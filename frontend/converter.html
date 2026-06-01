@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Unit Converter — KnitAdvisor</title>
+  <meta name="description" content="Knitting unit converter: GSM↔OSY, Ne↔Tex↔Denier, Gauge↔Pitch, Length, Weight. Real-time conversion.">
+  <meta name="theme-color" content="#FFFFFF">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+
+  <style>
+    .page-header {
+      padding: 28px 0 20px;
+    }
+    .page-title { margin-bottom: 4px; }
+    .page-sub { font-size: 12px; color: var(--t2); }
+
+    /* Converter sections */
+    .conv-section {
+      background: var(--bg2);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 18px;
+      margin-bottom: 12px;
+    }
+    .conv-section-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .conv-title-icon {
+      width: 26px; height: 26px;
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; flex-shrink: 0;
+    }
+
+    /* Input row */
+    .conv-row {
+      display: grid;
+      grid-template-columns: 1fr 28px 1fr;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .conv-arrow-btn {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: var(--bg4);
+      border: 1px solid var(--line2);
+      color: var(--t3);
+      font-size: 14px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      transition: all var(--t-fast);
+      flex-shrink: 0;
+    }
+    .conv-arrow-btn:hover { border-color: var(--a1); color: var(--a1); }
+
+    .conv-input-wrap { display: flex; flex-direction: column; gap: 4px; }
+    .conv-unit-label { font-size: 9px; color: var(--t3); text-transform: uppercase; letter-spacing: .6px; }
+    .conv-num-input {
+      background: var(--bg3);
+      border: 1px solid var(--line2);
+      border-radius: var(--radius-xs);
+      padding: 8px 10px;
+      font-family: var(--mono);
+      font-size: 15px;
+      color: var(--t1);
+      width: 100%;
+      outline: none;
+      transition: border-color var(--t-fast);
+    }
+    .conv-num-input:focus { border-color: rgba(0,255,178,.5); }
+    .conv-num-input.result {
+      color: var(--a1);
+      font-weight: 600;
+      background: rgba(0,255,178,.04);
+      border-color: rgba(0,255,178,.2);
+    }
+    .conv-num-input::-webkit-inner-spin-button,
+    .conv-num-input::-webkit-outer-spin-button { -webkit-appearance: none; }
+    .conv-num-input[type=number] { -moz-appearance: textfield; }
+
+    .conv-formula {
+      font-size: 10px;
+      color: var(--t3);
+      font-family: var(--mono);
+      margin-top: 4px;
+    }
+
+    /* Multi-output converter (yarn count) */
+    .multi-out {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .multi-out-card {
+      background: var(--bg3);
+      border: 1px solid var(--line2);
+      border-radius: var(--radius-xs);
+      padding: 10px 12px;
+    }
+    .moc-unit { font-size: 9px; color: var(--t3); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+    .moc-val { font-size: 16px; font-weight: 700; color: var(--a1); }
+
+    /* Reference table */
+    .ref-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+    .ref-table th {
+      text-align: left;
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      color: var(--t3);
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--line);
+    }
+    .ref-table td {
+      padding: 7px 8px;
+      border-bottom: 1px solid var(--line);
+      color: var(--t2);
+    }
+    .ref-table tr:last-child td { border: none; }
+    .ref-table td:first-child { color: var(--a1); font-weight: 600; }
+
+    .main-content { padding: 0 0 40px; }
+  </style>
+</head>
+<body>
+<div class="page-wrap">
+
+  <!-- HEADER -->
+  <header class="hdr">
+    <a href="/" class="logo">Knit<span>Advisor</span></a>
+    <div class="hdr-right">
+      <a href="/" class="btn btn-ghost">← Home</a>
+      <a href="patterns.html" class="btn btn-ghost hide-mobile">⊞ Patterns</a>
+      <a href="diagnostics.html" class="btn btn-ghost hide-mobile">🔍 Diagnostics</a>
+      <a href="weft-calc.html" class="btn btn-ghost hide-mobile">⚙️ Weft Calc</a>
+      <a href="academy.html" class="btn btn-ghost hide-mobile">🎓 Academy</a>
+    </div>
+  </header>
+
+  <main class="container main-content">
+
+    <div class="page-header">
+      <h1 class="h1 page-title text-head">Unit Converter</h1>
+      <div class="page-sub">Knitting industry unit conversions — instant, formula-based</div>
+    </div>
+
+    <!-- ===== GSM ↔ OSY ===== -->
+    <div class="conv-section anim-in">
+      <div class="conv-section-title">
+        <div class="conv-title-icon" style="background:rgba(255,184,48,.1)">⚖️</div>
+        <div class="h3">Fabric Weight</div>
+        <span class="badge badge-amber" style="margin-left:auto">GSM ↔ OSY</span>
+      </div>
+
+      <div class="conv-row">
+        <div class="conv-input-wrap">
+          <div class="conv-unit-label">GSM (g/m²)</div>
+          <input type="number" class="conv-num-input" id="gsm-in" placeholder="e.g. 200" oninput="convGSMtoOSY()" min="0">
+        </div>
+        <button class="conv-arrow-btn" onclick="swapGSMOSY()" title="Swap">⇄</button>
+        <div class="conv-input-wrap">
+          <div class="conv-unit-label">OSY (oz/yd²)</div>
+          <input type="number" class="conv-num-input result" id="osy-out" placeholder="result" readonly>
+        </div>
+      </div>
+      <div class="conv-formula" id="gsm-formula">Formula: GSM × 0.836 / 28.35</div>
+
+      <!-- OSY → GSM row -->
+      <div class="conv-row mt-12">
+        <div class="conv-input-wrap">
+          <div class="conv-unit-label">OSY (oz/yd²)</div>
+          <input type="number" class="conv-num-input" id="osy-in" placeholder="e.g. 5.9" oninput="convOSYtoGSM()" min="0">
+        </div>
+        <button class="conv-arrow-btn" style="cursor:default;opacity:.4">→</button>
+        <div class="conv-input-wrap">
+          <div class="conv-unit-label">GSM (g/m²)</div>
+          <input type="number" class="conv-num-input result" id="gsm-out" placeholder="result" readonly>
+        </div>
+      </div>
+      <div class="conv-formula">Formula: OSY × 28.35 / 0.836</div>
+    </div>
+
+    <!-- ===== YARN COUNT ===== -->
+    <div class="conv-section anim-in">
+      <div class="conv-section-title">
+        <div class="conv-title-icon" style="background:rgba(0,255,178,.1)">🧵</div>
+        <div class="h3">Yarn Count Converter</div>
+        <span class="badge badge-green" style="margin-left:auto">12 Systems</span>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end;">
+        <div class="form-group">
+          <label class="form-label" for="yarn-val">Input Value</label>
+          <input type="number" class="form-input" id="yarn-val" placeholder="e.g. 30" oninput="convYarnCount()" min="0" step="0.01">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="yarn-from">Unit</label>
+          <select class="form-select" id="yarn-from" onchange="convYarnCount()" style="min-width:140px;">
+            <option value="ne">Ne (Cotton)</option>
+            <option value="nm">Nm (Metric)</option>
+            <option value="tex">Tex</option>
+            <option value="denier">Denier</option>
+            <option value="dtex">dtex (Decitex)</option>
+            <option value="mtex">mtex (Millitex)</option>
+            <option value="ktex">ktex (Kilotex)</option>
+            <option value="jute">Jute Count</option>
+            <option value="nek">NeK (Worsted)</option>
+            <option value="nel">NeL (Linen)</option>
+            <option value="ysw">YSW (Woollen)</option>
+            <option value="dewsbury">Dewsbury</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="multi-out" id="yarn-out" style="grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); margin-top: 16px;">
+        <div class="multi-out-card">
+          <div class="moc-unit">Ne (Cotton)</div>
+          <div class="moc-val" id="yc-ne">—</div>
+        </div>
+        <div class="multi-out-card">
+          <div class="moc-unit">Nm (Metric)</div>
+          <div class="moc-val" id="yc-nm">—</div>
+        </div>
+        <div class="multi-out-card">
+          <div class="moc-unit">Tex</div>
+          <div class="moc-val" id="yc-tex">—</div>
+        </div>
+        <div class="multi-out-card">
+          <div class="moc-unit">Denier</div>
+          <div class="moc-val" id="yc-denier">—</div>
+        </div>
+        <div class="multi-out-card">
+          <div class="moc-unit">dtex (Decitex)</div>
+          <div class="moc-val" id="yc-dtex">—</div>
+        </div>
+        <div class="multi-out-card">
+          <div class="moc-unit">mtex (Millitex)</div>
+          <div class="moc-val" id="yc-mtex">—</div>
+        </div>
+        <div class="multi-out-card">
+          <div class="moc-unit">ktex (Kilotex)</div>
+          <div class="moc-val" id="yc-ktex">—</div>
+        </div>
+        <div class="multi-out-card">
+          <div class="moc-unit">Jute Count</div>
+          <div class="moc-val" id="yc-jute">—</div>
+        </div>
+        <div class="multi-out-card">
+          <div class="moc-unit">NeK (Worsted)</div>
+          <div class="moc-val" id="yc-nek">—</div>
+        </div>
+        <div class="multi-out-card">
+          <div class="moc-unit">NeL (Linen)</div>
+          <div class="moc-val" id="yc-nel">—</div>
+        </div>
+        <div class="multi-out-card">
+          <div class="moc-unit">YSW (Woollen)</div>
+          <div class="moc-val" id="yc-ysw">—</div>
+        </div>
+        <div class="multi-out-card">
+          <div class="moc-unit">Dewsbury</div>
+          <div class="moc-val" id="yc-dewsbury">—</div>
+        </div>
+      </div>
+
+      <div class="info-box mt-12">
+        <strong>Formulas:</strong> Indirect (Ne, Nm, etc.): Count ∝ 1/Weight. Direct (Tex, Denier, etc.): Count ∝ Weight. Tex is used as the universal reference system.
+      </div>
+    </div>
+
+    <!-- ===== PLY YARN CALCULATOR ===== -->
+    <div class="conv-section anim-in">
+      <div class="conv-section-title">
+        <div class="conv-title-icon" style="background:rgba(0,255,178,.1)">🧶</div>
+        <div class="h3">Ply Yarn (Resultant Count)</div>
+        <span class="badge badge-green" style="margin-left:auto">Multi-Yarn / Folded</span>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end;margin-bottom:12px;">
+        <div class="form-group">
+          <label class="form-label" for="ply-system">Yarn Count System</label>
+          <select class="form-select" id="ply-system" onchange="calculatePlyCount()" style="width:100%;">
+            <option value="ne">Ne (Cotton)</option>
+            <option value="nm">Nm (Metric)</option>
+            <option value="tex">Tex</option>
+            <option value="denier">Denier</option>
+            <option value="dtex">dtex (Decitex)</option>
+            <option value="mtex">mtex (Millitex)</option>
+            <option value="ktex">ktex (Kilotex)</option>
+            <option value="jute">Jute Count</option>
+            <option value="nek">NeK (Worsted)</option>
+            <option value="nel">NeL (Linen)</option>
+            <option value="ysw">YSW (Woollen)</option>
+            <option value="dewsbury">Dewsbury</option>
+          </select>
+        </div>
+        <div>
+          <button class="btn btn-ghost" onclick="addPlyRow()" style="height:38px;padding:0 12px;font-size:12px;">+ Add Component</button>
+        </div>
+      </div>
+
+      <div id="ply-inputs-container" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;">
+        <!-- Ply yarn input rows are dynamically added here -->
+      </div>
+
+      <div class="conv-result-box" style="margin-top:12px;">
+        <div class="conv-result-val" id="ply-result" style="font-size: 20px; font-weight: 700; color: var(--a1);">—</div>
+        <div class="conv-formula" id="ply-formula" style="margin-top:4px;">Formula: 1 / Sum(1/Count) [Indirect System]</div>
+      </div>
+    </div>
+
+    <!-- ===== SEWING THREAD / CONE LENGTH ===== -->
+    <div class="conv-section anim-in">
+      <div class="conv-section-title">
+        <div class="conv-title-icon" style="background:rgba(0,255,178,.1)">📏</div>
+        <div class="h3">Sewing Thread / Cone Length & Weight</div>
+        <span class="badge badge-green" style="margin-left:auto">Thread Calc</span>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div class="form-group">
+          <label class="form-label" for="thread-count">Yarn Count</label>
+          <input type="number" class="form-input" id="thread-count" placeholder="e.g. 40" oninput="calculateThread()" min="0.01" step="0.01">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="thread-system">System</label>
+          <select class="form-select" id="thread-system" onchange="calculateThread()">
+            <option value="ne">Ne (Cotton)</option>
+            <option value="nm">Nm (Metric)</option>
+            <option value="tex">Tex</option>
+            <option value="denier">Denier</option>
+            <option value="dtex">dtex (Decitex)</option>
+            <option value="mtex">mtex (Millitex)</option>
+            <option value="ktex">ktex (Kilotex)</option>
+            <option value="jute">Jute Count</option>
+            <option value="nek">NeK (Worsted)</option>
+            <option value="nel">NeL (Linen)</option>
+            <option value="ysw">YSW (Woollen)</option>
+            <option value="dewsbury">Dewsbury</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-bottom:12px;">
+        <label class="form-label">Calculation Mode</label>
+        <div style="display:flex;gap:16px;">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--t2);cursor:pointer;">
+            <input type="radio" name="thread-action" value="length" checked onchange="toggleThreadInputs(); calculateThread();">
+            Length from Weight
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--t2);cursor:pointer;">
+            <input type="radio" name="thread-action" value="weight" onchange="toggleThreadInputs(); calculateThread();">
+            Weight from Length
+          </label>
+        </div>
+      </div>
+
+      <div class="form-group" id="thread-weight-group" style="margin-bottom:12px;">
+        <label class="form-label" for="thread-weight">Cone Net Weight (grams)</label>
+        <input type="number" class="form-input" id="thread-weight" placeholder="e.g. 1000" oninput="calculateThread()" min="0.01" step="0.1">
+      </div>
+
+      <div class="form-group" id="thread-length-group" style="margin-bottom:12px; display:none;">
+        <label class="form-label" for="thread-length">Thread Length (meters)</label>
+        <input type="number" class="form-input" id="thread-length" placeholder="e.g. 5000" oninput="calculateThread()" min="0.1" step="1">
+      </div>
+
+      <div class="conv-result-box" style="margin-top:12px;">
+        <div class="conv-result-val" id="thread-result" style="font-size: 20px; font-weight: 700; color: var(--a1);">—</div>
+        <div class="conv-formula" id="thread-formula" style="margin-top:4px;">Formula: Count × Weight(g) × 1.6933</div>
+      </div>
+    </div>
+
+
+    <!-- ===== GAUGE ↔ PITCH ===== -->
+    <div class="conv-section anim-in">
+      <div class="conv-section-title">
+        <div class="conv-title-icon" style="background:rgba(108,142,255,.1)">📐</div>
+        <div class="h3">Gauge ↔ Pitch</div>
+        <span class="badge badge-blue" style="margin-left:auto">25.4mm rule</span>
+      </div>
+
+      <div class="conv-row">
+        <div class="conv-input-wrap">
+          <div class="conv-unit-label">Gauge (GG — needles/inch)</div>
+          <input type="number" class="conv-num-input" id="gauge-in" placeholder="e.g. 24" oninput="convGaugeToPitch()" min="1" max="60">
+        </div>
+        <button class="conv-arrow-btn" onclick="swapGaugePitch()" title="Swap">⇄</button>
+        <div class="conv-input-wrap">
+          <div class="conv-unit-label">Pitch (mm — needle spacing)</div>
+          <input type="number" class="conv-num-input result" id="pitch-out" placeholder="result" readonly>
+        </div>
+      </div>
+      <div class="conv-formula">Formula: Pitch (mm) = 25.4 / Gauge</div>
+
+      <div class="conv-row mt-12">
+        <div class="conv-input-wrap">
+          <div class="conv-unit-label">Pitch (mm)</div>
+          <input type="number" class="conv-num-input" id="pitch-in" placeholder="e.g. 1.06" oninput="convPitchToGauge()" min="0.1" step="0.01">
+        </div>
+        <button class="conv-arrow-btn" style="cursor:default;opacity:.4">→</button>
+        <div class="conv-input-wrap">
+          <div class="conv-unit-label">Gauge (GG)</div>
+          <input type="number" class="conv-num-input result" id="gauge-out" placeholder="result" readonly>
+        </div>
+      </div>
+      <div class="conv-formula">Formula: Gauge = 25.4 / Pitch (mm)</div>
+
+      <!-- Gauge reference table -->
+      <div class="result-section-label mt-16">Common Gauges Reference</div>
+      <table class="ref-table">
+        <thead>
+          <tr><th>Gauge (GG)</th><th>Pitch (mm)</th><th>Count for Single (Ne)</th><th>Count for Double (Ne)</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>14 GG</td><td>1.814</td><td>10.9</td><td>23.3</td></tr>
+          <tr><td>18 GG</td><td>1.411</td><td>18.0</td><td>38.6</td></tr>
+          <tr><td>20 GG</td><td>1.270</td><td>22.2</td><td>47.6</td></tr>
+          <tr><td>24 GG</td><td>1.058</td><td>32.0</td><td>68.6</td></tr>
+          <tr><td>28 GG</td><td>0.907</td><td>43.6</td><td>93.3</td></tr>
+          <tr><td>32 GG</td><td>0.794</td><td>56.9</td><td>121.9</td></tr>
+          <tr><td>36 GG</td><td>0.706</td><td>72.0</td><td>154.3</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ===== LENGTH ===== -->
+    <div class="conv-section anim-in">
+      <div class="conv-section-title">
+        <div class="conv-title-icon" style="background:rgba(0,255,178,.08)">📏</div>
+        <div class="h3">Length Converter</div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:end;margin-bottom:12px;">
+        <div class="form-group">
+          <label class="form-label" for="len-val">Value</label>
+          <input type="number" class="form-input" id="len-val" placeholder="e.g. 100" oninput="convLength()" step="any">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="len-from">From</label>
+          <select class="form-select" id="len-from" onchange="convLength()">
+            <option value="mm">mm</option>
+            <option value="cm">cm</option>
+            <option value="m">m</option>
+            <option value="inch">inch</option>
+            <option value="yard">yard</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="len-to">To</label>
+          <select class="form-select" id="len-to" onchange="convLength()">
+            <option value="cm">cm</option>
+            <option value="mm">mm</option>
+            <option value="m">m</option>
+            <option value="inch">inch</option>
+            <option value="yard">yard</option>
+          </select>
+        </div>
+      </div>
+      <div class="conv-result-box">
+        <div class="conv-result-val" id="len-result">—</div>
+      </div>
+    </div>
+
+    <!-- ===== WEIGHT ===== -->
+    <div class="conv-section anim-in">
+      <div class="conv-section-title">
+        <div class="conv-title-icon" style="background:rgba(255,107,107,.08)">⚖️</div>
+        <div class="h3">Weight Converter</div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:end;margin-bottom:12px;">
+        <div class="form-group">
+          <label class="form-label" for="wt-val">Value</label>
+          <input type="number" class="form-input" id="wt-val" placeholder="e.g. 100" oninput="convWeight()" step="any">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="wt-from">From</label>
+          <select class="form-select" id="wt-from" onchange="convWeight()">
+            <option value="kg">kg</option>
+            <option value="g">g</option>
+            <option value="lb">lb</option>
+            <option value="oz">oz</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="wt-to">To</label>
+          <select class="form-select" id="wt-to" onchange="convWeight()">
+            <option value="lb">lb</option>
+            <option value="kg">kg</option>
+            <option value="g">g</option>
+            <option value="oz">oz</option>
+          </select>
+        </div>
+      </div>
+      <div class="conv-result-box">
+        <div class="conv-result-val" id="wt-result">—</div>
+      </div>
+    </div>
+
+    <!-- Navigate back -->
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <a href="/" class="btn btn-secondary" style="flex:1">← Calculator</a>
+      <a href="patterns.html" class="btn btn-ghost" style="flex:1">⊞ Pattern Catalog</a>
+      <a href="diagnostics.html" class="btn btn-ghost" style="flex:1">🔍 Diagnostics</a>
+      <a href="weft-calc.html" class="btn btn-ghost" style="flex:1">⚙️ Weft Calculator</a>
+    </div>
+
+  </main>
+
+  <footer class="footer">
+    <div class="footer-nav container">
+      <div class="footer-brand">
+        <span class="footer-brand-name">KnitAdvisor</span>
+        <span class="footer-brand-sub">Unit Converter · Instant · No API needed</span>
+      </div>
+      <nav class="footer-links">
+        <a href="/">Calculator</a>
+        <a href="patterns.html">Patterns</a>
+        <a href="diagnostics.html">Diagnostics</a>
+        <a href="weft-calc.html">Weft Calculator</a>
+        <a href="academy.html">Knitting Academy</a>
+      </nav>
+    </div>
+    <div class="footer-bottom container">
+      <div class="footer-platform">
+        <span class="footer-platform-label">Part of</span>
+        <a href="https://www.onlinetextileschool.com" target="_blank" rel="noopener" class="footer-platform-link">www.onlinetextileschool.com</a>
+      </div>
+      <div class="footer-sponsor">
+        <span class="footer-sponsor-label">Proud Sponsor</span>
+        <a href="https://www.asutex.com" target="_blank" rel="noopener" class="footer-sponsor-link">
+          <span class="footer-sponsor-dot"></span>
+          Asutex
+        </a>
+      </div>
+    </div>
+  </footer>
+
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/ui.js"></script>
+
+<script>
+/* ============================================================
+   LOCAL CONVERSION FUNCTIONS (no API needed)
+   ============================================================ */
+
+// GSM → OSY
+function convGSMtoOSY() {
+  const v = parseFloat(document.getElementById('gsm-in').value);
+  const out = document.getElementById('osy-out');
+  if (!v || v <= 0) { out.value = ''; return; }
+  out.value = (v * 0.836 / 28.35).toFixed(4);
+}
+
+// OSY → GSM
+function convOSYtoGSM() {
+  const v = parseFloat(document.getElementById('osy-in').value);
+  const out = document.getElementById('gsm-out');
+  if (!v || v <= 0) { out.value = ''; return; }
+  out.value = (v * 28.35 / 0.836).toFixed(2);
+}
+
+function swapGSMOSY() {
+  const gsm = document.getElementById('gsm-in').value;
+  const osy = document.getElementById('osy-out').value;
+  document.getElementById('osy-in').value = osy;
+  convOSYtoGSM();
+}
+
+// Yarn count multi-output (supporting all 12 units)
+function convYarnCount() {
+  const v = parseFloat(document.getElementById('yarn-val').value);
+  const from = document.getElementById('yarn-from').value;
+  const units = ['ne', 'nm', 'tex', 'denier', 'dtex', 'mtex', 'ktex', 'jute', 'nek', 'nel', 'ysw', 'dewsbury'];
+  
+  if (!v || v <= 0) {
+    units.forEach(id => {
+      const el = document.getElementById('yc-' + id);
+      if (el) el.textContent = '—';
+    });
+    return;
+  }
+
+  // 1. Convert input to Tex (reference unit)
+  let tex;
+  const f = from.toLowerCase();
+  if (f === 'tex') {
+    tex = v;
+  } else if (f === 'denier') {
+    tex = v / 9;
+  } else if (f === 'dtex') {
+    tex = v / 10;
+  } else if (f === 'mtex') {
+    tex = v / 1000;
+  } else if (f === 'ktex') {
+    tex = v * 1000;
+  } else if (f === 'jute') {
+    tex = v * 34.448;
+  } else if (f === 'ne') {
+    tex = 590.5 / v;
+  } else if (f === 'nm') {
+    tex = 1000 / v;
+  } else if (f === 'nek') {
+    tex = 886.0 / v;
+  } else if (f === 'nel') {
+    tex = 1654.0 / v;
+  } else if (f === 'ysw') {
+    tex = 1938.0 / v;
+  } else if (f === 'dewsbury') {
+    tex = 31004.0 / v;
+  }
+
+  // 2. Convert from Tex to all other units and update UI
+  const values = {
+    tex: tex,
+    denier: tex * 9,
+    dtex: tex * 10,
+    mtex: tex * 1000,
+    ktex: tex / 1000,
+    jute: tex / 34.448,
+    ne: 590.5 / tex,
+    nm: 1000 / tex,
+    nek: 886.0 / tex,
+    nel: 1654.0 / tex,
+    ysw: 1938.0 / tex,
+    dewsbury: 31004.0 / tex
+  };
+
+  units.forEach(id => {
+    const el = document.getElementById('yc-' + id);
+    if (el) {
+      const val = values[id];
+      if (val >= 100) el.textContent = val.toFixed(2);
+      else if (val >= 1) el.textContent = val.toFixed(3);
+      else el.textContent = val.toFixed(5);
+    }
+  });
+}
+
+// Ply Count Calculator management
+let plyRowCount = 0;
+function addPlyRow(val = '') {
+  const container = document.getElementById('ply-inputs-container');
+  const rowId = `ply-row-${plyRowCount++}`;
+  const rowHtml = `
+    <div class="conv-row" id="${rowId}" style="grid-template-columns: 1fr auto; gap: 8px; margin-bottom: 0;">
+      <div class="conv-input-wrap">
+        <input type="number" class="conv-num-input ply-count-input" placeholder="Component count (e.g. 30)" value="${val}" oninput="calculatePlyCount()" min="0.01" step="0.01">
+      </div>
+      <button class="btn btn-ghost" onclick="removePlyRow('${rowId}')" style="height: 38px; padding: 0 10px; border-color: rgba(255, 90, 95, 0.3); color: #ff5a5f; align-self: flex-end;">✕</button>
+    </div>
+  `;
+  container.insertAdjacentHTML('beforeend', rowHtml);
+  calculatePlyCount();
+}
+
+function removePlyRow(rowId) {
+  const row = document.getElementById(rowId);
+  if (row) {
+    row.remove();
+  }
+  const container = document.getElementById('ply-inputs-container');
+  if (container.children.length === 0) {
+    addPlyRow();
+    addPlyRow();
+  }
+  calculatePlyCount();
+}
+
+function calculatePlyCount() {
+  const system = document.getElementById('ply-system').value.toLowerCase();
+  const inputs = document.querySelectorAll('.ply-count-input');
+  const yarns = [];
+  inputs.forEach(inp => {
+    const val = parseFloat(inp.value);
+    if (!isNaN(val) && val > 0) {
+      yarns.push(val);
+    }
+  });
+
+  const resultEl = document.getElementById('ply-result');
+  const formulaEl = document.getElementById('ply-formula');
+
+  if (yarns.length === 0) {
+    resultEl.textContent = '—';
+    return;
+  }
+
+  const isDirect = ['tex', 'denier', 'dtex', 'mtex', 'ktex', 'jute'].includes(system);
+  let result;
+  if (isDirect) {
+    result = yarns.reduce((sum, y) => sum + y, 0);
+    formulaEl.textContent = `Formula: Resultant Count = C₁ + C₂ + ... + Cₙ = ${yarns.join(' + ')}`;
+  } else {
+    const sumRecip = yarns.reduce((sum, y) => sum + (1 / y), 0);
+    result = 1 / sumRecip;
+    const recipTerms = yarns.map(y => `1/${y}`).join(' + ');
+    formulaEl.textContent = `Formula: 1 / (${recipTerms}) = 1 / ${sumRecip.toFixed(6)}`;
+  }
+
+  resultEl.textContent = `${result.toFixed(4)} ${system.toUpperCase()}`;
+}
+
+// Sewing Thread Calculator
+function toggleThreadInputs() {
+  const action = document.querySelector('input[name="thread-action"]:checked').value;
+  const wtGroup = document.getElementById('thread-weight-group');
+  const lenGroup = document.getElementById('thread-length-group');
+  if (action === 'length') {
+    wtGroup.style.display = 'block';
+    lenGroup.style.display = 'none';
+  } else {
+    wtGroup.style.display = 'none';
+    lenGroup.style.display = 'block';
+  }
+}
+
+function calculateThread() {
+  const count = parseFloat(document.getElementById('thread-count').value);
+  const system = document.getElementById('thread-system').value;
+  const action = document.querySelector('input[name="thread-action"]:checked').value;
+  const weight = parseFloat(document.getElementById('thread-weight').value);
+  const length = parseFloat(document.getElementById('thread-length').value);
+
+  const resultEl = document.getElementById('thread-result');
+  const formulaEl = document.getElementById('thread-formula');
+
+  if (isNaN(count) || count <= 0) {
+    resultEl.textContent = '—';
+    return;
+  }
+
+  function toTex(val, sys) {
+    const s = sys.toLowerCase();
+    if (s === 'tex') return val;
+    if (s === 'denier' || s === 'den') return val / 9;
+    if (s === 'dtex') return val / 10;
+    if (s === 'mtex') return val / 1000;
+    if (s === 'ktex') return val * 1000;
+    if (s === 'jute') return val * 34.448;
+    if (s === 'ne') return 590.5 / val;
+    if (s === 'nm') return 1000 / val;
+    if (s === 'nek') return 886.0 / val;
+    if (s === 'nel') return 1654.0 / val;
+    if (s === 'ysw' || s === 'new') return 1938.0 / val;
+    if (s === 'dewsbury') return 31004.0 / val;
+    return val;
+  }
+
+  const sysLower = system.toLowerCase();
+
+  if (action === 'length') {
+    if (isNaN(weight) || weight <= 0) {
+      resultEl.textContent = '—';
+      return;
+    }
+    let resLength;
+    let formulaStr;
+
+    if (sysLower === 'ne') {
+      resLength = count * weight * 1.6933;
+      formulaStr = `Formula: Length = Count (Ne) × Weight (g) × 1.6933 = ${count} × ${weight} × 1.6933`;
+    } else if (sysLower === 'nm') {
+      resLength = count * weight;
+      formulaStr = `Formula: Length = Count (Nm) × Weight (g) = ${count} × ${weight}`;
+    } else {
+      const tex = toTex(count, system);
+      resLength = (weight * 1000) / tex;
+      formulaStr = `Formula: Convert to Tex = ${tex.toFixed(2)} → Length = (Weight × 1000) / Tex = (${weight} × 1000) / ${tex.toFixed(2)}`;
+    }
+    resultEl.textContent = `${resLength.toFixed(2)} meters`;
+    formulaEl.textContent = formulaStr;
+
+  } else { // weight
+    if (isNaN(length) || length <= 0) {
+      resultEl.textContent = '—';
+      return;
+    }
+    let resWeight;
+    let formulaStr;
+
+    if (sysLower === 'ne') {
+      resWeight = length / (count * 1.6933);
+      formulaStr = `Formula: Weight = Length (m) / (Count (Ne) × 1.6933) = ${length} / (${count} × 1.6933)`;
+    } else if (sysLower === 'nm') {
+      resWeight = length / count;
+      formulaStr = `Formula: Weight = Length (m) / Count (Nm) = ${length} / ${count}`;
+    } else {
+      const tex = toTex(count, system);
+      resWeight = (length * tex) / 1000;
+      formulaStr = `Formula: Convert to Tex = ${tex.toFixed(2)} → Weight = (Length × Tex) / 1000 = (${length} × ${tex.toFixed(2)}) / 1000`;
+    }
+    resultEl.textContent = `${resWeight.toFixed(2)} grams`;
+    formulaEl.textContent = formulaStr;
+  }
+}
+
+// Initialise ply count inputs on load
+document.addEventListener('DOMContentLoaded', () => {
+  addPlyRow();
+  addPlyRow();
+});
+
+
+// Gauge → Pitch
+function convGaugeToPitch() {
+  const v = parseFloat(document.getElementById('gauge-in').value);
+  const out = document.getElementById('pitch-out');
+  if (!v || v <= 0) { out.value = ''; return; }
+  out.value = (25.4 / v).toFixed(4);
+}
+
+// Pitch → Gauge
+function convPitchToGauge() {
+  const v = parseFloat(document.getElementById('pitch-in').value);
+  const out = document.getElementById('gauge-out');
+  if (!v || v <= 0) { out.value = ''; return; }
+  out.value = (25.4 / v).toFixed(2);
+}
+
+function swapGaugePitch() {
+  const gauge = document.getElementById('gauge-in').value;
+  const pitch = document.getElementById('pitch-out').value;
+  document.getElementById('pitch-in').value = pitch;
+  convPitchToGauge();
+}
+
+// Length conversion
+const LEN_TO_M = { mm: 0.001, cm: 0.01, m: 1, inch: 0.0254, yard: 0.9144 };
+function convLength() {
+  const v = parseFloat(document.getElementById('len-val').value);
+  const from = document.getElementById('len-from').value;
+  const to = document.getElementById('len-to').value;
+  const el = document.getElementById('len-result');
+  if (!v || isNaN(v)) { el.textContent = '—'; return; }
+  const meters = v * LEN_TO_M[from];
+  const result = meters / LEN_TO_M[to];
+  el.textContent = `${smartFmt(result)} ${to}`;
+}
+
+// Weight conversion
+const WT_TO_G = { g: 1, kg: 1000, lb: 453.592, oz: 28.3495 };
+function convWeight() {
+  const v = parseFloat(document.getElementById('wt-val').value);
+  const from = document.getElementById('wt-from').value;
+  const to = document.getElementById('wt-to').value;
+  const el = document.getElementById('wt-result');
+  if (!v || isNaN(v)) { el.textContent = '—'; return; }
+  const grams = v * WT_TO_G[from];
+  const result = grams / WT_TO_G[to];
+  el.textContent = `${smartFmt(result)} ${to}`;
+}
+
+// Smart format — avoid excessive decimals
+function smartFmt(val) {
+  if (Math.abs(val) >= 100) return val.toFixed(2);
+  if (Math.abs(val) >= 1)   return val.toFixed(4);
+  return val.toFixed(6);
+}
+</script>
+
+</body>
+</html>

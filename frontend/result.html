@@ -1,0 +1,1395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Result — KnitAdvisor</title>
+  <meta name="description" content="KnitAdvisor calculation result — yarn count, loop length, machine spec, K/T/M pattern">
+  <meta name="theme-color" content="#FFFFFF">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+
+  <style>
+    /* Result page specific */
+    .result-header {
+      padding: 16px 0 12px;
+    }
+    .result-header-top {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .back-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--t3);
+      text-decoration: none;
+      transition: color var(--t-fast);
+    }
+    .back-btn:hover { color: var(--a1); text-decoration: none; }
+
+    .result-fabric-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      background: rgba(0,255,178,.06);
+      border: 1px solid rgba(0,255,178,.2);
+      border-radius: var(--radius-sm);
+      margin-bottom: 16px;
+    }
+    .rfb-name {
+      font-family: var(--head);
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--t1);
+    }
+    .rfb-gsm {
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--a1);
+      font-family: var(--head);
+      margin-left: auto;
+    }
+    .rfb-unit { font-size: 11px; color: var(--t3); margin-top: 2px; }
+
+    /* Section blocks */
+    .result-section {
+      background: var(--bg2);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+    .result-section-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .rst-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+    .rst-icon.green { background: rgba(0,255,178,.12); }
+    .rst-icon.blue  { background: rgba(108,142,255,.12); }
+    .rst-icon.amber { background: rgba(255,184,48,.1); }
+    .rst-icon.purple{ background: rgba(192,132,252,.1); }
+
+    .rst-title-text {
+      font-family: var(--head);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    /* Yarn highlights */
+    .yarn-main {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    @media (max-width: 400px) { .yarn-main { grid-template-columns: 1fr; } }
+
+    .yarn-card {
+      background: var(--bg3);
+      border: 1px solid var(--line2);
+      border-radius: var(--radius-sm);
+      padding: 12px;
+      text-align: center;
+    }
+    .yarn-label { font-size: 9px; color: var(--t3); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 4px; }
+    .yarn-val { font-family: var(--head); font-size: 24px; font-weight: 800; color: var(--a1); }
+    .yarn-sub { font-size: 10px; color: var(--t3); margin-top: 2px; }
+
+    /* OSY badge */
+    .osy-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255,184,48,.08);
+      border: 1px solid rgba(255,184,48,.2);
+      border-radius: 20px;
+      padding: 4px 12px;
+      font-size: 12px;
+      color: var(--a4);
+      font-weight: 600;
+    }
+
+    /* Gauge range display */
+    .range-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .range-card {
+      background: var(--bg3);
+      border: 1px solid var(--line2);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+    }
+    .range-lbl { font-size: 9px; color: var(--t3); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+    .range-val { font-size: 15px; font-weight: 700; color: var(--a2); }
+    .range-sub { font-size: 10px; color: var(--t3); }
+
+    /* Production cards */
+    .prod-section {
+      background: var(--bg2);
+      border: 1px solid rgba(255,184,48,.2);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+
+    /* Actions toolbar */
+    .actions-bar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+
+    /* Mini stat row */
+    .mini-stats {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      padding: 10px;
+      background: var(--bg3);
+      border-radius: var(--radius-sm);
+      margin-bottom: 10px;
+    }
+    .mini-stat { text-align: center; }
+    .ms-val { font-size: 15px; font-weight: 700; color: var(--a1); }
+    .ms-lbl { font-size: 9px; color: var(--t3); text-transform: uppercase; letter-spacing: .4px; }
+
+    /* Warning banner */
+    .gsm-warning {
+      background: rgba(255,184,48,.06);
+      border: 1px solid rgba(255,184,48,.25);
+      border-radius: var(--radius-sm);
+      padding: 8px 12px;
+      font-size: 11px;
+      color: var(--a4);
+      margin-bottom: 12px;
+      display: none;
+    }
+
+    /* Cache badge */
+    .cache-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 9px;
+      padding: 2px 7px;
+      border-radius: 3px;
+      background: rgba(74,82,104,.2);
+      border: 1px solid var(--line);
+      color: var(--t3);
+      margin-left: auto;
+    }
+    .cache-tag.hit { background: rgba(0,255,178,.08); border-color: rgba(0,255,178,.2); color: var(--a1); }
+
+    /* Skeleton placeholders while loading */
+    .skel-line {
+      height: 14px;
+      border-radius: 3px;
+      margin-bottom: 8px;
+    }
+    .skel-line.w70 { width: 70%; }
+    .skel-line.w50 { width: 50%; }
+    .skel-line.w90 { width: 90%; }
+
+    .main-content {
+      padding: 0 0 40px;
+    }
+  </style>
+</head>
+<body>
+<div class="page-wrap">
+
+  <!-- HEADER -->
+  <header class="hdr">
+    <a href="/" class="logo">Knit<span>Advisor</span></a>
+    <div class="hdr-badge">BETA</div>
+    <div class="hdr-right">
+      <a href="converter.html" class="btn btn-ghost hide-mobile" id="nav-converter">⇄ Converter</a>
+      <a href="patterns.html" class="btn btn-ghost hide-mobile" id="nav-patterns">⊞ Patterns</a>
+      <a href="diagnostics.html" class="btn btn-ghost hide-mobile" id="nav-diagnostics">🔍 Diagnostics</a>
+      <a href="weft-calc.html" class="btn btn-ghost hide-mobile" id="nav-weft-calc">⚙️ Weft Calc</a>
+      <a href="academy.html" class="btn btn-ghost hide-mobile" id="nav-academy">🎓 Academy</a>
+      <a href="/" class="btn btn-ghost" id="new-calc-btn">+ New Calc</a>
+    </div>
+  </header>
+
+  <!-- LOADING OVERLAY (initial) -->
+  <div id="page-loading" style="padding:60px 16px;text-align:center;">
+    <div class="spinner" style="margin:0 auto 16px;width:28px;height:28px;border-width:3px;"></div>
+    <div class="text-dim">Calculating...</div>
+  </div>
+
+  <!-- RESULT CONTENT (hidden until loaded) -->
+  <main class="container main-content hidden" id="result-main">
+
+    <!-- Top bar -->
+    <div class="result-header">
+      <div class="result-header-top">
+        <a href="/" class="back-btn" id="back-link">← Back</a>
+        <div class="cache-tag" id="cache-tag">—</div>
+      </div>
+
+      <!-- GSM warning -->
+      <div class="gsm-warning" id="gsm-warning"></div>
+
+      <!-- Fabric + GSM badge -->
+      <div class="result-fabric-badge">
+        <div>
+          <div class="rfb-name" id="res-fabric-name">—</div>
+          <div class="text-xs text-dim" id="res-machine-type">—</div>
+        </div>
+        <div style="text-align:right;">
+          <div class="rfb-gsm" id="res-gsm">—</div>
+          <div class="rfb-unit">g/m²</div>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="actions-bar">
+        <button class="btn btn-ghost" onclick="window.print()">🖨 Print</button>
+        <button class="btn btn-ghost" id="copy-btn" onclick="copyResults()">📋 Copy</button>
+        <a href="/" class="btn btn-secondary">↩ Recalculate</a>
+      </div>
+    </div>
+
+    <!-- ===== COMPOSITION / COLOR SECTION (conditional) ===== -->
+    <div class="result-section anim-in hidden" id="sec-composition">
+      <div class="result-section-title">
+        <div class="rst-icon amber">🧪</div>
+        <div class="rst-title-text">Composition & Shade</div>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Parsed Composition</span>
+        <span class="result-val white" id="c-parsed">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Dominant Fiber</span>
+        <span class="result-val" id="c-dominant" style="text-transform: capitalize;">—</span>
+      </div>
+      <div class="result-row hidden" id="c-color-row">
+        <span class="result-key">Color Shade</span>
+        <span class="result-val" id="c-color">—</span>
+      </div>
+      
+      <div class="result-section-label">Calculated Modifiers</div>
+      <div class="result-row">
+        <span class="result-key">Count Adjustment</span>
+        <span class="result-val blue" id="c-mod-count">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Loop Length Adjustment</span>
+        <span class="result-val amber" id="c-mod-sl">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">GSM Offset</span>
+        <span class="result-val" id="c-mod-gsm">—</span>
+      </div>
+      
+      <div id="c-notes-container" class="mt-12 text-sm text-dim">
+      </div>
+    </div>
+
+    <!-- ===== PHYSICAL CONSTRAINTS ===== -->
+    <div class="result-section anim-in hidden" id="sec-constraints">
+      <div class="result-section-title">
+        <div class="rst-icon red" id="pc-icon">⚖️</div>
+        <div class="rst-title-text" id="pc-title">Physical Constraints</div>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Tightness Factor (TF)</span>
+        <span class="result-val" id="pc-tf">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Structure Status</span>
+        <span class="result-val" id="pc-status">—</span>
+      </div>
+    </div>
+
+    <!-- ===== EXPERT ANALYSIS (CRITICAL PATH) ===== -->
+    <div class="result-section anim-in hidden" id="sec-expert" style="border:1px solid var(--a4); background:rgba(255,184,48,0.05);">
+      <div class="result-section-title">
+        <div class="rst-icon" id="expert-icon">🧠</div>
+        <div class="rst-title-text" id="expert-title" style="color:var(--a4);">Critical Path Analysis</div>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Cause</span>
+        <span class="result-val white" id="expert-cause" style="white-space:normal; line-height:1.4; text-align:right;">—</span>
+      </div>
+      <div class="result-section-label" style="margin-top:12px; color:var(--a4);">Expert Factory Solutions</div>
+      <ul id="expert-solutions" style="padding-left:16px; margin-top:8px; font-size:12px; color:var(--t2); line-height:1.6; display:flex; flex-direction:column; gap:4px;">
+      </ul>
+    </div>
+
+    <!-- ===== QUALITY & SHRINKAGE PREDICTION ===== -->
+    <div class="result-section anim-in hidden" id="sec-quality">
+      <div class="result-section-title">
+        <div class="rst-icon purple">🛡️</div>
+        <div class="rst-title-text">Fabric Quality & Shrinkage Prediction</div>
+        <span class="badge badge-purple" style="margin-left:auto">Predictive Model</span>
+      </div>
+
+      <div class="range-grid">
+        <div class="range-card">
+          <div class="range-lbl">Lengthwise Shrinkage</div>
+          <div class="range-val" id="quality-shrink-length">—</div>
+          <div class="range-sub">expected wash loss</div>
+        </div>
+        <div class="range-card">
+          <div class="range-lbl">Widthwise Shrinkage</div>
+          <div class="range-val" id="quality-shrink-width">—</div>
+          <div class="range-sub">expected wash loss</div>
+        </div>
+      </div>
+
+      <div class="result-row">
+        <span class="result-key">Spirality (Torque)</span>
+        <span class="result-val" id="quality-spirality">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Pilling Resistance</span>
+        <span class="result-val" id="quality-pilling">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Bursting Strength</span>
+        <span class="result-val" id="quality-bursting">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Dimensional Stability</span>
+        <span class="result-val" id="quality-dim-class">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Wash Color Fastness</span>
+        <span class="result-val" id="quality-fastness">—</span>
+      </div>
+
+      <div class="result-section-label" style="color:var(--a3);">Recommended Finishing Process</div>
+      <ul id="quality-finishing-recs" style="padding-left:16px; margin-top:8px; font-size:12px; color:var(--t2); line-height:1.6; display:flex; flex-direction:column; gap:6px;">
+      </ul>
+    </div>
+
+    <!-- ===== WARP KNIT SPECIFICATION ===== -->
+    <div class="result-section anim-in hidden" id="sec-warp-knit">
+      <div class="result-section-title">
+        <div class="rst-icon amber">⫸</div>
+        <div class="rst-title-text">Warp Knit Specification</div>
+      </div>
+      <div id="warp-knit-body"></div>
+    </div>
+
+    <!-- ===== YARN SECTION ===== -->
+    <div class="result-section anim-in" id="sec-yarn">
+      <div class="result-section-title">
+        <div class="rst-icon green">🧵</div>
+        <div class="rst-title-text">Yarn Specification</div>
+        <div class="osy-badge hide-mobile" id="osy-badge" style="margin-left:auto;">— oz/yd²</div>
+      </div>
+
+      <!-- Primary yarn count cards -->
+      <div class="yarn-main" id="yarn-main">
+        <div class="yarn-card">
+          <div class="yarn-label">Count (Ne)</div>
+          <div class="yarn-val" id="y-count-ne">—</div>
+          <div class="yarn-sub">exact calculated</div>
+        </div>
+        <div class="yarn-card">
+          <div class="yarn-label">Count (Industry)</div>
+          <div class="yarn-val" id="y-count-disp">—</div>
+          <div class="yarn-sub" id="y-count-src">—</div>
+        </div>
+      </div>
+
+      <!-- Multi-yarn breakdown (shown if terry/fleece) -->
+      <div id="multi-yarn-section" class="hidden">
+        <div class="result-section-label">Multi-yarn Breakdown</div>
+        <div id="multi-yarn-rows"></div>
+      </div>
+
+      <!-- Loop length -->
+      <div class="result-section-label">Loop Length</div>
+      <div class="result-row">
+        <span class="result-key">Loop length (mm)</span>
+        <span class="result-val" id="ll-mm">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Loop length (cm)</span>
+        <span class="result-val white" id="ll-cm">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Multiplier used</span>
+        <span class="result-val white" id="ll-mult">—</span>
+      </div>
+      
+      <!-- R&D Validation Badge -->
+      <div id="rnd-validation-box" class="hidden" style="margin-top:12px; padding:10px; border-radius:var(--radius-sm); border:1px solid rgba(0,0,0,0.1); display:flex; align-items:center; gap:8px;">
+        <div id="rnd-icon" style="font-size:16px;">✓</div>
+        <div>
+          <div id="rnd-title" style="font-weight:600; font-size:11px;">Factory Verified</div>
+          <div id="rnd-desc" style="font-size:10px; color:var(--t3); margin-top:2px;">Matches R&D data from 25+ real samples</div>
+        </div>
+      </div>
+
+      <!-- OSY (mobile — also shown in header on desktop) -->
+      <div class="result-row show-mobile">
+        <span class="result-key">OSY</span>
+        <span class="result-val amber" id="osy-val-mobile">—</span>
+      </div>
+    </div>
+
+    <!-- ===== COSTING ESTIMATION ===== -->
+    <div class="result-section anim-in hidden" id="sec-costing">
+      <div class="result-section-title">
+        <div class="rst-icon green">💵</div>
+        <div class="rst-title-text">Fabric Costing Estimation</div>
+        <span class="badge badge-green" style="margin-left:auto" id="cost-currency-badge">USD/kg</span>
+      </div>
+
+      <div class="range-grid">
+        <div class="range-card" style="text-align:center;">
+          <div class="range-lbl">Total Estimated Cost</div>
+          <div class="range-val" id="cost-total-val" style="font-size: 24px; color: var(--a1);">—</div>
+          <div class="range-sub">per kg fabric</div>
+        </div>
+        <div class="range-card" style="text-align:center;">
+          <div class="range-lbl">Yarn Cost (with waste)</div>
+          <div class="range-val" id="cost-yarn-val" style="font-size: 24px; color: var(--a2);">—</div>
+          <div class="range-sub" id="cost-waste-lbl">incl. waste & winding</div>
+        </div>
+      </div>
+
+      <div class="result-section-label">Cost Breakdown (FOB Bangladesh Mill)</div>
+      <div class="result-row">
+        <span class="result-key">Yarn Raw Material Cost</span>
+        <span class="result-val white" id="cost-breakdown-yarn">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Knitting CMT Cost</span>
+        <span class="result-val white" id="cost-breakdown-knitting">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Dyeing CMT Cost</span>
+        <span class="result-val white" id="cost-breakdown-dyeing">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Finishing Cost</span>
+        <span class="result-val white" id="cost-breakdown-finishing">—</span>
+      </div>
+
+      <div class="result-section-label">Margin & Selling Price Scenarios</div>
+      <div id="cost-margin-scenarios" style="display:flex; flex-direction:column; gap:4px; margin-top:8px;">
+      </div>
+    </div>
+
+    <!-- ===== MACHINE RECOMMENDED ===== -->
+    <div class="result-section anim-in" id="sec-machine">
+      <div class="result-section-title">
+        <div class="rst-icon blue">⚙️</div>
+        <div class="rst-title-text">Machine Specification</div>
+        <span class="badge badge-blue" style="margin-left:auto">Recommended</span>
+      </div>
+
+      <div class="range-grid">
+        <div class="range-card">
+          <div class="range-lbl">Gauge Range</div>
+          <div class="range-val" id="m-gauge-range">—</div>
+          <div class="range-sub" id="m-gauge-opt">optimal: —</div>
+        </div>
+        <div class="range-card">
+          <div class="range-lbl">Dia Range</div>
+          <div class="range-val" id="m-dia-range">—</div>
+          <div class="range-sub">inch</div>
+        </div>
+      </div>
+
+      <div class="result-row">
+        <span class="result-key">Feeders (theoretical)</span>
+        <span class="result-val blue" id="m-feeders">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Machine pitch</span>
+        <span class="result-val white" id="m-pitch">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Count for gauge</span>
+        <span class="result-val white" id="m-count-gauge">—</span>
+      </div>
+
+      <!-- Exact specs (shown only when dia+gauge given) -->
+      <div id="exact-specs" class="hidden">
+        <div class="result-section-label">Exact (from your machine specs)</div>
+        <div class="result-row">
+          <span class="result-key">Total needles</span>
+          <span class="result-val" id="m-needles">—</span>
+        </div>
+        <div class="result-row">
+          <span class="result-key">Your gauge</span>
+          <span class="result-val" id="m-gauge-actual">—</span>
+        </div>
+        <div class="result-row">
+          <span class="result-key">Your diameter</span>
+          <span class="result-val" id="m-dia-actual">—</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== PRODUCTION (conditional) ===== -->
+    <div class="prod-section anim-in hidden" id="sec-production">
+      <div class="result-section-title">
+        <div class="rst-icon amber">🏭</div>
+        <div class="rst-title-text">Production Output</div>
+        <span class="badge badge-amber" style="margin-left:auto">From machine specs</span>
+      </div>
+
+      <div class="prod-grid" id="prod-grid">
+        <div class="prod-card">
+          <div class="prod-val" id="prod-hr">—</div>
+          <div class="prod-unit">kg / hour</div>
+        </div>
+        <div class="prod-card">
+          <div class="prod-val" id="prod-shift">—</div>
+          <div class="prod-unit">kg / 8h shift</div>
+        </div>
+        <div class="prod-card">
+          <div class="prod-val" id="prod-day">—</div>
+          <div class="prod-unit">kg / 24h day</div>
+        </div>
+      </div>
+
+      <div class="result-row mt-12">
+        <span class="result-key">Efficiency used</span>
+        <span class="result-val amber" id="prod-eff">85%</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Machine RPM</span>
+        <span class="result-val white" id="prod-rpm">—</span>
+      </div>
+    </div>
+
+    <!-- ===== K/T/M PATTERN ===== -->
+    <div class="result-section anim-in" id="sec-pattern">
+      <div class="result-section-title">
+        <div class="rst-icon purple">⊞</div>
+        <div class="rst-title-text">K/T/M Stitch Pattern</div>
+      </div>
+      <div id="pattern-container">
+        <div class="skeleton skel-line w90"></div>
+        <div class="skeleton skel-line w70"></div>
+      </div>
+    </div>
+
+    <!-- ===== GRAMMAGE ===== -->
+    <div class="result-section anim-in" id="sec-grammage">
+      <div class="result-section-title">
+        <div class="rst-icon amber">⚖️</div>
+        <div class="rst-title-text">Grammage / Weight</div>
+      </div>
+      <div class="result-row">
+        <span class="result-key">GSM (g/m²)</span>
+        <span class="result-val" id="g-gsm">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">OSY (oz/yd²)</span>
+        <span class="result-val amber" id="g-osy">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Conversion formula</span>
+        <span class="result-val white text-sm">GSM × 0.836 / 28.35</span>
+      </div>
+    </div>
+
+    <!-- ===== FORMULA TRACE (collapsible) ===== -->
+    <div class="result-section anim-in" id="sec-trace">
+      <button class="collapsible-trigger" onclick="toggleTrace(this)" style="border-top:none;padding-top:0;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span>🔍</span>
+          <span class="h3">Formula Trace</span>
+          <span class="badge badge-gray">step-by-step</span>
+        </div>
+        <span class="arrow">▼</span>
+      </button>
+      <div class="collapsible-body" id="trace-body">
+        <div class="collapsible-inner">
+          <div id="trace-steps"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== NAVIGATE MORE ===== -->
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
+      <a href="converter.html" class="btn btn-secondary" style="flex:1;min-width:120px;" id="res-converter-link">⇄ Unit Converter</a>
+      <a href="patterns.html" class="btn btn-secondary" style="flex:1;min-width:120px;" id="res-patterns-link">⊞ Pattern Catalog</a>
+    </div>
+
+  </main>
+
+  <!-- ERROR STATE (hidden until needed) -->
+  <div id="error-container" class="container hidden" style="padding:40px 0;">
+  </div>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="footer-nav container">
+      <div class="footer-brand">
+        <span class="footer-brand-name">KnitAdvisor</span>
+        <span class="footer-brand-sub" id="res-footer-time">v1.0</span>
+      </div>
+      <nav class="footer-links">
+        <a href="/">Home</a>
+        <a href="converter.html">Converter</a>
+        <a href="patterns.html">Patterns</a>
+        <a href="diagnostics.html">Diagnostics</a>
+        <a href="weft-calc.html">Weft Calculator</a>
+        <a href="academy.html">Knitting Academy</a>
+      </nav>
+    </div>
+    <div class="footer-bottom container">
+      <div class="footer-platform">
+        <span class="footer-platform-label">Part of</span>
+        <a href="https://www.onlinetextileschool.com" target="_blank" rel="noopener" class="footer-platform-link">www.onlinetextileschool.com</a>
+      </div>
+      <div class="footer-sponsor">
+        <span class="footer-sponsor-label">Proud Sponsor</span>
+        <a href="https://www.asutex.com" target="_blank" rel="noopener" class="footer-sponsor-link">
+          <span class="footer-sponsor-dot"></span>
+          Asutex
+        </a>
+      </div>
+    </div>
+  </footer>
+
+</div>
+
+<!-- SCRIPTS -->
+<script src="js/api.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/storage.js"></script>
+<script src="js/pattern-renderer.js"></script>
+
+<script>
+/* ============================================================
+   MAIN — Load result on page ready
+   ============================================================ */
+document.addEventListener('DOMContentLoaded', async () => {
+  // Get pending params from sessionStorage
+  const params = loadPending();
+
+  if (!params) {
+    showError('No calculation data found', 'Please go back and submit the form again.');
+    return;
+  }
+
+  try {
+    const result = await apiCalculate(params);
+
+    if (!result || !result.success) {
+      showError(result?.error || 'Calculation failed', result?.code || '');
+      return;
+    }
+
+    // Save to recents
+    saveRecent(params, result);
+
+    // Render everything
+    renderResult(result, params);
+
+    // Load pattern separately (non-blocking)
+    loadPattern(params.fabric);
+
+  } catch (err) {
+    showError('API Error', err.message || 'Could not connect to server. Is the backend running?');
+  }
+});
+
+/* ============================================================
+   RENDER RESULT
+   ============================================================ */
+function renderResult(r, params) {
+  // Hide loading, show content
+  document.getElementById('page-loading').classList.add('hidden');
+  document.getElementById('result-main').classList.remove('hidden');
+
+  // — Fabric badge —
+  document.getElementById('res-fabric-name').textContent = r.fabric.name || params.fabric;
+  document.getElementById('res-machine-type').textContent =
+    r.fabric.machine_type || categoryLabel(r.fabric.category) || '';
+  document.getElementById('res-gsm').textContent = r.input.gsm;
+
+  // — Cache tag —
+  const cacheTag = document.getElementById('cache-tag');
+  if (r.from_cache) {
+    cacheTag.textContent = `⚡ ${r.from_cache} cache · ${r.response_ms}ms`;
+    cacheTag.classList.add('hit');
+  } else {
+    cacheTag.textContent = `Calculated · ${r.response_ms}ms`;
+  }
+
+  // — Warnings —
+  if (r.warnings && r.warnings.length > 0) {
+    const w = document.getElementById('gsm-warning');
+    w.textContent = '⚠ ' + r.warnings[0];
+    w.style.display = 'block';
+  }
+
+  // — Yarn —
+  renderYarn(r.yarn);
+
+  // — Warp Knit (if present) —
+  if (r.warp_knit) {
+    document.getElementById('sec-warp-knit').classList.remove('hidden');
+    document.getElementById('warp-knit-body').innerHTML = renderWarpKnitCard(r.warp_knit);
+  }
+
+  // — Loop length —
+  const ll = r.loop_length;
+  document.getElementById('ll-mm').textContent = ll?.value_mm != null ? `${ll.value_mm} mm` : '—';
+  document.getElementById('ll-cm').textContent = ll?.value_cm != null ? `${ll.value_cm} cm` : '—';
+  document.getElementById('ll-mult').textContent = ll?.multiplier != null
+    ? `${ll.multiplier} (${ll.multiplier_source || 'est.'})`
+    : '—';
+    
+  // R&D Validation
+  const rndBox = document.getElementById('rnd-validation-box');
+  if (ll && ll.rnd_validation && ll.rnd_validation.confidence !== 'no_data') {
+    const v = ll.rnd_validation;
+    rndBox.classList.remove('hidden');
+    const titleEl = document.getElementById('rnd-title');
+    const descEl = document.getElementById('rnd-desc');
+    const iconEl = document.getElementById('rnd-icon');
+    
+    if (v.valid) {
+      rndBox.style.background = 'rgba(0, 255, 178, 0.08)';
+      rndBox.style.borderColor = 'rgba(0, 255, 178, 0.2)';
+      iconEl.textContent = '✅';
+      titleEl.textContent = 'Factory Verified';
+      titleEl.style.color = 'var(--a1)';
+      descEl.textContent = `Aligns with real factory R&D (Avg: ${v.factory_sl} mm from ${v.factory_samples} samples).`;
+    } else {
+      rndBox.style.background = 'rgba(255, 184, 48, 0.08)';
+      rndBox.style.borderColor = 'rgba(255, 184, 48, 0.2)';
+      iconEl.textContent = '⚠️';
+      titleEl.textContent = 'Differs from Factory Data';
+      titleEl.style.color = 'var(--a4)';
+      descEl.textContent = `Calculated is ${ll.value_mm} mm, but factory R&D averages ${v.factory_sl} mm (Diff: ${v.deviation_pct}%).`;
+    }
+  } else {
+    rndBox.classList.add('hidden');
+  }
+
+  // — OSY —
+  const osy = r.grammage?.osy;
+  const osyText = osy != null ? `${fmt(osy, 3)} oz/yd²` : '—';
+  document.getElementById('osy-badge').textContent = osyText;
+  document.getElementById('osy-val-mobile').textContent = osyText;
+  document.getElementById('g-gsm').textContent = r.input.gsm;
+  document.getElementById('g-osy').textContent = osy != null ? fmt(osy, 3) : '—';
+
+  // — Composition & Color —
+  if (r.composition && r.composition.type !== 'pure' || r.color) {
+    document.getElementById('sec-composition').classList.remove('hidden');
+    document.getElementById('c-parsed').textContent = r.composition.parsed;
+    document.getElementById('c-dominant').textContent = r.composition.dominant;
+    
+    if (r.color) {
+      document.getElementById('c-color-row').classList.remove('hidden');
+      document.getElementById('c-color').textContent = `${r.input.color_shade} (${r.color.shade} shade, ~${r.color.gsm_adjustment_pct > 0 ? '+' : ''}${r.color.gsm_adjustment_pct}% GSM)`;
+    }
+    
+    const mods = r.composition.modifiers;
+    document.getElementById('c-mod-count').textContent = `× ${mods.count_factor}`;
+    document.getElementById('c-mod-sl').textContent = `× ${mods.sl_factor}`;
+    document.getElementById('c-mod-gsm').textContent = `${mods.gsm_offset > 0 ? '+' : ''}${mods.gsm_offset}`;
+    
+    if (r.composition.notes && r.composition.notes.length > 0) {
+      const notesHtml = r.composition.notes.map(n => `<div>• ${n}</div>`).join('');
+      document.getElementById('c-notes-container').innerHTML = notesHtml;
+    }
+  }
+
+  // — Physical Constraints —
+  if (r.physical_constraints) {
+    document.getElementById('sec-constraints').classList.remove('hidden');
+    const tf = r.physical_constraints.tightness_factor;
+    const status = r.physical_constraints.status;
+    document.getElementById('pc-tf').textContent = tf != null ? tf : '—';
+    
+    const statusEl = document.getElementById('pc-status');
+    const iconEl = document.getElementById('pc-icon');
+    const titleEl = document.getElementById('pc-title');
+    
+    if (status === 'KNITTABLE') {
+      statusEl.textContent = 'Knittable ✓';
+      statusEl.className = 'result-val green';
+      iconEl.className = 'rst-icon green';
+    } else if (status === 'UNKNITTABLE_LOOSE' || status === 'TOO_LOOSE') {
+      statusEl.textContent = 'Un-knittable ✗ (Too Loose)';
+      statusEl.className = 'result-val amber font-bold';
+      iconEl.className = 'rst-icon amber';
+      titleEl.classList.add('amber');
+    } else if (status === 'UNKNITTABLE_TIGHT' || status === 'TOO_TIGHT') {
+      statusEl.textContent = 'Un-knittable ✗ (Too Tight)';
+      statusEl.className = 'result-val red font-bold';
+      iconEl.className = 'rst-icon red';
+      titleEl.classList.add('red');
+    } else if (status === 'WARNING_LOOSE') {
+      statusEl.textContent = 'Warning (Very Loose)';
+      statusEl.className = 'result-val amber';
+    } else if (status === 'WARNING_TIGHT') {
+      statusEl.textContent = 'Warning (Very Tight)';
+      statusEl.className = 'result-val amber';
+    }
+
+    // Expert Analysis
+    if (r.physical_constraints.expert_analysis) {
+      const expert = r.physical_constraints.expert_analysis;
+      const secExpert = document.getElementById('sec-expert');
+      secExpert.classList.remove('hidden');
+      
+      const expertIcon = document.getElementById('expert-icon');
+      const expertTitle = document.getElementById('expert-title');
+      const secBorder = secExpert;
+      
+      if (expert.status === 'critical') {
+        expertIcon.textContent = '🚨';
+        expertTitle.style.color = 'var(--a4)';
+        secBorder.style.borderColor = 'var(--a4)';
+        secBorder.style.background = 'rgba(255,184,48,0.08)';
+      } else {
+        expertIcon.textContent = '🧠';
+        expertTitle.style.color = 'var(--a2)';
+        secBorder.style.borderColor = 'var(--a2)';
+        secBorder.style.background = 'rgba(0,184,255,0.08)';
+      }
+
+      document.getElementById('expert-cause').textContent = expert.cause;
+      
+      const solsContainer = document.getElementById('expert-solutions');
+      solsContainer.innerHTML = expert.solutions.map(s => `<li>• ${s}</li>`).join('');
+    }
+  }
+
+  // — Machine —
+  renderMachine(r.machine, r.input);
+
+  // — Production —
+  if (r.production) {
+    renderProduction(r.production, r.input);
+  }
+
+  // — Quality prediction —
+  renderQuality(r.quality_prediction);
+
+  // — Costing —
+  renderCosting(r.costing);
+
+  // — Formula trace —
+  renderTrace(r.formula_trace || []);
+
+  // — Footer —
+  document.getElementById('res-footer-time').textContent =
+    `KnitAdvisor · response ${r.response_ms}ms`;
+}
+
+/* ============================================================
+   WARP KNIT RENDER
+   ============================================================ */
+function renderWarpKnitCard(wk) {
+  if (!wk) return '';
+
+  let html = '';
+
+  // ── Primary stat grid ──
+  const denierVal = wk.denier_estimated
+    ? `${wk.denier_estimated}D <span style="font-size:10px;color:var(--t3);">(est. from GSM)</span>`
+    : `<span style="color:var(--t3);font-size:11px;">Enter denier</span>`;
+
+  html += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:8px;margin-bottom:14px;">
+    <div class="card-sm">
+      <div class="label">Denier / GSM Est.</div>
+      <div class="value-sm mt-4 text-blue">${denierVal}</div>
+    </div>
+    <div class="card-sm">
+      <div class="label">Stitch Density</div>
+      <div class="value-sm mt-4 text-green">${wk.stitch_density ? wk.stitch_density.courses_per_cm + 'c × ' + wk.stitch_density.wales_per_cm + 'w' : '—'}</div>
+      ${wk.stitch_density ? `<div class="label mt-2">${wk.stitch_density.stitches_per_cm2} stitches/cm²</div>` : ''}
+    </div>`;
+
+  if (wk.course_length) {
+    html += `<div class="card-sm">
+      <div class="label">Avg Course Length</div>
+      <div class="value-sm mt-4 text-amber">${wk.course_length.value} mm</div>
+      <div class="label mt-2">gauge ${wk.course_length.gauge} — pitch ${wk.course_length.pitch_mm} mm</div>
+    </div>`;
+  }
+
+  if (wk.production) {
+    html += `<div class="card-sm">
+      <div class="label">Production Rate</div>
+      <div class="value-sm mt-4 text-purple">${wk.production.production_m_per_min} m/min</div>
+      <div class="label mt-2">${wk.production.production_m_per_shift} m/shift · ${wk.production.work_width_cm}cm wide</div>
+    </div>`;
+  }
+
+  html += `</div>`;
+
+  // ── GSM range cross-check ──
+  if (wk.gsm_range) {
+    const gr = wk.gsm_range;
+    html += `<div class="result-row">
+      <span class="result-key">Expected GSM Range</span>
+      <span class="result-val">${gr.gsm_min}–${gr.gsm_max} g/m² <span style="font-size:10px;color:var(--t3);">(±12% tolerance)</span></span>
+    </div>`;
+  }
+
+  // ── Yarn consumption ──
+  if (wk.yarn_consumption) {
+    const yc = wk.yarn_consumption;
+    html += `<div class="result-section-label mt-12" style="color:var(--a3);">Yarn Consumption</div>`;
+    html += `<div class="result-row">
+      <span class="result-key">Total Yarn Length / m²</span>
+      <span class="result-val">${(yc.yarn_length_per_m2 || 0).toLocaleString()} m</span>
+    </div>
+    <div class="result-row">
+      <span class="result-key">Base Yarn Weight / m²</span>
+      <span class="result-val">${yc.base_yarn_weight_g} g</span>
+    </div>
+    <div class="result-row">
+      <span class="result-key">Total Fabric Weight / m²</span>
+      <span class="result-val white"><strong>${yc.total_weight_g} g/m²</strong></span>
+    </div>`;
+
+    // Per-bar breakdown
+    if (yc.per_bar) {
+      html += `<div style="font-size:11px;color:var(--t3);margin-top:6px;padding:8px;background:var(--bg2);border-radius:4px;">
+        <strong style="color:var(--t2);">Per Guide Bar:</strong>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:4px;margin-top:4px;">`;
+      Object.entries(yc.per_bar).forEach(([k, v]) => {
+        html += `<div>${k.replace('_', ' ')}: ${v.yarn_weight_g}g (${v.ll_mm}mm loop)</div>`;
+      });
+      html += `</div></div>`;
+    }
+  }
+
+  // ── Elastane blend (Powernet) ──
+  if (wk.elastic_blend) {
+    const eb = wk.elastic_blend;
+    html += `<div class="result-section-label mt-14" style="color:var(--a2);">Elastane / Compression Specification</div>`;
+    html += `<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:8px;">
+      <div class="card-sm">
+        <div class="label">Power Rating</div>
+        <div class="value-sm mt-4 text-purple">${eb.power_rating}</div>
+        <div class="label mt-2">D×%/100</div>
+      </div>
+      <div class="card-sm">
+        <div class="label">Compression Class</div>
+        <div class="value-sm mt-4" style="font-size:11px;color:var(--a2);">${eb.elasticity_class}</div>
+      </div>
+      <div class="card-sm">
+        <div class="label">Stretch Estimate</div>
+        <div class="value-sm mt-4 text-pink">~${eb.stretch_estimate_pct}%</div>
+      </div>
+      <div class="card-sm">
+        <div class="label">Recovery</div>
+        <div class="value-sm mt-4 text-cyan">~${eb.recovery_pct}%</div>
+      </div>
+    </div>`;
+    if (eb.compression_note) {
+      html += `<div class="info-box mt-8" style="font-size:11px;color:var(--t3);">${eb.compression_note}</div>`;
+    }
+    html += `<div class="result-row mt-8">
+      <span class="result-key">Denier Ratio (elastane : base)</span>
+      <span class="result-val">${eb.elastane_denier}D : ${eb.base_denier}D = ${eb.denier_ratio}×</span>
+    </div>
+    <div class="result-row">
+      <span class="result-key">Elastane Weight %</span>
+      <span class="result-val">~${eb.elastane_weight_pct}% of total fabric weight</span>
+    </div>`;
+  }
+
+  // ── Guide bars detail ──
+  if (wk.guide_bars) {
+    const gb = wk.guide_bars;
+    html += `<div class="result-section-label mt-14">Guide Bar Configuration</div>`;
+    html += `<div class="result-row">
+      <span class="result-key">Total Guide Bars</span>
+      <span class="result-val white"><strong>${gb.count}</strong></span>
+    </div>`;
+    if (gb.lapping) {
+      html += `<div style="font-size:11px;margin-top:6px;padding:8px;background:var(--bg2);border-radius:4px;">`;
+      Object.entries(gb.lapping).forEach(([k, v]) => {
+        if (typeof v === 'object') {
+          html += `<div style="padding:3px 0;border-bottom:1px solid var(--line3);">
+            <span style="color:var(--t2);font-weight:600;">${k.replace('_',' ').toUpperCase()}</span>
+            <code style="background:var(--bg3);padding:1px 5px;border-radius:2px;margin:0 6px;">${v.notation}</code>
+            <span style="color:var(--t3);">${v.description}</span>
+          </div>`;
+        }
+      });
+      html += `</div>`;
+    }
+    if (gb.note) {
+      html += `<div class="info-box mt-6" style="font-size:11px;">${gb.note}</div>`;
+    }
+  }
+
+  // ── Gauge recommendation ──
+  if (wk.gauge_recommendation) {
+    const gr = wk.gauge_recommendation;
+    html += `<div class="result-row mt-8">
+      <span class="result-key">Recommended Machine Gauge</span>
+      <span class="result-val">${gr.recommended_gauge.join(', ')} GG <span style="font-size:10px;color:var(--t3);">(needles/inch)</span></span>
+    </div>`;
+  }
+
+  // ── Machine speed reference ──
+  if (wk.machine_speed_reference) {
+    const ms = wk.machine_speed_reference;
+    html += `<div class="result-row mt-4">
+      <span class="result-key">Machine Speed Range</span>
+      <span class="result-val">${ms.min.toLocaleString()}–${ms.max.toLocaleString()} courses/min <span style="font-size:10px;color:var(--t3);">(typ. ${ms.typical.toLocaleString()})</span></span>
+    </div>`;
+  }
+
+  return html;
+}
+
+/* ============================================================
+   COSTING RENDER
+   ============================================================ */
+function renderCosting(costing) {
+  const sec = document.getElementById('sec-costing');
+  if (!costing) {
+    sec.classList.add('hidden');
+    return;
+  }
+  sec.classList.remove('hidden');
+
+  document.getElementById('cost-total-val').textContent = `$${fmt(costing.total_per_kg_usd, 2)}`;
+  document.getElementById('cost-yarn-val').textContent = `$${fmt(costing.raw_material_per_kg_usd, 2)}`;
+  
+  document.getElementById('cost-breakdown-yarn').textContent = `$${fmt(costing.raw_material_per_kg_usd, 2)} / kg`;
+  document.getElementById('cost-breakdown-knitting').textContent = `$${fmt(costing.knitting_per_kg_usd, 2)} / kg`;
+  document.getElementById('cost-breakdown-dyeing').textContent = `$${fmt(costing.dyeing_per_kg_usd, 2)} / kg`;
+  document.getElementById('cost-breakdown-finishing').textContent = `$${fmt(costing.finishing_per_kg_usd, 2)} / kg`;
+
+  const marginContainer = document.getElementById('cost-margin-scenarios');
+  if (costing.margin_scenarios && costing.margin_scenarios.length > 0) {
+    marginContainer.innerHTML = costing.margin_scenarios.map(m => `
+      <div class="result-row" style="background: rgba(255,255,255,0.02); padding: 6px 10px; border-radius: 4px; border: 1px solid var(--line2);">
+        <span class="result-key">${m.margin_pct}% Margin Scenario</span>
+        <span class="result-val green font-bold">$${fmt(m.selling_price_usd, 2)} / kg</span>
+      </div>
+    `).join('');
+  } else {
+    marginContainer.innerHTML = '<div class="text-dim text-xs">No scenarios available</div>';
+  }
+}
+
+/* ============================================================
+   QUALITY RENDER
+   ============================================================ */
+function renderQuality(q) {
+  const sec = document.getElementById('sec-quality');
+  if (!q) {
+    sec.classList.add('hidden');
+    return;
+  }
+  sec.classList.remove('hidden');
+
+  document.getElementById('quality-shrink-length').textContent = q.shrinkage?.lengthwise_pct != null ? `${fmt(q.shrinkage.lengthwise_pct, 2)}%` : '—';
+  document.getElementById('quality-shrink-width').textContent = q.shrinkage?.widthwise_pct != null ? `${fmt(q.shrinkage.widthwise_pct, 2)}%` : '—';
+
+  // Spirality
+  const spiralityEl = document.getElementById('quality-spirality');
+  if (q.spirality) {
+    spiralityEl.textContent = `${fmt(q.spirality.predicted_pct, 2)}% (${q.spirality.risk_level.split(' — ')[0]})`;
+    if (q.spirality.risk_level.includes('HIGH')) {
+      spiralityEl.className = 'result-val red font-bold';
+    } else if (q.spirality.risk_level.includes('MEDIUM')) {
+      spiralityEl.className = 'result-val amber';
+    } else {
+      spiralityEl.className = 'result-val green';
+    }
+  } else {
+    spiralityEl.textContent = '—';
+  }
+
+  // Pilling
+  const pillingEl = document.getElementById('quality-pilling');
+  if (q.pilling) {
+    pillingEl.textContent = `Grade ${q.pilling.score}/5 (${q.pilling.rating.split(' — ')[0]})`;
+    if (q.pilling.score <= 2) {
+      pillingEl.className = 'result-val red font-bold';
+    } else if (q.pilling.score === 3) {
+      pillingEl.className = 'result-val amber';
+    } else {
+      pillingEl.className = 'result-val green';
+    }
+  } else {
+    pillingEl.textContent = '—';
+  }
+
+  // Bursting strength
+  const burstingEl = document.getElementById('quality-bursting');
+  if (q.bursting_strength) {
+    burstingEl.textContent = `${fmt(q.bursting_strength.value_kpa, 1)} kPa (${q.bursting_strength.rating})`;
+    if (q.bursting_strength.rating.includes('Below Standard')) {
+      burstingEl.className = 'result-val red font-bold';
+    } else {
+      burstingEl.className = 'result-val green';
+    }
+  } else {
+    burstingEl.textContent = '—';
+  }
+
+  // Dimensional Stability Class
+  document.getElementById('quality-dim-class').textContent = q.dimensional_stability ? `Class ${q.dimensional_stability.class} (${q.dimensional_stability.label})` : '—';
+  
+  // Wash Fastness
+  document.getElementById('quality-fastness').textContent = q.wash_fastness ? `${q.wash_fastness.rating} (${q.wash_fastness.note || ''})` : '—';
+
+  // Finishing Process Recommendations
+  const recsContainer = document.getElementById('quality-finishing-recs');
+  if (q.finishing_recommendations && q.finishing_recommendations.length > 0) {
+    recsContainer.innerHTML = q.finishing_recommendations.map(r => `
+      <li>
+        <strong style="color:var(--a3);">${r.process}</strong>: 
+        <span style="color:var(--t2);">${r.reason}</span>
+      </li>
+    `).join('');
+  } else {
+    recsContainer.innerHTML = '<li>No special finishing recommendations.</li>';
+  }
+}
+
+/* ============================================================
+   YARN RENDER
+   ============================================================ */
+function renderYarn(yarn) {
+  if (!yarn) return;
+
+  document.getElementById('y-count-ne').textContent =
+    yarn.count_ne != null ? `${fmt(yarn.count_ne, 2)} Ne` : (yarn.count_display || '—');
+  document.getElementById('y-count-disp').textContent = yarn.count_display || '—';
+  document.getElementById('y-count-src').textContent = yarn.source || '';
+
+  // Multi-yarn (terry, fleece)
+  if (yarn.yarn2_ne || yarn.binder_denier) {
+    const sec = document.getElementById('multi-yarn-section');
+    const rows = document.getElementById('multi-yarn-rows');
+    sec.classList.remove('hidden');
+
+    let html = '';
+    html += `<div class="result-row"><span class="result-key">Ground yarn</span><span class="result-val">${yarn.count_display?.split('+')[0]?.trim() || '—'}</span></div>`;
+    if (yarn.yarn2_ne) {
+      html += `<div class="result-row"><span class="result-key">Pile / Loop yarn</span><span class="result-val">${yarn.yarn2_display || yarn.yarn2_ne + ' Ne'}</span></div>`;
+    }
+    if (yarn.binder_denier) {
+      html += `<div class="result-row"><span class="result-key">Binder yarn</span><span class="result-val blue">${yarn.binder_denier}D</span></div>`;
+    }
+    rows.innerHTML = html;
+  }
+}
+
+/* ============================================================
+   MACHINE RENDER
+   ============================================================ */
+function renderMachine(m, input) {
+  if (!m) return;
+
+  const gaugeMin = m.gauge_recommended?.min;
+  const gaugeMax = m.gauge_recommended?.max;
+  document.getElementById('m-gauge-range').textContent = fmtRange(gaugeMin, gaugeMax, 'GG');
+  document.getElementById('m-gauge-opt').textContent =
+    m.gauge_optimal ? `optimal: ${m.gauge_optimal} GG` : 'optimal: —';
+
+  const diaMin = m.dia_recommended?.min;
+  const diaMax = m.dia_recommended?.max;
+  document.getElementById('m-dia-range').textContent = fmtRange(diaMin, diaMax, '"');
+
+  document.getElementById('m-feeders').textContent =
+    m.feeders_theoretical != null ? `~${m.feeders_theoretical}` : '—';
+  document.getElementById('m-pitch').textContent =
+    m.pitch_mm != null ? `${m.pitch_mm} mm` : '—';
+  document.getElementById('m-count-gauge').textContent =
+    m.suitable_count_for_gauge != null ? `${m.suitable_count_for_gauge} Ne (est.)` : '—';
+
+  // Exact specs
+  if (input.dia && input.gauge) {
+    document.getElementById('exact-specs').classList.remove('hidden');
+    document.getElementById('m-needles').textContent =
+      m.needles != null ? m.needles.toLocaleString() : '—';
+    document.getElementById('m-gauge-actual').textContent = `${input.gauge} GG`;
+    document.getElementById('m-dia-actual').textContent = `${input.dia}"`;
+  }
+}
+
+/* ============================================================
+   PRODUCTION RENDER
+   ============================================================ */
+function renderProduction(prod, input) {
+  const sec = document.getElementById('sec-production');
+  sec.classList.remove('hidden');
+
+  document.getElementById('prod-hr').textContent = prod.kg_per_hour != null ? fmt(prod.kg_per_hour, 2) : '—';
+  document.getElementById('prod-shift').textContent = prod.kg_per_shift != null ? fmt(prod.kg_per_shift, 1) : '—';
+  document.getElementById('prod-day').textContent = prod.kg_per_day != null ? fmt(prod.kg_per_day, 1) : '—';
+  document.getElementById('prod-eff').textContent = `${input.efficiency || 85}%`;
+  document.getElementById('prod-rpm').textContent = input.rpm ? `${input.rpm} RPM` : '—';
+}
+
+/* ============================================================
+   PATTERN RENDER
+   ============================================================ */
+async function loadPattern(fabricId) {
+  const container = document.getElementById('pattern-container');
+  try {
+    const pattern = await apiPattern(fabricId);
+    renderPatternGrid(container, pattern);
+  } catch (err) {
+    container.innerHTML = `<div class="text-dim text-sm">Pattern data unavailable (${err.message})</div>`;
+  }
+}
+
+/* ============================================================
+   FORMULA TRACE RENDER
+   ============================================================ */
+function renderTrace(steps) {
+  const el = document.getElementById('trace-steps');
+  if (!steps || steps.length === 0) {
+    el.innerHTML = '<div class="text-dim text-sm">No trace available.</div>';
+    return;
+  }
+
+  el.innerHTML = steps.map(s => `
+    <div class="trace-step">
+      <div class="trace-num">${s.step}</div>
+      <div class="trace-content">
+        <div class="trace-action" style="font-weight:600; color:var(--a2);">${s.action || ''}</div>
+        ${s.parsed ? `<div class="text-sm">Parsed: <span style="color:var(--t1)">${s.parsed}</span></div>` : ''}
+        ${s.modifiers ? `<div class="text-xs text-dim mt-2">Modifiers: count ×${s.modifiers.count_factor}, SL ×${s.modifiers.sl_factor}</div>` : ''}
+        ${s.formula ? `<div class="trace-formula mt-2">${escHtml(s.formula)}</div>` : ''}
+        ${s.calculation ? `<div class="trace-formula text-dim">${escHtml(s.calculation)}</div>` : ''}
+        ${s.result && typeof s.result === 'object' ? `<pre class="text-xs text-dim mt-2 p-2 bg-bg3 rounded" style="overflow-x:auto;">${JSON.stringify(s.result, null, 2)}</pre>` : s.result ? `<div class="trace-result mt-2">${escHtml(String(s.result))}</div>` : ''}
+        ${s.source ? `<div class="text-xs text-dim mt-2">Source: ${s.source}</div>` : ''}
+        ${s.warnings ? s.warnings.map(w => `<div class="text-xs mt-2" style="color:var(--a4)">⚠ ${w}</div>`).join('') : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+/* ============================================================
+   TRACE TOGGLE
+   ============================================================ */
+function toggleTrace(trigger) {
+  const body = document.getElementById('trace-body');
+  const isOpen = body.classList.contains('open');
+  body.classList.toggle('open', !isOpen);
+  trigger.classList.toggle('open', !isOpen);
+}
+
+/* ============================================================
+   COPY RESULTS
+   ============================================================ */
+function copyResults() {
+  const params = loadPending();
+  if (!params) return;
+
+  const fabricName = document.getElementById('res-fabric-name').textContent;
+  const gsm = document.getElementById('res-gsm').textContent;
+  const countNe = document.getElementById('y-count-ne').textContent;
+  const countDisp = document.getElementById('y-count-disp').textContent;
+  const llMm = document.getElementById('ll-mm').textContent;
+  const gaugeR = document.getElementById('m-gauge-range').textContent;
+  const diaR = document.getElementById('m-dia-range').textContent;
+  const osy = document.getElementById('g-osy').textContent;
+
+  let text = `KnitAdvisor Result
+===================
+Fabric: ${fabricName}
+GSM: ${gsm} g/m²
+---
+Yarn Count (Ne): ${countNe}
+Yarn Count (Display): ${countDisp}
+Loop Length: ${llMm}
+---
+Gauge Range: ${gaugeR}
+Dia Range: ${diaR}
+OSY: ${osy} oz/yd²`;
+
+  // Costing
+  const secCosting = document.getElementById('sec-costing');
+  if (secCosting && !secCosting.classList.contains('hidden')) {
+    const totalCost = document.getElementById('cost-total-val').textContent;
+    const yarnCost = document.getElementById('cost-yarn-val').textContent;
+    const knitCost = document.getElementById('cost-breakdown-knitting').textContent;
+    const dyeCost = document.getElementById('cost-breakdown-dyeing').textContent;
+    const finCost = document.getElementById('cost-breakdown-finishing').textContent;
+    text += `\n---\nFabric Costing (USD/kg):
+Total Cost: ${totalCost}
+- Yarn (with waste): ${yarnCost}
+- Knitting: ${knitCost}
+- Dyeing: ${dyeCost}
+- Finishing: ${finCost}`;
+  }
+
+  // Quality
+  const secQuality = document.getElementById('sec-quality');
+  if (secQuality && !secQuality.classList.contains('hidden')) {
+    const shrinkL = document.getElementById('quality-shrink-length').textContent;
+    const shrinkW = document.getElementById('quality-shrink-width').textContent;
+    const spirality = document.getElementById('quality-spirality').textContent;
+    const pilling = document.getElementById('quality-pilling').textContent;
+    const bursting = document.getElementById('quality-bursting').textContent;
+    text += `\n---\nFabric Quality Prediction:
+Shrinkage: Length: ${shrinkL}, Width: ${shrinkW}
+Spirality: ${spirality}
+Pilling: ${pilling}
+Bursting Strength: ${bursting}`;
+  }
+
+  text += `\n---\nGenerated by KnitAdvisor`;
+
+  copyToClipboard(text);
+}
+
+/* ============================================================
+   ERROR STATE
+   ============================================================ */
+function showError(message, detail) {
+  document.getElementById('page-loading').classList.add('hidden');
+  const errContainer = document.getElementById('error-container');
+  errContainer.classList.remove('hidden');
+  renderError(errContainer, message, detail);
+}
+</script>
+
+</body>
+</html>

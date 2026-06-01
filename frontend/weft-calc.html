@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Advanced Weft Knitting Calculator — KnitAdvisor</title>
+  <meta name="description" content="Calculate circular knitting speed, system density, production in running meters & kg/hr, cover factor, and gauge-to-count matches.">
+  <meta name="theme-color" content="#FFFFFF">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+
+  <style>
+    .page-header { padding: 28px 0 20px; }
+    .page-title { margin-bottom: 4px; }
+    .page-sub { font-size: 12px; color: var(--t2); }
+
+    .calc-container {
+      display: grid;
+      grid-template-columns: 1.1fr 1.9fr;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    @media (max-width: 768px) {
+      .calc-container { grid-template-columns: 1fr; }
+    }
+
+    .form-section {
+      background: var(--bg2);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 18px;
+    }
+    .form-section-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .8px;
+      color: var(--a1);
+      font-weight: 600;
+      margin-bottom: 14px;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 6px;
+    }
+
+    .result-section {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .metrics-group {
+      background: var(--bg2);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 18px;
+    }
+
+    .metric-card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .metric-out-card {
+      background: var(--bg3);
+      border: 1px solid var(--line2);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+    }
+    .moc-lbl { font-size: 9px; color: var(--t3); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+    .moc-val { font-size: 18px; font-weight: 700; color: #00ffb2; }
+    .moc-sub { font-size: 9px; color: var(--t3); font-family: var(--mono); margin-top: 2px; }
+
+    .main-content { padding: 0 0 40px; }
+  </style>
+</head>
+<body>
+<div class="page-wrap">
+
+  <!-- HEADER -->
+  <header class="hdr">
+    <a href="/" class="logo">Knit<span>Advisor</span></a>
+    <div class="hdr-badge">BETA</div>
+    <div class="hdr-right">
+      <a href="/" class="btn btn-ghost hide-mobile">← Calculator</a>
+      <a href="converter.html" class="btn btn-ghost hide-mobile">⇄ Converter</a>
+      <a href="diagnostics.html" class="btn btn-ghost hide-mobile">🔍 Diagnostics</a>
+      <a href="academy.html" class="btn btn-ghost hide-mobile">🎓 Academy</a>
+    </div>
+  </header>
+
+  <main class="container main-content">
+
+    <div class="page-header">
+      <h1 class="h1 page-title text-head">Weft Knitting Calculations</h1>
+      <div class="page-sub">Comprehensive production arithmetic, fabric structure, and gauge matching</div>
+    </div>
+
+    <div class="calc-container">
+
+      <!-- COLUMN 1: MACHINERY INPUTS -->
+      <div class="form-section">
+        <div class="form-section-title">⚙️ Machine Specifications</div>
+        
+        <div class="form-group mb-12">
+          <label class="form-label" for="dia">Cylinder Diameter (inches)</label>
+          <input type="number" class="form-input" id="dia" placeholder="e.g. 30" value="30" oninput="doWeftCalculate()">
+        </div>
+
+        <div class="form-group mb-12">
+          <label class="form-label" for="gauge">Machine Gauge (GG)</label>
+          <input type="number" class="form-input" id="gauge" placeholder="e.g. 24" value="24" oninput="doWeftCalculate()">
+        </div>
+
+        <div class="form-group mb-12">
+          <label class="form-label" for="feeders">No. of Feeders (Systems)</label>
+          <input type="number" class="form-input" id="feeders" placeholder="e.g. 96" value="96" oninput="doWeftCalculate()">
+        </div>
+
+        <div class="form-group mb-12">
+          <label class="form-label" for="rpm">Machine RPM (Speed)</label>
+          <input type="number" class="form-input" id="rpm" placeholder="e.g. 25" value="25" oninput="doWeftCalculate()">
+        </div>
+
+        <div class="form-group mb-12">
+          <label class="form-label" for="efficiency">Efficiency (%)</label>
+          <input type="number" class="form-input" id="efficiency" placeholder="e.g. 85" value="85" oninput="doWeftCalculate()">
+        </div>
+
+        <div class="form-section-title mt-16">📋 Fabric Specifications</div>
+
+        <div class="form-group mb-12">
+          <label class="form-label" for="courses_per_cm">Course Density (courses/cm)</label>
+          <input type="number" class="form-input" id="courses_per_cm" placeholder="e.g. 20" value="20" oninput="doWeftCalculate()">
+        </div>
+
+        <div class="form-group mb-12">
+          <label class="form-label" for="wales_per_cm">Wales Density (wales/cm)</label>
+          <input type="number" class="form-input" id="wales_per_cm" placeholder="e.g. 11" value="11" oninput="doWeftCalculate()">
+        </div>
+
+        <div class="form-group mb-12">
+          <label class="form-label" for="gsm">Fabric Weight (GSM - g/m²)</label>
+          <input type="number" class="form-input" id="gsm" placeholder="e.g. 180" value="180" oninput="doWeftCalculate()">
+        </div>
+
+        <div class="form-group mb-12">
+          <label class="form-label" for="count_ne">Yarn Count (Ne)</label>
+          <input type="number" class="form-input" id="count_ne" placeholder="e.g. 30" value="30" oninput="doWeftCalculate()">
+        </div>
+
+        <div class="form-group mb-12">
+          <label class="form-label" for="loop_length_cm">Loop Length (cm)</label>
+          <input type="number" class="form-input" id="loop_length_cm" placeholder="e.g. 0.28" value="0.28" oninput="doWeftCalculate()" step="0.01">
+        </div>
+
+        <div class="form-group mb-12">
+          <label class="form-label" for="k_constant">Stitch Density Constant (K)</label>
+          <input type="number" class="form-input" id="k_constant" placeholder="e.g. 20" value="20" oninput="doWeftCalculate()">
+        </div>
+
+        <div class="form-group mb-12">
+          <label class="form-label" for="feeders_per_course">Feeders per Course</label>
+          <input type="number" class="form-input" id="feeders_per_course" placeholder="e.g. 1" value="1" oninput="doWeftCalculate()">
+        </div>
+      </div>
+
+      <!-- COLUMN 2: CALCULATED METRICS -->
+      <div class="result-section">
+        
+        <!-- SECTION 1: SPEED & PRODUCTIVITY -->
+        <div class="metrics-group">
+          <div class="form-section-title">⚡ Speed & Productivity Metrics</div>
+          <div class="metric-card-grid">
+            <div class="metric-out-card">
+              <span class="moc-lbl">Knitting Speed</span>
+              <span class="moc-val" id="r-speed">—</span>
+              <span class="moc-sub" id="f-speed">V = 0.00133 × d × n</span>
+            </div>
+            <div class="metric-out-card">
+              <span class="moc-lbl">System Density</span>
+              <span class="moc-val" id="r-density">—</span>
+              <span class="moc-sub" id="f-density">SD = S / d</span>
+            </div>
+            <div class="metric-out-card">
+              <span class="moc-lbl">Speed Factor</span>
+              <span class="moc-val" id="r-factor">—</span>
+              <span class="moc-sub" id="f-factor">SF = S × n</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- SECTION 2: PRODUCTION CAPACITY -->
+        <div class="metrics-group">
+          <div class="form-section-title">🏭 Production Capacity (Output)</div>
+          <div class="metric-card-grid">
+            <div class="metric-out-card">
+              <span class="moc-lbl">Running Length</span>
+              <span class="moc-val" id="r-length">—</span>
+              <span class="moc-sub" id="f-length">L = (n×S×η×60) / (Feeder/cr×cpcm×100)</span>
+            </div>
+            <div class="metric-out-card">
+              <span class="moc-lbl">Fabric Open Width</span>
+              <span class="moc-val" id="r-width">—</span>
+              <span class="moc-sub" id="f-width">W_B = (π × d × E) / (wpcm × 100)</span>
+            </div>
+            <div class="metric-out-card">
+              <span class="moc-lbl">Shift Production (m)</span>
+              <span class="moc-val" id="r-length-shift">—</span>
+              <span class="moc-sub">Shift = L × 8 hrs</span>
+            </div>
+            <div class="metric-out-card">
+              <span class="moc-lbl">Production (kg/hr)</span>
+              <span class="moc-val" id="r-weight">—</span>
+              <span class="moc-sub" id="f-weight">P = (L × W_B × GSM) / 1000</span>
+            </div>
+            <div class="metric-out-card">
+              <span class="moc-lbl">Production (kg/hr) [Yarn Ne]</span>
+              <span class="moc-val" id="r-weight-ne">—</span>
+              <span class="moc-sub" id="f-weight-ne">Direct formula based on Ne</span>
+            </div>
+            <div class="metric-out-card">
+              <span class="moc-lbl">Shift Production (kg)</span>
+              <span class="moc-val" id="r-weight-shift">—</span>
+              <span class="moc-sub">Shift = P × 8 hrs</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- SECTION 3: STRUCTURE & TIGHTNESS -->
+        <div class="metrics-group">
+          <div class="form-section-title">🧶 Fabric Structure & Tightness</div>
+          <div class="metric-card-grid">
+            <div class="metric-out-card">
+              <span class="moc-lbl">Stitch Density</span>
+              <span class="moc-val" id="r-stitch-density">—</span>
+              <span class="moc-sub" id="f-stitch-density">S = K / l^2</span>
+            </div>
+            <div class="metric-out-card">
+              <span class="moc-lbl">Tightness Cover Factor</span>
+              <span class="moc-val" id="r-cover-factor">—</span>
+              <span class="moc-sub" id="f-cover-factor">CF = sqrt(Tex) / l_cm</span>
+            </div>
+            <div class="metric-out-card">
+              <span class="moc-lbl">Calculated GSM</span>
+              <span class="moc-val" id="r-calc-gsm">—</span>
+              <span class="moc-sub" id="f-calc-gsm">GSM = (S × l_cm × Tex) / 10</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- SECTION 4: GAUGE MATCHING -->
+        <div class="metrics-group">
+          <div class="form-section-title">📐 Optimum Gauge & Yarn Match</div>
+          <div class="metric-card-grid">
+            <div class="metric-out-card">
+              <span class="moc-lbl">Optimum Gauge (Single Jersey)</span>
+              <span class="moc-val" id="r-gauge-sj">—</span>
+              <span class="moc-sub" id="f-gauge-sj">E = 2.54 × sqrt(1650/Tex)</span>
+            </div>
+            <div class="metric-out-card">
+              <span class="moc-lbl">Optimum Gauge (Double Jersey)</span>
+              <span class="moc-val" id="r-gauge-dj">—</span>
+              <span class="moc-sub" id="f-gauge-dj">E = 2.54 × sqrt(1400/Tex)</span>
+            </div>
+            <div class="metric-out-card">
+              <span class="moc-lbl">Optimum Tex (for input GG)</span>
+              <span class="moc-val" id="r-tex-match-sj">—</span>
+              <span class="moc-sub" id="f-tex-match-sj">Tex_SJ = 10645 / E^2</span>
+            </div>
+            <div class="metric-out-card">
+              <span class="moc-lbl">Optimum Ne (for input GG)</span>
+              <span class="moc-val" id="r-ne-match-sj">—</span>
+              <span class="moc-sub">Ne = 590.5 / Tex_SJ</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- Navigate back -->
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <a href="/" class="btn btn-secondary" style="flex:1">← Main Calculator</a>
+      <a href="diagnostics.html" class="btn btn-secondary" style="flex:1">🔍 Diagnostics Hub</a>
+    </div>
+
+  </main>
+
+  <footer class="footer">
+    <div class="footer-nav container">
+      <div class="footer-brand">
+        <span class="footer-brand-name">KnitAdvisor</span>
+        <span class="footer-brand-sub">Advanced Calculations · Arithmetic Engine</span>
+      </div>
+      <nav class="footer-links">
+        <a href="/">Calculator</a>
+        <a href="converter.html">Converter</a>
+        <a href="diagnostics.html">Diagnostics</a>
+        <a href="academy.html">Knitting Academy</a>
+      </nav>
+    </div>
+    <div class="footer-bottom container">
+      <div class="footer-platform">
+        <span class="footer-platform-label">Part of</span>
+        <a href="https://www.onlinetextileschool.com" target="_blank" rel="noopener" class="footer-platform-link">www.onlinetextileschool.com</a>
+      </div>
+      <div class="footer-sponsor">
+        <span class="footer-sponsor-label">Proud Sponsor</span>
+        <a href="https://www.asutex.com" target="_blank" rel="noopener" class="footer-sponsor-link">
+          <span class="footer-sponsor-dot"></span>
+          Asutex
+        </a>
+      </div>
+    </div>
+  </footer>
+
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/ui.js"></script>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    doWeftCalculate();
+  });
+
+  async function doWeftCalculate() {
+    const dia = parseFloat(document.getElementById('dia').value);
+    const gauge = parseFloat(document.getElementById('gauge').value);
+    const feeders = parseFloat(document.getElementById('feeders').value);
+    const rpm = parseFloat(document.getElementById('rpm').value);
+    const efficiency = parseFloat(document.getElementById('efficiency').value);
+    const courses_per_cm = parseFloat(document.getElementById('courses_per_cm').value);
+    const wales_per_cm = parseFloat(document.getElementById('wales_per_cm').value);
+    const gsm = parseFloat(document.getElementById('gsm').value);
+    const count_ne = parseFloat(document.getElementById('count_ne').value);
+    const loop_length_cm = parseFloat(document.getElementById('loop_length_cm').value);
+    const k_constant = parseFloat(document.getElementById('k_constant').value);
+    const feeders_per_course = parseFloat(document.getElementById('feeders_per_course').value) || 1;
+
+    // Local calculation parameters
+    const tex = 590.5 / count_ne;
+    const sl_cm = loop_length_cm;
+
+    const params = {
+      dia, gauge, feeders, rpm, efficiency, feeders_per_course,
+      courses_per_cm, wales_per_cm, gsm, count_ne, loop_length_cm,
+      k_constant, tex, sl_cm
+    };
+
+    try {
+      const res = await apiWeftCalculate(params);
+      if (res.success) {
+        renderResults(res.results);
+      }
+    } catch (err) {
+      console.error(err);
+      // Run client-side calculation fallback if API is offline
+      runClientSideWeftCalculations(params);
+    }
+  }
+
+  function renderResults(r) {
+    // Speed
+    updateVal('r-speed', r.knitting_speed, ' m/sec');
+    updateVal('r-density', r.system_density, ' sys/in');
+    updateVal('r-factor', r.speed_factor, ' courses/min');
+
+    // Capacity
+    updateVal('r-length', r.running_meters_hr, ' m/hr');
+    updateVal('r-width', r.open_width_m, ' meters');
+    updateVal('r-length-shift', r.running_meters_hr ? r.running_meters_hr * 8 : null, ' m/shift');
+    updateVal('r-weight', r.production_kg_hr_m, ' kg/hr');
+    updateVal('r-weight-ne', r.production_kg_hr_ne, ' kg/hr');
+    updateVal('r-weight-shift', r.production_kg_hr_m ? r.production_kg_hr_m * 8 : null, ' kg/shift');
+
+    // Structure
+    updateVal('r-stitch-density', r.stitch_density, ' loops/cm²');
+    updateVal('r-cover-factor', r.cover_factor, '');
+    updateVal('r-calc-gsm', r.gsm_from_structure, ' g/m²');
+
+    // Gauge matching
+    updateVal('r-gauge-sj', r.optimum_gauge_sj, ' GG');
+    updateVal('r-gauge-dj', r.optimum_gauge_dj, ' GG');
+    updateVal('r-tex-match-sj', r.optimum_tex_sj, ' Tex');
+    
+    const neMatch = r.optimum_tex_sj ? (590.5 / r.optimum_tex_sj) : null;
+    updateVal('r-ne-match-sj', neMatch, ' Ne');
+  }
+
+  function updateVal(id, val, suffix = '') {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (val === null || val === undefined || isNaN(val)) {
+      el.textContent = '—';
+    } else {
+      el.textContent = parseFloat(val).toFixed(2) + suffix;
+    }
+  }
+
+  // Client-side fallback engine to guarantee offline operation
+  function runClientSideWeftCalculations(p) {
+    const r = {};
+
+    if (!isNaN(p.dia) && !isNaN(p.rpm)) {
+      r.knitting_speed = 0.00133 * p.dia * p.rpm;
+    }
+    if (!isNaN(p.feeders) && !isNaN(p.dia)) {
+      r.system_density = p.feeders / p.dia;
+    }
+    if (!isNaN(p.feeders) && !isNaN(p.rpm)) {
+      r.speed_factor = p.feeders * p.rpm;
+    }
+    if (!isNaN(p.rpm) && !isNaN(p.feeders) && !isNaN(p.efficiency) && !isNaN(p.courses_per_cm)) {
+      const eff = p.efficiency / 100;
+      r.running_meters_hr = (p.rpm * p.feeders * eff * 60) / (p.feeders_per_course * p.courses_per_cm * 100);
+    }
+    if (!isNaN(p.dia) && !isNaN(p.gauge) && !isNaN(p.wales_per_cm)) {
+      r.open_width_m = (Math.PI * p.dia * p.gauge) / (p.wales_per_cm * 100);
+    }
+    if (r.running_meters_hr && r.open_width_m && !isNaN(p.gsm)) {
+      r.production_kg_hr_m = (r.running_meters_hr * r.open_width_m * p.gsm) / 1000;
+    }
+    if (!isNaN(p.rpm) && !isNaN(p.feeders) && !isNaN(p.dia) && !isNaN(p.gauge) && !isNaN(p.sl_cm) && !isNaN(p.efficiency) && !isNaN(p.count_ne)) {
+      const eff = p.efficiency / 100;
+      const factor = 0.00001112598;
+      r.production_kg_hr_ne = (p.rpm * p.feeders * (p.dia * p.gauge * p.sl_cm) * eff * Math.PI * factor) / p.count_ne;
+    }
+    if (!isNaN(p.loop_length_cm) && !isNaN(p.k_constant)) {
+      r.stitch_density = p.k_constant / (p.loop_length_cm * p.loop_length_cm);
+    }
+    if (!isNaN(p.tex) && !isNaN(p.loop_length_cm)) {
+      r.cover_factor = Math.sqrt(p.tex) / p.loop_length_cm;
+    }
+    if (!isNaN(p.loop_length_cm) && !isNaN(p.tex)) {
+      const density = r.stitch_density || (p.k_constant ? p.k_constant / (p.loop_length_cm * p.loop_length_cm) : null);
+      if (density) {
+        r.gsm_from_structure = (density * p.loop_length_cm * p.tex) / 10;
+      }
+    }
+    if (!isNaN(p.tex)) {
+      r.optimum_gauge_sj = 2.54 * Math.sqrt(1650 / p.tex);
+      r.optimum_gauge_dj = 2.54 * Math.sqrt(1400 / p.tex);
+    }
+    if (!isNaN(p.gauge)) {
+      r.optimum_tex_sj = (1650 * 2.54 * 2.54) / (p.gauge * p.gauge);
+      r.optimum_tex_dj = (1400 * 2.54 * 2.54) / (p.gauge * p.gauge);
+    }
+
+    renderResults(r);
+  }
+</script>
+</body>
+</html>

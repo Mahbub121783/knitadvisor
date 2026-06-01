@@ -1,0 +1,40 @@
+name: cPanel Auto Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy to cPanel
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🚚 Get latest code
+        uses: actions/checkout@v4
+
+      - name: 📂 Sync files to cPanel
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          server-dir: /home/tecnedub/repositories/knitadvisor/
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/node_modules/**
+            .env
+            backend/.env
+            *.pdf
+            *.xlsx
+            *.html
+            !frontend/*.html
+            !final_structure_revised.html
+            fleece_data.txt
+            rnd_data_full.json
+            woven_erp_reference.json
+            SYSTEM_ANALYSIS.md
+            *.xlsx
+            *.pdf

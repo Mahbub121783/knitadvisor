@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KnitAdvisor — Admin Panel</title>
+  <meta name="theme-color" content="#080A0F">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+
+  <style>
+    /* Login fullscreen overlay */
+    .login-overlay {
+      position: fixed;
+      inset: 0;
+      background: var(--bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 999;
+      padding: var(--pad);
+    }
+
+    .login-card {
+      background: var(--bg2);
+      border: 1px solid var(--line2);
+      border-radius: var(--radius);
+      padding: var(--pad-lg);
+      max-width: 360px;
+      width: 100%;
+    }
+
+    .login-card .h2 { margin-bottom: 20px; }
+
+    .form-group {
+      margin-bottom: 16px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .form-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      color: var(--t3);
+      margin-bottom: 6px;
+      font-weight: 600;
+    }
+
+    .form-input, .form-select {
+      background: var(--bg3);
+      border: 1px solid var(--line2);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--t1);
+      transition: border-color var(--t-fast);
+    }
+
+    .form-input:focus, .form-select:focus {
+      outline: none;
+      border-color: #00ffb2;
+    }
+
+    #login-error {
+      color: var(--a3);
+      font-size: 11px;
+      margin-top: 8px;
+      text-align: center;
+    }
+
+    .hidden { display: none !important; }
+
+    /* Tab panels */
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; animation: fade-in .2s ease; }
+
+    @keyframes fade-in {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    /* Log table */
+    .log-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+
+    .log-th {
+      text-align: left;
+      padding: 8px 10px;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      color: var(--t3);
+      font-family: var(--mono);
+      font-weight: 600;
+      border-bottom: 1px solid var(--line);
+      background: var(--bg3);
+    }
+
+    .log-td {
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--line);
+      color: var(--t2);
+      font-family: var(--mono);
+    }
+
+    .log-tr:hover .log-td { background: var(--bg3); }
+
+    /* Badges */
+    .badge-cache { font-size: 9px; padding: 2px 6px; border-radius: 3px; background: var(--bg4); color: var(--t3); }
+    .badge-hit { background: rgba(0,255,178,.15); color: #00ffb2; border: 1px solid rgba(0,255,178,.3); }
+    .badge-miss { background: rgba(255,68,68,.15); color: var(--a3); border: 1px solid rgba(255,68,68,.3); }
+
+    /* Provider card */
+    .provider-card {
+      background: var(--bg2);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      margin-bottom: 10px;
+      display: grid;
+      grid-template-columns: 50px 1fr 140px;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .provider-card.healthy { border-left: 3px solid #00ffb2; }
+    .provider-card.unhealthy { border-left: 3px solid var(--a3); }
+    .provider-card.disabled { opacity: .5; }
+
+    .provider-buttons { display: flex; gap: 6px; }
+    .btn-arrow { padding: 6px 8px; font-size: 11px; font-family: var(--mono); min-width: 32px; }
+
+    .provider-info {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .priority-badge {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: var(--bg4);
+      border: 1px solid var(--line2);
+      font-size: 11px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--t1);
+    }
+
+    .health-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 4px;
+    }
+
+    .health-dot.ok { background: #00ffb2; }
+    .health-dot.bad { background: var(--a3); }
+
+    .provider-details {
+      font-size: 10px;
+      color: var(--t3);
+      margin: 8px 0;
+    }
+
+    .provider-controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto auto;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .toggle-switch {
+      position: relative;
+      width: 36px;
+      height: 20px;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .toggle-track {
+      position: absolute;
+      inset: 0;
+      background: var(--bg4);
+      border: 1px solid var(--line2);
+      border-radius: 10px;
+      transition: background var(--t-fast);
+    }
+
+    .toggle-track::after {
+      content: '';
+      position: absolute;
+      left: 3px;
+      top: 3px;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--t3);
+      transition: transform var(--t-fast), background var(--t-fast);
+    }
+
+    .toggle-switch input:checked + .toggle-track {
+      background: rgba(0,255,178,.2);
+      border-color: #00ffb2;
+    }
+
+    .toggle-switch input:checked + .toggle-track::after {
+      transform: translateX(16px);
+      background: #00ffb2;
+    }
+
+    .api-key-input {
+      font-size: 10px;
+      padding: 6px 8px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    /* Cache table */
+    .cache-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+
+    .cache-th {
+      text-align: left;
+      padding: 8px 10px;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      color: var(--t3);
+      font-family: var(--mono);
+      font-weight: 600;
+      border-bottom: 1px solid var(--line);
+      background: var(--bg3);
+    }
+
+    .cache-td {
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--line);
+      color: var(--t2);
+      font-family: var(--mono);
+      word-break: break-all;
+    }
+
+    .cache-tr:hover .cache-td { background: var(--bg3); }
+
+    .btn { display: inline-flex; gap: 8px; padding: 10px 16px; border-radius: var(--radius-sm); font-family: var(--mono); font-size: 12px; font-weight: 500; border: none; cursor: pointer; transition: all var(--t-fast); }
+
+    .btn-primary { background: white; color: black; }
+    .btn-primary:hover { background: #f0f0f0; }
+
+    .btn-secondary { background: var(--bg3); border: 1px solid var(--line2); color: var(--t1); }
+    .btn-secondary:hover { border-color: var(--a2); color: var(--a2); }
+
+    .btn-ghost { background: transparent; border: 1px solid var(--line); color: var(--t2); padding: 8px 12px; font-size: 11px; }
+    .btn-ghost:hover { border-color: var(--a1); color: var(--a1); }
+
+    .btn-small { padding: 4px 8px; font-size: 10px; }
+
+    .w-full { width: 100%; }
+
+    .mt-16 { margin-top: 16px; }
+    .mt-12 { margin-top: 12px; }
+    .mt-8 { margin-top: 8px; }
+
+    .mb-16 { margin-bottom: 16px; }
+    .mb-12 { margin-bottom: 12px; }
+    .mb-8 { margin-bottom: 8px; }
+
+    .gap-8 { gap: 8px; }
+    .gap-12 { gap: 12px; }
+    .gap-16 { gap: 16px; }
+
+    .flex { display: flex; }
+    .flex-col { flex-direction: column; }
+    .items-center { align-items: center; }
+    .justify-between { justify-content: space-between; }
+    .flex-wrap { flex-wrap: wrap; }
+
+    .text-sm { font-size: 11px; }
+    .text-xs { font-size: 10px; }
+
+    .text-muted { color: var(--t2); }
+    .text-dim { color: var(--t3); }
+
+    /* Stat grid */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .stat-card {
+      background: var(--bg3);
+      border: 1px solid var(--line2);
+      border-radius: var(--radius-sm);
+      padding: 12px;
+      text-align: center;
+    }
+
+    .stat-value {
+      font-family: 'Inter';
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--a1);
+    }
+
+    .stat-label {
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      color: var(--t3);
+      margin-top: 4px;
+    }
+
+    .pagination {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .pagination button { padding: 8px 12px; }
+
+    #cache-entry-viewer {
+      border: 1px solid var(--line2);
+      padding: 16px;
+      border-radius: var(--radius);
+      background: var(--bg2);
+    }
+
+    #entry-json-display {
+      background: var(--bg3);
+      border: 1px solid var(--line2);
+      border-radius: 4px;
+      padding: 12px;
+      font-family: var(--mono);
+      font-size: 10px;
+      overflow: auto;
+      max-height: 400px;
+      color: var(--t1);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .hdr-badge {
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      background: var(--bg3);
+      color: var(--t3);
+      padding: 4px 8px;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Login Overlay -->
+  <div id="login-screen" class="login-overlay">
+    <div class="login-card">
+      <h1 class="h2">KnitAdvisor Admin</h1>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input type="password" id="admin-password" class="form-input" placeholder="Enter admin password">
+      </div>
+      <button id="login-btn" class="btn btn-primary w-full mt-16">Login</button>
+      <div id="login-error" class="hidden"></div>
+    </div>
+  </div>
+
+  <!-- Admin App -->
+  <div id="admin-app" class="page-wrap hidden">
+    <header class="hdr">
+      <a class="logo" href="/">Knit<span>Advisor</span></a>
+      <span class="hdr-badge">ADMIN</span>
+      <div class="hdr-right flex gap-8 items-center">
+        <span id="admin-status-dot" style="width:8px;height:8px;border-radius:50%;background:#00ffb2;"></span>
+        <button id="logout-btn" class="btn btn-ghost">Logout</button>
+      </div>
+    </header>
+
+    <!-- Tab Bar -->
+    <div class="tab-bar" id="admin-tab-bar">
+      <button class="tab-btn active" data-tab="tab-logs">Query Logs</button>
+      <button class="tab-btn" data-tab="tab-providers">AI Providers</button>
+      <button class="tab-btn" data-tab="tab-cache">Cache</button>
+    </div>
+
+    <main class="container" style="padding-top:20px;padding-bottom:40px;">
+
+      <!-- TAB: Query Logs -->
+      <div id="tab-logs" class="tab-panel active">
+        <div class="stat-grid mb-16" id="log-stats-grid">
+          <div class="stat-card"><div class="stat-value" id="stat-today">—</div><div class="stat-label">Queries Today</div></div>
+          <div class="stat-card"><div class="stat-value" id="stat-cache-pct">—</div><div class="stat-label">Cache Hit %</div></div>
+          <div class="stat-card"><div class="stat-value" id="stat-avg-ms">—</div><div class="stat-label">Avg Response ms</div></div>
+          <div class="stat-card"><div class="stat-value" id="stat-nl">—</div><div class="stat-label">NL Queries</div></div>
+        </div>
+
+        <!-- Filters -->
+        <div class="card mb-16">
+          <div class="flex gap-8 flex-wrap items-flex-end">
+            <div class="form-group" style="min-width:130px;">
+              <label class="form-label">Fabric</label>
+              <select id="filter-fabric" class="form-select">
+                <option value="">All fabrics</option>
+                <option value="single_jersey">Single Jersey</option>
+                <option value="terry_fabric">Terry</option>
+                <option value="fleece">Fleece</option>
+                <option value="rib_1x1">Rib 1×1</option>
+                <option value="interlock">Interlock</option>
+              </select>
+            </div>
+            <div class="form-group" style="min-width:120px;">
+              <label class="form-label">Date From</label>
+              <input type="date" id="filter-date-from" class="form-input">
+            </div>
+            <div class="form-group" style="min-width:120px;">
+              <label class="form-label">Date To</label>
+              <input type="date" id="filter-date-to" class="form-input">
+            </div>
+            <div class="form-group" style="min-width:110px;">
+              <label class="form-label">Cache</label>
+              <select id="filter-cache" class="form-select">
+                <option value="">All</option>
+                <option value="1">Hit</option>
+                <option value="0">Miss</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" style="visibility:hidden;">NL</label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--t2);">
+                <input type="checkbox" id="filter-nl-only" style="accent-color:#00ffb2;">
+                NL Only
+              </label>
+            </div>
+            <button id="logs-apply-btn" class="btn btn-secondary">Apply</button>
+          </div>
+        </div>
+
+        <!-- Log Table -->
+        <div class="card" style="overflow-x:auto;">
+          <table class="log-table">
+            <thead>
+              <tr>
+                <th class="log-th">Time</th>
+                <th class="log-th">Input Text</th>
+                <th class="log-th">Fabric</th>
+                <th class="log-th">GSM</th>
+                <th class="log-th">Ms</th>
+                <th class="log-th">Cache</th>
+                <th class="log-th">AI</th>
+              </tr>
+            </thead>
+            <tbody id="log-tbody"></tbody>
+          </table>
+        </div>
+
+        <!-- Pagination -->
+        <div id="log-pagination" class="pagination"></div>
+      </div>
+
+      <!-- TAB: AI Providers -->
+      <div id="tab-providers" class="tab-panel hidden">
+        <div class="flex items-center justify-between mb-16">
+          <div>
+            <h2 class="h2">AI Providers</h2>
+            <div class="text-sm text-muted mt-8">Drag to reorder priority. Provider 1 is tried first. Gray indicates disabled.</div>
+          </div>
+          <button id="reset-stats-btn" class="btn btn-ghost">Reset Daily Stats</button>
+        </div>
+
+        <!-- Provider Cards List -->
+        <div id="providers-list" class="flex flex-col gap-8"></div>
+      </div>
+
+      <!-- TAB: Cache -->
+      <div id="tab-cache" class="tab-panel hidden">
+        <!-- Cache Stats -->
+        <div class="stat-grid mb-16">
+          <div class="stat-card"><div class="stat-value" id="cache-stat-entries">—</div><div class="stat-label">DB Entries</div></div>
+          <div class="stat-card"><div class="stat-value" id="cache-stat-hits">—</div><div class="stat-label">Total Hits</div></div>
+          <div class="stat-card"><div class="stat-value" id="cache-stat-mem">—</div><div class="stat-label">Memory Cache</div></div>
+          <div class="stat-card"><div class="stat-value" id="cache-stat-oldest">—</div><div class="stat-label">Oldest Entry</div></div>
+        </div>
+
+        <div class="flex gap-8 mb-16">
+          <button id="cache-flush-btn" class="btn btn-secondary" style="border-color:var(--a3);color:var(--a3);">Flush All Cache</button>
+          <button id="cache-refresh-btn" class="btn btn-ghost">Refresh Stats</button>
+        </div>
+
+        <!-- Cache Entries Table -->
+        <div class="card" style="overflow-x:auto;">
+          <table class="cache-table">
+            <thead>
+              <tr>
+                <th class="cache-th">Cache Key</th>
+                <th class="cache-th">Hits</th>
+                <th class="cache-th">Created</th>
+                <th class="cache-th">Expires</th>
+                <th class="cache-th">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="cache-tbody"></tbody>
+          </table>
+        </div>
+        <div id="cache-pagination" class="pagination"></div>
+
+        <!-- Entry Viewer -->
+        <div id="cache-entry-viewer" class="hidden mt-16">
+          <div class="flex items-center justify-between mb-12">
+            <div class="h3">Cache Entry Detail</div>
+            <button id="entry-viewer-close" class="btn btn-ghost btn-small">×</button>
+          </div>
+          <div class="form-group mb-8">
+            <label class="form-label">Cache Key</label>
+            <code id="entry-key-display" style="font-family:var(--mono);font-size:11px;color:var(--t3);word-break:break-all;"></code>
+          </div>
+          <pre id="entry-json-display"></pre>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <script src="js/ui.js"></script>
+  <script src="js/admin.js"></script>
+</body>
+</html>
