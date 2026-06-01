@@ -21,7 +21,7 @@ jobs:
           # Local folder to deploy (the entire clean project)
           local-dir: ./
           # Target cPanel folder path (e.g. /home/tecnedub/repositories/knitadvisor/ or specific folder)
-          server-dir: ./repositories/knitadvisor/
+          server-dir: ./knitadvisor/
           # Optional: Delete old remote files not present in local repo
           dangerous-clean-slate: true
           # Files to exclude from upload and avoid deleting on the remote server
