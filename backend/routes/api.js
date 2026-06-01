@@ -354,7 +354,11 @@ router.get('/fabrics', (req, res) => {
 // GET /api/pattern/:slug
 // ============================================================
 router.get('/pattern/:slug', (req, res) => {
-  const pattern = getPattern(req.params.slug);
+  const gsm = req.query.gsm ? parseFloat(req.query.gsm) : null;
+  const gauge = req.query.gauge ? parseFloat(req.query.gauge) : null;
+  const composition = req.query.composition || null;
+
+  const pattern = getPattern(req.params.slug, gsm, gauge, composition);
   if (!pattern) {
     return res.status(404).json({ error: `Pattern not found for: ${req.params.slug}` });
   }

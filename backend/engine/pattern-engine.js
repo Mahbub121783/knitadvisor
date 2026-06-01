@@ -10,9 +10,10 @@ class PatternEngine {
     this.cache = new Map();
   }
 
-  generatePattern(fabricId) {
-    if (this.cache.has(fabricId)) {
-      return this.cache.get(fabricId);
+  generatePattern(fabricId, gsm = null, gauge = null, composition = null) {
+    const cacheKey = `${fabricId}_${gsm || ''}_${gauge || ''}_${composition || ''}`;
+    if (this.cache.has(cacheKey)) {
+      return this.cache.get(cacheKey);
     }
 
     const fabric = FABRIC_DERIVATIVES.find(f => f.id === fabricId);
@@ -20,9 +21,96 @@ class PatternEngine {
       return null;
     }
 
+    // Clone the structure to prevent mutating global definitions
+    const structure = JSON.parse(JSON.stringify(fabric.structure));
+
+    // Apply dynamic adjustments based on gsm, gauge, and composition
+    let dynamicNote = structure.note || '';
+    
+    // --- 1. Rib 2x2 & Lycra Rib 2x2: Drop Needle setup at very high GSM ---
+    if ((fabricId === 'rib_2x2' || fabricId === 'lycra_rib_2x2') && gsm && gsm > 220 && gauge && gauge >= 18) {
+      structure.courses_per_repeat = 1;
+      structure.wales_per_repeat = 5;
+      structure.pattern = {
+        C: [['K', 'K', 'M', 'M', 'M']],
+        D: [['M', 'M', 'K', 'K', 'M']]
+      };
+      structure.cam = [
+        { feed: 1, cylinder: 'K on active, M on dropped', dial: 'K on active, M on dropped', note: '2 active cylinder then 2 active dial needles knit, dropping the 5th needle slot to prevent crowing/collision.' }
+      ];
+      structure.needle_arrangement = {
+        butt_pattern: 'CC__DD__',
+        description: 'Drop-needle setup: 2 active cylinder needles alternating with 2 active dial needles and 1 deactivated needle slot on both beds to accommodate thick yarn on fine gauge.'
+      };
+      dynamicNote = 'Heavy fabric drop-needle configuration active (4 wales + 1 dropped wale repeat) to prevent needle damage and jamming.';
+    }
+
+    // --- 2. Lycra Rib 1x1 & 2x2: Full-feed vs Half-feed Plating ---
+    if (fabricId === 'lycra_rib_1x1' || fabricId === 'lycra_rib_2x2') {
+      if (gsm && gsm >= 220) {
+        structure.cam = [
+          { feed: 1, cylinder: 'K', dial: 'K', note: 'Alternating needles plate main cotton yarn and Lycra on all feeds (Full-feed) for high recovery power.' }
+        ];
+        if (structure.needle_arrangement) {
+          structure.needle_arrangement.description = 'Alternating beds gating. Plating carrier feeds Lycra on ALL feeds (Full-feed plating).';
+        }
+        dynamicNote = 'Full-feed Lycra plating engaged (all feeds). Provides maximum recovery power, thickness, and density.';
+      } else if (gsm) {
+        structure.cam = [
+          { feed: 1, cylinder: 'K', dial: 'K', note: 'Alternating needles plate main cotton yarn and Lycra at alternate feeds (Half-feed) for lightweight stretch.' }
+        ];
+        if (structure.needle_arrangement) {
+          structure.needle_arrangement.description = 'Alternating beds gating. Plating carrier feeds Lycra at alternate feeds only (Half-feed plating).';
+        }
+        dynamicNote = 'Half-feed Lycra plating engaged (alternate feeds). Balances elastic recovery with lightweight drapability.';
+      }
+    }
+
+    // --- 3. Single Pique & Single Lacoste: Tuck-to-Miss weight reduction ---
+    if (gsm && gsm > 220) {
+      if (fabricId === 'pique_single') {
+        structure.pattern = [
+          ['K', 'T'],
+          ['K', 'M'],
+          ['T', 'K'],
+          ['M', 'K']
+        ];
+        structure.cam = [
+          { feed: 1, cylinder: 'K/T', note: 'Odd needles knit, even needles tuck' },
+          { feed: 2, cylinder: 'K/M', note: 'Odd needles knit, even needles miss (tuck loop converted to miss to prevent stiff boardy fabric)' },
+          { feed: 3, cylinder: 'T/K', note: 'Odd needles tuck, even needles knit' },
+          { feed: 4, cylinder: 'M/K', note: 'Odd needles miss, even needles knit (tuck loop converted to miss to prevent stiff boardy fabric)' }
+        ];
+        dynamicNote = 'High GSM tuck-to-miss adaptation active. Secondary tuck loops replaced with miss loops to reduce fabric weight and stiffness, keeping the pique drapable.';
+      } else if (fabricId === 'lacoste_single') {
+        structure.pattern = [
+          ['K', 'T'],
+          ['K', 'K'],
+          ['T', 'K'],
+          ['M', 'M']
+        ];
+        structure.cam = [
+          { feed: 1, cylinder: 'K/T', note: 'A needles knit, B needles tuck' },
+          { feed: 2, cylinder: 'K', note: 'All needles knit' },
+          { feed: 3, cylinder: 'T/K', note: 'A needles tuck, B needles knit' },
+          { feed: 4, cylinder: 'M', note: 'All needles miss (knit course converted to miss to reduce density and weight)' }
+        ];
+        dynamicNote = 'High GSM knit-to-miss adaptation active. Courses modified to introduce miss loops, stabilizing fabric and preventing boardy thickness.';
+      }
+    }
+
+    // --- 4. French Terry Pile Sinker Loop Height ---
+    if (fabricId === 'french_terry' && gsm) {
+      if (gsm < 240) {
+        dynamicNote = 'Lightweight French Terry: loop height set to 1.6× ground stitch length to prevent grinning (pile showing on face).';
+      } else {
+        dynamicNote = 'Heavy French Terry: sinker loop height multiplier increased to 2.2× ground stitch length to construct high, dense piles on fabric back without grinning. Sinker push setting: 2.2 mm.';
+      }
+    }
+
     // Warp knit — return lapping-based pattern object instead of K/T/M grid
     if (fabric.category === 'warp_knit') {
-      const s = fabric.structure;
+      const s = structure;
       const warpData = {
         fabric_id: fabric.id,
         fabric_name: fabric.name,
@@ -34,15 +122,14 @@ class PatternEngine {
         machine_speed: fabric.machine_speed,
         technical_notes: fabric.machine_note || '',
         appearance: fabric.appearance || '',
-        structure_note: s.note || '',
+        structure_note: dynamicNote,
         pattern_cylinder: null,
         pattern_dial: null,
       };
-      this.cache.set(fabricId, warpData);
+      this.cache.set(cacheKey, warpData);
       return warpData;
     }
 
-    const structure = fabric.structure;
     const { pattern_cylinder, pattern_dial } = this._extractPatterns(structure);
     const { courses_per_repeat, wales_per_repeat } = this._resolveRepeat(structure, pattern_cylinder, pattern_dial);
     const generated = {
@@ -63,10 +150,10 @@ class PatternEngine {
       // Technical parameters
       technical_notes: fabric.machine_note || '',
       appearance: fabric.appearance || '',
-      structure_note: structure.note || '',
+      structure_note: dynamicNote,
     };
 
-    this.cache.set(fabricId, generated);
+    this.cache.set(cacheKey, generated);
     return generated;
   }
 
@@ -185,5 +272,5 @@ class PatternEngine {
 const patternEngine = new PatternEngine();
 
 module.exports = {
-  getPattern: (fabricId) => patternEngine.generatePattern(fabricId)
+  getPattern: (fabricId, gsm, gauge, composition) => patternEngine.generatePattern(fabricId, gsm, gauge, composition)
 };
