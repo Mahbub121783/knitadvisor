@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KnitAdvisor — Knit Fabric Calculation Engine</title>
+  <meta name="description" content="GSM + Fabric Type দিলেই Yarn Count, Loop Length, Machine Spec, K/T/M Pattern সব auto calculate। Bangladesh knitting industry এর জন্য।">
+  <meta name="theme-color" content="#FFFFFF">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    /* Page-specific styles */
+    .hero {
+      padding: 32px 0 16px;
+      text-align: center;
+    }
+    .hero-eyebrow {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--a1);
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+    .hero-title {
+      font-family: var(--head);
+      font-size: clamp(26px, 6vw, 42px);
+      font-weight: 800;
+      line-height: 1.1;
+      letter-spacing: -1px;
+      margin-bottom: 10px;
+    }
+    .hero-title span { color: var(--a1); }
+    .hero-sub {
+      font-size: 12px;
+      color: var(--t2);
+      line-height: 1.7;
+      max-width: 420px;
+      margin: 0 auto 28px;
+    }
+
+    /* Input card */
+    .input-card {
+      background: var(--bg2);
+      border: 1px solid var(--line2);
+      border-radius: 14px;
+      padding: 22px;
+      margin-bottom: 16px;
+    }
+
+    .gsm-input-wrap {
+      position: relative;
+    }
+    .gsm-input {
+      font-size: 28px !important;
+      font-weight: 600 !important;
+      padding: 14px 70px 14px 16px !important;
+      color: var(--a1) !important;
+    }
+    .gsm-unit {
+      position: absolute;
+      right: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 12px;
+      color: var(--t3);
+      pointer-events: none;
+    }
+
+    .optional-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    @media (max-width: 480px) {
+      .optional-grid { grid-template-columns: 1fr; }
+    }
+
+    /* Path tabs */
+    .path-tabs {
+      display: flex;
+      gap: 0;
+      background: var(--bg3);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 3px;
+      margin-bottom: 20px;
+    }
+    .path-tab {
+      flex: 1;
+      padding: 8px 12px;
+      border-radius: 6px;
+      background: transparent;
+      border: none;
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--t3);
+      cursor: pointer;
+      transition: all var(--t-fast);
+      text-align: center;
+    }
+    .path-tab.active {
+      background: var(--bg4);
+      color: var(--t1);
+      border: 1px solid var(--line2);
+    }
+
+    /* NL input tab */
+    .nl-box {
+      background: var(--bg3);
+      border: 1px solid var(--line2);
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--t1);
+      width: 100%;
+      resize: none;
+      outline: none;
+      min-height: 80px;
+      transition: border-color var(--t-fast);
+    }
+    .nl-box::placeholder { color: var(--t3); }
+    .nl-box:focus { border-color: rgba(192,132,252,.5); }
+    .nl-coming-soon {
+      background: rgba(192,132,252,.05);
+      border: 1px solid rgba(192,132,252,.2);
+      border-radius: var(--radius-sm);
+      padding: 10px 14px;
+      font-size: 11px;
+      color: var(--t2);
+      margin-top: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Fabric chips (category filter) */
+    .fabric-cats {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+    .cat-chip {
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 10px;
+      font-weight: 600;
+      border: 1px solid var(--line2);
+      background: var(--bg3);
+      color: var(--t3);
+      cursor: pointer;
+      transition: all var(--t-fast);
+    }
+    .cat-chip.active, .cat-chip:hover {
+      border-color: rgba(0,255,178,.4);
+      color: var(--a1);
+      background: rgba(0,255,178,.06);
+    }
+
+    /* GSM range hints */
+    .gsm-hints {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+    .gsm-hint {
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 11px;
+      background: var(--bg3);
+      border: 1px solid var(--line);
+      color: var(--t3);
+      cursor: pointer;
+      transition: all var(--t-fast);
+    }
+    .gsm-hint:hover {
+      border-color: var(--a1);
+      color: var(--a1);
+    }
+
+    /* Calculate button */
+    .calc-btn-wrap {
+      position: relative;
+    }
+    #calc-btn {
+      border-radius: 8px;
+      font-size: 15px;
+      letter-spacing: .2px;
+    }
+    .calc-btn-hint {
+      text-align: center;
+      font-size: 10px;
+      color: var(--t3);
+      margin-top: 8px;
+    }
+
+    /* Recents section */
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+
+    /* Features row */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 8px;
+      margin: 24px 0;
+    }
+    .feat-card {
+      background: var(--bg2);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      padding: 14px 12px;
+      text-align: center;
+    }
+    .feat-icon { font-size: 20px; margin-bottom: 6px; }
+    .feat-name { font-size: 11px; font-weight: 600; color: var(--t1); margin-bottom: 2px; }
+    .feat-desc { font-size: 10px; color: var(--t3); line-height: 1.5; }
+
+    /* Composition chips */
+    .comp-chips {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+    .comp-chip {
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      background: var(--bg3);
+      border: 1px solid var(--line);
+      color: var(--t3);
+      cursor: pointer;
+      transition: all var(--t-fast);
+    }
+    .comp-chip:hover, .comp-chip.active {
+      border-color: rgba(192,132,252,.5);
+      color: rgba(192,132,252,1);
+      background: rgba(192,132,252,.06);
+    }
+
+    /* Color shade chips */
+    .shade-chips {
+      display: flex;
+      gap: 6px;
+      margin-top: 6px;
+    }
+    .shade-chip {
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      background: var(--bg3);
+      border: 1px solid var(--line);
+      color: var(--t3);
+      cursor: pointer;
+      transition: all var(--t-fast);
+    }
+    .shade-chip:hover, .shade-chip.active {
+      border-color: rgba(0,255,178,.4);
+      color: var(--a1);
+      background: rgba(0,255,178,.06);
+    }
+    .shade-chip[data-shade="dark"] { border-left: 3px solid #333; }
+    .shade-chip[data-shade="medium"] { border-left: 3px solid #999; }
+    .shade-chip[data-shade="light"] { border-left: 3px solid #eee; }
+
+    /* Panel sections */
+    .main-content {
+      padding: 16px 0 32px;
+    }
+  </style>
+</head>
+<body>
+<div class="page-wrap">
+
+  <!-- HEADER -->
+  <header class="hdr">
+    <a href="/" class="logo">Knit<span>Advisor</span></a>
+    <div class="hdr-badge">BETA</div>
+    <div class="hdr-right">
+      <a href="converter.html" class="btn btn-ghost hide-mobile" id="nav-converter">⇄ Converter</a>
+      <a href="patterns.html" class="btn btn-ghost hide-mobile" id="nav-patterns">⊞ Patterns</a>
+      <a href="diagnostics.html" class="btn btn-ghost hide-mobile" id="nav-diagnostics">🔍 Diagnostics</a>
+      <a href="weft-calc.html" class="btn btn-ghost hide-mobile" id="nav-weft-calc">⚙️ Weft Calc</a>
+      <a href="academy.html" class="btn btn-ghost hide-mobile" id="nav-academy">🎓 Academy</a>
+    </div>
+  </header>
+
+  <!-- MAIN -->
+  <main class="container main-content">
+
+    <!-- HERO -->
+    <div class="hero">
+      <div class="hero-eyebrow">🧵 Knitting Calculation Engine</div>
+      <h1 class="hero-title">GSM + Fabric Type<br><span>→ Everything Automated</span></h1>
+      <p class="hero-sub">Yarn count, loop length, machine gauge, K/T/M pattern, production rate — no manual calculation needed.</p>
+    </div>
+
+    <!-- PATH SELECTOR -->
+    <div class="path-tabs" id="path-tabs" role="tablist">
+      <button class="path-tab active" id="tab-form" data-panel="panel-form" role="tab" onclick="switchPath('form')">
+        📋 Form Input
+      </button>
+      <button class="path-tab" id="tab-nl" data-panel="panel-nl" role="tab" onclick="switchPath('nl')">
+        💬 Natural Language
+      </button>
+    </div>
+
+    <!-- FORM INPUT PANEL -->
+    <div id="panel-form">
+      <div class="input-card">
+
+        <!-- GSM Input -->
+        <div class="form-group mb-16">
+          <label class="form-label label green" for="gsm-input">Target GSM <span style="color:var(--a3)">*</span></label>
+          <div class="gsm-input-wrap">
+            <input
+              type="number"
+              id="gsm-input"
+              class="form-input gsm-input"
+              placeholder="e.g. 180"
+              min="60"
+              max="500"
+              step="1"
+              autocomplete="off"
+              inputmode="numeric"
+            >
+            <span class="gsm-unit">g/m²</span>
+          </div>
+          <!-- Quick GSM hints -->
+          <div class="gsm-hints" id="gsm-hints">
+            <button class="gsm-hint" onclick="setGSM(160)">160</button>
+            <button class="gsm-hint" onclick="setGSM(180)">180</button>
+            <button class="gsm-hint" onclick="setGSM(200)">200</button>
+            <button class="gsm-hint" onclick="setGSM(220)">220</button>
+            <button class="gsm-hint" onclick="setGSM(240)">240</button>
+            <button class="gsm-hint" onclick="setGSM(260)">260</button>
+          </div>
+        </div>
+
+        <!-- Composition Input -->
+        <div class="form-group mb-16">
+          <label class="form-label" for="comp-input" style="color:var(--t1)">Composition <span class="badge badge-gray" style="margin-left:6px">OPTIONAL</span></label>
+          <input
+            type="text"
+            id="comp-input"
+            class="form-input"
+            placeholder="e.g. 100% Cotton, CVC, 95% Cotton 5% Spandex"
+            autocomplete="off"
+          >
+          <div class="comp-chips" id="comp-chips">
+            <button class="comp-chip" onclick="setComp('100% Cotton', this)">100% Cotton</button>
+            <button class="comp-chip" onclick="setComp('95% Cotton 5% Elastane', this)">95/5 Ctn+Lycra</button>
+            <button class="comp-chip" onclick="setComp('60% Cotton 40% Polyester', this)">CVC 60/40</button>
+            <button class="comp-chip" onclick="setComp('65% Polyester 35% Cotton', this)">PC 65/35</button>
+            <button class="comp-chip" onclick="setComp('85% Cotton 15% Viscose', this)">Cotton/Viscose</button>
+            <button class="comp-chip" onclick="setComp('55% Cotton 40% Polyester 5% Elastane', this)">Ctn+Poly+Lycra</button>
+            <button class="comp-chip" onclick="setComp('100% Polyester', this)">100% Polyester</button>
+          </div>
+        </div>
+
+        <!-- Fabric Type -->
+        <div class="form-group mb-16">
+          <label class="form-label label green" for="fabric-select">Fabric Type <span style="color:var(--a3)">*</span></label>
+          <!-- Category filter chips -->
+          <div class="fabric-cats" id="fabric-cats">
+            <button class="cat-chip active" onclick="filterFabrics('all', this)">All</button>
+            <button class="cat-chip" onclick="filterFabrics('single_jersey', this)">Single Jersey</button>
+            <button class="cat-chip" onclick="filterFabrics('rib', this)">Rib</button>
+            <button class="cat-chip" onclick="filterFabrics('interlock', this)">Interlock</button>
+            <button class="cat-chip" onclick="filterFabrics('warp_knit', this)">Warp Knit</button>
+          </div>
+          <select id="fabric-select" class="form-select">
+            <option value="">— Select fabric type —</option>
+          </select>
+          <div id="fabric-info" class="text-xs text-dim mt-4" style="min-height:16px;"></div>
+        </div>
+
+        <!-- Optional machine specs (collapsible) -->
+        <button class="collapsible-trigger" id="optional-trigger" onclick="toggleOptional(this)">
+          <span>⚙ Machine Specs <span class="badge badge-gray" style="margin-left:6px">OPTIONAL</span> — Add for production metrics</span>
+          <span class="arrow">▼</span>
+        </button>
+        <div class="collapsible-body" id="optional-body">
+          <div class="collapsible-inner">
+            <div class="optional-grid">
+              <div class="form-group">
+                <label class="form-label" for="dia-input" id="dia-label">Machine Dia (inch)</label>
+                <input type="number" id="dia-input" class="form-input" placeholder="e.g. 30" min="14" max="260" step="0.5">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="gauge-input">Gauge (GG)</label>
+                <input type="number" id="gauge-input" class="form-input" placeholder="e.g. 24" min="8" max="48" step="1">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="rpm-input" id="rpm-label">RPM</label>
+                <input type="number" id="rpm-input" class="form-input" placeholder="e.g. 25" min="5" max="3000" step="1">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="eff-input">Efficiency (%)</label>
+                <input type="number" id="eff-input" class="form-input" placeholder="85" min="30" max="100" step="1" value="85">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="sl-input">Stitch Length (mm)</label>
+                <input type="number" id="sl-input" class="form-input" placeholder="auto" min="1" max="10" step="0.01">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="feeders-input">Feeders (override)</label>
+                <input type="number" id="feeders-input" class="form-input" placeholder="auto" min="1" max="200" step="1">
+              </div>
+            </div>
+
+            <!-- Color Shade -->
+            <div class="form-group" style="grid-column: 1 / -1">
+              <label class="form-label" for="color-input">Color / Shade</label>
+              <input type="text" id="color-input" class="form-input" placeholder="e.g. Black, Navy, White, Grey Mel" autocomplete="off">
+              <div class="shade-chips" id="shade-chips">
+                <button class="shade-chip" data-shade="dark" onclick="setShade('Black', this)">🌑 Dark</button>
+                <button class="shade-chip" data-shade="medium" onclick="setShade('Grey Melange', this)">🌤 Medium</button>
+                <button class="shade-chip" data-shade="light" onclick="setShade('White', this)">☀ Light</button>
+              </div>
+            </div>
+
+            <div class="info-box mt-12" style="grid-column: 1 / -1">
+              <strong>Dia + Gauge + RPM</strong> will give exact production rates (kg/hr, shift, day).
+            </div>
+
+            <!-- WARP KNIT INPUTS (hidden for non-warp fabrics) -->
+            <div id="warp-knit-panel" class="hidden" style="grid-column: 1 / -1; border-top: 1px solid var(--line2); padding-top: 12px; margin-top: 12px;">
+              <div class="optional-label" style="margin-bottom: 8px;">Warp Knit <span class="text-dim">(optional)</span></div>
+              <div class="optional-row">
+                <div class="inp-group">
+                  <label for="denier-input">Denier (D)</label>
+                  <input type="number" id="denier-input" class="form-input" min="20" max="500" placeholder="e.g. 70">
+                </div>
+                <div class="inp-group">
+                  <label for="filaments-input">Filaments (f)</label>
+                  <input type="number" id="filaments-input" class="form-input" min="1" max="200" placeholder="e.g. 34">
+                </div>
+              </div>
+              <div class="optional-row">
+                <div class="inp-group">
+                  <label for="elastane-denier-input">Elastane Denier <span class="text-dim">(Powernet)</span></label>
+                  <input type="number" id="elastane-denier-input" class="form-input" min="0" max="500" placeholder="e.g. 280">
+                </div>
+                <div class="inp-group">
+                  <label for="elastane-pct-input">Elastane %</label>
+                  <input type="number" id="elastane-pct-input" class="form-input" min="0" max="50" placeholder="e.g. 20">
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Calculate Button -->
+        <div class="calc-btn-wrap mt-16">
+          <button id="calc-btn" class="btn btn-primary btn-lg" onclick="doCalculate()">
+            Calculate Everything →
+          </button>
+          <div class="calc-btn-hint">16+ calculations in &lt;50ms · No internet needed for form input</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- NATURAL LANGUAGE PANEL -->
+    <div id="panel-nl" class="hidden">
+      <div class="input-card">
+        <div class="form-group mb-12">
+          <label class="form-label label" style="color:var(--t1)">Natural Language Input</label>
+          <textarea
+            class="nl-box"
+            id="nl-input"
+            placeholder="e.g. &quot;I need 200 gsm terry for 30 dia machine&quot; or &quot;180 GSM single jersey for H&M&quot;"
+            rows="3"
+            style="border-color:var(--line2);"
+          ></textarea>
+        </div>
+        <div class="nl-coming-soon" style="background:var(--bg2); border-color:var(--line2)">
+          <span style="font-size:18px">💬</span>
+          <div>
+            <div style="color:var(--t1);font-weight:600;margin-bottom:2px;">Describe your requirements</div>
+            <div class="text-dim text-xs">Enter your fabric specifications in plain text and we will extract them automatically.</div>
+          </div>
+        </div>
+        <button id="parse-btn" class="btn btn-primary btn-lg mt-12" style="width:100%;" onclick="doParse()">
+          Parse &amp; Calculate
+        </button>
+      </div>
+    </div>
+
+    <!-- RECENT CALCULATIONS -->
+    <div id="recents-section" class="hidden">
+      <div class="section-header mt-8">
+        <div class="h3">Recent Calculations</div>
+        <button class="btn btn-ghost" style="font-size:10px;padding:4px 10px;" onclick="clearAllRecents()">Clear</button>
+      </div>
+      <div class="recent-list" id="recents-list"></div>
+    </div>
+
+    <!-- FEATURES INFO -->
+    <div class="features-grid">
+      <div class="feat-card">
+        <div class="feat-icon">🔢</div>
+        <div class="feat-name">Yarn Count</div>
+        <div class="feat-desc">Ne, display, multi-yarn breakdown</div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">📏</div>
+        <div class="feat-name">Loop Length</div>
+        <div class="feat-desc">mm + cm, formula trace</div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">⚙️</div>
+        <div class="feat-name">Machine Spec</div>
+        <div class="feat-desc">Gauge, Dia, Feeders, Needles</div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">⊞</div>
+        <div class="feat-name">K/T/M Pattern</div>
+        <div class="feat-desc">Visual grid, cam & needle</div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">🏭</div>
+        <div class="feat-name">Production</div>
+        <div class="feat-desc">kg/hr, shift, day</div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">⚖️</div>
+        <div class="feat-name">GSM ↔ OSY</div>
+        <div class="feat-desc">Auto unit convert</div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="footer-nav container">
+      <div class="footer-brand">
+        <span class="footer-brand-name">KnitAdvisor</span>
+        <span class="footer-brand-sub">v1.0 · 29 fabric structures</span>
+      </div>
+      <nav class="footer-links">
+        <a href="converter.html">Unit Converter</a>
+        <a href="patterns.html">Pattern Catalog</a>
+        <a href="diagnostics.html">Diagnostics Hub</a>
+        <a href="weft-calc.html">Weft Calculator</a>
+        <a href="academy.html">Knitting Academy</a>
+      </nav>
+    </div>
+    <div class="footer-bottom container">
+      <div class="footer-platform">
+        <span class="footer-platform-label">Part of</span>
+        <a href="https://www.onlinetextileschool.com" target="_blank" rel="noopener" class="footer-platform-link">www.onlinetextileschool.com</a>
+      </div>
+      <div class="footer-sponsor">
+        <span class="footer-sponsor-label">Proud Sponsor</span>
+        <a href="https://www.asutex.com" target="_blank" rel="noopener" class="footer-sponsor-link">
+          <span class="footer-sponsor-dot"></span>
+          Asutex
+        </a>
+      </div>
+    </div>
+  </footer>
+
+</div><!-- .page-wrap -->
+
+<!-- SCRIPTS -->
+<script src="js/api.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/storage.js"></script>
+
+<script>
+/* ============================================================
+   STATE
+   ============================================================ */
+let allFabrics = [];
+let activeCategory = 'all';
+
+/* ============================================================
+   INIT
+   ============================================================ */
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadFabrics();
+  applyQueryParams();
+  loadRecentsUI();
+
+  // Auto-focus GSM input
+  document.getElementById('gsm-input').focus();
+});
+
+function applyQueryParams() {
+  const params = new URLSearchParams(window.location.search);
+  const fabric = params.get('fabric');
+  if (!fabric) return;
+
+  const sel = document.getElementById('fabric-select');
+  if (!sel) return;
+
+  for (const opt of sel.options) {
+    if (opt.value === fabric) {
+      sel.value = fabric;
+      onFabricChange();
+      break;
+    }
+  }
+}
+
+/* ============================================================
+   LOAD FABRICS FROM API
+   ============================================================ */
+async function loadFabrics() {
+  const select = document.getElementById('fabric-select');
+  try {
+    allFabrics = await apiFabrics();
+    populateFabricSelect(allFabrics);
+  } catch (err) {
+    // Fallback list if API not running
+    select.innerHTML = `
+      <option value="">— Select fabric type —</option>
+      <option value="single_jersey">Single Jersey</option>
+      <option value="heavy_jersey">Heavy Single Jersey</option>
+      <option value="terry_fabric">Terry Fabric</option>
+      <option value="fleece">Fleece</option>
+      <option value="rib_1x1">1×1 Rib</option>
+      <option value="rib_2x2">2×2 Rib</option>
+      <option value="interlock">Interlock</option>
+      <option value="pique">Pique</option>
+      <option value="lacoste">Lacoste</option>
+    `;
+    console.warn('[KnitAdvisor] API not available, using fallback fabric list');
+  }
+
+  // Fabric change → show info
+  select.addEventListener('change', onFabricChange);
+}
+
+function populateFabricSelect(fabrics, category = 'all') {
+  const select = document.getElementById('fabric-select');
+  const prev = select.value;
+
+  const filtered = category === 'all' ? fabrics : fabrics.filter(f => f.category === category);
+
+  // Group by category
+  const groups = {};
+  filtered.forEach(f => {
+    const g = f.category || 'other';
+    if (!groups[g]) groups[g] = [];
+    groups[g].push(f);
+  });
+
+  const catLabels = {
+    single_jersey: '— Single Bed (Jersey / Terry / Fleece) —',
+    rib: '— Rib Structures —',
+    interlock: '— Double Bed (Interlock) —',
+    warp_knit: '— Warp Knit —',
+  };
+
+  let html = '<option value="">— Select fabric type —</option>';
+  Object.entries(groups).forEach(([cat, items]) => {
+    html += `<optgroup label="${catLabels[cat] || cat}">`;
+    items.forEach(f => {
+      const sel = f.id === prev ? 'selected' : '';
+      const range = f.gsm_range ? ` (${f.gsm_range[0]}–${f.gsm_range[1]} GSM)` : '';
+      html += `<option value="${f.id}" ${sel}>${f.name}${range}</option>`;
+    });
+    html += `</optgroup>`;
+  });
+
+  select.innerHTML = html;
+}
+
+/* ============================================================
+   FABRIC CHANGE HANDLER
+   ============================================================ */
+function onFabricChange() {
+  const select = document.getElementById('fabric-select');
+  const info = document.getElementById('fabric-info');
+  const warpPanel = document.getElementById('warp-knit-panel');
+  const fabricId = select.value;
+  if (!fabricId) { info.textContent = ''; return; }
+
+  const fabric = allFabrics.find(f => f.id === fabricId);
+  if (!fabric) { info.textContent = ''; return; }
+
+  const parts = [];
+  if (fabric.gsm_range) parts.push(`GSM: ${fabric.gsm_range[0]}–${fabric.gsm_range[1]}`);
+  if (fabric.gauge_range) parts.push(`Gauge: ${fabric.gauge_range[0]}–${fabric.gauge_range[1]} GG`);
+  if (fabric.is_multi_yarn) parts.push('Multi-yarn (ground + pile)');
+  if (fabric.is_warp) parts.push('Warp knit (denier-based)');
+  info.textContent = parts.join(' · ');
+
+  // Show/hide warp knit panel and update field labels
+  const diaLabel = document.getElementById('dia-label');
+  const rpmLabel = document.getElementById('rpm-label');
+  const diaInput = document.getElementById('dia-input');
+  const rpmInput = document.getElementById('rpm-input');
+
+  if (fabric.is_warp) {
+    warpPanel.classList.remove('hidden');
+    // Warp knit: dia = working width (inch), rpm = courses/min
+    if (diaLabel) diaLabel.textContent = 'Working Width (inch)';
+    if (rpmLabel) rpmLabel.textContent = 'Speed (courses/min)';
+    if (diaInput) { diaInput.placeholder = 'e.g. 60'; diaInput.min = 30; diaInput.max = 260; }
+    if (rpmInput) { rpmInput.placeholder = 'e.g. 1500'; rpmInput.min = 100; rpmInput.max = 3000; }
+  } else {
+    warpPanel.classList.add('hidden');
+    // Restore weft knit labels
+    if (diaLabel) diaLabel.textContent = 'Machine Dia (inch)';
+    if (rpmLabel) rpmLabel.textContent = 'RPM';
+    if (diaInput) { diaInput.placeholder = 'e.g. 30'; diaInput.min = 14; diaInput.max = 60; }
+    if (rpmInput) { rpmInput.placeholder = 'e.g. 25'; rpmInput.min = 5; rpmInput.max = 80; }
+    // Clear warp knit fields when switching away
+    document.getElementById('denier-input').value = '';
+    document.getElementById('filaments-input').value = '';
+    document.getElementById('elastane-denier-input').value = '';
+    document.getElementById('elastane-pct-input').value = '';
+  }
+}
+
+/* ============================================================
+   CATEGORY FILTER
+   ============================================================ */
+function filterFabrics(category, chipEl) {
+  activeCategory = category;
+  document.querySelectorAll('.cat-chip').forEach(c => c.classList.remove('active'));
+  chipEl.classList.add('active');
+  populateFabricSelect(allFabrics, category);
+}
+
+/* ============================================================
+   PATH SWITCHING (form ↔ NL)
+   ============================================================ */
+function switchPath(path) {
+  const formPanel = document.getElementById('panel-form');
+  const nlPanel = document.getElementById('panel-nl');
+  const tabForm = document.getElementById('tab-form');
+  const tabNL = document.getElementById('tab-nl');
+
+  if (path === 'form') {
+    formPanel.classList.remove('hidden');
+    nlPanel.classList.add('hidden');
+    tabForm.classList.add('active');
+    tabNL.classList.remove('active');
+  } else {
+    formPanel.classList.add('hidden');
+    nlPanel.classList.remove('hidden');
+    tabForm.classList.remove('active');
+    tabNL.classList.add('active');
+  }
+}
+
+/* ============================================================
+   OPTIONAL PANEL TOGGLE
+   ============================================================ */
+function toggleOptional(trigger) {
+  const body = document.getElementById('optional-body');
+  const isOpen = body.classList.contains('open');
+  body.classList.toggle('open', !isOpen);
+  trigger.classList.toggle('open', !isOpen);
+}
+
+/* ============================================================
+   GSM HINTS
+   ============================================================ */
+function setGSM(val) {
+  document.getElementById('gsm-input').value = val;
+  document.getElementById('gsm-input').focus();
+}
+
+/* ============================================================
+   COMPOSITION & COLOR CHIPS
+   ============================================================ */
+function setComp(val, btn) {
+  document.getElementById('comp-input').value = val;
+  document.querySelectorAll('.comp-chip').forEach(c => c.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+}
+
+function setShade(val, btn) {
+  document.getElementById('color-input').value = val;
+  document.querySelectorAll('.shade-chip').forEach(c => c.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+}
+
+/* ============================================================
+   CALCULATE
+   ============================================================ */
+async function doCalculate() {
+  const gsmEl = document.getElementById('gsm-input');
+  const fabricEl = document.getElementById('fabric-select');
+  const btn = document.getElementById('calc-btn');
+
+  const gsm = parseFloat(gsmEl.value);
+  const fabric = fabricEl.value;
+
+  // Validate
+  if (!fabric) {
+    showToast('Please select a fabric type', 'error');
+    fabricEl.focus();
+    return;
+  }
+  if (!gsm || isNaN(gsm) || gsm < 60 || gsm > 500) {
+    showToast('Please enter a valid GSM (60–500)', 'error');
+    gsmEl.focus();
+    return;
+  }
+
+  // Build params
+  const params = {
+    fabric,
+    gsm,
+    composition: document.getElementById('comp-input').value || undefined,
+    color_shade: document.getElementById('color-input').value || undefined,
+    dia: parseFloat(document.getElementById('dia-input').value) || undefined,
+    gauge: parseFloat(document.getElementById('gauge-input').value) || undefined,
+    rpm: parseFloat(document.getElementById('rpm-input').value) || undefined,
+    efficiency: parseFloat(document.getElementById('eff-input').value) || 85,
+    stitch_length: parseFloat(document.getElementById('sl-input').value) || undefined,
+    feeders: parseInt(document.getElementById('feeders-input').value) || undefined,
+    // Warp knit parameters
+    denier: parseFloat(document.getElementById('denier-input').value) || undefined,
+    filaments: parseInt(document.getElementById('filaments-input').value) || undefined,
+    elastane_denier: parseFloat(document.getElementById('elastane-denier-input').value) || undefined,
+    elastane_pct: parseFloat(document.getElementById('elastane-pct-input').value) || undefined,
+  };
+
+  // Remove undefined keys
+  Object.keys(params).forEach(k => params[k] === undefined && delete params[k]);
+
+  setButtonLoading(btn, true, 'Calculating...');
+
+  try {
+    const result = await apiCalculate(params);
+
+    if (!result.success) {
+      showToast(result.error || 'Calculation failed', 'error');
+      return;
+    }
+
+    // Save to storage and redirect
+    savePending(params);
+    saveRecent(params, result);
+
+    // Navigate to result page
+    window.location.href = 'result.html';
+  } catch (err) {
+    showToast(err.message || 'API error — is the server running?', 'error');
+  } finally {
+    setButtonLoading(btn, false);
+  }
+}
+
+/* ============================================================
+   AI PARSE
+   ============================================================ */
+async function doParse() {
+  const nlEl = document.getElementById('nl-input');
+  const btn = document.getElementById('parse-btn');
+  const text = nlEl.value.trim();
+  
+  if (!text) {
+    showToast('Please enter some text', 'error');
+    nlEl.focus();
+    return;
+  }
+  
+  setButtonLoading(btn, true, 'Parsing...');
+  try {
+    const res = await fetch('/api/parse', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text })
+    });
+    const parsed = await res.json();
+    
+    if (!res.ok) throw new Error(parsed.error || 'Parsing failed');
+    
+    if (parsed.confidence === 'low' || !parsed.fabric || !parsed.gsm) {
+      showToast(parsed.message || 'Could not understand fabric and GSM. Please specify clearly.', 'warning');
+      return;
+    }
+    
+    // Fill form and switch
+    document.getElementById('gsm-input').value = parsed.gsm;
+    
+    // Attempt to set fabric in select
+    const sel = document.getElementById('fabric-select');
+    let matched = false;
+    for (const opt of sel.options) {
+      if (opt.value === parsed.fabric) {
+        sel.value = parsed.fabric;
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) {
+      showToast(`Extracted fabric '${parsed.fabric}', but it's not in our list.`, 'warning');
+      return;
+    }
+    
+    // Optional params
+    if (parsed.dia) { document.getElementById('dia-input').value = parsed.dia; toggleOptional(document.getElementById('optional-trigger')); }
+    if (parsed.gauge) { document.getElementById('gauge-input').value = parsed.gauge; toggleOptional(document.getElementById('optional-trigger')); }
+    if (parsed.rpm) document.getElementById('rpm-input').value = parsed.rpm;
+    
+    onFabricChange();
+    switchPath('form');
+    
+    // Auto calculate
+    setTimeout(() => {
+      doCalculate();
+    }, 500);
+    
+  } catch(err) {
+    showToast(err.message || 'Error communicating with parser', 'error');
+  } finally {
+    setButtonLoading(btn, false);
+  }
+}
+
+// Allow Enter key on inputs
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    const active = document.activeElement;
+    if (active && (active.classList.contains('form-input') || active.classList.contains('form-select'))) {
+      doCalculate();
+    }
+  }
+});
+
+/* ============================================================
+   RECENTS
+   ============================================================ */
+function loadRecentsUI() {
+  const recents = getRecents();
+  const section = document.getElementById('recents-section');
+  const list = document.getElementById('recents-list');
+
+  if (recents.length === 0) {
+    section.classList.add('hidden');
+    return;
+  }
+  section.classList.remove('hidden');
+
+  list.innerHTML = recents.map(r => `
+    <div class="recent-item" onclick="reuseRecent('${r.params.fabric}', ${r.params.gsm})">
+      <div class="recent-fabric">${r.params.fabric.replace(/_/g,' ')} · ${r.params.gsm} GSM</div>
+      <div class="recent-gsm">${r.summary || ''}</div>
+      <div class="recent-time">${timeAgo(r.ts)}</div>
+    </div>
+  `).join('');
+}
+
+function reuseRecent(fabric, gsm) {
+  document.getElementById('gsm-input').value = gsm;
+  const sel = document.getElementById('fabric-select');
+  // Try to set fabric in select
+  for (const opt of sel.options) {
+    if (opt.value === fabric) {
+      sel.value = fabric;
+      onFabricChange();
+      break;
+    }
+  }
+  doCalculate();
+}
+
+function clearAllRecents() {
+  clearRecents();
+  document.getElementById('recents-section').classList.add('hidden');
+  showToast('Recents cleared', 'info', 1500);
+}
+</script>
+
+</body>
+</html>

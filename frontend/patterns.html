@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pattern Catalog — KnitAdvisor</title>
+  <meta name="description" content="29 knit fabric structures — K/T/M stitch patterns, cam arrangements, needle setups for all knit fabric types.">
+  <meta name="theme-color" content="#FFFFFF">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+
+  <style>
+    .page-header { padding: 28px 0 20px; }
+
+    /* Filter bar */
+    .filter-bar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+    .filter-chip {
+      padding: 5px 12px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      border: 1px solid var(--line2);
+      background: var(--bg3);
+      color: var(--t3);
+      cursor: pointer;
+      transition: all var(--t-fast);
+    }
+    .filter-chip.active, .filter-chip:hover {
+      border-color: rgba(0,255,178,.4);
+      color: var(--a1);
+      background: rgba(0,255,178,.06);
+    }
+
+    /* Fabric cards grid */
+    .fabrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .fabric-card {
+      background: var(--bg2);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: hidden;
+      transition: border-color var(--t-fast), transform var(--t-fast);
+      cursor: pointer;
+    }
+    .fabric-card:hover {
+      border-color: rgba(0,255,178,.3);
+      transform: translateY(-2px);
+    }
+
+    .fc-head {
+      padding: 12px 14px;
+      background: var(--bg3);
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .fc-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .fc-name {
+      font-family: var(--head);
+      font-size: 13px;
+      font-weight: 600;
+      flex: 1;
+    }
+
+    .fc-body { padding: 12px 14px; }
+
+    .fc-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+    .fc-stat { font-size: 11px; color: var(--t2); }
+    .fc-stat span { color: var(--a1); font-weight: 600; }
+
+    .mini-pattern-box {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--line);
+    }
+
+    /* Detail modal */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(255,255,255,.80);
+      backdrop-filter: blur(8px);
+      z-index: 500;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding: 0;
+    }
+    .modal-overlay.hidden { display: none; }
+
+    .modal-sheet {
+      background: var(--bg2);
+      border: 1px solid var(--line2);
+      border-radius: 16px 16px 0 0;
+      width: 100%;
+      max-width: 640px;
+      max-height: 90vh;
+      overflow-y: auto;
+      padding: 20px;
+      animation: slide-up .25s ease;
+    }
+    @keyframes slide-up {
+      from { transform: translateY(100%); }
+      to   { transform: translateY(0); }
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .modal-close {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      background: var(--bg3);
+      border: 1px solid var(--line2);
+      color: var(--t2);
+      font-size: 16px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+    }
+    .modal-close:hover { border-color: var(--a3); color: var(--a3); }
+
+    .main-content { padding: 0 0 40px; }
+
+    /* Category dot colors */
+    .dot-sj     { background: var(--a1); }
+    .dot-rib    { background: var(--a2); }
+    .dot-inter  { background: var(--a4); }
+    .dot-warp   { background: var(--a5); }
+  </style>
+</head>
+<body>
+<div class="page-wrap">
+
+  <header class="hdr">
+    <a href="/" class="logo">Knit<span>Advisor</span></a>
+    <div class="hdr-right">
+      <a href="/" class="btn btn-ghost">← Home</a>
+      <a href="converter.html" class="btn btn-ghost hide-mobile">⇄ Converter</a>
+      <a href="diagnostics.html" class="btn btn-ghost hide-mobile">🔍 Diagnostics</a>
+      <a href="weft-calc.html" class="btn btn-ghost hide-mobile">⚙️ Weft Calc</a>
+      <a href="academy.html" class="btn btn-ghost hide-mobile">🎓 Academy</a>
+    </div>
+  </header>
+
+  <main class="container main-content">
+
+    <div class="page-header">
+      <h1 class="h1 text-head">Pattern Catalog</h1>
+      <div class="text-muted" style="font-size:12px;margin-top:4px;">29 knit structures — K/T/M grids, cam & needle arrangements</div>
+    </div>
+
+    <!-- Filter -->
+    <div class="filter-bar">
+      <button class="filter-chip active" onclick="filterCat('all', this)">All (29)</button>
+      <button class="filter-chip" onclick="filterCat('single_jersey', this)">Single Jersey</button>
+      <button class="filter-chip" onclick="filterCat('rib', this)">Rib</button>
+      <button class="filter-chip" onclick="filterCat('interlock', this)">Interlock</button>
+      <button class="filter-chip" onclick="filterCat('warp_knit', this)">Warp Knit</button>
+    </div>
+
+    <!-- Loading state -->
+    <div id="loading-state" style="text-align:center;padding:40px;">
+      <div class="spinner" style="margin:0 auto 12px;"></div>
+      <div class="text-dim">Loading fabric structures...</div>
+    </div>
+
+    <!-- Grid -->
+    <div class="fabrics-grid hidden" id="fabrics-grid"></div>
+
+    <a href="/" class="btn btn-secondary" style="display:inline-flex;">← Back to Calculator</a>
+
+  </main>
+
+  <!-- Detail Modal -->
+  <div class="modal-overlay hidden" id="detail-modal" onclick="closeModal(event)">
+    <div class="modal-sheet" id="modal-sheet">
+      <div class="modal-header">
+        <div>
+          <div class="h2 text-head" id="modal-title">—</div>
+          <div class="text-dim text-xs mt-4" id="modal-sub">—</div>
+        </div>
+        <button class="modal-close" onclick="closeModalBtn()">✕</button>
+      </div>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <div class="footer-nav container">
+      <div class="footer-brand">
+        <span class="footer-brand-name">KnitAdvisor</span>
+        <span class="footer-brand-sub">29 knit structures · PDF-verified data</span>
+      </div>
+      <nav class="footer-links">
+        <a href="/">Calculator</a>
+        <a href="converter.html">Converter</a>
+        <a href="diagnostics.html">Diagnostics</a>
+        <a href="weft-calc.html">Weft Calculator</a>
+        <a href="academy.html">Knitting Academy</a>
+      </nav>
+    </div>
+    <div class="footer-bottom container">
+      <div class="footer-platform">
+        <span class="footer-platform-label">Part of</span>
+        <a href="https://www.onlinetextileschool.com" target="_blank" rel="noopener" class="footer-platform-link">www.onlinetextileschool.com</a>
+      </div>
+      <div class="footer-sponsor">
+        <span class="footer-sponsor-label">Proud Sponsor</span>
+        <a href="https://www.asutex.com" target="_blank" rel="noopener" class="footer-sponsor-link">
+          <span class="footer-sponsor-dot"></span>
+          Asutex
+        </a>
+      </div>
+    </div>
+  </footer>
+
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/pattern-renderer.js"></script>
+
+<script>
+let allFabrics = [];
+let activeFilter = 'all';
+
+const CAT_DOT = {
+  single_jersey: 'dot-sj',
+  rib: 'dot-rib',
+  interlock: 'dot-inter',
+  warp_knit: 'dot-warp',
+};
+const CAT_COLOR = {
+  single_jersey: 'var(--a1)',
+  rib: 'var(--a2)',
+  interlock: 'var(--a4)',
+  warp_knit: 'var(--a5)',
+};
+
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
+    allFabrics = await apiFabrics();
+    renderGrid(allFabrics);
+  } catch (err) {
+    document.getElementById('loading-state').innerHTML =
+      `<div class="card accent-red" style="max-width:360px;margin:0 auto;text-align:center;padding:24px;">
+        <div style="font-size:24px;margin-bottom:8px;">⚠️</div>
+        <div class="h3" style="color:var(--a3)">Server not running</div>
+        <div class="text-sm text-muted mt-8">Start the backend server to load fabric data.<br><code style="color:var(--a2)">npm run dev</code></div>
+      </div>`;
+  }
+});
+
+function renderGrid(fabrics) {
+  const grid = document.getElementById('fabrics-grid');
+  const loading = document.getElementById('loading-state');
+
+  if (fabrics.length === 0) {
+    loading.innerHTML = '<div class="text-dim text-sm">No fabrics found.</div>';
+    return;
+  }
+
+  loading.classList.add('hidden');
+  grid.classList.remove('hidden');
+
+  grid.innerHTML = fabrics.map(f => `
+    <div class="fabric-card anim-in" onclick="showDetail('${f.id}')">
+      <div class="fc-head">
+        <div class="fc-dot ${CAT_DOT[f.category] || 'dot-sj'}"></div>
+        <div class="fc-name">${f.name}</div>
+        ${f.is_multi_yarn ? '<span class="badge badge-blue">multi-yarn</span>' : ''}
+        ${f.is_warp ? '<span class="badge badge-gray">warp</span>' : ''}
+      </div>
+      <div class="fc-body">
+        <div class="fc-stats">
+          <div class="fc-stat">GSM: <span>${f.gsm_range ? f.gsm_range[0] + '–' + f.gsm_range[1] : '—'}</span></div>
+          <div class="fc-stat">Gauge: <span>${f.gauge_range ? f.gauge_range[0] + '–' + f.gauge_range[1] + ' GG' : '—'}</span></div>
+          <div class="fc-stat">Category: <span style="color:${CAT_COLOR[f.category]}">${f.category?.replace('_',' ') || '—'}</span></div>
+        </div>
+        <div class="mini-pattern-box">
+          <div class="text-xs text-dim mb-4">Pattern preview</div>
+          <div id="mini-${f.id}"><div class="skeleton skel-line w70"></div></div>
+        </div>
+      </div>
+    </div>
+  `).join('');
+
+  // Load mini patterns async
+  fabrics.forEach(f => loadMiniPattern(f.id));
+}
+
+async function loadMiniPattern(fabricId) {
+  try {
+    const pattern = await apiPattern(fabricId);
+    const el = document.getElementById(`mini-${fabricId}`);
+    if (!el) return;
+    if (pattern?.pattern_cylinder) {
+      renderMiniPattern(el, pattern.pattern_cylinder, pattern.pattern_dial);
+    } else if (pattern?.fabric_type === 'warp_knit') {
+      // Warp knit mini preview: show guide bar count and stitch density
+      const d = pattern.stitch_density || {};
+      el.innerHTML = `<div class="text-xs text-dim" style="padding:4px 0;">
+        ⫸ ${pattern.guide_bars}-bar · ${d.courses_per_cm || '?'}c/cm × ${d.wales_per_cm || '?'}w/cm
+      </div>`;
+    } else {
+      el.innerHTML = '<div class="text-xs text-dim">Pattern data N/A</div>';
+    }
+  } catch {
+    const el = document.getElementById(`mini-${fabricId}`);
+    if (el) el.innerHTML = '<div class="text-xs text-dim">—</div>';
+  }
+}
+
+function filterCat(cat, chipEl) {
+  activeFilter = cat;
+  document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+  chipEl.classList.add('active');
+  const filtered = cat === 'all' ? allFabrics : allFabrics.filter(f => f.category === cat);
+  renderGrid(filtered);
+}
+
+/* Detail modal */
+async function showDetail(fabricId) {
+  const fabric = allFabrics.find(f => f.id === fabricId);
+  if (!fabric) return;
+
+  document.getElementById('modal-title').textContent = fabric.name;
+  document.getElementById('modal-sub').textContent =
+    [fabric.category?.replace(/_/g,' '), fabric.gsm_range ? `GSM ${fabric.gsm_range[0]}–${fabric.gsm_range[1]}` : ''].filter(Boolean).join(' · ');
+
+  const body = document.getElementById('modal-body');
+  body.innerHTML = '<div class="spinner" style="margin:20px auto;"></div>';
+
+  document.getElementById('detail-modal').classList.remove('hidden');
+
+  try {
+    const pattern = await apiPattern(fabricId);
+    let html = '';
+
+    // Stats
+    html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;">
+      <div class="card-sm"><div class="label">GSM Range</div><div class="value-sm mt-4 text-green">${fabric.gsm_range ? fabric.gsm_range[0] + '–' + fabric.gsm_range[1] + ' g/m²' : '—'}</div></div>
+      <div class="card-sm"><div class="label">Gauge Range</div><div class="value-sm mt-4 text-blue">${fabric.gauge_range ? fabric.gauge_range[0] + '–' + fabric.gauge_range[1] + ' GG' : '—'}</div></div>
+    </div>`;
+
+    html += `<div id="modal-pattern-grid"></div>`;
+    html += `<a href="/?fabric=${fabricId}" class="btn btn-primary mt-16" style="display:inline-flex;width:100%">Calculate for this fabric →</a>`;
+
+    body.innerHTML = html;
+
+    // Render pattern
+    renderPatternGrid(document.getElementById('modal-pattern-grid'), pattern);
+  } catch (err) {
+    body.innerHTML = `<div class="warning-box">Pattern data unavailable: ${err.message}</div>`;
+  }
+}
+
+function closeModal(e) {
+  if (e.target.id === 'detail-modal') closeModalBtn();
+}
+function closeModalBtn() {
+  document.getElementById('detail-modal').classList.add('hidden');
+}
+
+// ESC to close
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeModalBtn();
+});
+</script>
+
+</body>
+</html>

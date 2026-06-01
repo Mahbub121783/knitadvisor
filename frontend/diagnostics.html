@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fabric Diagnostics & Faults — KnitAdvisor</title>
+  <meta name="description" content="Knit fabric faults troubleshooter: diagnose holes, drop stitches, marks, barre, and lines. Get causes and remedies.">
+  <meta name="theme-color" content="#FFFFFF">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+
+  <style>
+    .page-header {
+      padding: 28px 0 20px;
+    }
+    .page-title { margin-bottom: 4px; }
+    .page-sub { font-size: 12px; color: var(--t2); }
+
+    .diag-grid {
+      display: grid;
+      grid-template-columns: 1.2fr 1.8fr;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    @media (max-width: 768px) {
+      .diag-grid { grid-template-columns: 1fr; }
+    }
+
+    /* Checkbox list styling */
+    .symptom-group {
+      background: var(--bg2);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 16px;
+    }
+    .symptom-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .8px;
+      color: var(--t3);
+      font-weight: 600;
+      margin-bottom: 12px;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 6px;
+    }
+
+    .check-label {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--t2);
+      cursor: pointer;
+      padding: 6px 0;
+      transition: color var(--t-fast);
+    }
+    .check-label:hover { color: var(--t1); }
+    .check-input {
+      margin-top: 3px;
+      accent-color: var(--a1);
+      width: 14px; height: 14px;
+      cursor: pointer;
+    }
+
+    /* Diagnosis result cards */
+    .diag-result-card {
+      background: var(--bg2);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 18px;
+      margin-bottom: 12px;
+      position: relative;
+    }
+    .diag-card-hdr {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 12px;
+      gap: 12px;
+    }
+    .diag-fault-name {
+      font-family: var(--head);
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--t1);
+    }
+    .confidence-badge {
+      font-family: var(--mono);
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 2px;
+      background: rgba(0, 255, 178, 0.08);
+      border: 1px solid rgba(0, 255, 178, 0.3);
+      color: #00ffb2;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .diag-fault-desc {
+      font-size: 11px;
+      color: var(--t3);
+      line-height: 1.6;
+      margin-bottom: 14px;
+      background: var(--bg3);
+      padding: 8px 10px;
+      border-radius: var(--radius-sm);
+    }
+
+    .causes-title {
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      color: var(--t3);
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .causes-list {
+      list-style-type: none;
+      padding-left: 0;
+      margin-bottom: 12px;
+    }
+    .causes-list li {
+      position: relative;
+      padding-left: 12px;
+      font-size: 11px;
+      color: var(--t2);
+      margin-bottom: 4px;
+      line-height: 1.5;
+    }
+    .causes-list li::before {
+      content: '•';
+      position: absolute;
+      left: 0;
+      color: var(--a5);
+    }
+    .causes-list.yarn li::before { color: #5bc0be; }
+    .causes-list.machine li::before { color: #ffa62b; }
+
+    .remedies-box {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--line2);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+    }
+    .remedies-list {
+      list-style-type: none;
+      padding-left: 0;
+    }
+    .remedies-list li {
+      position: relative;
+      padding-left: 14px;
+      font-size: 11px;
+      color: var(--t1);
+      margin-bottom: 4px;
+      line-height: 1.5;
+    }
+    .remedies-list li::before {
+      content: '✓';
+      position: absolute;
+      left: 0;
+      color: #00ffb2;
+      font-weight: bold;
+    }
+
+    /* Catalog tab style */
+    .catalog-section {
+      margin-top: 24px;
+      border-top: 1px solid var(--line);
+      padding-top: 20px;
+    }
+
+    .empty-state {
+      background: var(--bg2);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 40px var(--pad);
+      text-align: center;
+      color: var(--t3);
+    }
+    .empty-icon { font-size: 32px; margin-bottom: 12px; }
+
+    .main-content { padding: 0 0 40px; }
+  </style>
+</head>
+<body>
+<div class="page-wrap">
+
+  <!-- HEADER -->
+  <header class="hdr">
+    <a href="/" class="logo">Knit<span>Advisor</span></a>
+    <div class="hdr-badge">BETA</div>
+    <div class="hdr-right">
+      <a href="/" class="btn btn-ghost hide-mobile">← Calculator</a>
+      <a href="converter.html" class="btn btn-ghost hide-mobile">⇄ Converter</a>
+      <a href="weft-calc.html" class="btn btn-ghost hide-mobile">⚙️ Weft Calc</a>
+      <a href="academy.html" class="btn btn-ghost hide-mobile">🎓 Academy</a>
+    </div>
+  </header>
+
+  <main class="container main-content">
+
+    <div class="page-header">
+      <h1 class="h1 page-title text-head">Fabric Diagnostics</h1>
+      <div class="page-sub">Interactive weft knitted fabric faults troubleshooter and causes database</div>
+    </div>
+
+    <div class="diag-grid">
+
+      <!-- COLUMN 1: SYMPTOMS SELECTOR -->
+      <div>
+        <div class="symptom-group">
+          <div class="symptom-title">1. Observed Symptoms</div>
+          <div id="symptoms-container">
+            <label class="check-label">
+              <input type="checkbox" class="check-input symptom-cb" value="holes" onchange="runDiagnosis()">
+              Holes / Cracks / Breakages
+            </label>
+            <label class="check-label">
+              <input type="checkbox" class="check-input symptom-cb" value="drop_stitch" onchange="runDiagnosis()">
+              Dropped / Unlinked Loops
+            </label>
+            <label class="check-label">
+              <input type="checkbox" class="check-input symptom-cb" value="pressed_off" onchange="runDiagnosis()">
+              Pressed-off / Cloth Fall-out
+            </label>
+            <label class="check-label">
+              <input type="checkbox" class="check-input symptom-cb" value="vertical_lines" onchange="runDiagnosis()">
+              Vertical lines / Wales gaps
+            </label>
+            <label class="check-label">
+              <input type="checkbox" class="check-input symptom-cb" value="horizontal_lines" onchange="runDiagnosis()">
+              Horizontal bands / Course lines
+            </label>
+            <label class="check-label">
+              <input type="checkbox" class="check-input symptom-cb" value="oil_marks" onchange="runDiagnosis()">
+              Oil marks / Dirty lines
+            </label>
+            <label class="check-label">
+              <input type="checkbox" class="check-input symptom-cb" value="lint_spots" onchange="runDiagnosis()">
+              Colour fly / Lint spots
+            </label>
+            <label class="check-label">
+              <input type="checkbox" class="check-input symptom-cb" value="pulled_loops" onchange="runDiagnosis()">
+              Pulled loops / Snags
+            </label>
+            <label class="check-label">
+              <input type="checkbox" class="check-input symptom-cb" value="beads" onchange="runDiagnosis()">
+              Beads / Slubs / Thick spots
+            </label>
+            <label class="check-label">
+              <input type="checkbox" class="check-input symptom-cb" value="shadow_look" onchange="runDiagnosis()">
+              Shadow appearance against light
+            </label>
+          </div>
+
+          <div class="symptom-title mt-16">2. Machinery/Yarn Conditions</div>
+          <div id="conditions-container">
+            <label class="check-label">
+              <input type="checkbox" class="check-input symptom-cb" value="high_tension" onchange="runDiagnosis()">
+              Yarn running tension too high
+            </label>
+            <label class="check-label">
+              <input type="checkbox" class="check-input symptom-cb" value="low_tension" onchange="runDiagnosis()">
+              Yarn tension too slack/vibrating
+            </label>
+            <label class="check-label">
+              <input type="checkbox" class="check-input symptom-cb" value="weak_takeup" onchange="runDiagnosis()">
+              Fabric take-up weak / uneven
+            </label>
+            <label class="check-label">
+              <input type="checkbox" class="check-input symptom-cb" value="stiff_needles" onchange="runDiagnosis()">
+              Needles running heavily / stiff
+            </label>
+            <label class="check-label">
+              <input type="checkbox" class="check-input symptom-cb" value="closed_latch" onchange="runDiagnosis()">
+              Needle latch closed on feed
+            </label>
+            <label class="check-label">
+              <input type="checkbox" class="check-input symptom-cb" value="broken_hook" onchange="runDiagnosis()">
+              Needle hook broken / damaged
+            </label>
+            <label class="check-label">
+              <input type="checkbox" class="check-input symptom-cb" value="oil_leakage" onchange="runDiagnosis()">
+              Defective oiler / dirty bed
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- COLUMN 2: DIAGNOSIS REPORT -->
+      <div>
+        <div id="diag-results">
+          <div class="empty-state">
+            <div class="empty-icon">🔍</div>
+            <div class="h3">No symptoms selected</div>
+            <div class="text-xs text-dim mt-4">Select one or more fabric symptoms or machine conditions in the left panel to execute real-time diagnosis.</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- CATALOG SECTION -->
+    <div class="catalog-section">
+      <div class="section-header">
+        <h2 class="h2">Fabric Faults Catalog</h2>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px;" id="catalog-container">
+        <!-- Catalog content will load via API/script -->
+      </div>
+    </div>
+
+    <!-- Navigate back -->
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:24px;">
+      <a href="/" class="btn btn-secondary" style="flex:1">← Main Calculator</a>
+      <a href="weft-calc.html" class="btn btn-secondary" style="flex:1">⚙️ Weft Calculator</a>
+    </div>
+
+  </main>
+
+  <footer class="footer">
+    <div class="footer-nav container">
+      <div class="footer-brand">
+        <span class="footer-brand-name">KnitAdvisor</span>
+        <span class="footer-brand-sub">Diagnostics · Industrial Knowledge Base</span>
+      </div>
+      <nav class="footer-links">
+        <a href="/">Calculator</a>
+        <a href="converter.html">Converter</a>
+        <a href="weft-calc.html">Weft Calculator</a>
+        <a href="academy.html">Knitting Academy</a>
+      </nav>
+    </div>
+    <div class="footer-bottom container">
+      <div class="footer-platform">
+        <span class="footer-platform-label">Part of</span>
+        <a href="https://www.onlinetextileschool.com" target="_blank" rel="noopener" class="footer-platform-link">www.onlinetextileschool.com</a>
+      </div>
+      <div class="footer-sponsor">
+        <span class="footer-sponsor-label">Proud Sponsor</span>
+        <a href="https://www.asutex.com" target="_blank" rel="noopener" class="footer-sponsor-link">
+          <span class="footer-sponsor-dot"></span>
+          Asutex
+        </a>
+      </div>
+    </div>
+  </footer>
+
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/ui.js"></script>
+
+<script>
+  const FALLBACK_FAULTS_DATABASE = [
+    {
+      id: "holes",
+      name: "Holes (Broken ends, holes or cracks)",
+      description: "Holes are the result of cracks or yarn breakages. During stitch formation the yarn had already broken in the region of the needle hook. Depending on the knitted structure, yarn count, machine gauge and course density, the holes have different sizes.",
+      symptoms: ["holes", "cracks", "yarn_breakage", "rupture"],
+      yarn_causes: [
+        "High yarn irregularity / thick-thin places",
+        "Incorrect yarn input tension setting (yarn running-in tension is too high)",
+        "Poorly lubricated yarns / high coefficient of friction",
+        "Weak places in yarn which break during stitch formation",
+        "Knots, slubs, or foreign matter in the yarn path",
+        "Yarn is too dry, losing its natural elasticity"
+      ],
+      machine_causes: [
+        "Yarn trapped between the needle cheek taper and closing latch (yarn damage)",
+        "Stitches set too small (high tightness), causing difficulty in casting-off",
+        "Incorrect relation between cylinder and dial loop length",
+        "Badly set yarn feeder position or feeding angle",
+        "Defective knitting elements (worn needles, sinks, cams)"
+      ],
+      remedies: [
+        "Reduce yarn feed tension and optimize yarn path geometry",
+        "Ensure proper yarn waxing and conditioning (yarn lubrication)",
+        "Readjust stitch cams (couliering) to increase loop length if stitches are too tight",
+        "Check feeder alignment and adjust distance from needle line",
+        "Inspect needles and dial elements for burrs, replace worn hooks or latch cheeks"
+      ]
+    },
+    {
+      id: "drop_stitches",
+      name: "Drop Stitches",
+      description: "These are the result of a defective needle or when a yarn is not properly fed during stitch formation, i.e., not properly laid-in the needle hooks. These are the unlinked knitted loops.",
+      symptoms: ["dropped_loops", "vertical_gaps", "unlinked_loops"],
+      yarn_causes: [
+        "High yarn twist causing loops to snarl and jump out of hooks",
+        "Very dry material lacking flexibility to stay in the hook",
+        "Insufficient yarn tension leading to high yarn vibrations and slack"
+      ],
+      machine_causes: [
+        "Improper setting of the yarn feed angle (badly set yarn feeder)",
+        "Closed needle latch - a wale of dropped stitches will be produced until latch is opened",
+        "Broken needle hook",
+        "Low fabric take-down tension, allowing loops to fall out of the hook",
+        "Wrongly threaded-in yarn feeder",
+        "Dial loop length not properly related to cylinder loop length, causing loops to jump out",
+        "Bad take-up mechanical mechanism"
+      ],
+      remedies: [
+        "Verify needle hook and latch condition; replace bent or broken needles",
+        "Adjust yarn feeder height and horizontal angle so yarn is laid directly inside the hook",
+        "Adjust fabric take-down tension to keep loops taut below the needle line",
+        "Ensure latches are opened by latch openers or brushing devices before feeding",
+        "Verify relation between dial and cylinder stitch settings"
+      ]
+    },
+    {
+      id: "cloth_fallout",
+      name: "Cloth Fall-out (Pressed-off stitches)",
+      description: "It is an area consisting of drop stitches lying side by side. They can occur either when a yarn is laid-out or when it breaks without any immediate connection. Empty needles with closed latches run into the yarn feeder and remove the yarn from following hooks.",
+      symptoms: ["large_holes", "pressed_off", "cloth_drop", "machine_empty"],
+      yarn_causes: [
+        "Yarn breaks completely before reaching the yarn feeder",
+        "Yarn package winding faults, poor package build-up causing snags and breaks"
+      ],
+      machine_causes: [
+        "Fibre fly or lint blocking the yarn guides, feeders, or stop-motions",
+        "Defective yarn stop-motion mechanism failing to stop machine on break",
+        "Empty needle with closed latch running into the yarn feeder"
+      ],
+      remedies: [
+        "Clean yarn guides, feeders, and yarn storage units of lint and fibre fly",
+        "Check and adjust yarn package placement and tension disks",
+        "Test electronic yarn break detectors (stop-motions) to ensure instant machine stop on yarn breakage",
+        "Ensure proper functionality of the latch opening brushes"
+      ]
+    },
+    {
+      id: "needle_marks",
+      name: "Needle Marks (Vertical Stripes)",
+      description: "Vertical stripes observed as longitudinal gaps in the fabric. The space between adjacent wales is irregular and the closed appearance of the fabric is broken. Often the result of a meager setting, i.e., yarn count too fine for machine gauge or incorrect course density.",
+      symptoms: ["vertical_stripes", "longitudinal_lines", "wale_gaps"],
+      yarn_causes: [
+        "Yarn count is too fine for the machine gauge (meager setting)"
+      ],
+      machine_causes: [
+        "Twisted or bent needle hooks",
+        "Stiff needle latches or needle pivots",
+        "Incorrect closing of the hook by the latch",
+        "Heavily running needles (needles tight in cylinder tricks/slots)",
+        "Damaged dial or cylinder trick walls",
+        "Damaged needle latch and needle hooks",
+        "Worn or mismatched knitting elements from different suppliers"
+      ],
+      remedies: [
+        "Inspect cylinder and dial slots (tricks); clean out hardened lint, grease, and dirt",
+        "Replace bent, twisted, or stiff needles immediately",
+        "Ensure all needles in the cylinder are of the same make and construction",
+        "Choose a yarn count appropriate for the machine gauge (follow G = sqrt(1650/Tex) rule)",
+        "Check dial-to-cylinder alignment (timing and concentricity)"
+      ]
+    },
+    {
+      id: "horizontal_stripes",
+      name: "Horizontal Stripes",
+      description: "These are caused by unevenness in the courses; they traverse horizontally and repeat themselves regularly or irregularly.",
+      symptoms: ["horizontal_stripes", "course_lines", "horizontal_bands"],
+      yarn_causes: [
+        "Differences in yarn running-in tension across different feeders"
+      ],
+      machine_causes: [
+        "Deflector in dial cam brought into tuck position by mistake",
+        "Deflector not completely switched off (needle grips yarn and forms tuck loop)",
+        "Yarn feeder badly set at one or more systems",
+        "Couliering (stitch depth cams) not set constantly across all feeders",
+        "Jerky impulse or uneven pull from the fabric take-up roll"
+      ],
+      remedies: [
+        "Calibrate stitch length across all feeders using a yarn rate meter (LFA meter)",
+        "Verify dial cam deflectors are fully disengaged",
+        "Check and equalize yarn feed tension at all storage feeders",
+        "Ensure smooth, continuous operation of the fabric take-up and wind-up mechanism",
+        "Adjust and lock stitch cam screws securely"
+      ]
+    },
+    {
+      id: "barreness",
+      name: "Barre'ness",
+      description: "Periodic lateral irregularities in the fabric, appearing as bands or stripes. Classified into structural, colour, or shadow barre'ness.",
+      symptoms: ["barre_lines", "periodic_bands", "shade_changes"],
+      yarn_causes: [
+        "Individual yarns differ with respect to count, twist, blend, or physical properties",
+        "Yarns dye differently during piece dyeing due to varying dye affinity",
+        "Different course lengths being fed at different systems"
+      ],
+      machine_causes: [
+        "Uneven stitch length (couliering) at different systems",
+        "Improper feeder heights or feed angles causing minor loop structure variations"
+      ],
+      remedies: [
+        "Use yarn from the same batch/lot number on all feeders of the machine",
+        "Perform yarn dye-affinity checks before loading batches",
+        "Verify yarn feed rate (LFA) is identical at all feeders",
+        "Ensure identical stitch cams setting and inspect cams for wear"
+      ]
+    },
+    {
+      id: "bunching_up",
+      name: "Bunching-up (Thick and thin places)",
+      description: "Visible knots in the fabric referred to as bunching up. They appear as beads and turn up irregularly in the fabric. Can build up resulting in a 'cloudy' appearance. More irregular the yarn, more pronounced the cloudy appearance.",
+      symptoms: ["beads", "thick_thin", "cloudy_look", "slubs"],
+      yarn_causes: [
+        "Thick and thin places in the yarn (high yarn CV%)",
+        "Spinning faults in yarn (slubs, bad splices, or knots)"
+      ],
+      machine_causes: [
+        "Fabric take-up tension is too weak, causing fabric to bunch up at the knitting zone"
+      ],
+      remedies: [
+        "Use high-quality combed or carded yarn with low yarn mass variation (Uster CV%)",
+        "Adjust and increase fabric take-down tension to pull fabric down uniformly",
+        "Use yarn clearers on winders to cut and splice thick places and slubs"
+      ]
+    },
+    {
+      id: "snags",
+      name: "Snags / Snagging",
+      description: "Loops or yarn filaments pulled out from the fabric surface. Mainly occurs while processing filament yarns. Tendency is reduced by using coarser single filaments, lesser crimp elasticity, and higher twist.",
+      symptoms: ["pulled_loops", "filament_breaks", "hairy_surface"],
+      yarn_causes: [
+        "Fine filament yarns with low twist",
+        "High crimp elasticity in textured yarns"
+      ],
+      machine_causes: [
+        "Rough surfaces on yarn guide elements, ceramic eyes, or tension discs",
+        "Rough or nicked yarn feeders, needles, sinkers, or trick walls",
+        "Rough rollers on fabric take-up",
+        "Careless fabric handling, storage, or transport after knitting"
+      ],
+      remedies: [
+        "Inspect and polish all yarn contact surfaces; replace chipped ceramic guides",
+        "Check needles, sinkers, and cylinder dial edges for nicks or burrs",
+        "Wrap take-up rolls with protective covers if processing delicate filament yarns",
+        "Handle and store fabric rolls in clean, smooth containers with protective wrapping"
+      ]
+    },
+    {
+      id: "tuck_stitches",
+      name: "Tuck or Double Stitches",
+      description: "These occur due to badly knitted or non-knitted loops. They are unintentional tuck loops or floats, showing up as thick places or small beads in the fabric. May also appear as shadows against light.",
+      symptoms: ["double_loops", "shadow_look", "unintentional_tuck"],
+      yarn_causes: [
+        "Yarn count too thick, preventing proper loop shedding"
+      ],
+      machine_causes: [
+        "Fabric take-up is too weak, insufficient, has a one-sided drag, or is not continuous",
+        "The dial is set too high (dial needles do not support fabric, which is pulled up)",
+        "Incorrect course density or couliering setting",
+        "Loops are too tight (e.g. in interlock), preventing loops from clearing the needle latch"
+      ],
+      remedies: [
+        "Readjust and increase fabric take-up tension, ensuring uniform drag across circumference",
+        "Lower the dial height to ensure dial needles support the fabric properly",
+        "Check and adjust couliering (stitch cams) to loosen loops if clearing is difficult",
+        "Verify needle latches open and close freely; clean trick slots of lint build-up"
+      ]
+    },
+    {
+      id: "soil_stripe",
+      name: "Soil Stripes",
+      description: "Soil stripes can appear in the direction of wales (needle stripes) or courses. Wales stripes are solely caused by the machine. Course stripes are usually present in the yarn or caused by standing courses.",
+      symptoms: ["oil_marks", "black_stripes", "dirty_lines", "stop_marks"],
+      yarn_causes: [
+        "Soiled or dirty yarn package",
+        "Dust and dirt built up on yarn packages during long storage"
+      ],
+      machine_causes: [
+        "Defective or excessive lubrication from automatic oilers / greasing devices",
+        "Accumulated dirt and oil on needles after replacing individual needles",
+        "Machine stoppage leaving a standing course mark (oil line from needle bed)"
+      ],
+      remedies: [
+        "Clean cylinder slots and blow out dirty oil regularly",
+        "Adjust automatic oiling intervals and quantity; use washable needle oils",
+        "Ensure needles are wiped clean after replacement before starting production",
+        "Avoid prolonged machine stoppage with yarn threaded; blow clean dirt from yarn packages"
+      ]
+    },
+    {
+      id: "colour_fly",
+      name: "Colour Fly / Coloured Tinges",
+      description: "Colour fly consists of single fibres, bunches of fibres or yarn pieces in varying colours. It sticks on the yarn or is knitted into the fabric and is very difficult to remove.",
+      symptoms: ["foreign_fibers", "colored_spots", "lint_spots"],
+      yarn_causes: [
+        "Contamination in the raw yarn shipment",
+        "Fly fibers from neighboring spinning frames"
+      ],
+      machine_causes: [
+        "High accumulation of airborne lint (fly) in the knitting shed",
+        "Cross-contamination from adjacent machines running different colors",
+        "Poor machine cleaning schedule"
+      ],
+      remedies: [
+        "Install partition curtains between machines running different colors",
+        "Use overhead fans and traveling cleaners to blow away lint",
+        "Clean machines regularly using compressed air (with yarn guides covered)",
+        "Keep yarn packages stored in plastic bags until ready to mount on creels"
+      ]
+    }
+  ];
+
+  let faultsCatalog = [];
+
+  document.addEventListener('DOMContentLoaded', async () => {
+    try {
+      // Load all faults from the database
+      const res = await apiFaultsList();
+      if (res.success) {
+        faultsCatalog = res.faults;
+        renderCatalog(faultsCatalog);
+      }
+    } catch (err) {
+      console.error("Failed to load faults catalog, using local fallback database", err);
+      faultsCatalog = FALLBACK_FAULTS_DATABASE;
+      renderCatalog(faultsCatalog);
+    }
+  });
+
+  function renderCatalog(faults) {
+    const container = document.getElementById('catalog-container');
+    let html = '';
+    faults.forEach(f => {
+      html += `
+        <div class="diag-result-card" style="border-color: var(--line)">
+          <div class="diag-card-hdr">
+            <div class="diag-fault-name">${f.name}</div>
+          </div>
+          <div class="diag-fault-desc">${f.description}</div>
+          
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+            <div>
+              <div class="causes-title" style="color:#5bc0be;">Yarn-Related Causes</div>
+              <ul class="causes-list yarn">
+                ${f.yarn_causes.map(c => `<li>${c}</li>`).join('')}
+              </ul>
+            </div>
+            <div>
+              <div class="causes-title" style="color:#ffa62b;">Machine-Related Causes</div>
+              <ul class="causes-list machine">
+                ${f.machine_causes.map(c => `<li>${c}</li>`).join('')}
+              </ul>
+            </div>
+          </div>
+          
+          <div class="remedies-box mt-8">
+            <div class="causes-title" style="color:#00ffb2;">Corrective Remedies</div>
+            <ul class="remedies-list">
+              ${f.remedies.map(r => `<li>${r}</li>`).join('')}
+            </ul>
+          </div>
+        </div>
+      `;
+    });
+    container.innerHTML = html;
+  }
+
+  async function runDiagnosis() {
+    const checkboxes = document.querySelectorAll('.symptom-cb:checked');
+    const symptoms = [];
+    checkboxes.forEach(cb => symptoms.push(cb.value));
+
+    const resultPanel = document.getElementById('diag-results');
+
+    if (symptoms.length === 0) {
+      resultPanel.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">🔍</div>
+          <div class="h3">No symptoms selected</div>
+          <div class="text-xs text-dim mt-4">Select one or more fabric symptoms or machine conditions in the left panel to execute real-time diagnosis.</div>
+        </div>
+      `;
+      return;
+    }
+
+    try {
+      const res = await apiFaultsDiagnose(symptoms);
+      if (res.success && res.diagnosed.length > 0) {
+        renderDiagnosisReport(res.diagnosed);
+      } else {
+        resultPanel.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">⚠️</div>
+            <div class="h3">No matching faults found</div>
+            <div class="text-xs text-dim mt-4">The selected combination of symptoms does not match any standard faults. Try choosing different conditions.</div>
+          </div>
+        `;
+      }
+    } catch (err) {
+      console.error(err);
+      // Client-side fallback diagnosis if API is offline
+      runClientSideDiagnosis(symptoms);
+    }
+  }
+
+  function renderDiagnosisReport(diagnosed) {
+    const resultPanel = document.getElementById('diag-results');
+    let html = '<div class="symptom-title" style="margin-bottom:12px;">Diagnostic Matches</div>';
+
+    diagnosed.forEach(d => {
+      html += `
+        <div class="diag-result-card" style="border-left: 4px solid #00ffb2; padding-left: 14px;">
+          <div class="diag-card-hdr">
+            <div class="diag-fault-name">${d.name}</div>
+            <span class="confidence-badge">Match: ${d.confidence}%</span>
+          </div>
+          <div class="diag-fault-desc">${d.description}</div>
+          
+          <div style="font-size:10px; color:var(--t3); font-family:var(--mono); margin-bottom:10px;">
+            Matched cues: ${d.matches.join(', ')}
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+            <div>
+              <div class="causes-title" style="color:#5bc0be;">Yarn-Related Causes</div>
+              <ul class="causes-list yarn">
+                ${d.yarn_causes.map(c => `<li>${c}</li>`).join('')}
+              </ul>
+            </div>
+            <div>
+              <div class="causes-title" style="color:#ffa62b;">Machine-Related Causes</div>
+              <ul class="causes-list machine">
+                ${d.machine_causes.map(c => `<li>${c}</li>`).join('')}
+              </ul>
+            </div>
+          </div>
+          
+          <div class="remedies-box mt-8">
+            <div class="causes-title" style="color:#00ffb2;">Corrective Remedies</div>
+            <ul class="remedies-list">
+              ${d.remedies.map(r => `<li>${r}</li>`).join('')}
+            </ul>
+          </div>
+        </div>
+      `;
+    });
+
+    resultPanel.innerHTML = html;
+  }
+
+  // Local rule-based fallback diagnostics engine (keeps tool 100% reliable)
+  function runClientSideDiagnosis(selectedSymptoms) {
+    if (faultsCatalog.length === 0) return;
+    
+    const symptomKeywords = {
+      "holes": ["holes", "cracks", "yarn_breakage", "break", "weak"],
+      "drop_stitch": ["dropped_loops", "vertical_gaps", "unlinked", "slip"],
+      "pressed_off": ["pressed_off", "fall-out", "cloth_drop"],
+      "vertical_lines": ["vertical_stripes", "longitudinal", "wale_gaps", "needle marks"],
+      "horizontal_lines": ["horizontal_stripes", "course_lines", "horizontal_bands", "barre"],
+      "oil_marks": ["oil_marks", "black_stripes", "dirty_lines", "grease"],
+      "lint_spots": ["foreign_fibers", "colored_spots", "lint_spots", "colour fly"],
+      "pulled_loops": ["pulled_loops", "filament", "rough", "snag"],
+      "beads": ["beads", "thick_thin", "knots", "slubs", "tuck"],
+      
+      "high_tension": ["tension is too high", "high yarn tension", "couliering", "tight"],
+      "low_tension": ["low yarn tension", "insufficient yarn tension", "slack"],
+      "weak_takeup": ["take-up is too weak", "low fabric take-down", "bad take-up"],
+      "stiff_needles": ["stiff needle", "heavily running needles", "stiff latches"],
+      "closed_latch": ["closed latch", "closed needle latch"],
+      "broken_hook": ["broken needle hook", "damaged needle latch"],
+      "oil_leakage": ["lubrication", "oiling", "greasing"]
+    };
+
+    const results = [];
+
+    faultsCatalog.forEach(fault => {
+      let score = 0;
+      const matches = [];
+
+      selectedSymptoms.forEach(sym => {
+        const keywords = symptomKeywords[sym] || [];
+        const descMatch = keywords.some(kw => fault.description.toLowerCase().includes(kw.toLowerCase()));
+        const symListMatch = keywords.some(kw => fault.symptoms.some(fs => fs.toLowerCase().includes(kw.toLowerCase())));
+
+        if (descMatch || symListMatch) {
+          score += 3;
+          matches.push(`Symptom: ${sym}`);
+        }
+      });
+
+      fault.yarn_causes.forEach(cause => {
+        selectedSymptoms.forEach(sym => {
+          const keywords = symptomKeywords[sym] || [];
+          if (keywords.some(kw => cause.toLowerCase().includes(kw.toLowerCase()))) {
+            score += 1;
+            matches.push(`Yarn cue: ${sym}`);
+          }
+        });
+      });
+
+      fault.machine_causes.forEach(cause => {
+        selectedSymptoms.forEach(sym => {
+          const keywords = symptomKeywords[sym] || [];
+          if (keywords.some(kw => cause.toLowerCase().includes(kw.toLowerCase()))) {
+            score += 1;
+            matches.push(`Machine cue: ${sym}`);
+          }
+        });
+      });
+
+      const maxPossibleScore = 10;
+      const confidence = Math.min(100, Math.round((score / maxPossibleScore) * 100));
+
+      if (score > 0) {
+        results.push({
+          name: fault.name,
+          description: fault.description,
+          confidence,
+          matches: [...new Set(matches)],
+          yarn_causes: fault.yarn_causes,
+          machine_causes: fault.machine_causes,
+          remedies: fault.remedies
+        });
+      }
+    });
+
+    results.sort((a, b) => b.confidence - a.confidence);
+    if (results.length > 0) {
+      renderDiagnosisReport(results);
+    } else {
+      const resultPanel = document.getElementById('diag-results');
+      resultPanel.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">⚠️</div>
+          <div class="h3">No matching faults found</div>
+          <div class="text-xs text-dim mt-4">The selected combination of symptoms does not match any standard faults. Try choosing different conditions.</div>
+        </div>
+      `;
+    }
+  }
+</script>
+</body>
+</html>

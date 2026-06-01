@@ -1,0 +1,25 @@
+# Node dependencies
+node_modules/
+backend/node_modules/
+npm-debug.log*
+
+# Environment secrets
+.env
+backend/.env
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Large book assets and spreadsheets
+*.pdf
+*.xlsx
+fleece_data.txt
+rnd_data_full.json
+woven_erp_reference.json
+final_structure_revised.html
+temp/
+logs/
+*.log
+dist/
+build/
