@@ -45,7 +45,7 @@ router.post('/calculate', async (req, res) => {
   }
 
   // Normalize cache key (includes composition + color for unique caching)
-  const cacheInput = `${fabric}_${gsm}_${body.composition||''}_${body.color_shade||''}_${body.dia||''}_${body.gauge||''}_${body.rpm||''}_${body.efficiency||85}`;
+  const cacheInput = `${fabric}_${gsm}_${body.composition||''}_${body.color_shade||''}_${body.dia||''}_${body.gauge||''}_${body.rpm||''}_${body.efficiency||85}_${body.denier||''}_${body.filaments||''}_${body.elastane_denier||''}_${body.elastane_pct||''}`;
   const cacheKey = crypto.createHash('md5').update(cacheInput).digest('hex');
 
   // L1 — memory cache
@@ -96,14 +96,19 @@ router.post('/calculate', async (req, res) => {
   const result = calculate({
     fabric,
     gsm,
-    composition: body.composition,
-    color_shade: body.color_shade,
-    dia: body.dia,
-    gauge: body.gauge,
-    rpm: body.rpm,
-    efficiency: body.efficiency,
-    stitch_length: body.stitch_length,
-    feeders: body.feeders,
+    composition:     body.composition,
+    color_shade:     body.color_shade,
+    dia:             body.dia,
+    gauge:           body.gauge,
+    rpm:             body.rpm,
+    efficiency:      body.efficiency,
+    stitch_length:   body.stitch_length,
+    feeders:         body.feeders,
+    // Warp knit parameters
+    denier:          body.denier,
+    filaments:       body.filaments,
+    elastane_denier: body.elastane_denier,
+    elastane_pct:    body.elastane_pct,
   });
 
   if (result.error) {

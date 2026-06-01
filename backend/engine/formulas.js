@@ -263,6 +263,7 @@ const YarnCountFormulas = {
 // Default tight and loose limits for various fabric categories based on industry standards
 const TIGHTNESS_LIMITS = {
   'single_jersey': { min: 11, max: 19, ideal_min: 13, ideal_max: 17 },
+  'heavy_jersey': { min: 13, max: 28, ideal_min: 16, ideal_max: 25 },
   'interlock': { min: 12, max: 20, ideal_min: 14, ideal_max: 18 },
   'rib': { min: 10, max: 18, ideal_min: 12, ideal_max: 16 },
   'fleece': { min: 14, max: 22, ideal_min: 16, ideal_max: 20 },

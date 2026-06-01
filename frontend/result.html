@@ -426,18 +426,18 @@
         <div id="multi-yarn-rows"></div>
       </div>
 
-      <!-- Loop length -->
-      <div class="result-section-label">Loop Length</div>
+      <!-- Loop length / Course length -->
+      <div class="result-section-label" id="ll-section-label">Loop Length</div>
       <div class="result-row">
-        <span class="result-key">Loop length (mm)</span>
+        <span class="result-key" id="ll-mm-label">Loop length (mm)</span>
         <span class="result-val" id="ll-mm">—</span>
       </div>
       <div class="result-row">
-        <span class="result-key">Loop length (cm)</span>
+        <span class="result-key" id="ll-cm-label">Loop length (cm)</span>
         <span class="result-val white" id="ll-cm">—</span>
       </div>
       <div class="result-row">
-        <span class="result-key">Multiplier used</span>
+        <span class="result-key" id="ll-mult-label">Multiplier used</span>
         <span class="result-val white" id="ll-mult">—</span>
       </div>
       
@@ -760,13 +760,27 @@ function renderResult(r, params) {
     document.getElementById('warp-knit-body').innerHTML = renderWarpKnitCard(r.warp_knit);
   }
 
-  // — Loop length —
+  // — Loop length (or course length for warp knit) —
   const ll = r.loop_length;
+  const isWarpKnit = r.yarn?.is_warp_knit;
+
+  // For warp knit: relabel the loop length section
+  if (isWarpKnit) {
+    const el = document.getElementById('ll-section-label');
+    if (el) el.textContent = 'Course Length (per lapping cycle)';
+    const mmLbl = document.getElementById('ll-mm-label');
+    if (mmLbl) mmLbl.textContent = 'Course length (mm)';
+    const cmLbl = document.getElementById('ll-cm-label');
+    if (cmLbl) cmLbl.textContent = 'Course length (cm)';
+    const mulLbl = document.getElementById('ll-mult-label');
+    if (mulLbl) mulLbl.textContent = 'Formula basis';
+  }
+
   document.getElementById('ll-mm').textContent = ll?.value_mm != null ? `${ll.value_mm} mm` : '—';
   document.getElementById('ll-cm').textContent = ll?.value_cm != null ? `${ll.value_cm} cm` : '—';
-  document.getElementById('ll-mult').textContent = ll?.multiplier != null
-    ? `${ll.multiplier} (${ll.multiplier_source || 'est.'})`
-    : '—';
+  document.getElementById('ll-mult').textContent = isWarpKnit
+    ? (ll?.value_mm != null ? 'Lapping geometry: Σ(moves × pitch × 1.08)' : 'Enter gauge to calculate')
+    : (ll?.multiplier != null ? `${ll.multiplier} (${ll.multiplier_source || 'est.'})` : '—');
     
   // R&D Validation
   const rndBox = document.getElementById('rnd-validation-box');
@@ -1086,8 +1100,25 @@ function renderCosting(costing) {
 
   document.getElementById('cost-total-val').textContent = `$${fmt(costing.total_per_kg_usd, 2)}`;
   document.getElementById('cost-yarn-val').textContent = `$${fmt(costing.raw_material_per_kg_usd, 2)}`;
-  
-  document.getElementById('cost-breakdown-yarn').textContent = `$${fmt(costing.raw_material_per_kg_usd, 2)} / kg`;
+
+  // Show elastane-blended price if applicable
+  const el = costing.fiber_detail;
+  const yarnRowEl = document.getElementById('cost-breakdown-yarn');
+  if (el && el.length > 0) {
+    // Build fiber detail breakdown
+    const detailLines = el.map(f =>
+      `<div class="result-row" style="padding:4px 10px; opacity:0.8;">
+        <span class="result-key" style="font-size:11px;">${f.fiber} (${f.pct}%)</span>
+        <span class="result-val white" style="font-size:11px;">$${fmt(f.price_per_kg, 2)}/kg → $${fmt(f.cost_contribution, 4)} contribution</span>
+      </div>`
+    ).join('');
+    yarnRowEl.innerHTML = `$${fmt(costing.raw_material_per_kg_usd, 2)} / kg
+      <div style="margin-top:6px; border-top:1px solid var(--line2); padding-top:6px; font-size:11px; color:var(--t3);">Fiber cost breakdown:</div>
+      ${detailLines}`;
+  } else {
+    yarnRowEl.textContent = `$${fmt(costing.raw_material_per_kg_usd, 2)} / kg`;
+  }
+
   document.getElementById('cost-breakdown-knitting').textContent = `$${fmt(costing.knitting_per_kg_usd, 2)} / kg`;
   document.getElementById('cost-breakdown-dyeing').textContent = `$${fmt(costing.dyeing_per_kg_usd, 2)} / kg`;
   document.getElementById('cost-breakdown-finishing').textContent = `$${fmt(costing.finishing_per_kg_usd, 2)} / kg`;
@@ -1188,10 +1219,63 @@ function renderQuality(q) {
 function renderYarn(yarn) {
   if (!yarn) return;
 
+  // ── Warp knit: denier-based system, override the Ne display ──
+  if (yarn.is_warp_knit) {
+    const denierVal = yarn.denier_input
+      ? `${yarn.denier_input}D / ${yarn.filaments_input || 34}f`
+      : (yarn.denier_estimated ? `${yarn.denier_estimated}D (est. from GSM)` : '—');
+    const denierLabel = yarn.denier_input ? 'exact input' : 'back-calculated from GSM';
+
+    document.getElementById('y-count-ne').textContent = denierVal;
+    document.getElementById('y-count-disp').textContent = denierVal;
+    document.getElementById('y-count-src').textContent = 'Denier system — warp knit does not use Ne count';
+
+    // Override the yarn card labels
+    const cards = document.querySelectorAll('#yarn-main .yarn-card');
+    if (cards[0]) {
+      cards[0].querySelector('.yarn-label').textContent = 'Yarn Denier';
+      cards[0].querySelector('.yarn-sub').textContent = denierLabel;
+    }
+    if (cards[1]) {
+      cards[1].querySelector('.yarn-label').textContent = 'Filament Count';
+      cards[1].querySelector('.yarn-val').textContent = (yarn.filaments_input || 34) + 'f';
+      cards[1].querySelector('.yarn-sub').textContent = 'filaments per yarn';
+    }
+
+    // Hide Ne conversion sections that don't apply
+    document.getElementById('multi-yarn-section').classList.add('hidden');
+    return;
+  }
+
+  // Count (Ne) card: show integer count, with exact value as sub-label
+  const countInt = yarn.count_ne != null ? yarn.count_ne : null;
+  const countExact = yarn.count_ne_exact || null;
   document.getElementById('y-count-ne').textContent =
-    yarn.count_ne != null ? `${fmt(yarn.count_ne, 2)} Ne` : (yarn.count_display || '—');
+    countInt != null ? `${countInt} Ne` : (yarn.count_display || '—');
+
+  // Count sub-label: show exact calculated value for transparency
+  const neCard = document.querySelector('#yarn-main .yarn-card:first-child');
+  if (neCard) {
+    const subEl = neCard.querySelector('.yarn-sub');
+    if (subEl && countExact != null && countExact !== countInt) {
+      subEl.textContent = `calc: ${countExact.toFixed(2)} Ne → rounded to ${countInt}`;
+    } else if (subEl) {
+      subEl.textContent = 'exact calculated';
+    }
+  }
+
+  // Industry declaration: base yarn + separate elastane if applicable
   document.getElementById('y-count-disp').textContent = yarn.count_display || '—';
   document.getElementById('y-count-src').textContent = yarn.source || '';
+
+  // Elastane separate declaration card
+  const indCard = document.querySelector('#yarn-main .yarn-card:last-child');
+  if (indCard && yarn.elastane_denier_declared) {
+    const feedType = (yarn.elastane_pct || 0) <= 5 ? 'Half-feed' : 'Full-feed';
+    indCard.querySelector('.yarn-label').textContent = 'Count (Industry)';
+    indCard.querySelector('.yarn-val').textContent = yarn.count_display || '—';
+    indCard.querySelector('.yarn-sub').textContent = `Base yarn + ${yarn.elastane_denier_declared}D Elastane (${feedType}) declared separately`;
+  }
 
   // Multi-yarn (terry, fleece)
   if (yarn.yarn2_ne || yarn.binder_denier) {

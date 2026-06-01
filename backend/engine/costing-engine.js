@@ -446,10 +446,43 @@ function calculateCost(params) {
 
   const finalYarnPrice = round4(basePrice + surchargeTotal);
 
+  // ---- 3b. ELASTANE SEPARATE COST (when composition includes elastane) ----
+  // Elastane/spandex is always a separate yarn fed via a dedicated feeder.
+  // Cost must be weighted by its fraction of the total fabric weight.
+  const fiberComp = parsedComp ? (parsedComp.fibers || {}) : {};
+  const elastanePct = fiberComp.elastane || 0;
+  let effectiveYarnPrice = finalYarnPrice;
+  let elastaneDetail = null;
+
+  if (elastanePct > 0) {
+    let elDenier = 40;
+    if (elastanePct <= 3) elDenier = 20;
+    else if (elastanePct <= 8) elDenier = 40;
+    else elDenier = 70;
+
+    const elKey = `spandex_${elDenier}d`;
+    const elPricePerKg = SM_PRICE_MATRIX[elKey]?.price || 4.90;
+    const elFraction = elastanePct / 100;
+    const baseFraction = 1 - elFraction;
+
+    // Weighted blended yarn price = (base yarn price × base%) + (elastane price × elastane%)
+    effectiveYarnPrice = round4(finalYarnPrice * baseFraction + elPricePerKg * elFraction);
+    elastaneDetail = {
+      denier: elDenier,
+      pct_in_fabric: elastanePct,
+      price_per_kg_usd: elPricePerKg,
+      cost_contribution_usd: round4(elPricePerKg * elFraction),
+      base_yarn_cost_contribution_usd: round4(finalYarnPrice * baseFraction),
+      blended_price_usd: effectiveYarnPrice,
+      label: SM_PRICE_MATRIX[elKey]?.label || `Spandex ${elDenier}D`,
+      note: `${elastanePct}% elastane weight × $${elPricePerKg}/kg = $${round4(elPricePerKg * elFraction)}/kg contribution`,
+    };
+  }
+
   // ---- 4. INVISIBLE WASTE ----
   const wastePct = INVISIBLE_WASTE_PCT[fabricId] || INVISIBLE_WASTE_PCT.default;
   const wasteMultiplier = 1 + wastePct / 100;
-  const rawMaterialWithWaste = round4(finalYarnPrice * wasteMultiplier);
+  const rawMaterialWithWaste = round4(effectiveYarnPrice * wasteMultiplier);
 
   // ---- 5. KNITTING COST ----
   const gaugeKey = Object.keys(KNITTING_COST_BY_GAUGE)
@@ -512,20 +545,38 @@ function calculateCost(params) {
     yarn: {
       type_key:          yarnTypeKey,
       type_label:        yarnLabel,
-      count_ne:          countNe,
+      count_ne:          Math.round(countNe), // integer — industry standard
       count_display:     `${Math.round(countNe)}/1 Ne`,
       base_price_usd:    basePrice,
       surcharges:        surchargesApplied,
       surcharge_total:   round4(surchargeTotal),
       final_price_usd:   finalYarnPrice,
       source:            'KnitAdvisor Certified Price Database — May 2, 2026',
+      // Elastane separate yarn (when applicable)
+      elastane: elastaneDetail,
     },
 
     cost_breakdown_usd: {
       raw_material: {
-        yarn_price_per_kg:   finalYarnPrice,
+        base_yarn_price_per_kg: finalYarnPrice,
+        elastane_blended_price: elastaneDetail ? effectiveYarnPrice : null,
+        effective_yarn_price_per_kg: effectiveYarnPrice,
         waste_pct:           wastePct,
         with_waste_per_kg:   rawMaterialWithWaste,
+        fiber_detail: elastaneDetail ? [
+          {
+            fiber: yarnLabel,
+            pct: 100 - elastanePct,
+            price_per_kg: finalYarnPrice,
+            cost_contribution: round4(finalYarnPrice * (1 - elastanePct / 100)),
+          },
+          {
+            fiber: elastaneDetail.label,
+            pct: elastanePct,
+            price_per_kg: elastaneDetail.price_per_kg_usd,
+            cost_contribution: elastaneDetail.cost_contribution_usd,
+          },
+        ] : null,
       },
       knitting:              knittingFinal,
       dyeing: {
@@ -552,7 +603,8 @@ function calculateCost(params) {
 
     formula_trace: {
       yarn_price:   `Reference Matrix[${yarnTypeKey}][${Math.round(countNe)}Ne] = $${basePrice} + surcharges($${round4(surchargeTotal)}) = $${finalYarnPrice}`,
-      raw_material: `$${finalYarnPrice} × (1 + ${wastePct}% waste) = $${rawMaterialWithWaste}`,
+      elastane_blend: elastaneDetail ? `Base yarn $${finalYarnPrice} × ${100 - elastanePct}% + Elastane $${elastaneDetail.price_per_kg_usd} × ${elastanePct}% = $${effectiveYarnPrice}/kg (weighted blend)` : null,
+      raw_material: `$${effectiveYarnPrice} × (1 + ${wastePct}% waste) = $${rawMaterialWithWaste}`,
       knitting:     `Gauge ${gaugeKey}GG base $${knittingBase} × fine_surcharge(${fineSurcharge}) = $${knittingFinal}`,
       dyeing:       `shade="${colorShade}" $${dyeingBase} + dual_bath $${dualBath} = $${dyeingFinal}`,
       finishing:    `fabric="${fabricId}" $${finishingBase} + heavy_gsm $${heavySurcharge} = $${finishingFinal}`,
