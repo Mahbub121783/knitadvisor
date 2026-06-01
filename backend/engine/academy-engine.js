@@ -283,7 +283,7 @@ const BASIC_ELEMENTS = {
       name: "Rib Circular Knitting Machine",
       page: "368-376",
       desc: "Has two sets of latch needles: vertical needles in a rotating cylinder and horizontal needles in a perpendicular dial. Gauge ranges 5 to 20 npi.",
-      formula: "Ne = G² / 8.4 (where Ne is Cotton Count and G is Gauge in npi)",
+      formula: "Ne = G² / 15.3 (where Ne is Cotton Count and G is Gauge in npi)",
       timing_modes: {
         synchronized: "Cylinder and dial needles knock over at the same instant. Draws yarn in two directions alternately under high tension. Loose structures, uneven stitches.",
         delayed: "Dial needles knock over 4-6 needles later. Robs yarn from cylinder loops. Produces tighter, heavier, wider, and more stable fabrics. Ratio: Cylinder Depth = k × Dial Depth (k = 1.2 to 1.5).",
@@ -594,7 +594,7 @@ const QUIZ_QUESTIONS = [
     options: [
       "Ne = G² / 18",
       "Ne = G / 18",
-      "Ne = G² / 8.4",
+      "Ne = G² / 15.3",
       "Ne = G × 18"
     ],
     answer: 0,

@@ -26,14 +26,17 @@ router.get('/', (req, res) => {
 });
 
 router.post('/login', async (req, res) => {
-  const { password } = req.body || {};
+  const { username, password } = req.body || {};
 
-  if (!password) {
-    return res.status(400).json({ error: 'password is required' });
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Username and password are required' });
   }
 
-  if (password !== process.env.ADMIN_PASSWORD) {
-    return res.status(401).json({ error: 'Invalid password' });
+  const validUsername = process.env.ADMIN_USERNAME || 'knitadvisor';
+  const validPassword = process.env.ADMIN_PASSWORD;
+
+  if (username !== validUsername || password !== validPassword) {
+    return res.status(401).json({ error: 'Invalid username or password' });
   }
 
   try {
@@ -154,10 +157,70 @@ router.get('/api/logs', adminAuth, async (req, res) => {
 // AI Providers
 router.get('/api/providers', adminAuth, async (req, res) => {
   try {
-    const providers = await providerManager.getProviders();
-    res.json({ providers });
+    const [providers, strategy] = await Promise.all([
+      providerManager.getProviders(),
+      providerManager.getStrategy()
+    ]);
+    const annotated = providers.map(p => ({
+      ...p,
+      key_is_set: !!(process.env[p.api_key_env] && process.env[p.api_key_env].trim().length > 0)
+    }));
+    res.json({ providers: annotated, strategy });
   } catch (err) {
     console.error('[Providers Error]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get available provider types for Add Provider modal
+router.get('/api/providers/types', adminAuth, async (req, res) => {
+  res.json({ types: providerManager.getProviderTypes() });
+});
+
+// Get/set fallback strategy
+router.get('/api/providers/strategy', adminAuth, async (req, res) => {
+  try {
+    const strategy = await providerManager.getStrategy();
+    res.json({ strategy });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/api/providers/strategy', adminAuth, async (req, res) => {
+  try {
+    const { strategy } = req.body;
+    const valid = ['priority', 'round_robin', 'weighted', 'fastest'];
+    if (!valid.includes(strategy)) return res.status(400).json({ error: 'Invalid strategy. Use: ' + valid.join(', ') });
+    await providerManager.setStrategy(strategy);
+    res.json({ ok: true, strategy });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Add a new provider instance
+router.post('/api/providers', adminAuth, async (req, res) => {
+  try {
+    const { provider_type, display_name, api_key_env, model_name, api_url, daily_limit, per_min_limit } = req.body;
+    if (!provider_type) return res.status(400).json({ error: 'provider_type required' });
+    if (!api_key_env) return res.status(400).json({ error: 'api_key_env required' });
+    const providerName = await providerManager.addProvider({ provider_type, display_name, api_key_env, model_name, api_url, daily_limit, per_min_limit });
+    res.json({ ok: true, provider_name: providerName });
+  } catch (err) {
+    console.error('[Add Provider Error]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Delete a provider instance
+router.delete('/api/providers/:id', adminAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    await providerManager.deleteProvider(id);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[Delete Provider Error]', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -167,8 +230,8 @@ router.patch('/api/providers/:id/priority', adminAuth, async (req, res) => {
     const id = parseInt(req.params.id);
     const { priority } = req.body;
 
-    if (!priority || priority < 1 || priority > 4) {
-      return res.status(400).json({ error: 'priority must be 1-4' });
+    if (!priority || priority < 1) {
+      return res.status(400).json({ error: 'priority must be >= 1' });
     }
 
     await providerManager.updatePriority(id, priority);
@@ -196,17 +259,8 @@ router.post('/api/providers/:id/apikey', adminAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const { key } = req.body;
-
-    if (!key) {
-      return res.status(400).json({ error: 'key is required' });
-    }
-
-    const rows = await dbQuery('SELECT provider_name FROM ai_provider_stats WHERE id = ?', [id]);
-    if (!rows.length) {
-      return res.status(404).json({ error: 'Provider not found' });
-    }
-
-    await providerManager.updateApiKey(rows[0].provider_name, key);
+    if (!key) return res.status(400).json({ error: 'key is required' });
+    await providerManager.updateApiKey(id, key);
     res.json({ ok: true });
   } catch (err) {
     console.error('[API Key Update Error]', err);
@@ -216,18 +270,46 @@ router.post('/api/providers/:id/apikey', adminAuth, async (req, res) => {
 
 router.post('/api/providers/:id/test', adminAuth, async (req, res) => {
   try {
-    const startMs = Date.now();
-    const result = await providerManager.parse('single_jersey 180 GSM');
-    const responsMs = Date.now() - startMs;
+    const id = parseInt(req.params.id);
+    const rows = await dbQuery('SELECT * FROM ai_provider_stats WHERE id = ?', [id]);
+    if (!rows.length) return res.status(404).json({ error: 'Provider not found' });
 
-    res.json({
-      ok: true,
-      response_ms: responsMs,
-      provider: result.provider_used,
-      result: result
-    });
+    const provider = rows[0];
+    const apiKey = process.env[provider.api_key_env];
+
+    if (!apiKey || !apiKey.trim()) {
+      return res.status(400).json({ error: `API key not configured (${provider.api_key_env} is empty)` });
+    }
+
+    const startMs = Date.now();
+    const result = await providerManager.testProvider(provider);
+    const responseMs = Date.now() - startMs;
+
+    // Mark healthy in DB on success
+    await dbQuery(
+      'UPDATE ai_provider_stats SET is_healthy = 1, cooldown_until = NULL WHERE id = ?',
+      [id]
+    );
+
+    res.json({ ok: true, response_ms: responseMs, provider: provider.provider_name, model: provider.model_name, result });
   } catch (err) {
     console.error('[Provider Test Error]', err);
+    // Mark unhealthy on failure
+    const id = parseInt(req.params.id);
+    await dbQuery('UPDATE ai_provider_stats SET is_healthy = 0 WHERE id = ?', [id]).catch(() => {});
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.patch('/api/providers/:id/model', adminAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { model_name } = req.body;
+    if (!model_name || !model_name.trim()) return res.status(400).json({ error: 'model_name required' });
+    await dbQuery('UPDATE ai_provider_stats SET model_name = ? WHERE id = ?', [model_name.trim(), id]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[Model Update Error]', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -335,6 +417,108 @@ router.delete('/api/cache/entry/:key', adminAuth, async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     console.error('[Cache Entry Delete Error]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================
+// Inquiries — paginated query_logs with CSV download support
+// ============================================================
+
+router.get('/api/inquiries', adminAuth, async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = (page - 1) * limit;
+    const format = req.query.format; // 'csv' for download
+
+    let sql = 'SELECT * FROM query_logs';
+    const params = [];
+    const conditions = [];
+
+    if (req.query.fabric) { conditions.push('parsed_fabric = ?'); params.push(req.query.fabric); }
+    if (req.query.date_from) { conditions.push('DATE(created_at) >= ?'); params.push(req.query.date_from); }
+    if (req.query.date_to) { conditions.push('DATE(created_at) <= ?'); params.push(req.query.date_to); }
+    if (conditions.length) sql += ' WHERE ' + conditions.join(' AND ');
+
+    if (format === 'csv') {
+      // No pagination for CSV — get all
+      const rows = await dbQuery(sql + ' ORDER BY created_at DESC', params);
+      const header = 'ID,Time,Input,Fabric,GSM,Gauge,Dia,Composition,AI Provider,Response Ms,From Cache,IP\n';
+      const csvRows = rows.map(r => [
+        r.id,
+        r.created_at,
+        `"${(r.input_text||'').replace(/"/g,'""')}"`,
+        r.parsed_fabric||'',
+        r.parsed_gsm||'',
+        r.parsed_gauge||'',
+        r.parsed_dia||'',
+        `"${(r.parsed_composition||'').replace(/"/g,'""')}"`,
+        r.ai_provider||'',
+        r.response_ms||'',
+        r.from_cache?'1':'0',
+        r.ip_address||''
+      ].join(','));
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="inquiries_${Date.now()}.csv"`);
+      return res.send(header + csvRows.join('\n'));
+    }
+
+    const countRows = await dbQuery(sql.replace('SELECT *', 'SELECT COUNT(*) as cnt'), params);
+    const total = countRows[0]?.cnt || 0;
+    sql += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
+    params.push(limit, offset);
+    const rows = await dbQuery(sql, params);
+    res.json({ rows, total, page, pages: Math.ceil(total / limit) });
+  } catch (err) {
+    console.error('[Inquiries Error]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================
+// Settings — read/update admin credentials
+// ============================================================
+
+router.get('/api/settings', adminAuth, async (req, res) => {
+  res.json({
+    username: process.env.ADMIN_USERNAME || 'knitadvisor',
+    yarn_prices_note: 'Yarn prices are defined in backend/engine/costing-engine.js SM_PRICE_MATRIX. Use POST /admin/api/settings/yarn-price to override a single entry in the DB overrides table (future feature).',
+  });
+});
+
+router.post('/api/settings/credentials', adminAuth, async (req, res) => {
+  try {
+    const { new_username, new_password, current_password } = req.body || {};
+    if (!current_password || current_password !== process.env.ADMIN_PASSWORD) {
+      return res.status(401).json({ error: 'Current password is incorrect' });
+    }
+    if (!new_username && !new_password) {
+      return res.status(400).json({ error: 'Provide new_username or new_password' });
+    }
+    const fs = require('fs');
+    const envPath = path.join(__dirname, '..', '.env');
+    let envContent = fs.readFileSync(envPath, 'utf8');
+    if (new_username) {
+      if (/^ADMIN_USERNAME=/m.test(envContent)) {
+        envContent = envContent.replace(/^ADMIN_USERNAME=.*/m, `ADMIN_USERNAME=${new_username}`);
+      } else {
+        envContent += `\nADMIN_USERNAME=${new_username}`;
+      }
+      process.env.ADMIN_USERNAME = new_username;
+    }
+    if (new_password) {
+      if (/^ADMIN_PASSWORD=/m.test(envContent)) {
+        envContent = envContent.replace(/^ADMIN_PASSWORD=.*/m, `ADMIN_PASSWORD=${new_password}`);
+      } else {
+        envContent += `\nADMIN_PASSWORD=${new_password}`;
+      }
+      process.env.ADMIN_PASSWORD = new_password;
+    }
+    fs.writeFileSync(envPath, envContent);
+    res.json({ ok: true, message: 'Credentials updated. Changes take effect immediately (in-memory update done).' });
+  } catch (err) {
+    console.error('[Settings Credentials Error]', err);
     res.status(500).json({ error: err.message });
   }
 });

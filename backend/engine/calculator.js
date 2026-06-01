@@ -905,6 +905,21 @@ function generateFleeceProperties(fabricId, parsedComp) {
   };
 }
 
+function roundToStandardCount(countNe) {
+  if (!countNe) return countNe;
+  const standardCounts = [6, 7, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 40, 44, 50, 60, 80];
+  let closest = standardCounts[0];
+  let minDiff = Math.abs(countNe - closest);
+  for (let i = 1; i < standardCounts.length; i++) {
+    const diff = Math.abs(countNe - standardCounts[i]);
+    if (diff < minDiff) {
+      minDiff = diff;
+      closest = standardCounts[i];
+    }
+  }
+  return closest;
+}
+
 function calculateCount(fabricId, gsm, fabricDef, compModifiers = {}, factoryLookup = null, parsedComp = null, rawInputStr = '') {
   const reg = GSM_COUNT_REGRESSION_COMPLETE[fabricId];
   const countFactor = compModifiers.count_factor || 1.0;
@@ -912,7 +927,7 @@ function calculateCount(fabricId, gsm, fabricDef, compModifiers = {}, factoryLoo
   // If factory knowledge has an exact/interpolated count, prefer it
   if (factoryLookup && factoryLookup.count_ne) {
     const fCount = factoryLookup.count_ne;
-    const count_rounded = Math.round(fCount); // preserve exact factory count
+    const count_rounded = roundToStandardCount(fCount); // snap to standard commercial sizes
     const advanced_display = generateYarnDeclaration(parsedComp, count_rounded, rawInputStr, fabricId);
     return {
       count_ne: count_rounded,
@@ -922,7 +937,7 @@ function calculateCount(fabricId, gsm, fabricDef, compModifiers = {}, factoryLoo
       source: factoryLookup.source || 'FACTORY_KNOWLEDGE',
       trace: {
         formula: `Factory knowledge lookup (GSM=${gsm}, composition-aware)`,
-        result: `${fCount.toFixed(2)} Ne → rounded to ${count_rounded}/1 Ne (industry integer)`,
+        result: `${fCount.toFixed(2)} Ne → snapped to standard ${count_rounded}/1 Ne`,
         source: factoryLookup.source,
         composition_factor: countFactor,
       }
@@ -949,8 +964,8 @@ function calculateCount(fabricId, gsm, fabricDef, compModifiers = {}, factoryLoo
   if (reg && reg.a !== undefined && reg.a !== null) {
     const count_base = reg.a * gsm + reg.b;
     const count_adjusted = count_base * countFactor;
-    // For heavy_jersey, round to nearest integer to allow odd counts (e.g. 7s Ne). Otherwise round to even.
-    const count_rounded = fabricId === 'heavy_jersey' ? Math.round(count_adjusted) : Math.round(count_adjusted / 2) * 2;
+    // Snap to standard commercial count
+    const count_rounded = roundToStandardCount(count_adjusted);
     const advanced_display = generateYarnDeclaration(parsedComp, count_rounded, rawInputStr, fabricId);
 
     return {
@@ -966,7 +981,7 @@ function calculateCount(fabricId, gsm, fabricDef, compModifiers = {}, factoryLoo
         calculation: countFactor !== 1.0
           ? `= ${count_base.toFixed(3)} × ${countFactor} = ${count_adjusted.toFixed(4)}`
           : `= ${(reg.a * gsm).toFixed(3)} + ${reg.b} = ${count_adjusted.toFixed(4)}`,
-        result: `${count_adjusted.toFixed(2)} Ne → rounded to ${count_rounded}/1 Ne (industry integer)`,
+        result: `${count_adjusted.toFixed(2)} Ne → snapped to standard ${count_rounded}/1 Ne`,
         source: reg.source,
         composition_factor: countFactor,
       }
@@ -1122,7 +1137,7 @@ function calculateMachine(fabricDef, count_ne, dia, gauge) {
     const isSingle = ['single_jersey'].includes(fabricDef.category);
     result.suitable_count = isSingle
       ? parseFloat(((g * g) / 18).toFixed(2))
-      : parseFloat(((g * g) / 8.4).toFixed(2));
+      : parseFloat(((g * g) / 15.3).toFixed(2));
   }
 
   // If dia given (or use mid-range default)

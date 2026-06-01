@@ -55,7 +55,7 @@ assert(machinery.interlock !== undefined);
 assert(machinery.flat_bed !== undefined);
 assert(machinery.links_links !== undefined);
 assert.strictEqual(machinery.single_jersey.formula, "Ne = G² / 18 (where Ne is Cotton Count and G is Gauge in npi)");
-assert.strictEqual(machinery.rib.formula, "Ne = G² / 8.4 (where Ne is Cotton Count and G is Gauge in npi)");
+assert.strictEqual(machinery.rib.formula, "Ne = G² / 15.3 (where Ne is Cotton Count and G is Gauge in npi)");
 console.log("✅ Weft Machinery properties verified.");
 
 console.log("All Knitting Academy Engine Tests Passed!");
