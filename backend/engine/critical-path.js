@@ -147,7 +147,7 @@ function analyzeCriticalPath(params) {
     else if (category === 'interlock') baseTension = 0.026;
 
     // Grams per needle based on density and bed friction
-    tensionGPerNeedle = parseFloat((gsm * baseTension * 0.08).toFixed(3));
+    tensionGPerNeedle = parseFloat((gsm * baseTension * 8.0).toFixed(3));
     
     // Total machine take-down weight load in kg
     totalTakedownLoadKg = parseFloat(((tensionGPerNeedle * needlesCount) / 1000).toFixed(2));

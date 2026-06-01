@@ -250,7 +250,7 @@ const YarnCountFormulas = {
   // Suitable count for machine gauge
   // Source: KnittingCalculations.pdf p.1
   suitable_count_single_jersey: gauge => (gauge * gauge) / 18,
-  suitable_count_double_jersey: gauge => (gauge * gauge) / 8.4,
+  suitable_count_double_jersey: gauge => (gauge * gauge) / 15.3,
 
   // Tightness Factor (TF) calculations
   // TF = sqrt(Tex) / StitchLength_cm

@@ -3,549 +3,857 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>KnitAdvisor — Admin Panel</title>
-  <meta name="theme-color" content="#080A0F">
+  <title>KnitAdvisor — Admin</title>
+  <meta name="theme-color" content="#000000">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css">
-
   <style>
-    /* Login fullscreen overlay */
-    .login-overlay {
-      position: fixed;
-      inset: 0;
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:    #000000;
+      --bg2:   #0a0a0a;
+      --bg3:   #111111;
+      --bg4:   #1a1a1a;
+      --bg5:   #222222;
+      --line:  rgba(255,255,255,.06);
+      --line2: rgba(255,255,255,.12);
+      --line3: rgba(255,255,255,.2);
+      --t1:    #ffffff;
+      --t2:    rgba(255,255,255,.7);
+      --t3:    rgba(255,255,255,.35);
+      --t4:    rgba(255,255,255,.18);
+      --a1:    #00ffb2;
+      --a2:    #6c8eff;
+      --a3:    #ff4444;
+      --a4:    #ffb300;
+      --mono:  'JetBrains Mono', monospace;
+      --sans:  'Syne', sans-serif;
+      --rad:   8px;
+      --rad-sm:4px;
+    }
+
+    html, body {
       background: var(--bg);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 999;
-      padding: var(--pad);
-    }
-
-    .login-card {
-      background: var(--bg2);
-      border: 1px solid var(--line2);
-      border-radius: var(--radius);
-      padding: var(--pad-lg);
-      max-width: 360px;
-      width: 100%;
-    }
-
-    .login-card .h2 { margin-bottom: 20px; }
-
-    .form-group {
-      margin-bottom: 16px;
-      display: flex;
-      flex-direction: column;
-    }
-
-    .form-label {
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: .6px;
-      color: var(--t3);
-      margin-bottom: 6px;
-      font-weight: 600;
-    }
-
-    .form-input, .form-select {
-      background: var(--bg3);
-      border: 1px solid var(--line2);
-      border-radius: var(--radius-sm);
-      padding: 10px 12px;
-      font-family: var(--mono);
-      font-size: 12px;
       color: var(--t1);
-      transition: border-color var(--t-fast);
+      font-family: var(--mono);
+      font-size: 13px;
+      min-height: 100vh;
     }
 
-    .form-input:focus, .form-select:focus {
-      outline: none;
-      border-color: #00ffb2;
-    }
-
-    #login-error {
-      color: var(--a3);
-      font-size: 11px;
-      margin-top: 8px;
-      text-align: center;
-    }
-
+    a { color: inherit; text-decoration: none; }
+    button { cursor: pointer; font-family: var(--mono); border: none; }
+    input, select, textarea { font-family: var(--mono); }
     .hidden { display: none !important; }
 
-    /* Tab panels */
+    /* ── SCROLLBAR ── */
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: var(--bg2); }
+    ::-webkit-scrollbar-thumb { background: var(--bg5); border-radius: 2px; }
+
+    /* ── LOGIN ── */
+    .login-wrap {
+      position: fixed; inset: 0;
+      background: var(--bg);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 9999;
+    }
+    .login-box {
+      width: 380px;
+      background: var(--bg2);
+      border: 1px solid var(--line2);
+      border-radius: 12px;
+      padding: 40px;
+    }
+    .login-logo {
+      font-family: var(--sans);
+      font-size: 20px;
+      font-weight: 800;
+      color: var(--t1);
+      margin-bottom: 6px;
+    }
+    .login-logo span { color: var(--a1); }
+    .login-sub { font-size: 11px; color: var(--t3); margin-bottom: 32px; letter-spacing: .5px; text-transform: uppercase; }
+    .fld { margin-bottom: 16px; }
+    .fld-label { font-size: 10px; text-transform: uppercase; letter-spacing: .8px; color: var(--t3); font-weight: 600; margin-bottom: 6px; display: block; }
+    .fld-input {
+      width: 100%; background: var(--bg3);
+      border: 1px solid var(--line2); border-radius: var(--rad-sm);
+      padding: 10px 12px; font-family: var(--mono); font-size: 12px;
+      color: var(--t1); outline: none; transition: border-color .15s;
+    }
+    .fld-input:focus { border-color: var(--a1); }
+    .login-err { color: var(--a3); font-size: 11px; margin-top: 10px; text-align: center; min-height: 16px; }
+    .btn-login {
+      width: 100%; margin-top: 20px; padding: 12px;
+      background: var(--a1); color: #000; border-radius: var(--rad-sm);
+      font-size: 12px; font-weight: 700; letter-spacing: .5px;
+      transition: opacity .15s;
+    }
+    .btn-login:hover { opacity: .85; }
+    .btn-login:disabled { opacity: .5; }
+
+    /* ── LAYOUT ── */
+    #admin-app { display: flex; flex-direction: column; min-height: 100vh; }
+
+    /* ── TOPBAR ── */
+    .topbar {
+      height: 52px;
+      background: var(--bg2);
+      border-bottom: 1px solid var(--line);
+      display: flex; align-items: center;
+      padding: 0 24px; gap: 16px;
+      position: sticky; top: 0; z-index: 100;
+    }
+    .topbar-logo { font-family: var(--sans); font-size: 16px; font-weight: 800; color: var(--t1); }
+    .topbar-logo span { color: var(--a1); }
+    .topbar-badge {
+      font-size: 9px; letter-spacing: 1.2px; text-transform: uppercase;
+      background: rgba(0,255,178,.12); color: var(--a1);
+      border: 1px solid rgba(0,255,178,.25); border-radius: 3px;
+      padding: 2px 7px;
+    }
+    .topbar-spacer { flex: 1; }
+    .status-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--a1); box-shadow: 0 0 6px var(--a1);
+    }
+    .btn-logout {
+      background: transparent; border: 1px solid var(--line2);
+      color: var(--t3); font-size: 11px; padding: 6px 14px;
+      border-radius: var(--rad-sm); transition: all .15s;
+    }
+    .btn-logout:hover { border-color: var(--a3); color: var(--a3); }
+
+    /* ── TABS ── */
+    .tab-bar {
+      background: var(--bg2);
+      border-bottom: 1px solid var(--line);
+      display: flex; padding: 0 24px; gap: 2px;
+    }
+    .tab-btn {
+      background: transparent; border: none;
+      padding: 14px 16px; font-size: 11px; font-weight: 600;
+      letter-spacing: .4px; color: var(--t3);
+      border-bottom: 2px solid transparent;
+      transition: color .15s, border-color .15s;
+      white-space: nowrap;
+    }
+    .tab-btn:hover { color: var(--t2); }
+    .tab-btn.active { color: var(--t1); border-bottom-color: var(--a1); }
+
+    /* ── MAIN ── */
+    .main { flex: 1; padding: 28px 28px 60px; max-width: 1280px; margin: 0 auto; width: 100%; }
     .tab-panel { display: none; }
-    .tab-panel.active { display: block; animation: fade-in .2s ease; }
+    .tab-panel.active { display: block; animation: fadeIn .18s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 
-    @keyframes fade-in {
-      from { opacity: 0; }
-      to { opacity: 1; }
-    }
-
-    /* Log table */
-    .log-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 11px;
-    }
-
-    .log-th {
-      text-align: left;
-      padding: 8px 10px;
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: .6px;
-      color: var(--t3);
-      font-family: var(--mono);
-      font-weight: 600;
-      border-bottom: 1px solid var(--line);
-      background: var(--bg3);
-    }
-
-    .log-td {
-      padding: 8px 10px;
-      border-bottom: 1px solid var(--line);
-      color: var(--t2);
-      font-family: var(--mono);
-    }
-
-    .log-tr:hover .log-td { background: var(--bg3); }
-
-    /* Badges */
-    .badge-cache { font-size: 9px; padding: 2px 6px; border-radius: 3px; background: var(--bg4); color: var(--t3); }
-    .badge-hit { background: rgba(0,255,178,.15); color: #00ffb2; border: 1px solid rgba(0,255,178,.3); }
-    .badge-miss { background: rgba(255,68,68,.15); color: var(--a3); border: 1px solid rgba(255,68,68,.3); }
-
-    /* Provider card */
-    .provider-card {
+    /* ── COMMON ── */
+    .card {
       background: var(--bg2);
       border: 1px solid var(--line);
-      border-radius: var(--radius);
-      padding: 14px 16px;
-      margin-bottom: 10px;
-      display: grid;
-      grid-template-columns: 50px 1fr 140px;
-      gap: 12px;
-      align-items: center;
+      border-radius: var(--rad);
+      padding: 20px;
     }
-
-    .provider-card.healthy { border-left: 3px solid #00ffb2; }
-    .provider-card.unhealthy { border-left: 3px solid var(--a3); }
-    .provider-card.disabled { opacity: .5; }
-
-    .provider-buttons { display: flex; gap: 6px; }
-    .btn-arrow { padding: 6px 8px; font-size: 11px; font-family: var(--mono); min-width: 32px; }
-
-    .provider-info {
-      display: grid;
-      grid-template-columns: auto 1fr auto;
-      gap: 8px;
-      align-items: center;
+    .section-title {
+      font-family: var(--sans); font-size: 16px; font-weight: 700;
+      color: var(--t1); margin-bottom: 4px;
     }
-
-    .priority-badge {
-      width: 24px;
-      height: 24px;
-      border-radius: 50%;
-      background: var(--bg4);
-      border: 1px solid var(--line2);
-      font-size: 11px;
-      font-weight: 700;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--t1);
-    }
-
-    .health-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      display: inline-block;
-      margin-right: 4px;
-    }
-
-    .health-dot.ok { background: #00ffb2; }
-    .health-dot.bad { background: var(--a3); }
-
-    .provider-details {
-      font-size: 10px;
-      color: var(--t3);
-      margin: 8px 0;
-    }
-
-    .provider-controls {
-      display: grid;
-      grid-template-columns: 1fr 1fr auto auto;
-      gap: 8px;
-      margin-top: 8px;
-    }
-
-    .toggle-switch {
-      position: relative;
-      width: 36px;
-      height: 20px;
-      cursor: pointer;
-      flex-shrink: 0;
-    }
-
-    .toggle-switch input {
-      opacity: 0;
-      width: 0;
-      height: 0;
-    }
-
-    .toggle-track {
-      position: absolute;
-      inset: 0;
-      background: var(--bg4);
-      border: 1px solid var(--line2);
-      border-radius: 10px;
-      transition: background var(--t-fast);
-    }
-
-    .toggle-track::after {
-      content: '';
-      position: absolute;
-      left: 3px;
-      top: 3px;
-      width: 12px;
-      height: 12px;
-      border-radius: 50%;
-      background: var(--t3);
-      transition: transform var(--t-fast), background var(--t-fast);
-    }
-
-    .toggle-switch input:checked + .toggle-track {
-      background: rgba(0,255,178,.2);
-      border-color: #00ffb2;
-    }
-
-    .toggle-switch input:checked + .toggle-track::after {
-      transform: translateX(16px);
-      background: #00ffb2;
-    }
-
-    .api-key-input {
-      font-size: 10px;
-      padding: 6px 8px;
-      width: 100%;
-      box-sizing: border-box;
-    }
-
-    /* Cache table */
-    .cache-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 11px;
-    }
-
-    .cache-th {
-      text-align: left;
-      padding: 8px 10px;
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: .6px;
-      color: var(--t3);
-      font-family: var(--mono);
-      font-weight: 600;
-      border-bottom: 1px solid var(--line);
-      background: var(--bg3);
-    }
-
-    .cache-td {
-      padding: 8px 10px;
-      border-bottom: 1px solid var(--line);
-      color: var(--t2);
-      font-family: var(--mono);
-      word-break: break-all;
-    }
-
-    .cache-tr:hover .cache-td { background: var(--bg3); }
-
-    .btn { display: inline-flex; gap: 8px; padding: 10px 16px; border-radius: var(--radius-sm); font-family: var(--mono); font-size: 12px; font-weight: 500; border: none; cursor: pointer; transition: all var(--t-fast); }
-
-    .btn-primary { background: white; color: black; }
-    .btn-primary:hover { background: #f0f0f0; }
-
-    .btn-secondary { background: var(--bg3); border: 1px solid var(--line2); color: var(--t1); }
-    .btn-secondary:hover { border-color: var(--a2); color: var(--a2); }
-
-    .btn-ghost { background: transparent; border: 1px solid var(--line); color: var(--t2); padding: 8px 12px; font-size: 11px; }
-    .btn-ghost:hover { border-color: var(--a1); color: var(--a1); }
-
-    .btn-small { padding: 4px 8px; font-size: 10px; }
-
-    .w-full { width: 100%; }
-
-    .mt-16 { margin-top: 16px; }
-    .mt-12 { margin-top: 12px; }
-    .mt-8 { margin-top: 8px; }
-
-    .mb-16 { margin-bottom: 16px; }
-    .mb-12 { margin-bottom: 12px; }
-    .mb-8 { margin-bottom: 8px; }
-
+    .section-sub { font-size: 11px; color: var(--t3); margin-bottom: 20px; }
+    .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .row-between { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+    .col { display: flex; flex-direction: column; }
+    .gap-4 { gap: 4px; }
     .gap-8 { gap: 8px; }
     .gap-12 { gap: 12px; }
     .gap-16 { gap: 16px; }
+    .gap-20 { gap: 20px; }
+    .mt-4 { margin-top: 4px; }
+    .mt-8 { margin-top: 8px; }
+    .mt-12 { margin-top: 12px; }
+    .mt-16 { margin-top: 16px; }
+    .mt-20 { margin-top: 20px; }
+    .mb-8 { margin-bottom: 8px; }
+    .mb-12 { margin-bottom: 12px; }
+    .mb-16 { margin-bottom: 16px; }
+    .mb-20 { margin-bottom: 20px; }
+    .w-full { width: 100%; }
 
-    .flex { display: flex; }
-    .flex-col { flex-direction: column; }
-    .items-center { align-items: center; }
-    .justify-between { justify-content: space-between; }
-    .flex-wrap { flex-wrap: wrap; }
-
-    .text-sm { font-size: 11px; }
-    .text-xs { font-size: 10px; }
-
-    .text-muted { color: var(--t2); }
-    .text-dim { color: var(--t3); }
-
-    /* Stat grid */
-    .stat-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-      gap: 12px;
-      margin-bottom: 16px;
+    /* ── BUTTONS ── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 14px; border-radius: var(--rad-sm);
+      font-size: 11px; font-weight: 600; letter-spacing: .3px;
+      transition: all .15s; border: 1px solid transparent;
     }
+    .btn-primary { background: var(--a1); color: #000; }
+    .btn-primary:hover { opacity: .85; }
+    .btn-ghost { background: transparent; border-color: var(--line2); color: var(--t2); }
+    .btn-ghost:hover { border-color: var(--line3); color: var(--t1); }
+    .btn-danger { background: transparent; border-color: rgba(255,68,68,.3); color: var(--a3); }
+    .btn-danger:hover { background: rgba(255,68,68,.1); }
+    .btn-sm { padding: 5px 10px; font-size: 10px; }
+    .btn-xs { padding: 3px 8px; font-size: 10px; }
+    .btn:disabled { opacity: .4; cursor: not-allowed; }
 
+    /* ── STAT GRID ── */
+    .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
     .stat-card {
-      background: var(--bg3);
-      border: 1px solid var(--line2);
-      border-radius: var(--radius-sm);
-      padding: 12px;
-      text-align: center;
+      background: var(--bg3); border: 1px solid var(--line);
+      border-radius: var(--rad); padding: 16px 18px;
     }
+    .stat-val { font-family: var(--sans); font-size: 26px; font-weight: 700; color: var(--a1); line-height: 1; }
+    .stat-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: var(--t3); margin-top: 6px; }
 
-    .stat-value {
-      font-family: 'Inter';
-      font-size: 22px;
-      font-weight: 700;
-      color: var(--a1);
+    /* ── TABLE ── */
+    .tbl { width: 100%; border-collapse: collapse; font-size: 11px; }
+    .tbl th {
+      text-align: left; padding: 9px 10px;
+      font-size: 9px; text-transform: uppercase; letter-spacing: .8px;
+      color: var(--t3); font-weight: 600;
+      border-bottom: 1px solid var(--line);
+      background: var(--bg3); white-space: nowrap;
     }
-
-    .stat-label {
-      font-size: 9px;
-      text-transform: uppercase;
-      letter-spacing: .5px;
-      color: var(--t3);
-      margin-top: 4px;
+    .tbl td {
+      padding: 9px 10px; border-bottom: 1px solid var(--line);
+      color: var(--t2); vertical-align: middle;
     }
+    .tbl tr:hover td { background: var(--bg3); }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl-wrap { border: 1px solid var(--line); border-radius: var(--rad); overflow: hidden; overflow-x: auto; }
 
-    .pagination {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      margin-top: 12px;
+    /* ── BADGES ── */
+    .badge { display: inline-block; font-size: 9px; font-weight: 700; letter-spacing: .5px; padding: 2px 7px; border-radius: 3px; }
+    .badge-green { background: rgba(0,255,178,.12); color: var(--a1); border: 1px solid rgba(0,255,178,.25); }
+    .badge-red   { background: rgba(255,68,68,.12); color: var(--a3); border: 1px solid rgba(255,68,68,.25); }
+    .badge-yellow{ background: rgba(255,179,0,.12); color: var(--a4); border: 1px solid rgba(255,179,0,.25); }
+    .badge-blue  { background: rgba(108,142,255,.12); color: var(--a2); border: 1px solid rgba(108,142,255,.25); }
+    .badge-gray  { background: var(--bg4); color: var(--t3); border: 1px solid var(--line); }
+
+    /* ── FORM ── */
+    .form-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+    .form-group { display: flex; flex-direction: column; gap: 5px; }
+    .form-label { font-size: 9px; text-transform: uppercase; letter-spacing: .8px; color: var(--t3); font-weight: 600; }
+    .form-input, .form-select {
+      background: var(--bg3); border: 1px solid var(--line2);
+      border-radius: var(--rad-sm); padding: 8px 10px;
+      font-family: var(--mono); font-size: 11px; color: var(--t1); outline: none;
+      transition: border-color .15s;
     }
+    .form-input:focus, .form-select:focus { border-color: var(--a1); }
+    .form-select { cursor: pointer; }
+    option { background: #111; }
 
-    .pagination button { padding: 8px 12px; }
+    /* ── PAGINATION ── */
+    .pagination { display: flex; align-items: center; justify-content: center; gap: 8px; padding-top: 14px; }
 
-    #cache-entry-viewer {
-      border: 1px solid var(--line2);
-      padding: 16px;
-      border-radius: var(--radius);
+    /* ── TOAST ── */
+    #toast-wrap {
+      position: fixed; bottom: 24px; right: 24px;
+      z-index: 99999; display: flex; flex-direction: column; gap: 8px;
+      pointer-events: none;
+    }
+    .toast {
+      padding: 10px 16px; border-radius: var(--rad-sm);
+      font-size: 11px; font-weight: 500; min-width: 220px;
+      animation: toastIn .2s ease;
+      pointer-events: all;
+    }
+    @keyframes toastIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    .toast-ok  { background: rgba(0,255,178,.15); border: 1px solid rgba(0,255,178,.3); color: var(--a1); }
+    .toast-err { background: rgba(255,68,68,.15); border: 1px solid rgba(255,68,68,.3); color: var(--a3); }
+    .toast-info{ background: rgba(108,142,255,.15); border: 1px solid rgba(108,142,255,.3); color: var(--a2); }
+
+    /* ─────────────────────────────
+       PROVIDER CARDS
+    ───────────────────────────── */
+    .provider-grid { display: flex; flex-direction: column; gap: 12px; }
+
+    .prov-card {
       background: var(--bg2);
+      border: 1px solid var(--line);
+      border-left: 3px solid var(--line3);
+      border-radius: var(--rad);
+      overflow: hidden;
+      transition: border-color .15s;
+    }
+    .prov-card.healthy  { border-left-color: var(--a1); }
+    .prov-card.unhealthy{ border-left-color: var(--a3); }
+    .prov-card.disabled { opacity: .55; }
+
+    .prov-head {
+      display: grid;
+      grid-template-columns: 44px 1fr auto auto;
+      align-items: center;
+      gap: 16px; padding: 14px 18px;
+      cursor: pointer;
+    }
+    .prov-head:hover { background: var(--bg3); }
+
+    .prov-rank {
+      width: 36px; height: 36px; border-radius: 50%;
+      background: var(--bg4); border: 1px solid var(--line2);
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--sans); font-size: 14px; font-weight: 700; color: var(--t2);
     }
 
-    #entry-json-display {
+    .prov-meta { display: flex; flex-direction: column; gap: 3px; }
+    .prov-name { font-family: var(--sans); font-size: 14px; font-weight: 700; color: var(--t1); }
+    .prov-model { font-size: 10px; color: var(--t3); }
+
+    .prov-stats {
+      display: flex; gap: 16px; align-items: center;
+    }
+    .prov-stat { text-align: center; }
+    .prov-stat-val { font-size: 13px; font-weight: 600; color: var(--t1); }
+    .prov-stat-lbl { font-size: 9px; color: var(--t3); text-transform: uppercase; letter-spacing: .4px; margin-top: 1px; }
+
+    .prov-right { display: flex; align-items: center; gap: 12px; }
+
+    .health-indicator {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 10px; color: var(--t3);
+    }
+    .hdot { width: 7px; height: 7px; border-radius: 50%; }
+    .hdot-ok  { background: var(--a1); box-shadow: 0 0 5px var(--a1); }
+    .hdot-bad { background: var(--a3); box-shadow: 0 0 5px var(--a3); }
+    .hdot-dis { background: var(--t4); }
+
+    .prov-expand-icon { font-size: 10px; color: var(--t3); transition: transform .2s; }
+    .prov-card.open .prov-expand-icon { transform: rotate(180deg); }
+
+    /* Toggle switch */
+    .toggle { position: relative; width: 38px; height: 22px; flex-shrink: 0; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle-track {
+      position: absolute; inset: 0;
+      background: var(--bg5); border: 1px solid var(--line2);
+      border-radius: 11px; cursor: pointer; transition: background .15s;
+    }
+    .toggle-track::after {
+      content: ''; position: absolute; left: 3px; top: 3px;
+      width: 14px; height: 14px; border-radius: 50%;
+      background: var(--t3); transition: transform .15s, background .15s;
+    }
+    .toggle input:checked + .toggle-track { background: rgba(0,255,178,.2); border-color: rgba(0,255,178,.4); }
+    .toggle input:checked + .toggle-track::after { transform: translateX(16px); background: var(--a1); }
+
+    /* Provider expanded body */
+    .prov-body {
+      display: none;
+      border-top: 1px solid var(--line);
+      padding: 0;
+      gap: 0;
+      flex-direction: column;
       background: var(--bg3);
+    }
+    .prov-card.open .prov-body { display: flex; }
+
+    .prov-body-section {
+      padding: 16px 18px 16px 78px;
+      border-bottom: 1px solid var(--line);
+    }
+    .prov-body-section:last-child { border-bottom: none; }
+    .prov-section-label {
+      font-size: 9px; text-transform: uppercase; letter-spacing: .8px;
+      color: var(--t4); font-weight: 600; margin-bottom: 10px;
+    }
+
+    .prov-body-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .prov-body-label { font-size: 10px; color: var(--t3); text-transform: uppercase; letter-spacing: .5px; min-width: 80px; }
+
+    /* API key section */
+    .key-section {
+      background: var(--bg4);
       border: 1px solid var(--line2);
-      border-radius: 4px;
-      padding: 12px;
-      font-family: var(--mono);
-      font-size: 10px;
-      overflow: auto;
-      max-height: 400px;
-      color: var(--t1);
-      white-space: pre-wrap;
-      word-break: break-word;
+      border-radius: var(--rad);
+      padding: 14px 16px;
     }
+    .key-current-row {
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 10px; padding-bottom: 10px;
+      border-bottom: 1px solid var(--line);
+    }
+    .key-current-label { font-size: 9px; color: var(--t4); text-transform: uppercase; letter-spacing: .6px; }
+    .key-current-value {
+      font-size: 11px; color: var(--t2); font-family: var(--mono);
+      flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .key-set-badge {
+      font-size: 9px; padding: 2px 7px; border-radius: 3px; font-weight: 700;
+      background: rgba(0,255,178,.1); color: var(--a1); border: 1px solid rgba(0,255,178,.2);
+    }
+    .key-notset-badge {
+      font-size: 9px; padding: 2px 7px; border-radius: 3px; font-weight: 700;
+      background: rgba(255,179,0,.1); color: var(--a4); border: 1px solid rgba(255,179,0,.2);
+    }
+    .key-new-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
-    .hdr-badge {
-      font-size: 9px;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      background: var(--bg3);
-      color: var(--t3);
-      padding: 4px 8px;
-      border-radius: 3px;
+    .key-input {
+      flex: 1; min-width: 200px; max-width: 380px;
+      background: var(--bg2); border: 1px solid var(--line2);
+      border-radius: var(--rad-sm); padding: 8px 12px;
+      font-family: var(--mono); font-size: 11px; color: var(--t1);
+      outline: none; transition: border-color .15s; letter-spacing: 1px;
     }
+    .key-input:focus { border-color: var(--a1); box-shadow: 0 0 0 2px rgba(0,255,178,.08); }
+    .key-input::placeholder { color: var(--t4); letter-spacing: 0; }
+
+    .key-toggle-btn {
+      background: var(--bg2); border: 1px solid var(--line2);
+      color: var(--t3); padding: 7px 12px; border-radius: var(--rad-sm);
+      font-size: 10px; transition: all .15s; white-space: nowrap;
+    }
+    .key-toggle-btn:hover { border-color: var(--line3); color: var(--t2); }
+
+    .prov-order-btns { display: flex; flex-direction: column; gap: 3px; }
+    .prov-order-btn {
+      background: var(--bg4); border: 1px solid var(--line);
+      color: var(--t3); width: 24px; height: 22px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 3px; font-size: 9px; transition: all .15s;
+    }
+    .prov-order-btn:hover { border-color: var(--a1); color: var(--a1); }
+
+    .prov-test-result {
+      font-size: 10px; padding: 7px 12px;
+      border-radius: var(--rad-sm); display: none;
+    }
+    .prov-test-result.ok  { background: rgba(0,255,178,.1); color: var(--a1); border: 1px solid rgba(0,255,178,.2); }
+    .prov-test-result.err { background: rgba(255,68,68,.1); color: var(--a3); border: 1px solid rgba(255,68,68,.2); }
+
+    /* Limits info row */
+    .prov-limits { display: flex; gap: 20px; flex-wrap: wrap; }
+    .prov-limit-item {
+      display: flex; flex-direction: column; gap: 2px;
+    }
+    .prov-limit-val { font-size: 13px; font-weight: 600; color: var(--t1); }
+    .prov-limit-lbl { font-size: 9px; color: var(--t4); text-transform: uppercase; letter-spacing: .5px; }
+
+    /* ── OVERVIEW ── */
+    .ov-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 20px; }
+    .ov-health-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 0; border-bottom: 1px solid var(--line);
+    }
+    .ov-health-row:last-child { border-bottom: none; }
+
+    /* ── SETTINGS ── */
+    .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; max-width: 800px; }
+    .msg-ok  { color: var(--a1); font-size: 11px; margin-top: 8px; }
+    .msg-err { color: var(--a3); font-size: 11px; margin-top: 8px; }
+
+    /* ── STRATEGY BAR ── */
+    .strategy-bar {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      padding: 12px 16px;
+      background: var(--bg3); border: 1px solid var(--line);
+      border-radius: var(--rad); margin-bottom: 14px;
+    }
+    .strategy-label { font-size: 10px; text-transform: uppercase; letter-spacing: .7px; color: var(--t3); font-weight: 600; }
+    .strategy-btn {
+      padding: 5px 14px; font-size: 10px; border-radius: 20px;
+      border: 1px solid var(--line2); background: transparent; color: var(--t3);
+      transition: all .15s; cursor: pointer; font-family: var(--mono);
+    }
+    .strategy-btn.active {
+      background: rgba(0,255,178,.12); border-color: rgba(0,255,178,.35);
+      color: var(--a1); font-weight: 600;
+    }
+    .strategy-btn:hover:not(.active) { border-color: var(--line3); color: var(--t2); }
+
+    /* ── FALLBACK CHAIN VISUALIZER ── */
+    .chain-wrap {
+      padding: 12px 16px;
+      background: var(--bg3); border: 1px solid var(--line);
+      border-radius: var(--rad); margin-bottom: 14px;
+    }
+    .chain-title { font-size: 9px; text-transform: uppercase; letter-spacing: .7px; color: var(--t3); font-weight: 600; margin-bottom: 10px; }
+    .chain-list { display: flex; align-items: center; gap: 0; flex-wrap: wrap; }
+    .chain-node {
+      display: flex; align-items: center; gap: 6px;
+      padding: 5px 12px; border-radius: 20px;
+      font-size: 10px; font-weight: 600; letter-spacing: .3px;
+      border: 1px solid var(--line2); background: var(--bg4); color: var(--t2);
+      white-space: nowrap;
+    }
+    .chain-node.active { border-color: rgba(0,255,178,.4); background: rgba(0,255,178,.08); color: var(--a1); }
+    .chain-node.disabled { opacity: .35; }
+    .chain-node.unhealthy { border-color: rgba(255,68,68,.3); background: rgba(255,68,68,.06); color: var(--a3); }
+    .chain-arrow { font-size: 10px; color: var(--t4); padding: 0 4px; }
+    .chain-dot { width: 6px; height: 6px; border-radius: 50%; }
+    .chain-dot-ok   { background: var(--a1); }
+    .chain-dot-bad  { background: var(--a3); }
+    .chain-dot-dis  { background: var(--t4); }
+
+    /* ── ADD PROVIDER MODAL ── */
+    .modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.8); backdrop-filter: blur(4px);
+      z-index: 9000; display: flex; align-items: center; justify-content: center;
+    }
+    .modal-box {
+      background: var(--bg2); border: 1px solid var(--line2);
+      border-radius: 12px; padding: 28px; width: 480px; max-width: 95vw;
+      max-height: 90vh; overflow-y: auto;
+    }
+    .modal-title { font-family: var(--sans); font-size: 16px; font-weight: 700; color: var(--t1); margin-bottom: 20px; }
+    .modal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+    .modal-full { grid-column: 1 / -1; }
+    .modal-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+
+    /* Type selector cards */
+    .type-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 16px; }
+    .type-card {
+      padding: 10px 8px; border-radius: var(--rad-sm);
+      border: 1px solid var(--line2); background: var(--bg3);
+      text-align: center; cursor: pointer; transition: all .15s;
+    }
+    .type-card:hover { border-color: var(--line3); }
+    .type-card.selected { border-color: var(--a1); background: rgba(0,255,178,.06); }
+    .type-card-name { font-size: 11px; font-weight: 600; color: var(--t2); }
+    .type-card-model { font-size: 9px; color: var(--t4); margin-top: 3px; }
   </style>
 </head>
 <body>
-  <!-- Login Overlay -->
-  <div id="login-screen" class="login-overlay">
-    <div class="login-card">
-      <h1 class="h2">KnitAdvisor Admin</h1>
-      <div class="form-group">
-        <label class="form-label">Password</label>
-        <input type="password" id="admin-password" class="form-input" placeholder="Enter admin password">
-      </div>
-      <button id="login-btn" class="btn btn-primary w-full mt-16">Login</button>
-      <div id="login-error" class="hidden"></div>
+
+<!-- ══ TOAST ══ -->
+<div id="toast-wrap"></div>
+
+<!-- ══ LOGIN ══ -->
+<div id="login-screen" class="login-wrap">
+  <div class="login-box">
+    <div class="login-logo">Knit<span>Advisor</span></div>
+    <div class="login-sub">Admin Panel</div>
+    <div class="fld">
+      <label class="fld-label" for="admin-username">Username</label>
+      <input type="text" id="admin-username" class="fld-input" placeholder="Enter username" autocomplete="username">
     </div>
+    <div class="fld">
+      <label class="fld-label" for="admin-password">Password</label>
+      <input type="password" id="admin-password" class="fld-input" placeholder="Enter password" autocomplete="current-password">
+    </div>
+    <div id="login-error" class="login-err"></div>
+    <button id="login-btn" class="btn-login">Login</button>
+  </div>
+</div>
+
+<!-- ══ ADMIN APP ══ -->
+<div id="admin-app" class="hidden">
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="topbar-logo">Knit<span>Advisor</span></div>
+    <span class="topbar-badge">ADMIN</span>
+    <div class="topbar-spacer"></div>
+    <span class="status-dot" id="status-dot"></span>
+    <button id="logout-btn" class="btn-logout">Logout</button>
   </div>
 
-  <!-- Admin App -->
-  <div id="admin-app" class="page-wrap hidden">
-    <header class="hdr">
-      <a class="logo" href="/">Knit<span>Advisor</span></a>
-      <span class="hdr-badge">ADMIN</span>
-      <div class="hdr-right flex gap-8 items-center">
-        <span id="admin-status-dot" style="width:8px;height:8px;border-radius:50%;background:#00ffb2;"></span>
-        <button id="logout-btn" class="btn btn-ghost">Logout</button>
-      </div>
-    </header>
-
-    <!-- Tab Bar -->
-    <div class="tab-bar" id="admin-tab-bar">
-      <button class="tab-btn active" data-tab="tab-logs">Query Logs</button>
-      <button class="tab-btn" data-tab="tab-providers">AI Providers</button>
-      <button class="tab-btn" data-tab="tab-cache">Cache</button>
-    </div>
-
-    <main class="container" style="padding-top:20px;padding-bottom:40px;">
-
-      <!-- TAB: Query Logs -->
-      <div id="tab-logs" class="tab-panel active">
-        <div class="stat-grid mb-16" id="log-stats-grid">
-          <div class="stat-card"><div class="stat-value" id="stat-today">—</div><div class="stat-label">Queries Today</div></div>
-          <div class="stat-card"><div class="stat-value" id="stat-cache-pct">—</div><div class="stat-label">Cache Hit %</div></div>
-          <div class="stat-card"><div class="stat-value" id="stat-avg-ms">—</div><div class="stat-label">Avg Response ms</div></div>
-          <div class="stat-card"><div class="stat-value" id="stat-nl">—</div><div class="stat-label">NL Queries</div></div>
-        </div>
-
-        <!-- Filters -->
-        <div class="card mb-16">
-          <div class="flex gap-8 flex-wrap items-flex-end">
-            <div class="form-group" style="min-width:130px;">
-              <label class="form-label">Fabric</label>
-              <select id="filter-fabric" class="form-select">
-                <option value="">All fabrics</option>
-                <option value="single_jersey">Single Jersey</option>
-                <option value="terry_fabric">Terry</option>
-                <option value="fleece">Fleece</option>
-                <option value="rib_1x1">Rib 1×1</option>
-                <option value="interlock">Interlock</option>
-              </select>
-            </div>
-            <div class="form-group" style="min-width:120px;">
-              <label class="form-label">Date From</label>
-              <input type="date" id="filter-date-from" class="form-input">
-            </div>
-            <div class="form-group" style="min-width:120px;">
-              <label class="form-label">Date To</label>
-              <input type="date" id="filter-date-to" class="form-input">
-            </div>
-            <div class="form-group" style="min-width:110px;">
-              <label class="form-label">Cache</label>
-              <select id="filter-cache" class="form-select">
-                <option value="">All</option>
-                <option value="1">Hit</option>
-                <option value="0">Miss</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label class="form-label" style="visibility:hidden;">NL</label>
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--t2);">
-                <input type="checkbox" id="filter-nl-only" style="accent-color:#00ffb2;">
-                NL Only
-              </label>
-            </div>
-            <button id="logs-apply-btn" class="btn btn-secondary">Apply</button>
-          </div>
-        </div>
-
-        <!-- Log Table -->
-        <div class="card" style="overflow-x:auto;">
-          <table class="log-table">
-            <thead>
-              <tr>
-                <th class="log-th">Time</th>
-                <th class="log-th">Input Text</th>
-                <th class="log-th">Fabric</th>
-                <th class="log-th">GSM</th>
-                <th class="log-th">Ms</th>
-                <th class="log-th">Cache</th>
-                <th class="log-th">AI</th>
-              </tr>
-            </thead>
-            <tbody id="log-tbody"></tbody>
-          </table>
-        </div>
-
-        <!-- Pagination -->
-        <div id="log-pagination" class="pagination"></div>
-      </div>
-
-      <!-- TAB: AI Providers -->
-      <div id="tab-providers" class="tab-panel hidden">
-        <div class="flex items-center justify-between mb-16">
-          <div>
-            <h2 class="h2">AI Providers</h2>
-            <div class="text-sm text-muted mt-8">Drag to reorder priority. Provider 1 is tried first. Gray indicates disabled.</div>
-          </div>
-          <button id="reset-stats-btn" class="btn btn-ghost">Reset Daily Stats</button>
-        </div>
-
-        <!-- Provider Cards List -->
-        <div id="providers-list" class="flex flex-col gap-8"></div>
-      </div>
-
-      <!-- TAB: Cache -->
-      <div id="tab-cache" class="tab-panel hidden">
-        <!-- Cache Stats -->
-        <div class="stat-grid mb-16">
-          <div class="stat-card"><div class="stat-value" id="cache-stat-entries">—</div><div class="stat-label">DB Entries</div></div>
-          <div class="stat-card"><div class="stat-value" id="cache-stat-hits">—</div><div class="stat-label">Total Hits</div></div>
-          <div class="stat-card"><div class="stat-value" id="cache-stat-mem">—</div><div class="stat-label">Memory Cache</div></div>
-          <div class="stat-card"><div class="stat-value" id="cache-stat-oldest">—</div><div class="stat-label">Oldest Entry</div></div>
-        </div>
-
-        <div class="flex gap-8 mb-16">
-          <button id="cache-flush-btn" class="btn btn-secondary" style="border-color:var(--a3);color:var(--a3);">Flush All Cache</button>
-          <button id="cache-refresh-btn" class="btn btn-ghost">Refresh Stats</button>
-        </div>
-
-        <!-- Cache Entries Table -->
-        <div class="card" style="overflow-x:auto;">
-          <table class="cache-table">
-            <thead>
-              <tr>
-                <th class="cache-th">Cache Key</th>
-                <th class="cache-th">Hits</th>
-                <th class="cache-th">Created</th>
-                <th class="cache-th">Expires</th>
-                <th class="cache-th">Actions</th>
-              </tr>
-            </thead>
-            <tbody id="cache-tbody"></tbody>
-          </table>
-        </div>
-        <div id="cache-pagination" class="pagination"></div>
-
-        <!-- Entry Viewer -->
-        <div id="cache-entry-viewer" class="hidden mt-16">
-          <div class="flex items-center justify-between mb-12">
-            <div class="h3">Cache Entry Detail</div>
-            <button id="entry-viewer-close" class="btn btn-ghost btn-small">×</button>
-          </div>
-          <div class="form-group mb-8">
-            <label class="form-label">Cache Key</label>
-            <code id="entry-key-display" style="font-family:var(--mono);font-size:11px;color:var(--t3);word-break:break-all;"></code>
-          </div>
-          <pre id="entry-json-display"></pre>
-        </div>
-      </div>
-
-    </main>
+  <!-- TABS -->
+  <div class="tab-bar">
+    <button class="tab-btn active" data-tab="tab-overview">Overview</button>
+    <button class="tab-btn" data-tab="tab-logs">Query Logs</button>
+    <button class="tab-btn" data-tab="tab-providers">AI Providers</button>
+    <button class="tab-btn" data-tab="tab-cache">Cache</button>
+    <button class="tab-btn" data-tab="tab-inquiries">Inquiries</button>
+    <button class="tab-btn" data-tab="tab-settings">Settings</button>
   </div>
 
-  <script src="js/ui.js"></script>
-  <script src="js/admin.js"></script>
+  <!-- MAIN -->
+  <div class="main">
+
+    <!-- ── OVERVIEW ── -->
+    <div id="tab-overview" class="tab-panel active">
+      <div class="stat-grid" id="ov-stat-grid">
+        <div class="stat-card"><div class="stat-val" id="ov-total">—</div><div class="stat-lbl">Total Queries</div></div>
+        <div class="stat-card"><div class="stat-val" id="ov-today">—</div><div class="stat-lbl">Today</div></div>
+        <div class="stat-card"><div class="stat-val" id="ov-cache">—</div><div class="stat-lbl">Cache Hit %</div></div>
+        <div class="stat-card"><div class="stat-val" id="ov-avg-ms">—</div><div class="stat-lbl">Avg Response</div></div>
+        <div class="stat-card"><div class="stat-val" id="ov-providers">—</div><div class="stat-lbl">Active Providers</div></div>
+        <div class="stat-card"><div class="stat-val" id="ov-cache-entries">—</div><div class="stat-lbl">Cache Entries</div></div>
+      </div>
+      <div class="ov-grid">
+        <div class="card">
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--t3);font-weight:600;margin-bottom:14px;">Provider Health</div>
+          <div id="ov-provider-health"><div style="color:var(--t3);font-size:11px;">Loading…</div></div>
+        </div>
+        <div class="card">
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--t3);font-weight:600;margin-bottom:14px;">Top Fabrics Today</div>
+          <div id="ov-top-fabrics"><div style="color:var(--t3);font-size:11px;">No data</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── QUERY LOGS ── -->
+    <div id="tab-logs" class="tab-panel">
+      <div class="row-between mb-20">
+        <div>
+          <div class="section-title">Query Logs</div>
+          <div class="section-sub">Real-time query history and NLP stats</div>
+        </div>
+      </div>
+      <div class="stat-grid mb-20">
+        <div class="stat-card"><div class="stat-val" id="stat-today">—</div><div class="stat-lbl">Today</div></div>
+        <div class="stat-card"><div class="stat-val" id="stat-cache-pct">—</div><div class="stat-lbl">Cache Hit %</div></div>
+        <div class="stat-card"><div class="stat-val" id="stat-avg-ms">—</div><div class="stat-lbl">Avg ms</div></div>
+        <div class="stat-card"><div class="stat-val" id="stat-nl">—</div><div class="stat-lbl">NL Queries</div></div>
+      </div>
+      <div class="card mb-16">
+        <div class="form-row">
+          <div class="form-group" style="min-width:130px;">
+            <label class="form-label">Fabric</label>
+            <select id="filter-fabric" class="form-select">
+              <option value="">All fabrics</option>
+              <option value="single_jersey">Single Jersey</option>
+              <option value="terry_fabric">Terry</option>
+              <option value="fleece">Fleece</option>
+              <option value="rib_1x1">Rib 1×1</option>
+              <option value="interlock">Interlock</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Date From</label>
+            <input type="date" id="filter-date-from" class="form-input">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Date To</label>
+            <input type="date" id="filter-date-to" class="form-input">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Cache</label>
+            <select id="filter-cache" class="form-select">
+              <option value="">All</option>
+              <option value="1">Hit</option>
+              <option value="0">Miss</option>
+            </select>
+          </div>
+          <div class="form-group" style="justify-content:flex-end;">
+            <label class="form-label" style="opacity:0;">.</label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:11px;color:var(--t2);">
+              <input type="checkbox" id="filter-nl-only" style="accent-color:var(--a1);">
+              NL Only
+            </label>
+          </div>
+          <div class="form-group" style="justify-content:flex-end;">
+            <label class="form-label" style="opacity:0;">.</label>
+            <button id="logs-apply-btn" class="btn btn-ghost">Apply Filters</button>
+          </div>
+        </div>
+      </div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr>
+            <th>Time</th><th>Input</th><th>Fabric</th>
+            <th>GSM</th><th>Ms</th><th>Cache</th><th>AI</th>
+          </tr></thead>
+          <tbody id="log-tbody"></tbody>
+        </table>
+      </div>
+      <div id="log-pagination" class="pagination"></div>
+    </div>
+
+    <!-- ── AI PROVIDERS ── -->
+    <div id="tab-providers" class="tab-panel">
+      <div class="row-between mb-16">
+        <div>
+          <div class="section-title">AI Providers</div>
+          <div class="section-sub">Multi-instance fallback · Auto-switch · Rolling health checks</div>
+        </div>
+        <div class="row gap-8">
+          <button id="add-provider-btn" class="btn btn-primary btn-sm">+ Add Provider</button>
+          <button id="reset-stats-btn" class="btn btn-ghost btn-sm">Reset Daily Stats</button>
+        </div>
+      </div>
+
+      <!-- Strategy selector -->
+      <div class="strategy-bar">
+        <span class="strategy-label">Fallback Strategy:</span>
+        <button class="strategy-btn" data-strategy="priority">Priority Order</button>
+        <button class="strategy-btn" data-strategy="round_robin">Round Robin</button>
+        <button class="strategy-btn" data-strategy="weighted">Weighted (failure rate)</button>
+        <button class="strategy-btn" data-strategy="fastest">Fastest First</button>
+        <span id="strategy-save-msg" style="font-size:10px;color:var(--a1);margin-left:auto;display:none;">✓ Saved</span>
+      </div>
+
+      <!-- Live fallback chain -->
+      <div class="chain-wrap">
+        <div class="chain-title">Active Fallback Chain</div>
+        <div class="chain-list" id="fallback-chain">
+          <span style="font-size:10px;color:var(--t4);">Loading…</span>
+        </div>
+      </div>
+
+      <div class="provider-grid" id="providers-list">
+        <div style="color:var(--t3);font-size:11px;padding:20px 0;">Loading providers…</div>
+      </div>
+    </div>
+
+    <!-- ── ADD PROVIDER MODAL ── -->
+    <div id="add-provider-modal" class="modal-overlay hidden">
+      <div class="modal-box">
+        <div class="modal-title">Add AI Provider</div>
+
+        <div style="font-size:9px;text-transform:uppercase;letter-spacing:.7px;color:var(--t3);font-weight:600;margin-bottom:8px;">Provider Type</div>
+        <div class="type-grid" id="type-grid">
+          <!-- filled by JS -->
+        </div>
+
+        <div class="modal-grid">
+          <div class="form-group modal-full">
+            <label class="form-label">Display Name</label>
+            <input type="text" id="ap-display-name" class="form-input" placeholder="e.g. GROQ Account 2">
+          </div>
+          <div class="form-group modal-full">
+            <label class="form-label">API Key Env Variable Name</label>
+            <input type="text" id="ap-env-var" class="form-input" placeholder="e.g. GROQ_API_KEY_2" spellcheck="false" autocomplete="off">
+          </div>
+          <div class="form-group modal-full">
+            <label class="form-label">Model Name</label>
+            <input type="text" id="ap-model" class="form-input" placeholder="">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Daily Token Limit</label>
+            <input type="number" id="ap-daily-limit" class="form-input" placeholder="14400">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Per-Minute Limit</label>
+            <input type="number" id="ap-per-min" class="form-input" placeholder="30">
+          </div>
+          <div class="form-group modal-full">
+            <label class="form-label">API URL (optional — uses default if blank)</label>
+            <input type="text" id="ap-url" class="form-input" placeholder="">
+          </div>
+        </div>
+
+        <div id="ap-error" style="font-size:11px;color:var(--a3);min-height:16px;margin-bottom:4px;"></div>
+
+        <div class="modal-footer">
+          <button class="btn btn-ghost" id="ap-cancel">Cancel</button>
+          <button class="btn btn-primary" id="ap-save">Add Provider</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CACHE ── -->
+    <div id="tab-cache" class="tab-panel">
+      <div class="row-between mb-20">
+        <div>
+          <div class="section-title">Cache Manager</div>
+          <div class="section-sub">Database and memory cache inspection</div>
+        </div>
+        <div class="row gap-8">
+          <button id="cache-refresh-btn" class="btn btn-ghost btn-sm">Refresh</button>
+          <button id="cache-flush-btn" class="btn btn-danger btn-sm">Flush All Cache</button>
+        </div>
+      </div>
+      <div class="stat-grid mb-20">
+        <div class="stat-card"><div class="stat-val" id="cache-stat-entries">—</div><div class="stat-lbl">DB Entries</div></div>
+        <div class="stat-card"><div class="stat-val" id="cache-stat-hits">—</div><div class="stat-lbl">Total Hits</div></div>
+        <div class="stat-card"><div class="stat-val" id="cache-stat-mem">—</div><div class="stat-lbl">Memory Cache</div></div>
+        <div class="stat-card"><div class="stat-val" id="cache-stat-oldest">—</div><div class="stat-lbl">Oldest Entry</div></div>
+      </div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr>
+            <th>Cache Key</th><th>Hits</th><th>Created</th><th>Expires</th><th>Actions</th>
+          </tr></thead>
+          <tbody id="cache-tbody"></tbody>
+        </table>
+      </div>
+      <div id="cache-pagination" class="pagination"></div>
+      <div id="cache-entry-viewer" class="hidden mt-16 card">
+        <div class="row-between mb-12">
+          <div style="font-size:12px;font-weight:600;color:var(--t1);">Cache Entry Detail</div>
+          <button id="entry-viewer-close" class="btn btn-ghost btn-xs">✕ Close</button>
+        </div>
+        <div style="font-size:10px;color:var(--t3);margin-bottom:6px;" id="entry-key-display"></div>
+        <pre id="entry-json-display" style="background:var(--bg3);border:1px solid var(--line);border-radius:var(--rad-sm);padding:12px;font-size:10px;color:var(--t1);overflow:auto;max-height:400px;white-space:pre-wrap;word-break:break-word;"></pre>
+      </div>
+    </div>
+
+    <!-- ── INQUIRIES ── -->
+    <div id="tab-inquiries" class="tab-panel">
+      <div class="row-between mb-20">
+        <div>
+          <div class="section-title">Inquiries</div>
+          <div class="section-sub">Full query history with export</div>
+        </div>
+        <button id="inq-download-btn" class="btn btn-ghost btn-sm">↓ Download CSV</button>
+      </div>
+      <div class="card mb-16">
+        <div class="form-row">
+          <div class="form-group" style="min-width:130px;">
+            <label class="form-label">Fabric</label>
+            <select id="inq-filter-fabric" class="form-select">
+              <option value="">All</option>
+              <option value="single_jersey">Single Jersey</option>
+              <option value="terry_fabric">Terry</option>
+              <option value="fleece">Fleece</option>
+              <option value="rib_1x1">Rib 1×1</option>
+              <option value="interlock">Interlock</option>
+              <option value="pique">Pique</option>
+              <option value="waffle">Waffle</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">From</label>
+            <input type="date" id="inq-filter-from" class="form-input">
+          </div>
+          <div class="form-group">
+            <label class="form-label">To</label>
+            <input type="date" id="inq-filter-to" class="form-input">
+          </div>
+          <div class="form-group" style="justify-content:flex-end;">
+            <label class="form-label" style="opacity:0;">.</label>
+            <button id="inq-apply-btn" class="btn btn-ghost">Apply</button>
+          </div>
+        </div>
+      </div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr>
+            <th>#</th><th>Time</th><th>Input</th><th>Fabric</th>
+            <th>GSM</th><th>Composition</th><th>AI</th><th>Ms</th><th>Cache</th>
+          </tr></thead>
+          <tbody id="inq-tbody"></tbody>
+        </table>
+      </div>
+      <div id="inq-pagination" class="pagination"></div>
+    </div>
+
+    <!-- ── SETTINGS ── -->
+    <div id="tab-settings" class="tab-panel">
+      <div class="section-title mb-20">Settings</div>
+      <div class="settings-grid">
+        <div class="card">
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--t3);font-weight:600;margin-bottom:18px;">Change Credentials</div>
+          <div class="form-group mb-12">
+            <label class="form-label">Current Password</label>
+            <input type="password" id="set-cur-pass" class="form-input" placeholder="Current password">
+          </div>
+          <div class="form-group mb-12">
+            <label class="form-label">New Username</label>
+            <input type="text" id="set-new-user" class="form-input" placeholder="Leave blank to keep">
+          </div>
+          <div class="form-group mb-16">
+            <label class="form-label">New Password</label>
+            <input type="password" id="set-new-pass" class="form-input" placeholder="Leave blank to keep">
+          </div>
+          <button id="set-save-creds" class="btn btn-primary w-full">Update Credentials</button>
+          <div id="set-creds-msg" style="margin-top:10px;font-size:11px;text-align:center;min-height:16px;"></div>
+        </div>
+        <div class="card">
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--t3);font-weight:600;margin-bottom:18px;">System Info</div>
+          <div id="set-sysinfo" style="font-size:12px;color:var(--t2);line-height:2;"></div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+</div><!-- /admin-app -->
+
+<script src="js/admin.js"></script>
 </body>
 </html>
