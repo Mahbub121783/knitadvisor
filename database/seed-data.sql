@@ -131,3 +131,25 @@ INSERT INTO yarn_count_lookup (fabric_id,gsm,count_display,yarn1_ne,source) VALU
 INSERT INTO yarn_count_lookup (fabric_id,gsm,count_display,yarn1_ne,source) VALUES (12,220,'26/1',26,'PDF_VERIFIED');
 INSERT INTO yarn_count_lookup (fabric_id,gsm,count_display,yarn1_ne,source) VALUES (12,230,'24/1',24,'PDF_VERIFIED');
 INSERT INTO yarn_count_lookup (fabric_id,gsm,count_display,yarn1_ne,source) VALUES (12,240,'24/1',24,'PDF_VERIFIED');
+
+-- ============ HEAVY SINGLE JERSEY (ID: 30) ============
+INSERT INTO fabrics (id,slug,name,name_bn,category,base_fabric,gsm_min,gsm_max,gauge_min,gauge_max,typical_gauge,ll_multiplier,ll_source,machine_type,is_multi_yarn,is_warp_knit,appearance,machine_note,sort_order) VALUES (30,'heavy_jersey','Heavy Single Jersey','হেভি সিঙ্গেল জার্সি','single_jersey','single_jersey',260,350,14,20,16,1.05,'ESTIMATED — slightly longer loop to accommodate heavy yarn','single_bed_circular',0,0,NULL,'Requires robust needles and stronger take-down tension.',30);
+INSERT INTO fabric_count_formulas (fabric_id,formula_type,coeff_a,coeff_b,gsm_min,gsm_max,source,source_file,notes) VALUES (30,'regression',-0.0889,37.11,260,350,'LOOKUP_DERIVED',NULL,'Regression matched to factory R&D database.');
+INSERT INTO fabric_patterns (fabric_id,pattern_name,courses_per_repeat,wales_per_repeat,pattern_type,pattern_cylinder,pattern_dial,cam_arrangement,needle_butt_pattern,needle_description) VALUES (30,'default',1,1,'single','[["K"]]',NULL,'[{"feed":1,"cylinder":"K","note":"Plain knit cam on all needles"}]','AAAA','All long-butt needles');
+
+-- Yarn Count lookups for Heavy Single Jersey (100% Cotton)
+INSERT INTO yarn_count_lookup (fabric_id,gsm,count_display,yarn1_ne,source) VALUES (30,260,'14/1',14,'PDF_VERIFIED');
+INSERT INTO yarn_count_lookup (fabric_id,gsm,count_display,yarn1_ne,source) VALUES (30,280,'12/1',12,'PDF_VERIFIED');
+INSERT INTO yarn_count_lookup (fabric_id,gsm,count_display,yarn1_ne,source) VALUES (30,300,'10/1',10,'PDF_VERIFIED');
+INSERT INTO yarn_count_lookup (fabric_id,gsm,count_display,yarn1_ne,source) VALUES (30,320,'8/1',8,'PDF_VERIFIED');
+INSERT INTO yarn_count_lookup (fabric_id,gsm,count_display,yarn1_ne,source) VALUES (30,340,'7/1',7,'PDF_VERIFIED');
+INSERT INTO yarn_count_lookup (fabric_id,gsm,count_display,yarn1_ne,source) VALUES (30,350,'6/1',6,'PDF_VERIFIED');
+
+-- Yarn Count lookups for Heavy Single Jersey + Elastane
+INSERT INTO yarn_count_lookup (fabric_id,gsm,count_display,yarn1_ne,binder_denier,source) VALUES (30,260,'20/1+40D',20,40,'PDF_VERIFIED');
+INSERT INTO yarn_count_lookup (fabric_id,gsm,count_display,yarn1_ne,binder_denier,source) VALUES (30,280,'18/1+40D',18,40,'PDF_VERIFIED');
+INSERT INTO yarn_count_lookup (fabric_id,gsm,count_display,yarn1_ne,binder_denier,source) VALUES (30,300,'16/1+40D',16,40,'PDF_VERIFIED');
+INSERT INTO yarn_count_lookup (fabric_id,gsm,count_display,yarn1_ne,binder_denier,source) VALUES (30,320,'14/1+40D',14,40,'PDF_VERIFIED');
+INSERT INTO yarn_count_lookup (fabric_id,gsm,count_display,yarn1_ne,binder_denier,source) VALUES (30,340,'12/1+40D',12,40,'PDF_VERIFIED');
+INSERT INTO yarn_count_lookup (fabric_id,gsm,count_display,yarn1_ne,binder_denier,source) VALUES (30,350,'10/1+70D',10,70,'PDF_VERIFIED');
+

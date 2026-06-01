@@ -73,9 +73,9 @@ const FABRIC_DERIVATIVES = [
     gsm_range: { min: 260, max: 350 },
     count_formula: {
       type: 'regression',
-      a: -0.141, b: 50.22,
-      source: 'ESTIMATED',
-      note: 'Same regression as SJ but uses coarser yarns.'
+      a: -0.0889, b: 37.11,
+      source: 'LOOKUP_DERIVED',
+      note: 'Regression matched to factory R&D database.'
     },
     ll_multiplier: 1.05,
     ll_source: 'ESTIMATED — slightly longer loop to accommodate heavy yarn',
@@ -1646,12 +1646,12 @@ const FABRIC_DERIVATIVES = [
       type: 'warp_knit',
       guide_bars: 2,
       lapping_pattern: {
-        bar_1: { notation: '1-0/1-2', description: 'Plain overlapping movement' },
-        bar_2: { notation: '2-3/1-0', description: 'Reverse overlapping movement' },
+        bar_1: { notation: '1-0/1-2', description: 'Front bar — 1-needle overlap (OL), 1-needle underlap right (UL)' },
+        bar_2: { notation: '2-3/2-1', description: 'Back bar — 1-needle overlap counter, 1-needle underlap left' },
       },
       stitch_density: { courses_per_cm: 8, wales_per_cm: 12, stitches_per_cm2: 96 },
       course_length_formula: 'CL (mm) = (diameter_mm × π × wales_per_cm) / 100',
-      note: 'Standard open-weft Tricot. Two guide bars create interlocking structure. Each yarn forms vertical loops (wales) in warp direction.',
+      note: 'Standard open-lap Tricot. Both bars run same speed. Very stable structure. Source: Spencer (2001) Table 14.1.',
     },
     appearance: 'Very smooth, run-resistant, sheer. Common in lingerie, swimwear lining.',
     machine_speed: { min: 400, max: 1200, typical: 800, unit: 'stitch/min' },
@@ -1675,12 +1675,12 @@ const FABRIC_DERIVATIVES = [
       type: 'warp_knit',
       guide_bars: 2,
       lapping_pattern: {
-        bar_1: { notation: '1-0/1-2', description: 'Closed-lap plain overlapping (run-proof)' },
-        bar_2: { notation: '1-2/3-2', description: 'Anti-ladder counter-lapping' },
+        bar_1: { notation: '1-0/2-3', description: 'Front bar — 1-needle overlap, 2-needle underlap (longer underlap for run-resistance)' },
+        bar_2: { notation: '1-2/1-0', description: 'Back bar — counter-direction to bar 1, creates interlocking loops' },
       },
       stitch_density: { courses_per_cm: 8, wales_per_cm: 12, stitches_per_cm2: 96 },
       course_length_formula: 'CL (mm) = (diameter_mm × π × wales_per_cm) / 100',
-      note: 'Run-resistant Tricot derivative. Combination of counter-lapping creates ladder-proof structure.',
+      note: 'Run-resistant (ladder-proof) Tricot. Counter-lapping locks each loop. Source: Spencer (2001) Table 14.1.',
     },
     appearance: 'Ladder-proof, smooth face. Widely used for intimate apparel, lingerie lining.',
     machine_speed: { min: 400, max: 1200, typical: 800, unit: 'stitch/min' },
@@ -1704,9 +1704,9 @@ const FABRIC_DERIVATIVES = [
       type: 'warp_knit',
       guide_bars: 3,
       lapping_pattern: {
-        bar_1: { notation: '1-0/1-2', description: 'Base fabric bar 1' },
-        bar_2: { notation: '2-3/1-0', description: 'Base fabric bar 2' },
-        bar_3: { notation: 'Independent', description: 'Texture/abrasion bar (independent timing)' },
+        bar_1: { notation: '1-0/1-2', description: 'Ground structure front bar' },
+        bar_2: { notation: '2-3/2-1', description: 'Ground structure back bar' },
+        bar_3: { notation: '0-1/1-0', description: 'Texture bar — creates surface relief and abrasion resistance (independent timing)' },
       },
       stitch_density: { courses_per_cm: 10, wales_per_cm: 14, stitches_per_cm2: 140 },
       course_length_formula: 'CL (mm) = (diameter_mm × π × wales_per_cm) / 100',
@@ -1734,9 +1734,10 @@ const FABRIC_DERIVATIVES = [
       type: 'warp_knit_3d',
       guide_bars: 4,
       lapping_pattern: {
-        face_a: { bars: [1, 2], description: 'Face fabric (guide bars 1-2)' },
-        spacer: { bars: [3], description: 'Monofilament spacer yarns (50D-200D, independent timing)' },
-        face_b: { bars: [4], description: 'Back face fabric (mirror of face A)' },
+        bar_1: { notation: '1-0/1-2', description: 'Face fabric — front bed, bar 1 (plain tricot overlap)' },
+        bar_2: { notation: '2-3/2-1', description: 'Face fabric — front bed, bar 2 (counter-direction)' },
+        bar_3: { notation: '0-1/1-0', description: 'Monofilament spacer — diagonal pillar between bed faces (50D–200D)' },
+        bar_4: { notation: '1-0/1-2', description: 'Back face fabric — back bed, mirror of bar 1' },
       },
       stitch_density: { courses_per_cm: 6, wales_per_cm: 10, stitches_per_cm2: 60 },
       course_length_formula: 'CL (mm) = (diameter_mm × π × wales_per_cm) / 100',
@@ -1771,9 +1772,9 @@ const FABRIC_DERIVATIVES = [
       type: 'warp_knit',
       guide_bars: 3,
       lapping_pattern: {
-        bar_1: { notation: 'Independent', description: 'Ground mesh base (bar 1)' },
-        bar_2: { notation: 'Independent', description: 'Ground mesh base (bar 2, offset)' },
-        bar_3: { notation: 'Multi-wale inlay', description: 'Elastomeric yarn inlay (compression)' },
+        bar_1: { notation: '1-0/1-2', description: 'Ground mesh front bar (nylon/polyester base)' },
+        bar_2: { notation: '2-3/2-1', description: 'Ground mesh back bar (nylon/polyester base, offset)' },
+        bar_3: { notation: '0-2/2-0', description: 'Elastane inlay bar — 2-needle float underlap only, creating compression force' },
       },
       stitch_density: { courses_per_cm: 9, wales_per_cm: 13, stitches_per_cm2: 117 },
       course_length_formula: 'CL (mm) = (diameter_mm × π × wales_per_cm) / 100',
@@ -1868,6 +1869,7 @@ const GSM_COUNT_REGRESSION_COMPLETE = {
   poplin_double:   { a: -0.140, b: 60.00, source: 'ESTIMATED',      gsm_range: [160,320] },
   blister_single:  { a: -0.150, b: 64.00, source: 'ESTIMATED',      gsm_range: [200,360] },
   relief_single:   { a: -0.130, b: 60.00, source: 'ESTIMATED',      gsm_range: [220,400] },
+  heavy_jersey:    { a: -0.0889, b: 37.11, source: 'LOOKUP_DERIVED', gsm_range: [260,350] },
 };
 
 module.exports = {

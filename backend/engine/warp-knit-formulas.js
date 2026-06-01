@@ -126,9 +126,9 @@ const WARP_KNIT_CONSTANTS = {
       lapping: {
         bar_1: { notation: '1-0/1-2', type: 'overlap+underlap', swing: 1, description: 'Ground mesh front bar (nylon/polyester base)' },
         bar_2: { notation: '2-3/2-1', type: 'overlap+underlap', swing: 1, description: 'Ground mesh back bar (nylon/polyester base, offset)' },
-        bar_3: { notation: '0-0/2-2', type: 'inlay', swing: 2, description: 'Elastane inlay bar — 2-needle float inlay creating compression force' },
+        bar_3: { notation: '0-2/2-0', type: 'inlay', swing: 2, description: 'Elastane inlay bar — 2-needle float inlay (underlap only, no overlap), creating compression force' },
       },
-      note: 'Open-mesh Raschel with elastane inlay. Bar 3 is full-set inlay — never overlaps, only underlaps for maximum stretch.',
+      note: 'Open-mesh Raschel with elastane inlay. Bar 3 is full-set inlay — zero-needle overlap, 2-needle underlap for maximum stretch.',
     },
   },
 
@@ -671,16 +671,23 @@ function calculateWarpKnitSpec(params) {
   const targetDenier = denier || null;
   const targetGSM    = gsm || null;
 
-  if (targetDenier && !targetGSM) {
+  if (targetDenier && targetGSM) {
+    // Both provided: validate denier against GSM, use both as-is
+    result.calculations.denier_to_gsm = denierToGSM(fabricId, targetDenier, filaments);
+    result.denier_estimated = targetDenier;
+    result.gsm_estimated = targetGSM;
+  } else if (targetDenier && !targetGSM) {
     result.calculations.denier_to_gsm = denierToGSM(fabricId, targetDenier, filaments);
     result.gsm_estimated = result.calculations.denier_to_gsm;
+    result.denier_estimated = targetDenier;
   } else if (targetGSM && !targetDenier) {
     result.calculations.gsm_to_denier = gsmToDenier(fabricId, targetGSM, filaments);
     result.denier_estimated = result.calculations.gsm_to_denier;
+    result.gsm_estimated = targetGSM;
   }
 
-  const effectiveDenier = targetDenier || result.denier_estimated;
-  const effectiveGSM    = targetGSM    || result.gsm_estimated;
+  const effectiveDenier = result.denier_estimated || targetDenier || null;
+  const effectiveGSM    = result.gsm_estimated    || targetGSM    || null;
 
   // 2. GSM range cross-check
   result.calculations.gsm_range = lookupGSMRange(fabricId, effectiveDenier);

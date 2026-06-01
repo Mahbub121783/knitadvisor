@@ -113,6 +113,59 @@ const COMPOSITION_REFERENCE = {
   },
 
   // ============================================================
+  // HEAVY JERSEY
+  // ============================================================
+  heavy_jersey: {
+    '100_cotton': {
+      gsm_range: { min: 260, max: 350 },
+      count_map: [
+        { gsm: 260, count_ne: 14, count_display: '14/1', gauge: 18, sl: 3.25 },
+        { gsm: 280, count_ne: 12, count_display: '12/1', gauge: 18, sl: 3.32 },
+        { gsm: 300, count_ne: 10, count_display: '10/1', gauge: 16, sl: 3.40 },
+        { gsm: 320, count_ne: 8, count_display: '8/1', gauge: 16, sl: 3.52 },
+        { gsm: 340, count_ne: 7, count_display: '7/1', gauge: 14, sl: 3.61 },
+        { gsm: 350, count_ne: 6, count_display: '6/1', gauge: 14, sl: 3.70 },
+      ],
+      typical_gauges: [14, 16, 18, 20],
+      typical_dia: [30, 32, 34],
+    },
+
+    'cotton_elastane_hf': {
+      label: 'Cotton + Elastane (Half Feed)',
+      gsm_range: { min: 260, max: 350 },
+      gsm_offset: 0.15,
+      count_map: [
+        { gsm: 260, count_ne: 20, count_display: '20/1+40D', gauge: 20, sl: 3.10 },
+        { gsm: 280, count_ne: 18, count_display: '18/1+40D', gauge: 20, sl: 3.15 },
+        { gsm: 300, count_ne: 16, count_display: '16/1+40D', gauge: 18, sl: 3.22 },
+        { gsm: 320, count_ne: 14, count_display: '14/1+40D', gauge: 18, sl: 3.28 },
+        { gsm: 340, count_ne: 12, count_display: '12/1+40D', gauge: 16, sl: 3.35 },
+        { gsm: 350, count_ne: 10, count_display: '10/1+70D', gauge: 16, sl: 3.42 },
+      ],
+      typical_gauges: [16, 18, 20],
+      typical_dia: [30, 32],
+      lycra_denier: 40,
+      feed_type: 'half_feed',
+    },
+
+    'cotton_polyester': {
+      label: 'Cotton/Polyester Blend',
+      gsm_range: { min: 260, max: 350 },
+      gsm_offset: -0.03,
+      count_map: [
+        { gsm: 260, count_ne: 14, count_display: '14/1', gauge: 18, sl: 3.22 },
+        { gsm: 280, count_ne: 12, count_display: '12/1', gauge: 18, sl: 3.30 },
+        { gsm: 300, count_ne: 10, count_display: '10/1', gauge: 16, sl: 3.38 },
+        { gsm: 320, count_ne: 8, count_display: '8/1', gauge: 16, sl: 3.50 },
+        { gsm: 340, count_ne: 7, count_display: '7/1', gauge: 14, sl: 3.58 },
+        { gsm: 350, count_ne: 6, count_display: '6/1', gauge: 14, sl: 3.66 },
+      ],
+      typical_gauges: [14, 16, 18],
+      typical_dia: [30, 32],
+    },
+  },
+
+  // ============================================================
   // RIB 1x1
   // ============================================================
   rib_1x1: {

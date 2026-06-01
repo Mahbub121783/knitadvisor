@@ -20,7 +20,9 @@
       "Bash(netstat -tlnp)",
       "Bash(curl -v http://localhost:3001/api/pattern/tricot_plain)",
       "Bash(python3 -m json.tool)",
-      "Bash(curl -s http://localhost:3002/api/pattern/tricot_plain)"
+      "Bash(curl -s http://localhost:3002/api/pattern/tricot_plain)",
+      "Bash(taskkill /PID 21100 /F)",
+      "PowerShell(Set-Location \"d:\\\\Downloads\\\\knitadvisor-phase1\\\\knitadvisor\"; Start-Process -FilePath \"node\" -ArgumentList \"backend/server.js\" -WindowStyle Hidden; Start-Sleep -Seconds 3; $conn = Get-NetTCPConnection -LocalPort 3001 -ErrorAction SilentlyContinue; if \\($conn\\) { Write-Host \"Server started, PID $\\($conn.OwningProcess\\)\" } else { Write-Host \"Server NOT started on port 3001\" })"
     ]
   }
 }

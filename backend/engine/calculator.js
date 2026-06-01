@@ -139,17 +139,57 @@ function calculate(params) {
   // --- 3. Calculate loop length (skip for warp knit, use course length instead) ---
   let llResult = null;
   if (fabricDef.category !== 'warp_knit') {
-    llResult = calculateLoopLength(fabric, countResult.count_ne, gsm, compModifiers);
-    trace.push({ step: 3, action: 'loop_length', ...llResult.trace });
-  } else {
-    // For warp knit, calculate course length instead
-    if (dia && warpKnitSpec?.calculations.stitch_density) {
-      const courseLength = calculateCourseLength(dia, warpKnitSpec.calculations.stitch_density.wales_per_cm);
-      llResult = { ll_mm: courseLength.value, ll_cm: courseLength.value / 10, trace: { formula: courseLength.formula, result: courseLength } };
-      trace.push({ step: 3, action: 'course_length', ...courseLength });
+    if (factoryLookup && factoryLookup.sl) {
+      const sl_mm = factoryLookup.sl;
+      const sl_cm = sl_mm / 10;
+      llResult = {
+        ll_mm: parseFloat(sl_mm.toFixed(3)),
+        ll_cm: parseFloat(sl_cm.toFixed(5)),
+        multiplier: fabricDef.ll_multiplier || 1.0,
+        multiplier_source: 'FACTORY_R_D_RECORD',
+        trace: {
+          formula: `Factory R&D Record lookup (GSM=${gsm}, Count=${countResult.count_rounded})`,
+          result: `${sl_mm.toFixed(3)} mm (${sl_cm.toFixed(5)} cm)`,
+          note: 'Using verified factory R&D stitch length directly for maximum accuracy.',
+          composition_sl_factor: compModifiers.sl_factor || 1.0,
+        }
+      };
+      trace.push({ step: 3, action: 'loop_length', ...llResult.trace });
     } else {
-      llResult = { ll_mm: 0, ll_cm: 0, trace: { formula: 'N/A for warp knit without machine diameter', result: 'Course length calculation skipped' } };
-      trace.push({ step: 3, action: 'course_length', result: 'Requires machine diameter input' });
+      llResult = calculateLoopLength(fabric, countResult.count_ne, gsm, compModifiers);
+      trace.push({ step: 3, action: 'loop_length', ...llResult.trace });
+    }
+  } else {
+    // For warp knit, use course length from warpKnitSpec (calculateCourseLength(gauge, fabricId))
+    if (gauge && warpKnitSpec?.calculations?.course_length) {
+      const cl = warpKnitSpec.calculations.course_length;
+      llResult = {
+        ll_mm: cl.value,
+        ll_cm: parseFloat((cl.value / 10).toFixed(4)),
+        multiplier: null,
+        multiplier_source: 'Course length (warp knit)',
+        is_course_length: true,
+        trace: { formula: cl.formula || 'Course length from lapping geometry', result: cl.value + ' mm' }
+      };
+      trace.push({ step: 3, action: 'course_length', value_mm: cl.value, formula: cl.formula });
+    } else if (gauge) {
+      const cl = calculateCourseLength(gauge, fabric);
+      if (cl) {
+        llResult = {
+          ll_mm: cl.value,
+          ll_cm: parseFloat((cl.value / 10).toFixed(4)),
+          multiplier: null,
+          multiplier_source: 'Course length (warp knit)',
+          is_course_length: true,
+          trace: { formula: cl.formula, result: cl.value + ' mm' }
+        };
+      } else {
+        llResult = { ll_mm: null, ll_cm: null, is_course_length: true, trace: { formula: 'N/A', result: 'Gauge required for course length' } };
+      }
+      trace.push({ step: 3, action: 'course_length', result: cl ? cl.value + ' mm' : 'N/A' });
+    } else {
+      llResult = { ll_mm: null, ll_cm: null, is_course_length: true, trace: { formula: 'N/A — gauge not provided', result: 'Enter gauge for course length' } };
+      trace.push({ step: 3, action: 'course_length', result: 'Gauge not provided' });
     }
   }
 
@@ -176,7 +216,8 @@ function calculate(params) {
   if (countResult.count_ne > 0 && llResult.ll_cm > 0) {
     // Determine TF limits for the category
     let categoryKey = 'default';
-    if (fabricDef.category.includes('single_jersey')) categoryKey = 'single_jersey';
+    if (fabricDef.id === 'heavy_jersey') categoryKey = 'heavy_jersey';
+    else if (fabricDef.category.includes('single_jersey')) categoryKey = 'single_jersey';
     if (fabricDef.category.includes('rib')) categoryKey = 'rib';
     if (fabricDef.category.includes('interlock')) categoryKey = 'interlock';
     if (fabricDef.category.includes('fleece') || fabricDef.category.includes('terry')) categoryKey = 'fleece';
@@ -303,13 +344,21 @@ function calculate(params) {
   trace.push({ step: '6.1', action: 'quality_prediction', shrinkage: qualityResult.shrinkage, spirality: qualityResult.spirality });
 
   // --- 6.2 Financial Costing ---
+  // For warp knit: convert denier to Ne equivalent for costing (1 denier = 5315/denier Ne approx)
+  let costCountNe = countResult.count_ne;
+  if (fabricDef.category === 'warp_knit') {
+    const effectiveDenier = (denier || (warpKnitSpec?.denier_estimated) || 70);
+    costCountNe = parseFloat((5315 / effectiveDenier).toFixed(2)); // denier → Ne equiv for cost calc
+  }
   const costResult = calculateCost({
     fabric: fabricDef.id,
     gsm,
-    count_ne: countResult.count_ne || 30,
+    count_ne: costCountNe || 30,
     gauge: gauge || fabricDef.typical_gauge || 24,
     color_shade: color_shade,
     parsedComp,
+    is_warp_knit: fabricDef.category === 'warp_knit',
+    denier: fabricDef.category === 'warp_knit' ? (denier || warpKnitSpec?.denier_estimated || 70) : null,
   });
   trace.push({ step: '6.2', action: 'costing', total_usd_per_kg: costResult.cost_breakdown_usd.total_per_kg });
 
@@ -369,14 +418,29 @@ function calculate(params) {
     color: colorResult || null,
 
     yarn: {
-      count_ne: countResult.count_ne,
+      count_ne: countResult.count_ne,           // integer (industry standard)
+      count_ne_exact: countResult.count_ne_exact || null, // raw calculated float, for reference
       count_display: countResult.count_display,
       count_rounded: countResult.count_rounded,
       source: countResult.source,
+      // Elastane separate declaration (when composition includes elastane)
+      elastane_denier_declared: (() => {
+        if (!parsedComp || !parsedComp.has_elastane) return null;
+        const ePct = parsedComp.elastane_pct || 0;
+        if (ePct <= 3) return 20;       // 20D for ≤3%
+        if (ePct <= 8) return 40;       // 40D for ≤8%
+        return 70;                       // 70D for >8%
+      })(),
+      elastane_pct: parsedComp?.elastane_pct || null,
       // Multi-yarn (terry, fleece)
       yarn2_ne: countResult.yarn2_ne || null,
       yarn2_display: countResult.yarn2_display || null,
       binder_denier: countResult.binder_denier || null,
+      // Warp knit extras
+      is_warp_knit: fabricDef.category === 'warp_knit',
+      denier_input: denier || null,
+      denier_estimated: (fabricDef.category === 'warp_knit' && warpKnitSpec) ? warpKnitSpec.denier_estimated : null,
+      filaments_input: (fabricDef.category === 'warp_knit') ? (filaments || 34) : null,
     },
     
     yarn_consumption: consumptionResult || null,
@@ -387,6 +451,7 @@ function calculate(params) {
       value_cm: llResult.ll_cm,
       multiplier: llResult.multiplier,
       multiplier_source: llResult.multiplier_source,
+      is_course_length: llResult.is_course_length || false,
       rnd_validation: rndValidation,
     },
 
@@ -491,36 +556,81 @@ function normalizeParams(p) {
   };
 }
 
-function generateYarnDeclaration(parsedComp, countStrOrNumber, rawInputStr = '') {
+function generateYarnDeclaration(parsedComp, countStrOrNumber, rawInputStr = '', fabricId = '') {
   if (!countStrOrNumber) return '';
   const inputStrLower = ((parsedComp && parsedComp.parsed) ? parsedComp.parsed : '').toLowerCase() + ' ' + String(countStrOrNumber).toLowerCase() + ' ' + String(rawInputStr).toLowerCase();
-  
+
   let processStr = '';
   if (inputStrLower.includes('vortex')) processStr = 'Vortex';
   else if (inputStrLower.includes('slub')) processStr = 'Slub';
   else if (inputStrLower.includes('compact')) processStr = 'Compact';
   else if (inputStrLower.includes('combed')) processStr = 'Combed';
   else if (inputStrLower.includes('carded')) processStr = 'Carded';
-  
+
+  // Elastane/spandex is always declared separately as denier — never folded into base yarn compName.
+  // Build compName from non-elastane fibers only.
   let compName = '100% Cotton';
-  if (parsedComp && parsedComp.type !== 'pure') {
-    const c = parsedComp.fibers.cotton || 0;
-    const p = parsedComp.fibers.polyester || 0;
-    const v = parsedComp.fibers.viscose || 0;
-    
-    if (c > 0 && p > 0 && (c + p >= 90)) {
-      compName = c >= p ? `${c}/${p} CVC` : `${p}/${c} PC`;
-    } else if (c > 0 && v > 0 && (c + v >= 90)) {
-      compName = `${c}/${v} Cotton/Viscose`;
-    } else {
-      compName = parsedComp.display.replace(' + ', '/').replace(/%/g, '');
+  let elastaneStr = null; // e.g. "40D Elastane (Half-feed)"
+
+  if (parsedComp) {
+    const fibers = parsedComp.fibers || {};
+    const elastanePct = fibers.elastane || 0;
+
+    // Build elastane declaration string from composition modifiers data
+    // We derive denier from elastane_pct: 3% → 20D, 5% → 40D, 8%+ → 70D
+    if (elastanePct > 0) {
+      // Denier selection mirrors composition-engine.js modifiers
+      let elDen = 40;
+      if (elastanePct <= 3) elDen = 20;
+      else if (elastanePct <= 8) elDen = 40;
+      else elDen = 70;
+      // Feed type: ≤5% = half-feed, >5% = full-feed (industry convention)
+      const feedType = elastanePct <= 5 ? 'Half-feed' : 'Full-feed';
+      elastaneStr = `${elDen}D Elastane (${feedType})`;
     }
-  } else if (parsedComp && parsedComp.type === 'pure') {
-    compName = `100% ${parsedComp.dominant.charAt(0).toUpperCase() + parsedComp.dominant.slice(1)}`;
+
+    // Build base fiber name WITHOUT elastane
+    const c = fibers.cotton || 0;
+    const p = fibers.polyester || 0;
+    const v = fibers.viscose || 0;
+    const modal = fibers.modal || 0;
+
+    // Non-elastane total %
+    const baseTotal = c + p + v + modal + (fibers.tencel || 0) + (fibers.bamboo || 0) + (fibers.nylon || 0);
+
+    if (elastanePct > 0 && baseTotal > 0) {
+      // Recalculate base fiber percentages excluding elastane for display
+      if (c > 0 && p === 0 && v === 0 && modal === 0) {
+        compName = `${Math.round(c)}% Cotton`;
+      } else if (c > 0 && p > 0) {
+        compName = c >= p ? `${Math.round(c)}/${Math.round(p)} CVC` : `${Math.round(p)}/${Math.round(c)} PC`;
+      } else if (c > 0 && v > 0) {
+        compName = `${Math.round(c)}/${Math.round(v)} Cotton/Viscose`;
+      } else if (c > 0 && modal > 0) {
+        compName = `${Math.round(c)}/${Math.round(modal)} Cotton/Modal`;
+      } else {
+        // generic — exclude elastane from display
+        const parts = Object.entries(fibers)
+          .filter(([f, pct]) => f !== 'elastane' && pct > 0)
+          .sort((a, b) => b[1] - a[1]);
+        compName = parts.map(([f, pct]) => `${Math.round(pct)}% ${f.charAt(0).toUpperCase() + f.slice(1)}`).join('/');
+      }
+    } else if (parsedComp.type !== 'pure') {
+      if (c > 0 && p > 0 && (c + p >= 90)) {
+        compName = c >= p ? `${c}/${p} CVC` : `${p}/${c} PC`;
+      } else if (c > 0 && v > 0 && (c + v >= 90)) {
+        compName = `${c}/${v} Cotton/Viscose`;
+      } else {
+        compName = parsedComp.display.replace(' + ', '/').replace(/%/g, '');
+      }
+    } else {
+      compName = `100% ${parsedComp.dominant.charAt(0).toUpperCase() + parsedComp.dominant.slice(1)}`;
+    }
   }
 
   function formatYarn(numStr) {
-    const num = parseFloat(numStr);
+    // Always use integer count — decimal counts don't exist in industry
+    const num = Math.round(parseFloat(numStr));
     let finalProcess = processStr;
     if (!finalProcess) {
       if (parsedComp && parsedComp.dominant === 'polyester' && parsedComp.type === 'pure') {
@@ -533,7 +643,13 @@ function generateYarnDeclaration(parsedComp, countStrOrNumber, rawInputStr = '')
         finalProcess = 'Combed';
       }
     }
-    return `${num}/1 (${compName} ${finalProcess})`.trim();
+    let baseDecl = `${num}/1 (${compName} ${finalProcess})`;
+    if (fabricId === 'heavy_jersey' && num >= 6 && num <= 20) {
+      const doubleCount = num * 2;
+      baseDecl += ` [or ${doubleCount}/1 × 2 Double-end]`;
+    }
+    baseDecl = baseDecl.trim();
+    return elastaneStr ? `${baseDecl} + ${elastaneStr}` : baseDecl;
   }
 
   if (typeof countStrOrNumber === 'number' || !isNaN(countStrOrNumber)) {
@@ -551,7 +667,17 @@ function generateYarnDeclaration(parsedComp, countStrOrNumber, rawInputStr = '')
 
     const match = part.match(/(\d+)\/S/i) || part.match(/(\d+)\/1/i);
     if (match) {
-      const formatted = formatYarn(match[1]);
+      const countNum = Math.round(parseFloat(match[1]));
+      const num = countNum;
+      let finalProcess = processStr;
+      if (!finalProcess) {
+        if (parsedComp && parsedComp.dominant === 'polyester' && parsedComp.type === 'pure') finalProcess = 'Spun';
+        else if (num >= 36) finalProcess = 'Compact';
+        else if (num < 20) finalProcess = 'Carded';
+        else finalProcess = 'Combed';
+      }
+      const baseDecl = `${num}/1 (${compName} ${finalProcess})`.trim();
+      const formatted = elastaneStr ? `${baseDecl} + ${elastaneStr}` : baseDecl;
       let label = part.split(' ')[0];
       if (label.match(/^\d+/)) label = '';
       else label = label + ' ';
@@ -757,17 +883,17 @@ function calculateCount(fabricId, gsm, fabricDef, compModifiers = {}, factoryLoo
   // If factory knowledge has an exact/interpolated count, prefer it
   if (factoryLookup && factoryLookup.count_ne) {
     const fCount = factoryLookup.count_ne;
-    const count_rounded = Math.round(fCount / 2) * 2;
-    const raw_display = factoryLookup.count_display || count_rounded;
-    const advanced_display = generateYarnDeclaration(parsedComp, raw_display, rawInputStr);
+    const count_rounded = Math.round(fCount); // preserve exact factory count
+    const advanced_display = generateYarnDeclaration(parsedComp, count_rounded, rawInputStr, fabricId);
     return {
-      count_ne: parseFloat(fCount.toFixed(2)),
+      count_ne: count_rounded,
+      count_ne_exact: parseFloat(fCount.toFixed(2)),
       count_display: advanced_display,
       count_rounded,
       source: factoryLookup.source || 'FACTORY_KNOWLEDGE',
       trace: {
         formula: `Factory knowledge lookup (GSM=${gsm}, composition-aware)`,
-        result: `${fCount.toFixed(2)} Ne → ${factoryLookup.count_display || count_rounded + '/S'}`,
+        result: `${fCount.toFixed(2)} Ne → rounded to ${count_rounded}/1 Ne (industry integer)`,
         source: factoryLookup.source,
         composition_factor: countFactor,
       }
@@ -794,11 +920,13 @@ function calculateCount(fabricId, gsm, fabricDef, compModifiers = {}, factoryLoo
   if (reg && reg.a !== undefined && reg.a !== null) {
     const count_base = reg.a * gsm + reg.b;
     const count_adjusted = count_base * countFactor;
-    const count_rounded = Math.round(count_adjusted / 2) * 2; // nearest even
-    const advanced_display = generateYarnDeclaration(parsedComp, count_rounded, rawInputStr);
+    // For heavy_jersey, round to nearest integer to allow odd counts (e.g. 7s Ne). Otherwise round to even.
+    const count_rounded = fabricId === 'heavy_jersey' ? Math.round(count_adjusted) : Math.round(count_adjusted / 2) * 2;
+    const advanced_display = generateYarnDeclaration(parsedComp, count_rounded, rawInputStr, fabricId);
 
     return {
-      count_ne: parseFloat(count_adjusted.toFixed(2)),
+      count_ne: count_rounded, // integer — decimal counts are not used in industry declarations
+      count_ne_exact: parseFloat(count_adjusted.toFixed(2)), // exact value kept in trace only
       count_display: advanced_display,
       count_rounded,
       source: reg.source,
@@ -809,7 +937,7 @@ function calculateCount(fabricId, gsm, fabricDef, compModifiers = {}, factoryLoo
         calculation: countFactor !== 1.0
           ? `= ${count_base.toFixed(3)} × ${countFactor} = ${count_adjusted.toFixed(4)}`
           : `= ${(reg.a * gsm).toFixed(3)} + ${reg.b} = ${count_adjusted.toFixed(4)}`,
-        result: `${count_adjusted.toFixed(2)} Ne → rounded to ${count_rounded}/S`,
+        result: `${count_adjusted.toFixed(2)} Ne → rounded to ${count_rounded}/1 Ne (industry integer)`,
         source: reg.source,
         composition_factor: countFactor,
       }
