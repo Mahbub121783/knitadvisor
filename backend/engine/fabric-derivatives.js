@@ -927,9 +927,22 @@ const FABRIC_DERIVATIVES = [
     ll_source: 'Same multiplier as 1×1 rib; elastane inlaid, does not form needle loop',
     typical_gauge: 18,
     structure: {
-      note: 'Same as 1×1 rib, plus elastane (Lycra) inlaid — fed without forming needle loops, runs between needle loops',
-      extra_feed: 'Elastane core feed (20D–40D) between ground yarn feeds',
-      pattern: { C: [['K']], D: [['K']] }
+      type: 'weft_knit',
+      courses_per_repeat: 1,
+      wales_per_repeat: 2,
+      beds: ['cylinder', 'dial'],
+      pattern: {
+        C: [['K']],
+        D: [['K']]
+      },
+      cam: [
+        { feed: 1, cylinder: 'K', dial: 'K', note: 'Alternating cylinder and dial needles knit main spun cotton yarn plated with elastane (Lycra)' }
+      ],
+      needle_arrangement: {
+        butt_pattern: 'C_D_C_D',
+        description: 'Alternating cylinder (C) and dial (D) needles. Dual-feed plating carrier feeds Lycra simultaneously, positioning it on the fabric back.'
+      },
+      note: 'Main spun cotton yarn plated with elastane (Lycra) core thread (20D–40D) fed simultaneously.'
     },
     appearance: 'Same as 1×1 rib but with superior recovery/return-to-shape. 5-8% elastane typical.'
   },
@@ -1785,6 +1798,486 @@ const FABRIC_DERIVATIVES = [
     appearance: 'Open mesh with high elasticity/compression. Smooth face, structured stretch.',
     machine_speed: { min: 400, max: 1400, typical: 900, unit: 'stitch/min' },
     uses: 'Shapewear, foundation garments, swimwear, medical compression wear.',
+  },
+
+  {
+    id: 'rib_2x1',
+    name: '2×1 Rib',
+    name_bn: '২×১ রিব',
+    category: 'rib',
+    base: 'rib_1x1',
+    machine_type: 'double_bed_circular',
+    gauge_range: { min: 14, max: 22 },
+    gsm_range: { min: 140, max: 300 },
+    count_formula: {
+      type: 'regression',
+      a: -0.115, b: 53.00,
+      source: 'ESTIMATED',
+      note: '2 cylinder needles active, 1 dial needle active.'
+    },
+    ll_multiplier: 1.43,
+    ll_source: 'ESTIMATED — intermediate density between 1x1 and 2x2 ribs',
+    typical_gauge: 18,
+    structure: {
+      type: 'weft_knit',
+      courses_per_repeat: 1,
+      wales_per_repeat: 3,
+      beds: ['cylinder', 'dial'],
+      pattern: {
+        C: [['K','K','M']],
+        D: [['M','M','K']]
+      },
+      cam: [
+        { feed: 1, cylinder: 'K on active, M on inactive', dial: 'K on active, M on inactive', note: '2 active cylinder needles alternate with 1 active dial needle' }
+      ],
+      needle_arrangement: {
+        butt_pattern: 'AAB_AAB',
+        description: '2 active cylinder needles (A) followed by 1 deactivated slot (B) aligned with 1 active dial needle'
+      }
+    },
+    appearance: 'Distinct vertical rib cords with 2-to-1 width ratio. Reversible but unbalanced structure.'
+  },
+
+  {
+    id: 'rib_3x3',
+    name: '3×3 Rib',
+    name_bn: '৩×৩ রিব',
+    category: 'rib',
+    base: 'rib_1x1',
+    machine_type: 'double_bed_circular',
+    gauge_range: { min: 12, max: 20 },
+    gsm_range: { min: 160, max: 320 },
+    count_formula: {
+      type: 'regression',
+      a: -0.110, b: 56.00,
+      source: 'ESTIMATED',
+      note: '3 cylinder needles active, 3 dial needles active.'
+    },
+    ll_multiplier: 1.48,
+    ll_source: 'ESTIMATED — wider needle grouping increases loop length at rib transitions',
+    typical_gauge: 16,
+    structure: {
+      type: 'weft_knit',
+      courses_per_repeat: 1,
+      wales_per_repeat: 6,
+      beds: ['cylinder', 'dial'],
+      pattern: {
+        C: [['K','K','K','M','M','M']],
+        D: [['M','M','M','K','K','K']]
+      },
+      cam: [
+        { feed: 1, cylinder: 'K on 3 needles, M on 3 needles', dial: 'M on 3 needles, K on 3 needles', note: 'Alternating blocks of 3 cylinder and 3 dial needles active' }
+      ],
+      needle_arrangement: {
+        butt_pattern: 'AAABBB_AAABBB',
+        description: 'Blocks of 3 active cylinder needles alternating with blocks of 3 active dial needles. Rib gating offset.'
+      }
+    },
+    appearance: 'Broad vertical panels. Bulky structure with high stretch recovery, common in knitwear collars.'
+  },
+
+  {
+    id: 'rib_3x2',
+    name: '3×2 Rib',
+    name_bn: '৩×২ রিব',
+    category: 'rib',
+    base: 'rib_1x1',
+    machine_type: 'double_bed_circular',
+    gauge_range: { min: 12, max: 20 },
+    gsm_range: { min: 150, max: 310 },
+    count_formula: {
+      type: 'regression',
+      a: -0.110, b: 55.00,
+      source: 'ESTIMATED',
+      note: '3 cylinder needles active, 2 dial needles active.'
+    },
+    ll_multiplier: 1.46,
+    ll_source: 'ESTIMATED — asymmetrical rib spacing',
+    typical_gauge: 16,
+    structure: {
+      type: 'weft_knit',
+      courses_per_repeat: 1,
+      wales_per_repeat: 5,
+      beds: ['cylinder', 'dial'],
+      pattern: {
+        C: [['K','K','K','M','M']],
+        D: [['M','M','M','K','K']]
+      },
+      cam: [
+        { feed: 1, cylinder: 'K on 3, M on 2', dial: 'M on 3, K on 2', note: 'Alternating block of 3 cylinder needles active and 2 dial needles active' }
+      ],
+      needle_arrangement: {
+        butt_pattern: 'AAABB_AAABB',
+        description: '3 active cylinder needles followed by 2 active dial needles.'
+      }
+    },
+    appearance: 'Rib cords with alternating widths of 3 wales (face) and 2 wales (back).'
+  },
+
+  {
+    id: 'rib_4x1',
+    name: '4×1 Rib',
+    name_bn: '৪×১ রিব',
+    category: 'rib',
+    base: 'rib_1x1',
+    machine_type: 'double_bed_circular',
+    gauge_range: { min: 14, max: 22 },
+    gsm_range: { min: 140, max: 300 },
+    count_formula: {
+      type: 'regression',
+      a: -0.115, b: 54.00,
+      source: 'ESTIMATED',
+      note: '4 cylinder needles active, 1 dial needle active.'
+    },
+    ll_multiplier: 1.42,
+    ll_source: 'ESTIMATED — flat face appearance with sparse backing ribs',
+    typical_gauge: 18,
+    structure: {
+      type: 'weft_knit',
+      courses_per_repeat: 1,
+      wales_per_repeat: 5,
+      beds: ['cylinder', 'dial'],
+      pattern: {
+        C: [['K','K','K','K','M']],
+        D: [['M','M','M','M','K']]
+      },
+      cam: [
+        { feed: 1, cylinder: 'K on 4, M on 1', dial: 'M on 4, K on 1', note: '4 active cylinder needles and 1 active dial needle repeating sequence' }
+      ],
+      needle_arrangement: {
+        butt_pattern: 'AAAAB_AAAAB',
+        description: '4 active needles on cylinder bed, 1 active needle on dial bed.'
+      }
+    },
+    appearance: 'Wide flat wale panels on technical face separated by narrow single wale channels.'
+  },
+
+  {
+    id: 'lycra_rib_2x2',
+    name: '2×2 Rib + Lycra (Elastane)',
+    name_bn: 'লাইক্রা ২×২ রিব',
+    category: 'rib',
+    base: 'rib_2x2',
+    machine_type: 'double_bed_circular',
+    gauge_range: { min: 14, max: 22 },
+    gsm_range: { min: 180, max: 320 },
+    count_formula: {
+      type: 'regression',
+      a: -0.108, b: 56.62,
+      source: 'PDF_VERIFIED',
+      note: 'Includes 5-8% elastane for compression and stretch recovery.'
+    },
+    ll_multiplier: 1.45,
+    ll_source: 'PDF_VERIFIED — matches standard 2x2 rib base',
+    typical_gauge: 18,
+    structure: {
+      type: 'weft_knit',
+      courses_per_repeat: 1,
+      wales_per_repeat: 4,
+      beds: ['cylinder', 'dial'],
+      pattern: {
+        C: [['K','K','M','M']],
+        D: [['M','M','K','K']]
+      },
+      cam: [
+        { feed: 1, cylinder: 'K on 2, M on 2', dial: 'M on 2, K on 2', note: 'Knit with main spun yarn plated with elastane thread' }
+      ],
+      needle_arrangement: {
+        butt_pattern: 'CC_DD_CC_DD',
+        description: '2 active cylinder needles alternating with 2 active dial needles. Plating attachment engaged.'
+      }
+    },
+    appearance: 'Heavy ribbed structure with exceptional widthwise elastic stretch and shape retention.'
+  },
+
+  {
+    id: 'pointelle_eyelet',
+    name: 'Eyelet Pointelle',
+    name_bn: 'আইলেট পয়েন্টেল',
+    category: 'single_jersey',
+    base: 'pointelle',
+    machine_type: 'single_bed_circular_or_flatbed',
+    gauge_range: { min: 18, max: 32 },
+    gsm_range: { min: 80, max: 180 },
+    count_formula: {
+      type: 'regression',
+      a: -0.130, b: 48.00,
+      source: 'ESTIMATED',
+      note: 'Fine lace-like holes formed by single-needle loop transfer.'
+    },
+    ll_multiplier: 0.96,
+    ll_source: 'ESTIMATED — open holes reduce weight per unit area',
+    typical_gauge: 24,
+    structure: {
+      type: 'weft_knit',
+      courses_per_repeat: 4,
+      wales_per_repeat: 4,
+      beds: ['cylinder'],
+      pattern: [
+        ['K','K','K','K'],
+        ['K','M','K','K'],
+        ['K','K','K','K'],
+        ['K','K','K','K']
+      ],
+      cam: [
+        { feed: 1, cylinder: 'K', note: 'Base jersey course' },
+        { feed: 2, cylinder: 'K/transfer', note: 'Selected needle loop is transferred to adjacent cylinder needle' },
+        { feed: 3, cylinder: 'K', note: 'Base jersey course' },
+        { feed: 4, cylinder: 'K', note: 'Locking course' }
+      ],
+      needle_arrangement: {
+        butt_pattern: 'AAAA',
+        description: 'All needles active. Needle selection logic drives transfer elements on course 2.'
+      }
+    },
+    appearance: 'Lightweight fabric punctuated by tiny circular eyelet holes in a regular grid.'
+  },
+
+  {
+    id: 'pointelle_chevron',
+    name: 'Chevron Pointelle',
+    name_bn: 'শেভরন পয়েন্টেল',
+    category: 'single_jersey',
+    base: 'pointelle',
+    machine_type: 'single_bed_circular_or_flatbed',
+    gauge_range: { min: 18, max: 32 },
+    gsm_range: { min: 90, max: 200 },
+    count_formula: {
+      type: 'regression',
+      a: -0.130, b: 49.00,
+      source: 'ESTIMATED',
+      note: 'Zig-zag lace holes formed by shifting transfer points.'
+    },
+    ll_multiplier: 0.98,
+    ll_source: 'ESTIMATED — chevron design balances tension',
+    typical_gauge: 24,
+    structure: {
+      type: 'weft_knit',
+      courses_per_repeat: 8,
+      wales_per_repeat: 8,
+      beds: ['cylinder'],
+      pattern: [
+        ['K','K','K','K','K','K','K','K'],
+        ['K','M','K','K','K','K','K','K'],
+        ['K','K','M','K','K','K','K','K'],
+        ['K','K','K','M','K','K','K','K'],
+        ['K','K','K','K','K','K','K','K'],
+        ['K','K','K','K','K','K','M','K'],
+        ['K','K','K','K','K','M','K','K'],
+        ['K','K','K','K','M','K','K','K']
+      ],
+      cam: [
+        { feed: 1, cylinder: 'K', note: 'Plain knit course' },
+        { feed: 2, cylinder: 'Transfer at W2', note: 'Transfer course for left wing' },
+        { feed: 3, cylinder: 'Transfer at W3', note: 'Transfer course for left wing' },
+        { feed: 4, cylinder: 'Transfer at W4', note: 'Transfer course for left wing' },
+        { feed: 5, cylinder: 'K', note: 'Plain knit course' },
+        { feed: 6, cylinder: 'Transfer at W7', note: 'Transfer course for right wing' },
+        { feed: 7, cylinder: 'Transfer at W6', note: 'Transfer course for right wing' },
+        { feed: 8, cylinder: 'Transfer at W5', note: 'Transfer course for right wing' }
+      ],
+      needle_arrangement: {
+        butt_pattern: 'AAAA',
+        description: 'Electronic selection controls transfer cams for V-shape geometry.'
+      }
+    },
+    appearance: 'Distinct V-shaped zig-zag (chevron) lace tracks on a single-jersey base.'
+  },
+
+  {
+    id: 'pointelle_diagonal',
+    name: 'Diagonal Pointelle',
+    name_bn: 'ডায়াগোনাল পয়েন্টেল',
+    category: 'single_jersey',
+    base: 'pointelle',
+    machine_type: 'single_bed_circular_or_flatbed',
+    gauge_range: { min: 18, max: 32 },
+    gsm_range: { min: 80, max: 170 },
+    count_formula: {
+      type: 'regression',
+      a: -0.135, b: 47.50,
+      source: 'ESTIMATED',
+      note: 'Mesh-like structure with diagonal hole lines.'
+    },
+    ll_multiplier: 0.95,
+    ll_source: 'ESTIMATED — open diagonal mesh reduces density',
+    typical_gauge: 24,
+    structure: {
+      type: 'weft_knit',
+      courses_per_repeat: 6,
+      wales_per_repeat: 6,
+      beds: ['cylinder'],
+      pattern: [
+        ['K','K','K','K','K','K'],
+        ['K','M','K','K','K','K'],
+        ['K','K','K','M','K','K'],
+        ['K','K','K','K','K','M'],
+        ['K','K','K','K','K','K'],
+        ['K','K','M','K','K','K']
+      ],
+      cam: [
+        { feed: 1, cylinder: 'K', note: 'Knit' },
+        { feed: 2, cylinder: 'Transfer W2', note: 'Diagonal hole step 1' },
+        { feed: 3, cylinder: 'Transfer W4', note: 'Diagonal hole step 2' },
+        { feed: 4, cylinder: 'Transfer W6', note: 'Diagonal hole step 3' },
+        { feed: 5, cylinder: 'K', note: 'Knit' },
+        { feed: 6, cylinder: 'Transfer W3', note: 'Diagonal hole step 4' }
+      ],
+      needle_arrangement: {
+        butt_pattern: 'AAAA',
+        description: 'Electronic selection controls diagonal shifting.'
+      }
+    },
+    appearance: 'Sporty, mesh-like appearance with diagonal lace tracks. High breathability.'
+  },
+
+  {
+    id: 'waffle_knit',
+    name: 'Waffle Knit',
+    name_bn: 'ওয়াফেল নিট',
+    category: 'rib',
+    base: 'rib_1x1',
+    machine_type: 'double_bed_circular',
+    gauge_range: { min: 12, max: 20 },
+    gsm_range: { min: 180, max: 350 },
+    count_formula: {
+      type: 'regression',
+      a: -0.105, b: 54.00,
+      source: 'ESTIMATED',
+      note: 'Three-dimensional cell structure formed by combining knit and tuck.'
+    },
+    ll_multiplier: 1.50,
+    ll_source: 'ESTIMATED — heavy tucking on both cylinder and dial increases loop length',
+    typical_gauge: 16,
+    structure: {
+      type: 'weft_knit',
+      courses_per_repeat: 4,
+      wales_per_repeat: 4,
+      beds: ['cylinder', 'dial'],
+      pattern: {
+        C: [
+          ['K','K','K','K'],
+          ['K','T','K','T'],
+          ['K','K','K','K'],
+          ['K','T','K','T']
+        ],
+        D: [
+          ['K','K','K','K'],
+          ['T','K','T','K'],
+          ['K','K','K','K'],
+          ['T','K','T','K']
+        ]
+      },
+      cam: [
+        { feed: 1, cylinder: 'K', dial: 'K', note: 'Course 1: 1x1 rib knit course' },
+        { feed: 2, cylinder: 'K on odd, T on even', dial: 'T on odd, K on even', note: 'Course 2: cylinder tucks even wales, dial tucks odd wales' },
+        { feed: 3, cylinder: 'K', dial: 'K', note: 'Course 3: 1x1 rib knit course' },
+        { feed: 4, cylinder: 'T on odd, K on even', dial: 'K on odd, T on even', note: 'Course 4: cylinder tucks odd wales, dial tucks even wales' }
+      ],
+      needle_arrangement: {
+        butt_pattern: 'ABAB',
+        description: 'Alternating long (A) and short (B) butt needles on both cylinder and dial. Standard rib gating.'
+      }
+    },
+    appearance: 'Pronounced three-dimensional square cell pattern resembling a waffle. High warmth and absorption.'
+  },
+
+  {
+    id: 'cable_rib',
+    name: 'Cable Rib (Mock Cable)',
+    name_bn: 'ক্যাবল রিব',
+    category: 'rib',
+    base: 'rib_1x1',
+    machine_type: 'double_bed_circular',
+    gauge_range: { min: 10, max: 18 },
+    gsm_range: { min: 200, max: 400 },
+    count_formula: {
+      type: 'regression',
+      a: -0.095, b: 52.00,
+      source: 'ESTIMATED',
+      note: 'Mock cable effect created by selective tuck loops and needle grouping.'
+    },
+    ll_multiplier: 1.52,
+    ll_source: 'ESTIMATED — bulky mock-cable structure',
+    typical_gauge: 14,
+    structure: {
+      type: 'weft_knit',
+      courses_per_repeat: 6,
+      wales_per_repeat: 6,
+      beds: ['cylinder', 'dial'],
+      pattern: {
+        C: [
+          ['K','K','K','M','M','M'],
+          ['K','K','K','M','M','M'],
+          ['T','T','T','M','M','M'],
+          ['K','K','K','M','M','M'],
+          ['K','K','K','M','M','M'],
+          ['T','T','T','M','M','M']
+        ],
+        D: [
+          ['M','M','M','K','K','K'],
+          ['M','M','M','K','K','K'],
+          ['M','M','M','T','T','T'],
+          ['M','M','M','K','K','K'],
+          ['M','M','M','K','K','K'],
+          ['M','M','M','T','T','T']
+        ]
+      },
+      cam: [
+        { feed: 1, cylinder: 'K', dial: 'M', note: 'Courses 1-2: Knit on cylinder panel' },
+        { feed: 3, cylinder: 'T', dial: 'M', note: 'Course 3: Tuck on cylinder to accumulate yarn and raise design' },
+        { feed: 4, cylinder: 'M', dial: 'K', note: 'Courses 4-5: Knit on dial panel' },
+        { feed: 6, cylinder: 'M', dial: 'T', note: 'Course 6: Tuck on dial to raise panel' }
+      ],
+      needle_arrangement: {
+        butt_pattern: 'AAABBB',
+        description: 'Blocks of 3 active cylinder needles and 3 active dial needles. Cylinder A needles correspond to dial B slots.'
+      }
+    },
+    appearance: 'Bulky mock cable patterns on technical face with a ribbed reverse. Heavyweight.'
+  },
+
+  {
+    id: 'moss_stitch',
+    name: 'Moss Stitch',
+    name_bn: 'মস স্টিচ',
+    category: 'single_jersey',
+    base: 'single_jersey',
+    machine_type: 'single_bed_circular',
+    gauge_range: { min: 16, max: 28 },
+    gsm_range: { min: 150, max: 280 },
+    count_formula: {
+      type: 'regression',
+      a: -0.138, b: 54.00,
+      source: 'ESTIMATED',
+      note: 'Grainy texture formed by alternating knit and tuck loops.'
+    },
+    ll_multiplier: 1.12,
+    ll_source: 'ESTIMATED — tuck loops increase average loop length',
+    typical_gauge: 22,
+    structure: {
+      type: 'weft_knit',
+      courses_per_repeat: 4,
+      wales_per_repeat: 2,
+      beds: ['cylinder'],
+      pattern: [
+        ['K','T'],
+        ['T','K'],
+        ['K','T'],
+        ['T','K']
+      ],
+      cam: [
+        { feed: 1, cylinder: 'K on odd, T on even', note: 'Feed 1: odd needle knits, even needle tucks' },
+        { feed: 2, cylinder: 'T on odd, K on even', note: 'Feed 2: odd needle tucks, even needle knits' },
+        { feed: 3, cylinder: 'K on odd, T on even', note: 'Feed 3: same as feed 1' },
+        { feed: 4, cylinder: 'T on odd, K on even', note: 'Feed 4: same as feed 2' }
+      ],
+      needle_arrangement: {
+        butt_pattern: 'ABAB',
+        description: 'Alternating long-butt (A) and short-butt (B) cylinder needles. Controlled by independent knit/tuck cam tracks.'
+      }
+    },
+    appearance: 'Granular, seed-like, textured surface. Stable and less prone to curling than plain single jersey.'
   }
 ];
 
@@ -1830,6 +2323,17 @@ const LL_MULTIPLIERS_COMPLETE = {
   poplin_double:     { m: 1.55, gauge_ref: 20, source: 'ESTIMATED' },
   blister_single:    { m: 1.65, gauge_ref: 24, source: 'ESTIMATED' },
   relief_single:     { m: 1.60, gauge_ref: 18, source: 'ESTIMATED' },
+  rib_2x1:           { m: 1.43, gauge_ref: 18, source: 'ESTIMATED' },
+  rib_3x3:           { m: 1.48, gauge_ref: 16, source: 'ESTIMATED' },
+  rib_3x2:           { m: 1.46, gauge_ref: 16, source: 'ESTIMATED' },
+  rib_4x1:           { m: 1.42, gauge_ref: 18, source: 'ESTIMATED' },
+  lycra_rib_2x2:     { m: 1.45, gauge_ref: 18, source: 'ESTIMATED' },
+  pointelle_eyelet:  { m: 0.96, gauge_ref: 24, source: 'ESTIMATED' },
+  pointelle_chevron: { m: 0.98, gauge_ref: 24, source: 'ESTIMATED' },
+  pointelle_diagonal:{ m: 0.95, gauge_ref: 24, source: 'ESTIMATED' },
+  waffle_knit:       { m: 1.50, gauge_ref: 16, source: 'ESTIMATED' },
+  cable_rib:         { m: 1.52, gauge_ref: 14, source: 'ESTIMATED' },
+  moss_stitch:       { m: 1.12, gauge_ref: 22, source: 'ESTIMATED' },
 };
 
 // ============================================================
@@ -1870,6 +2374,16 @@ const GSM_COUNT_REGRESSION_COMPLETE = {
   blister_single:  { a: -0.150, b: 64.00, source: 'ESTIMATED',      gsm_range: [200,360] },
   relief_single:   { a: -0.130, b: 60.00, source: 'ESTIMATED',      gsm_range: [220,400] },
   heavy_jersey:    { a: -0.0889, b: 37.11, source: 'LOOKUP_DERIVED', gsm_range: [260,350] },
+  rib_2x1:         { a: -0.115, b: 53.00, source: 'ESTIMATED',      gsm_range: [140,300] },
+  rib_3x3:         { a: -0.110, b: 56.00, source: 'ESTIMATED',      gsm_range: [160,320] },
+  rib_3x2:         { a: -0.110, b: 55.00, source: 'ESTIMATED',      gsm_range: [150,310] },
+  rib_4x1:         { a: -0.115, b: 54.00, source: 'ESTIMATED',      gsm_range: [140,300] },
+  pointelle_eyelet:{ a: -0.130, b: 48.00, source: 'ESTIMATED',      gsm_range: [80,180] },
+  pointelle_chevron:{a: -0.130, b: 49.00, source: 'ESTIMATED',      gsm_range: [90,200] },
+  pointelle_diagonal:{a: -0.135, b: 47.50, source: 'ESTIMATED',     gsm_range: [80,170] },
+  waffle_knit:     { a: -0.105, b: 54.00, source: 'ESTIMATED',      gsm_range: [180,350] },
+  cable_rib:       { a: -0.095, b: 52.00, source: 'ESTIMATED',      gsm_range: [200,400] },
+  moss_stitch:     { a: -0.138, b: 54.00, source: 'ESTIMATED',      gsm_range: [150,280] },
 };
 
 module.exports = {
