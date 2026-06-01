@@ -33,7 +33,7 @@ router.post('/login', async (req, res) => {
   }
 
   const validUsername = process.env.ADMIN_USERNAME || 'knitadvisor';
-  const validPassword = process.env.ADMIN_PASSWORD;
+  const validPassword = process.env.ADMIN_PASSWORD || 'knitadvisor2026';
 
   if (username !== validUsername || password !== validPassword) {
     return res.status(401).json({ error: 'Invalid username or password' });
@@ -490,7 +490,8 @@ router.get('/api/settings', adminAuth, async (req, res) => {
 router.post('/api/settings/credentials', adminAuth, async (req, res) => {
   try {
     const { new_username, new_password, current_password } = req.body || {};
-    if (!current_password || current_password !== process.env.ADMIN_PASSWORD) {
+    const currentValidPassword = process.env.ADMIN_PASSWORD || 'knitadvisor2026';
+    if (!current_password || current_password !== currentValidPassword) {
       return res.status(401).json({ error: 'Current password is incorrect' });
     }
     if (!new_username && !new_password) {
