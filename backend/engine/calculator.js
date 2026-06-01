@@ -58,6 +58,9 @@ const {
   calculateWarpKnitSpec,
 } = require('./warp-knit-formulas');
 
+const { getPattern: getEnginePattern } = require('./pattern-engine');
+const { analyzeCriticalPath } = require('./critical-path');
+
 // ============================================================
 // MAIN CALCULATE FUNCTION
 // ============================================================
@@ -362,6 +365,29 @@ function calculate(params) {
   });
   trace.push({ step: '6.2', action: 'costing', total_usd_per_kg: costResult.cost_breakdown_usd.total_per_kg });
 
+  // --- 6.3 Dynamic Pattern & Structural Adaptation ---
+  const patternResult = getEnginePattern(fabricDef.id, gsm, gauge, composition);
+  trace.push({ step: '6.3', action: 'generate_pattern', result: patternResult ? 'SUCCESS' : 'FAILED' });
+
+  // --- 6.4 Production Critical Path Analysis (CPA) ---
+  const cpaResult = analyzeCriticalPath({
+    fabricId: fabricDef.id,
+    category: fabricDef.category,
+    gsm,
+    countNe: countResult.count_ne,
+    loopLengthMm: llResult ? llResult.ll_mm : null,
+    dia,
+    gauge,
+    feeders: feeders || machineResult.feeders_theoretical,
+    rpm,
+    composition,
+    yarnType: countResult.count_display,
+  });
+  if (cpaResult && cpaResult.warnings && cpaResult.warnings.length) {
+    warnings.push(...cpaResult.warnings);
+  }
+  trace.push({ step: '6.4', action: 'critical_path_analysis', warnings_count: cpaResult?.warnings?.length || 0 });
+
   // --- 7. Build response ---
   const response = {
     success: true,
@@ -524,6 +550,9 @@ function calculate(params) {
       machine_speed_reference: warpKnitSpec.calculations.machine_speed_reference,
       elastic_blend: warpKnitSpec.calculations.elastic_blend,
     } : null,
+
+    pattern: patternResult || null,
+    critical_path: cpaResult || null,
 
     warnings,
     formula_trace: trace,

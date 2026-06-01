@@ -216,6 +216,14 @@
     .main-content {
       padding: 0 0 40px;
     }
+    .info-box {
+      background: var(--bg3);
+      border: 1px solid var(--line2);
+      border-radius: var(--radius-sm);
+      padding: 8px 10px;
+      color: var(--t2);
+      margin-top: 8px;
+    }
   </style>
 </head>
 <body>
@@ -340,6 +348,78 @@
       <div class="result-section-label" style="margin-top:12px; color:var(--a4);">Expert Factory Solutions</div>
       <ul id="expert-solutions" style="padding-left:16px; margin-top:8px; font-size:12px; color:var(--t2); line-height:1.6; display:flex; flex-direction:column; gap:4px;">
       </ul>
+    </div>
+
+    <!-- ===== PRODUCTION CRITICAL PATH ANALYSIS (CPA) ===== -->
+    <div class="result-section anim-in hidden" id="sec-cpa">
+      <div class="result-section-title">
+        <div class="rst-icon green">🧭</div>
+        <div class="rst-title-text" style="color:var(--a1);">Production Critical Path Analysis (CPA)</div>
+        <span class="badge badge-green" style="margin-left:auto;">Factory-Ready</span>
+      </div>
+      
+      <!-- Clearance Sub-section -->
+      <div class="result-section-label" style="color:var(--a2); margin-top:8px;">1. Yarn-to-Needle Slot Clearance</div>
+      <div class="result-row">
+        <span class="result-key">Yarn Dia vs. Slot Width</span>
+        <span class="result-val white" id="cpa-clearance-space">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Collision Index</span>
+        <span class="result-val" id="cpa-collision-idx">—</span>
+      </div>
+      <div class="info-box text-xs" id="cpa-clearance-desc">—</div>
+
+      <!-- Spirality Sub-section -->
+      <div class="result-section-label" style="color:var(--a3); margin-top:12px;">2. Torque & Spirality Skewness</div>
+      <div class="result-row">
+        <span class="result-key">Estimated Skewness Angle</span>
+        <span class="result-val white" id="cpa-spirality-angle">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Spirality Risk Level</span>
+        <span class="result-val" id="cpa-spirality-risk">—</span>
+      </div>
+      <div class="info-box text-xs" id="cpa-spirality-desc">—</div>
+
+      <!-- Setup Sub-section -->
+      <div class="result-section-label" style="color:var(--a2); margin-top:12px;">3. Recommended Machine Setup</div>
+      <div class="result-row">
+        <span class="result-key">Recommended Cam Timing</span>
+        <span class="result-val white" id="cpa-cam-timing">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Gating Configuration</span>
+        <span class="result-val white" id="cpa-gating">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Sinker Setting</span>
+        <span class="result-val white" id="cpa-sinker">—</span>
+      </div>
+      <div class="info-box text-xs" id="cpa-timing-adv" style="margin-top: 8px;">—</div>
+
+      <!-- Take-down Sub-section -->
+      <div class="result-section-label" style="color:var(--a3); margin-top:12px;">4. Take-down Tension Requirements</div>
+      <div class="result-row">
+        <span class="result-key">Load per Needle</span>
+        <span class="result-val white" id="cpa-tension-needle">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Total Take-down Load</span>
+        <span class="result-val white" id="cpa-total-load">—</span>
+      </div>
+
+      <!-- Speed Sub-section -->
+      <div class="result-section-label" style="color:var(--a4); margin-top:12px;">5. Mechanical Speed Limit</div>
+      <div class="result-row">
+        <span class="result-key">Safe Running Speed Limit</span>
+        <span class="result-val white" id="cpa-max-rpm">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Mechanical Speed Status</span>
+        <span class="result-val" id="cpa-rpm-status">—</span>
+      </div>
+      <div class="info-box text-xs" id="cpa-rpm-desc">—</div>
     </div>
 
     <!-- ===== QUALITY & SHRINKAGE PREDICTION ===== -->
@@ -713,9 +793,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Render everything
     renderResult(result, params);
 
-    // Load pattern separately (non-blocking)
-    loadPattern(params.fabric);
-
   } catch (err) {
     showError('API Error', err.message || 'Could not connect to server. Is the backend running?');
   }
@@ -915,6 +992,12 @@ function renderResult(r, params) {
 
   // — Costing —
   renderCosting(r.costing);
+
+  // — Production Critical Path Analysis (CPA) —
+  renderCPA(r.critical_path);
+
+  // — Pattern —
+  renderPattern(r.pattern);
 
   // — Formula trace —
   renderTrace(r.formula_trace || []);
@@ -1345,13 +1428,107 @@ function renderProduction(prod, input) {
 /* ============================================================
    PATTERN RENDER
    ============================================================ */
-async function loadPattern(fabricId) {
+function renderPattern(pattern) {
   const container = document.getElementById('pattern-container');
-  try {
-    const pattern = await apiPattern(fabricId);
-    renderPatternGrid(container, pattern);
-  } catch (err) {
-    container.innerHTML = `<div class="text-dim text-sm">Pattern data unavailable (${err.message})</div>`;
+  if (!pattern) {
+    container.innerHTML = `<div class="text-dim text-sm">Pattern data unavailable</div>`;
+    return;
+  }
+  renderPatternGrid(container, pattern);
+}
+
+/* ============================================================
+   CRITICAL PATH ANALYSIS RENDER
+   ============================================================ */
+function renderCPA(cpa) {
+  const sec = document.getElementById('sec-cpa');
+  if (!cpa) {
+    sec.classList.add('hidden');
+    return;
+  }
+  sec.classList.remove('hidden');
+
+  // 1. Clearance
+  const clearance = cpa.clearance;
+  if (clearance && clearance.yarn_diameter_mm != null) {
+    document.getElementById('cpa-clearance-space').textContent = 
+      `${clearance.yarn_diameter_mm} mm vs ${clearance.slot_width_mm} mm (Slot Width)`;
+    
+    const colEl = document.getElementById('cpa-collision-idx');
+    colEl.textContent = `${clearance.collision_index}`;
+    if (clearance.status === 'SAFE') {
+      colEl.className = 'result-val green font-bold';
+    } else if (clearance.status === 'CRITICAL_TIGHT') {
+      colEl.className = 'result-val red font-bold';
+    } else {
+      colEl.className = 'result-val amber font-bold';
+    }
+    document.getElementById('cpa-clearance-desc').textContent = clearance.recommendation;
+  } else {
+    document.getElementById('cpa-clearance-space').textContent = '—';
+    document.getElementById('cpa-collision-idx').textContent = '—';
+    document.getElementById('cpa-clearance-desc').textContent = 'Clearance parameters not available. Enter GSM and Machine specs.';
+  }
+
+  // 2. Spirality
+  const spirality = cpa.spirality;
+  if (spirality && spirality.angle_degrees != null) {
+    document.getElementById('cpa-spirality-angle').textContent = `${spirality.angle_degrees}°`;
+    const riskEl = document.getElementById('cpa-spirality-risk');
+    riskEl.textContent = spirality.risk;
+    if (spirality.risk === 'LOW') {
+      riskEl.className = 'result-val green font-bold';
+    } else if (spirality.risk === 'HIGH') {
+      riskEl.className = 'result-val red font-bold';
+    } else {
+      riskEl.className = 'result-val amber font-bold';
+    }
+    document.getElementById('cpa-spirality-desc').textContent = spirality.mitigation;
+  } else {
+    document.getElementById('cpa-spirality-angle').textContent = '—';
+    document.getElementById('cpa-spirality-risk').textContent = '—';
+    document.getElementById('cpa-spirality-desc').textContent = 'Spirality parameters not available.';
+  }
+
+  // 3. Setup
+  const setup = cpa.setup;
+  if (setup && setup.cam_timing) {
+    document.getElementById('cpa-cam-timing').textContent = setup.cam_timing;
+    document.getElementById('cpa-gating').textContent = setup.gating_type;
+    document.getElementById('cpa-sinker').textContent = setup.sinker_setting;
+    document.getElementById('cpa-timing-adv').textContent = setup.timing_advantage;
+  } else {
+    document.getElementById('cpa-cam-timing').textContent = '—';
+    document.getElementById('cpa-gating').textContent = '—';
+    document.getElementById('cpa-sinker').textContent = '—';
+    document.getElementById('cpa-timing-adv').textContent = 'Setup settings not available.';
+  }
+
+  // 4. Take-down
+  if (setup && setup.tension_g_per_needle != null) {
+    document.getElementById('cpa-tension-needle').textContent = `${setup.tension_g_per_needle} g/needle`;
+    document.getElementById('cpa-total-load').textContent = `${setup.total_load_kg} kg (for ${setup.active_needles.toLocaleString()} needles)`;
+  } else {
+    document.getElementById('cpa-tension-needle').textContent = '—';
+    document.getElementById('cpa-total-load').textContent = '—';
+  }
+
+  // 5. Speed
+  const speed = cpa.speed;
+  if (speed && speed.max_rpm != null) {
+    document.getElementById('cpa-max-rpm').textContent = `${speed.max_rpm} RPM`;
+    const statusEl = document.getElementById('cpa-rpm-status');
+    statusEl.textContent = speed.status === 'SAFE' ? 'SAFE ✓' : 'EXCEEDS SAFE LIMIT ✗';
+    if (speed.status === 'SAFE') {
+      statusEl.className = 'result-val green font-bold';
+    } else {
+      statusEl.className = 'result-val red font-bold';
+    }
+    document.getElementById('cpa-rpm-desc').textContent = speed.warning;
+  } else {
+    document.getElementById('cpa-max-rpm').textContent = '—';
+    document.getElementById('cpa-rpm-status').textContent = '—';
+    document.getElementById('cpa-rpm-desc').textContent = 'Speed ceiling parameters not available. Enter Dia and Gauge.';
   }
 }
 
@@ -1427,6 +1604,35 @@ Loop Length: ${llMm}
 Gauge Range: ${gaugeR}
 Dia Range: ${diaR}
 OSY: ${osy} oz/yd²`;
+
+  // CPA
+  const secCpa = document.getElementById('sec-cpa');
+  if (secCpa && !secCpa.classList.contains('hidden')) {
+    const clearanceSpace = document.getElementById('cpa-clearance-space').textContent;
+    const collisionIdx = document.getElementById('cpa-collision-idx').textContent;
+    const collisionDesc = document.getElementById('cpa-clearance-desc').textContent;
+    const spiralityAngle = document.getElementById('cpa-spirality-angle').textContent;
+    const spiralityRisk = document.getElementById('cpa-spirality-risk').textContent;
+    const spiralityDesc = document.getElementById('cpa-spirality-desc').textContent;
+    const camTiming = document.getElementById('cpa-cam-timing').textContent;
+    const gating = document.getElementById('cpa-gating').textContent;
+    const sinker = document.getElementById('cpa-sinker').textContent;
+    const tensionNeedle = document.getElementById('cpa-tension-needle').textContent;
+    const totalLoad = document.getElementById('cpa-total-load').textContent;
+    const maxRpm = document.getElementById('cpa-max-rpm').textContent;
+    const rpmStatus = document.getElementById('cpa-rpm-status').textContent;
+
+    text += `\n---\nKnitting Critical Path Analysis (CPA):
+Clearance: ${clearanceSpace} (Collision Index: ${collisionIdx})
+  Note: ${collisionDesc}
+Spirality: ${spiralityAngle} (Risk: ${spiralityRisk})
+  Note: ${spiralityDesc}
+Cam Timing: ${camTiming}
+Gating: ${gating}
+Sinker Setting: ${sinker}
+Take-down Tension: ${tensionNeedle} (Total Load: ${totalLoad})
+Speed Ceiling: ${maxRpm} (Status: ${rpmStatus})`;
+  }
 
   // Costing
   const secCosting = document.getElementById('sec-costing');
