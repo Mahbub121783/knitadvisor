@@ -10,10 +10,10 @@ let pool = null;
 function getPool() {
   if (!pool) {
     const config = {
-      host: process.env.DB_HOST || 'localhost',
-      user: process.env.DB_USER || 'root',
-      password: process.env.DB_PASS || '',
-      database: process.env.DB_NAME || 'knitadvisor_db',
+      host: process.env.DB_HOST || '38.46.220.25',
+      user: process.env.DB_USER || 'tecnedub_knitadvisor',
+      password: process.env.DB_PASS || 'M@hbubu5',
+      database: process.env.DB_NAME || 'tecnedub_knitadvisor',
       port: parseInt(process.env.DB_PORT) || 3306,
       waitForConnections: true,
       connectionLimit: 10,
