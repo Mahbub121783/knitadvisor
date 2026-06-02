@@ -40,7 +40,7 @@ async function adminAuth(req, res, next) {
     await ensureSessionsTable();
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     const rows = await dbQuery(
-      'SELECT id FROM admin_sessions WHERE token_hash = ? AND expires_at > NOW() AND is_active = 1',
+      'SELECT id FROM admin_sessions WHERE token_hash = ? AND expires_at > NOW()',
       [tokenHash]
     );
     if (rows.length > 0) {
