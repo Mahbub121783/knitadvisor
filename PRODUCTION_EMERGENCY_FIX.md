@@ -7,20 +7,57 @@ Admin panel login is failing with "Login failed" error even with correct credent
 
 ---
 
-## Solution (Step by Step)
+## Solution — Two Options
 
-### Step 1: SSH to cPanel Server
+### **OPTION A: Via Web (No SSH Required) — EASIEST**
+
+This is the fastest way if you don't have SSH access!
+
+```bash
+# Step 1: Create the missing table via web endpoint
+curl -X POST https://knitadvisor.onlinetextileschool.com/emergency/create-admin-sessions
+
+# Expected response:
+# {
+#   "ok": true,
+#   "message": "admin_sessions table created successfully",
+#   "next_steps": [...]
+# }
+```
+
+Then **Restart Node.js in cPanel:**
+1. Go to cPanel → "Node.js Domains"
+2. Find your KnitAdvisor app
+3. Click **STOP** 
+4. Wait 3 seconds
+5. Click **START**
+
+Done! Login will work now.
+
+---
+
+### **OPTION B: Via SSH (If you have access)**
+
+#### Step 1: SSH to cPanel Server
+You need to find your cPanel username first. Usually it's in your hosting welcome email or you can ask your hosting provider.
+
 ```bash
 ssh your_cpanel_username@knitadvisor.onlinetextileschool.com
 ```
 
-### Step 2: Navigate to Backend
+If you don't know your username, try common ones:
+- `knitadvisor`
+- `knitad` (abbreviated)
+- Check your cPanel welcome email
+- Contact hosting provider
+
+#### Step 2: Navigate to Backend
 ```bash
 cd ~/public_html/backend
 # or wherever the app is deployed
 ```
 
-### Step 3: Create the Missing Table
+#### Step 3: Create the Missing Table
 ```bash
 node scripts/create-admin-sessions.js
 ```
@@ -35,7 +72,7 @@ Creating admin_sessions table...
 You can now log in to the admin panel.
 ```
 
-### Step 4: Restart Node.js Application
+#### Step 4: Restart Node.js Application
 This is **CRITICAL** — the running Node.js process needs to restart.
 
 **Option A: Via cPanel (Recommended)**
@@ -54,7 +91,7 @@ pkill -f "node server.js"
 nohup node server.js > /tmp/knitadvisor.log 2>&1 &
 ```
 
-### Step 5: Verify Login Works
+#### Step 5: Verify Login Works
 ```bash
 curl -X POST https://knitadvisor.onlinetextileschool.com/admin/login \
   -H "Content-Type: application/json" \
@@ -67,6 +104,35 @@ curl -X POST https://knitadvisor.onlinetextileschool.com/admin/login \
   "ok": true,
   "token": "a1b2c3d4e5f6... (long hex string)"
 }
+```
+
+---
+
+## Emergency Diagnostic Endpoints
+
+Before trying the fix, check your server status:
+
+```bash
+# Check if everything is ready
+curl https://knitadvisor.onlinetextileschool.com/emergency/auth-status
+
+# Expected response if system is broken:
+# {
+#   "admin_configured": true,
+#   "admin_username": "knitadvisor",
+#   "admin_sessions_table_exists": false,  ← THIS IS THE PROBLEM
+#   "status": "MISSING_TABLE"
+# }
+
+# Check database connection
+curl https://knitadvisor.onlinetextileschool.com/emergency/db-status
+
+# Expected response:
+# {
+#   "database": "connected",
+#   "tables_total": 25,
+#   "admin_sessions_exists": false
+# }
 ```
 
 ---
