@@ -321,7 +321,7 @@ function buildProviderCard(p) {
   const card = document.createElement('div');
   const healthy = p.is_healthy;
   const enabled = p.is_enabled;
-  const keyIsSet = !!p.key_is_set;
+  let keyIsSet = !!p.key_is_set;
   const isCooldown = p.cooldown_until && new Date(p.cooldown_until) > new Date();
 
   card.className = 'prov-card' + (healthy && enabled ? ' healthy' : !healthy && enabled ? ' unhealthy' : '') + (!enabled ? ' disabled' : '');
@@ -409,14 +409,18 @@ function buildProviderCard(p) {
           </div>
           <div class="key-new-row">
             <input type="password" class="key-input prov-apikey"
-              placeholder="Enter new ${p.api_key_env}…"
+              value="${keyIsSet ? '••••••••••••••••••••••••••••••' : ''}"
+              placeholder="${keyIsSet ? '••••••••••••••••••••••••••••••' : `Enter new ${p.api_key_env}…`}"
               autocomplete="new-password" spellcheck="false">
             <button class="key-toggle-btn prov-key-show" type="button">Show</button>
             <button class="btn btn-primary btn-sm prov-apikey-save">Save Key</button>
           </div>
+          <div class="prov-key-warning" style="margin-top:5px;font-size:10px;color:var(--a3);display:none;font-weight:600;">
+            ⚠ Warning: You are editing an existing API key. Typing and saving will overwrite it!
+          </div>
           <div class="prov-key-feedback" style="margin-top:8px;font-size:10px;min-height:14px;color:var(--t3);">
             Env var: <code style="color:var(--t2);background:var(--bg3);padding:1px 5px;border-radius:3px;">${p.api_key_env}</code>
-            — writes to .env + updates process.env immediately
+            — writes to secure database storage
           </div>
         </div>
       </div>
@@ -487,6 +491,32 @@ function buildProviderCard(p) {
   // Show/hide key
   const keyInput = card.querySelector('.prov-apikey');
   const showBtn  = card.querySelector('.prov-key-show');
+  const keyWarning = card.querySelector('.prov-key-warning');
+
+  // Input warnings for editing existing key
+  if (keyIsSet) {
+    keyInput.addEventListener('focus', () => {
+      if (keyInput.value === '••••••••••••••••••••••••••••••') {
+        keyInput.value = '';
+      }
+    });
+
+    keyInput.addEventListener('input', () => {
+      if (keyInput.value.trim() !== '' && keyInput.value !== '••••••••••••••••••••••••••••••') {
+        keyWarning.style.display = 'block';
+      } else {
+        keyWarning.style.display = 'none';
+      }
+    });
+
+    keyInput.addEventListener('blur', () => {
+      if (keyInput.value.trim() === '') {
+        keyInput.value = '••••••••••••••••••••••••••••••';
+        keyWarning.style.display = 'none';
+      }
+    });
+  }
+
   showBtn.addEventListener('click', () => {
     const visible = keyInput.type === 'text';
     keyInput.type = visible ? 'password' : 'text';
@@ -498,14 +528,28 @@ function buildProviderCard(p) {
   saveBtn.addEventListener('click', async () => {
     const key = keyInput.value.trim();
     if (!key) { toast('Enter an API key first', 'error'); return; }
+    if (key === '••••••••••••••••••••••••••••••') {
+      toast('API key is unchanged', 'info');
+      return;
+    }
+
+    if (keyIsSet) {
+      const confirmOverwrite = confirm(`Are you sure you want to overwrite the existing API key for ${p.provider_name.toUpperCase()}?`);
+      if (!confirmOverwrite) return;
+    }
+
     saveBtn.disabled = true; saveBtn.textContent = 'Saving…';
     const feedback = card.querySelector('.prov-key-feedback');
     try {
       await api(`/admin/api/providers/${p.id}/apikey`, 'POST', { key });
       toast(`${p.provider_name.toUpperCase()} API key saved successfully`, 'success');
-      keyInput.value = '';
+      
+      keyIsSet = true; // Mark as set now
+      keyInput.value = '••••••••••••••••••••••••••••••';
       keyInput.type = 'password';
       showBtn.textContent = 'Show';
+      keyWarning.style.display = 'none';
+
       // Update current key display
       const currentRow = card.querySelector('.key-current-row');
       currentRow.querySelector('.key-current-value').textContent = `${p.api_key_env} = ••••••••••••••••••••••••••••••`;
@@ -513,6 +557,26 @@ function buildProviderCard(p) {
       if (badge) { badge.className = 'key-set-badge'; badge.textContent = '● KEY SET'; }
       feedback.style.color = 'var(--a1)';
       feedback.innerHTML = '✓ Key saved — active immediately (no restart needed)';
+
+      // Wire focus/input listeners if it was not previously set
+      keyInput.addEventListener('focus', () => {
+        if (keyInput.value === '••••••••••••••••••••••••••••••') {
+          keyInput.value = '';
+        }
+      });
+      keyInput.addEventListener('input', () => {
+        if (keyInput.value.trim() !== '' && keyInput.value !== '••••••••••••••••••••••••••••••') {
+          keyWarning.style.display = 'block';
+        } else {
+          keyWarning.style.display = 'none';
+        }
+      });
+      keyInput.addEventListener('blur', () => {
+        if (keyInput.value.trim() === '') {
+          keyInput.value = '••••••••••••••••••••••••••••••';
+          keyWarning.style.display = 'none';
+        }
+      });
     } catch (e) {
       toast('Failed to save key: ' + e.message, 'error');
       feedback.style.color = 'var(--a3)';
