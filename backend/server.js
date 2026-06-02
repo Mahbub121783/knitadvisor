@@ -11,6 +11,7 @@ const path = require('path');
 
 const apiRoutes = require('./routes/api');
 const adminRoutes = require('./routes/admin');
+const emergencyRoutes = require('./routes/emergency');
 const rateLimiter = require('./middleware/rate-limiter');
 const { testConnection } = require('./config/database');
 
@@ -37,6 +38,9 @@ app.use('/api', apiRoutes);
 
 // Admin routes
 app.use('/admin', adminRoutes);
+
+// Emergency routes (for critical fixes when SSH unavailable)
+app.use('/emergency', emergencyRoutes);
 
 // Static frontend (served by Express in dev, Apache in production)
 app.use(express.static(path.join(__dirname, '..', 'frontend')));
