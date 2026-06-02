@@ -42,7 +42,9 @@
 // ============================================================
 const SHRINKAGE_BASE = {
   single_jersey: {
-    cotton:      { length: 7.0,  width: 3.0 },
+    // Greige relaxed base. Width raised 3→5.5 to match factory data: compacted
+    // S/J cotton shows W ≈ 4.4% (width relaxes more than the old model assumed).
+    cotton:      { length: 6.5,  width: 5.5 },
     cvc:         { length: 5.5,  width: 2.5 },
     pc:          { length: 4.0,  width: 2.0 },
     polyester:   { length: 2.5,  width: 1.5 },
@@ -155,18 +157,22 @@ const TWIST_SPIRALITY_COEFF = 4.0;   // %spirality per unit αe above neutral
 const DEFAULT_TWIST_ALPHA = 3.75;    // typical hosiery/knitting yarn
 
 // ============================================================
-// v2.0 — FINISHING ROUTE FACTOR  (primary residual-shrinkage lever)
-// Multiplier on the relaxation-theory base shrinkage. A compacted/sanforized
-// fabric is delivered already pre-relaxed → low residual shrinkage.
-// Source: Heap/Starfish relaxation DB; Quaynor et al. (1999); mill practice.
+// v2.1 — FINISHING ROUTE FACTOR  (DIRECTIONAL — length vs width vs spirality)
+// CALIBRATED to real factory finishing reports (129 rows, 30s S/J cotton).
+// Key finding: compacting/sanforizing pre-shrinks LENGTH heavily (residual
+// L ≈ 0–1%) but barely affects WIDTH (residual W ≈ 4–5%), and finishing also
+// controls spirality down to ~2%. A single scalar factor cannot capture this,
+// so each route carries separate length / width / spirality factors.
+// Factory targets (compacted 30s S/J cotton): L ≈ +0.4%, W ≈ −4.4%, spiral ≈ 2.3%.
+// Source: factory grey→finish report data + Heap/Starfish relaxation theory.
 // ============================================================
 const FINISHING_ROUTE = {
-  greige:          { factor: 1.00, label: 'Greige / unfinished (full relaxation pending)' },
-  tubular_relaxed: { factor: 0.72, label: 'Tubular relaxed / tumble-dried' },
-  compacted:       { factor: 0.48, label: 'Open-width compacted / sanforized' },
-  heat_set:        { factor: 0.30, label: 'Heat-set (synthetic-rich)' },
+  greige:          { length_factor: 1.00, width_factor: 1.00, spirality_factor: 1.00, label: 'Greige / unfinished (full relaxation pending)' },
+  tubular_relaxed: { length_factor: 0.70, width_factor: 0.85, spirality_factor: 0.60, label: 'Tubular relaxed / tumble-dried' },
+  compacted:       { length_factor: 0.10, width_factor: 0.80, spirality_factor: 0.31, label: 'Open-width compacted / sanforized' },
+  heat_set:        { length_factor: 0.12, width_factor: 0.45, spirality_factor: 0.20, label: 'Heat-set (synthetic-rich)' },
 };
-const DEFAULT_FINISHING_ROUTE = 'tubular_relaxed';
+const DEFAULT_FINISHING_ROUTE = 'compacted'; // most knit fabric is delivered compacted
 
 // ============================================================
 // v2.0 — MODEL CONFIDENCE BANDS (±, from source regression std. error)
@@ -343,7 +349,10 @@ function predictQuality(params) {
   const torqueFactor  = YARN_STRUCTURE_TORQUE[yarnStructure];
   const twistAlpha    = estimateTwistAlpha(params.twist_multiplier);
   const finishKey     = FINISHING_ROUTE[params.finishing_route] ? params.finishing_route : DEFAULT_FINISHING_ROUTE;
-  const routeFactor   = FINISHING_ROUTE[finishKey].factor;
+  const route         = FINISHING_ROUTE[finishKey];
+  const routeLenF     = route.length_factor;
+  const routeWidF     = route.width_factor;
+  const routeSpirF    = route.spirality_factor;
   // Optional lab calibration anchors (measured %): overrides prediction when given
   const calib = params.calibration || null;
 
@@ -380,9 +389,9 @@ function predictQuality(params) {
   const relaxedLength = base.length + slMod.length + tfMod.length + elastaneMod.length;
   const relaxedWidth  = base.width  + slMod.width  + tfMod.width  + elastaneMod.width;
 
-  // v2.0 — apply FINISHING ROUTE factor (the dominant residual-shrinkage lever)
-  let lengthShrink = relaxedLength * routeFactor;
-  let widthShrink  = relaxedWidth  * routeFactor;
+  // v2.1 — apply DIRECTIONAL finishing-route factors (length compacts more than width)
+  let lengthShrink = relaxedLength * routeLenF;
+  let widthShrink  = relaxedWidth  * routeWidF;
 
   // v2.0 — lab calibration override (anchor to a measured value if provided)
   if (calib && calib.shrinkage_length != null) lengthShrink = parseFloat(calib.shrinkage_length);
@@ -413,6 +422,10 @@ function predictQuality(params) {
 
   // Elastane recovery force counteracts residual twist
   spirality_raw -= elastane * 0.15;
+
+  // v2.1 — finishing controls residual spirality (compacting/heat-set reduce skew).
+  // Calibrated so compacted combed S/J cotton lands ~2.3% (factory data).
+  spirality_raw *= routeSpirF;
 
   // v2.0 — lab calibration override
   let spiralityFinal = parseFloat(Math.max(0, spirality_raw).toFixed(2));
@@ -455,7 +468,7 @@ function predictQuality(params) {
              yarn_structure: yarnStructure, twist_multiplier_alpha: twistAlpha, finishing_route: finishKey },
 
     model_meta: {
-      version: '2.0',
+      version: '2.1',
       method: 'Deterministic regression on dominant physical drivers (yarn torque, twist factor, relaxation reference state, finishing route).',
       accuracy_note: 'Predicted values carry the stated ± confidence band for standard ring-spun cotton knits. For an exact figure on a specific quality, anchor the model with one lab test via the calibration input.',
       test_standards: { shrinkage: 'AATCC 135 / ISO 6330 / AATCC 150', spirality: 'AATCC 179', pilling: 'ASTM D3512 / Martindale', bursting: 'ISO 13938-1 / ASTM D3786', wash_fastness: 'ISO 105-C06' },
@@ -470,23 +483,24 @@ function predictQuality(params) {
         length: [parseFloat(Math.max(0, finalLength - CONF_BAND.shrinkage_length).toFixed(1)), parseFloat((finalLength + CONF_BAND.shrinkage_length).toFixed(1))],
         width:  [parseFloat(Math.max(0, finalWidth  - CONF_BAND.shrinkage_width ).toFixed(1)), parseFloat((finalWidth  + CONF_BAND.shrinkage_width ).toFixed(1))],
       },
-      finishing_route: { key: finishKey, label: FINISHING_ROUTE[finishKey].label, factor: routeFactor },
+      finishing_route: { key: finishKey, label: route.label, length_factor: routeLenF, width_factor: routeWidF, spirality_factor: routeSpirF },
       breakdown: {
         relaxed_base: { length: parseFloat(relaxedLength.toFixed(2)), width: parseFloat(relaxedWidth.toFixed(2)) },
         base:         { length: base.length,     width: base.width },
         sl_modifier:  { length: slMod.length,    width: slMod.width },
         tf_modifier:  { length: tfMod.length,    width: tfMod.width },
         elastane_mod: { length: elastaneMod.length, width: elastaneMod.width },
-        route_factor: routeFactor,
+        route_length_factor: routeLenF,
+        route_width_factor:  routeWidF,
       },
       formula_trace: {
-        length: `[${base.length} base + ${slMod.length} SL + ${tfMod.length} TF + ${elastaneMod.length} elastane] × ${routeFactor} (${finishKey}) = ${finalLength}%`,
-        width:  `[${base.width} base + ${slMod.width} SL + ${tfMod.width} TF + ${elastaneMod.width} elastane] × ${routeFactor} (${finishKey}) = ${finalWidth}%`,
+        length: `[${base.length} base + ${slMod.length} SL + ${tfMod.length} TF + ${elastaneMod.length} elastane] × ${routeLenF} (${finishKey} length) = ${finalLength}%`,
+        width:  `[${base.width} base + ${slMod.width} SL + ${tfMod.width} TF + ${elastaneMod.width} elastane] × ${routeWidF} (${finishKey} width) = ${finalWidth}%`,
       },
       calibrated: !!(calib && (calib.shrinkage_length != null || calib.shrinkage_width != null)),
       test_standard: 'AATCC 135 / ISO 6330 (home laundering), AATCC 150 (garment)',
-      reference_note: 'Based on Munden relaxation-reference theory (K-values). Residual shrinkage = distance from delivered state to fully-relaxed reference, scaled by the finishing route.',
-      source: 'Munden (1959) reference state; Hossain et al. (2021) IJFTR; Heap/Starfish relaxation DB',
+      reference_note: 'Directional finishing-route model: compacting pre-shrinks LENGTH heavily but barely affects WIDTH. Calibrated to a real factory grey→finish report (129 rows, 30s S/J cotton: L≈0.4%, W≈4.4%).',
+      source: 'Factory finishing-report data (30s S/J, 2026) + Munden (1959) reference state; Heap/Starfish relaxation DB',
     },
 
     spirality: {

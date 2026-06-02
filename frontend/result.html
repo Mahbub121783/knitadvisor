@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20260602g">
+  <link rel="stylesheet" href="css/style.css?v=20260602h">
 
   <style>
     /* Result page specific */
@@ -1514,7 +1514,7 @@ function renderQuality(q) {
   const frEl = document.getElementById('quality-finish-route');
   const fr = q.shrinkage?.finishing_route;
   if (fr) {
-    frEl.textContent = `${fr.label} (×${fr.factor})`;
+    frEl.textContent = fr.length_factor != null ? `${fr.label} (L×${fr.length_factor} · W×${fr.width_factor})` : `${fr.label}`;
     document.getElementById('row-finish-route').style.display = '';
   } else {
     document.getElementById('row-finish-route').style.display = 'none';
@@ -1809,8 +1809,16 @@ function renderOptimalMachine(o) {
     tEl.textContent = '—';
   }
 
-  // Note: prefer dia note (contains width/economical detail), fall back to gauge note
-  document.getElementById('opt-note').textContent = (d.note || '') + (g.note ? '  •  ' + g.note : '');
+  // Finished width prediction (grey width − width shrinkage) → specific, not a range
+  let noteText = (d.note || '') + (g.note ? '  •  ' + g.note : '');
+  if (o.finished_width) {
+    const fw = o.finished_width;
+    noteText += `  •  📏 Finished width: grey ${fw.grey_open_width_in}" − ${fw.width_shrinkage_pct}% → ~${fw.finished_open_width_in}" (${fw.finished_open_width_cm} cm) delivered.`;
+    document.getElementById('opt-width').textContent = `${d.open_width_in}" → ${fw.finished_open_width_in}"`;
+    const wl = document.querySelector('#opt-width').parentElement.querySelector('.ms-lbl');
+    if (wl) wl.textContent = 'Grey → Finished W';
+  }
+  document.getElementById('opt-note').textContent = noteText;
 }
 
 /* ============================================================

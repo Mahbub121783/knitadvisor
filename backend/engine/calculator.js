@@ -178,18 +178,26 @@ function calculate(params) {
   let llResult = null;
   if (fabricDef.category !== 'warp_knit') {
     if (factoryLookup && factoryLookup.sl) {
-      const sl_mm = factoryLookup.sl;
+      // Apply the combined composition × shade SL factor on top of the factory
+      // base SL so colour shade (dark = looser, light = tighter) changes the SL.
+      const slFactor = compModifiers.sl_factor || 1.0;
+      const baseSl = factoryLookup.sl;
+      const sl_mm = parseFloat((baseSl * slFactor).toFixed(3));
       const sl_cm = sl_mm / 10;
       llResult = {
-        ll_mm: parseFloat(sl_mm.toFixed(3)),
+        ll_mm: sl_mm,
         ll_cm: parseFloat(sl_cm.toFixed(5)),
         multiplier: fabricDef.ll_multiplier || 1.0,
         multiplier_source: 'FACTORY_R_D_RECORD',
+        base_sl_mm: baseSl,
+        sl_factor_applied: slFactor,
         trace: {
-          formula: `Factory R&D Record lookup (GSM=${gsm}, Count=${countResult.count_rounded})`,
+          formula: `Factory R&D base SL ${baseSl} mm × SL-factor ${slFactor} (composition+shade)`,
           result: `${sl_mm.toFixed(3)} mm (${sl_cm.toFixed(5)} cm)`,
-          note: 'Using verified factory R&D stitch length directly for maximum accuracy.',
-          composition_sl_factor: compModifiers.sl_factor || 1.0,
+          note: slFactor !== 1.0
+            ? `Factory base ${baseSl} mm adjusted by ${slFactor}× for composition/shade → ${sl_mm} mm.`
+            : 'Using verified factory R&D stitch length directly for maximum accuracy.',
+          composition_sl_factor: slFactor,
         }
       };
       trace.push({ step: 3, action: 'loop_length', ...llResult.trace });
@@ -407,6 +415,21 @@ function calculate(params) {
     qualityResult.warnings.forEach(w => warnings.push(w));
   }
   trace.push({ step: '6.1', action: 'quality_prediction', shrinkage: qualityResult.shrinkage, spirality: qualityResult.spirality });
+
+  // --- 6.1b Finished width prediction (grey open width × width shrinkage) ---
+  // Gives a specific FINISHED dia/width instead of a range, per factory request.
+  if (optimalMachine && optimalMachine.ok && optimalMachine.dia && optimalMachine.dia.open_width_in) {
+    const wShrink = qualityResult.shrinkage ? qualityResult.shrinkage.widthwise_pct : 0;
+    const greyW = optimalMachine.dia.open_width_in;
+    const finishedW = parseFloat((greyW * (1 - wShrink / 100)).toFixed(1));
+    optimalMachine.finished_width = {
+      grey_open_width_in: greyW,
+      width_shrinkage_pct: wShrink,
+      finished_open_width_in: finishedW,
+      finished_open_width_cm: parseFloat((finishedW * 2.54).toFixed(1)),
+      note: `Grey ${greyW}" open width − ${wShrink}% width shrinkage → ~${finishedW}" finished (deliver to buyer).`,
+    };
+  }
 
   // --- 6.2 Financial Costing ---
   // For warp knit: convert denier to Ne equivalent for costing (1 denier = 5315/denier Ne approx)
