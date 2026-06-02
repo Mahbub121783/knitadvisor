@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/style.css?v=20260602">
   <style>
     /* Page-specific styles */
     .hero {
@@ -432,7 +432,7 @@
         </div>
 
         <!-- Optional machine specs (collapsible) -->
-        <button class="collapsible-trigger" id="optional-trigger" onclick="toggleOptional(this)">
+        <button class="collapsible-trigger" id="optional-trigger" onclick="toggleOptional()">
           <span>⚙ Machine Specs <span class="badge badge-gray" style="margin-left:6px">OPTIONAL</span> — Add for production metrics</span>
           <span class="arrow">▼</span>
         </button>
@@ -797,12 +797,31 @@ function switchPath(path) {
 /* ============================================================
    OPTIONAL PANEL TOGGLE
    ============================================================ */
-function toggleOptional(triggerEl) {
-  const body = document.getElementById('optional-body');
-  const btn  = document.getElementById('optional-trigger');
-  const opening = !body.classList.contains('open');
-  body.classList.toggle('open', opening);
-  btn.classList.toggle('open', opening);
+function toggleOptional() {
+  const body  = document.getElementById('optional-body');
+  const btn   = document.getElementById('optional-trigger');
+  const inner = body.querySelector('.collapsible-inner');
+  const isOpen = btn.classList.contains('open');
+
+  if (isOpen) {
+    body.style.height = body.scrollHeight + 'px';
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => { body.style.height = '0px'; });
+    });
+    btn.classList.remove('open');
+  } else {
+    openOptional();
+  }
+}
+
+function openOptional() {
+  const body  = document.getElementById('optional-body');
+  const btn   = document.getElementById('optional-trigger');
+  if (btn.classList.contains('open')) return;
+  const inner = body.querySelector('.collapsible-inner');
+  const targetH = (inner ? inner.scrollHeight : 400) + 32;
+  body.style.height = targetH + 'px';
+  btn.classList.add('open');
 }
 
 /* ============================================================
@@ -960,8 +979,8 @@ async function doParse() {
     }
     
     // Optional params
-    if (parsed.dia) { document.getElementById('dia-input').value = parsed.dia; toggleOptional(document.getElementById('optional-trigger')); }
-    if (parsed.gauge) { document.getElementById('gauge-input').value = parsed.gauge; toggleOptional(document.getElementById('optional-trigger')); }
+    if (parsed.dia) { document.getElementById('dia-input').value = parsed.dia; openOptional(); }
+    if (parsed.gauge) { document.getElementById('gauge-input').value = parsed.gauge; openOptional(); }
     if (parsed.rpm) document.getElementById('rpm-input').value = parsed.rpm;
     
     onFabricChange();
