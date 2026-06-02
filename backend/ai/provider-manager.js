@@ -106,13 +106,19 @@ async function expireCooldown(provider) {
   }
 }
 
+// ── Check if provider has API key configured ─────────────────────────────────
+function hasApiKey(provider) {
+  const envVar = provider.api_key_env;
+  return envVar && process.env[envVar];
+}
+
 // ── Strategy: select ordered list of providers to try ────────────────────────
 function orderProviders(providers, strategy) {
   const eligible = providers.filter(p => isAvailable(p) && p.is_healthy);
 
   if (!eligible.length) {
-    // All unhealthy — return all enabled ones anyway (let them fail with real errors)
-    return providers.filter(p => p.is_enabled);
+    // All unhealthy — try only those with API keys configured
+    return providers.filter(p => p.is_enabled && hasApiKey(p));
   }
 
   if (strategy === 'round_robin') {
