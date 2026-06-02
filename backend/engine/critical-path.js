@@ -101,19 +101,19 @@ function analyzeCriticalPath(params) {
 
     if (spiralityAngle > 7.0) {
       spiralityRisk = 'HIGH';
-      spiralityMitigation = `Feeder pitch angle is high (${spiralityAngle}° skewness). Twist-balancing is CRITICAL. Plated cotton must alternate S-twist and Z-twist yarns on adjacent feeders, or use finishing compactors and twist-set heat setting.`;
-      warnings.push(`CPA: High fabric spirality risk (${spiralityAngle}° skewness). Twist-balancing required.`);
+      spiralityMitigation = `Feeder pitch angle is high (${spiralityAngle}° skewness). Control at TWO stages — (1) KNITTING: twist-balanced/low-twist yarn + alternate S- & Z-twist feeders (plating). (2) FINISHING MACHINERY: relax/soft-flow DYEING with adequate dwell to release knitting tension → STENTER with weft-straightener/anti-skew (bow & skew correction) + controlled overfeed to straighten the wale line → COMPACTOR (open-width or tubular) to set loop geometry and lock residual torque. NOTE: enzyme/bio-wash does NOT correct spirality — it only affects pilling and hand-feel.`;
+      warnings.push(`CPA: High fabric spirality risk (${spiralityAngle}° skewness). Stenter anti-skew + compacting + twist-balanced yarn required.`);
     } else if (spiralityAngle > 4.0) {
       spiralityRisk = 'MEDIUM';
-      spiralityMitigation = `Moderate spirality risk (${spiralityAngle}° skewness). Balanced take-up tension and standard wash relaxation finishing are recommended.`;
+      spiralityMitigation = `Moderate spirality risk (${spiralityAngle}° skewness). Correct on the FINISHING line: relax/soft-flow DYEING dwell, then STENTER anti-skew (weft-straightener) with controlled overfeed, then COMPACTOR to set the wale line. Balanced take-down tension at knitting helps. (Not a wash issue — it is a stenter/compactor setting.)`;
     } else {
       spiralityRisk = 'LOW';
-      spiralityMitigation = `Low spirality risk (${spiralityAngle}° skewness). Feeder angle is balanced. Fabric twist is naturally stable.`;
+      spiralityMitigation = `Low spirality risk (${spiralityAngle}° skewness). Feeder angle is balanced and yarn twist is stable. Standard stenter + compacting finishing holds the wale line straight; no special anti-skew correction needed.`;
     }
   } else if (!isSingleBed) {
     spiralityAngle = 0.0;
     spiralityRisk = 'LOW';
-    spiralityMitigation = 'Double-bed structures are balanced and have no spirality risk due to opposing loop loops locking the torque.';
+    spiralityMitigation = 'Double-bed structures are balanced — opposing loops on front and back beds lock the yarn torque, so there is no spirality. Standard stenter + compacting finishing is sufficient.';
   }
 
   // 3. Cam Timing & Robbing Indexes
