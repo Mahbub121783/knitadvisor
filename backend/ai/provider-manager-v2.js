@@ -561,6 +561,22 @@ async function testProvider(provider) {
     } catch (err) {
       console.error(`[Test Connection failed for ${provider.provider_name} model ${model.model_name}]`, err.message);
       lastError = err;
+
+      // Special case: 429 means the key is VALID, but free quota has been exhausted.
+      // We should treat this as a successful key validation!
+      if (err.response?.status === 429 || err.message?.includes('429')) {
+        await Promise.all([
+          dbQuery('UPDATE ai_provider_stats SET current_model_id = ?, model_name = ? WHERE id = ?', [model.id, model.model_name, provider.id]),
+          dbQuery('UPDATE ai_provider_models SET is_healthy = 1, cooldown_until = NULL WHERE id = ?', [model.id])
+        ]);
+        return {
+          rate_limited: true,
+          model_used: model.model_name,
+          provider_used: provider.provider_name,
+          message: 'API Key is VALID, but Google says: Quota Exhausted (429). Please wait or set up billing.'
+        };
+      }
+
       // Mark this specific model as unhealthy/cooldown in DB
       const cooldownUntil = new Date(Date.now() + 5 * 60 * 1000);
       await dbQuery(
