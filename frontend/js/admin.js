@@ -635,16 +635,27 @@ function buildProviderCard(p) {
     detailEl.style.display = 'none';
     try {
       const r = await api(`/admin/api/providers/${p.id}/test`, 'POST');
-      resultEl.className = 'prov-test-result ok';
-      resultEl.textContent = `OK · ${r.response_ms}ms`;
+      const isRateLimited = !!r.result?.rate_limited;
+      if (isRateLimited) {
+        resultEl.className = 'prov-test-result warn';
+        resultEl.textContent = `OK (Rate Limited) · 429`;
+      } else {
+        resultEl.className = 'prov-test-result ok';
+        resultEl.textContent = `OK · ${r.response_ms}ms`;
+      }
       resultEl.style.display = 'block';
+
       // Show parsed result detail
       const parsed = r.result?.parsed || r.result || {};
       detailEl.style.display = 'block';
-      detailEl.innerHTML = `<strong style="color:var(--a1);">Parse Result:</strong> ` +
-        Object.entries(parsed).filter(([k]) => !['message'].includes(k)).map(([k,v]) =>
-          `<span style="color:var(--t3);">${k}:</span> <span style="color:var(--t1);">${v}</span>`
-        ).join(' &nbsp;·&nbsp; ');
+      if (isRateLimited) {
+        detailEl.innerHTML = `<strong style="color:var(--a4);">Status Note:</strong> <span style="color:var(--t2);">${r.result?.message || 'API key validated but rate limited.'}</span>`;
+      } else {
+        detailEl.innerHTML = `<strong style="color:var(--a1);">Parse Result:</strong> ` +
+          Object.entries(parsed).filter(([k]) => !['message'].includes(k)).map(([k,v]) =>
+            `<span style="color:var(--t3);">${k}:</span> <span style="color:var(--t1);">${v}</span>`
+          ).join(' &nbsp;·&nbsp; ');
+      }
       // Update health dot in card header
       const hdot = card.querySelector('.hdot');
       hdot.className = 'hdot hdot-ok';
