@@ -32,14 +32,17 @@ router.post('/login', async (req, res) => {
     return res.status(400).json({ error: 'Username and password are required' });
   }
 
-  const validUsername = process.env.ADMIN_USERNAME || 'knitadvisor';
-  const validPassword = process.env.ADMIN_PASSWORD || 'knitadvisor2026';
-
-  if (username !== validUsername || password !== validPassword) {
-    return res.status(401).json({ error: 'Invalid username or password' });
-  }
-
   try {
+    const passHash = crypto.createHash('sha256').update(password).digest('hex');
+    const rows = await dbQuery(
+      'SELECT id FROM admin_users WHERE username = ? AND password_hash = ?',
+      [username, passHash]
+    );
+
+    if (rows.length === 0) {
+      return res.status(401).json({ error: 'Invalid username or password' });
+    }
+
     const { rawToken, tokenHash } = await generateToken();
     const ip = req.ip || req.connection.remoteAddress || 'unknown';
     const sessionResult = await createSession(tokenHash, ip);
@@ -491,43 +494,51 @@ router.get('/api/inquiries', adminAuth, async (req, res) => {
 // ============================================================
 
 router.get('/api/settings', adminAuth, async (req, res) => {
-  res.json({
-    username: process.env.ADMIN_USERNAME || 'knitadvisor',
-    yarn_prices_note: 'Yarn prices are defined in backend/engine/costing-engine.js SM_PRICE_MATRIX. Use POST /admin/api/settings/yarn-price to override a single entry in the DB overrides table (future feature).',
-  });
+  try {
+    const rows = await dbQuery('SELECT username FROM admin_users LIMIT 1');
+    const username = rows[0]?.username || 'knitadvisor';
+    res.json({
+      username,
+      yarn_prices_note: 'Yarn prices are defined in backend/engine/costing-engine.js SM_PRICE_MATRIX. Use POST /admin/api/settings/yarn-price to override a single entry in the DB overrides table (future feature).',
+    });
+  } catch (err) {
+    console.error('[Settings Get Error]', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 router.post('/api/settings/credentials', adminAuth, async (req, res) => {
   try {
     const { new_username, new_password, current_password } = req.body || {};
-    const currentValidPassword = process.env.ADMIN_PASSWORD || 'knitadvisor2026';
-    if (!current_password || current_password !== currentValidPassword) {
+    if (!current_password) {
+      return res.status(400).json({ error: 'Current password is required' });
+    }
+
+    // Fetch the first admin user from the database
+    const rows = await dbQuery('SELECT * FROM admin_users LIMIT 1');
+    if (!rows.length) {
+      return res.status(500).json({ error: 'No admin user found in database' });
+    }
+    const admin = rows[0];
+
+    const currentHash = crypto.createHash('sha256').update(current_password).digest('hex');
+    if (currentHash !== admin.password_hash) {
       return res.status(401).json({ error: 'Current password is incorrect' });
     }
+
     if (!new_username && !new_password) {
       return res.status(400).json({ error: 'Provide new_username or new_password' });
     }
-    const fs = require('fs');
-    const envPath = path.join(__dirname, '..', '.env');
-    let envContent = fs.readFileSync(envPath, 'utf8');
+
     if (new_username) {
-      if (/^ADMIN_USERNAME=/m.test(envContent)) {
-        envContent = envContent.replace(/^ADMIN_USERNAME=.*/m, `ADMIN_USERNAME=${new_username}`);
-      } else {
-        envContent += `\nADMIN_USERNAME=${new_username}`;
-      }
-      process.env.ADMIN_USERNAME = new_username;
+      await dbQuery('UPDATE admin_users SET username = ? WHERE id = ?', [new_username, admin.id]);
     }
     if (new_password) {
-      if (/^ADMIN_PASSWORD=/m.test(envContent)) {
-        envContent = envContent.replace(/^ADMIN_PASSWORD=.*/m, `ADMIN_PASSWORD=${new_password}`);
-      } else {
-        envContent += `\nADMIN_PASSWORD=${new_password}`;
-      }
-      process.env.ADMIN_PASSWORD = new_password;
+      const newHash = crypto.createHash('sha256').update(new_password).digest('hex');
+      await dbQuery('UPDATE admin_users SET password_hash = ? WHERE id = ?', [newHash, admin.id]);
     }
-    fs.writeFileSync(envPath, envContent);
-    res.json({ ok: true, message: 'Credentials updated. Changes take effect immediately (in-memory update done).' });
+
+    res.json({ ok: true, message: 'Credentials updated successfully in the database.' });
   } catch (err) {
     console.error('[Settings Credentials Error]', err);
     res.status(500).json({ error: err.message });

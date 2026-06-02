@@ -48,6 +48,39 @@ async function query(sql, params = []) {
   }
 }
 
+async function initAdminDatabase() {
+  try {
+    // 1. Create table admin_users if not exists
+    await query(`
+      CREATE TABLE IF NOT EXISTS admin_users (
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        username VARCHAR(50) NOT NULL UNIQUE,
+        password_hash VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB;
+    `);
+    console.log('[DB] Table admin_users checked/created');
+
+    // 2. Check if there are any admins in the table
+    const rows = await query('SELECT COUNT(*) as count FROM admin_users');
+    if (rows[0].count === 0) {
+      // Seed default admin: username=knitadvisor, password=knitadvisor2026
+      const crypto = require('crypto');
+      const defaultUser = 'knitadvisor';
+      const defaultPassHash = crypto.createHash('sha256').update('knitadvisor2026').digest('hex');
+      
+      await query(
+        'INSERT INTO admin_users (username, password_hash) VALUES (?, ?)',
+        [defaultUser, defaultPassHash]
+      );
+      console.log('[DB] Default admin user seeded successfully');
+    }
+  } catch (err) {
+    console.error('[DB] Failed to initialize admin database:', err.message);
+  }
+}
+
 async function testConnection() {
   try {
     const p = getPool();
@@ -61,4 +94,4 @@ async function testConnection() {
   }
 }
 
-module.exports = { getPool, query, testConnection };
+module.exports = { getPool, query, testConnection, initAdminDatabase };
