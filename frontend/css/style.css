@@ -524,7 +524,7 @@ img { max-width: 100%; }
 }
 
 /* ============================================================
-   COLLAPSIBLE PANEL
+   COLLAPSIBLE PANEL — JS-height driven (no max-height transition)
    ============================================================ */
 .collapsible-trigger {
   display: flex;
@@ -534,35 +534,38 @@ img { max-width: 100%; }
   background: var(--bg3);
   border: 1px solid var(--line2);
   border-radius: 8px;
-  padding: 10px 14px;
-  margin-top: 8px;
+  padding: 12px 16px;
+  margin-top: 10px;
   font-family: var(--mono);
   font-size: 12px;
   color: var(--t2);
   cursor: pointer;
   transition: color var(--t-fast), border-color var(--t-fast), background var(--t-fast);
   text-align: left;
+  box-sizing: border-box;
 }
-.collapsible-trigger:hover { color: var(--t1); border-color: rgba(0,255,178,.3); background: rgba(0,255,178,.04); }
-.collapsible-trigger.open  { color: var(--t1); border-color: rgba(0,255,178,.25); border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.collapsible-trigger:hover { color: var(--t1); border-color: rgba(0,255,178,.4); background: rgba(0,255,178,.05); }
+.collapsible-trigger.open  { color: var(--t1); border-color: rgba(0,255,178,.3); background: rgba(0,255,178,.04); border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
 .collapsible-trigger .arrow {
-  font-size: 10px;
-  transition: transform var(--t-mid);
+  font-size: 11px;
+  transition: transform 200ms ease;
   flex-shrink: 0;
   margin-left: 8px;
 }
 .collapsible-trigger.open .arrow { transform: rotate(180deg); }
+
+/* Body: height controlled by JS inline style — no CSS height/max-height here */
 .collapsible-body {
   overflow: hidden;
-  max-height: 0;
-  transition: max-height 400ms ease;
+  height: 0;
+  transition: height 300ms ease;
   border: 1px solid var(--line2);
   border-top: none;
   border-bottom-left-radius: 8px;
   border-bottom-right-radius: 8px;
+  box-sizing: border-box;
 }
-.collapsible-body.open { max-height: 2400px; }
-.collapsible-inner { padding: 14px; }
+.collapsible-inner { padding: 16px; }
 
 /* ============================================================
    FORMULA TRACE
