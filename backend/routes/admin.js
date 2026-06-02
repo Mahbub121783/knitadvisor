@@ -11,7 +11,7 @@ const path = require('path');
 const router = express.Router();
 
 const { adminAuth, generateToken, createSession, deleteSession } = require('../middleware/admin-auth');
-const providerManager = require('../ai/provider-manager');
+const providerManager = require('../ai/provider-manager-v2');
 const memCache = require('../cache/memory-cache');
 const dbCache = require('../cache/db-cache');
 const { query: dbQuery } = require('../config/database');
