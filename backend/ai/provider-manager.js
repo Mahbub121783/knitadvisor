@@ -7,7 +7,7 @@ const Groq = require('groq-sdk');
 const axios = require('axios');
 const { query: dbQuery } = require('../config/database');
 
-// ── System Prompt ─────────────────────────────────────────────────────────────
+// System prompt shared across all providers (from groq-parser.js)
 const SYSTEM_PROMPT = `You are an expert knitting assistant for KnitAdvisor.
 Your task is to parse a user's natural language request (in Bengali, English, or Banglish) and extract the required parameters for fabric calculation.
 
