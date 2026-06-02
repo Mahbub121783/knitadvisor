@@ -62,6 +62,7 @@ const { getPattern: getEnginePattern } = require('./pattern-engine');
 const { analyzeCriticalPath } = require('./critical-path');
 const { recommendMachine } = require('./machine-optimizer');
 const { analyzeYarn, recommendYarnGrade } = require('./yarn-engine');
+const { matchFactory, recommendCountFromGSM } = require('./factory-match');
 
 // ============================================================
 // MAIN CALCULATE FUNCTION
@@ -431,6 +432,32 @@ function calculate(params) {
     };
   }
 
+  // --- 6.1c Factory R&D data match (real greige→finish records) ---
+  let factoryMatch = null;
+  if (fabricDef.category !== 'warp_knit' && countResult.count_ne) {
+    // Map composition → fibre class used by the dataset.
+    const fib = parsedComp ? (parsedComp.fibers || {}) : { cotton: 100 };
+    let compClass = 'cotton';
+    if ((fib.polyester || 0) > 50) compClass = 'pc';
+    else if ((fib.polyester || 0) >= 20) compClass = 'cvc';
+    else if ((fib.modal || 0) >= 30) compClass = 'modal';
+    else if ((fib.viscose || 0) >= 50) compClass = 'viscose';
+    const seg = colorResult ? colorResult.shade : 'medium';
+    factoryMatch = matchFactory({
+      fabric: fabricDef.id,
+      count_ne: countResult.count_ne,
+      gsm,
+      gauge: gauge || (optimalMachine && optimalMachine.ok ? optimalMachine.optimal_gauge : null),
+      dia,
+      color_segment: seg,
+      comp: compClass,
+    });
+    if (factoryMatch && factoryMatch.ok) {
+      factoryMatch.count_recommendation = recommendCountFromGSM(fabricDef.id, gsm, compClass);
+      trace.push({ step: '6.1c', action: 'factory_match', result: `SL ${factoryMatch.prediction.stitch_length_mm}mm · finish ${factoryMatch.prediction.finished_gsm} GSM · ${factoryMatch.confidence} (${factoryMatch.confidence_pct}%)` });
+    }
+  }
+
   // --- 6.2 Financial Costing ---
   // For warp knit: convert denier to Ne equivalent for costing (1 denier = 5315/denier Ne approx)
   let costCountNe = countResult.count_ne;
@@ -634,6 +661,9 @@ function calculate(params) {
       finishing_recommendations: qualityResult.finishing_recommendations,
       model_meta:           qualityResult.model_meta,
     } : null,
+
+    // Real factory R&D data match (greige→finish records)
+    factory_prediction: (factoryMatch && factoryMatch.ok) ? factoryMatch : null,
 
     costing: costResult ? {
       raw_material_per_kg_usd:  costResult.cost_breakdown_usd.raw_material.with_waste_per_kg,
