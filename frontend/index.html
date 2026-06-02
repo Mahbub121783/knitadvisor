@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20260602c">
+  <link rel="stylesheet" href="css/style.css?v=20260602d">
   <style>
     /* Page-specific styles */
     .hero {
@@ -474,23 +474,56 @@
               <strong>Target Width</strong> → system recommends the exact single optimal Dia. Leave blank for the standard economical machine.
             </div>
 
-            <!-- QUALITY PREDICTION INPUTS (shrinkage & spirality accuracy) -->
+            <!-- YARN SPECIFICATION (fiber grade + spinning system + form) -->
             <div style="grid-column: 1 / -1; border-top: 1px solid var(--line2); padding-top: 12px; margin-top: 12px;">
-              <div class="optional-label" style="margin-bottom: 8px;">Quality Prediction <span class="text-dim">(boosts shrinkage & spirality accuracy)</span></div>
+              <div class="optional-label" style="margin-bottom: 8px;">Yarn Specification <span class="text-dim">(grade, spinning system & form)</span></div>
               <div class="optional-grid">
                 <div class="form-group">
-                  <label class="form-label" for="yarn-type-input">Yarn Structure</label>
-                  <select id="yarn-type-input" class="form-select">
-                    <option value="">— auto (combed) —</option>
-                    <option value="single_carded">Single — Carded (most torque)</option>
-                    <option value="single_combed">Single — Combed</option>
-                    <option value="single_compact">Single — Compact</option>
-                    <option value="single_open_end">Single — Open-End (Rotor)</option>
-                    <option value="single_vortex">Vortex / Air-Jet (low torque)</option>
-                    <option value="ply_2">2-Ply (torque-balanced)</option>
-                    <option value="ply_2_compact">2-Ply Compact</option>
+                  <label class="form-label" for="fiber-grade-input">Fibre Grade</label>
+                  <select id="fiber-grade-input" class="form-select">
+                    <option value="">— auto (Combed Upland) —</option>
+                    <option value="supima">Supima / Pima (ELS, finest)</option>
+                    <option value="giza">Egyptian Giza (ELS)</option>
+                    <option value="combed_upland">Combed Upland (standard)</option>
+                    <option value="carded_upland">Carded Upland</option>
+                    <option value="bci">BCI Cotton</option>
+                    <option value="organic">Organic Cotton (GOTS)</option>
+                    <option value="cmia">Cotton made in Africa</option>
+                    <option value="recycled">Recycled Cotton</option>
                   </select>
                 </div>
+                <div class="form-group">
+                  <label class="form-label" for="spinning-input">Spinning System</label>
+                  <select id="spinning-input" class="form-select">
+                    <option value="">— auto (by count) —</option>
+                    <option value="compact">Compact (finest, strongest)</option>
+                    <option value="combed">Combed Ring</option>
+                    <option value="carded">Carded Ring</option>
+                    <option value="open_end">Open-End / Rotor</option>
+                    <option value="vortex">Air-Jet / Vortex (low spiral)</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="yarn-form-input">Yarn Form</label>
+                  <select id="yarn-form-input" class="form-select">
+                    <option value="">— Single —</option>
+                    <option value="ply2">2-Ply (torque-balanced)</option>
+                    <option value="slub">Slub / Fancy</option>
+                    <option value="core_spun">Core-Spun (lycra core)</option>
+                  </select>
+                </div>
+              </div>
+              <div class="info-box mt-12" style="font-size:10px; line-height:1.6;">
+                Quality hierarchy: <strong>Supima/Giza (ELS) › Combed › Carded › Open-End › Recycled</strong>.
+                The engine returns strength (RKM/CSP), evenness (U%), spinnability check & price index.
+                Spinning system also drives spirality. Sources: Klein, Uster Statistics 2018.
+              </div>
+            </div>
+
+            <!-- FINISHING & QUALITY INPUTS (shrinkage & spirality accuracy) -->
+            <div style="grid-column: 1 / -1; border-top: 1px solid var(--line2); padding-top: 12px; margin-top: 12px;">
+              <div class="optional-label" style="margin-bottom: 8px;">Finishing &amp; Quality <span class="text-dim">(boosts shrinkage accuracy)</span></div>
+              <div class="optional-grid">
                 <div class="form-group">
                   <label class="form-label" for="finishing-route-input">Finishing Route</label>
                   <select id="finishing-route-input" class="form-select">
@@ -507,9 +540,8 @@
                 </div>
               </div>
               <div class="info-box mt-12" style="font-size:10px; line-height:1.6;">
-                <strong>Yarn structure</strong> is the #1 driver of spirality — 2-ply/vortex barely spirals vs single carded.
                 <strong>Finishing route</strong> is the #1 driver of residual shrinkage — compacted ≈ half of greige.
-                Based on Primentas (2003) & Munden relaxation theory · tested per AATCC 179 / AATCC 135.
+                Based on Munden relaxation theory · tested per AATCC 135 / AATCC 179.
               </div>
             </div>
 
@@ -942,7 +974,9 @@ async function doCalculate() {
     stitch_length: parseFloat(document.getElementById('sl-input').value) || undefined,
     feeders: parseInt(document.getElementById('feeders-input').value) || undefined,
     target_width: parseFloat(document.getElementById('width-input').value) || undefined,
-    yarn_type: document.getElementById('yarn-type-input').value || undefined,
+    fiber_grade: document.getElementById('fiber-grade-input').value || undefined,
+    spinning_system: document.getElementById('spinning-input').value || undefined,
+    yarn_form: document.getElementById('yarn-form-input').value || undefined,
     finishing_route: document.getElementById('finishing-route-input').value || undefined,
     twist_multiplier: parseFloat(document.getElementById('twist-input').value) || undefined,
     // Warp knit parameters

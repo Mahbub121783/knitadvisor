@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20260602c">
+  <link rel="stylesheet" href="css/style.css?v=20260602d">
 
   <style>
     /* Result page specific */
@@ -552,6 +552,45 @@
       <div id="multi-yarn-section" class="hidden">
         <div class="result-section-label">Multi-yarn Breakdown</div>
         <div id="multi-yarn-rows"></div>
+      </div>
+
+      <!-- YARN EXPERTISE (grade, spinning system, strength, evenness) -->
+      <div id="yarn-expertise-block" class="hidden" style="margin-top:12px; border:1px solid rgba(0,255,178,.2); background:rgba(0,255,178,.03); border-radius:10px; padding:12px;">
+        <div class="result-section-label" style="margin-top:0; color:var(--a1);">Yarn Expertise Analysis</div>
+        <div class="result-row">
+          <span class="result-key">Fibre Grade</span>
+          <span class="result-val white" id="ye-grade">—</span>
+        </div>
+        <div class="result-row">
+          <span class="result-key">Spinning System</span>
+          <span class="result-val white" id="ye-system">—</span>
+        </div>
+        <div class="mini-stats" style="display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin:10px 0;">
+          <div class="mini-stat"><div class="ms-val" id="ye-rkm">—</div><div class="ms-lbl">Tenacity RKM</div></div>
+          <div class="mini-stat"><div class="ms-val" id="ye-csp">—</div><div class="ms-lbl">CSP (approx)</div></div>
+          <div class="mini-stat"><div class="ms-val" id="ye-upct">—</div><div class="ms-lbl">Evenness U%</div></div>
+          <div class="mini-stat"><div class="ms-val" id="ye-rank">—</div><div class="ms-lbl">Quality Rank</div></div>
+        </div>
+        <div class="result-row">
+          <span class="result-key">Yarn Diameter</span>
+          <span class="result-val" id="ye-dia">—</span>
+        </div>
+        <div class="result-row">
+          <span class="result-key">Price Index <span class="text-dim">(combed Upland = 1.0)</span></span>
+          <span class="result-val" id="ye-price">—</span>
+        </div>
+        <div class="result-row">
+          <span class="result-key">Spinnability</span>
+          <span class="result-val" id="ye-spinnable">—</span>
+        </div>
+        <!-- Slub (shown only for slub yarn) -->
+        <div class="result-row hidden" id="ye-slub-row">
+          <span class="result-key">Slub Effective Count</span>
+          <span class="result-val amber" id="ye-slub">—</span>
+        </div>
+        <!-- Recommendation (shown when current differs from ideal) -->
+        <div id="ye-recommend" class="mt-6 hidden" style="font-size:10px;color:var(--t2);line-height:1.6;padding:8px 10px;background:rgba(255,184,48,.06);border-radius:6px;border-left:2px solid var(--a4)"></div>
+        <div id="ye-note" class="mt-6" style="font-size:9.5px;color:var(--t3);line-height:1.6;"></div>
       </div>
 
       <!-- Loop length / Course length -->
@@ -1541,6 +1580,56 @@ function renderYarn(yarn) {
     }
     rows.innerHTML = html;
   }
+
+  // — Yarn Expertise —
+  renderYarnExpertise(yarn.expertise, yarn.recommendation);
+}
+
+function renderYarnExpertise(e, rec) {
+  const block = document.getElementById('yarn-expertise-block');
+  if (!e || !e.ok) { block.classList.add('hidden'); return; }
+  block.classList.remove('hidden');
+
+  document.getElementById('ye-grade').textContent  = e.fiber_grade?.label || '—';
+  document.getElementById('ye-system').textContent = e.spinning_system?.label || '—';
+
+  const p = e.properties || {};
+  document.getElementById('ye-rkm').textContent  = p.tenacity_rkm != null ? `${p.tenacity_rkm}` : '—';
+  document.getElementById('ye-csp').textContent  = p.csp != null ? p.csp.toLocaleString() : '—';
+  document.getElementById('ye-upct').textContent = p.evenness_u_pct != null ? `${p.evenness_u_pct}` : '—';
+  document.getElementById('ye-rank').textContent = e.quality_rank != null ? `#${e.quality_rank}` : '—';
+
+  document.getElementById('ye-dia').textContent = e.diameter_mm != null ? `${e.diameter_mm} mm` : '—';
+  document.getElementById('ye-price').textContent = e.price_index != null ? `× ${e.price_index}` : '—';
+
+  const spinEl = document.getElementById('ye-spinnable');
+  if (e.spinnable) {
+    spinEl.textContent = `✓ Spinnable (limit ${e.spinning_limit.min}–${e.spinning_limit.max}s)`;
+    spinEl.className = 'result-val green';
+  } else {
+    spinEl.textContent = `✗ Exceeds spinning limit (max ~${e.spinning_limit.max}s)`;
+    spinEl.className = 'result-val red font-bold';
+  }
+
+  // Slub
+  const slubRow = document.getElementById('ye-slub-row');
+  if (e.slub) {
+    slubRow.classList.remove('hidden');
+    document.getElementById('ye-slub').textContent = `base ${e.slub.base_ne}s → effective ${e.slub.resultant_ne}s (+${e.slub.extra_mass_pct}% mass)`;
+  } else {
+    slubRow.classList.add('hidden');
+  }
+
+  // Recommendation — show only if current grade/system differs from ideal
+  const recEl = document.getElementById('ye-recommend');
+  if (rec && (rec.recommended_grade !== e.fiber_grade?.key || rec.recommended_system !== e.spinning_system?.key)) {
+    recEl.classList.remove('hidden');
+    recEl.innerHTML = `<strong>💡 Recommended for this count:</strong> ${rec.grade_label} on ${rec.system_label}. ${rec.reason}`;
+  } else {
+    recEl.classList.add('hidden');
+  }
+
+  document.getElementById('ye-note').textContent = `${e.note || ''} · ${e.test_standards || ''}`;
 }
 
 /* ============================================================

@@ -61,6 +61,7 @@ const {
 const { getPattern: getEnginePattern } = require('./pattern-engine');
 const { analyzeCriticalPath } = require('./critical-path');
 const { recommendMachine } = require('./machine-optimizer');
+const { analyzeYarn, recommendYarnGrade } = require('./yarn-engine');
 
 // ============================================================
 // MAIN CALCULATE FUNCTION
@@ -73,6 +74,7 @@ function calculate(params) {
   // --- 1. Validate & normalize inputs ---
   const { fabric, gsm, dia, gauge, rpm, efficiency, stitch_length, feeders, composition, color_shade,
           target_width, yarn_type, twist_multiplier, finishing_route,
+          fiber_grade, spinning_system, yarn_form, slub_thickness, slub_length_cm, slub_spacing_cm,
           denier, filaments, elastane_denier, elastane_pct } = normalizeParams(params);
 
   if (!fabric) return { error: 'fabric is required', code: 'MISSING_FABRIC' };
@@ -149,6 +151,28 @@ function calculate(params) {
   // --- 2. Calculate yarn count (with composition modifiers) ---
   const countResult = calculateCount(fabric, gsm, fabricDef, compModifiers, factoryLookup, parsedComp, composition);
   trace.push({ step: 2, action: 'count', ...countResult.trace });
+
+  // --- 2.5. Yarn Expertise Engine (grade, spinning system, strength, evenness) ---
+  let yarnExpertise = null, yarnRecommendation = null;
+  if (countResult.count_ne && fabricDef.category !== 'warp_knit') {
+    yarnExpertise = analyzeYarn({
+      count_ne: countResult.count_ne,
+      fibers: parsedComp ? parsedComp.fibers : { cotton: 100 },
+      fiber_grade,
+      spinning_system,
+      yarn_form,
+      slub: { slub_thickness, slub_length_cm, slub_spacing_cm },
+    });
+    yarnRecommendation = recommendYarnGrade(countResult.count_ne, fabricDef.category);
+    trace.push({
+      step: '2.5',
+      action: 'yarn_expertise',
+      result: `${yarnExpertise.fiber_grade.label} · ${yarnExpertise.spinning_system.label} · RKM ${yarnExpertise.properties.tenacity_rkm} · U% ${yarnExpertise.properties.evenness_u_pct}`,
+    });
+    if (yarnExpertise.warnings && yarnExpertise.warnings.length) {
+      yarnExpertise.warnings.forEach(w => warnings.push(w));
+    }
+  }
 
   // --- 3. Calculate loop length (skip for warp knit, use course length instead) ---
   let llResult = null;
@@ -373,8 +397,9 @@ function calculate(params) {
     tightness_factor: tfResult ? tfResult.value : 14.0,
     count_ne: countResult.count_ne || 30,
     parsedComp,
-    // v2.0 dominant-driver inputs
-    yarn_type,
+    // v2.0 dominant-driver inputs — fall back to the yarn engine's detected
+    // spinning-system torque bucket when the user didn't explicitly pick one.
+    yarn_type: yarn_type || (yarnExpertise ? yarnExpertise.quality_engine_yarn_type : null),
     twist_multiplier,
     finishing_route,
   });
@@ -505,6 +530,9 @@ function calculate(params) {
       denier_input: denier || null,
       denier_estimated: (fabricDef.category === 'warp_knit' && warpKnitSpec) ? warpKnitSpec.denier_estimated : null,
       filaments_input: (fabricDef.category === 'warp_knit') ? (filaments || 34) : null,
+      // Yarn Expertise Engine output
+      expertise: yarnExpertise,
+      recommendation: yarnRecommendation,
     },
     
     yarn_consumption: consumptionResult || null,
@@ -624,6 +652,13 @@ function normalizeParams(p) {
     yarn_type: p.yarn_type ? String(p.yarn_type).trim() : null,
     twist_multiplier: p.twist_multiplier ? parseFloat(p.twist_multiplier) : null,
     finishing_route: p.finishing_route ? String(p.finishing_route).trim() : null,
+    // Yarn Expertise inputs (optional)
+    fiber_grade: p.fiber_grade ? String(p.fiber_grade).trim() : null,
+    spinning_system: p.spinning_system ? String(p.spinning_system).trim() : null,
+    yarn_form: p.yarn_form ? String(p.yarn_form).trim() : null,
+    slub_thickness: p.slub_thickness ? parseFloat(p.slub_thickness) : null,
+    slub_length_cm: p.slub_length_cm ? parseFloat(p.slub_length_cm) : null,
+    slub_spacing_cm: p.slub_spacing_cm ? parseFloat(p.slub_spacing_cm) : null,
     // Warp knit parameters
     denier: p.denier ? parseFloat(p.denier) : null,
     filaments: p.filaments ? parseInt(p.filaments) : 34,
