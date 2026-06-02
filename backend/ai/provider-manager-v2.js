@@ -64,7 +64,7 @@ const PROVIDER_DEFAULTS = {
 let rrCursor = 0;
 
 // ── AES-256 encryption/decryption for API keys ────────────────────────────────
-const ENCRYPTION_KEY = crypto.scryptSync(process.env.DB_PASS || 'knitadvisor-secret', 'salt', 32);
+const ENCRYPTION_KEY = crypto.scryptSync('knitadvisor-secret', 'salt', 32);
 
 function encryptApiKey(plaintext) {
   const iv = crypto.randomBytes(16);
@@ -92,8 +92,39 @@ async function getProviderKeys(providerId) {
   return dbQuery('SELECT id, api_key_encrypted, key_index, is_active, is_healthy, cooldown_until FROM ai_provider_keys WHERE provider_id = ? AND is_active = 1 ORDER BY key_index ASC', [providerId]);
 }
 
-async function getProviderModels(providerId) {
-  return dbQuery('SELECT id, model_name, is_active, is_healthy, avg_response_ms, cooldown_until FROM ai_provider_models WHERE provider_id = ? AND is_active = 1 ORDER BY is_healthy DESC, avg_response_ms ASC', [providerId]);
+async function getProviderModels(providerId, currentModelId) {
+  // Self-healing check: Ensure the model_name from ai_provider_stats exists in ai_provider_models
+  try {
+    const stats = await dbQuery('SELECT model_name FROM ai_provider_stats WHERE id = ?', [providerId]);
+    if (stats.length && stats[0].model_name) {
+      const mainModel = stats[0].model_name.trim();
+      if (mainModel) {
+        await dbQuery(
+          'INSERT IGNORE INTO ai_provider_models (provider_id, model_name, is_active, is_healthy) VALUES (?, ?, 1, 1)',
+          [providerId, mainModel]
+        );
+      }
+    }
+  } catch (err) {
+    console.error('[getProviderModels self-healing error]', err.message);
+  }
+
+  if (currentModelId) {
+    return dbQuery(
+      `SELECT id, model_name, is_active, is_healthy, avg_response_ms, cooldown_until 
+       FROM ai_provider_models 
+       WHERE provider_id = ? AND is_active = 1 
+       ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END ASC, is_healthy DESC, avg_response_ms ASC`,
+      [providerId, currentModelId]
+    );
+  }
+  return dbQuery(
+    `SELECT id, model_name, is_active, is_healthy, avg_response_ms, cooldown_until 
+     FROM ai_provider_models 
+     WHERE provider_id = ? AND is_active = 1 
+     ORDER BY is_healthy DESC, avg_response_ms ASC`,
+    [providerId]
+  );
 }
 
 async function getStrategy() {
@@ -185,8 +216,8 @@ async function parse(text) {
 
     // Try each API key for this provider
     for (const key of keys) {
-      // Get all models for this provider
-      const models = await getProviderModels(provider.id);
+      // Get all models for this provider (prioritizes current active model)
+      const models = await getProviderModels(provider.id, provider.current_model_id);
       if (!models.length) {
         console.error(`[Provider ${provider.provider_name}] No models configured`);
         continue;
@@ -509,14 +540,37 @@ async function testProvider(provider) {
   }
   const decryptedKey = decryptApiKey(keys[0].api_key_encrypted);
 
-  const models = await getProviderModels(provider.id);
+  const models = await getProviderModels(provider.id, provider.current_model_id);
   if (!models.length) {
     throw new Error('No models configured for this provider');
   }
-  const model = models[0];
 
-  const TEST_TEXT = 'single jersey 180 GSM 30 dia 24 gauge';
-  return callProvider(provider, model, decryptedKey, TEST_TEXT);
+  let lastError = null;
+  for (const model of models) {
+    try {
+      const TEST_TEXT = 'single jersey 180 GSM 30 dia 24 gauge';
+      const result = await callProvider(provider, model, decryptedKey, TEST_TEXT);
+
+      // Success! Update this provider's active model and set health
+      await Promise.all([
+        dbQuery('UPDATE ai_provider_stats SET current_model_id = ?, model_name = ? WHERE id = ?', [model.id, model.model_name, provider.id]),
+        dbQuery('UPDATE ai_provider_models SET is_healthy = 1, cooldown_until = NULL WHERE id = ?', [model.id])
+      ]);
+
+      return result;
+    } catch (err) {
+      console.error(`[Test Connection failed for ${provider.provider_name} model ${model.model_name}]`, err.message);
+      lastError = err;
+      // Mark this specific model as unhealthy/cooldown in DB
+      const cooldownUntil = new Date(Date.now() + 5 * 60 * 1000);
+      await dbQuery(
+        'UPDATE ai_provider_models SET is_healthy = 0, cooldown_until = ? WHERE id = ?',
+        [cooldownUntil, model.id]
+      );
+    }
+  }
+
+  throw new Error(lastError ? lastError.message : 'All models failed during connection test');
 }
 
 async function resetDailyStats() {
