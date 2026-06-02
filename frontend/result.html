@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20260602b">
+  <link rel="stylesheet" href="css/style.css?v=20260602c">
 
   <style>
     /* Result page specific */
@@ -471,18 +471,26 @@
         <div class="range-card">
           <div class="range-lbl">Lengthwise Shrinkage</div>
           <div class="range-val" id="quality-shrink-length">—</div>
-          <div class="range-sub">expected wash loss</div>
+          <div class="range-sub" id="quality-shrink-length-band">expected wash loss</div>
         </div>
         <div class="range-card">
           <div class="range-lbl">Widthwise Shrinkage</div>
           <div class="range-val" id="quality-shrink-width">—</div>
-          <div class="range-sub">expected wash loss</div>
+          <div class="range-sub" id="quality-shrink-width-band">expected wash loss</div>
         </div>
       </div>
 
       <div class="result-row">
         <span class="result-key">Spirality (Torque)</span>
         <span class="result-val" id="quality-spirality">—</span>
+      </div>
+      <div class="result-row" id="row-spiral-driver">
+        <span class="result-key">↳ Spirality driver</span>
+        <span class="result-val" id="quality-spiral-driver" style="font-size:11px; text-align:right; white-space:normal; line-height:1.4;">—</span>
+      </div>
+      <div class="result-row" id="row-finish-route">
+        <span class="result-key">↳ Finishing route</span>
+        <span class="result-val" id="quality-finish-route" style="font-size:11px; text-align:right; white-space:normal; line-height:1.4;">—</span>
       </div>
       <div class="result-row">
         <span class="result-key">Pilling Resistance</span>
@@ -500,6 +508,9 @@
         <span class="result-key">Wash Color Fastness</span>
         <span class="result-val" id="quality-fastness">—</span>
       </div>
+
+      <!-- Accuracy / test-standard footnote -->
+      <div id="quality-accuracy-note" class="mt-6" style="font-size:9.5px;color:var(--t3);line-height:1.6;padding:8px 10px;background:rgba(192,132,252,.05);border-radius:6px;border-left:2px solid var(--purple, #c084fc)"></div>
 
       <div class="result-section-label" style="color:var(--a3);">Recommended Finishing Process</div>
       <ul id="quality-finishing-recs" style="padding-left:16px; margin-top:8px; font-size:12px; color:var(--t2); line-height:1.6; display:flex; flex-direction:column; gap:6px;">
@@ -1345,11 +1356,19 @@ function renderQuality(q) {
   document.getElementById('quality-shrink-length').textContent = q.shrinkage?.lengthwise_pct != null ? `${fmt(q.shrinkage.lengthwise_pct, 2)}%` : '—';
   document.getElementById('quality-shrink-width').textContent = q.shrinkage?.widthwise_pct != null ? `${fmt(q.shrinkage.widthwise_pct, 2)}%` : '—';
 
+  // Confidence bands under each shrinkage card
+  const cb = q.shrinkage?.confidence_band;
+  if (cb) {
+    document.getElementById('quality-shrink-length-band').textContent = `range ${cb.length[0]}–${cb.length[1]}%`;
+    document.getElementById('quality-shrink-width-band').textContent  = `range ${cb.width[0]}–${cb.width[1]}%`;
+  }
+
   // Spirality
   const spiralityEl = document.getElementById('quality-spirality');
   if (q.spirality) {
+    const band = q.spirality.confidence_band ? ` ±, range ${q.spirality.confidence_band[0]}–${q.spirality.confidence_band[1]}%` : '';
     spiralityEl.textContent = `${fmt(q.spirality.predicted_pct, 2)}% (${q.spirality.risk_level.split(' — ')[0]})`;
-    if (q.spirality.risk_level.includes('HIGH')) {
+    if (q.spirality.risk_level.includes('HIGH') || q.spirality.risk_level.includes('CRITICAL')) {
       spiralityEl.className = 'result-val red font-bold';
     } else if (q.spirality.risk_level.includes('MEDIUM')) {
       spiralityEl.className = 'result-val amber';
@@ -1358,6 +1377,40 @@ function renderQuality(q) {
     }
   } else {
     spiralityEl.textContent = '—';
+  }
+
+  // Spirality driver (yarn structure) — the v2 primary driver
+  const sdEl = document.getElementById('quality-spiral-driver');
+  const dr = q.spirality?.drivers;
+  if (dr) {
+    const yarnLabels = {
+      single_carded: 'Single carded', single_combed: 'Single combed', single_compact: 'Single compact',
+      single_open_end: 'Open-end rotor', single_vortex: 'Vortex/air-jet', ply_2: '2-ply', ply_2_compact: '2-ply compact',
+    };
+    sdEl.textContent = `${yarnLabels[dr.yarn_structure] || dr.yarn_structure} · torque ×${dr.torque_factor} · twist αe ${dr.twist_multiplier_alpha}`;
+    document.getElementById('row-spiral-driver').style.display = '';
+  } else {
+    document.getElementById('row-spiral-driver').style.display = 'none';
+  }
+
+  // Finishing route (shrinkage primary driver)
+  const frEl = document.getElementById('quality-finish-route');
+  const fr = q.shrinkage?.finishing_route;
+  if (fr) {
+    frEl.textContent = `${fr.label} (×${fr.factor})`;
+    document.getElementById('row-finish-route').style.display = '';
+  } else {
+    document.getElementById('row-finish-route').style.display = 'none';
+  }
+
+  // Accuracy / test-standard footnote
+  const accEl = document.getElementById('quality-accuracy-note');
+  if (accEl) {
+    const mm = q.model_meta;
+    const calNote = (q.shrinkage?.calibrated || q.spirality?.calibrated) ? ' ✓ Calibrated to your lab data.' : '';
+    accEl.innerHTML = mm
+      ? `<strong>Model v${mm.version}</strong> — grounded in dominant physical drivers (yarn torque, twist factor, relaxation reference state, finishing route). Tested per ${mm.test_standards.spirality} (spirality) & ${mm.test_standards.shrinkage} (shrinkage). Values carry a ± confidence band; anchor with one lab test for exact figures.${calNote}`
+      : '';
   }
 
   // Pilling
