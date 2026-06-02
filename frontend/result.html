@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20260602h">
+  <link rel="stylesheet" href="css/style.css?v=20260602i">
 
   <style>
     /* Result page specific */
@@ -280,6 +280,42 @@
         <button class="btn btn-ghost" id="copy-btn" onclick="copyResults()">📋 Copy</button>
         <a href="/" class="btn btn-secondary">↩ Recalculate</a>
       </div>
+    </div>
+
+    <!-- ===== FACTORY R&D DATA MATCH (real measured records) ===== -->
+    <div class="result-section anim-in hidden" id="sec-factory" style="border:1px solid rgba(0,255,178,.4); background:rgba(0,255,178,.06);">
+      <div class="result-section-title">
+        <div class="rst-icon green">🏭</div>
+        <div class="rst-title-text" style="color:var(--a1);">Factory R&amp;D Data Match</div>
+        <span id="factory-conf" class="badge badge-green" style="margin-left:auto;">—</span>
+      </div>
+      <div class="info-box text-xs" style="margin-bottom:10px; font-size:10px; line-height:1.5;">
+        Anchored to <strong>real factory greige→finish records</strong> (2700+ measured samples). These are what the machine actually delivered after dyeing + finishing.
+      </div>
+      <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:10px;">
+        <div style="background:rgba(0,255,178,.08); border:1px solid rgba(0,255,178,.25); border-radius:10px; padding:12px 8px; text-align:center;">
+          <div style="font-size:9px; text-transform:uppercase; letter-spacing:.6px; color:var(--t3); margin-bottom:4px;">Stitch Length</div>
+          <div style="font-size:22px; font-weight:800; color:var(--a1); font-family:var(--head); line-height:1;" id="fac-sl">—</div>
+          <div style="font-size:9px; color:var(--t3); margin-top:3px;">mm (body SL)</div>
+        </div>
+        <div style="background:rgba(251,146,60,.08); border:1px solid rgba(251,146,60,.2); border-radius:10px; padding:12px 8px; text-align:center;">
+          <div style="font-size:9px; text-transform:uppercase; letter-spacing:.6px; color:var(--t3); margin-bottom:4px;">Finished GSM</div>
+          <div style="font-size:22px; font-weight:800; color:#fb923c; font-family:var(--head); line-height:1;" id="fac-gsm">—</div>
+          <div style="font-size:9px; color:var(--t3); margin-top:3px;" id="fac-gsm-gain">after dye+finish</div>
+        </div>
+        <div style="background:rgba(0,200,255,.06); border:1px solid rgba(0,200,255,.18); border-radius:10px; padding:12px 8px; text-align:center;">
+          <div style="font-size:9px; text-transform:uppercase; letter-spacing:.6px; color:var(--t3); margin-bottom:4px;">Finished Width</div>
+          <div style="font-size:22px; font-weight:800; color:var(--a2); font-family:var(--head); line-height:1;" id="fac-width">—</div>
+          <div style="font-size:9px; color:var(--t3); margin-top:3px;">inch (open)</div>
+        </div>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Factory count for this GSM</span>
+        <span class="result-val white" id="fac-count">—</span>
+      </div>
+      <div class="result-section-label" style="margin-top:10px;">Nearest Real Samples</div>
+      <div id="fac-records" style="font-size:10px; line-height:1.7;"></div>
+      <div class="text-xs text-dim" style="margin-top:6px; font-size:9px;" id="fac-source"></div>
     </div>
 
     <!-- ===== COLOR SHADE SECTION (shown whenever shade is selected) ===== -->
@@ -1006,6 +1042,9 @@ function renderResult(r, params) {
   // — Yarn —
   renderYarn(r.yarn);
 
+  // — Factory R&D data match —
+  renderFactoryMatch(r.factory_prediction);
+
   // — Warp Knit (if present) —
   if (r.warp_knit) {
     document.getElementById('sec-warp-knit').classList.remove('hidden');
@@ -1576,6 +1615,51 @@ function renderQuality(q) {
   } else {
     recsContainer.innerHTML = '<li>No special finishing recommendations.</li>';
   }
+}
+
+/* ============================================================
+   FACTORY R&D DATA MATCH RENDER
+   ============================================================ */
+function renderFactoryMatch(f) {
+  const sec = document.getElementById('sec-factory');
+  if (!f || !f.ok) { sec.classList.add('hidden'); return; }
+  sec.classList.remove('hidden');
+
+  const p = f.prediction;
+  document.getElementById('fac-sl').textContent = p.stitch_length_mm != null ? p.stitch_length_mm : '—';
+  document.getElementById('fac-gsm').textContent = p.finished_gsm != null ? p.finished_gsm : '—';
+  document.getElementById('fac-width').textContent = p.finished_open_width_in != null ? `${p.finished_open_width_in}"` : '—';
+
+  const gainEl = document.getElementById('fac-gsm-gain');
+  if (p.dye_gsm_gain_pct != null) {
+    const sign = p.dye_gsm_gain_pct >= 0 ? '+' : '';
+    gainEl.textContent = `${sign}${p.dye_gsm_gain_pct}% vs grey`;
+  }
+
+  const conf = document.getElementById('factory-conf');
+  const confLabels = { very_high: 'Very High', high: 'High', medium: 'Medium', low: 'Indicative' };
+  conf.textContent = `${confLabels[f.confidence] || f.confidence} · ${f.confidence_pct}%`;
+
+  document.getElementById('fac-count').textContent = f.count_recommendation
+    ? `${f.count_recommendation.recommended_count_ne}/1 Ne (from ${f.count_recommendation.based_on})`
+    : '—';
+
+  // Nearest real samples table
+  const recEl = document.getElementById('fac-records');
+  if (f.nearest_records && f.nearest_records.length) {
+    recEl.innerHTML = f.nearest_records.slice(0, 4).map(r => {
+      const segIcon = r.color === 'dark' ? '⬛' : r.color === 'light' ? '☀' : '▪';
+      return `<div style="display:flex; gap:8px; padding:3px 0; border-bottom:1px solid var(--line3);">
+        <span style="color:var(--a1); min-width:42px;">${r.count_ne}/1</span>
+        <span style="color:var(--t3); min-width:58px;">${r.spin}</span>
+        <span style="min-width:74px;">${r.gauge}G × ${r.dia}"</span>
+        <span style="min-width:64px;">${r.grey_gsm}→${r.finished_gsm}g</span>
+        <span style="min-width:40px;">SL ${r.sl_mm}</span>
+        <span style="color:var(--t3);">${segIcon}${r.color}</span>
+      </div>`;
+    }).join('');
+  }
+  document.getElementById('fac-source').textContent = f.source || '';
 }
 
 /* ============================================================
