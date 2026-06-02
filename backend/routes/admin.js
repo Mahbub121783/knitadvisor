@@ -168,9 +168,12 @@ router.get('/api/providers', adminAuth, async (req, res) => {
       providerManager.getProviders(),
       providerManager.getStrategy()
     ]);
-    const annotated = providers.map(p => ({
-      ...p,
-      key_is_set: !!(process.env[p.api_key_env] && process.env[p.api_key_env].trim().length > 0)
+    const annotated = await Promise.all(providers.map(async p => {
+      const keys = await providerManager.getProviderKeys(p.id);
+      return {
+        ...p,
+        key_is_set: keys.length > 0
+      };
     }));
     res.json({ providers: annotated, strategy });
   } catch (err) {
@@ -282,10 +285,10 @@ router.post('/api/providers/:id/test', adminAuth, async (req, res) => {
     if (!rows.length) return res.status(404).json({ error: 'Provider not found' });
 
     const provider = rows[0];
-    const apiKey = process.env[provider.api_key_env];
+    const keys = await providerManager.getProviderKeys(id);
 
-    if (!apiKey || !apiKey.trim()) {
-      return res.status(400).json({ error: `API key not configured (${provider.api_key_env} is empty)` });
+    if (!keys.length) {
+      return res.status(400).json({ error: 'API key not configured (no active keys found in database)' });
     }
 
     const startMs = Date.now();
@@ -314,6 +317,14 @@ router.patch('/api/providers/:id/model', adminAuth, async (req, res) => {
     const { model_name } = req.body;
     if (!model_name || !model_name.trim()) return res.status(400).json({ error: 'model_name required' });
     await dbQuery('UPDATE ai_provider_stats SET model_name = ? WHERE id = ?', [model_name.trim(), id]);
+    
+    // In v2 context: we should also make sure this model exists in ai_provider_models for this provider
+    // and is active and healthy. Let's do an INSERT ... ON DUPLICATE KEY UPDATE.
+    await dbQuery(
+      'INSERT INTO ai_provider_models (provider_id, model_name, is_active, is_healthy) VALUES (?, ?, 1, 1) ON DUPLICATE KEY UPDATE is_active = 1, is_healthy = 1',
+      [id, model_name.trim()]
+    );
+    
     res.json({ ok: true });
   } catch (err) {
     console.error('[Model Update Error]', err);
