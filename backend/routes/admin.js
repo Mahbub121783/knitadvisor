@@ -10,7 +10,7 @@ const express = require('express');
 const path = require('path');
 const router = express.Router();
 
-const { adminAuth, generateToken, createSession, deleteSession } = require('../middleware/admin-auth');
+const { adminAuth, generateToken, createSession, deleteSession, buildMemToken } = require('../middleware/admin-auth');
 const providerManager = require('../ai/provider-manager-v2');
 const memCache = require('../cache/memory-cache');
 const dbCache = require('../cache/db-cache');
@@ -42,12 +42,22 @@ router.post('/login', async (req, res) => {
   try {
     const { rawToken, tokenHash } = await generateToken();
     const ip = req.ip || req.connection.remoteAddress || 'unknown';
-    await createSession(tokenHash, ip);
+    const sessionResult = await createSession(tokenHash, ip);
 
-    res.json({ ok: true, token: rawToken });
+    // If DB is down, return a signed composite token (hash.sig) that works without DB
+    const responseToken = sessionResult.mode === 'mem'
+      ? buildMemToken(rawToken)
+      : rawToken;
+
+    res.json({
+      ok: true,
+      token: responseToken,
+      session_mode: sessionResult.mode,
+      expires_at: sessionResult.expiresAt,
+    });
   } catch (err) {
     console.error('[Login Error]', err);
-    res.status(500).json({ error: 'Login failed' });
+    res.status(500).json({ error: 'Login failed', detail: err.message });
   }
 });
 
