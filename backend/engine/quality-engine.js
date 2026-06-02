@@ -431,9 +431,9 @@ function predictQuality(params) {
   let spiralityFinal = parseFloat(Math.max(0, spirality_raw).toFixed(2));
   if (calib && calib.spirality != null) spiralityFinal = parseFloat(calib.spirality);
 
-  const spiralityRisk = spiralityFinal > 8 ? 'CRITICAL — Severe skew; must use counter-twist yarn or enzyme wash'
-    : spiralityFinal > 5 ? 'HIGH — Noticeable twisting; recommend heat setting or anti-twist finish'
-    : spiralityFinal > 3 ? 'MEDIUM — Light spirality; compacting recommended'
+  const spiralityRisk = spiralityFinal > 8 ? 'CRITICAL — Severe skew; use twist-balanced (ply/compact/vortex) yarn + stenter weft-straightener (anti-skew) + compactor'
+    : spiralityFinal > 5 ? 'HIGH — Noticeable twisting; correct on stenter with anti-skew/overfeed, then compactor (heat-set for synthetic-rich)'
+    : spiralityFinal > 3 ? 'MEDIUM — Light spirality; stenter overfeed + compacting straightens the wale line'
     : 'LOW — Within acceptable limits (≤3%)';
 
   // --- PILLING ---
@@ -543,8 +543,8 @@ function buildFinishingRecommendations(lengthS, widthS, spirality, pillingScore,
 
   if (lengthS > 5) recs.push({ process: 'Compacting / Sanforizing', reason: `Predicted length shrinkage ${lengthS}%. Compactor will mechanically pre-shrink lengthwise.` });
   if (widthS > 3)  recs.push({ process: 'Open-Width Finish + Overfeeding', reason: `Width shrinkage ${widthS}%. Feed fabric at slight overfeed on stenter to allow width relaxation.` });
-  if (spirality > 4) recs.push({ process: 'Enzyme Bio-Wash (Cellulase)', reason: `Spirality ${spirality}%. Cellulase enzyme reduces surface torque and fiber snarling.` });
-  if (spirality > 6) recs.push({ process: 'Heat Setting (190°C, 30s)', reason: `Critical spirality. Heat setting on pin stenter at 190°C locks structure and removes twist.` });
+  if (spirality > 4) recs.push({ process: 'Stenter Anti-Skew + Compacting', reason: `Spirality ${spirality}%. Set the wale line on a stenter with weft-straightener/skew-bow correction and controlled overfeed, then lock it on the compactor. (Enzyme wash does NOT fix spirality — it only reduces pilling.)` });
+  if (spirality > 6) recs.push({ process: 'Heat Setting (190°C, 30s)', reason: `Critical spirality on synthetic-rich fabric. Pin-stenter heat setting at 190°C relaxes residual torque and locks the structure before compacting.` });
   if (pillingScore < 2.5) recs.push({ process: 'Bio-Polish (Anti-Pilling Enzyme)', reason: `Pilling score ${pillingScore}/5. Removes protruding fibers causing pilling.` });
   if (['fleece_2_thread', 'fleece_3_thread', 'french_terry'].includes(fabricId)) {
     recs.push({ process: 'Brushing / Raising (3–5 passes)', reason: 'Essential for fleece. Wire-point raising breaks loop heads to generate soft nap.' });
