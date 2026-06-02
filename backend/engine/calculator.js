@@ -424,6 +424,15 @@ function calculate(params) {
     parsedComp,
     is_warp_knit: fabricDef.category === 'warp_knit',
     denier: fabricDef.category === 'warp_knit' ? (denier || warpKnitSpec?.denier_estimated || 70) : null,
+    // Explicit mill yarn type + footnote surcharge options (SM price list)
+    yarn_type: params.yarn_price_type || null,
+    white: !!params.yarn_white,
+    organic: !!params.yarn_organic,
+    organic_type: params.yarn_organic_type || 'gots',
+    slub: !!params.yarn_slub || (yarn_form === 'slub'),
+    siro: !!params.yarn_siro,
+    ecovero: !!params.yarn_ecovero,
+    at_sight: !!params.yarn_at_sight,
   });
   trace.push({ step: '6.2', action: 'costing', total_usd_per_kg: costResult.cost_breakdown_usd.total_per_kg });
 
@@ -611,6 +620,12 @@ function calculate(params) {
       total_per_kg_usd:         costResult.cost_breakdown_usd.total_per_kg,
       margin_scenarios:         costResult.margin_scenarios,
       fiber_detail:             costResult.cost_breakdown_usd.raw_material.fiber_detail,
+      // Mill yarn pricing detail (SM price list)
+      yarn_type_label:          costResult.yarn.type_label,
+      yarn_base_price_usd:      costResult.yarn.base_price_usd,
+      yarn_surcharges:          costResult.yarn.surcharges,
+      yarn_final_price_usd:     costResult.yarn.final_price_usd,
+      yarn_price_source:        costResult.yarn.source,
     } : null,
 
     // Warp knit specific data
