@@ -553,19 +553,16 @@ img { max-width: 100%; }
 }
 .collapsible-trigger.open .arrow { transform: rotate(180deg); }
 .collapsible-body {
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height 400ms ease;
   border: 1px solid var(--line2);
   border-top: none;
   border-bottom-left-radius: 8px;
   border-bottom-right-radius: 8px;
 }
-
-.collapsible-body {
-  overflow: hidden;
-  max-height: 0;
-  transition: max-height 400ms ease;
-}
 .collapsible-body.open { max-height: 2400px; }
-.collapsible-inner { padding: 14px 14px 14px; }
+.collapsible-inner { padding: 14px; }
 
 /* ============================================================
    FORMULA TRACE
