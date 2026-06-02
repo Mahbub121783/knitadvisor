@@ -60,6 +60,7 @@ const {
 
 const { getPattern: getEnginePattern } = require('./pattern-engine');
 const { analyzeCriticalPath } = require('./critical-path');
+const { recommendMachine } = require('./machine-optimizer');
 
 // ============================================================
 // MAIN CALCULATE FUNCTION
@@ -71,7 +72,7 @@ function calculate(params) {
 
   // --- 1. Validate & normalize inputs ---
   const { fabric, gsm, dia, gauge, rpm, efficiency, stitch_length, feeders, composition, color_shade,
-          denier, filaments, elastane_denier, elastane_pct } = normalizeParams(params);
+          target_width, denier, filaments, elastane_denier, elastane_pct } = normalizeParams(params);
 
   if (!fabric) return { error: 'fabric is required', code: 'MISSING_FABRIC' };
   if (!gsm) return { error: 'gsm is required', code: 'MISSING_GSM' };
@@ -323,6 +324,28 @@ function calculate(params) {
   const machineResult = calculateMachine(fabricDef, countResult.count_ne, dia, gauge);
   trace.push({ step: 4, action: 'machine', ...machineResult.trace });
 
+  // --- 4.1 Optimal SINGLE Dia + SINGLE Gauge (expert request) ---
+  let optimalMachine = null;
+  if (fabricDef.category !== 'warp_knit' && countResult.count_ne > 0) {
+    optimalMachine = recommendMachine({
+      fabricDef,
+      count_ne: countResult.count_ne,
+      tex: tfResult ? tfResult.tex : null,
+      tf: tfResult ? tfResult.value : null,
+      tfStatus: tfResult ? tfResult.status : null,
+      tfLimits: tfResult ? { ideal_min: tfResult.limits && tfResult.limits.min, ideal_max: tfResult.limits && tfResult.limits.max } : null,
+      targetWidthInches: target_width,
+    });
+    if (optimalMachine && optimalMachine.ok) {
+      trace.push({
+        step: '4.1',
+        action: 'optimal_machine',
+        result: optimalMachine.summary,
+        formula: optimalMachine.gauge.formula,
+      });
+    }
+  }
+
   // --- 5. Production (only if machine specs provided) ---
   let productionResult = null;
   if (dia && gauge && rpm) {
@@ -419,6 +442,7 @@ function calculate(params) {
       gauge: gauge || null,
       rpm: rpm || null,
       efficiency: efficiency || 85,
+      target_width: target_width || null,
       stitch_length: stitch_length || null,
     },
 
@@ -498,6 +522,8 @@ function calculate(params) {
       feeders_theoretical: machineResult.feeders_theoretical,
       pitch_mm: machineResult.pitch_mm,
       suitable_count_for_gauge: machineResult.suitable_count,
+      // Single optimal Dia + Gauge recommendation (expert request)
+      optimal: optimalMachine && optimalMachine.ok ? optimalMachine : null,
     },
     
     physical_constraints: tfResult ? {
@@ -586,6 +612,8 @@ function normalizeParams(p) {
     efficiency: p.efficiency ? parseFloat(p.efficiency) : null,
     stitch_length: p.stitch_length ? parseFloat(p.stitch_length) : null,
     feeders: p.feeders ? parseInt(p.feeders) : null,
+    // Optional finished open-width target (inches) → drives optimal Dia
+    target_width: p.target_width ? parseFloat(p.target_width) : null,
     // Warp knit parameters
     denier: p.denier ? parseFloat(p.denier) : null,
     filaments: p.filaments ? parseInt(p.filaments) : 34,

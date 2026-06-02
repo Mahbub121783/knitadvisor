@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/style.css?v=20260602b">
 
   <style>
     /* Result page specific */
@@ -618,11 +618,56 @@
       </div>
     </div>
 
+    <!-- ===== OPTIMAL SINGLE MACHINE SETUP (expert request) ===== -->
+    <div class="result-section anim-in hidden" id="sec-optimal" style="border:1px solid rgba(0,255,178,.35); background:rgba(0,255,178,.05);">
+      <div class="result-section-title">
+        <div class="rst-icon green">🎯</div>
+        <div class="rst-title-text" style="color:var(--a1);">Optimal Machine Setup</div>
+        <span class="badge badge-green" style="margin-left:auto" id="opt-confidence">Best Single Pick</span>
+      </div>
+
+      <!-- Headline: single Dia × single Gauge -->
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px;">
+        <div style="background:rgba(0,255,178,.08); border:1px solid rgba(0,255,178,.25); border-radius:10px; padding:14px 12px; text-align:center;">
+          <div style="font-size:9px; text-transform:uppercase; letter-spacing:.7px; color:var(--t3); margin-bottom:4px;">Optimal Dia</div>
+          <div style="font-size:30px; font-weight:800; color:var(--a1); font-family:var(--head); line-height:1;" id="opt-dia">—</div>
+          <div style="font-size:10px; color:var(--t3); margin-top:3px;">inch</div>
+        </div>
+        <div style="background:rgba(0,255,178,.08); border:1px solid rgba(0,255,178,.25); border-radius:10px; padding:14px 12px; text-align:center;">
+          <div style="font-size:9px; text-transform:uppercase; letter-spacing:.7px; color:var(--t3); margin-bottom:4px;">Optimal Gauge</div>
+          <div style="font-size:30px; font-weight:800; color:var(--a1); font-family:var(--head); line-height:1;" id="opt-gauge">—</div>
+          <div style="font-size:10px; color:var(--t3); margin-top:3px;">needles / inch (GG)</div>
+        </div>
+      </div>
+
+      <div class="info-box" id="opt-summary" style="font-size:11px; line-height:1.6; margin-bottom:10px; border-left:2px solid var(--a1);">—</div>
+
+      <div class="mini-stats" id="opt-stats" style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:10px;">
+        <div class="mini-stat"><div class="ms-val" id="opt-needles">—</div><div class="ms-lbl">Total Needles</div></div>
+        <div class="mini-stat"><div class="ms-val" id="opt-feeders">—</div><div class="ms-lbl">Feeders</div></div>
+        <div class="mini-stat"><div class="ms-val" id="opt-width">—</div><div class="ms-lbl">Open Width</div></div>
+      </div>
+
+      <div class="result-row">
+        <span class="result-key">Gauge basis</span>
+        <span class="result-val white" id="opt-gauge-formula" style="font-size:10px; text-align:right; white-space:normal; line-height:1.4;">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Dia basis</span>
+        <span class="result-val" id="opt-dia-mode">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Knittability (Tightness)</span>
+        <span class="result-val" id="opt-tightness">—</span>
+      </div>
+      <div id="opt-note" class="mt-6" style="font-size:10px;color:var(--t3);line-height:1.6;padding:8px 10px;background:rgba(255,255,255,.03);border-radius:6px;border-left:2px solid var(--a1)"></div>
+    </div>
+
     <!-- ===== MACHINE RECOMMENDED ===== -->
     <div class="result-section anim-in" id="sec-machine">
       <div class="result-section-title">
         <div class="rst-icon blue">⚙️</div>
-        <div class="rst-title-text">Machine Specification</div>
+        <div class="rst-title-text">Machine Specification <span style="font-size:10px; color:var(--t3); font-weight:400;">(full range)</span></div>
         <span class="badge badge-blue" style="margin-left:auto">Recommended</span>
       </div>
 
@@ -1476,6 +1521,58 @@ function renderMachine(m, input) {
     document.getElementById('m-gauge-actual').textContent = `${input.gauge} GG`;
     document.getElementById('m-dia-actual').textContent = `${input.dia}"`;
   }
+
+  // — Optimal single Dia + Gauge —
+  renderOptimalMachine(m.optimal);
+}
+
+function renderOptimalMachine(o) {
+  const sec = document.getElementById('sec-optimal');
+  if (!o || !o.ok) { sec.classList.add('hidden'); return; }
+  sec.classList.remove('hidden');
+
+  const d = o.dia || {};
+  const g = o.gauge || {};
+
+  document.getElementById('opt-dia').textContent   = o.optimal_dia != null ? o.optimal_dia : '—';
+  document.getElementById('opt-gauge').textContent = o.optimal_gauge != null ? o.optimal_gauge : '—';
+  document.getElementById('opt-summary').textContent = o.summary || '';
+
+  document.getElementById('opt-needles').textContent = d.needles != null ? d.needles.toLocaleString() : '—';
+  document.getElementById('opt-feeders').textContent = d.feeders != null ? d.feeders : '—';
+  document.getElementById('opt-width').textContent   = d.open_width_in != null ? `${d.open_width_in}"` : '—';
+
+  document.getElementById('opt-gauge-formula').textContent = g.formula || '—';
+
+  const modeLabels = {
+    width_target:       '📐 Solved from your target width (exact)',
+    economical_default: '🏭 Standard economical machine (no width given)',
+  };
+  document.getElementById('opt-dia-mode').textContent = modeLabels[d.mode] || '—';
+
+  // Confidence badge
+  const conf = document.getElementById('opt-confidence');
+  if (o.confidence === 'very_high') { conf.textContent = 'Very High Confidence'; }
+  else if (o.confidence === 'high') { conf.textContent = 'High Confidence'; }
+
+  // Tightness verdict
+  const t = o.tightness;
+  const tEl = document.getElementById('opt-tightness');
+  if (t) {
+    const verdictMap = {
+      balanced: ['✓ Balanced — knittable', 'green'],
+      slack:    ['↓ Slack — loops may be loose', 'amber'],
+      tight:    ['↑ Tight — high needle load', 'amber'],
+    };
+    const [label, cls] = verdictMap[t.verdict] || [t.verdict, 'white'];
+    tEl.textContent = `${label} (TF ${t.tf}, ideal ${t.healthy_band})`;
+    tEl.className = `result-val ${cls}`;
+  } else {
+    tEl.textContent = '—';
+  }
+
+  // Note: prefer dia note (contains width/economical detail), fall back to gauge note
+  document.getElementById('opt-note').textContent = (d.note || '') + (g.note ? '  •  ' + g.note : '');
 }
 
 /* ============================================================

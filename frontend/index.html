@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20260602">
+  <link rel="stylesheet" href="css/style.css?v=20260602b">
   <style>
     /* Page-specific styles */
     .hero {
@@ -463,10 +463,15 @@
                 <label class="form-label" for="feeders-input">Feeders (override)</label>
                 <input type="number" id="feeders-input" class="form-input" placeholder="auto" min="1" max="200" step="1">
               </div>
+              <div class="form-group">
+                <label class="form-label" for="width-input">Target Width (inch, open)</label>
+                <input type="number" id="width-input" class="form-input" placeholder="e.g. 70" min="20" max="120" step="1">
+              </div>
             </div>
 
             <div class="info-box mt-12" style="grid-column: 1 / -1">
-              <strong>Dia + Gauge + RPM</strong> will give exact production rates (kg/hr, shift, day).
+              <strong>Dia + Gauge + RPM</strong> will give exact production rates (kg/hr, shift, day).<br>
+              <strong>Target Width</strong> → system recommends the exact single optimal Dia. Leave blank for the standard economical machine.
             </div>
 
             <!-- WARP KNIT INPUTS (hidden for non-warp fabrics) -->
@@ -897,6 +902,7 @@ async function doCalculate() {
     efficiency: parseFloat(document.getElementById('eff-input').value) || 85,
     stitch_length: parseFloat(document.getElementById('sl-input').value) || undefined,
     feeders: parseInt(document.getElementById('feeders-input').value) || undefined,
+    target_width: parseFloat(document.getElementById('width-input').value) || undefined,
     // Warp knit parameters
     denier: parseFloat(document.getElementById('denier-input').value) || undefined,
     filaments: parseInt(document.getElementById('filaments-input').value) || undefined,
