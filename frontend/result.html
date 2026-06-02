@@ -296,25 +296,46 @@
         <span class="result-key">Dominant Fiber</span>
         <span class="result-val" id="c-dominant" style="text-transform: capitalize;">—</span>
       </div>
-      <div class="result-row hidden" id="c-color-row">
-        <span class="result-key">Color Shade</span>
-        <span class="result-val" id="c-color">—</span>
+      <!-- Color shade impact (shown only when shade selected) -->
+      <div id="shade-impact-block" class="hidden">
+        <div class="result-section-label" style="margin-top:10px;">Color Shade Impact</div>
+        <div class="result-row">
+          <span class="result-key">Shade</span>
+          <span class="result-val" id="c-shade-label">—</span>
+        </div>
+        <div class="result-row">
+          <span class="result-key">Grey GSM Target</span>
+          <span class="result-val amber" id="c-grey-gsm">—</span>
+        </div>
+        <div class="result-row">
+          <span class="result-key">Finish GSM Target</span>
+          <span class="result-val green" id="c-finish-gsm">—</span>
+        </div>
+        <div class="result-row">
+          <span class="result-key">Dye Uptake (GSM gain)</span>
+          <span class="result-val" id="c-dye-uptake">—</span>
+        </div>
+        <div class="result-row">
+          <span class="result-key">SL Adjustment</span>
+          <span class="result-val" id="c-sl-direction">—</span>
+        </div>
+        <div id="c-shade-note" class="mt-6" style="font-size:10px;color:var(--t3);line-height:1.6;padding:8px 10px;background:rgba(255,255,255,.03);border-radius:6px;border-left:2px solid var(--a3)"></div>
       </div>
-      
-      <div class="result-section-label">Calculated Modifiers</div>
+
+      <div class="result-section-label" style="margin-top:10px;">Calculated Modifiers</div>
       <div class="result-row">
         <span class="result-key">Count Adjustment</span>
         <span class="result-val blue" id="c-mod-count">—</span>
       </div>
       <div class="result-row">
-        <span class="result-key">Loop Length Adjustment</span>
+        <span class="result-key">SL Factor (combined)</span>
         <span class="result-val amber" id="c-mod-sl">—</span>
       </div>
       <div class="result-row">
         <span class="result-key">GSM Offset</span>
         <span class="result-val" id="c-mod-gsm">—</span>
       </div>
-      
+
       <div id="c-notes-container" class="mt-12 text-sm text-dim">
       </div>
     </div>
@@ -896,22 +917,34 @@ function renderResult(r, params) {
   document.getElementById('g-osy').textContent = osy != null ? fmt(osy, 3) : '—';
 
   // — Composition & Color —
-  if (r.composition && r.composition.type !== 'pure' || r.color) {
+  if ((r.composition && r.composition.type !== 'pure') || r.color) {
     document.getElementById('sec-composition').classList.remove('hidden');
-    document.getElementById('c-parsed').textContent = r.composition.parsed;
-    document.getElementById('c-dominant').textContent = r.composition.dominant;
-    
+    document.getElementById('c-parsed').textContent = r.composition?.parsed || '100% Cotton';
+    document.getElementById('c-dominant').textContent = r.composition?.dominant || 'cotton';
+
+    // Shade impact block
     if (r.color) {
-      document.getElementById('c-color-row').classList.remove('hidden');
-      document.getElementById('c-color').textContent = `${r.input.color_shade} (${r.color.shade} shade, ~${r.color.gsm_adjustment_pct > 0 ? '+' : ''}${r.color.gsm_adjustment_pct}% GSM)`;
+      const c = r.color;
+      document.getElementById('shade-impact-block').classList.remove('hidden');
+      const shadeLabels = { dark: '⬛ Dark', medium: '⬜ Medium', light: '☀ Light' };
+      document.getElementById('c-shade-label').textContent = shadeLabels[c.shade] || c.shade;
+      document.getElementById('c-grey-gsm').textContent = c.grey_gsm_target
+        ? `${c.grey_gsm_target} g/m² (knit at this weight)`
+        : '—';
+      document.getElementById('c-finish-gsm').textContent = `${c.finish_gsm_target || r.input.gsm} g/m² (after dyeing)`;
+      const uptakeSign = c.gsm_adjustment_pct >= 0 ? '+' : '';
+      document.getElementById('c-dye-uptake').textContent = `${uptakeSign}${c.gsm_adjustment_pct}%`;
+      const slDir = { looser: '↑ Looser (+2%) — dark dye adds mass', standard: '→ Standard', tighter: '↓ Tighter (−1%) — minimal dye mass' };
+      document.getElementById('c-sl-direction').textContent = slDir[c.sl_direction] || c.sl_direction;
+      document.getElementById('c-shade-note').textContent = c.note || '';
     }
-    
-    const mods = r.composition.modifiers;
-    document.getElementById('c-mod-count').textContent = `× ${mods.count_factor}`;
-    document.getElementById('c-mod-sl').textContent = `× ${mods.sl_factor}`;
-    document.getElementById('c-mod-gsm').textContent = `${mods.gsm_offset > 0 ? '+' : ''}${mods.gsm_offset}`;
-    
-    if (r.composition.notes && r.composition.notes.length > 0) {
+
+    const mods = r.composition?.modifiers || {};
+    document.getElementById('c-mod-count').textContent = mods.count_factor ? `× ${mods.count_factor}` : '× 1.0';
+    document.getElementById('c-mod-sl').textContent = mods.sl_factor ? `× ${mods.sl_factor}` : '× 1.0';
+    document.getElementById('c-mod-gsm').textContent = mods.gsm_offset != null ? `${mods.gsm_offset >= 0 ? '+' : ''}${mods.gsm_offset}` : '0';
+
+    if (r.composition?.notes?.length > 0) {
       const notesHtml = r.composition.notes.map(n => `<div>• ${n}</div>`).join('');
       document.getElementById('c-notes-container').innerHTML = notesHtml;
     }

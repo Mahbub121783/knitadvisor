@@ -93,14 +93,20 @@ function calculate(params) {
   const compModifiers = getCompositionModifiers(parsedComp, fabric);
   trace.push({ step: '1.5', action: 'composition', parsed: parsedComp ? parsedComp.display : '100% Cotton (default)', modifiers: compModifiers });
 
-  // --- 1.6. Color shade analysis ---
+  // --- 1.6. Color shade analysis + SL adjustment ---
   let colorResult = null;
   if (color_shade) {
     colorResult = classifyColorShade(color_shade);
-    trace.push({ step: '1.6', action: 'color_shade', result: colorResult });
-    if (colorResult.gsm_adjustment_pct !== 0) {
-      warnings.push(`Color shade "${colorResult.shade}": expect ~${colorResult.gsm_adjustment_pct > 0 ? '+' : ''}${colorResult.gsm_adjustment_pct}% GSM change after dyeing.`);
-    }
+    // Apply shade sl_factor on top of composition sl_factor
+    compModifiers.sl_factor = parseFloat(((compModifiers.sl_factor || 1.0) * colorResult.sl_factor).toFixed(4));
+    // Calculate grey GSM target (what to knit at before dyeing)
+    colorResult.grey_gsm_target = parseFloat((gsm * colorResult.grey_gsm_factor).toFixed(1));
+    colorResult.finish_gsm_target = gsm;
+    trace.push({ step: '1.6', action: 'color_shade', result: colorResult, sl_factor_combined: compModifiers.sl_factor });
+    const adjSign = colorResult.gsm_adjustment_pct >= 0 ? '+' : '';
+    warnings.push(
+      `${colorResult.shade.toUpperCase()} shade: knit grey at ${colorResult.grey_gsm_target} GSM (${adjSign}${colorResult.gsm_adjustment_pct}% dye uptake → finish ${gsm} GSM). SL set ${colorResult.sl_direction}.`
+    );
   }
 
   // --- 1.7. Warp knit specific handling ---
