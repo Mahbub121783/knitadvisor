@@ -287,47 +287,108 @@ function lookupGSMRange(fabricId, denier) {
 function calculateCourseLength(gauge, fabricId) {
   if (!gauge || !fabricId) return null;
 
-  const pitch_mm = 25.4 / gauge;
+  const pitch_mm = 25.4 / gauge;                       // lateral needle spacing
   const loopData = WARP_KNIT_CONSTANTS.LOOP_LENGTH_MM[fabricId];
   const barData  = WARP_KNIT_CONSTANTS.GUIDE_BARS[fabricId];
+  const density  = WARP_KNIT_CONSTANTS.STITCH_DENSITY[fabricId];
 
   if (!loopData || !barData) return null;
 
   const tension_factor = 1.08; // yarn extension under machine tension, typical 5-12%
+  const RACK = 480;            // 1 rack = 480 courses (warp knit industry standard)
+  const courses_per_cm = density ? density.courses_per_cm : 8;
+  const course_spacing_mm = 10 / courses_per_cm;       // vertical spacing between courses
 
-  // Per-bar course length from lapping geometry
+  // Per-bar analysis: decompose the chain notation into overlap + underlap and
+  // build the yarn path geometrically (the educational "chain → length" link),
+  // while reporting the empirically-calibrated stitch length as the headline value.
   const bars = {};
   const barKeys = Object.keys(loopData).filter(k => k !== 'note');
-  let avg_cl_mm = 0;
+  let avg_calibrated_mm = 0;
+  let avg_geom_mm = 0;
 
   for (const barKey of barKeys) {
     const bar = barData.lapping[barKey];
+    const calibrated = loopData[barKey];
     if (!bar) continue;
 
-    // Parse notation to get total needle moves: overlap + underlap
-    const totalMoves = parseLappingMoves(bar.notation);
-    const geom_cl_mm = totalMoves * pitch_mm * tension_factor;
+    const parsed = parseChainNotation(bar.notation);   // {overlap_needles, underlap_needles, ...}
+
+    // Geometric yarn-path decomposition (diagonal over one course spacing):
+    //  • needle (overlap) loop ≈ wrap around needle + the two loop legs
+    //  • underlap float ≈ diagonal across u needle spaces over one course
+    const u = parsed.underlap_needles;
+    const o = parsed.overlap_needles;
+    const underlap_mm = Math.sqrt(Math.pow(u * pitch_mm, 2) + Math.pow(course_spacing_mm, 2));
+    const needleLoop_mm = 2 * Math.sqrt(Math.pow((o || 1) * pitch_mm, 2) + Math.pow(course_spacing_mm, 2))
+                          + Math.PI * (pitch_mm * 0.5);   // half-wrap around the needle
+    const geom_sl_mm = (underlap_mm + needleLoop_mm) * tension_factor;
+
+    const sl_mm = (typeof calibrated === 'number' && calibrated > 0) ? calibrated : geom_sl_mm;
+    const runner_mm = sl_mm * RACK;     // runner length per rack of 480 courses
 
     bars[barKey] = {
       notation: bar.notation,
-      moves: totalMoves,
-      cl_mm: Math.round(geom_cl_mm * 100) / 100,
+      type: bar.type || 'overlap+underlap',
+      overlap_needles: o,
+      underlap_needles: u,
+      overlap_mm: round2(needleLoop_mm),
+      underlap_mm: round2(underlap_mm),
+      sl_mm: round2(sl_mm),                 // calibrated stitch length (headline)
+      sl_geometric_mm: round2(geom_sl_mm),  // pure-geometry cross-check
+      runner_mm_per_rack: Math.round(runner_mm),
+      runner_cm_per_rack: round2(runner_mm / 10),
     };
-    avg_cl_mm += geom_cl_mm;
+    avg_calibrated_mm += sl_mm;
+    avg_geom_mm += geom_sl_mm;
   }
 
-  avg_cl_mm = avg_cl_mm / barKeys.length;
+  const n = barKeys.length || 1;
+  avg_calibrated_mm /= n;
+  avg_geom_mm /= n;
 
   return {
-    value: Math.round(avg_cl_mm * 100) / 100,
+    value: round2(avg_calibrated_mm),
     unit: 'mm',
     per_bar: bars,
-    pitch_mm: Math.round(pitch_mm * 1000) / 1000,
+    pitch_mm: round3(pitch_mm),
+    course_spacing_mm: round3(course_spacing_mm),
     gauge,
+    courses_per_cm,
     tension_factor,
-    formula: 'CL (mm) = (overlap_steps + underlap_steps) × (25.4/gauge) × tension_factor',
-    note: 'Based on geometric yarn path from lapping notation',
+    runner_length_mm_per_rack: Math.round(avg_calibrated_mm * RACK),
+    runner_length_cm_per_rack: round2(avg_calibrated_mm * RACK / 10),
+    rack_courses: RACK,
+    geometric_avg_mm: round2(avg_geom_mm),
+    formula: 'SL_bar = [√((u·t)² + c²) + (2·√((o·t)² + c²) + π·t/2)] × tension ; Runner = SL × 480 courses/rack',
+    formula_terms: 't = 25.4/gauge (needle pitch), c = 10/courses_per_cm (course spacing), o = overlap needles, u = underlap needles',
+    note: 'Stitch length is the empirically-calibrated value; the overlap/underlap decomposition shows how the chain notation produces it. Runner length is per standard 480-course rack.',
   };
+}
+
+function round2(v) { return Math.round(v * 100) / 100; }
+function round3(v) { return Math.round(v * 1000) / 1000; }
+
+/**
+ * Parse warp-knit chain notation "A-B/C-D" into overlap & underlap needle moves.
+ *   First half (A-B)  = overlap (needle loop swing)
+ *   Second half (C-D) = underlap (lateral float on technical back)
+ * @param {string} notation
+ * @returns {{overlap_needles:number, underlap_needles:number, raw:string, valid:boolean}}
+ */
+function parseChainNotation(notation) {
+  const fallback = { overlap_needles: 1, underlap_needles: 1, raw: notation, valid: false };
+  if (!notation || typeof notation !== 'string') return fallback;
+  const halves = notation.split('/');
+  if (halves.length < 2) return fallback;
+  const move = (h) => {
+    const p = h.trim().split('-').map(Number);
+    return (!isNaN(p[0]) && !isNaN(p[1])) ? Math.abs(p[0] - p[1]) : null;
+  };
+  const o = move(halves[0]);
+  const u = move(halves[1]);
+  if (o == null || u == null) return fallback;
+  return { overlap_needles: o, underlap_needles: u, raw: notation, valid: true };
 }
 
 /**

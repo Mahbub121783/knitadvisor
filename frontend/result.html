@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20260602f">
+  <link rel="stylesheet" href="css/style.css?v=20260602g">
 
   <style>
     /* Result page specific */
@@ -1237,11 +1237,19 @@ function renderWarpKnitCard(wk) {
     </div>`;
 
   if (wk.course_length) {
+    const cl = wk.course_length;
     html += `<div class="card-sm">
-      <div class="label">Avg Course Length</div>
-      <div class="value-sm mt-4 text-amber">${wk.course_length.value} mm</div>
-      <div class="label mt-2">gauge ${wk.course_length.gauge} — pitch ${wk.course_length.pitch_mm} mm</div>
+      <div class="label">Stitch Length (SL)</div>
+      <div class="value-sm mt-4 text-amber">${cl.value} mm</div>
+      <div class="label mt-2">gauge ${cl.gauge} · pitch ${cl.pitch_mm}mm · course ${cl.course_spacing_mm}mm</div>
     </div>`;
+    if (cl.runner_length_cm_per_rack) {
+      html += `<div class="card-sm">
+        <div class="label">Runner Length</div>
+        <div class="value-sm mt-4" style="color:var(--a1);">${cl.runner_length_cm_per_rack} cm</div>
+        <div class="label mt-2">per rack (${cl.rack_courses} courses)</div>
+      </div>`;
+    }
   }
 
   if (wk.production) {
@@ -1261,6 +1269,33 @@ function renderWarpKnitCard(wk) {
       <span class="result-key">Expected GSM Range</span>
       <span class="result-val">${gr.gsm_min}–${gr.gsm_max} g/m² <span style="font-size:10px;color:var(--t3);">(±12% tolerance)</span></span>
     </div>`;
+  }
+
+  // ── Chain notation → loop length decomposition (per guide bar) ──
+  if (wk.course_length && wk.course_length.per_bar) {
+    const cl = wk.course_length;
+    html += `<div class="result-section-label mt-12" style="color:var(--a1);">Chain Notation → Loop Length</div>`;
+    html += `<div class="info-box text-xs" style="margin-bottom:8px;font-size:9.5px;line-height:1.5;">
+      <strong>Formula:</strong> <code style="font-size:9px;">${cl.formula}</code><br>${cl.formula_terms}</div>`;
+    html += `<table style="width:100%;border-collapse:collapse;font-size:11px;">
+      <thead><tr style="border-bottom:1px solid var(--line2);color:var(--t3);">
+        <th style="text-align:left;padding:5px 4px;">Bar</th>
+        <th style="text-align:left;padding:5px 4px;">Chain</th>
+        <th style="text-align:center;padding:5px 4px;">OL/UL</th>
+        <th style="text-align:right;padding:5px 4px;">SL (mm)</th>
+        <th style="text-align:right;padding:5px 4px;">Runner (cm)</th>
+      </tr></thead><tbody>`;
+    Object.entries(cl.per_bar).forEach(([k, b], i) => {
+      html += `<tr style="border-bottom:1px solid var(--line3);">
+        <td style="padding:5px 4px;color:var(--a1);font-weight:600;">GB${i + 1}</td>
+        <td style="padding:5px 4px;"><code style="background:var(--bg3);padding:1px 5px;border-radius:2px;">${b.notation}</code></td>
+        <td style="padding:5px 4px;text-align:center;color:var(--t3);">${b.overlap_needles}/${b.underlap_needles}</td>
+        <td style="padding:5px 4px;text-align:right;color:var(--a4);font-weight:600;">${b.sl_mm}</td>
+        <td style="padding:5px 4px;text-align:right;">${b.runner_cm_per_rack}</td>
+      </tr>`;
+    });
+    html += `</tbody></table>`;
+    html += `<div class="text-xs text-dim" style="margin-top:4px;font-size:9px;">Geometric cross-check avg: ${cl.geometric_avg_mm}mm vs calibrated ${cl.value}mm. ${cl.note}</div>`;
   }
 
   // ── Yarn consumption ──
@@ -1797,6 +1832,13 @@ function renderProduction(prod, input) {
    ============================================================ */
 function renderPattern(pattern) {
   const container = document.getElementById('pattern-container');
+  // Relabel the section title depending on fabric structure type.
+  const titleEl = document.querySelector('#sec-pattern .rst-title-text');
+  if (titleEl) {
+    titleEl.textContent = (pattern && pattern.fabric_type === 'warp_knit')
+      ? 'Warp Knit — Lapping & Chain Notation'
+      : 'K/T/M Stitch Pattern';
+  }
   if (!pattern) {
     container.innerHTML = `<div class="text-dim text-sm">Pattern data unavailable</div>`;
     return;
