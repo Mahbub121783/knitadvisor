@@ -797,11 +797,12 @@ function switchPath(path) {
 /* ============================================================
    OPTIONAL PANEL TOGGLE
    ============================================================ */
-function toggleOptional(trigger) {
+function toggleOptional(triggerEl) {
   const body = document.getElementById('optional-body');
-  const isOpen = body.classList.contains('open');
-  body.classList.toggle('open', !isOpen);
-  trigger.classList.toggle('open', !isOpen);
+  const btn  = document.getElementById('optional-trigger');
+  const opening = !body.classList.contains('open');
+  body.classList.toggle('open', opening);
+  btn.classList.toggle('open', opening);
 }
 
 /* ============================================================
