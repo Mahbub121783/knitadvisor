@@ -133,16 +133,90 @@ const FACTORY_RECORDS = [
   { fab:'heavy_jersey', comp:'cotton', ne:20, spin:'combed', g:20, dia:32, gsm:200, seg:'medium', sl:2.95, fdia:73, fgsm:190 },
   { fab:'heavy_jersey', comp:'cotton', ne:30, spin:'combed', g:20, dia:30, gsm:250, seg:'medium', sl:3.50, fdia:69, fgsm:245 },
   { fab:'heavy_jersey', comp:'cotton', ne:24, spin:'combed', g:16, dia:36, gsm:250, seg:'medium', sl:3.70, fdia:72, fgsm:274 },
+
+  // ═══════════════════════════════════════════════════════════════════════════════════════
+  //  BULK PRODUCTION ANCHORS — extracted from the Knitting Master File
+  //  (5000+ multi-buyer bookings: NEXT, LPP, Carrefour, Schoeffel, Diadora, OTCF, Signet…).
+  //  Fills the fabric/count/composition gaps the ERP file did not cover.
+  // ═══════════════════════════════════════════════════════════════════════════════════════
+
+  // ───────────── S/LACOSTE & SINGLE-PIQUE family (mapped to 'pique') ─────────────
+  // Carrefour/LPP/Signet ran 32/1 & 22/1 S/Lacoste @200 GSM, finished ~74"; LPP 22/1 @220.
+  { fab:'pique', comp:'cotton', ne:32, spin:'carded_lycra', g:24, dia:32, gsm:200, seg:'medium', sl:2.70, fdia:74, fgsm:200 },
+  { fab:'pique', comp:'cotton', ne:32, spin:'carded_lycra', g:24, dia:32, gsm:200, seg:'light',  sl:2.70, fdia:75, fgsm:198 },
+  { fab:'pique', comp:'cotton', ne:22, spin:'carded',       g:24, dia:28, gsm:220, seg:'dark',   sl:2.65, fdia:74, fgsm:222 },
+  { fab:'pique', comp:'cotton', ne:30, spin:'combed',       g:24, dia:30, gsm:215, seg:'dark',   sl:2.70, fdia:70, fgsm:218 },
+  { fab:'pique', comp:'pc',     ne:24, spin:'combed',       g:24, dia:30, gsm:200, seg:'medium', sl:2.65, fdia:74, fgsm:198 },
+  { fab:'pique', comp:'pc',     ne:24, spin:'combed',       g:24, dia:30, gsm:180, seg:'medium', sl:2.60, fdia:76, fgsm:178 },
+  { fab:'pique', comp:'cotton', ne:28, spin:'combed',       g:24, dia:30, gsm:180, seg:'medium', sl:2.55, fdia:78, fgsm:180 },
+
+  // ───────────── SINGLE JERSEY — organic / BCI / recycled / melange / vortex ─────────────
+  { fab:'single_jersey', comp:'cotton', ne:30, spin:'combed', g:24, dia:36, gsm:190, seg:'light',  sl:2.85, fdia:76, fgsm:190 }, // 100% organic, Salling
+  { fab:'single_jersey', comp:'cotton', ne:36, spin:'combed', g:28, dia:34, gsm:190, seg:'dark',   sl:2.65, fdia:64, fgsm:193 }, // organic 36/1
+  { fab:'single_jersey', comp:'cotton', ne:28, spin:'combed', g:24, dia:30, gsm:240, seg:'medium', sl:2.95, fdia:74, fgsm:240 }, // BCI 28/1 Schoeffel
+  { fab:'single_jersey', comp:'cvc',    ne:26, spin:'rotor',  g:24, dia:30, gsm:155, seg:'light',  sl:2.70, fdia:60, fgsm:160 }, // 80/20 BCI/recycled, Mango
+  { fab:'single_jersey', comp:'cvc',    ne:24, spin:'rotor',  g:24, dia:30, gsm:150, seg:'dark',   sl:2.75, fdia:60, fgsm:150 }, // recycled-blend vortex
+  { fab:'single_jersey', comp:'modal',  ne:32, spin:'combed', g:24, dia:30, gsm:135, seg:'light',  sl:2.55, fdia:54, fgsm:135 }, // ctn/modal LPP
+  { fab:'single_jersey', comp:'viscose',ne:28, spin:'combed', g:24, dia:30, gsm:250, seg:'dark',   sl:2.95, fdia:62, fgsm:250 }, // 100% viscose 28/1 LA-Halle
+  { fab:'single_jersey', comp:'cotton', ne:26, spin:'slub',   g:24, dia:30, gsm:160, seg:'dark',   sl:2.80, fdia:62, fgsm:160 }, // slub S/J Cross-Plus
+  { fab:'single_jersey', comp:'cotton', ne:24, spin:'slub',   g:20, dia:38, gsm:180, seg:'medium', sl:2.95, fdia:70, fgsm:180 }, // slub fleece-S/J Next(DSL)
+  { fab:'single_jersey', comp:'pc',     ne:32, spin:'combed', g:28, dia:38, gsm:150, seg:'light',  sl:2.55, fdia:76, fgsm:150 }, // 65/35 PC singed Accolade
+  { fab:'single_jersey', comp:'pc',     ne:32, spin:'combed', g:28, dia:38, gsm:150, seg:'dark',   sl:2.55, fdia:76, fgsm:153 },
+
+  // ───────────── RIB — more counts / lycra / PC / modal / viscose ─────────────
+  { fab:'rib', comp:'cotton', ne:34, spin:'combed_lycra', g:18, dia:44, gsm:230, seg:'medium', sl:2.60, fdia:48, fgsm:230 }, // 5x2 / 2x2 lycra rib Next(DSL)
+  { fab:'rib', comp:'cotton', ne:18, spin:'carded_lycra', g:18, dia:34, gsm:330, seg:'light',  sl:3.00, fdia:74, fgsm:320 }, // 18/1 lycra rib LPP
+  { fab:'rib', comp:'pc',     ne:24, spin:'combed_lycra', g:18, dia:38, gsm:280, seg:'medium', sl:2.70, fdia:70, fgsm:280 }, // 65/35 PC interlock-rib Signet
+  { fab:'rib', comp:'cvc',    ne:28, spin:'combed_lycra', g:18, dia:42, gsm:380, seg:'medium', sl:2.95, fdia:56, fgsm:360 }, // heavy fleece-rib Salt Life
+  { fab:'rib', comp:'modal',  ne:34, spin:'combed_lycra', g:18, dia:44, gsm:230, seg:'dark',   sl:2.70, fdia:46, fgsm:230 }, // ctn/modal 2x2 Laura Canada
+  { fab:'rib', comp:'cotton', ne:24, spin:'carded_lycra', g:18, dia:44, gsm:420, seg:'medium', sl:2.95, fdia:48, fgsm:420 }, // 2x1 heavy rib Schoeffel/Salt
+
+  // ───────────── INTERLOCK — fine count & PC ─────────────
+  { fab:'interlock', comp:'cotton', ne:40, spin:'combed', g:24, dia:34, gsm:235, seg:'medium', sl:2.75, fdia:74, fgsm:235 }, // 40/1 rib-interlock LPP
+  { fab:'interlock', comp:'pc',     ne:40, spin:'combed', g:24, dia:34, gsm:185, seg:'medium', sl:2.70, fdia:80, fgsm:185 }, // 50/50 PC pique-interlock Signet
+  { fab:'interlock', comp:'cvc',    ne:22, spin:'combed', g:24, dia:34, gsm:290, seg:'dark',   sl:2.90, fdia:70, fgsm:290 }, // 60/40 CVC interlock Mulliez
+
+  // ───────────── FLEECE / TERRY — lighter & PC variants ─────────────
+  { fab:'fleece', comp:'cotton', ne:20, spin:'carded', g:20, dia:38, gsm:200, seg:'light',  sl:3.10, fdia:74, fgsm:200 }, // 18-20/1 S/J fleece LPP
+  { fab:'fleece', comp:'cotton', ne:18, spin:'carded', g:20, dia:36, gsm:210, seg:'dark',   sl:3.20, fdia:70, fgsm:210 },
+  { fab:'fleece', comp:'pc',     ne:32, spin:'combed', g:20, dia:34, gsm:280, seg:'dark',   sl:4.45, fdia:74, fgsm:280 }, // 80/20 brushed F/Terry Sport Vision
+  { fab:'terry', comp:'cotton', ne:28, spin:'combed', g:20, dia:30, gsm:400, seg:'medium', sl:4.60, fdia:74, fgsm:400 }, // heavy F/Terry 28/1+8/1 Next(Tudor)
+  { fab:'terry', comp:'cvc',    ne:30, spin:'combed', g:20, dia:34, gsm:300, seg:'dark',   sl:4.45, fdia:74, fgsm:300 }, // F/Terry 60/40 CVC LA-Halle
+
+  // ───────────── WAFFLE & HEAVY JERSEY — extra points ─────────────
+  { fab:'waffle', comp:'cvc',    ne:34, spin:'combed_lycra', g:18, dia:34, gsm:230, seg:'medium', sl:2.70, fdia:56, fgsm:230 }, // waffle-random 60/40 CVC Carrefour
+  { fab:'heavy_jersey', comp:'cotton', ne:26, spin:'carded', g:20, dia:34, gsm:270, seg:'medium', sl:4.00, fdia:76, fgsm:270 }, // H/Jer fleece Rock Wear
+  { fab:'heavy_jersey', comp:'cotton', ne:30, spin:'combed', g:20, dia:34, gsm:250, seg:'dark',   sl:3.60, fdia:74, fgsm:250 }, // H/Jer 30/1 Tamnoon
+  { fab:'heavy_jersey', comp:'cotton', ne:28, spin:'combed', g:20, dia:34, gsm:270, seg:'medium', sl:3.80, fdia:78, fgsm:270 }, // peach fleece H/Jer Rock Wear
 ];
 
 // Fabric-category aliases → dataset `fab` key (so calculator fabric IDs map in).
+// Expanded to cover the full fabric-derivatives catalogue, mapping each
+// structure to its nearest data-bearing family.
 const FAB_ALIAS = {
+  // single-bed plain & structured → single_jersey
   single_jersey: 'single_jersey', sj: 'single_jersey',
-  rib_1x1: 'rib', rib_2x2: 'rib', lycra_rib_1x1: 'rib', lycra_rib_2x2: 'rib', rib: 'rib',
-  pique_single: 'pique', lacoste_single: 'pique', pique: 'pique',
-  interlock: 'interlock', ponte_di_roma: 'interlock',
+  plated_jersey: 'single_jersey', single_jacquard: 'single_jersey',
+  single_cross_tuck: 'single_jersey', knitted_twill: 'single_jersey',
+  knitted_crepe: 'single_jersey', mock_rib: 'single_jersey',
+  pointelle: 'single_jersey', pointelle_eyelet: 'single_jersey', pointelle_chevron: 'single_jersey',
+  blister_single: 'single_jersey', relief_single: 'single_jersey',
+  // rib family (incl. cardigan/milano interlock-rib structures)
+  rib_1x1: 'rib', rib_2x2: 'rib', rib_2x1: 'rib', rib_3x3: 'rib', rib_3x2: 'rib', rib_4x1: 'rib',
+  lycra_rib_1x1: 'rib', lycra_rib_2x2: 'rib', rib: 'rib',
+  half_cardigan: 'rib', full_cardigan: 'rib', half_milano: 'rib', full_milano: 'rib',
+  drop_needle_rib: 'rib',
+  // pique / lacoste family
+  pique_single: 'pique', pique_double: 'pique', lacoste_single: 'pique', lacoste_double: 'pique',
+  lacoste_pique: 'pique', texipique: 'pique', pique: 'pique',
+  // interlock & double-knit family
+  interlock: 'interlock', ponte_di_roma: 'interlock', eight_lock: 'interlock',
+  swiss_double_pique: 'interlock', french_double_pique: 'interlock',
+  gabardine_double: 'interlock', poplin_double: 'interlock', bourrelet: 'interlock',
+  // fleece / terry
   fleece_2_thread: 'fleece', fleece_3_thread: 'fleece', fleece_diagonal: 'fleece', fleece: 'fleece',
   french_terry: 'terry', terry_fabric: 'terry', terry: 'terry',
+  // misc
   waffle: 'waffle',
   heavy_jersey: 'heavy_jersey',
 };

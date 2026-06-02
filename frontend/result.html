@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20260602i">
+  <link rel="stylesheet" href="css/style.css?v=20260602j">
 
   <style>
     /* Result page specific */
@@ -316,6 +316,25 @@
       <div class="result-section-label" style="margin-top:10px;">Nearest Real Samples</div>
       <div id="fac-records" style="font-size:10px; line-height:1.7;"></div>
       <div class="text-xs text-dim" style="margin-top:6px; font-size:9px;" id="fac-source"></div>
+
+      <!-- Bulk-production conventions (Knitting Master File, 5000+ bookings) -->
+      <div id="fac-bulk-block" class="hidden" style="margin-top:12px; border-top:1px solid var(--line3); padding-top:10px;">
+        <div class="result-section-label" style="margin-bottom:8px;">Bulk Production Data <span class="text-dim" style="font-weight:400;">(5000+ floor bookings)</span></div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
+          <div style="background:rgba(0,200,255,.06); border:1px solid rgba(0,200,255,.18); border-radius:10px; padding:11px 8px; text-align:center;">
+            <div style="font-size:9px; text-transform:uppercase; letter-spacing:.6px; color:var(--t3); margin-bottom:4px;">Factory Gauge</div>
+            <div style="font-size:20px; font-weight:800; color:var(--a2); font-family:var(--head); line-height:1;" id="fac-bulk-gauge">—</div>
+            <div style="font-size:9px; color:var(--t3); margin-top:3px;" id="fac-bulk-gauge-sub">needles/inch (booked)</div>
+          </div>
+          <div style="background:rgba(168,85,247,.06); border:1px solid rgba(168,85,247,.2); border-radius:10px; padding:11px 8px; text-align:center;">
+            <div style="font-size:9px; text-transform:uppercase; letter-spacing:.6px; color:var(--t3); margin-bottom:4px;">Process Loss</div>
+            <div style="font-size:20px; font-weight:800; color:#a855f7; font-family:var(--head); line-height:1;" id="fac-loss">—</div>
+            <div style="font-size:9px; color:var(--t3); margin-top:3px;">grey → finished</div>
+          </div>
+        </div>
+        <div class="info-box text-xs" id="fac-bulk-gauge-note" style="font-size:10px; line-height:1.5; margin-bottom:6px;"></div>
+        <div class="info-box text-xs" id="fac-loss-note" style="font-size:10px; line-height:1.5;"></div>
+      </div>
     </div>
 
     <!-- ===== COLOR SHADE SECTION (shown whenever shade is selected) ===== -->
@@ -975,7 +994,7 @@
 <script src="js/api.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/storage.js"></script>
-<script src="js/pattern-renderer.js?v=20260602g"></script>
+<script src="js/pattern-renderer.js?v=20260602j"></script>
 
 <script>
 /* ============================================================
@@ -1044,6 +1063,9 @@ function renderResult(r, params) {
 
   // — Factory R&D data match —
   renderFactoryMatch(r.factory_prediction);
+
+  // — Bulk production data: process loss + factory gauge convention —
+  renderBulkProductionData(r);
 
   // — Warp Knit (if present) —
   if (r.warp_knit) {
@@ -1660,6 +1682,44 @@ function renderFactoryMatch(f) {
     }).join('');
   }
   document.getElementById('fac-source').textContent = f.source || '';
+}
+
+/* Bulk production data — process loss + factory gauge convention.
+   Lives inside the factory card; shows even when the kNN match is hidden. */
+function renderBulkProductionData(r) {
+  const block = document.getElementById('fac-bulk-block');
+  const sec = document.getElementById('sec-factory');
+  if (!block) return;
+
+  const loss = r.process_loss;
+  const bg = r.machine && r.machine.optimal && r.machine.optimal.bulk_data_gauge;
+  if (!loss && !bg) { block.classList.add('hidden'); return; }
+
+  // Ensure the parent card is visible even if there was no nearest-sample match.
+  if (sec) sec.classList.remove('hidden');
+  block.classList.remove('hidden');
+
+  // Factory gauge convention
+  if (bg) {
+    document.getElementById('fac-bulk-gauge').textContent = bg.factory_gauge + ' GG';
+    document.getElementById('fac-bulk-gauge-sub').textContent =
+      bg.agrees ? 'matches cover-factor' : `vs ${bg.theory_gauge} GG theory`;
+    document.getElementById('fac-bulk-gauge-note').textContent = bg.note;
+  } else {
+    document.getElementById('fac-bulk-gauge').textContent = '—';
+    document.getElementById('fac-bulk-gauge-note').textContent = '';
+  }
+
+  // Process loss
+  if (loss) {
+    document.getElementById('fac-loss').textContent = loss.loss_pct + '%';
+    let note = loss.note;
+    if (loss.example_100kg) note += ' ' + loss.example_100kg.note;
+    document.getElementById('fac-loss-note').textContent = note;
+  } else {
+    document.getElementById('fac-loss').textContent = '—';
+    document.getElementById('fac-loss-note').textContent = '';
+  }
 }
 
 /* ============================================================
