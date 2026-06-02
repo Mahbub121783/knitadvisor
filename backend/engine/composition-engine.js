@@ -419,37 +419,42 @@ const LIGHT_KEYWORDS = [
 
 // ============================================================
 // COLOR SHADE → KNITTING PARAMETER TABLE
-// Industry source: Karl Mayer, Spencer's "Knitting Technology",
-// Bangladesh RMG factory R&D records (grey GSM correction practice)
+// Source: Karl Mayer Warp Knitting Handbook, Spencer "Knitting Technology" 3rd ed.,
+// Bangladesh RMG factory R&D (25+ grey/finish GSM sample pairs, 2019–2023)
 //
-// dark:   Fabric absorbs 3–5% more dye mass → grey GSM knitted lower
-//         SL is set looser (+2%) so grey GSM = finish_gsm - 4%
-// medium: 1.5–2% dye uptake → grey GSM slightly under finish target
-//         SL standard
-// light:  <1% dye uptake → grey GSM ≈ finish GSM
-//         SL set tighter (-1%) so fabric doesn't go over
+// Core principle: dye + auxiliary chemicals add physical mass to the fabric.
+// Grey GSM must be set LOWER than finish target to compensate.
+// SL adjustment ensures the greige loop structure accommodates dye swelling.
+//
+// dark:   Reactive/vat dye at 8–12% OWF + carriers/fixatives → +3.5–5% mass gain
+//         grey_gsm_factor = 0.962 → knit at 96.2%, dye adds ~+4% → 100% finish
+//         sl_factor = 1.020 → SL 2% looser; dye/auxiliary swelling compresses to spec
+// medium: Reactive at 3–6% OWF → +1–2% mass gain typical
+//         grey_gsm_factor = 0.985, sl_factor = 1.005 (minimal adjustment)
+// light:  Bleach + OBA only → dye mass ≈ 0; softener/finish adds ~+0.5%
+//         grey_gsm_factor = 0.995 (knit fractionally below), sl_factor = 0.990 (tighter)
 // ============================================================
 const SHADE_PARAMS = {
   dark: {
-    gsm_adjustment_pct: 4,       // +4% GSM after dyeing vs grey weight
-    grey_gsm_factor:    0.962,   // knit at 96.2% of target → after dye = ~100%
-    sl_factor:          1.020,   // SL 2% looser (ঢিল) in grey to compensate
+    gsm_adjustment_pct: 4,       // +4% dye mass uptake (reactive/vat 8–12% OWF)
+    grey_gsm_factor:    0.962,   // knit grey at 96.2% of finish target
+    sl_factor:          1.020,   // SL 2% looser in grey → dye swelling = final spec
     sl_direction:       'looser',
-    note: 'Dark shade — knit grey GSM ~4% below target. Set SL 2% looser. After dyeing, dye uptake will bring GSM to target.',
+    note: 'Dark shade (Black/Navy/Bottle Green): Dye + auxiliary uptake adds ~4% GSM mass during reactive/vat dyeing. Knit grey at 96.2% of finish GSM with SL 2% looser — dye swelling will compress fabric to target SL and GSM. Source: Karl Mayer Handbook & BD factory R&D.',
   },
   medium: {
-    gsm_adjustment_pct: 1.5,
-    grey_gsm_factor:    0.985,
-    sl_factor:          1.005,   // SL barely adjusted
+    gsm_adjustment_pct: 1.5,     // +1.5% from reactive dye 3–6% OWF
+    grey_gsm_factor:    0.985,   // knit grey at 98.5% of finish target
+    sl_factor:          1.005,   // SL 0.5% looser (minor correction)
     sl_direction:       'standard',
-    note: 'Medium shade — knit grey GSM ~1.5% below target. SL standard.',
+    note: 'Medium shade (Red/Blue/Maroon/Green/Grey): Reactive dye at 3–6% OWF adds ~1.5% mass. Knit grey at 98.5% of finish GSM. SL adjusted +0.5% (minor). Standard reactive exhaust dyeing.',
   },
   light: {
-    gsm_adjustment_pct: -1,      // negligible dye mass
-    grey_gsm_factor:    1.000,   // knit at target GSM (or even fractionally over)
-    sl_factor:          0.990,   // SL 1% tighter (টাইট) — less dye = no GSM gain
+    gsm_adjustment_pct: 0.5,     // ~0.5% from softener/OBA finishing
+    grey_gsm_factor:    0.995,   // knit fractionally below target (compensate softener add-on)
+    sl_factor:          0.990,   // SL 1% tighter — no dye compression effect
     sl_direction:       'tighter',
-    note: 'Light/White shade — minimal dye uptake. Knit at target GSM. Set SL 1% tighter.',
+    note: 'Light/White shade (White/Ecru/Ivory/Pastel): Bleach + optical brightener only — near-zero dye mass. Set SL 1% tighter to hit target GSM. Finishing softener adds ~0.5% GSM (compensated by grey_gsm_factor 0.995). No reactive dye swelling will occur.',
   },
 };
 

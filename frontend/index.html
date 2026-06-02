@@ -407,6 +407,30 @@
           <div id="fabric-info" class="text-xs text-dim mt-4" style="min-height:16px;"></div>
         </div>
 
+        <!-- Color Shade — MAIN FORM (visible by default) -->
+        <div class="form-group mb-16">
+          <label class="form-label" style="color:var(--t1)">Color Shade <span class="badge badge-gray" style="margin-left:6px">OPTIONAL</span></label>
+          <div class="shade-selector" id="shade-selector">
+            <button class="shade-btn" data-shade="dark" type="button" onclick="setShade('dark', this)">
+              <div class="shade-swatch"></div>
+              Dark
+              <span style="font-size:9px;font-weight:400;color:var(--t3)">Black/Navy</span>
+            </button>
+            <button class="shade-btn" data-shade="medium" type="button" onclick="setShade('medium', this)">
+              <div class="shade-swatch"></div>
+              Medium
+              <span style="font-size:9px;font-weight:400;color:var(--t3)">Grey/Red/Blue</span>
+            </button>
+            <button class="shade-btn" data-shade="light" type="button" onclick="setShade('light', this)">
+              <div class="shade-swatch"></div>
+              Light
+              <span style="font-size:9px;font-weight:400;color:var(--t3)">White/Ecru</span>
+            </button>
+          </div>
+          <input type="hidden" id="color-input" value="">
+          <div class="shade-hint" id="shade-hint"></div>
+        </div>
+
         <!-- Optional machine specs (collapsible) -->
         <button class="collapsible-trigger" id="optional-trigger" onclick="toggleOptional(this)">
           <span>⚙ Machine Specs <span class="badge badge-gray" style="margin-left:6px">OPTIONAL</span> — Add for production metrics</span>
@@ -439,30 +463,6 @@
                 <label class="form-label" for="feeders-input">Feeders (override)</label>
                 <input type="number" id="feeders-input" class="form-input" placeholder="auto" min="1" max="200" step="1">
               </div>
-            </div>
-
-            <!-- Color Shade -->
-            <div class="form-group" style="grid-column: 1 / -1">
-              <label class="form-label">Color Shade <span class="badge badge-gray" style="margin-left:6px">OPTIONAL</span></label>
-              <div class="shade-selector" id="shade-selector">
-                <button class="shade-btn" data-shade="dark" type="button" onclick="setShade('dark', this)">
-                  <div class="shade-swatch"></div>
-                  Dark
-                  <span style="font-size:9px;font-weight:400;color:var(--t3)">Black/Navy</span>
-                </button>
-                <button class="shade-btn" data-shade="medium" type="button" onclick="setShade('medium', this)">
-                  <div class="shade-swatch"></div>
-                  Medium
-                  <span style="font-size:9px;font-weight:400;color:var(--t3)">Grey/Red/Blue</span>
-                </button>
-                <button class="shade-btn" data-shade="light" type="button" onclick="setShade('light', this)">
-                  <div class="shade-swatch"></div>
-                  Light
-                  <span style="font-size:9px;font-weight:400;color:var(--t3)">White/Ecru</span>
-                </button>
-              </div>
-              <input type="hidden" id="color-input" value="">
-              <div class="shade-hint" id="shade-hint"></div>
             </div>
 
             <div class="info-box mt-12" style="grid-column: 1 / -1">

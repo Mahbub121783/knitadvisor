@@ -97,15 +97,18 @@ function calculate(params) {
   let colorResult = null;
   if (color_shade) {
     colorResult = classifyColorShade(color_shade);
-    // Apply shade sl_factor on top of composition sl_factor
-    compModifiers.sl_factor = parseFloat(((compModifiers.sl_factor || 1.0) * colorResult.sl_factor).toFixed(4));
-    // Calculate grey GSM target (what to knit at before dyeing)
+    // Combined SL: composition_factor × shade_factor
+    const compSLBefore = compModifiers.sl_factor || 1.0;
+    compModifiers.sl_factor = parseFloat((compSLBefore * colorResult.sl_factor).toFixed(4));
+    // Grey GSM: what to knit before dyeing
     colorResult.grey_gsm_target = parseFloat((gsm * colorResult.grey_gsm_factor).toFixed(1));
     colorResult.finish_gsm_target = gsm;
+    colorResult.comp_sl_factor = compSLBefore;
+    colorResult.combined_sl_factor = compModifiers.sl_factor;
     trace.push({ step: '1.6', action: 'color_shade', result: colorResult, sl_factor_combined: compModifiers.sl_factor });
     const adjSign = colorResult.gsm_adjustment_pct >= 0 ? '+' : '';
     warnings.push(
-      `${colorResult.shade.toUpperCase()} shade: knit grey at ${colorResult.grey_gsm_target} GSM (${adjSign}${colorResult.gsm_adjustment_pct}% dye uptake → finish ${gsm} GSM). SL set ${colorResult.sl_direction}.`
+      `${colorResult.shade.toUpperCase()} shade: SET GREY GSM = ${colorResult.grey_gsm_target} g/m² (finish target: ${gsm} g/m², dye uptake ${adjSign}${colorResult.gsm_adjustment_pct}%). SL set ${colorResult.sl_direction} (factor ×${colorResult.sl_factor}).`
     );
   }
 

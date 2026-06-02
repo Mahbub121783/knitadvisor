@@ -282,11 +282,52 @@
       </div>
     </div>
 
-    <!-- ===== COMPOSITION / COLOR SECTION (conditional) ===== -->
+    <!-- ===== COLOR SHADE SECTION (shown whenever shade is selected) ===== -->
+    <div class="result-section anim-in hidden" id="sec-shade" style="border-color: rgba(168,85,247,0.3); background: rgba(168,85,247,0.04);">
+      <div class="result-section-title">
+        <div class="rst-icon" style="color:#a855f7;">🎨</div>
+        <div class="rst-title-text" style="color:#a855f7;">Color Shade Impact</div>
+        <span id="shade-badge" class="badge" style="margin-left:auto; background:rgba(168,85,247,0.15); color:#a855f7; border:1px solid rgba(168,85,247,0.3);">—</span>
+      </div>
+
+      <!-- GSM Targets — most important info -->
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px;">
+        <div style="background:rgba(251,146,60,0.08); border:1px solid rgba(251,146,60,0.2); border-radius:8px; padding:10px 12px; text-align:center;">
+          <div style="font-size:9px; text-transform:uppercase; letter-spacing:.6px; color:var(--t3); margin-bottom:4px;">Grey GSM — Knit At</div>
+          <div style="font-size:20px; font-weight:800; color:#fb923c; font-family:var(--head);" id="c-grey-gsm-val">—</div>
+          <div style="font-size:9px; color:var(--t3);">g/m² (before dyeing)</div>
+        </div>
+        <div style="background:rgba(0,255,178,0.06); border:1px solid rgba(0,255,178,0.15); border-radius:8px; padding:10px 12px; text-align:center;">
+          <div style="font-size:9px; text-transform:uppercase; letter-spacing:.6px; color:var(--t3); margin-bottom:4px;">Finish GSM — After Dye</div>
+          <div style="font-size:20px; font-weight:800; color:var(--a1); font-family:var(--head);" id="c-finish-gsm-val">—</div>
+          <div style="font-size:9px; color:var(--t3);">g/m² (target delivered)</div>
+        </div>
+      </div>
+
+      <div class="result-row">
+        <span class="result-key">Dye Mass Uptake</span>
+        <span class="result-val" id="c-dye-uptake">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Grey GSM Factor</span>
+        <span class="result-val amber" id="c-grey-gsm-factor">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">SL Correction Applied</span>
+        <span class="result-val" id="c-sl-direction">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Combined SL Factor</span>
+        <span class="result-val amber" id="c-combined-sl">—</span>
+      </div>
+      <div id="c-shade-note" class="mt-6" style="font-size:10px;color:var(--t3);line-height:1.6;padding:8px 10px;background:rgba(255,255,255,.03);border-radius:6px;border-left:2px solid rgba(168,85,247,0.4)"></div>
+    </div>
+
+    <!-- ===== COMPOSITION SECTION (shown only when non-pure blend) ===== -->
     <div class="result-section anim-in hidden" id="sec-composition">
       <div class="result-section-title">
         <div class="rst-icon amber">🧪</div>
-        <div class="rst-title-text">Composition & Shade</div>
+        <div class="rst-title-text">Composition Analysis</div>
       </div>
       <div class="result-row">
         <span class="result-key">Parsed Composition</span>
@@ -296,31 +337,6 @@
         <span class="result-key">Dominant Fiber</span>
         <span class="result-val" id="c-dominant" style="text-transform: capitalize;">—</span>
       </div>
-      <!-- Color shade impact (shown only when shade selected) -->
-      <div id="shade-impact-block" class="hidden">
-        <div class="result-section-label" style="margin-top:10px;">Color Shade Impact</div>
-        <div class="result-row">
-          <span class="result-key">Shade</span>
-          <span class="result-val" id="c-shade-label">—</span>
-        </div>
-        <div class="result-row">
-          <span class="result-key">Grey GSM Target</span>
-          <span class="result-val amber" id="c-grey-gsm">—</span>
-        </div>
-        <div class="result-row">
-          <span class="result-key">Finish GSM Target</span>
-          <span class="result-val green" id="c-finish-gsm">—</span>
-        </div>
-        <div class="result-row">
-          <span class="result-key">Dye Uptake (GSM gain)</span>
-          <span class="result-val" id="c-dye-uptake">—</span>
-        </div>
-        <div class="result-row">
-          <span class="result-key">SL Adjustment</span>
-          <span class="result-val" id="c-sl-direction">—</span>
-        </div>
-        <div id="c-shade-note" class="mt-6" style="font-size:10px;color:var(--t3);line-height:1.6;padding:8px 10px;background:rgba(255,255,255,.03);border-radius:6px;border-left:2px solid var(--a3)"></div>
-      </div>
 
       <div class="result-section-label" style="margin-top:10px;">Calculated Modifiers</div>
       <div class="result-row">
@@ -328,7 +344,7 @@
         <span class="result-val blue" id="c-mod-count">—</span>
       </div>
       <div class="result-row">
-        <span class="result-key">SL Factor (combined)</span>
+        <span class="result-key">SL Factor (composition)</span>
         <span class="result-val amber" id="c-mod-sl">—</span>
       </div>
       <div class="result-row">
@@ -916,28 +932,46 @@ function renderResult(r, params) {
   document.getElementById('g-gsm').textContent = r.input.gsm;
   document.getElementById('g-osy').textContent = osy != null ? fmt(osy, 3) : '—';
 
-  // — Composition & Color —
-  if ((r.composition && r.composition.type !== 'pure') || r.color) {
+  // — Color Shade (always show when shade was selected) —
+  if (r.color) {
+    const c = r.color;
+    document.getElementById('sec-shade').classList.remove('hidden');
+
+    const shadeLabels = { dark: '⬛ Dark', medium: '▪ Medium', light: '☀ Light' };
+    document.getElementById('shade-badge').textContent = shadeLabels[c.shade] || c.shade;
+
+    document.getElementById('c-grey-gsm-val').textContent = c.grey_gsm_target
+      ? `${c.grey_gsm_target}`
+      : (r.input.gsm || '—');
+    document.getElementById('c-finish-gsm-val').textContent = c.finish_gsm_target || r.input.gsm || '—';
+
+    const uptakeSign = c.gsm_adjustment_pct >= 0 ? '+' : '';
+    document.getElementById('c-dye-uptake').textContent = `${uptakeSign}${c.gsm_adjustment_pct}% GSM gain from dye mass`;
+
+    document.getElementById('c-grey-gsm-factor').textContent =
+      c.grey_gsm_factor ? `${c.grey_gsm_factor} (${(c.grey_gsm_factor * 100).toFixed(1)}% of finish GSM)` : '—';
+
+    const slDir = {
+      looser:   `↑ +${((c.sl_factor - 1) * 100).toFixed(1)}% Looser — Dark shade absorbs dye mass, grey SL set wider to allow GSM gain during dyeing`,
+      standard: `→ +${((c.sl_factor - 1) * 100).toFixed(1)}% Standard — Medium shade, minimal SL correction`,
+      tighter:  `↓ ${((c.sl_factor - 1) * 100).toFixed(1)}% Tighter — Light/White, minimal dye uptake, tighter SL to hit target GSM`,
+    };
+    document.getElementById('c-sl-direction').textContent = slDir[c.sl_direction] || c.sl_direction;
+
+    // Combined SL factor (backend pre-computes this)
+    const combinedSL = c.combined_sl_factor || parseFloat(((c.comp_sl_factor || 1.0) * c.sl_factor).toFixed(4));
+    const compSL = c.comp_sl_factor || 1.0;
+    document.getElementById('c-combined-sl').textContent =
+      `× ${combinedSL} (Composition: ×${compSL} × Shade: ×${c.sl_factor})`;
+
+    document.getElementById('c-shade-note').textContent = c.note || '';
+  }
+
+  // — Composition (shown for non-pure blends) —
+  if (r.composition && r.composition.type !== 'pure') {
     document.getElementById('sec-composition').classList.remove('hidden');
     document.getElementById('c-parsed').textContent = r.composition?.parsed || '100% Cotton';
     document.getElementById('c-dominant').textContent = r.composition?.dominant || 'cotton';
-
-    // Shade impact block
-    if (r.color) {
-      const c = r.color;
-      document.getElementById('shade-impact-block').classList.remove('hidden');
-      const shadeLabels = { dark: '⬛ Dark', medium: '⬜ Medium', light: '☀ Light' };
-      document.getElementById('c-shade-label').textContent = shadeLabels[c.shade] || c.shade;
-      document.getElementById('c-grey-gsm').textContent = c.grey_gsm_target
-        ? `${c.grey_gsm_target} g/m² (knit at this weight)`
-        : '—';
-      document.getElementById('c-finish-gsm').textContent = `${c.finish_gsm_target || r.input.gsm} g/m² (after dyeing)`;
-      const uptakeSign = c.gsm_adjustment_pct >= 0 ? '+' : '';
-      document.getElementById('c-dye-uptake').textContent = `${uptakeSign}${c.gsm_adjustment_pct}%`;
-      const slDir = { looser: '↑ Looser (+2%) — dark dye adds mass', standard: '→ Standard', tighter: '↓ Tighter (−1%) — minimal dye mass' };
-      document.getElementById('c-sl-direction').textContent = slDir[c.sl_direction] || c.sl_direction;
-      document.getElementById('c-shade-note').textContent = c.note || '';
-    }
 
     const mods = r.composition?.modifiers || {};
     document.getElementById('c-mod-count').textContent = mods.count_factor ? `× ${mods.count_factor}` : '× 1.0';
