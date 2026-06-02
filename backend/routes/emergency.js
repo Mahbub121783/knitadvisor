@@ -80,11 +80,10 @@ router.get('/db-status', async (req, res) => {
 // ── GET /emergency/auth-status ────────────────────────────────────────────────
 router.get('/auth-status', async (req, res) => {
   const dbConnected = await testConnection();
-  const adminUsername = process.env.ADMIN_USERNAME || 'knitadvisor';
-  const adminPasswordSet = !!(process.env.ADMIN_PASSWORD);
 
   let sessionTableExists = false;
   let sessionCount = 0;
+  let adminUsersCount = 0;
 
   if (dbConnected) {
     try {
@@ -97,6 +96,9 @@ router.get('/auth-status', async (req, res) => {
         const res2 = await dbQuery('SELECT COUNT(*) as cnt FROM admin_sessions WHERE expires_at > NOW()');
         sessionCount = res2[0]?.cnt || 0;
       }
+
+      const res3 = await dbQuery("SELECT COUNT(*) as cnt FROM admin_users");
+      adminUsersCount = res3[0]?.cnt || 0;
     } catch { /* ignore */ }
   }
 
@@ -105,8 +107,7 @@ router.get('/auth-status', async (req, res) => {
   return res.json({
     status,
     db_connected: dbConnected,
-    admin_username: adminUsername,
-    admin_password_set: adminPasswordSet,
+    admin_users_in_db: adminUsersCount,
     admin_sessions_table_exists: sessionTableExists,
     active_sessions: sessionCount,
     fix_needed: status !== 'READY',
@@ -159,9 +160,13 @@ router.post('/fix-all', async (req, res) => {
     results.admin_sessions_table = 'FAILED: ' + err.message;
   }
 
-  // Step 3: Verify admin credentials are set
-  results.admin_username = process.env.ADMIN_USERNAME || 'knitadvisor (default)';
-  results.admin_password_set = !!(process.env.ADMIN_PASSWORD);
+  // Step 3: Verify admin users exist in DB
+  try {
+    const adminRows = await dbQuery('SELECT COUNT(*) as cnt FROM admin_users');
+    results.admin_users_in_db = adminRows[0]?.cnt || 0;
+  } catch (err) {
+    results.admin_users_in_db = 0;
+  }
 
   // Try to touch tmp/restart.txt to trigger Passenger restart
   let touchedRestart = false;
@@ -195,10 +200,18 @@ router.post('/fix-all', async (req, res) => {
 // Simulates a login without storing session — tests credentials + DB write
 router.post('/test-login', async (req, res) => {
   const { username, password } = req.body || {};
-  const validUsername = process.env.ADMIN_USERNAME || 'knitadvisor';
-  const validPassword = process.env.ADMIN_PASSWORD || 'knitadvisor2026';
-
-  const credentialsOk = (username === validUsername && password === validPassword);
+  
+  let credentialsOk = false;
+  try {
+    const passHash = crypto.createHash('sha256').update(password || '').digest('hex');
+    const adminRows = await dbQuery(
+      'SELECT id FROM admin_users WHERE username = ? AND password_hash = ?',
+      [username, passHash]
+    );
+    credentialsOk = adminRows.length > 0;
+  } catch (err) {
+    console.error('[Emergency Test Login Error]', err.message);
+  }
 
   let dbWriteOk = false;
   let dbWriteError = null;
@@ -244,8 +257,6 @@ router.get('/env-check', async (req, res) => {
     DB_PASS: process.env.DB_PASS ? '(set, length=' + process.env.DB_PASS.length + ')' : '(NOT SET)',
     DB_NAME: process.env.DB_NAME || '(not set)',
     DB_PORT: process.env.DB_PORT || '3306 (default)',
-    ADMIN_USERNAME: process.env.ADMIN_USERNAME || 'knitadvisor (default)',
-    ADMIN_PASSWORD: process.env.ADMIN_PASSWORD ? '(set, length=' + process.env.ADMIN_PASSWORD.length + ')' : '(NOT SET — using default)',
     PORT: process.env.PORT || '3001 (default)',
     NODE_ENV: process.env.NODE_ENV || '(not set)',
     node_version: process.version,
@@ -254,14 +265,19 @@ router.get('/env-check', async (req, res) => {
 });
 
 // ── POST /emergency/write-env ─────────────────────────────────────────────────
-// Writes/updates .env with provided DB config and admin credentials
+// Writes/updates .env with provided DB config
 // SECURITY: Only accepts a known setup token to prevent abuse
 router.post('/write-env', async (req, res) => {
-  const { setup_token, db_host, db_user, db_pass, db_name, db_port, admin_username, admin_password } = req.body || {};
+  const { setup_token, db_host, db_user, db_pass, db_name, db_port } = req.body || {};
 
-  // Setup token = SHA256 of admin password — prevents random callers from writing env
-  const adminPwd = process.env.ADMIN_PASSWORD || 'knitadvisor2026';
-  const expectedToken = require('crypto').createHash('sha256').update(adminPwd).digest('hex');
+  // Setup token = password_hash from the first admin, or fallback to hash of 'knitadvisor2026'
+  let expectedToken;
+  try {
+    const adminRows = await dbQuery('SELECT password_hash FROM admin_users LIMIT 1');
+    expectedToken = adminRows[0]?.password_hash || crypto.createHash('sha256').update('knitadvisor2026').digest('hex');
+  } catch (err) {
+    expectedToken = crypto.createHash('sha256').update('knitadvisor2026').digest('hex');
+  }
 
   if (setup_token !== expectedToken) {
     return res.status(403).json({ error: 'Invalid setup_token' });
@@ -289,8 +305,6 @@ router.post('/write-env', async (req, res) => {
     if (db_pass) content = setEnvVar(content, 'DB_PASS', db_pass);
     if (db_name) content = setEnvVar(content, 'DB_NAME', db_name);
     if (db_port) content = setEnvVar(content, 'DB_PORT', db_port);
-    if (admin_username) content = setEnvVar(content, 'ADMIN_USERNAME', admin_username);
-    if (admin_password) content = setEnvVar(content, 'ADMIN_PASSWORD', admin_password);
 
     fs.writeFileSync(envPath, content, 'utf8');
 
@@ -328,8 +342,7 @@ router.post('/write-env', async (req, res) => {
       passenger_restart_triggered: touchedRestart,
       updated_keys: [
         db_host && 'DB_HOST', db_user && 'DB_USER', db_pass && 'DB_PASS',
-        db_name && 'DB_NAME', db_port && 'DB_PORT',
-        admin_username && 'ADMIN_USERNAME', admin_password && 'ADMIN_PASSWORD'
+        db_name && 'DB_NAME', db_port && 'DB_PORT'
       ].filter(Boolean)
     });
   } catch (err) {
