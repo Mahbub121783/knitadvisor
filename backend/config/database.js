@@ -94,4 +94,5 @@ async function testConnection() {
   }
 }
 
-module.exports = { getPool, query, testConnection, initAdminDatabase };
+module.exports = { getPool, query, testConnection, initAdminDatabase, resetPool: () => { pool = null; } };
+

@@ -123,6 +123,23 @@ router.get('/auth-status', async (req, res) => {
 router.post('/fix-all', async (req, res) => {
   const results = {};
 
+  // Hot-reload environment variables in memory first
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const envPath = path.join(__dirname, '..', '.env');
+    if (fs.existsSync(envPath)) {
+      require('dotenv').config({ path: envPath, override: true });
+    }
+    const dbConfig = require('../config/database');
+    if (dbConfig.resetPool) {
+      dbConfig.resetPool();
+    }
+    results.hot_reload = 'success';
+  } catch (reloadErr) {
+    results.hot_reload = 'FAILED: ' + reloadErr.message;
+  }
+
   // Step 1: DB connection
   results.db_connected = await testConnection();
 
@@ -146,15 +163,31 @@ router.post('/fix-all', async (req, res) => {
   results.admin_username = process.env.ADMIN_USERNAME || 'knitadvisor (default)';
   results.admin_password_set = !!(process.env.ADMIN_PASSWORD);
 
+  // Try to touch tmp/restart.txt to trigger Passenger restart
+  let touchedRestart = false;
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const tmpDir = path.join(__dirname, '..', '..', 'tmp');
+    if (!fs.existsSync(tmpDir)) {
+      fs.mkdirSync(tmpDir, { recursive: true });
+    }
+    fs.writeFileSync(path.join(tmpDir, 'restart.txt'), String(Date.now()), 'utf8');
+    touchedRestart = true;
+  } catch (touchErr) {
+    // ignore
+  }
+  results.passenger_restart_triggered = touchedRestart;
+
   const allOk = results.db_connected && results.admin_sessions_table === 'ready';
 
   return res.json({
     ok: allOk,
     results,
     message: allOk
-      ? 'All repairs complete! Restart Node.js app in cPanel, then try login.'
+      ? 'All repairs complete! Hot-reloaded and triggered server restart.'
       : 'Some repairs failed. Check results above.',
-    next_step: 'Restart Node.js in cPanel: Stop → 3s → Start'
+    next_step: 'Passenger restart triggered via tmp/restart.txt'
   });
 });
 
@@ -261,9 +294,38 @@ router.post('/write-env', async (req, res) => {
 
     fs.writeFileSync(envPath, content, 'utf8');
 
+    // Hot-reload environment variables in memory
+    try {
+      require('dotenv').config({ path: envPath, override: true });
+      const dbConfig = require('../config/database');
+      if (dbConfig.resetPool) {
+        dbConfig.resetPool();
+      }
+      // Re-initialize tables
+      await dbConfig.initAdminDatabase();
+      console.log('[Emergency] Environment hot-reloaded and database pool reset');
+    } catch (reloadErr) {
+      console.warn('[Emergency] Environment reload failed:', reloadErr.message);
+    }
+
+    // Try to touch tmp/restart.txt to trigger Passenger restart
+    let touchedRestart = false;
+    try {
+      const tmpDir = path.join(__dirname, '..', '..', 'tmp');
+      if (!fs.existsSync(tmpDir)) {
+        fs.mkdirSync(tmpDir, { recursive: true });
+      }
+      fs.writeFileSync(path.join(tmpDir, 'restart.txt'), String(Date.now()), 'utf8');
+      touchedRestart = true;
+      console.log('[Emergency] Touched tmp/restart.txt for Passenger restart');
+    } catch (touchErr) {
+      console.warn('[Emergency] Could not touch tmp/restart.txt:', touchErr.message);
+    }
+
     return res.json({
       ok: true,
-      message: '.env updated. Restart Node.js app in cPanel for changes to take effect.',
+      message: '.env updated. Hot-reloaded and triggered server restart.',
+      passenger_restart_triggered: touchedRestart,
       updated_keys: [
         db_host && 'DB_HOST', db_user && 'DB_USER', db_pass && 'DB_PASS',
         db_name && 'DB_NAME', db_port && 'DB_PORT',
