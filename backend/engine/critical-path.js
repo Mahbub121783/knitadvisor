@@ -15,16 +15,31 @@ function analyzeCriticalPath(params) {
     gsm,
     countNe,
     loopLengthMm,
-    dia,
-    gauge,
-    feeders,
-    rpm,
     composition,
     yarnType,
+    optimal,
+    yarnUster,
+    yarnTorqueType,
   } = params;
 
   const steps = [];
   const warnings = [];
+
+  // ── ALWAYS-ON: fall back to the OPTIMAL machine when specs are omitted ──
+  // so the CPA always produces a full expert analysis (never an empty state).
+  const usedOptimalDia   = (params.dia == null || isNaN(params.dia)) && optimal && optimal.optimal_dia != null;
+  const usedOptimalGauge = (params.gauge == null || isNaN(params.gauge)) && optimal && optimal.optimal_gauge != null;
+  const dia    = params.dia    || (optimal ? optimal.optimal_dia : null);
+  const gauge  = params.gauge  || (optimal ? optimal.optimal_gauge : null);
+  const feeders = params.feeders || (optimal && optimal.dia ? optimal.dia.feeders : null);
+  const rpm    = params.rpm || null;
+  const basis = {
+    dia_source:   usedOptimalDia   ? 'recommended (optimal machine)' : (params.dia ? 'your input' : 'unavailable'),
+    gauge_source: usedOptimalGauge ? 'recommended (optimal machine)' : (params.gauge ? 'your input' : 'unavailable'),
+    note: (usedOptimalDia || usedOptimalGauge)
+      ? 'Machine specs not entered — analysis uses the recommended optimal Dia × Gauge. Enter your own machine for an exact CPA.'
+      : 'Analysis uses your entered machine specs.',
+  };
 
   // 1. Yarn-to-Needle Slot Clearance & Collision Index
   let yarnDiaMm = null;
@@ -179,7 +194,28 @@ function analyzeCriticalPath(params) {
     }
   }
 
+  // 6. Yarn-quality knitting performance (Uster-driven, always-on when yarn known)
+  let knittingPerf = null;
+  if (yarnUster && yarnUster.knitting_performance) {
+    const kp = yarnUster.knitting_performance;
+    knittingPerf = {
+      yarn_cvm_pct: yarnUster.cvm_pct,
+      yarn_u_pct: yarnUster.u_pct,
+      imperfections_ipi: yarnUster.imperfections_per_km ? yarnUster.imperfections_per_km.ipi : null,
+      hairiness_h: yarnUster.hairiness_h,
+      usp_rating: yarnUster.usp_rating ? yarnUster.usp_rating.label : null,
+      break_index: kp.break_index,
+      rating: kp.rating,
+      expected_efficiency_pct: kp.expected_efficiency_pct,
+      note: kp.note,
+    };
+    if (kp.rating === 'Poor') {
+      warnings.push(`CPA: Yarn imperfections (IPI ${knittingPerf.imperfections_ipi}/km, CVm ${yarnUster.cvm_pct}%) will cause frequent stops/holes — expect ~${kp.expected_efficiency_pct}% knitting efficiency.`);
+    }
+  }
+
   return {
+    basis,
     clearance: {
       yarn_diameter_mm: yarnDiaMm,
       slot_width_mm: slotWidthMm,
@@ -206,6 +242,7 @@ function analyzeCriticalPath(params) {
       status: rpmStatus,
       warning: rpmWarning,
     },
+    knitting_performance: knittingPerf,
     warnings,
   };
 }
