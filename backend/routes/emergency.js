@@ -220,4 +220,59 @@ router.get('/env-check', async (req, res) => {
   });
 });
 
+// ── POST /emergency/write-env ─────────────────────────────────────────────────
+// Writes/updates .env with provided DB config and admin credentials
+// SECURITY: Only accepts a known setup token to prevent abuse
+router.post('/write-env', async (req, res) => {
+  const { setup_token, db_host, db_user, db_pass, db_name, db_port, admin_username, admin_password } = req.body || {};
+
+  // Setup token = SHA256 of admin password — prevents random callers from writing env
+  const adminPwd = process.env.ADMIN_PASSWORD || 'knitadvisor2026';
+  const expectedToken = require('crypto').createHash('sha256').update(adminPwd).digest('hex');
+
+  if (setup_token !== expectedToken) {
+    return res.status(403).json({ error: 'Invalid setup_token' });
+  }
+
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const envPath = path.join(__dirname, '..', '.env');
+
+    let content = '';
+    try { content = fs.readFileSync(envPath, 'utf8'); } catch { content = ''; }
+
+    function setEnvVar(content, key, value) {
+      if (!value) return content;
+      const line = `${key}=${value}`;
+      if (new RegExp(`^${key}=`, 'm').test(content)) {
+        return content.replace(new RegExp(`^${key}=.*`, 'm'), line);
+      }
+      return content + `\n${line}`;
+    }
+
+    if (db_host) content = setEnvVar(content, 'DB_HOST', db_host);
+    if (db_user) content = setEnvVar(content, 'DB_USER', db_user);
+    if (db_pass) content = setEnvVar(content, 'DB_PASS', db_pass);
+    if (db_name) content = setEnvVar(content, 'DB_NAME', db_name);
+    if (db_port) content = setEnvVar(content, 'DB_PORT', db_port);
+    if (admin_username) content = setEnvVar(content, 'ADMIN_USERNAME', admin_username);
+    if (admin_password) content = setEnvVar(content, 'ADMIN_PASSWORD', admin_password);
+
+    fs.writeFileSync(envPath, content, 'utf8');
+
+    return res.json({
+      ok: true,
+      message: '.env updated. Restart Node.js app in cPanel for changes to take effect.',
+      updated_keys: [
+        db_host && 'DB_HOST', db_user && 'DB_USER', db_pass && 'DB_PASS',
+        db_name && 'DB_NAME', db_port && 'DB_PORT',
+        admin_username && 'ADMIN_USERNAME', admin_password && 'ADMIN_PASSWORD'
+      ].filter(Boolean)
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to write .env', message: err.message });
+  }
+});
+
 module.exports = router;
