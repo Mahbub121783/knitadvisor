@@ -72,7 +72,8 @@ function calculate(params) {
 
   // --- 1. Validate & normalize inputs ---
   const { fabric, gsm, dia, gauge, rpm, efficiency, stitch_length, feeders, composition, color_shade,
-          target_width, denier, filaments, elastane_denier, elastane_pct } = normalizeParams(params);
+          target_width, yarn_type, twist_multiplier, finishing_route,
+          denier, filaments, elastane_denier, elastane_pct } = normalizeParams(params);
 
   if (!fabric) return { error: 'fabric is required', code: 'MISSING_FABRIC' };
   if (!gsm) return { error: 'gsm is required', code: 'MISSING_GSM' };
@@ -372,6 +373,10 @@ function calculate(params) {
     tightness_factor: tfResult ? tfResult.value : 14.0,
     count_ne: countResult.count_ne || 30,
     parsedComp,
+    // v2.0 dominant-driver inputs
+    yarn_type,
+    twist_multiplier,
+    finishing_route,
   });
   if (qualityResult.warnings && qualityResult.warnings.length) {
     qualityResult.warnings.forEach(w => warnings.push(w));
@@ -561,6 +566,7 @@ function calculate(params) {
       dimensional_stability: qualityResult.dimensional_stability,
       wash_fastness:        qualityResult.wash_fastness,
       finishing_recommendations: qualityResult.finishing_recommendations,
+      model_meta:           qualityResult.model_meta,
     } : null,
 
     costing: costResult ? {
@@ -614,6 +620,10 @@ function normalizeParams(p) {
     feeders: p.feeders ? parseInt(p.feeders) : null,
     // Optional finished open-width target (inches) → drives optimal Dia
     target_width: p.target_width ? parseFloat(p.target_width) : null,
+    // Quality v2.0 dominant-driver inputs (optional)
+    yarn_type: p.yarn_type ? String(p.yarn_type).trim() : null,
+    twist_multiplier: p.twist_multiplier ? parseFloat(p.twist_multiplier) : null,
+    finishing_route: p.finishing_route ? String(p.finishing_route).trim() : null,
     // Warp knit parameters
     denier: p.denier ? parseFloat(p.denier) : null,
     filaments: p.filaments ? parseInt(p.filaments) : 34,
