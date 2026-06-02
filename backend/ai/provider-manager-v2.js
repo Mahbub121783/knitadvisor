@@ -373,6 +373,14 @@ async function addApiKey(providerId, apiKeyPlaintext, keyIndex) {
   );
 }
 
+async function updateApiKey(providerId, key) {
+  const encrypted = encryptApiKey(key);
+  await dbQuery(
+    'INSERT INTO ai_provider_keys (provider_id, key_index, api_key_encrypted, is_active, is_healthy) VALUES (?, 1, ?, 1, 1) ON DUPLICATE KEY UPDATE api_key_encrypted = ?, is_active = 1, is_healthy = 1, cooldown_until = NULL',
+    [providerId, encrypted, encrypted]
+  );
+}
+
 async function getApiKeysInfo(providerId) {
   const keys = await dbQuery('SELECT id, key_index, is_active, is_healthy, failures_today, tokens_today, last_used_at FROM ai_provider_keys WHERE provider_id = ?', [providerId]);
   return keys;
@@ -401,6 +409,116 @@ async function toggleModelActive(modelId, isActive) {
   await dbQuery('UPDATE ai_provider_models SET is_active = ? WHERE id = ?', [isActive ? 1 : 0, modelId]);
 }
 
+async function updatePriority(id, newPriority) {
+  const currentRow = await dbQuery('SELECT priority FROM ai_provider_stats WHERE id = ?', [id]);
+  if (!currentRow.length) throw new Error('Provider not found');
+  const oldPriority = currentRow[0].priority;
+  const otherRow = await dbQuery('SELECT id FROM ai_provider_stats WHERE priority = ? AND id != ?', [newPriority, id]);
+  if (otherRow.length > 0) {
+    await dbQuery('UPDATE ai_provider_stats SET priority = ? WHERE id = ?', [oldPriority, otherRow[0].id]);
+  }
+  await dbQuery('UPDATE ai_provider_stats SET priority = ? WHERE id = ?', [newPriority, id]);
+}
+
+async function toggleEnabled(id, enabled) {
+  await dbQuery('UPDATE ai_provider_stats SET is_enabled = ? WHERE id = ?', [enabled ? 1 : 0, id]);
+}
+
+async function setStrategy(strategy) {
+  await dbQuery(
+    "INSERT INTO ai_provider_config (cfg_key, cfg_value) VALUES ('strategy', ?) ON DUPLICATE KEY UPDATE cfg_value = ?",
+    [strategy, strategy]
+  );
+}
+
+function getProviderTypes() {
+  const defaultModels = {
+    groq: 'llama-3.3-70b-versatile',
+    gemini: 'gemini-1.5-flash',
+    mistral: 'mistral-small-latest',
+    cohere: 'command-r',
+    openai: 'gpt-4o-mini'
+  };
+  return Object.entries(PROVIDER_DEFAULTS).map(([type, d]) => ({
+    type,
+    default_model: defaultModels[type] || 'gpt-4o-mini',
+    default_daily_limit: d.daily_limit,
+    default_per_min_limit: d.per_min_limit,
+    default_api_url: d.api_url,
+    env_var_hint: type.toUpperCase() + '_API_KEY',
+  }));
+}
+
+async function addProvider({ provider_type, display_name, api_key_env, model_name, api_url, daily_limit, per_min_limit }) {
+  const defaults = PROVIDER_DEFAULTS[provider_type] || {};
+  const defaultModels = {
+    groq: 'llama-3.3-70b-versatile',
+    gemini: 'gemini-1.5-flash',
+    mistral: 'mistral-small-latest',
+    cohere: 'command-r',
+    openai: 'gpt-4o-mini'
+  };
+
+  // Auto-assign priority (max + 1)
+  const rows = await dbQuery('SELECT MAX(priority) AS maxP FROM ai_provider_stats');
+  const nextPriority = (rows[0]?.maxP || 0) + 1;
+
+  // Auto-generate provider_name: provider_type + _N
+  const existing = await dbQuery('SELECT provider_name FROM ai_provider_stats WHERE provider_type = ?', [provider_type]);
+  const providerName = existing.length === 0 ? provider_type : `${provider_type}_${existing.length + 1}`;
+
+  const result = await dbQuery(
+    `INSERT INTO ai_provider_stats
+     (provider_name, display_name, provider_type, priority, daily_limit, per_min_limit, api_key_env, model_name, api_url)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      providerName,
+      display_name || providerName.toUpperCase(),
+      provider_type,
+      nextPriority,
+      daily_limit || defaults.daily_limit || 10000,
+      per_min_limit || defaults.per_min_limit || 10,
+      api_key_env,
+      model_name || defaultModels[provider_type] || 'gpt-4o-mini',
+      api_url || defaults.api_url
+    ]
+  );
+
+  const newProviderId = result.insertId;
+
+  // Also add the default model to ai_provider_models table
+  const selectedModelName = model_name || defaultModels[provider_type] || 'gpt-4o-mini';
+  await dbQuery(
+    'INSERT INTO ai_provider_models (provider_id, model_name, is_active, is_healthy) VALUES (?, ?, 1, 1)',
+    [newProviderId, selectedModelName]
+  );
+
+  return providerName;
+}
+
+async function deleteProvider(id) {
+  await dbQuery('DELETE FROM ai_provider_keys WHERE provider_id = ?', [id]);
+  await dbQuery('DELETE FROM ai_provider_models WHERE provider_id = ?', [id]);
+  await dbQuery('DELETE FROM ai_provider_stats WHERE id = ?', [id]);
+}
+
+async function testProvider(provider) {
+  const keys = await getProviderKeys(provider.id);
+  if (!keys.length) {
+    throw new Error('No API keys configured in database for this provider');
+  }
+  const decryptedKey = decryptApiKey(keys[0].api_key_encrypted);
+
+  const models = await getProviderModels(provider.id);
+  if (!models.length) {
+    throw new Error('No models configured for this provider');
+  }
+  const model = models[0];
+
+  const TEST_TEXT = 'single jersey 180 GSM 30 dia 24 gauge';
+  return callProvider(provider, model, decryptedKey, TEST_TEXT);
+}
+
 async function resetDailyStats() {
   await Promise.all([
     dbQuery('UPDATE ai_provider_stats SET tokens_today = 0, requests_today = 0, failures_today = 0, is_healthy = 1, cooldown_until = NULL'),
@@ -417,11 +535,19 @@ module.exports = {
   getStrategy,
   orderProviders,
   addApiKey,
+  updateApiKey,
   getApiKeysInfo,
   addModel,
   getModelsInfo,
   toggleKeyActive,
   toggleModelActive,
+  updatePriority,
+  toggleEnabled,
+  setStrategy,
+  getProviderTypes,
+  addProvider,
+  deleteProvider,
+  testProvider,
   resetDailyStats,
   encryptApiKey,
   decryptApiKey,
