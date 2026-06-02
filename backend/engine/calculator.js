@@ -63,6 +63,7 @@ const { analyzeCriticalPath } = require('./critical-path');
 const { recommendMachine } = require('./machine-optimizer');
 const { analyzeYarn, recommendYarnGrade } = require('./yarn-engine');
 const { matchFactory, recommendCountFromGSM } = require('./factory-match');
+const { gaugeFromBulkData, estimateProcessLoss, greyRequirementForFinished } = require('./production-data');
 
 // ============================================================
 // MAIN CALCULATE FUNCTION
@@ -371,6 +372,22 @@ function calculate(params) {
       targetWidthInches: target_width,
     });
     if (optimalMachine && optimalMachine.ok) {
+      // Cross-check the cover-factor gauge against what bulk factory bookings
+      // actually use (mills run far finer than the cover-factor lower bound).
+      const bulk = gaugeFromBulkData(fabricDef.category, countResult.count_ne);
+      if (bulk) {
+        const theory = optimalMachine.optimal_gauge;
+        optimalMachine.bulk_data_gauge = {
+          factory_gauge: bulk.gg,
+          theory_gauge: theory,
+          family: bulk.family,
+          agrees: Math.abs(bulk.gg - theory) <= 2,
+          note: Math.abs(bulk.gg - theory) <= 2
+            ? `Bulk-production bookings confirm ~${bulk.gg} GG for ${countResult.count_ne}s — matches the cover-factor ${theory} GG.`
+            : `Cover-factor gives ${theory} GG, but real bulk bookings for ${countResult.count_ne}s ${bulk.family} fabric run ~${bulk.gg} GG (modern loose/lycra fabrics knit finer). Use ${bulk.gg} GG to match buyer-approved hand-feel.`,
+          source: 'Knitting Master File (5000+ bookings).',
+        };
+      }
       trace.push({
         step: '4.1',
         action: 'optimal_machine',
@@ -456,6 +473,24 @@ function calculate(params) {
       factoryMatch.count_recommendation = recommendCountFromGSM(fabricDef.id, gsm, compClass);
       trace.push({ step: '6.1c', action: 'factory_match', result: `SL ${factoryMatch.prediction.stitch_length_mm}mm · finish ${factoryMatch.prediction.finished_gsm} GSM · ${factoryMatch.confidence} (${factoryMatch.confidence_pct}%)` });
     }
+  }
+
+  // --- 6.1d Process loss (grey booking → finished delivery), bulk-data model ---
+  // Infer wet/mechanical processes from the fabric + finishing route so the
+  // floor knows how much extra grey to book. (Knitting Master File loss column.)
+  let processLoss = null;
+  {
+    const seg = colorResult ? colorResult.shade : 'medium';
+    const procs = [];
+    const cat = fabricDef.category || '';
+    const fid = fabricDef.id || '';
+    if (cat === 'fleece' || /fleece|terry/.test(fid)) procs.push('brush');
+    if (finishing_route === 'garment_wash' || /wash/.test(finishing_route || '')) procs.push('garment_wash');
+    if (finishing_route === 'peach' || /peach|sueded/.test(finishing_route || '')) procs.push('peach');
+    processLoss = estimateProcessLoss(seg, procs);
+    // Worked example: grey to book for 100 kg finished.
+    processLoss.example_100kg = greyRequirementForFinished(100, seg, procs);
+    trace.push({ step: '6.1d', action: 'process_loss', result: `${processLoss.loss_pct}% grey→finish (${seg}${procs.length ? ' + ' + procs.join('+') : ''})` });
   }
 
   // --- 6.2 Financial Costing ---
@@ -664,6 +699,9 @@ function calculate(params) {
 
     // Real factory R&D data match (greige→finish records)
     factory_prediction: (factoryMatch && factoryMatch.ok) ? factoryMatch : null,
+
+    // Bulk-production process loss (grey booking → finished delivery)
+    process_loss: processLoss,
 
     costing: costResult ? {
       raw_material_per_kg_usd:  costResult.cost_breakdown_usd.raw_material.with_waste_per_kg,
