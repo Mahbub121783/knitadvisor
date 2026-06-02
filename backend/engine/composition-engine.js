@@ -417,54 +417,86 @@ const LIGHT_KEYWORDS = [
 ];
 // Medium = everything else (grey, mel, olive, blue, red, etc.)
 
+// ============================================================
+// COLOR SHADE → KNITTING PARAMETER TABLE
+// Industry source: Karl Mayer, Spencer's "Knitting Technology",
+// Bangladesh RMG factory R&D records (grey GSM correction practice)
+//
+// dark:   Fabric absorbs 3–5% more dye mass → grey GSM knitted lower
+//         SL is set looser (+2%) so grey GSM = finish_gsm - 4%
+// medium: 1.5–2% dye uptake → grey GSM slightly under finish target
+//         SL standard
+// light:  <1% dye uptake → grey GSM ≈ finish GSM
+//         SL set tighter (-1%) so fabric doesn't go over
+// ============================================================
+const SHADE_PARAMS = {
+  dark: {
+    gsm_adjustment_pct: 4,       // +4% GSM after dyeing vs grey weight
+    grey_gsm_factor:    0.962,   // knit at 96.2% of target → after dye = ~100%
+    sl_factor:          1.020,   // SL 2% looser (ঢিল) in grey to compensate
+    sl_direction:       'looser',
+    note: 'Dark shade — knit grey GSM ~4% below target. Set SL 2% looser. After dyeing, dye uptake will bring GSM to target.',
+  },
+  medium: {
+    gsm_adjustment_pct: 1.5,
+    grey_gsm_factor:    0.985,
+    sl_factor:          1.005,   // SL barely adjusted
+    sl_direction:       'standard',
+    note: 'Medium shade — knit grey GSM ~1.5% below target. SL standard.',
+  },
+  light: {
+    gsm_adjustment_pct: -1,      // negligible dye mass
+    grey_gsm_factor:    1.000,   // knit at target GSM (or even fractionally over)
+    sl_factor:          0.990,   // SL 1% tighter (টাইট) — less dye = no GSM gain
+    sl_direction:       'tighter',
+    note: 'Light/White shade — minimal dye uptake. Knit at target GSM. Set SL 1% tighter.',
+  },
+};
+
 /**
- * Classify a color name/code into shade depth.
+ * Classify a color name/code into shade depth and return knitting parameters.
  * Also detects Pantone TCX codes (19-xxxx = dark, 11-14xxxx = light).
- * 
+ *
  * @param {string} colorName
- * @returns {{ shade: 'dark'|'medium'|'light', gsm_adjustment_pct: number, note: string }}
+ * @returns {{ shade, gsm_adjustment_pct, grey_gsm_factor, sl_factor, sl_direction, note }}
  */
 function classifyColorShade(colorName) {
   if (!colorName || typeof colorName !== 'string') {
-    return { shade: 'medium', gsm_adjustment_pct: 0, note: 'No color specified' };
+    return { shade: 'medium', ...SHADE_PARAMS.medium };
   }
 
   const lower = colorName.toLowerCase().trim();
 
-  // Check Pantone TCX codes first (e.g. "19-3910 Tcx")
+  // Direct shade keywords first (user clicked Dark/Medium/Light button)
+  if (lower === 'dark')   return { shade: 'dark',   ...SHADE_PARAMS.dark };
+  if (lower === 'medium') return { shade: 'medium', ...SHADE_PARAMS.medium };
+  if (lower === 'light')  return { shade: 'light',  ...SHADE_PARAMS.light };
+
+  // Pantone TCX code detection (e.g. "19-3910 TCX")
   const pantoneMatch = lower.match(/(\d{2})-\d{4}/);
   if (pantoneMatch) {
-    const pantoneGroup = parseInt(pantoneMatch[1]);
-    if (pantoneGroup >= 19) {
-      return { shade: 'dark', gsm_adjustment_pct: 4, note: `Pantone ${pantoneGroup}-series = dark shade. Expect +3-5% GSM after dyeing.` };
-    }
-    if (pantoneGroup <= 14) {
-      return { shade: 'light', gsm_adjustment_pct: -1, note: `Pantone ${pantoneGroup}-series = light shade. GSM stays close to target.` };
-    }
-    return { shade: 'medium', gsm_adjustment_pct: 1.5, note: `Pantone ${pantoneGroup}-series = medium shade. Expect +1-2% GSM.` };
+    const pg = parseInt(pantoneMatch[1]);
+    if (pg >= 19) return { shade: 'dark',   ...SHADE_PARAMS.dark };
+    if (pg <= 14) return { shade: 'light',  ...SHADE_PARAMS.light };
+    return             { shade: 'medium', ...SHADE_PARAMS.medium };
   }
 
-  // Check dark keywords
+  // Dark keywords
   for (const kw of DARK_KEYWORDS) {
-    if (lower.includes(kw)) {
-      return { shade: 'dark', gsm_adjustment_pct: 4, note: `"${kw}" detected — dark shade. Expect +3-5% GSM gain after dyeing.` };
-    }
+    if (lower.includes(kw)) return { shade: 'dark', ...SHADE_PARAMS.dark };
   }
 
-  // Check light keywords
+  // Light keywords
   for (const kw of LIGHT_KEYWORDS) {
-    if (lower.includes(kw)) {
-      return { shade: 'light', gsm_adjustment_pct: -1, note: `"${kw}" detected — light shade. GSM stays close to target or slightly under.` };
-    }
+    if (lower.includes(kw)) return { shade: 'light', ...SHADE_PARAMS.light };
   }
 
-  // Check melange / heather
+  // Melange / heather / grey → medium
   if (lower.includes('mel') || lower.includes('heather') || lower.includes('grey') || lower.includes('gray')) {
-    return { shade: 'medium', gsm_adjustment_pct: 1.5, note: 'Melange/Grey — medium shade. Expect +1-2% GSM.' };
+    return { shade: 'medium', ...SHADE_PARAMS.medium };
   }
 
-  // Default: medium
-  return { shade: 'medium', gsm_adjustment_pct: 1.5, note: 'Standard color — medium shade estimate.' };
+  return { shade: 'medium', ...SHADE_PARAMS.medium };
 }
 
 // ============================================================
