@@ -1,5 +1,17 @@
 const Groq = require('groq-sdk');
-require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
+// Load environment variables from either application root or backend folder
+(() => {
+  const path = require('path');
+  const fs = require('fs');
+  const rootEnv = path.join(__dirname, '..', '..', '.env');
+  if (fs.existsSync(rootEnv)) {
+    require('dotenv').config({ path: rootEnv });
+  }
+  const backendEnv = path.join(__dirname, '..', '.env');
+  if (fs.existsSync(backendEnv)) {
+    require('dotenv').config({ path: backendEnv });
+  }
+})();
 
 const groq = new Groq({
     apiKey: process.env.GROQ_API_KEY

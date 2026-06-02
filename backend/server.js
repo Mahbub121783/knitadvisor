@@ -2,7 +2,19 @@
  * KnitAdvisor Server — Entry Point
  * Runs on cPanel Node.js App
  */
-require('dotenv').config({ path: require('path').join(__dirname, '.env') });
+// Load environment variables from either application root or backend folder
+(() => {
+  const path = require('path');
+  const fs = require('fs');
+  const rootEnv = path.join(__dirname, '..', '.env');
+  if (fs.existsSync(rootEnv)) {
+    require('dotenv').config({ path: rootEnv });
+  }
+  const backendEnv = path.join(__dirname, '.env');
+  if (fs.existsSync(backendEnv)) {
+    require('dotenv').config({ path: backendEnv });
+  }
+})();
 
 const express = require('express');
 const cors = require('cors');
@@ -13,7 +25,7 @@ const apiRoutes = require('./routes/api');
 const adminRoutes = require('./routes/admin');
 const emergencyRoutes = require('./routes/emergency');
 const rateLimiter = require('./middleware/rate-limiter');
-const { testConnection } = require('./config/database');
+const { testConnection, initAdminDatabase } = require('./config/database');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -88,6 +100,9 @@ async function start() {
   if (!dbOk) {
     console.warn('[WARN] Database not available. Running without DB cache + logging.');
     console.warn('[WARN] Calculation engine will still work (in-memory only).');
+  } else {
+    // Initialize admin database table and default credentials
+    await initAdminDatabase();
   }
 
   app.listen(PORT, () => {
