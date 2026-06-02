@@ -35,6 +35,8 @@
 
 'use strict';
 
+const { usterProfile } = require('./uster-engine');
+
 // ============================================================
 // 1. FIBER GRADE TAXONOMY  (cotton quality hierarchy + sustainability labels)
 //    rank: 1 = finest/strongest. staple_mm = typical upper-half mean length.
@@ -299,6 +301,18 @@ function analyzeYarn(args = {}) {
     slub = slubEffectiveCount(countNe, args.slub || {});
   }
 
+  // Uster Statistics profile — count-grounded evenness, IPI, hairiness, USP.
+  const uster = usterProfile({
+    count_ne: countNe,
+    spinning_system: spinKey,
+    grade_key: gradeKey,
+  });
+  // Prefer Uster's count-grounded U% over the flat system value.
+  const u_final = (uster && uster.ok && uster.u_pct != null) ? uster.u_pct : u_pct;
+  if (uster && uster.ok && uster.fibre_count_flag) {
+    spinWarning = spinWarning ? spinWarning : uster.fibre_count_flag;
+  }
+
   return {
     ok: true,
     count_ne: countNe,
@@ -312,12 +326,14 @@ function analyzeYarn(args = {}) {
       tenacity_rkm: rkm,
       tenacity_rating: rkm >= 18 ? 'High' : rkm >= 15 ? 'Good' : rkm >= 12 ? 'Average' : 'Low',
       csp,
-      evenness_u_pct: u_pct,
-      evenness_rating: u_pct <= 9.5 ? 'Excellent' : u_pct <= 11 ? 'Good' : u_pct <= 13 ? 'Average' : 'Poor',
+      evenness_u_pct: u_final,
+      evenness_rating: u_final <= 9.5 ? 'Excellent' : u_final <= 11 ? 'Good' : u_final <= 13 ? 'Average' : 'Poor',
+      hairiness_h: uster && uster.ok ? uster.hairiness_h : null,
       hairiness_idx: spin.hairiness_idx,
       torque_idx: parseFloat(torque.toFixed(2)),
       pilling_tendency,
     },
+    uster: uster && uster.ok ? uster : null,
     quality_rank,
     price_index: price_idx,
     spinnable,

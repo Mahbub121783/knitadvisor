@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20260602d">
+  <link rel="stylesheet" href="css/style.css?v=20260602e">
 
   <style>
     /* Result page specific */
@@ -394,7 +394,10 @@
         <div class="rst-title-text" style="color:var(--a1);">Production Critical Path Analysis (CPA)</div>
         <span class="badge badge-green" style="margin-left:auto;">Factory-Ready</span>
       </div>
-      
+
+      <!-- Basis banner (shows when analysis uses recommended machine) -->
+      <div id="cpa-basis" class="hidden" style="font-size:10px; line-height:1.5; padding:8px 10px; margin-bottom:10px; background:rgba(0,255,178,.05); border:1px solid rgba(0,255,178,.18); border-radius:6px; color:var(--t2);"></div>
+
       <!-- Clearance Sub-section -->
       <div class="result-section-label" style="color:var(--a2); margin-top:8px;">1. Yarn-to-Needle Slot Clearance</div>
       <div class="result-row">
@@ -457,6 +460,26 @@
         <span class="result-val" id="cpa-rpm-status">—</span>
       </div>
       <div class="info-box text-xs" id="cpa-rpm-desc">—</div>
+
+      <!-- Yarn-quality knitting performance (Uster-driven) -->
+      <div id="cpa-knit-block" class="hidden">
+        <div class="result-section-label" style="color:var(--a1); margin-top:12px;">6. Yarn-Quality Knitting Performance <span style="font-size:9px; color:var(--t3); font-weight:400;">(Uster)</span></div>
+        <div class="mini-stats" style="display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin:8px 0;">
+          <div class="mini-stat"><div class="ms-val" id="cpa-knit-cvm">—</div><div class="ms-lbl">CVm %</div></div>
+          <div class="mini-stat"><div class="ms-val" id="cpa-knit-ipi">—</div><div class="ms-lbl">IPI /km</div></div>
+          <div class="mini-stat"><div class="ms-val" id="cpa-knit-h">—</div><div class="ms-lbl">Hairiness H</div></div>
+          <div class="mini-stat"><div class="ms-val" id="cpa-knit-eff">—</div><div class="ms-lbl">Exp. Efficiency</div></div>
+        </div>
+        <div class="result-row">
+          <span class="result-key">Uster Percentile (USP)</span>
+          <span class="result-val" id="cpa-knit-usp">—</span>
+        </div>
+        <div class="result-row">
+          <span class="result-key">Knitting Rating</span>
+          <span class="result-val" id="cpa-knit-rating">—</span>
+        </div>
+        <div class="info-box text-xs" id="cpa-knit-note" style="margin-top:8px;">—</div>
+      </div>
     </div>
 
     <!-- ===== QUALITY & SHRINKAGE PREDICTION ===== -->
@@ -583,6 +606,26 @@
           <span class="result-key">Spinnability</span>
           <span class="result-val" id="ye-spinnable">—</span>
         </div>
+        <!-- Uster Statistics sub-block -->
+        <div id="ye-uster-block" class="hidden">
+          <div class="result-section-label" style="margin-top:10px;">Uster Statistics <span style="font-size:9px; color:var(--t3); font-weight:400;">(evenness & imperfections)</span></div>
+          <div class="mini-stats" style="display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin:8px 0;">
+            <div class="mini-stat"><div class="ms-val" id="ye-cvm">—</div><div class="ms-lbl">CVm %</div></div>
+            <div class="mini-stat"><div class="ms-val" id="ye-ipi">—</div><div class="ms-lbl">IPI /km</div></div>
+            <div class="mini-stat"><div class="ms-val" id="ye-hairy">—</div><div class="ms-lbl">Hairiness H</div></div>
+            <div class="mini-stat"><div class="ms-val" id="ye-nfib">—</div><div class="ms-lbl">Fibres/section</div></div>
+          </div>
+          <div class="result-row">
+            <span class="result-key">Index of Irregularity</span>
+            <span class="result-val white" id="ye-ioi">—</span>
+          </div>
+          <div class="result-row">
+            <span class="result-key">Uster Percentile</span>
+            <span class="result-val" id="ye-usp">—</span>
+          </div>
+          <div class="info-box text-xs" id="ye-uster-trace" style="margin-top:6px; font-size:9px;">—</div>
+        </div>
+
         <!-- Slub (shown only for slub yarn) -->
         <div class="result-row hidden" id="ye-slub-row">
           <span class="result-key">Slub Effective Count</span>
@@ -1611,6 +1654,24 @@ function renderYarnExpertise(e, rec) {
     spinEl.className = 'result-val red font-bold';
   }
 
+  // Uster Statistics block
+  const ub = document.getElementById('ye-uster-block');
+  const u = e.uster;
+  if (u) {
+    ub.classList.remove('hidden');
+    document.getElementById('ye-cvm').textContent  = u.cvm_pct != null ? `${u.cvm_pct}` : '—';
+    document.getElementById('ye-ipi').textContent  = u.imperfections_per_km ? `${u.imperfections_per_km.ipi}` : '—';
+    document.getElementById('ye-hairy').textContent = u.hairiness_h != null ? `${u.hairiness_h}` : '—';
+    document.getElementById('ye-nfib').textContent = u.fibres_in_cross_section != null ? `${u.fibres_in_cross_section}` : '—';
+    document.getElementById('ye-ioi').textContent  = u.index_of_irregularity != null ? `${u.index_of_irregularity} (limit ${u.cv_limit_pct}%)` : '—';
+    const uspEl = document.getElementById('ye-usp');
+    uspEl.textContent = u.usp_rating ? u.usp_rating.label : '—';
+    uspEl.className = 'result-val ' + (u.usp_rating && u.usp_rating.usp <= 25 ? 'green font-bold' : u.usp_rating && u.usp_rating.usp <= 50 ? 'white' : 'amber');
+    document.getElementById('ye-uster-trace').textContent = u.formula_trace ? `${u.formula_trace.n} · ${u.formula_trace.cvm}` : '';
+  } else {
+    ub.classList.add('hidden');
+  }
+
   // Slub
   const slubRow = document.getElementById('ye-slub-row');
   if (e.slub) {
@@ -1754,6 +1815,15 @@ function renderCPA(cpa) {
   }
   sec.classList.remove('hidden');
 
+  // 0. Basis banner — show when analysis used the recommended optimal machine
+  const basisEl = document.getElementById('cpa-basis');
+  if (cpa.basis && (cpa.basis.dia_source.includes('recommended') || cpa.basis.gauge_source.includes('recommended'))) {
+    basisEl.classList.remove('hidden');
+    basisEl.innerHTML = `⚙️ <strong>Basis:</strong> Dia = ${cpa.basis.dia_source}, Gauge = ${cpa.basis.gauge_source}. ${cpa.basis.note}`;
+  } else {
+    basisEl.classList.add('hidden');
+  }
+
   // 1. Clearance
   const clearance = cpa.clearance;
   if (clearance && clearance.yarn_diameter_mm != null) {
@@ -1835,6 +1905,24 @@ function renderCPA(cpa) {
     document.getElementById('cpa-max-rpm').textContent = '—';
     document.getElementById('cpa-rpm-status').textContent = '—';
     document.getElementById('cpa-rpm-desc').textContent = 'Speed ceiling parameters not available. Enter Dia and Gauge.';
+  }
+
+  // 6. Yarn-quality knitting performance (Uster-driven)
+  const kp = cpa.knitting_performance;
+  const kpBlock = document.getElementById('cpa-knit-block');
+  if (kp) {
+    kpBlock.classList.remove('hidden');
+    document.getElementById('cpa-knit-cvm').textContent = kp.yarn_cvm_pct != null ? `${kp.yarn_cvm_pct}` : '—';
+    document.getElementById('cpa-knit-ipi').textContent = kp.imperfections_ipi != null ? `${kp.imperfections_ipi}` : '—';
+    document.getElementById('cpa-knit-h').textContent   = kp.hairiness_h != null ? `${kp.hairiness_h}` : '—';
+    document.getElementById('cpa-knit-eff').textContent = kp.expected_efficiency_pct != null ? `${kp.expected_efficiency_pct}%` : '—';
+    document.getElementById('cpa-knit-usp').textContent = kp.usp_rating || '—';
+    const rEl = document.getElementById('cpa-knit-rating');
+    rEl.textContent = kp.rating || '—';
+    rEl.className = 'result-val ' + (kp.rating === 'Excellent' || kp.rating === 'Good' ? 'green font-bold' : kp.rating === 'Average' ? 'amber font-bold' : 'red font-bold');
+    document.getElementById('cpa-knit-note').textContent = kp.note || '';
+  } else {
+    kpBlock.classList.add('hidden');
   }
 }
 

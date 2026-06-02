@@ -432,6 +432,8 @@ function calculate(params) {
   trace.push({ step: '6.3', action: 'generate_pattern', result: patternResult ? 'SUCCESS' : 'FAILED' });
 
   // --- 6.4 Production Critical Path Analysis (CPA) ---
+  // CPA always runs: when the user omits machine specs, fall back to the
+  // OPTIMAL machine (single Dia × Gauge) so the analysis is never empty.
   const cpaResult = analyzeCriticalPath({
     fabricId: fabricDef.id,
     category: fabricDef.category,
@@ -444,6 +446,10 @@ function calculate(params) {
     rpm,
     composition,
     yarnType: countResult.count_display,
+    // fallbacks + enrichment
+    optimal: optimalMachine && optimalMachine.ok ? optimalMachine : null,
+    yarnUster: yarnExpertise && yarnExpertise.uster ? yarnExpertise.uster : null,
+    yarnTorqueType: yarnExpertise ? yarnExpertise.quality_engine_yarn_type : null,
   });
   if (cpaResult && cpaResult.warnings && cpaResult.warnings.length) {
     warnings.push(...cpaResult.warnings);
