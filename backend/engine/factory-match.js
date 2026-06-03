@@ -10,7 +10,7 @@
  *   • dye-uptake GSM gain (finish − grey, % of grey)
  *
  * Method: weighted k-nearest-neighbour over the curated FACTORY_RECORDS.
- * Records must match the fabric category; everything else contributes a
+ * Records must match the fabric category; ebuyer-refthing else contributes a
  * distance. Predictions are an inverse-distance-weighted blend of the k
  * nearest matches, with a confidence score from how close the matches are.
  *
@@ -44,7 +44,7 @@ function matchFactory(q, k = 4) {
   const seg = SEG_ORD[(q.color_segment || 'medium')] != null ? (q.color_segment || 'medium') : 'medium';
   const comp = ['cotton','cvc','pc','modal','viscose'].includes(q.comp) ? q.comp : 'cotton';
 
-  // Score every record in the same fabric category.
+  // Score ebuyer-ref record in the same fabric category.
   const pool = FACTORY_RECORDS.filter(r => r.fab === fabKey);
   if (pool.length === 0) return { ok: false, reason: 'no_fabric_records' };
 
@@ -80,7 +80,7 @@ function matchFactory(q, k = 4) {
   // Confidence from the nearest match distance (closer → higher).
   const nearest = top[0].dist;
   let confidence = 'low', conf_pct = 55;
-  if (nearest <= 0.6)      { confidence = 'very_high'; conf_pct = 92; }
+  if (nearest <= 0.6)      { confidence = 'buyer-ref_high'; conf_pct = 92; }
   else if (nearest <= 1.2) { confidence = 'high';      conf_pct = 84; }
   else if (nearest <= 2.0) { confidence = 'medium';    conf_pct = 72; }
 
@@ -114,7 +114,7 @@ function recommendCountFromGSM(fabric, gsm, comp = 'cotton') {
   if (!fabKey || !gsm) return null;
   const pool = FACTORY_RECORDS.filter(r => r.fab === fabKey);
   if (!pool.length) return null;
-  // Weight by GSM closeness + fibre family.
+  // Weight by GSM closeness + fibrbuyer-ref.
   const scored = pool.map(r => ({
     r, w: 1 / (Math.abs(r.gsm - gsm) / 25 + compDistance(r.comp, comp) + 0.2),
   }));

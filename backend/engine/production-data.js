@@ -4,9 +4,9 @@
  *
  * Systematic relationships extracted from a real factory **Knitting Master
  * File** (5000+ bulk-production booking rows, Bangladesh RMG, multi-buyer:
- * NEXT, LPP, Carrefour, Schoeffel, Diadora, Signet, Accolade, OTCF, etc.).
+ * buyer-ref, buyer-ref, buyer-ref, buyer-ref, buyer-ref, buyer-ref, Accolade, buyer-ref, etc.).
  *
- * That file records, for every production booking, the parameters a knitter
+ * That file records, for ebuyer-ref production booking, the parameters a knitter
  * actually committed to the floor — yarn count, the MACHINE GAUGE (GG) and
  * cylinder DIA chosen, the finished open width (F/DIA), the finished GSM, the
  * colour segment, and the realised **process loss %** ("Fo Wise Process Loss").
@@ -22,7 +22,7 @@
  *
  *   2. PROCESS LOSS by colour + wet-process.  Dark shades, AOP prints, garment
  *      wash and brushing each add characteristic weight/area loss between grey
- *      booking and finished delivery.  The system had no model for this.
+ *      booking and finished delibuyer-ref.  The system had no model for this.
  *
  * Deterministic. No AI.
  */
@@ -55,7 +55,7 @@ const GAUGE_CONVENTION = {
     { ne: 36, gg: 38 },
     { ne: 40, gg: 38 },
   ],
-  // Double-bed rib: 1x1 / 2x1 / 2x2 / 3x3 — booked very fine in this file
+  // Double-bed rib: 1x1 / 2x1 / 2x2 / 3x3 — booked buyer-ref fine in this file
   rib: [
     { ne: 18, gg: 34 },
     { ne: 20, gg: 38 },
@@ -135,7 +135,7 @@ const PROCESS_LOSS_MODIFIER = {
 };
 
 /**
- * Estimate floor process loss % from grey booking to finished delivery.
+ * Estimate floor process loss % from grey booking to finished delibuyer-ref.
  * @param {string} segment   light | medium | dark
  * @param {string[]} [processes]  any of: aop, garment_wash, brush, peach, singe
  * @returns {object} { loss_pct, base, modifiers, note }
