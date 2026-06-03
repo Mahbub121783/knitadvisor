@@ -259,6 +259,40 @@ function calculate(params) {
     }
   }
 
+  // --- 3.55 EXPLICIT SL-BY-SHADE TABLE (factory concern: dark vs medium vs light) ---
+  // Everyone on the floor asks "dark color e SL koto, light e koto?". So instead
+  // of one SL we DECLARE all three shades side-by-side off the same neutral base.
+  // Neutral base = the composition-adjusted SL with the colour-shade factor removed.
+  let slByShade = null;
+  if (llResult.ll_mm > 0) {
+    // Remove whatever shade factor was applied to ll_mm to get the colour-neutral base.
+    const appliedShadeFactor = colorResult ? (colorResult.sl_factor || 1.0) : 1.0;
+    const neutralBaseSl = llResult.ll_mm / appliedShadeFactor;          // mm, colour-neutral
+    const rows = ['dark', 'medium', 'light'].map(s => {
+      const sp = classifyColorShade(s);                                 // shade params
+      const sl = parseFloat((neutralBaseSl * sp.sl_factor).toFixed(3));
+      const greyGsm = parseFloat((gsm * sp.grey_gsm_factor).toFixed(1));
+      return {
+        shade: s,
+        sl_mm: sl,
+        sl_cm: parseFloat((sl / 10).toFixed(4)),
+        sl_factor: sp.sl_factor,
+        sl_direction: sp.sl_direction,
+        grey_gsm: greyGsm,                 // knit at this grey GSM
+        finished_gsm: gsm,                 // all three deliver the same finish GSM
+        dye_gain_pct: sp.gsm_adjustment_pct,
+      };
+    });
+    slByShade = {
+      neutral_base_sl_mm: parseFloat(neutralBaseSl.toFixed(3)),
+      selected_shade: colorResult ? colorResult.shade : null,
+      rows,
+      note: 'DARK is knit LOOSER (longer SL) because dye adds mass; LIGHT/white is knit TIGHTER (shorter SL) since bleach adds almost no mass. All three are tuned to deliver the SAME finished GSM.',
+      reference: 'SL spread derived from factory grey→finish dye-uptake data (dark ≈ +4% mass, medium ≈ +1.5%, light ≈ +0.5%).',
+    };
+    trace.push({ step: '3.55', action: 'sl_by_shade', result: rows.map(r => `${r.shade}:${r.sl_mm}mm`).join(' · ') });
+  }
+
   // --- 3.6 Calculate Tightness Factor (TF) ---
   let tfResult = null;
   if (countResult.count_ne > 0 && llResult.ll_cm > 0) {
@@ -646,6 +680,8 @@ function calculate(params) {
       is_course_length: llResult.is_course_length || false,
       rnd_validation: rndValidation,
     },
+
+    sl_by_shade: slByShade,
 
     machine: {
       gauge_recommended: machineResult.gauge_range,
