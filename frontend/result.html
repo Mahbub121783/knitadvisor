@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20260602j">
+  <link rel="stylesheet" href="css/style.css?v=20260603a">
 
   <style>
     /* Result page specific */
@@ -376,6 +376,29 @@
         <span class="result-val amber" id="c-combined-sl">—</span>
       </div>
       <div id="c-shade-note" class="mt-6" style="font-size:10px;color:var(--t3);line-height:1.6;padding:8px 10px;background:rgba(255,255,255,.03);border-radius:6px;border-left:2px solid rgba(168,85,247,0.4)"></div>
+    </div>
+
+    <!-- ===== STITCH LENGTH BY SHADE (explicit dark / medium / light) ===== -->
+    <div class="result-section anim-in hidden" id="sec-sl-shade" style="border:1px solid rgba(0,209,255,.3); background:rgba(0,209,255,.04);">
+      <div class="result-section-title">
+        <div class="rst-icon" style="color:#00d1ff;">📏</div>
+        <div class="rst-title-text" style="color:#00d1ff;">Stitch Length by Color Shade</div>
+        <span class="badge" style="margin-left:auto;background:rgba(0,209,255,.12);color:#00d1ff;border:1px solid rgba(0,209,255,.3);">SET ON MACHINE</span>
+      </div>
+      <div style="font-size:10px;color:var(--t3);margin-bottom:8px;">The single most-asked number on the floor — what SL to set the machine to for each shade. All three deliver the <b>same finished GSM</b>.</div>
+      <table style="width:100%;border-collapse:collapse;font-size:11px;">
+        <thead>
+          <tr style="color:var(--t3);text-transform:uppercase;font-size:9px;letter-spacing:.5px;">
+            <th style="text-align:left;padding:6px 4px;">Shade</th>
+            <th style="text-align:right;padding:6px 4px;">SL (mm)</th>
+            <th style="text-align:right;padding:6px 4px;">SL (cm)</th>
+            <th style="text-align:right;padding:6px 4px;">Grey GSM</th>
+            <th style="text-align:right;padding:6px 4px;">Dye Gain</th>
+          </tr>
+        </thead>
+        <tbody id="sl-shade-rows"></tbody>
+      </table>
+      <div id="sl-shade-note" class="mt-6" style="font-size:10px;color:var(--t3);line-height:1.6;padding:8px 10px;background:rgba(255,255,255,.03);border-radius:6px;border-left:2px solid rgba(0,209,255,.4)"></div>
     </div>
 
     <!-- ===== COMPOSITION SECTION (shown only when non-pure blend) ===== -->
@@ -994,7 +1017,7 @@
 <script src="js/api.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/storage.js"></script>
-<script src="js/pattern-renderer.js?v=20260602j"></script>
+<script src="js/pattern-renderer.js?v=20260603a"></script>
 
 <script>
 /* ============================================================
@@ -1164,6 +1187,26 @@ function renderResult(r, params) {
       `× ${combinedSL} (Composition: ×${compSL} × Shade: ×${c.sl_factor})`;
 
     document.getElementById('c-shade-note').textContent = c.note || '';
+  }
+
+  // — Stitch Length by Shade (explicit dark / medium / light table) —
+  if (r.sl_by_shade && Array.isArray(r.sl_by_shade.rows)) {
+    document.getElementById('sec-sl-shade').classList.remove('hidden');
+    const sbs = r.sl_by_shade;
+    const lbl = { dark: '⬛ Dark', medium: '▪ Medium', light: '☀ Light' };
+    const tbody = document.getElementById('sl-shade-rows');
+    tbody.innerHTML = sbs.rows.map(row => {
+      const sel = sbs.selected_shade === row.shade;
+      const dirArrow = row.sl_direction === 'looser' ? '↑' : row.sl_direction === 'tighter' ? '↓' : '→';
+      return `<tr style="border-top:1px solid rgba(255,255,255,.06);${sel ? 'background:rgba(0,209,255,.10);' : ''}">
+        <td style="padding:7px 4px;font-weight:${sel ? '800' : '600'};color:${sel ? '#00d1ff' : 'var(--t1)'};">${lbl[row.shade] || row.shade}${sel ? ' <span style="font-size:8px;color:#00d1ff;">◀ selected</span>' : ''}</td>
+        <td style="padding:7px 4px;text-align:right;font-weight:800;font-family:var(--head);color:${sel ? '#00d1ff' : 'var(--t1)'};">${dirArrow} ${row.sl_mm}</td>
+        <td style="padding:7px 4px;text-align:right;color:var(--t3);">${row.sl_cm}</td>
+        <td style="padding:7px 4px;text-align:right;color:#fb923c;">${row.grey_gsm}</td>
+        <td style="padding:7px 4px;text-align:right;color:var(--t3);">+${row.dye_gain_pct}%</td>
+      </tr>`;
+    }).join('');
+    document.getElementById('sl-shade-note').textContent = (sbs.note || '') + ' ' + (sbs.reference || '');
   }
 
   // — Composition (shown for non-pure blends) —
