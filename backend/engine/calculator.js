@@ -64,6 +64,7 @@ const { recommendMachine } = require('./machine-optimizer');
 const { analyzeYarn, recommendYarnGrade } = require('./yarn-engine');
 const { matchFactory, recommendCountFromGSM } = require('./factory-match');
 const { gaugeFromBulkData, estimateProcessLoss, greyRequirementForFinished } = require('./production-data');
+const { analyzeWetProcessing } = require('./wet-processing-engine');
 
 // ============================================================
 // MAIN CALCULATE FUNCTION
@@ -77,7 +78,7 @@ function calculate(params) {
   const { fabric, gsm, dia, gauge, rpm, efficiency, stitch_length, feeders, composition, color_shade,
           target_width, yarn_type, twist_multiplier, finishing_route,
           fiber_grade, spinning_system, yarn_form, slub_thickness, slub_length_cm, slub_spacing_cm,
-          denier, filaments, elastane_denier, elastane_pct } = normalizeParams(params);
+          denier, filaments, elastane_denier, elastane_pct, dyeing_method } = normalizeParams(params);
 
   if (!fabric) return { error: 'fabric is required', code: 'MISSING_FABRIC' };
   if (!gsm) return { error: 'gsm is required', code: 'MISSING_GSM' };
@@ -527,6 +528,34 @@ function calculate(params) {
     trace.push({ step: '6.1d', action: 'process_loss', result: `${processLoss.loss_pct}% grey→finish (${seg}${procs.length ? ' + ' + procs.join('+') : ''})` });
   }
 
+  // --- 6.1e Wet-Processing Critical Path (greige GSM + machine-wise problems) ---
+  // Fabrication + GSM based critical path: what grey GSM to knit before dyeing,
+  // and the machine-by-machine problem/cause/solution/remedy for this fabric,
+  // shade and dyeing method. The expert "explain the whole critical path" answer.
+  let wetProcessing = null;
+  if (fabricDef.category !== 'warp_knit' && gsm) {
+    const fib = parsedComp ? (parsedComp.fibers || {}) : { cotton: 100 };
+    const wpProcs = [];
+    const cat2 = fabricDef.category || '';
+    const fid2 = fabricDef.id || '';
+    if (cat2 === 'fleece' || /fleece|terry/.test(fid2)) wpProcs.push('brush');
+    if (finishing_route === 'garment_wash' || /wash/.test(finishing_route || '')) wpProcs.push('garment_wash');
+    if (finishing_route === 'peach' || /peach|sueded/.test(finishing_route || '')) wpProcs.push('peach');
+    wetProcessing = analyzeWetProcessing({
+      fabric: fabricDef.id,
+      category: fabricDef.category,
+      finish_gsm: gsm,
+      shade: colorResult ? colorResult.shade : 'medium',
+      dyeing_method: dyeing_method,
+      fibers: fib,
+      spinning: spinning_system || (yarnExpertise ? yarnExpertise.spinning_system : null),
+      processes: wpProcs,
+    });
+    if (wetProcessing && wetProcessing.ok) {
+      trace.push({ step: '6.1e', action: 'wet_processing', result: `Grey ${wetProcessing.greige.grey_gsm_target} g/m² → finish ${gsm} · ${wetProcessing.machine_critical_path.length} machine stages · ${wetProcessing.dyeing_method}` });
+    }
+  }
+
   // --- 6.2 Financial Costing ---
   // For warp knit: convert denier to Ne equivalent for costing (1 denier = 5315/denier Ne approx)
   let costCountNe = countResult.count_ne;
@@ -683,6 +712,8 @@ function calculate(params) {
 
     sl_by_shade: slByShade,
 
+    wet_processing: (wetProcessing && wetProcessing.ok) ? wetProcessing : null,
+
     machine: {
       gauge_recommended: machineResult.gauge_range,
       gauge_optimal: machineResult.gauge_optimal,
@@ -812,6 +843,8 @@ function normalizeParams(p) {
     filaments: p.filaments ? parseInt(p.filaments) : 34,
     elastane_denier: p.elastane_denier ? parseFloat(p.elastane_denier) : null,
     elastane_pct: p.elastane_pct ? parseFloat(p.elastane_pct) : null,
+    // Wet-processing critical path: dyeing method (reactive default)
+    dyeing_method: p.dyeing_method ? String(p.dyeing_method).trim() : null,
   };
 }
 
