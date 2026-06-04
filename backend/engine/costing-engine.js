@@ -227,8 +227,12 @@ const YARN_TYPE_CATALOG = {
 };
 
 // ============================================================
-// SECTION 4: KNITTING COST BY GAUGE (USD/kg)
+// SECTION 4: KNITTING COST — Official Knitting Price List
+// Uses fabric-type × count-tier (above/below 30s) lookup.
 // ============================================================
+const { getKnittingPrice } = require('./knitting-price-table');
+
+// Legacy gauge-based table kept as fallback only (not primary path).
 const KNITTING_COST_BY_GAUGE = {
   12: 0.55, 14: 0.60, 16: 0.65, 18: 0.70,
   20: 0.75, 24: 0.85, 28: 1.00, 32: 1.20,
@@ -484,15 +488,19 @@ function calculateCost(params) {
   const wasteMultiplier = 1 + wastePct / 100;
   const rawMaterialWithWaste = round4(effectiveYarnPrice * wasteMultiplier);
 
-  // ---- 5. KNITTING COST ----
-  const gaugeKey = Object.keys(KNITTING_COST_BY_GAUGE)
-    .map(Number)
-    .reduce((prev, curr) => Math.abs(curr - gauge) < Math.abs(prev - gauge) ? curr : prev);
-  const knittingBase = params.knitting_cost
-    ? parseFloat(params.knitting_cost)
-    : KNITTING_COST_BY_GAUGE[gaugeKey] || 0.75;
-  const fineSurcharge = countNe > 36 ? 1.15 : countNe > 30 ? 1.05 : 1.0;
-  const knittingFinal = round4(knittingBase * fineSurcharge);
+  // ---- 5. KNITTING COST (Official Price List: fabric × above/below 30s) ----
+  let knittingFinal, knittingBase, knittingDetail;
+  if (params.knitting_cost) {
+    // User override
+    knittingBase = parseFloat(params.knitting_cost);
+    knittingFinal = knittingBase;
+    knittingDetail = { source: 'user_override', price_usd_kg: knittingBase, note: 'Manual override' };
+  } else {
+    // Look up from official knitting price table (fabric + count tier)
+    knittingDetail = getKnittingPrice(fabricId, countNe, parsedComp, params.yarn_form || null);
+    knittingBase = knittingDetail.price_usd_kg;
+    knittingFinal = knittingBase;
+  }
 
   // ---- 6. DYEING COST ----
   const dyeingBase = params.dyeing_cost
@@ -578,7 +586,15 @@ function calculateCost(params) {
           },
         ] : null,
       },
-      knitting:              knittingFinal,
+      knitting: {
+        per_kg:            knittingFinal,
+        fabric_key:        knittingDetail ? knittingDetail.fabric_key : null,
+        variant:           knittingDetail ? knittingDetail.variant : null,
+        tier:              knittingDetail ? knittingDetail.tier_label : null,
+        above30_price:     knittingDetail ? knittingDetail.above30 : null,
+        below30_price:     knittingDetail ? knittingDetail.below30 : null,
+        source:            knittingDetail ? knittingDetail.source : null,
+      },
       dyeing: {
         per_kg:              dyeingFinal,
         dual_bath_surcharge: dualBath > 0 ? dualBath : null,
@@ -605,7 +621,7 @@ function calculateCost(params) {
       yarn_price:   `Reference Matrix[${yarnTypeKey}][${Math.round(countNe)}Ne] = $${basePrice} + surcharges($${round4(surchargeTotal)}) = $${finalYarnPrice}`,
       elastane_blend: elastaneDetail ? `Base yarn $${finalYarnPrice} × ${100 - elastanePct}% + Elastane $${elastaneDetail.price_per_kg_usd} × ${elastanePct}% = $${effectiveYarnPrice}/kg (weighted blend)` : null,
       raw_material: `$${effectiveYarnPrice} × (1 + ${wastePct}% waste) = $${rawMaterialWithWaste}`,
-      knitting:     `Gauge ${gaugeKey}GG base $${knittingBase} × fine_surcharge(${fineSurcharge}) = $${knittingFinal}`,
+      knitting:     knittingDetail ? knittingDetail.note : `$${knittingFinal}/kg`,
       dyeing:       `shade="${colorShade}" $${dyeingBase} + dual_bath $${dualBath} = $${dyeingFinal}`,
       finishing:    `fabric="${fabricId}" $${finishingBase} + heavy_gsm $${heavySurcharge} = $${finishingFinal}`,
       total:        `$${rawMaterialWithWaste} + $${knittingFinal} + $${dyeingFinal} + $${finishingFinal} = $${totalCost}/kg`,
