@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20260603b">
+  <link rel="stylesheet" href="css/style.css?v=20260603c">
 
   <style>
     /* Result page specific */
@@ -1059,7 +1059,7 @@
 <script src="js/api.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/storage.js"></script>
-<script src="js/pattern-renderer.js?v=20260603b"></script>
+<script src="js/pattern-renderer.js?v=20260603c"></script>
 
 <script>
 /* ============================================================
@@ -1113,7 +1113,11 @@ function renderWetProcessing(w) {
   document.getElementById('wet-formula').textContent = g.formula || '';
 
   // Grey GSM by shade
-  const shadeLbl = { dark: '⬛ Dark', medium: '▪ Medium', light: '☀ Light', white: '⬜ White' };
+  const shadeLbl = {
+    black:'⬛ Black', dark_navy:'🔵 Dark/Navy', light_medium:'▪ Light/Med',
+    fluorescent:'💚 Fluoro', white_melange:'⬜ White', melange:'🌫️ Melange',
+    dark:'⬛ Dark', medium:'▪ Medium', light:'⬜ Light', white:'⬜ White',
+  };
   document.getElementById('wet-shade-grid').innerHTML = (w.greige_all_shades || []).map(s => {
     const sel = s.shade === w.shade;
     return `<div style="text-align:center;padding:7px 4px;border-radius:6px;border:1px solid ${sel ? 'rgba(251,146,60,.5)' : 'rgba(255,255,255,.08)'};${sel ? 'background:rgba(251,146,60,.10);' : ''}">
@@ -1308,7 +1312,12 @@ function renderResult(r, params) {
   if (r.sl_by_shade && Array.isArray(r.sl_by_shade.rows)) {
     document.getElementById('sec-sl-shade').classList.remove('hidden');
     const sbs = r.sl_by_shade;
-    const lbl = { dark: '⬛ Dark', medium: '▪ Medium', light: '☀ Light' };
+    const lbl = {
+      black:'⬛ Black', dark_navy:'🔵 Dark/Navy', light_medium:'▪ Light/Medium',
+      fluorescent:'💚 Fluorescent', white_melange:'⬜ White', melange:'🌫️ Melange',
+      // legacy
+      dark:'⬛ Dark', medium:'▪ Medium', light:'⬜ Light',
+    };
     const tbody = document.getElementById('sl-shade-rows');
     tbody.innerHTML = sbs.rows.map(row => {
       const sel = sbs.selected_shade === row.shade;

@@ -402,106 +402,99 @@ function getCompositionModifiers(parsed, fabricId) {
 }
 
 // ============================================================
-// COLOR SHADE CLASSIFIER
-// Classifies color names into dark / medium / light
-// for GSM impact analysis
+// COLOR SHADE CLASSIFIER — 6-tier (official price list: Black | Dark/Navy | Light/Medium | Neon/Fluorescent | White/Melange + Melange)
 // ============================================================
 
-const DARK_KEYWORDS = [
-  'black', 'navy', 'dark', 'charcoal', 'deep', 'midnight',
-  'ebony', 'onyx', 'anthracite', 'jet', 'iris',
-];
-const LIGHT_KEYWORDS = [
-  'white', 'bright', 'cream', 'ecru', 'ivory', 'snow',
-  'pale', 'light', 'pastel', 'bleach', 'vanilla', 'off-white',
-];
-// Medium = everything else (grey, mel, olive, blue, red, etc.)
+const BLACK_KEYWORDS   = ['black','noir','jet black','jet-black','deep black','pure black','onyx','ebony','99x','906'];
+const DARK_KEYWORDS    = ['navy','dark','charcoal','anthracite','midnight','bottle','maroon','wine','burgundy','deep','iron','slate dark','olive dark','khaki dark'];
+const FLUORO_KEYWORDS  = ['neon','fluorescent','fluro','fluoro','electric','lime green','safety','hi-vis','hivis','acid'];
+const MELANGE_KEYWORDS = ['melange','mélange','marl','heather','mel grey','grey mel','chine','gris chine','ecru mel','vigore','vigo'];
+const WHITE_KEYWORDS   = ['white','ecru','ivory','cream','snow','off white','off-white','optic','optical','bright white','bleach','vanilla','natural','rfd','lucent','gardenia','oyster'];
+const LIGHT_KEYWORDS   = ['light','pale','pastel','sky','blush','pink','peach','coral','lemon','mint','sand','beige','nude','powder','lavender','lilac'];
 
-// ============================================================
-// COLOR SHADE → KNITTING PARAMETER TABLE
-// Source: Karl Mayer Warp Knitting Handbook, Spencer "Knitting Technology" 3rd ed.,
-// Bangladesh RMG factory R&D (25+ grey/finish GSM sample pairs, 2019–2023)
-//
-// Core principle: dye + auxiliary chemicals add physical mass to the fabric.
-// Grey GSM must be set LOWER than finish target to compensate.
-// SL adjustment ensures the greige loop structure accommodates dye swelling.
-//
-// dark:   Reactive/vat dye at 8–12% OWF + carriers/fixatives → +3.5–5% mass gain
-//         grey_gsm_factor = 0.962 → knit at 96.2%, dye adds ~+4% → 100% finish
-//         sl_factor = 1.020 → SL 2% looser; dye/auxiliary swelling compresses to spec
-// medium: Reactive at 3–6% OWF → +1–2% mass gain typical
-//         grey_gsm_factor = 0.985, sl_factor = 1.005 (minimal adjustment)
-// light:  Bleach + OBA only → dye mass ≈ 0; softener/finish adds ~+0.5%
-//         grey_gsm_factor = 0.995 (knit fractionally below), sl_factor = 0.990 (tighter)
-// ============================================================
+// ── SHADE PARAMETERS ──────────────────────────────────────────────────────────
 const SHADE_PARAMS = {
-  dark: {
-    gsm_adjustment_pct: 4,       // +4% dye mass uptake (reactive/vat 8–12% OWF)
-    grey_gsm_factor:    0.962,   // knit grey at 96.2% of finish target
-    sl_factor:          1.020,   // SL 2% looser in grey → dye swelling = final spec
-    sl_direction:       'looser',
-    note: 'Dark shade (Black/Navy/Bottle Green): Dye + auxiliary uptake adds ~4% GSM mass during reactive/vat dyeing. Knit grey at 96.2% of finish GSM with SL 2% looser — dye swelling will compress fabric to target SL and GSM. Source: Karl Mayer Handbook & BD factory R&D.',
+  black: {
+    gsm_adjustment_pct: 5.0, grey_gsm_factor: 0.952,
+    sl_factor: 1.030, sl_direction: 'looser', dyeing_tier: 'black',
+    note: 'BLACK: Vat/reactive black 10-15% OWF adds ~5% mass. Knit grey at 95.2% finish GSM, SL 3% looser.',
   },
-  medium: {
-    gsm_adjustment_pct: 1.5,     // +1.5% from reactive dye 3–6% OWF
-    grey_gsm_factor:    0.985,   // knit grey at 98.5% of finish target
-    sl_factor:          1.005,   // SL 0.5% looser (minor correction)
-    sl_direction:       'standard',
-    note: 'Medium shade (Red/Blue/Maroon/Green/Grey): Reactive dye at 3–6% OWF adds ~1.5% mass. Knit grey at 98.5% of finish GSM. SL adjusted +0.5% (minor). Standard reactive exhaust dyeing.',
+  dark_navy: {
+    gsm_adjustment_pct: 4.0, grey_gsm_factor: 0.962,
+    sl_factor: 1.020, sl_direction: 'looser', dyeing_tier: 'dark_navy',
+    note: 'DARK/NAVY: Reactive 6-10% OWF adds ~4% mass. Knit grey at 96.2% finish GSM, SL 2% looser.',
   },
-  light: {
-    gsm_adjustment_pct: 0.5,     // ~0.5% from softener/OBA finishing
-    grey_gsm_factor:    0.995,   // knit fractionally below target (compensate softener add-on)
-    sl_factor:          0.990,   // SL 1% tighter — no dye compression effect
-    sl_direction:       'tighter',
-    note: 'Light/White shade (White/Ecru/Ivory/Pastel): Bleach + optical brightener only — near-zero dye mass. Set SL 1% tighter to hit target GSM. Finishing softener adds ~0.5% GSM (compensated by grey_gsm_factor 0.995). No reactive dye swelling will occur.',
+  light_medium: {
+    gsm_adjustment_pct: 2.0, grey_gsm_factor: 0.980,
+    sl_factor: 1.008, sl_direction: 'slight_loose', dyeing_tier: 'light_medium',
+    note: 'LIGHT/MEDIUM: Reactive 1-6% OWF, avg +2% mass. Knit grey at 98% finish GSM. Minor SL adjustment.',
+  },
+  fluorescent: {
+    gsm_adjustment_pct: 2.5, grey_gsm_factor: 0.976,
+    sl_factor: 1.010, sl_direction: 'standard', dyeing_tier: 'fluorescent',
+    note: 'NEON/FLUORESCENT: Special fluorescent reactive dyes, +2.5% mass. Premium dyeing cost. Sensitive to wash temp/UV.',
+  },
+  white_melange: {
+    gsm_adjustment_pct: 0.5, grey_gsm_factor: 0.995,
+    sl_factor: 0.990, sl_direction: 'tighter', dyeing_tier: 'white_melange',
+    note: 'WHITE/MELANGE: Bleach + OBA + softener only, near-zero dye mass. SL 1% tighter. No reactive dye swelling.',
+  },
+  melange: {
+    gsm_adjustment_pct: 0.3, grey_gsm_factor: 0.997,
+    sl_factor: 0.995, sl_direction: 'neutral', dyeing_tier: 'white_melange',
+    note: 'MELANGE/HEATHER: Color from yarn blend (pre-dyed fiber) — NO reactive dyeing. OBA + softener only. Viscose melange needs separate viscose bath.',
   },
 };
+// Legacy 3-tier aliases for engine fallbacks
+SHADE_PARAMS.dark   = { ...SHADE_PARAMS.dark_navy,    shade_alias_of: 'dark_navy' };
+SHADE_PARAMS.medium = { ...SHADE_PARAMS.light_medium, shade_alias_of: 'light_medium' };
+SHADE_PARAMS.light  = { ...SHADE_PARAMS.white_melange,shade_alias_of: 'white_melange' };
 
 /**
- * Classify a color name/code into shade depth and return knitting parameters.
- * Also detects Pantone TCX codes (19-xxxx = dark, 11-14xxxx = light).
- *
+ * Classify a color name/code into the 6-tier shade system.
  * @param {string} colorName
- * @returns {{ shade, gsm_adjustment_pct, grey_gsm_factor, sl_factor, sl_direction, note }}
+ * @returns {{ shade, dyeing_tier, gsm_adjustment_pct, grey_gsm_factor, sl_factor, sl_direction, note }}
  */
 function classifyColorShade(colorName) {
   if (!colorName || typeof colorName !== 'string') {
-    return { shade: 'medium', ...SHADE_PARAMS.medium };
+    return { shade: 'light_medium', ...SHADE_PARAMS.light_medium };
   }
-
   const lower = colorName.toLowerCase().trim();
 
-  // Direct shade keywords first (user clicked Dark/Medium/Light button)
-  if (lower === 'dark')   return { shade: 'dark',   ...SHADE_PARAMS.dark };
-  if (lower === 'medium') return { shade: 'medium', ...SHADE_PARAMS.medium };
-  if (lower === 'light')  return { shade: 'light',  ...SHADE_PARAMS.light };
+  // Direct 6-tier keys
+  if (lower === 'black')         return { shade: 'black',        ...SHADE_PARAMS.black };
+  if (lower === 'dark_navy')     return { shade: 'dark_navy',    ...SHADE_PARAMS.dark_navy };
+  if (lower === 'light_medium')  return { shade: 'light_medium', ...SHADE_PARAMS.light_medium };
+  if (lower === 'fluorescent')   return { shade: 'fluorescent',  ...SHADE_PARAMS.fluorescent };
+  if (lower === 'white_melange') return { shade: 'white_melange',...SHADE_PARAMS.white_melange };
+  if (lower === 'melange')       return { shade: 'melange',      ...SHADE_PARAMS.melange };
 
-  // Pantone TCX code detection (e.g. "19-3910 TCX")
-  const pantoneMatch = lower.match(/(\d{2})-\d{4}/);
-  if (pantoneMatch) {
-    const pg = parseInt(pantoneMatch[1]);
-    if (pg >= 19) return { shade: 'dark',   ...SHADE_PARAMS.dark };
-    if (pg <= 14) return { shade: 'light',  ...SHADE_PARAMS.light };
-    return             { shade: 'medium', ...SHADE_PARAMS.medium };
+  // Legacy 3-tier compat
+  if (lower === 'dark')   return { shade: 'dark_navy',    ...SHADE_PARAMS.dark_navy };
+  if (lower === 'medium') return { shade: 'light_medium', ...SHADE_PARAMS.light_medium };
+  if (lower === 'light')  return { shade: 'white_melange',...SHADE_PARAMS.white_melange };
+
+  // Pantone TCX (e.g. "19-3910 TCX")
+  const pm = lower.match(/(d{2})-d{4}/);
+  if (pm) {
+    const pg = parseInt(pm[1]);
+    if (pg >= 19) return { shade: 'dark_navy',    ...SHADE_PARAMS.dark_navy };
+    if (pg <= 11) return { shade: 'white_melange',...SHADE_PARAMS.white_melange };
+    return               { shade: 'light_medium', ...SHADE_PARAMS.light_medium };
   }
 
-  // Dark keywords
-  for (const kw of DARK_KEYWORDS) {
-    if (lower.includes(kw)) return { shade: 'dark', ...SHADE_PARAMS.dark };
-  }
+  // Keyword matching (most specific first)
+  for (const kw of FLUORO_KEYWORDS)  if (lower.includes(kw)) return { shade: 'fluorescent',  ...SHADE_PARAMS.fluorescent };
+  for (const kw of MELANGE_KEYWORDS) if (lower.includes(kw)) return { shade: 'melange',      ...SHADE_PARAMS.melange };
+  for (const kw of BLACK_KEYWORDS)   if (lower.includes(kw)) return { shade: 'black',        ...SHADE_PARAMS.black };
+  for (const kw of DARK_KEYWORDS)    if (lower.includes(kw)) return { shade: 'dark_navy',    ...SHADE_PARAMS.dark_navy };
+  for (const kw of WHITE_KEYWORDS)   if (lower.includes(kw)) return { shade: 'white_melange',...SHADE_PARAMS.white_melange };
+  for (const kw of LIGHT_KEYWORDS)   if (lower.includes(kw)) return { shade: 'light_medium', ...SHADE_PARAMS.light_medium };
 
-  // Light keywords
-  for (const kw of LIGHT_KEYWORDS) {
-    if (lower.includes(kw)) return { shade: 'light', ...SHADE_PARAMS.light };
-  }
+  if (lower.includes('aop') || lower.includes('rfd')) return { shade: 'white_melange', ...SHADE_PARAMS.white_melange };
+  if (lower.includes('y/d') || lower.includes('yd'))  return { shade: 'light_medium',  ...SHADE_PARAMS.light_medium };
 
-  // Melange / heather / grey → medium
-  if (lower.includes('mel') || lower.includes('heather') || lower.includes('grey') || lower.includes('gray')) {
-    return { shade: 'medium', ...SHADE_PARAMS.medium };
-  }
-
-  return { shade: 'medium', ...SHADE_PARAMS.medium };
+  return { shade: 'light_medium', ...SHADE_PARAMS.light_medium };
 }
 
 // ============================================================

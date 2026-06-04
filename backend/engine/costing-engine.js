@@ -252,11 +252,29 @@ const FINISHING_COST_BY_FABRIC = {
 
 // ============================================================
 // SECTION 6: DYEING COST BY SHADE (USD/kg)
+// Source: Official Knitting & Dyeing Price List (11-page document)
+// ONE-PART:  single-fiber fabric (100% cotton, viscose, modal, poly)
+// TWO-PART:  blend fabric (CVC/PC — cotton+polyester, needs 2 dye baths)
 // ============================================================
-const DYEING_COST_BY_SHADE = {
-  white: 0.35, light: 0.45, medium: 0.55, dark: 0.70,
-  black: 0.85, melange: 0.30, yarn_dyed: 1.20,
+const DYEING_COST = {
+  // shade key → { one_part, two_part } USD/kg
+  black:         { one_part: 1.75, two_part: 2.20 },
+  dark_navy:     { one_part: 1.55, two_part: 2.00 },
+  light_medium:  { one_part: 1.30, two_part: 1.75 },
+  fluorescent:   { one_part: 2.60, two_part: 0.00 }, // 0 = not available in PDF
+  white_melange: { one_part: 0.80, two_part: 0.00 }, // bleach/OBA only; two-part not applicable
+  melange:       { one_part: 0.50, two_part: 0.00 }, // OBA+softener only (estimated, not in PDF)
+  // Legacy compat aliases
+  dark:   null,   // → dark_navy
+  medium: null,   // → light_medium
+  light:  null,   // → white_melange
 };
+DYEING_COST.dark   = DYEING_COST.dark_navy;
+DYEING_COST.medium = DYEING_COST.light_medium;
+DYEING_COST.light  = DYEING_COST.white_melange;
+
+// Fallback for unknown shades
+const DYEING_COST_FALLBACK = { one_part: 1.30, two_part: 1.75 };
 
 // ============================================================
 // SECTION 7: INVISIBLE WASTE FACTORS (%)
@@ -502,14 +520,35 @@ function calculateCost(params) {
     knittingFinal = knittingBase;
   }
 
-  // ---- 6. DYEING COST ----
-  const dyeingBase = params.dyeing_cost
-    ? parseFloat(params.dyeing_cost)
-    : DYEING_COST_BY_SHADE[colorShade] || 0.55;
-  // Dual-bath surcharge for mixed fiber dyeing (cotton + polyester = two dye baths)
+  // ---- 6. DYEING COST (Official Price List: one-part vs two-part) ----
   const fibers = parsedComp ? (parsedComp.fibers || {}) : { cotton: 100 };
-  const dualBath = (fibers.polyester > 0 && fibers.cotton > 0) ? 0.15 : 0;
-  const dyeingFinal = round4(dyeingBase + dualBath);
+  // Two-part = blend with both cotton + polyester (CVC / PC)
+  const isTwoPart = (fibers.polyester || 0) >= 10 && ((fibers.cotton || 0) >= 30 || (fibers.viscose || 0) >= 30);
+
+  let dyeingFinal, dyeingBase, dyeingDetail;
+  if (params.dyeing_cost) {
+    dyeingBase  = parseFloat(params.dyeing_cost);
+    dyeingFinal = dyeingBase;
+    dyeingDetail = { source: 'user_override', one_part: dyeingBase, two_part: dyeingBase, is_two_part: false };
+  } else {
+    const shadeKey = colorShade || 'light_medium';
+    const dyeRow   = DYEING_COST[shadeKey] || DYEING_COST_FALLBACK;
+    const basePrice = isTwoPart
+      ? (dyeRow.two_part > 0 ? dyeRow.two_part : dyeRow.one_part)  // fall back to one-part if 0
+      : dyeRow.one_part;
+    dyeingBase  = basePrice;
+    dyeingFinal = round4(basePrice);
+    dyeingDetail = {
+      source: 'Official Dyeing Price List',
+      shade_key: shadeKey, is_two_part: isTwoPart,
+      one_part_price: dyeRow.one_part, two_part_price: dyeRow.two_part,
+      applied_price: dyeingFinal,
+      note: isTwoPart
+        ? `Two-part dyeing (CVC/PC blend) at ${dyeRow.two_part > 0 ? dyeRow.two_part : dyeRow.one_part} USD/kg`
+        : `One-part dyeing (${shadeKey}) at ${dyeRow.one_part} USD/kg`,
+    };
+  }
+  const dualBath = isTwoPart ? 0 : 0; // already factored in via two_part price
 
   // ---- 7. FINISHING COST ----
   const finishingBase = params.finishing_cost
@@ -596,8 +635,13 @@ function calculateCost(params) {
         source:            knittingDetail ? knittingDetail.source : null,
       },
       dyeing: {
-        per_kg:              dyeingFinal,
-        dual_bath_surcharge: dualBath > 0 ? dualBath : null,
+        per_kg:            dyeingFinal,
+        shade_key:         dyeingDetail ? dyeingDetail.shade_key : colorShade,
+        is_two_part:       dyeingDetail ? dyeingDetail.is_two_part : false,
+        one_part_price:    dyeingDetail ? dyeingDetail.one_part_price : null,
+        two_part_price:    dyeingDetail ? dyeingDetail.two_part_price : null,
+        source:            dyeingDetail ? dyeingDetail.source : null,
+        note:              dyeingDetail ? dyeingDetail.note : null,
       },
       finishing:             finishingFinal,
       total_per_kg:          totalCost,
@@ -622,7 +666,7 @@ function calculateCost(params) {
       elastane_blend: elastaneDetail ? `Base yarn $${finalYarnPrice} × ${100 - elastanePct}% + Elastane $${elastaneDetail.price_per_kg_usd} × ${elastanePct}% = $${effectiveYarnPrice}/kg (weighted blend)` : null,
       raw_material: `$${effectiveYarnPrice} × (1 + ${wastePct}% waste) = $${rawMaterialWithWaste}`,
       knitting:     knittingDetail ? knittingDetail.note : `$${knittingFinal}/kg`,
-      dyeing:       `shade="${colorShade}" $${dyeingBase} + dual_bath $${dualBath} = $${dyeingFinal}`,
+      dyeing:       dyeingDetail ? dyeingDetail.note : `$${dyeingFinal}/kg`,
       finishing:    `fabric="${fabricId}" $${finishingBase} + heavy_gsm $${heavySurcharge} = $${finishingFinal}`,
       total:        `$${rawMaterialWithWaste} + $${knittingFinal} + $${dyeingFinal} + $${finishingFinal} = $${totalCost}/kg`,
     },
