@@ -269,8 +269,8 @@ function calculate(params) {
     // Remove whatever shade factor was applied to ll_mm to get the colour-neutral base.
     const appliedShadeFactor = colorResult ? (colorResult.sl_factor || 1.0) : 1.0;
     const neutralBaseSl = llResult.ll_mm / appliedShadeFactor;          // mm, colour-neutral
-    const rows = ['dark', 'medium', 'light'].map(s => {
-      const sp = classifyColorShade(s);                                 // shade params
+    const rows = ['black','dark_navy','light_medium','fluorescent','white_melange','melange'].map(s => {
+      const sp = classifyColorShade(s);
       const sl = parseFloat((neutralBaseSl * sp.sl_factor).toFixed(3));
       const greyGsm = parseFloat((gsm * sp.grey_gsm_factor).toFixed(1));
       return {
@@ -279,14 +279,18 @@ function calculate(params) {
         sl_cm: parseFloat((sl / 10).toFixed(4)),
         sl_factor: sp.sl_factor,
         sl_direction: sp.sl_direction,
-        grey_gsm: greyGsm,                 // knit at this grey GSM
-        finished_gsm: gsm,                 // all three deliver the same finish GSM
+        grey_gsm: greyGsm,
+        finished_gsm: gsm,
         dye_gain_pct: sp.gsm_adjustment_pct,
+        dyeing_tier: sp.dyeing_tier,
       };
     });
+    // Map legacy shade names to 6-tier for selected_shade
+    const shadeAliasMap = { dark:'dark_navy', medium:'light_medium', light:'white_melange', white:'white_melange' };
+    const selectedShade6 = colorResult ? (shadeAliasMap[colorResult.shade] || colorResult.shade) : null;
     slByShade = {
       neutral_base_sl_mm: parseFloat(neutralBaseSl.toFixed(3)),
-      selected_shade: colorResult ? colorResult.shade : null,
+      selected_shade: selectedShade6,
       rows,
       note: 'DARK is knit LOOSER (longer SL) because dye adds mass; LIGHT/white is knit TIGHTER (shorter SL) since bleach adds almost no mass. All three are tuned to deliver the SAME finished GSM.',
       reference: 'SL spread derived from factory grey→finish dye-uptake data (dark ≈ +4% mass, medium ≈ +1.5%, light ≈ +0.5%).',

@@ -63,24 +63,52 @@ function familyOf(category) {
 // ============================================================
 // Fractional GSM gain from dye + auxiliary deposited on the fibre.
 // Reactive exhaust adds the most; pigment/discharge differ.
+// DYE_ADDON: fractional GSM gain per shade × dyeing method
+// Updated to 6-tier shade system. Legacy 3-tier keys also present for compat.
 const DYE_ADDON = {
-  reactive: { dark: 0.045, medium: 0.022, light: 0.008, white: 0.004 },
-  disperse: { dark: 0.030, medium: 0.018, light: 0.008, white: 0.004 }, // poly/CVC HT
-  pigment:  { dark: 0.020, medium: 0.014, light: 0.008, white: 0.004 }, // binder add-on
-  discharge:{ dark: 0.050, medium: 0.030, light: 0.015, white: 0.010 }, // dyed ground + paste
-  garment_wash: { dark: 0.040, medium: 0.025, light: 0.012, white: 0.008 },
+  reactive: {
+    black: 0.050, dark_navy: 0.040, light_medium: 0.020, fluorescent: 0.025,
+    white_melange: 0.005, melange: 0.003,
+    // legacy
+    dark: 0.040, medium: 0.020, light: 0.005, white: 0.005,
+  },
+  disperse: {
+    black: 0.035, dark_navy: 0.028, light_medium: 0.015, fluorescent: 0.020,
+    white_melange: 0.005, melange: 0.003,
+    dark: 0.028, medium: 0.015, light: 0.005, white: 0.005,
+  },
+  pigment: {
+    black: 0.025, dark_navy: 0.018, light_medium: 0.010, fluorescent: 0.015,
+    white_melange: 0.005, melange: 0.003,
+    dark: 0.018, medium: 0.010, light: 0.005, white: 0.005,
+  },
+  discharge: {
+    black: 0.055, dark_navy: 0.040, light_medium: 0.020, fluorescent: 0.020,
+    white_melange: 0.010, melange: 0.005,
+    dark: 0.040, medium: 0.020, light: 0.010, white: 0.010,
+  },
+  garment_wash: {
+    black: 0.045, dark_navy: 0.035, light_medium: 0.018, fluorescent: 0.020,
+    white_melange: 0.008, melange: 0.005,
+    dark: 0.035, medium: 0.018, light: 0.008, white: 0.008,
+  },
 };
 
 // Extra area relaxation for aggressive routes (discharge/G-wash relax harder).
 const EXTRA_AREA = { discharge: 0.025, garment_wash: 0.035 };
 
-const SHADES  = ['dark', 'medium', 'light', 'white'];
+const SHADES  = ['black','dark_navy','light_medium','fluorescent','white_melange','melange','dark','medium','light','white'];
 const METHODS = ['reactive', 'disperse', 'pigment', 'discharge', 'garment_wash'];
 
 function normShade(s) {
-  const x = (s || 'medium').toLowerCase();
-  if (x.startsWith('aop')) return x.replace('aop-', '').replace('aop', 'medium') || 'medium';
-  return SHADES.includes(x) ? x : 'medium';
+  const x = (s || 'light_medium').toLowerCase().replace(/ /g,'_');
+  if (x.startsWith('aop')) return 'white_melange';
+  if (SHADES.includes(x))  return x;
+  // legacy → new
+  if (x === 'dark')   return 'dark_navy';
+  if (x === 'medium') return 'light_medium';
+  if (x === 'light' || x === 'white') return 'white_melange';
+  return 'light_medium';
 }
 function normMethod(m) {
   const x = (m || 'reactive').toLowerCase().replace(/[\s-]/g, '_');
@@ -135,9 +163,10 @@ function greigeGsmTarget(finishGsm, category, shade, method) {
   };
 }
 
-/** Grey GSM for all 4 shades at once (the floor's "show me all shades" need). */
+/** Grey GSM for all 6 shades at once (the floor's "show me all shades" need). */
 function greigeGsmAllShades(finishGsm, category, method) {
-  return SHADES.map(sh => {
+  const shadesToShow = ['black','dark_navy','light_medium','fluorescent','white_melange','melange'];
+  return shadesToShow.map(sh => {
     const g = greigeGsmTarget(finishGsm, category, sh, method);
     return g ? { shade: sh, grey_gsm: g.grey_gsm_target, dye_add_on_pct: g.dye_add_on_pct } : null;
   }).filter(Boolean);

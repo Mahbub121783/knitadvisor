@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20260603b">
+  <link rel="stylesheet" href="css/style.css?v=20260603c">
   <style>
     /* Page-specific styles */
     .hero {
@@ -410,21 +410,36 @@
         <!-- Color Shade — MAIN FORM (visible by default) -->
         <div class="form-group mb-16">
           <label class="form-label" style="color:var(--t1)">Color Shade <span class="badge badge-gray" style="margin-left:6px">OPTIONAL</span></label>
-          <div class="shade-selector" id="shade-selector">
-            <button class="shade-btn" data-shade="dark" type="button" onclick="setShade('dark', this)">
-              <div class="shade-swatch"></div>
-              Dark
-              <span style="font-size:9px;font-weight:400;color:var(--t3)">Black/Navy</span>
+          <div class="shade-selector" id="shade-selector" style="grid-template-columns:repeat(3,1fr);">
+            <button class="shade-btn" data-shade="black" type="button" onclick="setShade('black', this)">
+              <div class="shade-swatch" style="background:#111;border-color:#333;"></div>
+              Black
+              <span style="font-size:9px;font-weight:400;color:var(--t3)">Pure Black</span>
             </button>
-            <button class="shade-btn" data-shade="medium" type="button" onclick="setShade('medium', this)">
-              <div class="shade-swatch"></div>
-              Medium
-              <span style="font-size:9px;font-weight:400;color:var(--t3)">Grey/Red/Blue</span>
+            <button class="shade-btn" data-shade="dark_navy" type="button" onclick="setShade('dark_navy', this)">
+              <div class="shade-swatch" style="background:#1a2a5e;border-color:#2a3a7e;"></div>
+              Dark/Navy
+              <span style="font-size:9px;font-weight:400;color:var(--t3)">Navy/Maroon/Dark</span>
             </button>
-            <button class="shade-btn" data-shade="light" type="button" onclick="setShade('light', this)">
-              <div class="shade-swatch"></div>
-              Light
-              <span style="font-size:9px;font-weight:400;color:var(--t3)">White/Ecru</span>
+            <button class="shade-btn" data-shade="light_medium" type="button" onclick="setShade('light_medium', this)">
+              <div class="shade-swatch" style="background:#4a8fcc;border-color:#5a9fdc;"></div>
+              Light/Medium
+              <span style="font-size:9px;font-weight:400;color:var(--t3)">Blue/Red/Green/Pink</span>
+            </button>
+            <button class="shade-btn" data-shade="fluorescent" type="button" onclick="setShade('fluorescent', this)">
+              <div class="shade-swatch" style="background:#b0ff00;border-color:#c0ff20;"></div>
+              Fluorescent
+              <span style="font-size:9px;font-weight:400;color:var(--t3)">Neon/Electric</span>
+            </button>
+            <button class="shade-btn" data-shade="white_melange" type="button" onclick="setShade('white_melange', this)">
+              <div class="shade-swatch" style="background:#f5f5f0;border-color:#ddd;"></div>
+              White
+              <span style="font-size:9px;font-weight:400;color:var(--t3)">White/Ecru/Ivory</span>
+            </button>
+            <button class="shade-btn" data-shade="melange" type="button" onclick="setShade('melange', this)">
+              <div class="shade-swatch" style="background:linear-gradient(135deg,#888 50%,#ddd 50%);border-color:#aaa;"></div>
+              Melange
+              <span style="font-size:9px;font-weight:400;color:var(--t3)">Heather/Grey-Mel</span>
             </button>
           </div>
           <input type="hidden" id="color-input" value="">
