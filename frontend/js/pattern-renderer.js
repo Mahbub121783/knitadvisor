@@ -156,19 +156,19 @@ function renderSvgSchematic(patternData) {
   //    T = tuck — a single held hump on the run
   //    M = miss/float — the yarn runs flat across the wale
   // ----------------------------------------------------
-  const cs = 44;                                   // notation cell size / needle pitch
+  const cs = 46;                                   // notation cell size / needle pitch
   const fnRepeatX = Math.max(3, Math.ceil(6 / baseCols));
   const fnRepeatY = Math.max(3, Math.ceil(4 / baseRows));
   const fnCols = baseCols * fnRepeatX;
   const fnRows = baseRows * fnRepeatY;
 
   const p     = cs;          // needle pitch
-  const h     = cs * 0.80;   // loop height
-  const rx    = cs * 0.17;   // loop head half-width
-  const lw    = cs * 0.085;  // leg half-spread at base (small → closed-looking loop)
-  const dip   = cs * 0.10;   // sinker scallop depth between loops
-  const humpH = cs * 0.46;   // tuck hump height
-  const topPad = cs * 0.55, botPad = cs * 0.35;
+  const capR  = cs * 0.26;   // loop head radius (WIDE → round balloon, not narrow)
+  const h     = cs * 0.62;   // loop height (SHORT → round, not tall candlestick)
+  const cross = cs * 0.06;   // narrow base opening where the loop meets the run
+  const dip   = cs * 0.08;   // sinker scallop depth between loops
+  const humpH = cs * 0.42;   // tuck hump height
+  const topPad = cs * 0.50, botPad = cs * 0.35;
   const fnInnerH = fnRows * cs;
   const fnW = fnCols * cs;
   const fnH = fnInnerH + topPad + botPad;
@@ -194,10 +194,10 @@ function renderSvgSchematic(patternData) {
       const cell = cellAt(r, c);
 
       if (cell === 'K') {
-        // sinker dip in → round loop up-over-down → sinker dip out
-        d += ` Q ${x - p * 0.34} ${by + dip} ${x - lw} ${by}`;
-        d += ` C ${x - lw * 1.5} ${by - h * 0.55} ${x - rx} ${by - h} ${x} ${by - h}`;
-        d += ` C ${x + rx} ${by - h} ${x + lw * 1.5} ${by - h * 0.55} ${x + lw} ${by}`;
+        // sinker dip in → ROUND balloon loop (bulges wide, rounded top) → sinker dip out
+        d += ` Q ${x - p * 0.34} ${by + dip} ${x - cross} ${by}`;
+        d += ` C ${x - capR * 1.5} ${by - h * 0.18} ${x - capR * 1.05} ${by - h * 0.92} ${x} ${by - h}`;
+        d += ` C ${x + capR * 1.05} ${by - h * 0.92} ${x + capR * 1.5} ${by - h * 0.18} ${x + cross} ${by}`;
         d += ` Q ${x + p * 0.34} ${by + dip} ${xR} ${by}`;
       } else if (cell === 'T') {
         // tuck — single held hump on the running yarn
