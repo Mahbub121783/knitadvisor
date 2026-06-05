@@ -973,6 +973,19 @@
       </div>
     </div>
 
+    <!-- ===== FABRIC VISUALIZATION ===== -->
+    <div class="result-section anim-in" id="sec-viz">
+      <div class="result-section-title">
+        <div class="rst-icon" style="background:rgba(37,99,235,.1); color:#2563EB;">&#129516;</div>
+        <div class="rst-title-text">Fabric Visualization</div>
+        <span class="badge" style="margin-left:auto; background:rgba(37,99,235,.1); color:#2563EB; border:1px solid rgba(37,99,235,.25); font-size:10px; padding:2px 8px;">Interactive</span>
+      </div>
+      <div id="viz-section-body">
+        <div class="skeleton skel-line w90"></div>
+        <div class="skeleton skel-line w70" style="margin-top:8px;"></div>
+      </div>
+    </div>
+
     <!-- ===== GRAMMAGE ===== -->
     <div class="result-section anim-in" id="sec-grammage">
       <div class="result-section-title">
@@ -1060,6 +1073,7 @@
 <script src="js/ui.js"></script>
 <script src="js/storage.js"></script>
 <script src="js/pattern-renderer.js?v=20260603c"></script>
+<script src="js/fabric-visualizer.js?v=20260605a"></script>
 
 <script>
 /* ============================================================
@@ -1436,6 +1450,17 @@ function renderResult(r, params) {
 
   // — Pattern —
   renderPattern(r.pattern);
+
+  // — Fabric Visualization —
+  requestAnimationFrame(() => {
+    const vizBody = document.getElementById('viz-section-body');
+    if (vizBody && window.FabricVisualizer) {
+      const fv = new FabricVisualizer(r, vizBody);
+      fv.init().catch(err => {
+        if (vizBody) vizBody.innerHTML = '<p style="color:var(--a3);font-family:var(--mono);font-size:12px;padding:8px 0;">Visualization unavailable: ' + err.message + '</p>';
+      });
+    }
+  });
 
   // — Formula trace —
   renderTrace(r.formula_trace || []);
