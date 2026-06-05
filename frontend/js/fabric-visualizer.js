@@ -948,3 +948,10 @@ class FabricVisualizer {
     this.container.innerHTML = `<p style="color:var(--a3);font-family:var(--mono);font-size:12px;padding:8px 0;">${msg}</p>`;
   }
 }
+
+// Expose globally — a top-level `class` declaration does NOT attach to
+// window automatically (unlike `function`), so result.html's
+// `window.FabricVisualizer` check would otherwise fail.
+if (typeof window !== 'undefined') {
+  window.FabricVisualizer = FabricVisualizer;
+}
