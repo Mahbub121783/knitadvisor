@@ -984,7 +984,7 @@ class FabricVisualizer {
     wrap.appendChild(canvas);
     this.canvases.realistic = canvas;
 
-    const W = 460, H = 320;
+    const W = 540, H = 360;
     const dpr = window.devicePixelRatio || 1;
     canvas.width  = W * dpr;
     canvas.height = H * dpr;
@@ -993,37 +993,14 @@ class FabricVisualizer {
     const ctx = canvas.getContext('2d');
     ctx.scale(dpr, dpr);
 
-    // ── derive every driving parameter ──
+    // ── driving parameters ──
     const dyed      = this._dyedColor;
     const fiberType = this._classifyFiber();
     const sheen     = this._getSheenModel(fiberType);
     const countNe   = yarn.count_ne || 30;
     const gsm       = (result.input || {}).gsm || (result.grammage || {}).gsm || 180;
     const tf        = (result.physical_constraints || {}).tightness_factor || 14;
-    const gauge     = (result.machine || {}).gauge_optimal || 24;
 
-    // wales / courses per cm (use warp stitch density if present, else from gauge)
-    let walesPerCm   = gauge / 2.54;
-    let coursesPerCm = walesPerCm * 1.35;
-    const sd = (result.warp_knit || {}).stitch_density;
-    if (sd) { walesPerCm = sd.wales_per_cm || walesPerCm; coursesPerCm = sd.courses_per_cm || coursesPerCm; }
-
-    // loop size in px — denser fabric => smaller stitches (more shown)
-    const targetWales = Math.round(Math.min(Math.max(walesPerCm * 4.2, 24), 56));
-    const stitchW = W / targetWales;
-    let stitchH = stitchW * (coursesPerCm ? (walesPerCm / coursesPerCm) : 0.75);
-    stitchH = Math.min(Math.max(stitchH, stitchW * 0.55), stitchW * 1.05);
-
-    // yarn thickness as fraction of stitch width — coarser yarn (low Ne) => thicker
-    const yarnFrac = Math.min(Math.max((0.9 / Math.sqrt(Math.max(countNe, 1))) * 5.6, 0.34), 0.6);
-
-    // tightness 0..1 from TF — high TF packs loops, low TF shows dark ground
-    const tightness = Math.min(Math.max((tf - 9) / 9, 0), 1);
-
-    const cols = Math.ceil(W / stitchW) + 1;
-    const rows = Math.ceil(H / stitchH) + 1;
-
-    // structure flags
     const cat = (fabric.category || '').toLowerCase();
     const id  = (fabric.id || '').toLowerCase();
     const isRib = cat.includes('rib') || id.includes('rib');
@@ -1031,121 +1008,168 @@ class FabricVisualizer {
     const grid = pattern.pattern_cylinder || [['K']];
     const gR = grid.length, gC = (grid[0] || ['K']).length;
 
-    // ── ground / interstice fill (darker the looser the fabric) ──
-    const groundDarken = -0.45 - (1 - tightness) * 0.2;
-    const ground = this._shadeColorRgb(dyed, groundDarken);
-    ctx.fillStyle = `rgb(${ground.r},${ground.g},${ground.b})`;
+    // stitch sizing from yarn count — finer yarn (higher Ne) → smaller, denser stitches
+    const targetWales = Math.round(Math.min(Math.max(12 + countNe * 0.55, 16), 32));
+    const sw = W / targetWales;
+    const sh = sw * 0.86;                                   // jersey stitch a touch wider than tall
+    const yarnW = sw * Math.min(Math.max(0.38 + (30 - countNe) * 0.004, 0.34), 0.48);
+
+    const cols = Math.ceil(W / sw) + 1;
+    const rows = Math.ceil(H / sh) + 2;
+
+    // background = deep shadow tone of the dye (the valleys behind the yarn)
+    ctx.fillStyle = this._shadeColorCss(dyed, -0.40);
     ctx.fillRect(0, 0, W, H);
 
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-
-    // ── draw each loop (bottom-up so upper courses overlap lower) ──
+    // draw course by course, BOTTOM-UP so each newer loop overlaps the older below
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
-        const cx = c * stitchW + stitchW / 2;
-        const cy = H - (r * stitchH + stitchH / 2);
+        const cx = c * sw + sw / 2;
+        const cy = H - (r * sh + sh / 2);
 
         let cell = 'K';
         if (grid[r % gR] && grid[r % gR][c % gC]) cell = grid[r % gR][c % gC];
 
-        let isPurlCol = false;
-        if (isRib) {
-          const phase = c % (ribRepeat * 2);
-          isPurlCol = phase >= ribRepeat;
-        }
+        const purl = isRib && (c % (ribRepeat * 2)) >= ribRepeat;
 
-        this._drawRealStitch(ctx, cx, cy, stitchW, stitchH, yarnFrac, dyed, sheen, cell, isPurlCol);
+        if (purl)               this._drawPurlStitch(ctx, cx, cy, sw, sh, yarnW, dyed);
+        else if (cell === 'M')  this._drawFloatStitch(ctx, cx, cy, sw, sh, yarnW, dyed);
+        else if (cell === 'T')  this._drawKnitVStitch(ctx, cx, cy, sw, sh * 1.45, yarnW, dyed, sheen);
+        else                    this._drawKnitVStitch(ctx, cx, cy, sw, sh, yarnW, dyed, sheen);
       }
     }
 
-    // ── fabric-family surface overlays ──
+    // surface character
+    this._overlayGrain(ctx, W, H);
     if (cat.includes('fleece') || id.includes('fleece')) this._overlayFuzz(ctx, W, H, dyed);
-    if (cat.includes('terry')  || id.includes('terry'))  this._overlayLoops(ctx, W, H, dyed, stitchW, stitchH);
+    this._overlaySoftLight(ctx, W, H);
 
-    // ── global lighting for 3D realism ──
-    this._overlayLighting(ctx, W, H);
-
-    // info line
     const info = this.container.querySelector('#viz-info-text');
     if (info) {
       const shadeName = ((result.input || {}).color_shade || (result.color || {}).shade || 'medium');
       info.textContent =
-        `Dyed preview · ${gsm} GSM · ${countNe} Ne · TF ${typeof tf === 'number' ? tf.toFixed(1) : tf} · ${fiberType} · ${shadeName}`;
+        `Dyed finished face · ${gsm} GSM · ${countNe} Ne · TF ${typeof tf === 'number' ? tf.toFixed(1) : tf} · ${fiberType} · ${shadeName}`;
     }
   }
 
-  /** Draws one realistic knit loop with tube shading. */
-  _drawRealStitch(ctx, cx, cy, w, h, yarnFrac, dyed, sheen, cell, isPurlCol) {
-    const lw   = Math.max(2, w * yarnFrac);
+  /** One stockinette knit "V" stitch — two rounded yarn legs forming the wale,
+   *  a receding head arc, tube highlight, and a depth shadow where it draws through. */
+  _drawKnitVStitch(ctx, cx, cy, sw, sh, yarnW, dyed, sheen) {
+    const topY = cy - sh * 0.50;
+    const botY = cy + sh * 0.54;            // slight overlap into the course below
+    const lxT  = cx - sw * 0.47;
+    const rxT  = cx + sw * 0.47;
     const base = `rgb(${dyed.r},${dyed.g},${dyed.b})`;
-    const hi   = this._shadeColorCss(dyed,  0.24);
-    const sh   = this._shadeColorCss(dyed, -0.30);
+    const hi   = this._shadeColorCss(dyed,  0.22);
+    const dk   = this._shadeColorCss(dyed, -0.26);
 
-    const topY = cy - h * 0.5, botY = cy + h * 0.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
 
-    // MISS / float — strand lying flat across the surface
-    if (cell === 'M') {
-      ctx.strokeStyle = this._shadeColorCss(dyed, -0.08);
-      ctx.lineWidth = lw * 0.8;
-      ctx.beginPath();
-      ctx.moveTo(cx - w * 0.5, cy);
-      ctx.lineTo(cx + w * 0.5, cy);
-      ctx.stroke();
-      return;
-    }
+    // head arc (recedes behind the loop above)
+    ctx.strokeStyle = dk;
+    ctx.lineWidth = yarnW * 0.95;
+    ctx.beginPath();
+    ctx.moveTo(lxT, topY + sh * 0.12);
+    ctx.quadraticCurveTo(cx, topY - sh * 0.04, rxT, topY + sh * 0.12);
+    ctx.stroke();
 
-    // RIB purl column — recessed darker bump, reads as a valley between wales
-    if (isPurlCol) {
-      ctx.strokeStyle = this._shadeColorCss(dyed, -0.34);
-      ctx.lineWidth = lw * 0.92;
-      ctx.beginPath();
-      ctx.moveTo(cx - w * 0.5, cy);
-      ctx.quadraticCurveTo(cx, cy - h * 0.16, cx + w * 0.5, cy);
-      ctx.stroke();
-      return;
-    }
-
-    // KNIT (and TUCK) — interlocking loop. Tuck sits a little taller/tighter.
-    const tuck = cell === 'T';
-    const armX = tuck ? w * 0.42 : w * 0.5;
-    const headSpread = tuck ? w * 0.12 : w * 0.18;
-
-    // body
+    // two legs (the visible V) — base yarn
     ctx.strokeStyle = base;
-    ctx.lineWidth = lw;
+    ctx.lineWidth = yarnW;
     ctx.beginPath();
-    ctx.moveTo(cx - w * 0.04, botY);
-    ctx.bezierCurveTo(cx - armX, cy + h * 0.10, cx - armX, topY + h * 0.10, cx - headSpread, topY);
-    ctx.bezierCurveTo(cx - w * 0.06, topY - h * 0.05, cx + w * 0.06, topY - h * 0.05, cx + headSpread, topY);
-    ctx.bezierCurveTo(cx + armX, topY + h * 0.10, cx + armX, cy + h * 0.10, cx + w * 0.04, botY);
+    ctx.moveTo(lxT, topY + sh * 0.12);
+    ctx.quadraticCurveTo(cx - sw * 0.26, cy, cx, botY);
+    ctx.moveTo(rxT, topY + sh * 0.12);
+    ctx.quadraticCurveTo(cx + sw * 0.26, cy, cx, botY);
     ctx.stroke();
 
-    // highlight on the left arm (light from top-left)
+    // tube highlight down each leg (rounded-yarn sheen, light from above)
     ctx.strokeStyle = hi;
-    ctx.lineWidth = lw * 0.42;
+    ctx.lineWidth = yarnW * 0.34;
     ctx.beginPath();
-    ctx.moveTo(cx - w * 0.04, botY);
-    ctx.bezierCurveTo(cx - armX, cy + h * 0.10, cx - armX, topY + h * 0.10, cx - headSpread, topY);
+    ctx.moveTo(lxT, topY + sh * 0.12);
+    ctx.quadraticCurveTo(cx - sw * 0.26, cy, cx, botY);
+    ctx.moveTo(rxT, topY + sh * 0.12);
+    ctx.quadraticCurveTo(cx + sw * 0.26, cy, cx, botY);
     ctx.stroke();
 
-    // shadow on the right arm
-    ctx.strokeStyle = sh;
-    ctx.lineWidth = lw * 0.34;
+    // depth shadow at the bottom crook where the loop draws through the one below
+    ctx.strokeStyle = dk;
+    ctx.lineWidth = yarnW * 0.55;
     ctx.beginPath();
-    ctx.moveTo(cx + headSpread, topY);
-    ctx.bezierCurveTo(cx + armX, topY + h * 0.10, cx + armX, cy + h * 0.10, cx + w * 0.04, botY);
+    ctx.moveTo(cx - sw * 0.11, botY - sh * 0.05);
+    ctx.quadraticCurveTo(cx, botY + sh * 0.02, cx + sw * 0.11, botY - sh * 0.05);
     ctx.stroke();
 
-    // specular sheen on loop head for synthetic yarns
-    if (sheen === 'high_sheen' || sheen === 'gradient') {
-      ctx.strokeStyle = sheen === 'high_sheen' ? 'rgba(255,255,255,0.42)' : 'rgba(255,255,255,0.22)';
-      ctx.lineWidth = lw * 0.16;
+    // synthetic specular sheen
+    if (sheen === 'high_sheen') {
+      ctx.strokeStyle = 'rgba(255,255,255,0.30)';
+      ctx.lineWidth = yarnW * 0.12;
       ctx.beginPath();
-      ctx.moveTo(cx - headSpread * 0.9, topY + h * 0.02);
-      ctx.bezierCurveTo(cx - w * 0.04, topY - h * 0.04, cx + w * 0.04, topY - h * 0.04, cx + headSpread * 0.9, topY + h * 0.02);
+      ctx.moveTo(lxT + yarnW * 0.12, topY + sh * 0.14);
+      ctx.quadraticCurveTo(cx - sw * 0.24, cy, cx, botY - yarnW * 0.1);
       ctx.stroke();
     }
+  }
+
+  /** Purl bump (rib back / recessed column) — horizontal arc, sits lower & darker. */
+  _drawPurlStitch(ctx, cx, cy, sw, sh, yarnW, dyed) {
+    const base = this._shadeColorCss(dyed, -0.16);
+    const hi   = this._shadeColorCss(dyed,  0.08);
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = base;
+    ctx.lineWidth = yarnW * 1.05;
+    ctx.beginPath();
+    ctx.moveTo(cx - sw * 0.44, cy + sh * 0.06);
+    ctx.quadraticCurveTo(cx, cy - sh * 0.24, cx + sw * 0.44, cy + sh * 0.06);
+    ctx.stroke();
+    ctx.strokeStyle = hi;
+    ctx.lineWidth = yarnW * 0.38;
+    ctx.beginPath();
+    ctx.moveTo(cx - sw * 0.36, cy);
+    ctx.quadraticCurveTo(cx, cy - sh * 0.22, cx + sw * 0.36, cy);
+    ctx.stroke();
+  }
+
+  /** Miss/float — a horizontal strand lying across the face. */
+  _drawFloatStitch(ctx, cx, cy, sw, sh, yarnW, dyed) {
+    const base = `rgb(${dyed.r},${dyed.g},${dyed.b})`;
+    const hi   = this._shadeColorCss(dyed, 0.16);
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = base;
+    ctx.lineWidth = yarnW * 0.92;
+    ctx.beginPath();
+    ctx.moveTo(cx - sw * 0.52, cy);
+    ctx.lineTo(cx + sw * 0.52, cy);
+    ctx.stroke();
+    ctx.strokeStyle = hi;
+    ctx.lineWidth = yarnW * 0.3;
+    ctx.beginPath();
+    ctx.moveTo(cx - sw * 0.5, cy - yarnW * 0.13);
+    ctx.lineTo(cx + sw * 0.5, cy - yarnW * 0.13);
+    ctx.stroke();
+  }
+
+  /** Fine fabric grain — very subtle salt-and-pepper for a textile (not plastic) surface. */
+  _overlayGrain(ctx, W, H) {
+    ctx.save();
+    ctx.globalAlpha = 0.035;
+    const n = Math.floor(W * H / 24);
+    for (let i = 0; i < n; i++) {
+      ctx.fillStyle = Math.random() < 0.5 ? '#FFFFFF' : '#000000';
+      ctx.fillRect(Math.random() * W, Math.random() * H, 1, 1);
+    }
+    ctx.restore();
+  }
+
+  /** Gentle global light — soft top-left key, subtle falloff. Keeps colour uniform. */
+  _overlaySoftLight(ctx, W, H) {
+    const g = ctx.createRadialGradient(W * 0.42, H * 0.32, H * 0.1, W * 0.5, H * 0.5, H * 0.95);
+    g.addColorStop(0, 'rgba(255,255,255,0.08)');
+    g.addColorStop(1, 'rgba(0,0,0,0.12)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
   }
 
   _overlayFuzz(ctx, W, H, dyed) {
