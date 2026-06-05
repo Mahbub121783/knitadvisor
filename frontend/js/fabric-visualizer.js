@@ -246,18 +246,34 @@ class FabricVisualizer {
   // ─────────────────────────────────────────────────────────
 
   _renderStitchView() {
-    const wrap   = this.container.querySelector('.viz-canvas-wrap[data-wrap="stitch"]');
+    const wrap = this.container.querySelector('.viz-canvas-wrap[data-wrap="stitch"]');
     if (!wrap) return;
     wrap.innerHTML = '';
 
-    if (!this.vizData) { this._panelMsg(wrap, 'Schematic data unavailable for this fabric.'); return; }
+    // Warp knit keeps its animated guide-bar lapping diagram
+    const fabric = this.result.fabric || {};
+    const isWarp = fabric.category === 'warp_knit' || (fabric.machine_type || '').includes('warp_knit');
+    if (isWarp && this.vizData && this.vizData.warp) { this._renderWarpCanvas(); return; }
 
-    const vizData = this.vizData.weft || this.vizData;
-    if (!vizData || vizData.kind !== 'weft_knit') {
-      // Warp knit → canvas animation
-      if (this.vizData.warp) this._renderWarpCanvas();
-      return;
-    }
+    // ── build the K/T/M grid (tiled) directly from the calc result ──
+    const pattern = this.result.pattern || {};
+    const grid = pattern.pattern_cylinder || [['K']];
+    const cpr  = pattern.courses_per_repeat || grid.length;
+    const wpr  = pattern.wales_per_repeat   || (grid[0] || ['K']).length;
+    const type = (c, w) => {
+      const row = grid[c % cpr] || ['K'];
+      return row[w % wpr] || 'K';
+    };
+
+    const tileC   = Math.max(2, Math.ceil(7 / cpr));
+    const tileW   = Math.max(2, Math.ceil(7 / wpr));
+    const courses = cpr * tileC;
+    const wales   = wpr * tileW;
+
+    const cell = 48;
+    const padX = 26, padY = 20, legendH = 30;
+    const W = wales * cell + padX * 2;
+    const H = courses * cell + padY * 2 + legendH;
 
     const canvas = document.createElement('canvas');
     canvas.className = 'viz-canvas';
@@ -265,149 +281,189 @@ class FabricVisualizer {
     this.canvases.stitch = canvas;
 
     const dpr = window.devicePixelRatio || 1;
-    canvas.width  = vizData.canvasWidth  * dpr;
-    canvas.height = vizData.canvasHeight * dpr;
-    canvas.style.width  = vizData.canvasWidth  + 'px';
-    canvas.style.height = vizData.canvasHeight + 'px';
-
+    canvas.width  = W * dpr;
+    canvas.height = H * dpr;
+    canvas.style.width  = W + 'px';
+    canvas.style.height = H + 'px';
     const ctx = canvas.getContext('2d');
     ctx.scale(dpr, dpr);
 
-    const yarnColor = this._getYarnColor();
-    const yarnLW    = this._getYarnLineWidth(vizData.countNe || 30, vizData.cellSize);
+    // colours by stitch type (technical notation — line art)
+    const COL = { K: '#1A1A1A', T: '#2563EB', M: '#D92B2B' };
+    const lw  = Math.max(2.2, cell * 0.085);
 
-    // PASS 1 — Background
+    // geometry helper — centre of cell (course 0 at bottom)
+    const cellX = (w) => padX + w * cell + cell / 2;
+    const cellY = (c) => H - legendH - padY - (c * cell + cell / 2);
+
+    // counts consecutive T/M directly above a cell → how far a held loop elongates
+    const heldAbove = (c, w) => {
+      let n = 0;
+      for (let cc = c + 1; cc < courses; cc++) {
+        const t = type(cc, w);
+        if (t === 'T' || t === 'M') n++; else break;
+      }
+      return n;
+    };
+
+    // background
     ctx.fillStyle = '#FFFFFF';
-    ctx.fillRect(0, 0, vizData.canvasWidth, vizData.canvasHeight);
+    ctx.fillRect(0, 0, W, H);
 
-    // PASS 2 — Needle guides (vertical)
-    ctx.save();
-    ctx.strokeStyle = 'rgba(0,0,0,0.05)';
-    ctx.lineWidth = 0.5;
-    ctx.setLineDash([2, 4]);
-    for (let c = 0; c <= vizData.totalCols; c++) {
-      const x = c * vizData.cellSize;
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, vizData.canvasHeight); ctx.stroke();
-    }
-    ctx.restore();
-
-    // PASS 3 — Course guides (horizontal)
-    ctx.save();
-    ctx.strokeStyle = 'rgba(0,0,0,0.05)';
-    ctx.lineWidth = 0.5;
-    ctx.setLineDash([2, 4]);
-    for (let r = 0; r <= vizData.totalRows; r++) {
-      const y = r * vizData.cellSize;
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(vizData.canvasWidth, y); ctx.stroke();
-    }
-    ctx.restore();
-
-    // PASS 4 — Miss/Float bars
-    ctx.save();
-    ctx.strokeStyle = '#CCCCCC';
-    ctx.lineWidth = yarnLW * 0.8;
-    ctx.setLineDash([]);
     ctx.lineCap = 'round';
-    for (const p of vizData.paths) {
-      if (p.type !== 'M') continue;
-      const hw = vizData.cellSize * 0.5;
-      ctx.beginPath(); ctx.moveTo(p.cx - hw, p.cy); ctx.lineTo(p.cx + hw, p.cy); ctx.stroke();
-    }
-    ctx.restore();
+    ctx.lineJoin = 'round';
 
-    // PASS 5 — Tuck arcs
-    ctx.save();
-    ctx.strokeStyle = this._lightenColor(yarnColor, 0.35);
-    ctx.lineWidth = yarnLW;
-    ctx.setLineDash([4, 2]);
-    ctx.lineCap = 'round';
-    for (const p of vizData.paths) {
-      if (p.type !== 'T') continue;
-      const { W, H, FS } = p.geom || this._defaultGeomFromCell(vizData.cellSize);
-      const hT = H * 0.55;
-      ctx.beginPath();
-      ctx.moveTo(p.cx - FS, p.cy);
-      ctx.bezierCurveTo(p.cx - FS, p.cy - hT, p.cx + FS, p.cy - hT, p.cx + FS, p.cy);
-      ctx.stroke();
-    }
-    ctx.restore();
-
-    // PASS 6 — Knit loops (bottom course first = painter's algorithm)
-    const kPaths = vizData.paths.filter(p => p.type === 'K');
-    for (const p of kPaths) {
-      const { W, H, FS } = p.geom || this._defaultGeomFromCell(vizData.cellSize);
-      const baseColor = p.isDial ? this._lightenColor(yarnColor, 0.25) : yarnColor;
-
-      // Leg pair
-      ctx.save();
-      ctx.strokeStyle = baseColor;
-      ctx.lineWidth = yarnLW;
-      ctx.setLineDash([]);
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.beginPath();
-      ctx.moveTo(p.cx - FS, p.cy);
-      ctx.bezierCurveTo(p.cx - W * 1.6, p.cy - H * 0.25,  p.cx - W, p.cy - H + W * 0.3,  p.cx, p.cy - H);
-      ctx.bezierCurveTo(p.cx + W,       p.cy - H + W * 0.3, p.cx + W * 1.6, p.cy - H * 0.25, p.cx + FS, p.cy);
-      ctx.stroke();
-
-      // Foot hooks
-      ctx.lineWidth = yarnLW * 0.75;
-      // Left
-      ctx.beginPath();
-      ctx.moveTo(p.cx - FS, p.cy);
-      ctx.quadraticCurveTo(p.cx - FS * 2.4, p.cy + FS * 1.2, p.cx - FS * 3, p.cy + FS * 0.5);
-      ctx.stroke();
-      // Right
-      ctx.beginPath();
-      ctx.moveTo(p.cx + FS, p.cy);
-      ctx.quadraticCurveTo(p.cx + FS * 2.4, p.cy + FS * 1.2, p.cx + FS * 3, p.cy + FS * 0.5);
-      ctx.stroke();
-
-      // Polyester sheen highlight
-      if (p.hasSheen) {
-        const grad = ctx.createLinearGradient(p.cx - FS, p.cy, p.cx + FS, p.cy);
-        grad.addColorStop(0,    'rgba(255,255,255,0)');
-        grad.addColorStop(0.4,  'rgba(255,255,255,0.55)');
-        grad.addColorStop(1,    'rgba(255,255,255,0)');
-        ctx.strokeStyle = grad;
-        ctx.lineWidth = yarnLW * 0.4;
+    // PASS A — sinker connectors (course yarn between adjacent wales)
+    ctx.strokeStyle = '#333333';
+    ctx.lineWidth = lw * 0.9;
+    for (let c = 0; c < courses; c++) {
+      const sinkerY = cellY(c) + cell * 0.42;
+      const legX = cell * 0.30;
+      for (let w = 1; w < wales; w++) {
+        const xPrev = cellX(w - 1) + legX;
+        const xCurr = cellX(w) - legX;
         ctx.beginPath();
-        ctx.moveTo(p.cx - FS, p.cy);
-        ctx.bezierCurveTo(p.cx - W * 1.6, p.cy - H * 0.25, p.cx - W, p.cy - H + W * 0.3, p.cx, p.cy - H);
-        ctx.bezierCurveTo(p.cx + W, p.cy - H + W * 0.3, p.cx + W * 1.6, p.cy - H * 0.25, p.cx + FS, p.cy);
+        ctx.moveTo(xPrev, sinkerY);
+        ctx.quadraticCurveTo((xPrev + xCurr) / 2, sinkerY + cell * 0.14, xCurr, sinkerY);
         ctx.stroke();
       }
-
-      // Needle dot
-      ctx.fillStyle = 'rgba(0,0,0,0.18)';
-      ctx.beginPath();
-      ctx.arc(p.cx, p.cy, 1.5, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.restore();
     }
 
-    // PASS 8 — Repeat boundary box
+    // PASS B — loops, bottom course first (upper courses interlock on top)
+    for (let c = 0; c < courses; c++) {
+      for (let w = 0; w < wales; w++) {
+        const t  = type(c, w);
+        const cx = cellX(w), cy = cellY(c);
+        if (t === 'K')      this._drawKnitLoop(ctx, cx, cy, cell, lw, COL.K, heldAbove(c, w));
+        else if (t === 'T') this._drawTuckLoop(ctx, cx, cy, cell, lw, COL.T);
+        else                this._drawMissFloat(ctx, cx, cy, cell, lw, COL.M);
+      }
+    }
+
+    // PASS C — repeat boundary box (one repeat unit, bottom-left)
     ctx.save();
-    ctx.strokeStyle = 'rgba(37,99,235,0.4)';
+    ctx.strokeStyle = 'rgba(37,99,235,0.35)';
     ctx.lineWidth = 1;
     ctx.setLineDash([4, 3]);
-    const boxW = vizData.walesPerRepeat   * vizData.cellSize;
-    const boxH = vizData.coursesPerRepeat * vizData.cellSize;
-    ctx.strokeRect(0.5, vizData.canvasHeight - boxH - 0.5, boxW, boxH);
+    ctx.strokeRect(padX + 0.5, H - legendH - padY - cpr * cell + 0.5, wpr * cell, cpr * cell);
     ctx.restore();
 
-    // PASS 9 — Legend
-    this._drawLegend(ctx, yarnColor, vizData.canvasWidth, vizData.canvasHeight);
+    // PASS D — legend
+    this._drawKtmLegend(ctx, COL, W, H, legendH);
 
-    // Update info text
+    // info line
     const info = this.container.querySelector('#viz-info-text');
     if (info) {
-      const ne = vizData.countNe || (this.result.yarn || {}).count_ne || '—';
-      const tf = ((this.result.physical_constraints || {}).tightness_factor || '—');
-      info.textContent = `Count: ${ne} Ne  |  TF: ${typeof tf === 'number' ? tf.toFixed(2) : tf}  |  ${vizData.coursesPerRepeat}C × ${vizData.walesPerRepeat}W repeat`;
+      const ne = (this.result.yarn || {}).count_ne || '—';
+      info.textContent = `Loop notation · ${cpr}C × ${wpr}W repeat · ${ne} Ne · knit interlock + tuck + float`;
     }
+  }
+
+  /** Knit needle loop — head up, two legs down interlocking with the loop below.
+   *  heldExtra elongates the loop upward when tuck/miss cells sit above it. */
+  _drawKnitLoop(ctx, cx, cy, cell, lw, color, heldExtra) {
+    const ch      = cell * (1 + (heldExtra || 0));
+    const headW   = cell * 0.30;
+    const legX    = cell * 0.30;
+    const sinkerY = cy + cell * 0.42;          // leg base (interlocks below)
+    const headY   = cy + cell * 0.42 - ch * 0.9; // rounded head near top (elongated up)
+
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lw;
+    ctx.beginPath();
+    // left leg: from base up to head
+    ctx.moveTo(cx - legX, sinkerY);
+    ctx.bezierCurveTo(cx - legX * 1.35, sinkerY - ch * 0.30,
+                      cx - headW,       headY + ch * 0.22,
+                      cx - headW,       headY);
+    // head arc (rounded top)
+    ctx.bezierCurveTo(cx - headW, headY - cell * 0.34,
+                      cx + headW, headY - cell * 0.34,
+                      cx + headW, headY);
+    // right leg: from head down to base
+    ctx.bezierCurveTo(cx + headW,       headY + ch * 0.22,
+                      cx + legX * 1.35, sinkerY - ch * 0.30,
+                      cx + legX,        sinkerY);
+    ctx.stroke();
+
+    // leg feet curl outward (the interlock hooks under the head of the loop below)
+    ctx.lineWidth = lw * 0.85;
+    ctx.beginPath();
+    ctx.moveTo(cx - legX, sinkerY);
+    ctx.quadraticCurveTo(cx - legX * 1.7, sinkerY + cell * 0.12, cx - legX * 1.9, sinkerY + cell * 0.02);
+    ctx.moveTo(cx + legX, sinkerY);
+    ctx.quadraticCurveTo(cx + legX * 1.7, sinkerY + cell * 0.12, cx + legX * 1.9, sinkerY + cell * 0.02);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /** Tuck — new yarn is caught but NOT cleared: a held cup (∪) with no pull-through.
+   *  The elongated knit loop from below passes up through it. */
+  _drawTuckLoop(ctx, cx, cy, cell, lw, color) {
+    const legX    = cell * 0.30;
+    const sinkerY = cy + cell * 0.42;
+    const cupY    = cy + cell * 0.10;
+
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lw;
+    // shallow cup held at the needle (tuck yarn)
+    ctx.beginPath();
+    ctx.moveTo(cx - legX, sinkerY);
+    ctx.bezierCurveTo(cx - legX * 0.9, cupY, cx + legX * 0.9, cupY, cx + legX, sinkerY);
+    ctx.stroke();
+
+    // small held-loop bump rising through the cup (shows it is tucked, not knitted)
+    ctx.lineWidth = lw * 0.8;
+    ctx.beginPath();
+    ctx.moveTo(cx - cell * 0.14, cupY + cell * 0.04);
+    ctx.bezierCurveTo(cx - cell * 0.14, cupY - cell * 0.30,
+                      cx + cell * 0.14, cupY - cell * 0.30,
+                      cx + cell * 0.14, cupY + cell * 0.04);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /** Miss / float — yarn passes straight across the wale; the loop below is held
+   *  and elongated up through this course. */
+  _drawMissFloat(ctx, cx, cy, cell, lw, color) {
+    const sinkerY = cy + cell * 0.42;
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lw;
+    // straight float (slightly bowed) across the full wale
+    ctx.beginPath();
+    ctx.moveTo(cx - cell * 0.5, sinkerY);
+    ctx.quadraticCurveTo(cx, sinkerY - cell * 0.06, cx + cell * 0.5, sinkerY);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /** K / T / M legend bar drawn along the bottom of the canvas. */
+  _drawKtmLegend(ctx, COL, W, H, legendH) {
+    const y = H - legendH / 2;
+    ctx.save();
+    ctx.font = `11px 'JetBrains Mono', monospace`;
+    ctx.textBaseline = 'middle';
+    const items = [
+      { c: COL.K, t: 'K — Knit (interlocked loop)' },
+      { c: COL.T, t: 'T — Tuck (held cup)' },
+      { c: COL.M, t: 'M — Miss (float)' },
+    ];
+    let x = 14;
+    for (const it of items) {
+      ctx.strokeStyle = it.c;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + 16, y);
+      ctx.stroke();
+      ctx.fillStyle = '#555555';
+      ctx.fillText(it.t, x + 22, y);
+      x += ctx.measureText(it.t).width + 46;
+    }
+    ctx.restore();
   }
 
   // ─────────────────────────────────────────────────────────
