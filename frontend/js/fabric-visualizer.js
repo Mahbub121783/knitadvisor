@@ -18,12 +18,14 @@ class FabricVisualizer {
   constructor(result, container) {
     this.result    = result;
     this.container = container;
-    this.activeTab = 'stitch';
+    this.activeTab = 'realistic';
     this.animFrame = null;
     this.animProgress = 0;
     this.vizData   = null;
     this.canvases  = {};
     this.svgWrap   = null;
+    this._userColor = null;                    // user-picked dye color (hex) or null
+    this._dyedColor = { r: 96, g: 100, b: 112 }; // computed in _computeDyedColor()
     this._destroyed = false;
   }
 
@@ -34,16 +36,18 @@ class FabricVisualizer {
   async init() {
     if (!this.container) return;
     this._buildSectionDOM();
-    this._showLoading(true);
 
+    // The Realistic view renders straight from the result object and never
+    // depends on the path engine — so a data-gen failure must NOT block it.
+    // (Stitch/Cross/Props tabs guard against null vizData individually.)
     try {
       this.vizData = await this._generateVizData();
     } catch (err) {
-      this._showError('Could not generate visualization: ' + err.message);
-      return;
+      this.vizData = null;
     }
 
-    this._showLoading(false);
+    this._computeDyedColor();
+    this._syncColorInput();
     this._renderActiveTab();
   }
 
@@ -62,7 +66,7 @@ class FabricVisualizer {
   }
 
   exportPng() {
-    const canvas = this.canvases[this.activeTab === 'props' ? 'props' : 'stitch'];
+    const canvas = this.canvases[this.activeTab] || this.canvases.realistic || this.canvases.stitch;
     if (!canvas) return;
     const link = document.createElement('a');
     link.download = `knitadvisor-${(this.result.fabric || {}).id || 'fabric'}-${this.activeTab}.png`;
@@ -245,6 +249,8 @@ class FabricVisualizer {
     const wrap   = this.container.querySelector('.viz-canvas-wrap[data-wrap="stitch"]');
     if (!wrap) return;
     wrap.innerHTML = '';
+
+    if (!this.vizData) { this._panelMsg(wrap, 'Schematic data unavailable for this fabric.'); return; }
 
     const vizData = this.vizData.weft || this.vizData;
     if (!vizData || vizData.kind !== 'weft_knit') {
@@ -524,8 +530,9 @@ class FabricVisualizer {
     if (!wrap) return;
     wrap.innerHTML = '';
 
+    if (!this.vizData) { this._panelMsg(wrap, 'Cross-section data unavailable for this fabric.'); return; }
     const cs = (this.vizData.weft || this.vizData).crossSection || (this.vizData.crossSection);
-    if (!cs) { wrap.innerHTML = '<p class="text-dim text-sm">Cross-section data unavailable.</p>'; return; }
+    if (!cs) { this._panelMsg(wrap, 'Cross-section data unavailable.'); return; }
 
     wrap.innerHTML = this._buildCrossSectionSvg(cs);
   }
@@ -637,7 +644,8 @@ class FabricVisualizer {
     const ctx = canvas.getContext('2d');
     ctx.scale(dpr, dpr);
 
-    const pm = (this.vizData.weft || this.vizData).propertiesMap || (this.vizData.propertiesMap);
+    const pm = (this.vizData && ((this.vizData.weft || this.vizData).propertiesMap || this.vizData.propertiesMap))
+      || this._buildPropertiesMapFromResult();
     if (!pm) return;
 
     // Background
@@ -891,9 +899,343 @@ class FabricVisualizer {
 
   _renderActiveTab() {
     if (this.animFrame) { cancelAnimationFrame(this.animFrame); this.animFrame = null; }
-    if (this.activeTab === 'stitch') this._renderStitchView();
+    if (this.activeTab === 'realistic') this._renderRealisticView();
+    else if (this.activeTab === 'stitch') this._renderStitchView();
     else if (this.activeTab === 'cross') this._renderCrossSection();
     else if (this.activeTab === 'props') this._renderPropertiesMap();
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // VIEW 0: REALISTIC DYED FABRIC SWATCH
+  // Synthesises the finished, dyed cloth appearance by combining every
+  // engine parameter: composition + shade → colour & sheen,
+  // K/T/M structure → surface texture, GSM + count → yarn thickness,
+  // gauge/stitch-density → loop size, TF → tightness (ground show-through).
+  // ─────────────────────────────────────────────────────────
+
+  _renderRealisticView() {
+    const wrap = this.container.querySelector('.viz-canvas-wrap[data-wrap="realistic"]');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+
+    const result  = this.result;
+    const fabric  = result.fabric  || {};
+    const pattern = result.pattern || {};
+    const yarn    = result.yarn    || {};
+
+    const canvas = document.createElement('canvas');
+    canvas.className = 'viz-canvas';
+    wrap.appendChild(canvas);
+    this.canvases.realistic = canvas;
+
+    const W = 460, H = 320;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width  = W * dpr;
+    canvas.height = H * dpr;
+    canvas.style.width  = W + 'px';
+    canvas.style.height = H + 'px';
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    // ── derive every driving parameter ──
+    const dyed      = this._dyedColor;
+    const fiberType = this._classifyFiber();
+    const sheen     = this._getSheenModel(fiberType);
+    const countNe   = yarn.count_ne || 30;
+    const gsm       = (result.input || {}).gsm || (result.grammage || {}).gsm || 180;
+    const tf        = (result.physical_constraints || {}).tightness_factor || 14;
+    const gauge     = (result.machine || {}).gauge_optimal || 24;
+
+    // wales / courses per cm (use warp stitch density if present, else from gauge)
+    let walesPerCm   = gauge / 2.54;
+    let coursesPerCm = walesPerCm * 1.35;
+    const sd = (result.warp_knit || {}).stitch_density;
+    if (sd) { walesPerCm = sd.wales_per_cm || walesPerCm; coursesPerCm = sd.courses_per_cm || coursesPerCm; }
+
+    // loop size in px — denser fabric => smaller stitches (more shown)
+    const targetWales = Math.round(Math.min(Math.max(walesPerCm * 4.2, 24), 56));
+    const stitchW = W / targetWales;
+    let stitchH = stitchW * (coursesPerCm ? (walesPerCm / coursesPerCm) : 0.75);
+    stitchH = Math.min(Math.max(stitchH, stitchW * 0.55), stitchW * 1.05);
+
+    // yarn thickness as fraction of stitch width — coarser yarn (low Ne) => thicker
+    const yarnFrac = Math.min(Math.max((0.9 / Math.sqrt(Math.max(countNe, 1))) * 5.6, 0.34), 0.6);
+
+    // tightness 0..1 from TF — high TF packs loops, low TF shows dark ground
+    const tightness = Math.min(Math.max((tf - 9) / 9, 0), 1);
+
+    const cols = Math.ceil(W / stitchW) + 1;
+    const rows = Math.ceil(H / stitchH) + 1;
+
+    // structure flags
+    const cat = (fabric.category || '').toLowerCase();
+    const id  = (fabric.id || '').toLowerCase();
+    const isRib = cat.includes('rib') || id.includes('rib');
+    const ribRepeat = this._ribRepeat(id);
+    const grid = pattern.pattern_cylinder || [['K']];
+    const gR = grid.length, gC = (grid[0] || ['K']).length;
+
+    // ── ground / interstice fill (darker the looser the fabric) ──
+    const groundDarken = -0.45 - (1 - tightness) * 0.2;
+    const ground = this._shadeColorRgb(dyed, groundDarken);
+    ctx.fillStyle = `rgb(${ground.r},${ground.g},${ground.b})`;
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    // ── draw each loop (bottom-up so upper courses overlap lower) ──
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const cx = c * stitchW + stitchW / 2;
+        const cy = H - (r * stitchH + stitchH / 2);
+
+        let cell = 'K';
+        if (grid[r % gR] && grid[r % gR][c % gC]) cell = grid[r % gR][c % gC];
+
+        let isPurlCol = false;
+        if (isRib) {
+          const phase = c % (ribRepeat * 2);
+          isPurlCol = phase >= ribRepeat;
+        }
+
+        this._drawRealStitch(ctx, cx, cy, stitchW, stitchH, yarnFrac, dyed, sheen, cell, isPurlCol);
+      }
+    }
+
+    // ── fabric-family surface overlays ──
+    if (cat.includes('fleece') || id.includes('fleece')) this._overlayFuzz(ctx, W, H, dyed);
+    if (cat.includes('terry')  || id.includes('terry'))  this._overlayLoops(ctx, W, H, dyed, stitchW, stitchH);
+
+    // ── global lighting for 3D realism ──
+    this._overlayLighting(ctx, W, H);
+
+    // info line
+    const info = this.container.querySelector('#viz-info-text');
+    if (info) {
+      const shadeName = ((result.input || {}).color_shade || (result.color || {}).shade || 'medium');
+      info.textContent =
+        `Dyed preview · ${gsm} GSM · ${countNe} Ne · TF ${typeof tf === 'number' ? tf.toFixed(1) : tf} · ${fiberType} · ${shadeName}`;
+    }
+  }
+
+  /** Draws one realistic knit loop with tube shading. */
+  _drawRealStitch(ctx, cx, cy, w, h, yarnFrac, dyed, sheen, cell, isPurlCol) {
+    const lw   = Math.max(2, w * yarnFrac);
+    const base = `rgb(${dyed.r},${dyed.g},${dyed.b})`;
+    const hi   = this._shadeColorCss(dyed,  0.24);
+    const sh   = this._shadeColorCss(dyed, -0.30);
+
+    const topY = cy - h * 0.5, botY = cy + h * 0.5;
+
+    // MISS / float — strand lying flat across the surface
+    if (cell === 'M') {
+      ctx.strokeStyle = this._shadeColorCss(dyed, -0.08);
+      ctx.lineWidth = lw * 0.8;
+      ctx.beginPath();
+      ctx.moveTo(cx - w * 0.5, cy);
+      ctx.lineTo(cx + w * 0.5, cy);
+      ctx.stroke();
+      return;
+    }
+
+    // RIB purl column — recessed darker bump, reads as a valley between wales
+    if (isPurlCol) {
+      ctx.strokeStyle = this._shadeColorCss(dyed, -0.34);
+      ctx.lineWidth = lw * 0.92;
+      ctx.beginPath();
+      ctx.moveTo(cx - w * 0.5, cy);
+      ctx.quadraticCurveTo(cx, cy - h * 0.16, cx + w * 0.5, cy);
+      ctx.stroke();
+      return;
+    }
+
+    // KNIT (and TUCK) — interlocking loop. Tuck sits a little taller/tighter.
+    const tuck = cell === 'T';
+    const armX = tuck ? w * 0.42 : w * 0.5;
+    const headSpread = tuck ? w * 0.12 : w * 0.18;
+
+    // body
+    ctx.strokeStyle = base;
+    ctx.lineWidth = lw;
+    ctx.beginPath();
+    ctx.moveTo(cx - w * 0.04, botY);
+    ctx.bezierCurveTo(cx - armX, cy + h * 0.10, cx - armX, topY + h * 0.10, cx - headSpread, topY);
+    ctx.bezierCurveTo(cx - w * 0.06, topY - h * 0.05, cx + w * 0.06, topY - h * 0.05, cx + headSpread, topY);
+    ctx.bezierCurveTo(cx + armX, topY + h * 0.10, cx + armX, cy + h * 0.10, cx + w * 0.04, botY);
+    ctx.stroke();
+
+    // highlight on the left arm (light from top-left)
+    ctx.strokeStyle = hi;
+    ctx.lineWidth = lw * 0.42;
+    ctx.beginPath();
+    ctx.moveTo(cx - w * 0.04, botY);
+    ctx.bezierCurveTo(cx - armX, cy + h * 0.10, cx - armX, topY + h * 0.10, cx - headSpread, topY);
+    ctx.stroke();
+
+    // shadow on the right arm
+    ctx.strokeStyle = sh;
+    ctx.lineWidth = lw * 0.34;
+    ctx.beginPath();
+    ctx.moveTo(cx + headSpread, topY);
+    ctx.bezierCurveTo(cx + armX, topY + h * 0.10, cx + armX, cy + h * 0.10, cx + w * 0.04, botY);
+    ctx.stroke();
+
+    // specular sheen on loop head for synthetic yarns
+    if (sheen === 'high_sheen' || sheen === 'gradient') {
+      ctx.strokeStyle = sheen === 'high_sheen' ? 'rgba(255,255,255,0.42)' : 'rgba(255,255,255,0.22)';
+      ctx.lineWidth = lw * 0.16;
+      ctx.beginPath();
+      ctx.moveTo(cx - headSpread * 0.9, topY + h * 0.02);
+      ctx.bezierCurveTo(cx - w * 0.04, topY - h * 0.04, cx + w * 0.04, topY - h * 0.04, cx + headSpread * 0.9, topY + h * 0.02);
+      ctx.stroke();
+    }
+  }
+
+  _overlayFuzz(ctx, W, H, dyed) {
+    ctx.save();
+    ctx.globalAlpha = 0.22;
+    const n = Math.floor(W * H / 55);
+    for (let i = 0; i < n; i++) {
+      const x = Math.random() * W, y = Math.random() * H;
+      const a = Math.random() * Math.PI * 2, len = 2 + Math.random() * 4;
+      ctx.strokeStyle = Math.random() < 0.5 ? this._shadeColorCss(dyed, 0.28) : this._shadeColorCss(dyed, -0.26);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  _overlayLoops(ctx, W, H, dyed, sw, sh) {
+    ctx.save();
+    ctx.globalAlpha = 0.28;
+    ctx.strokeStyle = this._shadeColorCss(dyed, 0.18);
+    ctx.lineWidth = Math.max(1, sw * 0.18);
+    for (let y = sh; y < H; y += sh * 1.5) {
+      for (let x = sw; x < W; x += sw * 1.5) {
+        ctx.beginPath();
+        ctx.arc(x, y, sw * 0.28, Math.PI, 0);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
+  _overlayLighting(ctx, W, H) {
+    const g = ctx.createLinearGradient(0, 0, W, H);
+    g.addColorStop(0,   'rgba(255,255,255,0.10)');
+    g.addColorStop(0.5, 'rgba(255,255,255,0)');
+    g.addColorStop(1,   'rgba(0,0,0,0.14)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // ── dyed colour synthesis ──
+
+  _computeDyedColor() {
+    if (this._userColor) { this._dyedColor = this._hexToRgb(this._userColor); return; }
+
+    const shadeRaw = ((this.result.input || {}).color_shade
+      || (this.result.color || {}).shade || 'medium').toString().toLowerCase();
+
+    let L;
+    if (/black|dark|navy|deep|charcoal/.test(shadeRaw))            L = 0.16;
+    else if (/light|white|pastel|pale|sky|cream/.test(shadeRaw))  L = 0.80;
+    else if (/fluor|neon|bright/.test(shadeRaw))                  L = 0.62;
+    else                                                          L = 0.44;
+
+    let baseHue = /fluor|neon/.test(shadeRaw)
+      ? { r: 180, g: 230, b: 40 }
+      : { r: 120, g: 124, b: 134 };
+
+    const rgb = this._applyLightness(baseHue, L);
+
+    const fiber = this._classifyFiber();
+    if (fiber === 'cotton') { rgb.r += 6; rgb.b -= 4; }
+    if (fiber === 'polyester' || fiber === 'nylon') { rgb.b += 6; }
+
+    this._dyedColor = {
+      r: Math.max(0, Math.min(255, Math.round(rgb.r))),
+      g: Math.max(0, Math.min(255, Math.round(rgb.g))),
+      b: Math.max(0, Math.min(255, Math.round(rgb.b))),
+    };
+  }
+
+  _applyLightness(base, L) {
+    if (L <= 0.5) {
+      const t = L / 0.5;
+      return { r: base.r * t, g: base.g * t, b: base.b * t };
+    }
+    const t = (L - 0.5) / 0.5;
+    return {
+      r: base.r + (255 - base.r) * t,
+      g: base.g + (255 - base.g) * t,
+      b: base.b + (255 - base.b) * t,
+    };
+  }
+
+  _shadeColorRgb(rgb, amt) {
+    // amt -1..1 ; negative => toward black, positive => toward white
+    const target = amt < 0 ? 0 : 255;
+    const t = Math.abs(amt);
+    return {
+      r: Math.round((target - rgb.r) * t + rgb.r),
+      g: Math.round((target - rgb.g) * t + rgb.g),
+      b: Math.round((target - rgb.b) * t + rgb.b),
+    };
+  }
+
+  _shadeColorCss(rgb, amt) {
+    const c = this._shadeColorRgb(rgb, amt);
+    return `rgb(${c.r},${c.g},${c.b})`;
+  }
+
+  _hexToRgb(hex) {
+    const n = parseInt(hex.replace('#', ''), 16);
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+  }
+
+  _rgbToHex(c) {
+    const h = v => ('0' + Math.max(0, Math.min(255, Math.round(v))).toString(16)).slice(-2);
+    return '#' + h(c.r) + h(c.g) + h(c.b);
+  }
+
+  _syncColorInput() {
+    const inp = this.container.querySelector('#viz-color-input');
+    if (inp) inp.value = this._rgbToHex(this._dyedColor);
+  }
+
+  _ribRepeat(id) {
+    const m = id.match(/(\d+)\s*x\s*\d+/);
+    if (m) return Math.max(1, parseInt(m[1]));
+    return 1;
+  }
+
+  _panelMsg(wrap, msg) {
+    wrap.innerHTML = `<p style="font-family:var(--mono);font-size:11px;color:var(--t3);padding:12px 4px;">${msg}</p>`;
+  }
+
+  _buildPropertiesMapFromResult() {
+    const tf = (this.result.physical_constraints || {}).tightness_factor || 14;
+    const spirality = (this.result.quality_prediction || {}).spirality || {};
+    const shrinkage = (this.result.quality_prediction || {}).shrinkage || {};
+    const zone = tf < 12 ? 'slack' : tf > 16 ? 'tight' : 'balanced';
+    const colors = { slack: '#F59E0B', balanced: '#10B981', tight: '#EF4444' };
+    return {
+      tightness: { value: Math.round(tf * 100) / 100, zone, color: colors[zone] },
+      spirality: {
+        angle_deg: spirality.skewness_angle || 0,
+        risk: spirality.risk_level || 'low',
+        arrowAngle_rad: ((spirality.skewness_angle || 0) * Math.PI) / 180,
+      },
+      shrinkage: {
+        lengthwise: { pct: shrinkage.lengthwise_pct || 0, arrowLength_normalized: Math.min((shrinkage.lengthwise_pct || 0) / 15, 1) },
+        widthwise:  { pct: shrinkage.widthwise_pct  || 0, arrowLength_normalized: Math.min((shrinkage.widthwise_pct  || 0) / 15, 1) },
+      },
+    };
   }
 
   // ─────────────────────────────────────────────────────────
@@ -903,11 +1245,15 @@ class FabricVisualizer {
   _buildSectionDOM() {
     this.container.innerHTML = `
       <div class="viz-tab-bar">
-        <button class="viz-tab active" data-tab="stitch">Stitch Structure</button>
+        <button class="viz-tab active" data-tab="realistic">Realistic Fabric</button>
+        <button class="viz-tab" data-tab="stitch">Stitch Structure</button>
         <button class="viz-tab" data-tab="cross">Cross-Section</button>
         <button class="viz-tab" data-tab="props">Properties Map</button>
       </div>
-      <div class="viz-panel active" data-panel="stitch">
+      <div class="viz-panel active" data-panel="realistic">
+        <div class="viz-canvas-wrap" data-wrap="realistic"></div>
+      </div>
+      <div class="viz-panel" data-panel="stitch">
         <div class="viz-canvas-wrap" data-wrap="stitch"></div>
       </div>
       <div class="viz-panel" data-panel="cross">
@@ -917,7 +1263,11 @@ class FabricVisualizer {
         <div class="viz-canvas-wrap" data-wrap="props"></div>
       </div>
       <div class="viz-toolbar">
-        <span class="viz-info" id="viz-info-text">Loading…</span>
+        <label class="viz-color" title="Dyed colour — change to preview any shade">
+          <span>Dye</span>
+          <input type="color" id="viz-color-input" value="#606470">
+        </label>
+        <span class="viz-info" id="viz-info-text">Rendering…</span>
         <button class="viz-btn" id="viz-export-png">Export PNG</button>
         <button class="viz-btn" id="viz-export-svg">Export SVG</button>
       </div>
@@ -929,6 +1279,17 @@ class FabricVisualizer {
     this.container.querySelectorAll('.viz-tab').forEach(btn => {
       btn.addEventListener('click', () => this.switchTab(btn.dataset.tab));
     });
+
+    // Dye colour picker — recompute and re-render the realistic swatch
+    const colorInput = this.container.querySelector('#viz-color-input');
+    if (colorInput) {
+      colorInput.addEventListener('input', () => {
+        this._userColor = colorInput.value;
+        this._computeDyedColor();
+        if (this.activeTab !== 'realistic') this.switchTab('realistic');
+        else this._renderRealisticView();
+      });
+    }
 
     // Export buttons
     this.container.querySelector('#viz-export-png').addEventListener('click', () => this.exportPng());
