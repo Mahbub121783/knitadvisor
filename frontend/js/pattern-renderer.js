@@ -150,70 +150,80 @@ function renderSvgSchematic(patternData) {
   let html = `<div style="display:flex; flex-wrap:wrap; gap:32px; margin-top:16px;">`;
 
   // ----------------------------------------------------
-  // 1. Fabric Notation (continuous running-yarn loop diagram)
-  //    Each course is ONE unbroken yarn path:
-  //    K = round needle loop on the running yarn
-  //    T = tuck — a single held hump on the run
-  //    M = miss/float — the yarn runs flat across the wale
+  // 1. Fabric Notation (true intermeshed loop structure)
+  //    K = needle loop: wraps OVER its dot, legs CROSS below it, and the
+  //        feet hook around the head of the loop in the course below
+  //        (so successive courses interlock — held "upside down").
+  //    T = tuck: covers only the UPPER part of the dot (a held cap),
+  //        no full wrap and no cross below.
+  //    M = miss/float: the yarn floats behind; the dot is left bare.
   // ----------------------------------------------------
-  const cs = 46;                                   // notation cell size / needle pitch
+  const cs = 50;                                   // needle pitch / course spacing
   const fnRepeatX = Math.max(3, Math.ceil(6 / baseCols));
   const fnRepeatY = Math.max(3, Math.ceil(4 / baseRows));
   const fnCols = baseCols * fnRepeatX;
   const fnRows = baseRows * fnRepeatY;
 
-  const p     = cs;          // needle pitch
-  const capR  = cs * 0.26;   // loop head radius (WIDE → round balloon, not narrow)
-  const h     = cs * 0.62;   // loop height (SHORT → round, not tall candlestick)
-  const cross = cs * 0.06;   // narrow base opening where the loop meets the run
-  const dip   = cs * 0.08;   // sinker scallop depth between loops
-  const humpH = cs * 0.42;   // tuck hump height
-  const topPad = cs * 0.50, botPad = cs * 0.35;
-  const fnInnerH = fnRows * cs;
-  const fnW = fnCols * cs;
-  const fnH = fnInnerH + topPad + botPad;
+  const hw = cs * 0.30;   // head half-width (arch span)
+  const hr = cs * 0.30;   // head rise above the dot
+  const cd = cs * 0.30;   // cross drop — legs cross this far below the dot
+  const ld = cs * 0.92;   // leg drop — feet reach down to wrap the loop below
+  const fx = cs * 0.24;   // foot half-splay
+
+  const fnPadX = 8, fnPadTop = hr + 6, fnPadBot = 8;
+  const fnW = fnCols * cs + fnPadX * 2;
+  const fnH = fnPadTop + (fnRows - 1) * cs + ld + fnPadBot;
 
   const cellAt = (r, c) => {
     const rowData = Array.isArray(pattern_cylinder[r % baseRows])
       ? pattern_cylinder[r % baseRows] : [pattern_cylinder[r % baseRows]];
     return (rowData[c % baseCols] || '').toString().toUpperCase();
   };
-  const fnX     = (c) => c * cs + cs / 2;
-  const fnBaseY = (r) => topPad + fnInnerH - r * cs - cs * 0.30;
+  const fnX  = (c) => fnPadX + c * cs + cs / 2;          // wale centre (the dot x)
+  const fnHy = (r) => fnPadTop + (fnRows - 1 - r) * cs;  // course r dot y (0 = bottom)
 
   let fn = `<svg width="${fnW}" height="${fnH}" viewBox="0 0 ${fnW} ${fnH}" style="background:#FFFFFF; border:1px solid #CCCCCC; border-radius:4px;">`;
 
+  // ── sinker loops: connect adjacent loops along each course (continuity) ──
   for (let r = 0; r < fnRows; r++) {
-    const by = fnBaseY(r);
+    const hy = fnHy(r);
+    for (let c = 1; c < fnCols; c++) {
+      const xL = fnX(c - 1) + fx, xR = fnX(c) - fx, yy = hy + ld;
+      fn += `<path d="M ${xL} ${yy} Q ${(xL + xR) / 2} ${yy + cs * 0.10} ${xR} ${yy}" fill="none" stroke="#333333" stroke-width="2" stroke-linecap="round"/>`;
+    }
+  }
 
-    // ── one continuous yarn path for the whole course ──
-    let d = `M ${fnX(0) - p * 0.5} ${by}`;
+  // ── loops / tucks / floats, bottom course first (upper courses on top) ──
+  for (let r = 0; r < fnRows; r++) {
+    const hy = fnHy(r);
     for (let c = 0; c < fnCols; c++) {
-      const x  = fnX(c);
-      const xR = x + p * 0.5;
+      const x = fnX(c);
       const cell = cellAt(r, c);
 
       if (cell === 'K') {
-        // sinker dip in → ROUND balloon loop (bulges wide, rounded top) → sinker dip out
-        d += ` Q ${x - p * 0.34} ${by + dip} ${x - cross} ${by}`;
-        d += ` C ${x - capR * 1.5} ${by - h * 0.18} ${x - capR * 1.05} ${by - h * 0.92} ${x} ${by - h}`;
-        d += ` C ${x + capR * 1.05} ${by - h * 0.92} ${x + capR * 1.5} ${by - h * 0.18} ${x + cross} ${by}`;
-        d += ` Q ${x + p * 0.34} ${by + dip} ${xR} ${by}`;
+        // left foot → up & cross right → over the head → down & cross left → right foot
+        fn += `<path d="M ${x - fx} ${hy + ld}
+          C ${x - fx} ${hy + cd + (ld - cd) * 0.40}, ${x + hw} ${hy + cd}, ${x + hw} ${hy}
+          C ${x + hw} ${hy - hr}, ${x - hw} ${hy - hr}, ${x - hw} ${hy}
+          C ${x - hw} ${hy + cd}, ${x + fx} ${hy + cd + (ld - cd) * 0.40}, ${x + fx} ${hy + ld}"
+          fill="none" stroke="#1A1A1A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>`;
       } else if (cell === 'T') {
-        // tuck — single held hump on the running yarn
-        d += ` L ${x - p * 0.30} ${by}`;
-        d += ` Q ${x} ${by - humpH} ${x + p * 0.30} ${by}`;
-        d += ` L ${xR} ${by}`;
+        // tuck — cap over only the UPPER part of the dot, ends hang (no cross, no wrap)
+        fn += `<path d="M ${x - hw * 0.85} ${hy + cs * 0.20}
+          C ${x - hw * 0.85} ${hy - hr * 0.95}, ${x + hw * 0.85} ${hy - hr * 0.95}, ${x + hw * 0.85} ${hy + cs * 0.20}"
+          fill="none" stroke="#1A1A1A" stroke-width="2.2" stroke-linecap="round"/>`;
       } else {
-        // miss / float — yarn runs flat across the wale
-        d += ` L ${xR} ${by}`;
+        // miss / float — yarn floats across behind the needle
+        fn += `<line x1="${x - cs * 0.5}" y1="${hy + cd}" x2="${x + cs * 0.5}" y2="${hy + cd}" stroke="#1A1A1A" stroke-width="2" stroke-linecap="round"/>`;
       }
     }
-    fn += `<path d="${d}" fill="none" stroke="#333333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
+  }
 
-    // round needle-position dots on the running yarn
+  // ── needle dots LAST so each sits clearly inside the loop that wraps it ──
+  for (let r = 0; r < fnRows; r++) {
+    const hy = fnHy(r);
     for (let c = 0; c < fnCols; c++) {
-      fn += `<circle cx="${fnX(c)}" cy="${by}" r="1.7" fill="#555555"/>`;
+      fn += `<circle cx="${fnX(c)}" cy="${hy}" r="2.2" fill="#1A1A1A"/>`;
     }
   }
 
