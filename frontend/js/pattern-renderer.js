@@ -150,13 +150,12 @@ function renderSvgSchematic(patternData) {
   let html = `<div style="display:flex; flex-wrap:wrap; gap:32px; margin-top:16px;">`;
 
   // ----------------------------------------------------
-  // 1. Fabric Notation (true intermeshed loop structure)
-  //    K = needle loop: wraps OVER its dot, legs CROSS below it, and the
-  //        feet hook around the head of the loop in the course below
-  //        (so successive courses interlock — held "upside down").
-  //    T = tuck: covers only the UPPER part of the dot (a held cap),
-  //        no full wrap and no cross below.
-  //    M = miss/float: the yarn floats behind; the dot is left bare.
+  // 1. Fabric Notation (exact reference loop)
+  //    K = teardrop loop: ROUND bulb raised up with its dot CENTRED inside;
+  //        at the bottom the two strands CROSS (interloop = overlap/underlap);
+  //        loops joined by one continuous scalloped running yarn.
+  //    T = tuck: a hump covering only the UPPER part of the dot (dot on base).
+  //    M = miss/float: flat running yarn; bare dot on the baseline.
   // ----------------------------------------------------
   const cs = 50;                                   // needle pitch / course spacing
   const fnRepeatX = Math.max(3, Math.ceil(6 / baseCols));
@@ -164,66 +163,64 @@ function renderSvgSchematic(patternData) {
   const fnCols = baseCols * fnRepeatX;
   const fnRows = baseRows * fnRepeatY;
 
-  const hw = cs * 0.30;   // head half-width (arch span)
-  const hr = cs * 0.30;   // head rise above the dot
-  const cd = cs * 0.30;   // cross drop — legs cross this far below the dot
-  const ld = cs * 0.92;   // leg drop — feet reach down to wrap the loop below
-  const fx = cs * 0.24;   // foot half-splay
+  const p       = cs;          // needle pitch
+  const R       = cs * 0.22;   // bulb radius (round head)
+  const baseOff = cs * 0.06;   // half-gap of the crossover at the loop bottom
+  const scallop = cs * 0.10;   // sinker dip between loops
+  const dDot    = cs * 0.40;   // dot height above baseline (centre of the bulb)
+  const dTop    = cs * 0.58;   // bulb top height above baseline
+  const humpH   = cs * 0.42;   // tuck hump height
 
-  const fnPadX = 8, fnPadTop = hr + 6, fnPadBot = 8;
+  const fnPadX = 8, fnPadTop = cs * 0.74, fnPadBot = cs * 0.28;
   const fnW = fnCols * cs + fnPadX * 2;
-  const fnH = fnPadTop + (fnRows - 1) * cs + ld + fnPadBot;
+  const fnH = fnPadTop + (fnRows - 1) * cs + fnPadBot;
 
   const cellAt = (r, c) => {
     const rowData = Array.isArray(pattern_cylinder[r % baseRows])
       ? pattern_cylinder[r % baseRows] : [pattern_cylinder[r % baseRows]];
     return (rowData[c % baseCols] || '').toString().toUpperCase();
   };
-  const fnX  = (c) => fnPadX + c * cs + cs / 2;          // wale centre (the dot x)
-  const fnHy = (r) => fnPadTop + (fnRows - 1 - r) * cs;  // course r dot y (0 = bottom)
+  const fnX  = (c) => fnPadX + c * cs + cs / 2;          // wale centre (dot x)
+  const fnBy = (r) => fnPadTop + (fnRows - 1 - r) * cs;  // course r baseline (0 = bottom)
 
   let fn = `<svg width="${fnW}" height="${fnH}" viewBox="0 0 ${fnW} ${fnH}" style="background:#FFFFFF; border:1px solid #CCCCCC; border-radius:4px;">`;
 
-  // ── sinker loops: connect adjacent loops along each course (continuity) ──
   for (let r = 0; r < fnRows; r++) {
-    const hy = fnHy(r);
-    for (let c = 1; c < fnCols; c++) {
-      const xL = fnX(c - 1) + fx, xR = fnX(c) - fx, yy = hy + ld;
-      fn += `<path d="M ${xL} ${yy} Q ${(xL + xR) / 2} ${yy + cs * 0.10} ${xR} ${yy}" fill="none" stroke="#333333" stroke-width="2" stroke-linecap="round"/>`;
-    }
-  }
+    const by   = fnBy(r);
+    const topY = by - dTop;
 
-  // ── loops / tucks / floats, bottom course first (upper courses on top) ──
-  for (let r = 0; r < fnRows; r++) {
-    const hy = fnHy(r);
+    // ── one continuous running yarn for the whole course ──
+    let d = `M ${fnX(0) - p * 0.5} ${by}`;
     for (let c = 0; c < fnCols; c++) {
       const x = fnX(c);
+      const xR = x + p * 0.5;
       const cell = cellAt(r, c);
 
       if (cell === 'K') {
-        // left foot → up & cross right → over the head → down & cross left → right foot
-        fn += `<path d="M ${x - fx} ${hy + ld}
-          C ${x - fx} ${hy + cd + (ld - cd) * 0.40}, ${x + hw} ${hy + cd}, ${x + hw} ${hy}
-          C ${x + hw} ${hy - hr}, ${x - hw} ${hy - hr}, ${x - hw} ${hy}
-          C ${x - hw} ${hy + cd}, ${x + fx} ${hy + cd + (ld - cd) * 0.40}, ${x + fx} ${hy + ld}"
-          fill="none" stroke="#1A1A1A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>`;
+        // dip + rise crossing to the RIGHT base → up right side, round the top,
+        // down left side to the LEFT base → cross back out (interlooping crossover)
+        d += ` Q ${x - p * 0.12} ${by + scallop} ${x + baseOff} ${by}`;
+        d += ` C ${x + R * 1.7} ${by - cs * 0.18} ${x + R * 0.9} ${topY} ${x + R * 0.30} ${topY - R * 0.15}`;
+        d += ` C ${x + R * 0.10} ${topY - R * 0.40} ${x - R * 0.10} ${topY - R * 0.40} ${x - R * 0.30} ${topY - R * 0.15}`;
+        d += ` C ${x - R * 0.9} ${topY} ${x - R * 1.7} ${by - cs * 0.18} ${x - baseOff} ${by}`;
+        d += ` Q ${x + p * 0.12} ${by + scallop} ${xR} ${by}`;
       } else if (cell === 'T') {
-        // tuck — cap over only the UPPER part of the dot, ends hang (no cross, no wrap)
-        fn += `<path d="M ${x - hw * 0.85} ${hy + cs * 0.20}
-          C ${x - hw * 0.85} ${hy - hr * 0.95}, ${x + hw * 0.85} ${hy - hr * 0.95}, ${x + hw * 0.85} ${hy + cs * 0.20}"
-          fill="none" stroke="#1A1A1A" stroke-width="2.2" stroke-linecap="round"/>`;
+        // tuck hump — covers just the upper part of the dot
+        d += ` L ${x - p * 0.30} ${by}`;
+        d += ` Q ${x} ${by - humpH} ${x + p * 0.30} ${by}`;
+        d += ` L ${xR} ${by}`;
       } else {
-        // miss / float — yarn floats across behind the needle
-        fn += `<line x1="${x - cs * 0.5}" y1="${hy + cd}" x2="${x + cs * 0.5}" y2="${hy + cd}" stroke="#1A1A1A" stroke-width="2" stroke-linecap="round"/>`;
+        // miss / float — flat run
+        d += ` L ${xR} ${by}`;
       }
     }
-  }
+    fn += `<path d="${d}" fill="none" stroke="#1A1A1A" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>`;
 
-  // ── needle dots LAST so each sits clearly inside the loop that wraps it ──
-  for (let r = 0; r < fnRows; r++) {
-    const hy = fnHy(r);
+    // dots: centred inside the bulb for K, on the baseline for T/M
     for (let c = 0; c < fnCols; c++) {
-      fn += `<circle cx="${fnX(c)}" cy="${hy}" r="2.2" fill="#1A1A1A"/>`;
+      const cell = cellAt(r, c);
+      const dy = cell === 'K' ? by - dDot : by;
+      fn += `<circle cx="${fnX(c)}" cy="${dy}" r="2.3" fill="#1A1A1A"/>`;
     }
   }
 
