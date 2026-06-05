@@ -22,10 +22,11 @@ const helmet = require('helmet');
 const path = require('path');
 
 const apiRoutes = require('./routes/api');
+const vizRoutes = require('./routes/viz');
 const adminRoutes = require('./routes/admin');
 const emergencyRoutes = require('./routes/emergency');
 const rateLimiter = require('./middleware/rate-limiter');
-const { testConnection, initAdminDatabase } = require('./config/database');
+const { testConnection, initAdminDatabase, initVizDatabase } = require('./config/database');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -47,6 +48,9 @@ app.use('/api', rateLimiter);
 
 // API routes
 app.use('/api', apiRoutes);
+
+// Visualization routes (internal — no external APIs)
+app.use('/api', vizRoutes);
 
 // Admin routes
 app.use('/admin', adminRoutes);
@@ -103,6 +107,7 @@ async function start() {
   } else {
     // Initialize admin database table and default credentials
     await initAdminDatabase();
+    await initVizDatabase();
   }
 
   app.listen(PORT, () => {

@@ -166,4 +166,24 @@ async function apiAcademyQuizVerify(questionId, choice) {
   });
 }
 
+// ============================================================
+// POST /api/visualize  (internal — no external APIs)
+// Generates viz path data for warp knit or large-repeat fabrics.
+// For simple weft knit (<=8×8 repeat), FabricVisualizer generates
+// path data client-side and does NOT call this endpoint.
+// params: { fabric_id: string, result_object: object }
+// ============================================================
+async function apiVisualize(fabricId, resultObject) {
+  return apiFetch('/api/visualize', {
+    method: 'POST',
+    body: { fabric_id: fabricId, result_object: resultObject },
+  });
+}
 
+// ============================================================
+// GET /api/viz-config/:fabric_id  (internal — reads your own DB)
+// Returns viz_configs row for fabric, or { config: null, default: true }
+// ============================================================
+async function apiVizConfig(fabricId) {
+  return apiFetch(`/api/viz-config/${encodeURIComponent(fabricId)}`);
+}
