@@ -474,13 +474,33 @@ function classifyColorShade(colorName) {
   if (lower === 'medium') return { shade: 'light_medium', ...SHADE_PARAMS.light_medium };
   if (lower === 'light')  return { shade: 'white_melange',...SHADE_PARAMS.white_melange };
 
-  // Pantone TCX (e.g. "19-3910 TCX")
-  const pm = lower.match(/(d{2})-d{4}/);
+  // Pantone TCX (e.g. "19-3910 TCX") — uses color-engine for accurate Lab-lightness classification
+  const pm = lower.match(/(\d{2})-\d{4}/);
   if (pm) {
+    try {
+      const colorEngine = require('./color-engine');
+      const tcxResult = colorEngine.classifyFromTCX(lower);
+      if (tcxResult && tcxResult.shade && SHADE_PARAMS[tcxResult.shade]) {
+        return { shade: tcxResult.shade, ...SHADE_PARAMS[tcxResult.shade], tcx_classification: tcxResult };
+      }
+    } catch (_) { /* color-engine not available, fall through to page-group */ }
+    // Page-group fallback if color-engine unavailable
     const pg = parseInt(pm[1]);
     if (pg >= 19) return { shade: 'dark_navy',    ...SHADE_PARAMS.dark_navy };
-    if (pg <= 11) return { shade: 'white_melange',...SHADE_PARAMS.white_melange };
-    return               { shade: 'light_medium', ...SHADE_PARAMS.light_medium };
+    if (pg <= 12) return { shade: 'white_melange',...SHADE_PARAMS.white_melange };
+    if (pg <= 16) return { shade: 'light_medium', ...SHADE_PARAMS.light_medium };
+    return               { shade: 'dark_navy',    ...SHADE_PARAMS.dark_navy };
+  }
+
+  // HEX color code (e.g. "#2B2E43", "#FFF")
+  if (lower.match(/^#?[0-9a-f]{3,6}$/)) {
+    try {
+      const colorEngine = require('./color-engine');
+      const hexResult = colorEngine.classifyFromHex(lower.startsWith('#') ? lower : '#' + lower);
+      if (hexResult && hexResult.shade && SHADE_PARAMS[hexResult.shade]) {
+        return { shade: hexResult.shade, ...SHADE_PARAMS[hexResult.shade], hex_classification: hexResult };
+      }
+    } catch (_) { /* color-engine not available, fall through */ }
   }
 
   // Keyword matching (most specific first)

@@ -251,30 +251,41 @@ const FINISHING_COST_BY_FABRIC = {
 };
 
 // ============================================================
-// SECTION 6: DYEING COST BY SHADE (USD/kg)
+// SECTION 6: WET-PROCESS COST BY SHADE (USD/kg)
 // Source: Official Knitting & Dyeing Price List (11-page document)
+//
 // ONE-PART:  single-fiber fabric (100% cotton, viscose, modal, poly)
 // TWO-PART:  blend fabric (CVC/PC — cotton+polyester, needs 2 dye baths)
+//
+// IMPORTANT — MELANGE IS DIFFERENT:
+//   Melange/Heather color comes from the YARN STAGE (pre-dyed fibers blended
+//   before spinning). There is NO reactive dyeing bath. The wet process is:
+//     Grey inspection → Scouring → OBA/Softener pad → Stenter → Compacting
+//   Cost = wash/finish charge only (~0.30–0.40 USD/kg), NOT a dyeing charge.
+//   The `is_wash_only` flag signals this to the UI and formula trace.
 // ============================================================
 const DYEING_COST = {
-  // shade key → { one_part, two_part } USD/kg
-  black:         { one_part: 1.75, two_part: 2.20 },
-  dark_navy:     { one_part: 1.55, two_part: 2.00 },
-  light_medium:  { one_part: 1.30, two_part: 1.75 },
-  fluorescent:   { one_part: 2.60, two_part: 0.00 }, // 0 = not available in PDF
-  white_melange: { one_part: 0.80, two_part: 0.00 }, // bleach/OBA only; two-part not applicable
-  melange:       { one_part: 0.50, two_part: 0.00 }, // OBA+softener only (estimated, not in PDF)
+  // shade key → { one_part, two_part, is_wash_only, process_label } USD/kg
+  black:         { one_part: 1.75, two_part: 2.20, is_wash_only: false, process_label: 'Reactive/Vat Dyeing' },
+  dark_navy:     { one_part: 1.55, two_part: 2.00, is_wash_only: false, process_label: 'Reactive Dyeing' },
+  light_medium:  { one_part: 1.30, two_part: 1.75, is_wash_only: false, process_label: 'Reactive Dyeing' },
+  fluorescent:   { one_part: 2.60, two_part: 0.00, is_wash_only: false, process_label: 'Fluorescent Reactive Dyeing' },
+  white_melange: { one_part: 0.80, two_part: 0.00, is_wash_only: false, process_label: 'Bleaching + OBA (White finish)' },
+  // ── MELANGE: WASH ONLY — no dye bath ──────────────────────────────────────
+  // Process: Scouring (0.10) + OBA/Softener pad (0.10) + overhead (0.15) = ~0.35
+  // Industry convention Bangladesh: melange wash cost ≤ 0.40 USD/kg
+  melange:       { one_part: 0.35, two_part: 0.00, is_wash_only: true,  process_label: 'Wash + OBA/Softener (no dyeing)' },
   // Legacy compat aliases
-  dark:   null,   // → dark_navy
-  medium: null,   // → light_medium
-  light:  null,   // → white_melange
+  dark:   null,
+  medium: null,
+  light:  null,
 };
 DYEING_COST.dark   = DYEING_COST.dark_navy;
 DYEING_COST.medium = DYEING_COST.light_medium;
 DYEING_COST.light  = DYEING_COST.white_melange;
 
 // Fallback for unknown shades
-const DYEING_COST_FALLBACK = { one_part: 1.30, two_part: 1.75 };
+const DYEING_COST_FALLBACK = { one_part: 1.30, two_part: 1.75, is_wash_only: false, process_label: 'Reactive Dyeing' };
 
 // ============================================================
 // SECTION 7: INVISIBLE WASTE FACTORS (%)
