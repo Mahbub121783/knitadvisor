@@ -150,61 +150,83 @@ function renderSvgSchematic(patternData) {
   let html = `<div style="display:flex; flex-wrap:wrap; gap:32px; margin-top:16px;">`;
 
   // ----------------------------------------------------
-  // 1. Fabric Notation (Yarn Path)
+  // 1. Fabric Notation (true textbook loop diagram)
+  //    K = interlocking needle loop (head up, curling feet)
+  //    T = tuck — yarn held as a raised hump on the course baseline
+  //    M = miss/float — yarn floats flat; only the needle dot shows
   // ----------------------------------------------------
-  const fnHeight = height + 20; // Add padding to height for loops
-  html += `
-    <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
-      <svg width="${width}" height="${fnHeight}" viewBox="0 -20 ${width} ${fnHeight}" style="background:#FFFFFF; border:1px solid #CCCCCC; border-radius:4px;">
-  `;
-  
-  // Anatomically-correct loop geometry (parametric to cellSize).
-  // Each knit stitch is drawn as an interlocking needle loop: two legs rising to
-  // a rounded head, with feet that hook around the head of the loop in the course
-  // below (loop height > row spacing so successive courses interlock visually).
-  const W  = cellSize * 0.30;   // half-width of the loop head
-  const H  = cellSize * 0.95;   // loop height (legs)
-  const FS = cellSize * 0.20;   // foot splay
-  for (let r = 0; r < rows; r++) {
-    const y = height - (r * cellSize) - (cellSize / 2); // baseline (feet) of this course
-    const top = y - H;                                  // loop head
-    const baseR = r % baseRows;
-    const rowData = Array.isArray(pattern_cylinder[baseR]) ? pattern_cylinder[baseR] : [pattern_cylinder[baseR]];
+  const cs = 42;                                   // notation cell size
+  const fnRepeatX = Math.max(3, Math.ceil(6 / baseCols));
+  const fnRepeatY = Math.max(3, Math.ceil(4 / baseRows));
+  const fnCols = baseCols * fnRepeatX;
+  const fnRows = baseRows * fnRepeatY;
 
-    for (let c = 0; c < cols; c++) {
-      const cx = (c * cellSize) + (cellSize / 2);
-      const baseC = c % baseCols;
-      const cell = (rowData[baseC] || '').toString().toUpperCase();
+  const LH   = cs * 1.18;   // loop height (> cell so courses interlock)
+  const hw   = cs * 0.24;   // head half-width
+  const legX = cs * 0.13;   // foot inset from centre
+  const topPad = cs * 0.55, botPad = cs * 0.40;
+  const fnInnerH = fnRows * cs;
+  const fnW = fnCols * cs;
+  const fnH = fnInnerH + topPad + botPad;
+
+  const cellAt = (r, c) => {
+    const rowData = Array.isArray(pattern_cylinder[r % baseRows])
+      ? pattern_cylinder[r % baseRows] : [pattern_cylinder[r % baseRows]];
+    return (rowData[c % baseCols] || '').toString().toUpperCase();
+  };
+  const fnX     = (c) => c * cs + cs / 2;
+  const fnBaseY = (r) => topPad + fnInnerH - r * cs - cs * 0.28;
+
+  let fn = `<svg width="${fnW}" height="${fnH}" viewBox="0 0 ${fnW} ${fnH}" style="background:#FFFFFF; border:1px solid #CCCCCC; border-radius:4px;">`;
+
+  // (a) course yarn baseline — connects needle positions with shallow sinker dips
+  for (let r = 0; r < fnRows; r++) {
+    const by = fnBaseY(r);
+    let d = `M ${fnX(0) - cs * 0.5} ${by}`;
+    for (let c = 0; c < fnCols; c++) {
+      const x = fnX(c);
+      d += ` Q ${x - cs * 0.5} ${by + cs * 0.14} ${x} ${by}`;
+    }
+    d += ` L ${fnX(fnCols - 1) + cs * 0.5} ${by}`;
+    fn += `<path d="${d}" fill="none" stroke="#BBBBBB" stroke-width="1.4"/>`;
+  }
+
+  // (b) loops / tucks / floats per cell
+  for (let r = 0; r < fnRows; r++) {
+    const by = fnBaseY(r);
+    for (let c = 0; c < fnCols; c++) {
+      const cx = fnX(c);
+      const cell = cellAt(r, c);
 
       if (cell === 'K') {
-        // Needle loop: left foot → up the left leg → over the head → down right leg → right foot.
-        // Feet curl outward to interlock with the loop above.
-        html += `<path d="M ${cx - FS} ${y}
-          C ${cx - W * 1.6} ${y - H * 0.25}, ${cx - W} ${top}, ${cx} ${top}
-          C ${cx + W} ${top}, ${cx + W * 1.6} ${y - H * 0.25}, ${cx + FS} ${y}"
-          fill="none" stroke="#111111" stroke-width="2" stroke-linecap="round"/>`;
-        // interlocking feet (hook under)
-        html += `<path d="M ${cx - FS} ${y} q ${-FS} ${FS * 0.9} ${-FS * 1.8} ${FS * 0.4}
-                       M ${cx + FS} ${y} q ${FS} ${FS * 0.9} ${FS * 1.8} ${FS * 0.4}"
+        const top = by - LH;
+        fn += `<path d="M ${cx - legX} ${by}
+          C ${cx - hw * 1.5} ${by - LH * 0.30}, ${cx - hw} ${top + LH * 0.12}, ${cx - hw * 0.45} ${top}
+          C ${cx - hw * 0.18} ${top - LH * 0.06}, ${cx + hw * 0.18} ${top - LH * 0.06}, ${cx + hw * 0.45} ${top}
+          C ${cx + hw} ${top + LH * 0.12}, ${cx + hw * 1.5} ${by - LH * 0.30}, ${cx + legX} ${by}"
+          fill="none" stroke="#111111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
+        // feet curl outward — hook under the head of the loop in the course below
+        fn += `<path d="M ${cx - legX} ${by} q ${-cs * 0.12} ${cs * 0.16} ${-cs * 0.24} ${cs * 0.05}
+                       M ${cx + legX} ${by} q ${cs * 0.12} ${cs * 0.16} ${cs * 0.24} ${cs * 0.05}"
           fill="none" stroke="#111111" stroke-width="1.6" stroke-linecap="round"/>`;
       } else if (cell === 'T') {
-        // Tuck: a HELD loop — the old loop is retained, no new loop drawn off.
-        // Shown as an elongated U held over the needle (does not interlock above).
-        html += `<path d="M ${cx - W * 0.9} ${y + cellSize * 0.30}
-          C ${cx - W * 0.9} ${top + H * 0.1}, ${cx + W * 0.9} ${top + H * 0.1}, ${cx + W * 0.9} ${y + cellSize * 0.30}"
-          fill="none" stroke="#111111" stroke-width="2" stroke-dasharray="4,2" stroke-linecap="round"/>`;
-      } else if (cell === 'M' || cell === '·') {
-        // Miss/float: yarn passes straight behind the needle (no loop).
-        html += `<line x1="${cx - cellSize / 2}" y1="${y}" x2="${cx + cellSize / 2}" y2="${y}" stroke="#111111" stroke-width="2"/>`;
+        // tuck — raised hump held on the baseline
+        const humpH = cs * 0.5;
+        fn += `<path d="M ${cx - cs * 0.32} ${by} Q ${cx} ${by - humpH} ${cx + cs * 0.32} ${by}"
+          fill="none" stroke="#111111" stroke-width="2" stroke-linecap="round"/>`;
       }
+      // M = miss/float: baseline + needle dot only (no loop)
 
       // needle position marker
-      html += `<circle cx="${cx}" cy="${y}" r="1.6" fill="#999999" />`;
+      fn += `<circle cx="${cx}" cy="${by}" r="1.8" fill="#222222"/>`;
     }
   }
-  
+
+  fn += `</svg>`;
+
   html += `
-      </svg>
+    <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
+      ${fn}
       <div style="font-size:11px; color:var(--t2); font-weight:500;">Fabric notation</div>
     </div>
   `;
