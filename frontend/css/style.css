@@ -1171,4 +1171,26 @@ img { max-width: 100%; }
   vertical-align: middle;
 }
 
+/* Dye colour picker in the toolbar */
+.viz-color {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--t2);
+  flex-shrink: 0;
+}
+.viz-color input[type="color"] {
+  width: 26px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-sm);
+  background: none;
+  cursor: pointer;
+}
+.viz-color input[type="color"]::-webkit-color-swatch-wrapper { padding: 2px; }
+.viz-color input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
+
 #sec-viz .skeleton { margin-bottom: 8px; }
