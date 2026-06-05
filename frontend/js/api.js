@@ -167,6 +167,28 @@ async function apiAcademyQuizVerify(questionId, choice) {
 }
 
 // ============================================================
+// GET /api/color/preview?input=...
+// Resolves any color input (TCX / hex / SCOTDIC / name) → full viz data
+// ============================================================
+async function apiColorPreview(input) {
+  return apiFetch(`/api/color/preview?input=${encodeURIComponent(input)}`);
+}
+
+// ============================================================
+// GET /api/color/search?q=...  (name) or ?family=...
+// ============================================================
+async function apiColorSearch(q, limit = 12) {
+  return apiFetch(`/api/color/search?q=${encodeURIComponent(q)}&limit=${limit}`);
+}
+
+// ============================================================
+// GET /api/color/popular
+// ============================================================
+async function apiColorPopular() {
+  return apiFetch('/api/color/popular');
+}
+
+// ============================================================
 // POST /api/visualize  (internal — no external APIs)
 // Generates viz path data for warp knit or large-repeat fabrics.
 // For simple weft knit (<=8×8 repeat), FabricVisualizer generates
