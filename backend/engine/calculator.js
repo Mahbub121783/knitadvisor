@@ -38,6 +38,8 @@ const {
   classifyColorShade,
 } = require('./composition-engine');
 
+const colorEngine = require('./color-engine');
+
 const {
   validateStitchLength,
   getCompositionReference,
@@ -76,6 +78,7 @@ function calculate(params) {
 
   // --- 1. Validate & normalize inputs ---
   const { fabric, gsm, dia, gauge, rpm, efficiency, stitch_length, feeders, composition, color_shade,
+          color_input,
           target_width, yarn_type, twist_multiplier, finishing_route,
           fiber_grade, spinning_system, yarn_form, slub_thickness, slub_length_cm, slub_spacing_cm,
           denier, filaments, elastane_denier, elastane_pct, dyeing_method } = normalizeParams(params);
@@ -100,10 +103,27 @@ function calculate(params) {
   const compModifiers = getCompositionModifiers(parsedComp, fabric);
   trace.push({ step: '1.5', action: 'composition', parsed: parsedComp ? parsedComp.display : '100% Cotton (default)', modifiers: compModifiers });
 
+  // --- 1.55. Precise Color Engine resolution (optional, separate from shade mode) ---
+  // The "Color Engine" input lets the user pick an EXACT color (TCX / hex / name).
+  // It drives the realistic visualization AND — when no color_shade mode is given —
+  // it derives the shade tier so the rest of the system (SL, grey-GSM, dyeing) still works.
+  let colorResolved = null;
+  if (color_input) {
+    try {
+      colorResolved = colorEngine.getColorPreview(color_input);
+    } catch (_) { colorResolved = null; }
+  }
+
+  // Effective shade mode: explicit color_shade wins; otherwise derive from the resolved color.
+  let effectiveShade = color_shade;
+  if (!effectiveShade && colorResolved && colorResolved.shade_tier) {
+    effectiveShade = colorResolved.shade_tier;
+  }
+
   // --- 1.6. Color shade analysis + SL adjustment ---
   let colorResult = null;
-  if (color_shade) {
-    colorResult = classifyColorShade(color_shade);
+  if (effectiveShade) {
+    colorResult = classifyColorShade(effectiveShade);
     // Combined SL: composition_factor × shade_factor
     const compSLBefore = compModifiers.sl_factor || 1.0;
     compModifiers.sl_factor = parseFloat((compSLBefore * colorResult.sl_factor).toFixed(4));
@@ -635,6 +655,8 @@ function calculate(params) {
       gsm,
       composition: composition || null,
       color_shade: color_shade || null,
+      color_input: color_input || null,
+      effective_shade: effectiveShade || null,
       dia: dia || null,
       gauge: gauge || null,
       rpm: rpm || null,
@@ -672,6 +694,27 @@ function calculate(params) {
     },
 
     color: colorResult || null,
+
+    // Precise color from the Color Engine (exact hex/name/family/temperature/shade_tier).
+    // Drives the realistic fabric visualization. Null when the user only picked a shade mode.
+    color_resolved: colorResolved ? {
+      hex: colorResolved.hex,
+      rgb: colorResolved.rgb,
+      hsl: colorResolved.hsl,
+      lab: colorResolved.lab || null,
+      name: colorResolved.name,
+      family: colorResolved.family,
+      temperature: colorResolved.temperature,
+      shade_tier: colorResolved.shade_tier,
+      tcx_code: colorResolved.tcx_code || null,
+      tcx_label: colorResolved.tcx_label || null,
+      scotdic_label: colorResolved.scotdic_label || null,
+      bros_label: colorResolved.bros_label || null,
+      archroma_label: colorResolved.archroma_label || null,
+      nearest_tcx: colorResolved.nearest_tcx || null,
+      source: 'color_engine',
+      derived_shade: !color_shade,
+    } : null,
 
     yarn: {
       count_ne: countResult.count_ne,           // integer (industry standard)
@@ -823,6 +866,7 @@ function normalizeParams(p) {
     gsm: p.gsm ? parseFloat(p.gsm) : null,
     composition: p.composition ? String(p.composition).trim() : null,
     color_shade: p.color_shade ? String(p.color_shade).trim() : null,
+    color_input: p.color_input ? String(p.color_input).trim() : null,
     dia: p.dia ? parseFloat(p.dia) : null,
     gauge: p.gauge ? parseFloat(p.gauge) : null,
     rpm: p.rpm ? parseFloat(p.rpm) : null,

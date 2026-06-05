@@ -295,6 +295,53 @@
       line-height: 1.5;
     }
 
+    /* Color Engine widget */
+    .ce-wrap { position: relative; }
+    .ce-row { display: flex; gap: 8px; align-items: stretch; }
+    .ce-picker {
+      flex: 0 0 44px; width: 44px; height: 40px; padding: 2px;
+      border: 1px solid rgba(255,255,255,.14); border-radius: 8px;
+      background: var(--s2, #11151c); cursor: pointer;
+    }
+    .ce-picker::-webkit-color-swatch-wrapper { padding: 0; }
+    .ce-picker::-webkit-color-swatch { border: none; border-radius: 5px; }
+    .ce-text { flex: 1 1 auto; min-width: 0; }
+    .ce-clear {
+      flex: 0 0 40px; border: 1px solid rgba(255,255,255,.14); border-radius: 8px;
+      background: rgba(255,255,255,.03); color: var(--t3); cursor: pointer; font-size: 13px;
+      transition: all .15s;
+    }
+    .ce-clear:hover { color: var(--a3, #ff5a5a); border-color: rgba(255,90,90,.4); }
+    .ce-preview {
+      display: flex; align-items: center; gap: 12px; margin-top: 10px;
+      padding: 10px 12px; border-radius: 10px;
+      border: 1px solid rgba(0,255,178,.18); background: rgba(0,255,178,.04);
+    }
+    .ce-swatch {
+      flex: 0 0 46px; width: 46px; height: 46px; border-radius: 8px;
+      border: 1px solid rgba(255,255,255,.18);
+      box-shadow: inset 0 1px 3px rgba(0,0,0,.4), 0 2px 6px rgba(0,0,0,.3);
+    }
+    .ce-meta { flex: 1 1 auto; min-width: 0; }
+    .ce-name { font-size: 13px; font-weight: 600; color: var(--t1); }
+    .ce-sub { font-size: 10px; color: var(--t3); margin-top: 2px; font-family: var(--mono, monospace); }
+    .ce-chips { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; max-width: 130px; }
+    .ce-chip {
+      font-size: 8.5px; padding: 2px 6px; border-radius: 20px; text-transform: capitalize;
+      border: 1px solid rgba(255,255,255,.12); color: var(--t2); background: rgba(255,255,255,.03);
+    }
+    .ce-suggest {
+      position: absolute; left: 52px; right: 48px; z-index: 30; margin-top: 4px;
+      background: var(--s1, #0c0f14); border: 1px solid rgba(255,255,255,.14);
+      border-radius: 10px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,.5);
+      max-height: 220px; overflow-y: auto;
+    }
+    .ce-opt { display: flex; align-items: center; gap: 8px; padding: 7px 10px; cursor: pointer; }
+    .ce-opt:hover { background: rgba(0,255,178,.06); }
+    .ce-opt-sw { width: 22px; height: 22px; border-radius: 5px; border: 1px solid rgba(255,255,255,.15); flex: 0 0 22px; }
+    .ce-opt-name { font-size: 11.5px; color: var(--t1); }
+    .ce-opt-code { font-size: 9px; color: var(--t3); font-family: var(--mono, monospace); }
+
     /* Panel sections */
     .main-content {
       padding: 16px 0 32px;
@@ -405,6 +452,33 @@
             <option value="">— Select fabric type —</option>
           </select>
           <div id="fabric-info" class="text-xs text-dim mt-4" style="min-height:16px;"></div>
+        </div>
+
+        <!-- Precise Color — COLOR ENGINE (optional, drives realistic visualization) -->
+        <div class="form-group mb-16">
+          <label class="form-label" style="color:var(--t1)">
+            Precise Color <span class="badge" style="margin-left:6px;background:rgba(0,255,178,.12);color:var(--a1);border:1px solid rgba(0,255,178,.3)">COLOR ENGINE</span>
+            <span class="badge badge-gray" style="margin-left:4px">OPTIONAL</span>
+          </label>
+          <div class="ce-wrap">
+            <div class="ce-row">
+              <input type="color" id="ce-picker" class="ce-picker" value="#0F4C81" title="Pick any color">
+              <input type="text" id="ce-text" class="form-input ce-text" autocomplete="off"
+                     placeholder="TCX code, hex, or color name — e.g. 19-4052, #0F4C81, Classic Blue">
+              <button type="button" id="ce-clear" class="ce-clear" title="Clear precise color">✕</button>
+            </div>
+            <div class="ce-preview" id="ce-preview" hidden>
+              <div class="ce-swatch" id="ce-swatch"></div>
+              <div class="ce-meta">
+                <div class="ce-name" id="ce-name">—</div>
+                <div class="ce-sub" id="ce-sub">—</div>
+              </div>
+              <div class="ce-chips" id="ce-chips"></div>
+            </div>
+            <div class="ce-suggest" id="ce-suggest" hidden></div>
+            <input type="hidden" id="color-engine-input" value="">
+            <div class="shade-hint" id="ce-hint">Pick an exact color to drive a true-to-life dyed-fabric preview. Leave empty to use only the Color Shade mode below.</div>
+          </div>
         </div>
 
         <!-- Color Shade — MAIN FORM (visible by default) -->
@@ -1012,6 +1086,116 @@ function setShade(val, btn) {
 }
 
 /* ============================================================
+   COLOR ENGINE WIDGET — precise color → live preview + shade tier
+   ============================================================ */
+(function initColorEngine() {
+  const text    = document.getElementById('ce-text');
+  const picker  = document.getElementById('ce-picker');
+  const clearBt = document.getElementById('ce-clear');
+  const hidden  = document.getElementById('color-engine-input');
+  const preview = document.getElementById('ce-preview');
+  const swatch  = document.getElementById('ce-swatch');
+  const nameEl  = document.getElementById('ce-name');
+  const subEl   = document.getElementById('ce-sub');
+  const chipsEl = document.getElementById('ce-chips');
+  const suggest = document.getElementById('ce-suggest');
+  const hintEl  = document.getElementById('ce-hint');
+  if (!text || !picker) return;
+
+  let debTimer = null, sugTimer = null, lastResolved = null;
+
+  const SHADE_LABEL = {
+    black: 'Black', dark_navy: 'Dark / Navy', light_medium: 'Light / Medium',
+    fluorescent: 'Fluorescent', white_melange: 'White', melange: 'Melange',
+  };
+
+  function clearPreview() {
+    preview.hidden = true;
+    hidden.value = '';
+    lastResolved = null;
+    hintEl.textContent = 'Pick an exact color to drive a true-to-life dyed-fabric preview. Leave empty to use only the Color Shade mode below.';
+  }
+
+  function showPreview(c, rawInput) {
+    if (!c || !c.hex) { clearPreview(); return; }
+    lastResolved = c;
+    hidden.value = (c.tcx_code ? (c.tcx_code + ' TCX') : null) || rawInput || c.hex;
+    swatch.style.background = c.hex;
+    nameEl.textContent = c.name || 'Custom Color';
+    const codeBits = [];
+    if (c.tcx_label) codeBits.push(c.tcx_label);
+    else if (c.scotdic_label) codeBits.push(c.scotdic_label);
+    else if (c.bros_label) codeBits.push(c.bros_label);
+    else if (c.archroma_label) codeBits.push(c.archroma_label);
+    codeBits.push(c.hex);
+    subEl.textContent = codeBits.join('  ·  ');
+    const chips = [];
+    if (c.family) chips.push(c.family);
+    if (c.temperature) chips.push(c.temperature);
+    if (c.shade_tier) chips.push(SHADE_LABEL[c.shade_tier] || c.shade_tier);
+    chipsEl.innerHTML = chips.map(t => `<span class="ce-chip">${t}</span>`).join('');
+    preview.hidden = false;
+    try { picker.value = c.hex; } catch (_) {}
+    const shadeMode = document.getElementById('color-input').value;
+    hintEl.textContent = shadeMode
+      ? `Visualization will use this exact color; shade-mode math uses "${shadeMode}".`
+      : `Exact color set → shade tier "${SHADE_LABEL[c.shade_tier] || c.shade_tier}" will drive the dyeing/SL math automatically.`;
+  }
+
+  async function resolve(input) {
+    if (!input || !input.trim()) { clearPreview(); return; }
+    try {
+      const data = await apiColorPreview(input.trim());
+      if (data && data.color) showPreview(data.color, input.trim());
+      else clearPreview();
+    } catch (_) {
+      // hex fallback if backend unreachable
+      const m = input.trim().match(/^#?[0-9a-fA-F]{6}$/);
+      if (m) showPreview({ hex: input.trim().startsWith('#') ? input.trim() : '#' + input.trim(), name: 'Custom Color' }, input.trim());
+      else clearPreview();
+    }
+  }
+
+  async function runSuggest(q) {
+    suggest.hidden = true;
+    if (!q || q.trim().length < 2 || /^#?[0-9a-fA-F]{3,6}$/.test(q.trim()) || /\d{2}-\d{4}/.test(q.trim())) return;
+    try {
+      const data = await apiColorSearch(q.trim(), 8);
+      if (!data || !data.results || !data.results.length) return;
+      suggest.innerHTML = data.results.map(r =>
+        `<div class="ce-opt" data-code="${r.code}" data-hex="${r.hex}">
+           <div class="ce-opt-sw" style="background:${r.hex}"></div>
+           <div><div class="ce-opt-name">${r.name}</div><div class="ce-opt-code">${r.code} TCX · ${r.hex}</div></div>
+         </div>`).join('');
+      suggest.hidden = false;
+      suggest.querySelectorAll('.ce-opt').forEach(opt => {
+        opt.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          text.value = opt.dataset.code + ' TCX';
+          suggest.hidden = true;
+          resolve(text.value);
+        });
+      });
+    } catch (_) {}
+  }
+
+  text.addEventListener('input', () => {
+    clearTimeout(debTimer); clearTimeout(sugTimer);
+    const v = text.value;
+    debTimer = setTimeout(() => resolve(v), 280);
+    sugTimer = setTimeout(() => runSuggest(v), 220);
+  });
+  text.addEventListener('blur', () => setTimeout(() => { suggest.hidden = true; }, 150));
+  picker.addEventListener('input', () => {
+    text.value = picker.value.toUpperCase();
+    suggest.hidden = true;
+    clearTimeout(debTimer);
+    debTimer = setTimeout(() => resolve(picker.value), 120);
+  });
+  clearBt.addEventListener('click', () => { text.value = ''; suggest.hidden = true; clearPreview(); });
+})();
+
+/* ============================================================
    CALCULATE
    ============================================================ */
 async function doCalculate() {
@@ -1040,6 +1224,7 @@ async function doCalculate() {
     gsm,
     composition: document.getElementById('comp-input').value || undefined,
     color_shade: document.getElementById('color-input').value || undefined,
+    color_input: document.getElementById('color-engine-input').value || undefined,
     dia: parseFloat(document.getElementById('dia-input').value) || undefined,
     gauge: parseFloat(document.getElementById('gauge-input').value) || undefined,
     rpm: parseFloat(document.getElementById('rpm-input').value) || undefined,

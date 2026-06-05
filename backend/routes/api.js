@@ -20,6 +20,7 @@ const { predictQuality } = require('../engine/quality-engine');
 const { calculateCost, SM_PRICE_MATRIX, YARN_TYPE_CATALOG, SM_SURCHARGES } = require('../engine/costing-engine');
 const { parseComposition } = require('../engine/composition-engine');
 const { GLOSSARY, BASIC_ELEMENTS, FORMATION_CYCLES, QUIZ_QUESTIONS } = require('../engine/academy-engine');
+const colorEngine = require('../engine/color-engine');
 
 const memCache = require('../cache/memory-cache');
 const dbCache = require('../cache/db-cache');
@@ -45,7 +46,7 @@ router.post('/calculate', async (req, res) => {
   }
 
   // Normalize cache key (includes composition + color for unique caching)
-  const cacheInput = `${fabric}_${gsm}_${body.composition||''}_${body.color_shade||''}_${body.dia||''}_${body.gauge||''}_${body.rpm||''}_${body.efficiency||85}_${body.denier||''}_${body.filaments||''}_${body.elastane_denier||''}_${body.elastane_pct||''}`;
+  const cacheInput = `${fabric}_${gsm}_${body.composition||''}_${body.color_shade||''}_${body.color_input||''}_${body.dia||''}_${body.gauge||''}_${body.rpm||''}_${body.efficiency||85}_${body.denier||''}_${body.filaments||''}_${body.elastane_denier||''}_${body.elastane_pct||''}`;
   const cacheKey = crypto.createHash('md5').update(cacheInput).digest('hex');
 
   // L1 — memory cache
@@ -98,6 +99,7 @@ router.post('/calculate', async (req, res) => {
     gsm,
     composition:     body.composition,
     color_shade:     body.color_shade,
+    color_input:     body.color_input,
     dia:             body.dia,
     gauge:           body.gauge,
     rpm:             body.rpm,
@@ -642,6 +644,46 @@ router.post('/academy/quiz/verify', (req, res) => {
     explanation: question.explanation,
     page: question.page
   });
+});
+
+// ============================================================
+// COLOR ENGINE ROUTES
+// GET  /api/color/preview?input=...   — full viz-ready data for any color input
+// GET  /api/color/popular             — popular Bangladesh knitwear colors
+// GET  /api/color/search?q=...        — search TCX by name/family
+// ============================================================
+router.get('/color/preview', (req, res) => {
+  const input = (req.query.input || '').toString().trim();
+  if (!input) return res.status(400).json({ error: 'input query param is required' });
+  try {
+    const preview = colorEngine.getColorPreview(input);
+    if (!preview) return res.status(404).json({ error: 'Color not recognised', input });
+    res.json({ success: true, input, color: preview });
+  } catch (err) {
+    res.status(500).json({ error: 'Color engine failure', detail: err.message });
+  }
+});
+
+router.get('/color/popular', (req, res) => {
+  try {
+    res.json({ success: true, colors: colorEngine.getPopularColors() });
+  } catch (err) {
+    res.status(500).json({ error: 'Color engine failure', detail: err.message });
+  }
+});
+
+router.get('/color/search', (req, res) => {
+  const q = (req.query.q || '').toString().trim();
+  const family = (req.query.family || '').toString().trim();
+  const limit = Math.min(parseInt(req.query.limit, 10) || 12, 48);
+  try {
+    let results = [];
+    if (family) results = colorEngine.searchByFamily(family, limit);
+    else if (q) results = colorEngine.searchByName(q, limit);
+    res.json({ success: true, results });
+  } catch (err) {
+    res.status(500).json({ error: 'Color engine failure', detail: err.message });
+  }
 });
 
 module.exports = router;

@@ -27,6 +27,9 @@ class FabricVisualizer {
     this._userColor = null;                    // user-picked dye color (hex) or null
     this._dyedColor = { r: 96, g: 100, b: 112 }; // computed in _computeDyedColor()
     this._destroyed = false;
+    // 3D view interaction state
+    this._three = { rotX: -14, rotY: 0, zoom: 1, brush: false, dragging: false, lastX: 0, lastY: 0, painted: false };
+    this._faceCache = { front: null, back: null, brushBack: null };
   }
 
   // ─────────────────────────────────────────────────────────
@@ -89,6 +92,11 @@ class FabricVisualizer {
   destroy() {
     this._destroyed = true;
     if (this.animFrame) { cancelAnimationFrame(this.animFrame); this.animFrame = null; }
+    if (this._threeHandlers) {
+      window.removeEventListener('mousemove', this._threeHandlers.move);
+      window.removeEventListener('mouseup', this._threeHandlers.up);
+      this._threeHandlers = null;
+    }
   }
 
   // ─────────────────────────────────────────────────────────
@@ -956,6 +964,7 @@ class FabricVisualizer {
   _renderActiveTab() {
     if (this.animFrame) { cancelAnimationFrame(this.animFrame); this.animFrame = null; }
     if (this.activeTab === 'realistic') this._renderRealisticView();
+    else if (this.activeTab === 'threed') this._render3DView();
     else if (this.activeTab === 'stitch') this._renderStitchView();
     else if (this.activeTab === 'cross') this._renderCrossSection();
     else if (this.activeTab === 'props') this._renderPropertiesMap();
@@ -969,87 +978,595 @@ class FabricVisualizer {
   // gauge/stitch-density → loop size, TF → tightness (ground show-through).
   // ─────────────────────────────────────────────────────────
 
+  // ── Flat realistic face (front), high-detail, construction-aware ──
   _renderRealisticView() {
     const wrap = this.container.querySelector('.viz-canvas-wrap[data-wrap="realistic"]');
     if (!wrap) return;
     wrap.innerHTML = '';
 
-    const result  = this.result;
-    const fabric  = result.fabric  || {};
-    const pattern = result.pattern || {};
-    const yarn    = result.yarn    || {};
-
+    const W = 560, H = 380, SS = 2;       // SS = supersample for crispness
     const canvas = document.createElement('canvas');
     canvas.className = 'viz-canvas';
+    canvas.width  = W * SS;
+    canvas.height = H * SS;
+    canvas.style.width  = W + 'px';
+    canvas.style.height = H + 'px';
+    canvas.style.borderRadius = '10px';
     wrap.appendChild(canvas);
     this.canvases.realistic = canvas;
 
-    const W = 540, H = 360;
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width  = W * dpr;
-    canvas.height = H * dpr;
-    canvas.style.width  = W + 'px';
-    canvas.style.height = H + 'px';
     const ctx = canvas.getContext('2d');
-    ctx.scale(dpr, dpr);
+    ctx.scale(SS, SS);
 
-    // ── driving parameters ──
-    const dyed      = this._dyedColor;
+    const opts = this._faceOpts();
+    this._paintFabricFace(ctx, W, H, 'front', opts);
+
+    this._updateInfoLine(opts);
+  }
+
+  /** Collects every parameter the painter needs, ONCE. */
+  _faceOpts() {
+    const result = this.result;
+    const yarn   = result.yarn || {};
     const fiberType = this._classifyFiber();
-    const sheen     = this._getSheenModel(fiberType);
-    const countNe   = yarn.count_ne || 30;
-    const gsm       = (result.input || {}).gsm || (result.grammage || {}).gsm || 180;
-    const tf        = (result.physical_constraints || {}).tightness_factor || 14;
+    return {
+      dyed:      this._dyedColor,
+      fiberType,
+      sheen:     this._getSheenModel(fiberType),
+      countNe:   yarn.count_ne || 30,
+      gsm:       (result.input || {}).gsm || (result.grammage || {}).gsm || 180,
+      tf:        (result.physical_constraints || {}).tightness_factor || 14,
+      construction: this._detectConstruction(),
+    };
+  }
 
-    const cat = (fabric.category || '').toLowerCase();
-    const id  = (fabric.id || '').toLowerCase();
-    const isRib = cat.includes('rib') || id.includes('rib');
-    const ribRepeat = this._ribRepeat(id);
-    const grid = pattern.pattern_cylinder || [['K']];
-    const gR = grid.length, gC = (grid[0] || ['K']).length;
+  _updateInfoLine(opts) {
+    const info = this.container.querySelector('#viz-info-text');
+    if (!info) return;
+    const result = this.result;
+    const resolved = result.color_resolved || null;
+    const colorName = resolved
+      ? `${resolved.name}${resolved.tcx_code ? ' (' + resolved.tcx_code + ')' : ''}`
+      : ((result.input || {}).color_shade || (result.color || {}).shade || 'medium shade');
+    const tf = opts.tf;
+    info.textContent =
+      `Finished ${opts.construction.label} · ${opts.gsm} GSM · ${opts.countNe} Ne ${opts.fiberType} · TF ${typeof tf === 'number' ? tf.toFixed(1) : tf} · ${colorName}`;
+  }
 
-    // stitch sizing from yarn count — finer yarn (higher Ne) → smaller, denser stitches
-    const targetWales = Math.round(Math.min(Math.max(12 + countNe * 0.55, 16), 32));
+  // ─────────────────────────────────────────────────────────
+  // CONSTRUCTION DETECTION — maps fabric id/category/name to a
+  // render recipe (face & back differ; brush/mesh/pile flags).
+  // ─────────────────────────────────────────────────────────
+  _detectConstruction() {
+    const fabric = this.result.fabric || {};
+    const id   = (fabric.id || '').toLowerCase();
+    const cat  = (fabric.category || '').toLowerCase();
+    const name = (fabric.name || '').toLowerCase();
+    const s = `${id} ${cat} ${name}`;
+    const has = (...k) => k.some(x => s.includes(x));
+
+    // Warp knit family → tricot/raschel zig-zag wales
+    if (cat.includes('warp') || has('tricot', 'raschel', 'warp_knit')) {
+      if (has('mesh', 'net', 'powernet', 'marqui', 'hexagon', 'sandfly'))
+        return { type: 'mesh', base: 'warp', label: 'warp-knit mesh', mesh: true, holeShape: 'hex', brush: false };
+      if (has('spacer', 'sandwich', '3d'))
+        return { type: 'spacer', base: 'warp', label: '3D spacer mesh', mesh: true, holeShape: 'round', brush: false };
+      return { type: 'tricot', base: 'warp', label: 'warp-knit tricot', mesh: false, brush: false };
+    }
+
+    // Mesh / airtex / mock-mesh (weft) — the holey "breathable" fabrics
+    if (has('mesh', 'airtex', 'air-tex', 'eyelet', 'net', 'aertex'))
+      return { type: 'mesh', base: 'single', label: 'mesh / airtex', mesh: true, holeShape: 'round', brush: false };
+    if (has('pointelle', 'pointel'))
+      return { type: 'mesh', base: 'single', label: 'pointelle', mesh: true, holeShape: 'diamond', brush: false };
+
+    // Pile / brushed family
+    if (has('fleece', 'polar'))
+      return { type: 'fleece', base: 'double', label: 'fleece', mesh: false, brush: true, pile: 'brush' };
+    if (has('terry', 'french terry', 'loop knit', 'loopback'))
+      return { type: 'terry', base: 'double', label: 'french terry', mesh: false, brush: false, pile: 'loop' };
+    if (has('velour', 'velvet'))
+      return { type: 'fleece', base: 'double', label: 'velour', mesh: false, brush: true, pile: 'velour' };
+
+    // Double-knit / interlock family
+    if (has('interlock'))
+      return { type: 'interlock', base: 'double', label: 'interlock', mesh: false, brush: false };
+    if (has('pique', 'piqué', 'lacoste'))
+      return { type: 'pique', base: 'single', label: has('lacoste', 'double') ? 'double lacoste' : 'piqué', mesh: false, brush: false };
+    if (has('rib'))
+      return { type: 'rib', base: 'double', label: this._ribLabel(id, name), mesh: false, brush: false, ribRepeat: this._ribRepeat(id) };
+    if (has('interlock', 'double jersey', 'double knit', 'ponte'))
+      return { type: 'interlock', base: 'double', label: 'double knit', mesh: false, brush: false };
+
+    // Default: single jersey (stockinette)
+    return { type: 'jersey', base: 'single', label: 'single jersey', mesh: false, brush: false };
+  }
+
+  _ribLabel(id, name) {
+    const m = (id + ' ' + name).match(/(\d+)\s*[x×]\s*(\d+)/);
+    return m ? `${m[1]}×${m[2]} rib` : 'rib';
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // UNIVERSAL FABRIC FACE PAINTER
+  // side: 'front' | 'back'.  Front & back differ per construction.
+  // ─────────────────────────────────────────────────────────
+  _paintFabricFace(ctx, W, H, side, opts) {
+    const { dyed, construction: con, countNe } = opts;
+    const brushed = side === 'back' && (this._three.brush || con.brush);
+
+    // stitch sizing — finer yarn (higher Ne) → smaller, denser stitches
+    const dense = con.type === 'interlock' ? 1.25 : con.type === 'rib' ? 1.0 : 1.0;
+    const targetWales = Math.round(Math.min(Math.max((13 + countNe * 0.52) * dense, 16), 38));
     const sw = W / targetWales;
-    const sh = sw * 0.86;                                   // jersey stitch a touch wider than tall
-    const yarnW = sw * Math.min(Math.max(0.38 + (30 - countNe) * 0.004, 0.34), 0.48);
+    const sh = sw * (con.type === 'rib' ? 0.92 : 0.84);
+    const yarnW = sw * Math.min(Math.max(0.40 + (30 - countNe) * 0.004, 0.34), 0.50);
 
-    const cols = Math.ceil(W / sw) + 1;
-    const rows = Math.ceil(H / sh) + 2;
-
-    // background = deep shadow tone of the dye (the valleys behind the yarn)
-    ctx.fillStyle = this._shadeColorCss(dyed, -0.40);
+    // ground (the deep valley colour seen between yarns)
+    ctx.fillStyle = this._shadeColorCss(dyed, -0.42);
     ctx.fillRect(0, 0, W, H);
 
-    // draw course by course, BOTTOM-UP so each newer loop overlaps the older below
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        const cx = c * sw + sw / 2;
-        const cy = H - (r * sh + sh / 2);
+    // brushed back short-circuits structure with a dense pile
+    if (brushed) { this._paintBrushedPile(ctx, W, H, dyed, opts); this._overlaySoftLight(ctx, W, H); return; }
 
-        let cell = 'K';
-        if (grid[r % gR] && grid[r % gR][c % gC]) cell = grid[r % gR][c % gC];
+    switch (con.type) {
+      case 'rib':       this._paintRib(ctx, W, H, sw, sh, yarnW, opts, side); break;
+      case 'interlock': this._paintInterlock(ctx, W, H, sw, sh, yarnW, opts, side); break;
+      case 'pique':     this._paintPique(ctx, W, H, sw, sh, yarnW, opts, side); break;
+      case 'mesh':      this._paintMesh(ctx, W, H, sw, sh, yarnW, opts, side); break;
+      case 'spacer':    this._paintMesh(ctx, W, H, sw, sh, yarnW, opts, side); break;
+      case 'tricot':    this._paintTricot(ctx, W, H, sw, sh, yarnW, opts, side); break;
+      case 'terry':     side === 'back' ? this._paintLoopPile(ctx, W, H, dyed, opts)
+                                        : this._paintStockinette(ctx, W, H, sw, sh, yarnW, opts, 'front'); break;
+      case 'fleece':    this._paintStockinette(ctx, W, H, sw, sh, yarnW, opts, side); break;
+      default:          this._paintStockinette(ctx, W, H, sw, sh, yarnW, opts, side);
+    }
 
-        const purl = isRib && (c % (ribRepeat * 2)) >= ribRepeat;
+    // shared finishing — fine textile grain, soft studio light
+    this._overlayGrain(ctx, W, H);
+    this._overlaySoftLight(ctx, W, H);
+  }
 
-        if (purl)               this._drawPurlStitch(ctx, cx, cy, sw, sh, yarnW, dyed);
-        else if (cell === 'M')  this._drawFloatStitch(ctx, cx, cy, sw, sh, yarnW, dyed);
-        else if (cell === 'T')  this._drawKnitVStitch(ctx, cx, cy, sw, sh * 1.45, yarnW, dyed, sheen);
-        else                    this._drawKnitVStitch(ctx, cx, cy, sw, sh, yarnW, dyed, sheen);
+  // ── STOCKINETTE (single jersey) ──
+  // front: columns of interlocking "V" knit loops.
+  // back : rows of purl bumps (the technical back).
+  _paintStockinette(ctx, W, H, sw, sh, yarnW, opts, side) {
+    const dyed = opts.dyed;
+    const cols = Math.ceil(W / sw) + 1;
+    const rows = Math.ceil(H / sh) + 2;
+    if (side === 'back') {
+      for (let r = 0; r < rows; r++)
+        for (let c = 0; c < cols; c++)
+          this._loopPurlBump(ctx, c * sw + sw / 2, H - (r * sh + sh / 2), sw, sh, yarnW, dyed, (r + c) % 2);
+    } else {
+      // sinker loops first (the connecting yarn dipping between wales), then the V loops
+      for (let r = 0; r < rows; r++)
+        for (let c = 0; c < cols; c++)
+          this._loopKnitV(ctx, c * sw + sw / 2, H - (r * sh + sh / 2), sw, sh, yarnW, dyed, opts.sheen);
+    }
+  }
+
+  // ── RIB (alternating knit & purl wales; both faces look similar) ──
+  _paintRib(ctx, W, H, sw, sh, yarnW, opts, side) {
+    const dyed = opts.dyed;
+    const rep = (opts.construction.ribRepeat || 1);
+    const cols = Math.ceil(W / sw) + 1;
+    const rows = Math.ceil(H / sh) + 2;
+    const phase = side === 'back' ? rep : 0;   // back swaps knit/purl columns
+    // shade the sunken purl columns darker for depth
+    for (let c = 0; c < cols; c++) {
+      const knitCol = ((c + phase) % (rep * 2)) < rep;
+      if (!knitCol) {
+        ctx.fillStyle = this._shadeColorCss(dyed, -0.30);
+        ctx.fillRect(c * sw, 0, sw, H);
       }
     }
-
-    // surface character
-    this._overlayGrain(ctx, W, H);
-    if (cat.includes('fleece') || id.includes('fleece')) this._overlayFuzz(ctx, W, H, dyed);
-    this._overlaySoftLight(ctx, W, H);
-
-    const info = this.container.querySelector('#viz-info-text');
-    if (info) {
-      const shadeName = ((result.input || {}).color_shade || (result.color || {}).shade || 'medium');
-      info.textContent =
-        `Dyed finished face · ${gsm} GSM · ${countNe} Ne · TF ${typeof tf === 'number' ? tf.toFixed(1) : tf} · ${fiberType} · ${shadeName}`;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const cx = c * sw + sw / 2, cy = H - (r * sh + sh / 2);
+        const knitCol = ((c + phase) % (rep * 2)) < rep;
+        if (knitCol) this._loopKnitV(ctx, cx, cy, sw, sh, yarnW, dyed, opts.sheen);
+        else         this._loopPurlBump(ctx, cx, cy, sw * 0.92, sh, yarnW, dyed, r % 2, -0.18);
+      }
     }
+  }
+
+  // ── INTERLOCK (smooth knit on BOTH faces, finer & denser) ──
+  _paintInterlock(ctx, W, H, sw, sh, yarnW, opts, side) {
+    const dyed = opts.dyed;
+    const cols = Math.ceil(W / sw) + 1;
+    const rows = Math.ceil(H / sh) + 2;
+    for (let r = 0; r < rows; r++)
+      for (let c = 0; c < cols; c++)
+        this._loopKnitV(ctx, c * sw + sw / 2, H - (r * sh + sh / 2), sw, sh, yarnW * 0.92, dyed, opts.sheen);
+  }
+
+  // ── PIQUÉ / LACOSTE (jersey ground + regular tuck dimples → textured grid) ──
+  _paintPique(ctx, W, H, sw, sh, yarnW, opts, side) {
+    const dyed = opts.dyed;
+    const cols = Math.ceil(W / sw) + 1;
+    const rows = Math.ceil(H / sh) + 2;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const cx = c * sw + sw / 2, cy = H - (r * sh + sh / 2);
+        // tuck dimple on a staggered 2×2 lattice
+        const dimple = ((r % 2) === 0 && (c % 2) === 0) || ((r % 2) === 1 && (c % 2) === 1);
+        if (side === 'front' && dimple) {
+          // recessed cell
+          ctx.save();
+          ctx.fillStyle = this._shadeColorCss(dyed, -0.22);
+          ctx.beginPath();
+          ctx.ellipse(cx, cy, sw * 0.42, sh * 0.42, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+          this._loopKnitV(ctx, cx, cy, sw * 0.86, sh * 0.8, yarnW * 0.9, dyed, opts.sheen);
+        } else {
+          this._loopKnitV(ctx, cx, cy, sw, sh, yarnW, dyed, opts.sheen);
+        }
+      }
+    }
+  }
+
+  // ── MESH / AIRTEX / POINTELLE — knit ground perforated with regular holes ──
+  _paintMesh(ctx, W, H, sw, sh, yarnW, opts, side) {
+    const dyed = opts.dyed;
+    // knit ground first
+    const cols = Math.ceil(W / sw) + 1;
+    const rows = Math.ceil(H / sh) + 2;
+    for (let r = 0; r < rows; r++)
+      for (let c = 0; c < cols; c++)
+        this._loopKnitV(ctx, c * sw + sw / 2, H - (r * sh + sh / 2), sw, sh, yarnW, dyed, opts.sheen);
+
+    // hole lattice — staggered rows, transfer-stitch eyelets
+    const hsX = sw * 2.4, hsY = sh * 2.6;
+    const holeShape = opts.construction.holeShape || 'round';
+    const rOut = Math.min(hsX, hsY) * 0.42;
+    for (let gy = 0, row = 0; gy < H + hsY; gy += hsY, row++) {
+      const offX = (row % 2) * hsX / 2;
+      for (let gx = 0; gx < W + hsX; gx += hsX) {
+        this._punchHole(ctx, gx + offX, gy, rOut, holeShape, dyed, yarnW);
+      }
+    }
+    this._overlayGrain(ctx, W, H);
+  }
+
+  _punchHole(ctx, cx, cy, r, shape, dyed, yarnW) {
+    ctx.save();
+    // dark void (light passes through → near-black behind the cloth)
+    ctx.beginPath();
+    if (shape === 'hex')      this._polyPath(ctx, cx, cy, r, 6, Math.PI / 6);
+    else if (shape === 'diamond') this._polyPath(ctx, cx, cy, r, 4, 0);
+    else                      ctx.ellipse(cx, cy, r, r * 1.06, 0, 0, Math.PI * 2);
+    ctx.fillStyle = this._shadeColorCss(dyed, -0.78);
+    ctx.fill();
+    // rolled rim of yarn around the eyelet (slightly raised, catches light)
+    ctx.lineWidth = yarnW * 1.05;
+    ctx.strokeStyle = this._shadeColorCss(dyed, 0.10);
+    ctx.stroke();
+    ctx.lineWidth = yarnW * 0.4;
+    ctx.strokeStyle = this._shadeColorCss(dyed, 0.30);
+    ctx.beginPath();
+    if (shape === 'round') ctx.ellipse(cx, cy - r * 0.1, r * 0.86, r * 0.9, 0, Math.PI * 1.05, Math.PI * 1.95);
+    else { this._polyPath(ctx, cx, cy, r * 0.9, shape === 'hex' ? 6 : 4, shape === 'hex' ? Math.PI / 6 : 0); }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  _polyPath(ctx, cx, cy, r, sides, rot) {
+    for (let i = 0; i <= sides; i++) {
+      const a = rot + i * (Math.PI * 2 / sides);
+      const x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+  }
+
+  // ── TRICOT (warp knit) — vertical wales of fine zig-zag loops ──
+  _paintTricot(ctx, W, H, sw, sh, yarnW, opts, side) {
+    const dyed = opts.dyed;
+    const cols = Math.ceil(W / sw) + 1;
+    const base = `rgb(${dyed.r},${dyed.g},${dyed.b})`;
+    const hi = this._shadeColorCss(dyed, 0.20), dk = this._shadeColorCss(dyed, -0.24);
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    for (let c = 0; c < cols; c++) {
+      const cx = c * sw + sw / 2;
+      // technical face: gentle vertical wale ribs; back: diagonal underlap shadows
+      ctx.strokeStyle = side === 'back' ? dk : base;
+      ctx.lineWidth = yarnW;
+      ctx.beginPath();
+      for (let y = -sh; y < H + sh; y += sh) {
+        const wob = (side === 'back' ? sw * 0.42 : sw * 0.2);
+        ctx.moveTo(cx - wob, y);
+        ctx.quadraticCurveTo(cx, y + sh * 0.5, cx + wob, y + sh);
+      }
+      ctx.stroke();
+      // highlight rib
+      ctx.strokeStyle = hi; ctx.lineWidth = yarnW * 0.32;
+      ctx.beginPath();
+      for (let y = -sh; y < H + sh; y += sh) {
+        ctx.moveTo(cx - sw * 0.06, y);
+        ctx.quadraticCurveTo(cx + sw * 0.04, y + sh * 0.5, cx - sw * 0.06, y + sh);
+      }
+      ctx.stroke();
+    }
+  }
+
+  // ── BRUSHED PILE (fleece back, velour) — soft raised noodly fibre ──
+  _paintBrushedPile(ctx, W, H, dyed, opts) {
+    // base wash slightly lighter & desaturated (raised fibre scatters light)
+    ctx.fillStyle = this._shadeColorCss(dyed, 0.06);
+    ctx.fillRect(0, 0, W, H);
+    const dense = opts.construction.pile === 'velour' ? 9 : 6;
+    const n = Math.floor(W * H / dense);
+    ctx.lineCap = 'round';
+    for (let i = 0; i < n; i++) {
+      const x = Math.random() * W, y = Math.random() * H;
+      const a = Math.PI * 0.5 + (Math.random() - 0.5) * 1.2;   // mostly downward sweep
+      const len = 3 + Math.random() * 7;
+      const shade = (Math.random() - 0.45) * 0.5;
+      ctx.strokeStyle = this._shadeColorCss(dyed, shade);
+      ctx.globalAlpha = 0.5 + Math.random() * 0.4;
+      ctx.lineWidth = 0.7 + Math.random() * 0.8;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.quadraticCurveTo(x + Math.cos(a) * len * 0.5, y + Math.sin(a) * len * 0.5,
+                           x + Math.cos(a) * len, y + Math.sin(a) * len);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // ── LOOP PILE (french terry back) — rows of uncut loops ──
+  _paintLoopPile(ctx, W, H, dyed, opts) {
+    ctx.fillStyle = this._shadeColorCss(dyed, -0.30);
+    ctx.fillRect(0, 0, W, H);
+    const sw = 16, sh = 16;
+    ctx.lineCap = 'round';
+    for (let r = 0; r * sh < H + sh; r++) {
+      const oy = r * sh + sh * 0.6;
+      const off = (r % 2) * sw / 2;
+      for (let c = 0; c * sw < W + sw; c++) {
+        const cx = c * sw + off + sw / 2;
+        ctx.strokeStyle = this._shadeColorCss(dyed, -0.05);
+        ctx.lineWidth = 3.0;
+        ctx.beginPath();
+        ctx.arc(cx, oy, sw * 0.34, Math.PI * 0.05, Math.PI * 0.95, false);
+        ctx.stroke();
+        ctx.strokeStyle = this._shadeColorCss(dyed, 0.22);
+        ctx.lineWidth = 1.1;
+        ctx.beginPath();
+        ctx.arc(cx, oy - 0.6, sw * 0.30, Math.PI * 0.15, Math.PI * 0.7, false);
+        ctx.stroke();
+      }
+    }
+    this._overlaySoftLight(ctx, W, H);
+  }
+
+  // ── single knit "V" loop (stockinette face) — realistic rounded yarn ──
+  _loopKnitV(ctx, cx, cy, sw, sh, yarnW, dyed, sheen) {
+    const topY = cy - sh * 0.52;
+    const botY = cy + sh * 0.56;
+    const lxT = cx - sw * 0.46, rxT = cx + sw * 0.46;
+    const base = `rgb(${dyed.r},${dyed.g},${dyed.b})`;
+    const hi = this._shadeColorCss(dyed, 0.24);
+    const dk = this._shadeColorCss(dyed, -0.30);
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+    // shadow under the head (the loop above draws through here)
+    ctx.strokeStyle = dk; ctx.lineWidth = yarnW * 1.05;
+    ctx.beginPath();
+    ctx.moveTo(lxT, topY + sh * 0.14);
+    ctx.quadraticCurveTo(cx, topY - sh * 0.05, rxT, topY + sh * 0.14);
+    ctx.stroke();
+
+    // two visible legs (the V)
+    ctx.strokeStyle = base; ctx.lineWidth = yarnW;
+    ctx.beginPath();
+    ctx.moveTo(lxT, topY + sh * 0.14);
+    ctx.quadraticCurveTo(cx - sw * 0.27, cy, cx, botY);
+    ctx.moveTo(rxT, topY + sh * 0.14);
+    ctx.quadraticCurveTo(cx + sw * 0.27, cy, cx, botY);
+    ctx.stroke();
+
+    // tube highlight (rounded yarn, light from upper-left)
+    ctx.strokeStyle = hi; ctx.lineWidth = yarnW * 0.34;
+    ctx.beginPath();
+    ctx.moveTo(lxT, topY + sh * 0.16);
+    ctx.quadraticCurveTo(cx - sw * 0.27, cy, cx - sw * 0.02, botY);
+    ctx.moveTo(rxT, topY + sh * 0.16);
+    ctx.quadraticCurveTo(cx + sw * 0.27, cy, cx + sw * 0.02, botY);
+    ctx.stroke();
+
+    // crook shadow where it draws through the loop below
+    ctx.strokeStyle = dk; ctx.lineWidth = yarnW * 0.5;
+    ctx.beginPath();
+    ctx.moveTo(cx - sw * 0.12, botY - sh * 0.06);
+    ctx.quadraticCurveTo(cx, botY + sh * 0.02, cx + sw * 0.12, botY - sh * 0.06);
+    ctx.stroke();
+
+    if (sheen === 'high_sheen') {
+      ctx.strokeStyle = 'rgba(255,255,255,0.28)'; ctx.lineWidth = yarnW * 0.12;
+      ctx.beginPath();
+      ctx.moveTo(lxT + yarnW * 0.1, topY + sh * 0.18);
+      ctx.quadraticCurveTo(cx - sw * 0.25, cy, cx, botY - yarnW * 0.1);
+      ctx.stroke();
+    }
+  }
+
+  // ── purl bump (technical back of jersey / purl wale of rib) ──
+  _loopPurlBump(ctx, cx, cy, sw, sh, yarnW, dyed, alt, extraDark) {
+    const base = this._shadeColorCss(dyed, -0.10 + (extraDark || 0));
+    const hi   = this._shadeColorCss(dyed, 0.16);
+    const dk   = this._shadeColorCss(dyed, -0.34 + (extraDark || 0));
+    ctx.lineCap = 'round';
+    // recess shadow
+    ctx.strokeStyle = dk; ctx.lineWidth = yarnW * 1.25;
+    ctx.beginPath();
+    ctx.moveTo(cx - sw * 0.48, cy + sh * 0.16);
+    ctx.quadraticCurveTo(cx, cy + sh * 0.40, cx + sw * 0.48, cy + sh * 0.16);
+    ctx.stroke();
+    // the bump arc (semicircle of yarn lying across the wale)
+    ctx.strokeStyle = base; ctx.lineWidth = yarnW * 1.12;
+    ctx.beginPath();
+    ctx.moveTo(cx - sw * 0.46, cy + sh * 0.06);
+    ctx.quadraticCurveTo(cx, cy - sh * 0.30, cx + sw * 0.46, cy + sh * 0.06);
+    ctx.stroke();
+    // top highlight on the bump
+    ctx.strokeStyle = hi; ctx.lineWidth = yarnW * 0.40;
+    ctx.beginPath();
+    ctx.moveTo(cx - sw * 0.34, cy - sh * 0.02);
+    ctx.quadraticCurveTo(cx, cy - sh * 0.26, cx + sw * 0.34, cy - sh * 0.02);
+    ctx.stroke();
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // 3D INTERACTIVE VIEW — CSS-3D cube w/ front & back canvas faces.
+  // Drag to rotate (flips to back), wheel/buttons to zoom, brush toggle.
+  // ─────────────────────────────────────────────────────────
+  _render3DView() {
+    const wrap = this.container.querySelector('.viz-canvas-wrap[data-wrap="threed"]');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+
+    const opts = this._faceOpts();
+    const con = opts.construction;
+    const W = 460, H = 320, SS = 2, THICK = 26;
+
+    const stage = document.createElement('div');
+    stage.className = 'ka3d-stage';
+    stage.innerHTML = `
+      <div class="ka3d-controls">
+        <button class="ka3d-btn" data-act="front" title="Front side">Front</button>
+        <button class="ka3d-btn" data-act="back" title="Back side">Back</button>
+        ${con.brush || con.pile ? '<button class="ka3d-btn" data-act="brush" title="Brushed back">Brush</button>' : ''}
+        <span class="ka3d-sep"></span>
+        <button class="ka3d-btn" data-act="zoomout">–</button>
+        <button class="ka3d-btn" data-act="zoomin">+</button>
+        <button class="ka3d-btn" data-act="reset" title="Reset view">⟳</button>
+      </div>
+      <div class="ka3d-viewport">
+        <div class="ka3d-cube">
+          <canvas class="ka3d-face ka3d-front"></canvas>
+          <canvas class="ka3d-face ka3d-back"></canvas>
+          <div class="ka3d-edge ka3d-edge-r"></div>
+          <div class="ka3d-edge ka3d-edge-b"></div>
+        </div>
+      </div>
+      <div class="ka3d-hint">Drag to rotate · scroll to zoom · flip to inspect the back</div>
+    `;
+    wrap.appendChild(stage);
+    this._injectThreeCss();
+
+    const frontC = stage.querySelector('.ka3d-front');
+    const backC  = stage.querySelector('.ka3d-back');
+    [frontC, backC].forEach(c => {
+      c.width = W * SS; c.height = H * SS;
+      c.style.width = W + 'px'; c.style.height = H + 'px';
+    });
+
+    const fctx = frontC.getContext('2d'); fctx.scale(SS, SS);
+    const bctx = backC.getContext('2d');  bctx.scale(SS, SS);
+    this._paintFabricFace(fctx, W, H, 'front', opts);
+    this._paintFabricFace(bctx, W, H, 'back',  opts);
+    this.canvases.threed = frontC;
+
+    const cube = stage.querySelector('.ka3d-cube');
+    const viewport = stage.querySelector('.ka3d-viewport');
+    cube.style.setProperty('--thick', THICK + 'px');
+
+    const apply = () => {
+      const t = this._three;
+      cube.style.transform =
+        `translateZ(-${THICK / 2}px) rotateX(${t.rotX}deg) rotateY(${t.rotY}deg) scale(${t.zoom})`;
+      const back = ((t.rotY % 360) + 360) % 360;
+      const showingBack = back > 90 && back < 270;
+      stage.querySelector('[data-act="front"]').classList.toggle('active', !showingBack);
+      stage.querySelector('[data-act="back"]').classList.toggle('active', showingBack);
+    };
+    this._three.painted = true;
+    apply();
+
+    // drag-rotate
+    const down = (e) => { const t = this._three; t.dragging = true; const p = e.touches ? e.touches[0] : e; t.lastX = p.clientX; t.lastY = p.clientY; viewport.classList.add('grabbing'); };
+    const move = (e) => {
+      const t = this._three; if (!t.dragging) return;
+      const p = e.touches ? e.touches[0] : e;
+      t.rotY += (p.clientX - t.lastX) * 0.6;
+      t.rotX = Math.max(-60, Math.min(60, t.rotX - (p.clientY - t.lastY) * 0.4));
+      t.lastX = p.clientX; t.lastY = p.clientY; apply();
+      if (e.cancelable) e.preventDefault();
+    };
+    const up = () => { this._three.dragging = false; viewport.classList.remove('grabbing'); };
+    // remove any window listeners from a previous 3D render (avoid leaks/double-rotate)
+    if (this._threeHandlers) {
+      window.removeEventListener('mousemove', this._threeHandlers.move);
+      window.removeEventListener('mouseup', this._threeHandlers.up);
+    }
+    this._threeHandlers = { move, up };
+    viewport.addEventListener('mousedown', down);
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+    viewport.addEventListener('touchstart', down, { passive: true });
+    viewport.addEventListener('touchmove', move, { passive: false });
+    viewport.addEventListener('touchend', up);
+    viewport.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const t = this._three;
+      t.zoom = Math.max(0.6, Math.min(3, t.zoom * (e.deltaY < 0 ? 1.12 : 0.89)));
+      apply();
+    }, { passive: false });
+
+    // buttons
+    stage.querySelector('.ka3d-controls').addEventListener('click', (e) => {
+      const act = e.target.getAttribute('data-act'); if (!act) return;
+      const t = this._three;
+      if (act === 'front') { t.rotY = 0; t.rotX = -14; }
+      else if (act === 'back') { t.rotY = 180; t.rotX = -14; }
+      else if (act === 'zoomin') t.zoom = Math.min(3, t.zoom * 1.18);
+      else if (act === 'zoomout') t.zoom = Math.max(0.6, t.zoom * 0.85);
+      else if (act === 'reset') { t.rotY = 0; t.rotX = -14; t.zoom = 1; }
+      else if (act === 'brush') {
+        t.brush = !t.brush;
+        e.target.classList.toggle('active', t.brush);
+        this._paintFabricFace(bctx, W, H, 'back', opts);   // repaint brushed back
+        if ((((t.rotY % 360) + 360) % 360) <= 90) { t.rotY = 180; } // flip to show it
+      }
+      apply();
+    });
+
+    this._updateInfoLine(opts);
+  }
+
+  _injectThreeCss() {
+    if (document.getElementById('ka3d-style')) return;
+    const css = `
+    .ka3d-stage{display:flex;flex-direction:column;align-items:center;gap:10px;width:100%;padding:6px 0;}
+    .ka3d-controls{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:center;}
+    .ka3d-btn{font:600 11px/1 var(--mono,monospace);padding:6px 11px;border-radius:7px;cursor:pointer;
+      border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.04);color:var(--t2,#aab);transition:all .15s;}
+    .ka3d-btn:hover{border-color:rgba(0,255,178,.4);color:var(--a1,#0fb);}
+    .ka3d-btn.active{background:rgba(0,255,178,.12);border-color:rgba(0,255,178,.5);color:var(--a1,#0fb);}
+    .ka3d-sep{width:1px;height:18px;background:rgba(255,255,255,.12);margin:0 3px;}
+    .ka3d-viewport{width:100%;max-width:520px;height:380px;display:flex;align-items:center;justify-content:center;
+      perspective:1100px;cursor:grab;overflow:hidden;
+      background:radial-gradient(ellipse at 50% 38%,rgba(255,255,255,.05),rgba(0,0,0,.28));border-radius:12px;}
+    .ka3d-viewport.grabbing{cursor:grabbing;}
+    .ka3d-cube{position:relative;width:460px;height:320px;transform-style:preserve-3d;transition:transform .08s linear;}
+    .ka3d-face{position:absolute;inset:0;backface-visibility:hidden;border-radius:10px;
+      box-shadow:0 18px 40px rgba(0,0,0,.5);}
+    .ka3d-front{transform:translateZ(calc(var(--thick)/2));}
+    .ka3d-back{transform:rotateY(180deg) translateZ(calc(var(--thick)/2));}
+    .ka3d-edge{position:absolute;background:rgba(0,0,0,.55);}
+    .ka3d-edge-r{top:0;right:0;width:var(--thick);height:320px;
+      transform:rotateY(90deg) translateZ(calc(230px - var(--thick)/2));transform-origin:right;
+      background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(0,0,0,.5));}
+    .ka3d-edge-b{bottom:0;left:0;width:460px;height:var(--thick);
+      transform:rotateX(90deg) translateZ(calc(-160px + var(--thick)/2));transform-origin:bottom;
+      background:linear-gradient(90deg,rgba(255,255,255,.05),rgba(0,0,0,.5));}
+    .ka3d-hint{font:10px var(--mono,monospace);color:var(--t3,#778);}`;
+    const style = document.createElement('style');
+    style.id = 'ka3d-style';
+    style.textContent = css;
+    document.head.appendChild(style);
   }
 
   /** One stockinette knit "V" stitch — two rounded yarn legs forming the wale,
@@ -1216,9 +1733,20 @@ class FabricVisualizer {
   // ── dyed colour synthesis ──
 
   _computeDyedColor() {
-    if (this._userColor) { this._dyedColor = this._hexToRgb(this._userColor); return; }
+    // 1) Manual dye-picker override always wins.
+    if (this._userColor) { this._dyedColor = this._hexToRgb(this._userColor); this._faceCache = { front: null, back: null, brushBack: null }; return; }
 
+    // 2) Precise color from the Color Engine (result.color_resolved.hex) — true-to-life dye.
+    const resolved = this.result.color_resolved || null;
+    if (resolved && resolved.hex) {
+      this._dyedColor = this._hexToRgb(resolved.hex);
+      this._faceCache = { front: null, back: null, brushBack: null };
+      return;
+    }
+
+    // 3) Fall back to shade-mode synthesis.
     const shadeRaw = ((this.result.input || {}).color_shade
+      || (this.result.input || {}).effective_shade
       || (this.result.color || {}).shade || 'medium').toString().toLowerCase();
 
     let L;
@@ -1326,12 +1854,16 @@ class FabricVisualizer {
     this.container.innerHTML = `
       <div class="viz-tab-bar">
         <button class="viz-tab active" data-tab="realistic">Realistic Fabric</button>
+        <button class="viz-tab" data-tab="threed">3D View</button>
         <button class="viz-tab" data-tab="stitch">Stitch Structure</button>
         <button class="viz-tab" data-tab="cross">Cross-Section</button>
         <button class="viz-tab" data-tab="props">Properties Map</button>
       </div>
       <div class="viz-panel active" data-panel="realistic">
         <div class="viz-canvas-wrap" data-wrap="realistic"></div>
+      </div>
+      <div class="viz-panel" data-panel="threed">
+        <div class="viz-canvas-wrap" data-wrap="threed"></div>
       </div>
       <div class="viz-panel" data-panel="stitch">
         <div class="viz-canvas-wrap" data-wrap="stitch"></div>
