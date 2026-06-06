@@ -56,6 +56,11 @@ class FabricVisualizer {
 
   switchTab(tabName) {
     if (this.animFrame) { cancelAnimationFrame(this.animFrame); this.animFrame = null; }
+    // free the WebGL context when leaving the 3D tab (browsers cap live contexts)
+    if (this.activeTab === 'threed' && tabName !== 'threed' && this._fabric3d) {
+      try { this._fabric3d.dispose(); } catch (_) {}
+      this._fabric3d = null;
+    }
     this.activeTab = tabName;
 
     this.container.querySelectorAll('.viz-tab').forEach(btn => {
@@ -97,6 +102,7 @@ class FabricVisualizer {
       window.removeEventListener('mouseup', this._threeHandlers.up);
       this._threeHandlers = null;
     }
+    if (this._fabric3d) { try { this._fabric3d.dispose(); } catch (_) {} this._fabric3d = null; }
   }
 
   // ─────────────────────────────────────────────────────────
@@ -1766,7 +1772,73 @@ class FabricVisualizer {
   // 3D INTERACTIVE VIEW — CSS-3D cube w/ front & back canvas faces.
   // Drag to rotate (flips to back), wheel/buttons to zoom, brush toggle.
   // ─────────────────────────────────────────────────────────
+  // True 3D (WebGL) fabric view for core weft knits; falls back to the CSS
+  // cube for other constructions or if WebGL / the module fails to load.
   _render3DView() {
+    const wrap = this.container.querySelector('.viz-canvas-wrap[data-wrap="threed"]');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+
+    const opts = this._faceOpts();
+    const con = opts.construction;
+    const WEBGL_TYPES = ['jersey', 'rib', 'interlock', 'pique'];
+    const webglOk = (() => {
+      try { return !!window.WebGLRenderingContext && !!document.createElement('canvas').getContext('webgl'); }
+      catch (_) { return false; }
+    })();
+
+    if (!webglOk || !WEBGL_TYPES.includes(con.type)) {
+      this._renderCubeFallback();
+      return;
+    }
+
+    // build stage: controls bar + mount point
+    const stage = document.createElement('div');
+    stage.className = 'ka3dgl-stage';
+    stage.innerHTML = `
+      <div class="ka3d-controls">
+        <button class="ka3d-btn" data-act="front">Front</button>
+        <button class="ka3d-btn" data-act="back">Back</button>
+        <button class="ka3d-btn" data-act="reset" title="Reset view">⟳</button>
+        <button class="ka3d-btn" data-act="wire" title="Show loop paths">Loops</button>
+        <span class="ka3d-hint" style="margin-left:6px">Drag to orbit · scroll to zoom · real 3-D yarn loops</span>
+      </div>
+      <div class="ka3dgl-mount"></div>
+      <div class="ka3dgl-loading" style="font:11px var(--mono,monospace);color:var(--t3,#778);padding:6px 2px;">Loading 3-D engine…</div>`;
+    wrap.appendChild(stage);
+    this._injectThreeCss();
+
+    const mount = stage.querySelector('.ka3dgl-mount');
+    const loading = stage.querySelector('.ka3dgl-loading');
+
+    // tokens for the patch come from the same K/T/M logic as the 2D view
+    const sample = (w, c) => this._tokenAt(w, c, 'front', opts);
+    const glOpts = {
+      dyed: this._dyedColor, construction: con, countNe: opts.countNe,
+      tf: opts.tf, fiberType: opts.fiberType, sheen: opts.sheen, sample,
+    };
+
+    import('/js/fabric-3d.js?v=20260607b').then(({ Fabric3D }) => {
+      if (this._destroyed || this.activeTab !== 'threed') return;
+      if (this._fabric3d) { try { this._fabric3d.dispose(); } catch (_) {} }
+      this._fabric3d = new Fabric3D();
+      this._fabric3d.mount(mount, glOpts);
+      loading.remove();
+      stage.querySelector('.ka3d-controls').addEventListener('click', (e) => {
+        const act = e.target.getAttribute('data-act'); if (!act) return;
+        if (act === 'front') this._fabric3d.setView('front');
+        else if (act === 'back') this._fabric3d.setView('back');
+        else if (act === 'reset') this._fabric3d.resetView();
+        else if (act === 'wire') e.target.classList.toggle('active', this._fabric3d.toggleWire());
+      });
+      this._updateInfoLine(opts);
+    }).catch((err) => {
+      // engine unavailable → graceful fallback
+      this._renderCubeFallback();
+    });
+  }
+
+  _renderCubeFallback() {
     const wrap = this.container.querySelector('.viz-canvas-wrap[data-wrap="threed"]');
     if (!wrap) return;
     wrap.innerHTML = '';
@@ -1927,7 +1999,9 @@ class FabricVisualizer {
   _injectThreeCss() {
     if (document.getElementById('ka3d-style')) return;
     const css = `
-    .ka3d-stage{display:flex;flex-direction:column;align-items:center;gap:10px;width:100%;padding:6px 0;}
+    .ka3d-stage,.ka3dgl-stage{display:flex;flex-direction:column;align-items:center;gap:10px;width:100%;padding:6px 0;}
+    .ka3dgl-mount{width:100%;max-width:560px;height:380px;border-radius:12px;overflow:hidden;
+      background:radial-gradient(ellipse at 50% 35%,rgba(255,255,255,.06),rgba(0,0,0,.30));}
     .ka3d-controls{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:center;}
     .ka3d-btn{font:600 11px/1 var(--mono,monospace);padding:6px 11px;border-radius:7px;cursor:pointer;
       border:1px solid rgba(0,0,0,.14);background:#fff;color:#333;transition:all .15s;}
@@ -2306,8 +2380,10 @@ class FabricVisualizer {
       colorInput.addEventListener('input', () => {
         this._userColor = colorInput.value;
         this._computeDyedColor();
-        if (this.activeTab !== 'realistic') this.switchTab('realistic');
-        else this._renderRealisticView();
+        // update the live view in place (3D updates the yarn material instantly)
+        if (this.activeTab === 'threed' && this._fabric3d) this._fabric3d.setColor(colorInput.value);
+        else if (this.activeTab === 'realistic') this._renderRealisticView();
+        else this._renderActiveTab();
       });
     }
 
