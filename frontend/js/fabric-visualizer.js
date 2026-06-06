@@ -1114,7 +1114,21 @@ class FabricVisualizer {
       gsm:       (result.input || {}).gsm || (result.grammage || {}).gsm || 180,
       tf:        (result.physical_constraints || {}).tightness_factor || 14,
       construction: this._detectConstruction(),
+      pattern:   this._patternMatrix(),
     };
+  }
+
+  // The real K/T/M needle action matrix (pattern_cylinder) drives tuck/miss
+  // placement so the rendered structure matches the actual stitch programme.
+  _patternMatrix() {
+    const p = this.result.pattern || {};
+    const grid = p.pattern_cylinder;
+    if (Array.isArray(grid) && grid.length && Array.isArray(grid[0]) && grid[0].length) {
+      // only meaningful if it actually contains tuck/miss (else it's plain knit)
+      const hasTM = grid.some(row => row.some(c => c === 'T' || c === 'M'));
+      if (hasTM) return { grid, rows: grid.length, cols: grid[0].length };
+    }
+    return null;
   }
 
   _updateInfoLine(opts) {
@@ -1242,9 +1256,12 @@ class FabricVisualizer {
   }
 
   /** Stitch token at a wale/course for a face. Front & back are intentionally
-   *  different (knit V ↔ purl bump), giving real two-sided fabric. */
-  _tokenAt(w, c, side, con) {
+   *  different (knit V ↔ purl bump), giving real two-sided fabric.
+   *  Tuck/miss come from the real K/T/M needle matrix when available. */
+  _tokenAt(w, c, side, opts) {
+    const con = opts.construction;
     const mod = (n, m) => ((n % m) + m) % m;
+    // 1) structural knit/purl from the construction (rib columns, interlock…)
     let front;
     switch (con.type) {
       case 'rib': {
@@ -1252,18 +1269,25 @@ class FabricVisualizer {
         front = mod(w, rep * 2) < rep ? 'knit' : 'purl';
         break;
       }
-      case 'interlock': return 'knit';                  // interlock: knit both faces
-      case 'pique': {
-        // tuck cells on a staggered lattice → honeycomb
-        front = (mod(w, 2) === mod(c, 2)) ? 'tuck' : 'knit';
-        break;
-      }
+      case 'interlock': front = 'knit'; break;          // interlock: knit both faces
       default: front = 'knit';
     }
-    if (side === 'back') {
+    // 2) overlay the real K/T/M programme (tuck/miss) onto knit cells
+    if (front === 'knit') {
+      const pat = opts.pattern;
+      if (pat && pat.grid) {
+        const cell = pat.grid[mod(c, pat.rows)][mod(w, pat.cols)] || 'K';
+        if (cell === 'T') front = 'tuck';
+        else if (cell === 'M') front = 'miss';
+      } else if (con.type === 'pique') {
+        // synthetic honeycomb tuck lattice when no matrix is supplied
+        front = (mod(w, 2) === mod(c, 2)) ? 'tuck' : 'knit';
+      }
+    }
+    // 3) interlock keeps knit on the back too; others flip knit↔purl
+    if (side === 'back' && con.type !== 'interlock') {
       if (front === 'knit') return 'purl';
       if (front === 'purl') return 'knit';
-      return 'tuck';
     }
     return front;
   }
@@ -1282,30 +1306,39 @@ class FabricVisualizer {
     // rib: shade the sunken purl wales for depth
     if (con.type === 'rib') {
       for (let w = w0; w <= w1; w++) {
-        if (this._tokenAt(w, 0, side, con) === 'purl') {
+        if (this._tokenAt(w, 0, side, opts) === 'purl') {
           ctx.fillStyle = this._shadeColorCss(dyed, -0.34);
           ctx.fillRect(xOf(w) - cw / 2, 0, cw, H);
         }
       }
     }
 
-    // collect knit cells; purl/tuck are self-contained and drawn first (recessed)
-    const knit = [];
+    // collect knit cells; purl/tuck/miss are self-contained and drawn first
+    const knit = [], miss = [];
     for (let c = c0; c <= c1; c++) {
       for (let w = w0; w <= w1; w++) {
-        const tok = this._tokenAt(w, c, side, con);
+        const tok = this._tokenAt(w, c, side, opts);
         const x = xOf(w), y = yOf(c);
         if (tok === 'purl')      this._drawPurlLOD(ctx, x, y, cw, ch, dyed, opts);
         else if (tok === 'tuck') this._drawTuckLOD(ctx, x, y, cw, ch, dyed, opts);
+        else if (tok === 'miss') { this._drawHeldLoop(ctx, x, y, cw, ch, dyed, opts); miss.push([x, y, c]); }
         else                     knit.push([x, y]);
       }
     }
 
-    // TWO-PASS interlocking loops → correct over/under intermesh:
+    // THREE-PASS interlocking mesh → correct over/under intermesh:
+    //   pass 0 = sinker loops (the course connectors, sit behind)
     //   pass 1 = all loop LEGS (these dip behind the head of the loop above)
     //   pass 2 = all loop HEADS on top (so each head clasps the legs above it)
+    if (cw >= 11) for (const [x, y] of knit) this._strokeYarn(ctx, (dx, dy) => this._knitSinkerPath(ctx, x, y, cw, ch, dx, dy), yw * 0.82, dyed, opts);
     for (const [x, y] of knit) this._strokeYarn(ctx, (dx, dy) => this._knitLegsPath(ctx, x, y, cw, ch, dx, dy), yw, dyed, opts);
-    for (const [x, y] of knit) this._strokeYarn(ctx, (dx, dy) => this._knitHeadPath(ctx, x, y, cw, ch, dx, dy), yw * 0.96, dyed, opts);
+    for (const [x, y] of knit) this._strokeYarn(ctx, (dx, dy) => this._knitHeadPath(ctx, x, y, cw, ch, dx, dy), yw * 0.98, dyed, opts);
+
+    // miss/float yarn lies straight ON TOP, across the held loops
+    for (const [x, y] of miss) this._strokeYarn(ctx, (dx, dy) => {
+      ctx.moveTo(x - cw * 0.56 + dx, y - ch * 0.04 + dy);
+      ctx.quadraticCurveTo(x + dx, y - ch * 0.10 + dy, x + cw * 0.56 + dx, y - ch * 0.04 + dy);
+    }, yw * 0.96, dyed, opts);
 
     // fine fibre/ply detail only when zoomed enough to see it
     if (cw > 44 && (opts.fiberType === 'cotton' || opts.fiberType === 'modal' || opts.fiberType === 'viscose'))
@@ -1315,6 +1348,14 @@ class FabricVisualizer {
     if (con.type === 'pique' && side === 'front') this._overlayWaffle(ctx, W, H, g, dyed);
   }
 
+  // a held (elongated) loop — the loop a missed needle keeps for extra courses
+  _drawHeldLoop(ctx, cx, cy, cw, ch, dyed, opts) {
+    const yw = this._yarnWidth(cw, opts);
+    this._strokeYarn(ctx, (dx, dy) => this._knitSinkerPath(ctx, cx, cy, cw, ch, dx, dy), yw * 0.82, dyed, opts);
+    this._strokeYarn(ctx, (dx, dy) => this._knitLegsPath(ctx, cx, cy + ch * 0.04, cw * 0.86, ch * 1.12, dx, dy), yw, dyed, opts);
+    this._strokeYarn(ctx, (dx, dy) => this._knitHeadPath(ctx, cx, cy + ch * 0.04, cw * 0.86, ch * 1.12, dx, dy), yw * 0.96, dyed, opts);
+  }
+
   // yarn line width from tightness factor (tighter cloth → fuller coverage)
   _yarnWidth(cw, opts) {
     const tf = typeof opts.tf === 'number' ? opts.tf : 14;
@@ -1322,24 +1363,39 @@ class FabricVisualizer {
     return Math.max(1.0, cw * cover);
   }
 
-  // legs of the knit loop: two arms from the top shoulders down to the bottom
-  // point (which is pulled through the loop below). Forms the stockinette "V".
+  // ── Knit needle-loop anatomy (ref. fig: Head + two Legs, intermeshing) ──
+  // The loop is a bulbous HEAD at top with two LEGS that converge downward and
+  // pass through the head of the loop below. Drawn in two passes so each head
+  // clasps the legs of the loop above (true over/under intermesh).
+  //
+  // legs: from the shoulders down, bowing slightly out then in to the foot
+  // point where they thread through the loop below.
   _knitLegsPath(ctx, cx, cy, cw, ch, dx, dy) {
     dx = dx || 0; dy = dy || 0;
-    const sx = cw * 0.46, shY = cy - ch * 0.34 + dy, botY = cy + ch * 0.58 + dy;
-    ctx.moveTo(cx - sx + dx, shY);
-    ctx.bezierCurveTo(cx - sx + dx, cy - ch * 0.02 + dy, cx - cw * 0.16 + dx, cy + ch * 0.30 + dy, cx + dx, botY);
-    ctx.moveTo(cx + sx + dx, shY);
-    ctx.bezierCurveTo(cx + sx + dx, cy - ch * 0.02 + dy, cx + cw * 0.16 + dx, cy + ch * 0.30 + dy, cx + dx, botY);
+    const legX = cw * 0.34, shY = cy - ch * 0.18 + dy;
+    const footX = cw * 0.13, footY = cy + ch * 0.54 + dy;
+    ctx.moveTo(cx - legX + dx, shY);
+    ctx.bezierCurveTo(cx - legX * 1.04 + dx, cy + ch * 0.12 + dy, cx - footX * 1.7 + dx, footY - ch * 0.14 + dy, cx - footX + dx, footY);
+    ctx.moveTo(cx + legX + dx, shY);
+    ctx.bezierCurveTo(cx + legX * 1.04 + dx, cy + ch * 0.12 + dy, cx + footX * 1.7 + dx, footY - ch * 0.14 + dy, cx + footX + dx, footY);
   }
 
-  // head of the knit loop: the top arch connecting the two shoulders. Drawn on
-  // top of the legs so it clasps the loop above (the real intermesh crossing).
+  // head: a rounded, slightly over-wide arch (the needle loop top / "bulb").
   _knitHeadPath(ctx, cx, cy, cw, ch, dx, dy) {
     dx = dx || 0; dy = dy || 0;
-    const sx = cw * 0.46, shY = cy - ch * 0.34 + dy;
-    ctx.moveTo(cx - sx + dx, shY);
-    ctx.bezierCurveTo(cx - sx * 0.9 + dx, cy - ch * 0.74 + dy, cx + sx * 0.9 + dx, cy - ch * 0.74 + dy, cx + sx + dx, shY);
+    const legX = cw * 0.34, shY = cy - ch * 0.18 + dy, topY = cy - ch * 0.60 + dy;
+    ctx.moveTo(cx - legX + dx, shY);
+    ctx.bezierCurveTo(cx - legX * 1.16 + dx, topY, cx + legX * 1.16 + dx, topY, cx + legX + dx, shY);
+  }
+
+  // sinker loop: the yarn arc connecting this needle loop's foot to the next
+  // wale's foot (same course). On the back these become the prominent
+  // half-moons; on the face they sit just behind the needle loops.
+  _knitSinkerPath(ctx, cx, cy, cw, ch, dx, dy) {
+    dx = dx || 0; dy = dy || 0;
+    const footX = cw * 0.13, footY = cy + ch * 0.54 + dy;
+    ctx.moveTo(cx + footX + dx, footY);
+    ctx.quadraticCurveTo(cx + cw * 0.5 + dx, footY + ch * 0.22, cx + cw - footX + dx, footY);
   }
 
   // round-yarn stroke: cast shadow + body + core shade + top-left specular,
@@ -1383,66 +1439,43 @@ class FabricVisualizer {
     ctx.restore();
   }
 
-  // solo knit loop (legs+head in one call) for mesh ground / tuck interiors
+  // solo knit loop (sinker + legs + head) for mesh ground / tuck interiors
   _drawKnitLoopSolo(ctx, cx, cy, cw, ch, dyed, opts) {
     const yw = this._yarnWidth(cw, opts);
+    this._strokeYarn(ctx, (dx, dy) => this._knitSinkerPath(ctx, cx, cy, cw, ch, dx, dy), yw * 0.82, dyed, opts);
     this._strokeYarn(ctx, (dx, dy) => this._knitLegsPath(ctx, cx, cy, cw, ch, dx, dy), yw, dyed, opts);
     this._strokeYarn(ctx, (dx, dy) => this._knitHeadPath(ctx, cx, cy, cw, ch, dx, dy), yw * 0.96, dyed, opts);
   }
 
-  // ── purl bump (technical back / rib purl wale) — horizontal nested ridges,
-  //    visually the OPPOSITE of the knit V columns. LOD adds depth & sheen.
+  // ── purl loop (technical back) — the SINKER half-moons + loop heads that
+  //    show on the reverse. Rows of nested half-moons (∩) — the opposite face
+  //    of the knit "V" columns. LOD adds the depth between bumps.
   _drawPurlLOD(ctx, cx, cy, cw, ch, dyed, opts) {
-    const lod = cw;
-    const yw = Math.max(1.2, cw * 0.34);
-    const base = this._shadeColorCss(dyed, -0.06);
-    const hi = this._shadeColorCss(dyed, 0.18);
-    const dk = this._shadeColorCss(dyed, -0.38);
-    ctx.lineCap = 'round';
-    // deep recess between bumps
-    ctx.strokeStyle = dk; ctx.lineWidth = yw * 1.4;
-    ctx.beginPath();
-    ctx.moveTo(cx - cw * 0.5, cy + ch * 0.20);
-    ctx.quadraticCurveTo(cx, cy + ch * 0.46, cx + cw * 0.5, cy + ch * 0.20);
-    ctx.stroke();
-    // the bump (a fat arc of yarn lying across the wale)
-    ctx.strokeStyle = base; ctx.lineWidth = yw * 1.18;
-    ctx.beginPath();
-    ctx.moveTo(cx - cw * 0.48, cy + ch * 0.06);
-    ctx.quadraticCurveTo(cx, cy - ch * 0.34, cx + cw * 0.48, cy + ch * 0.06);
-    ctx.stroke();
-    if (lod > 22) {           // crown highlight
-      ctx.strokeStyle = hi; ctx.lineWidth = yw * 0.42;
-      ctx.beginPath();
-      ctx.moveTo(cx - cw * 0.34, cy - ch * 0.04);
-      ctx.quadraticCurveTo(cx, cy - ch * 0.30, cx + cw * 0.34, cy - ch * 0.04);
-      ctx.stroke();
-    }
-    if (lod > 46) {           // the two legs disappearing under the next bump
-      ctx.strokeStyle = dk; ctx.lineWidth = yw * 0.55;
-      ctx.beginPath();
-      ctx.moveTo(cx - cw * 0.30, cy + ch * 0.06);
-      ctx.lineTo(cx - cw * 0.30, cy + ch * 0.30);
-      ctx.moveTo(cx + cw * 0.30, cy + ch * 0.06);
-      ctx.lineTo(cx + cw * 0.30, cy + ch * 0.30);
-      ctx.stroke();
-    }
+    const yw = Math.max(1.1, cw * 0.32);
+    // recess shadow under the half-moon
+    this._strokeYarn(ctx, (dx, dy) => {
+      ctx.moveTo(cx - cw * 0.5 + dx, cy + ch * 0.22 + dy);
+      ctx.quadraticCurveTo(cx + dx, cy + ch * 0.50 + dy, cx + cw * 0.5 + dx, cy + ch * 0.22 + dy);
+    }, yw * 0.9, dyed, opts);
+    // the prominent half-moon bump lying across the wale
+    this._strokeYarn(ctx, (dx, dy) => {
+      ctx.moveTo(cx - cw * 0.5 + dx, cy + ch * 0.10 + dy);
+      ctx.quadraticCurveTo(cx + dx, cy - ch * 0.40 + dy, cx + cw * 0.5 + dx, cy + ch * 0.10 + dy);
+    }, yw * 1.04, dyed, opts);
   }
 
-  // ── tuck cell (piqué) — a held loop, recessed below the knit plane ──
+  // ── tuck stitch — the needle held its old loop AND took a new yarn, so the
+  //    loop is elongated and a tuck yarn is caught beneath as a ∪. (ref. fig 6.6)
   _drawTuckLOD(ctx, cx, cy, cw, ch, dyed, opts) {
-    // recessed shadow pocket
-    ctx.save();
-    const grd = ctx.createRadialGradient(cx, cy, cw * 0.1, cx, cy, cw * 0.55);
-    grd.addColorStop(0, this._shadeColorCss(dyed, -0.30));
-    grd.addColorStop(1, this._shadeColorCss(dyed, -0.10));
-    ctx.fillStyle = grd;
-    ctx.beginPath();
-    ctx.ellipse(cx, cy, cw * 0.5, ch * 0.5, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-    // a smaller held loop sitting inside
-    this._drawKnitLoopSolo(ctx, cx, cy + ch * 0.06, cw * 0.78, ch * 0.74, dyed, opts);
+    const yw = this._yarnWidth(cw, opts);
+    // the caught tuck yarn ( ∪ ) sitting under the held loop, drawn first/behind
+    this._strokeYarn(ctx, (dx, dy) => {
+      ctx.moveTo(cx - cw * 0.46 + dx, cy + ch * 0.06 + dy);
+      ctx.quadraticCurveTo(cx + dx, cy + ch * 0.46 + dy, cx + cw * 0.46 + dx, cy + ch * 0.06 + dy);
+    }, yw * 0.92, dyed, opts);
+    // the elongated held needle loop (taller than a normal loop)
+    this._strokeYarn(ctx, (dx, dy) => this._knitLegsPath(ctx, cx, cy - ch * 0.10, cw * 0.92, ch * 1.18, dx, dy), yw, dyed, opts);
+    this._strokeYarn(ctx, (dx, dy) => this._knitHeadPath(ctx, cx, cy - ch * 0.10, cw * 0.92, ch * 1.18, dx, dy), yw * 0.96, dyed, opts);
   }
 
   // ── honeycomb / waffle relief for piqué technical face ──
