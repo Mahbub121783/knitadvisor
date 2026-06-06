@@ -32,22 +32,38 @@ function loopCurve() {
   ], false, 'catmullrom', 0.5);
 }
 
-// Small procedural fibre-noise bump texture so yarn isn't a smooth plastic tube.
-function fibreBump() {
-  const s = 128;
+// Yarn TWIST texture — diagonal helical grooves around the tube so the yarn
+// reads as spun-and-twisted (S/Z) with fibre fuzz, not a smooth plastic pipe.
+// Used as a bump map; UV u runs along the yarn, v around it, so diagonal bands
+// + repeat give a helix (the twist).
+function twistTexture(fiber, synthetic, zTwist) {
+  const w = 96, h = 96;
   const c = document.createElement('canvas');
-  c.width = c.height = s;
+  c.width = w; c.height = h;
   const ctx = c.getContext('2d');
   ctx.fillStyle = '#808080';
-  ctx.fillRect(0, 0, s, s);
-  for (let i = 0; i < 5000; i++) {
-    const v = 96 + Math.random() * 64 | 0;
-    ctx.fillStyle = `rgb(${v},${v},${v})`;
-    ctx.fillRect(Math.random() * s, Math.random() * s, 1, 1.5);
+  ctx.fillRect(0, 0, w, h);
+  const dir = zTwist ? 1 : -1;
+  const step = 7;
+  // twist grooves (dark) + ridges (light)
+  for (let i = -h; i < w + h; i += step) {
+    ctx.strokeStyle = '#5f5f5f'; ctx.lineWidth = 2.4;
+    ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i + dir * h, h); ctx.stroke();
+    ctx.strokeStyle = '#a6a6a6'; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(i + dir * 2.6, 0); ctx.lineTo(i + dir * (h + 2.6), h); ctx.stroke();
+  }
+  // fibre fuzz speckle (cotton/viscose) so the surface isn't a clean tube
+  if (!synthetic) {
+    for (let k = 0; k < 2600; k++) {
+      const v = 100 + (Math.random() * 56 | 0);
+      ctx.fillStyle = `rgb(${v},${v},${v})`;
+      ctx.fillRect(Math.random() * w, Math.random() * h, 1, 1.2);
+    }
   }
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(6, 1);
+  tex.anisotropy = 4;
+  tex.repeat.set(7, 2);     // 7 twists per loop-length, wraps twice around
   return tex;
 }
 
@@ -67,6 +83,9 @@ export class Fabric3D {
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setSize(W, H);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;   // filmic so PBR colour looks natural
+    renderer.toneMappingExposure = 1.05;
     renderer.domElement.style.cssText = 'width:100%;height:380px;display:block;border-radius:12px;cursor:grab;';
     container.appendChild(renderer.domElement);
     this.renderer = renderer;
@@ -77,15 +96,19 @@ export class Fabric3D {
     const camera = new THREE.PerspectiveCamera(40, W / H, 0.1, 200);
     this.camera = camera;
 
-    // Lighting — soft studio so the dye reads as colour, not flat fill.
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x555566, 0.9));
-    const key = new THREE.DirectionalLight(0xffffff, 1.15);
+    // Soft studio lighting (intensities tuned for ACES tone mapping) so the dye
+    // reads as true colour and the yarn looks lit, not flat.
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x4a4f5a, 1.5));
+    const key = new THREE.DirectionalLight(0xffffff, 2.6);
     key.position.set(-3, 5, 6);
     scene.add(key);
-    const fill = new THREE.DirectionalLight(0xffffff, 0.35);
-    fill.position.set(4, -2, 3);
+    const fill = new THREE.DirectionalLight(0xeef2ff, 0.8);
+    fill.position.set(4, -1, 3);
     scene.add(fill);
-    scene.add(new THREE.AmbientLight(0xffffff, 0.18));
+    const rim = new THREE.DirectionalLight(0xffffff, 0.6);
+    rim.position.set(0, 2, -5);     // back rim so the purl side reads when flipped
+    scene.add(rim);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.35));
 
     this._buildFabric();
 
@@ -128,17 +151,29 @@ export class Fabric3D {
   _material() {
     const d = this.opts.dyed || { r: 120, g: 124, b: 134 };
     const fiber = this.opts.fiberType || 'cotton';
-    const rough = fiber === 'polyester' || fiber === 'nylon' ? 0.45
-      : fiber === 'modal' || fiber === 'viscose' ? 0.72 : 0.92;
-    const mat = new THREE.MeshStandardMaterial({
-      color: new THREE.Color(d.r / 255, d.g / 255, d.b / 255),
+    const synthetic = fiber === 'polyester' || fiber === 'nylon';
+    const rough = synthetic ? 0.42 : fiber === 'modal' || fiber === 'viscose' ? 0.62 : 0.84;
+
+    const col = new THREE.Color().setRGB(d.r / 255, d.g / 255, d.b / 255, THREE.SRGBColorSpace);
+    const mat = new THREE.MeshPhysicalMaterial({
+      color: col,
       roughness: rough,
       metalness: 0.0,
+      // sheen = the soft fuzzy cloth fibre halo (cotton high, synthetic low)
+      sheen: synthetic ? 0.35 : 1.0,
+      sheenRoughness: synthetic ? 0.45 : 0.9,
+      sheenColor: col.clone().lerp(new THREE.Color(1, 1, 1), 0.55),
+      // anisotropic specular so highlights run ALONG the twisted yarn
+      anisotropy: synthetic ? 0.7 : 0.35,
+      anisotropyRotation: 0,
+      // a touch of clearcoat gives polyester its sporty sheen
+      clearcoat: synthetic ? 0.3 : 0.0,
+      clearcoatRoughness: 0.55,
     });
-    if (fiber === 'cotton' || fiber === 'modal' || fiber === 'viscose') {
-      mat.bumpMap = fibreBump();
-      mat.bumpScale = 0.015;
-    }
+    const tw = twistTexture(fiber, synthetic, true);
+    mat.bumpMap = tw;
+    mat.bumpScale = synthetic ? 0.008 : 0.02;
+    this._twistTex = tw;
     this._mat = mat;
     return mat;
   }
@@ -151,6 +186,7 @@ export class Fabric3D {
     const radius = this._yarnRadius();
 
     const geo = new THREE.TubeGeometry(loopCurve(), 48, radius, 10, false);
+    geo.computeTangents();          // required for anisotropic specular along the yarn
     const mat = this._material();
 
     const group = new THREE.Group();
