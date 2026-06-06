@@ -11,24 +11,27 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 const PITCH_X = 1.0;     // wale spacing (loop is ~unit sized)
-const PITCH_Y = 0.80;    // course spacing (loops overlap vertically → dense cloth)
+const PITCH_Y = 0.92;    // course spacing — loops cross & interlock like a chain
 
-// One stockinette needle-loop centreline. Head arches forward (+z); the legs
-// dip back (−z) and the feet splay beyond the cell so neighbours interlock.
-// Technical FACE faces +z: the two legs (the knit "V") come toward the viewer,
-// while the head arch recedes to −z. The loop above's feet pass behind this
-// loop's head → real over/under. (Back view then shows the purl head bumps.)
+// Accurate stockinette needle-loop centreline (textbook loop topology):
+//   • a NECK at the bottom where the two feet converge and dip BACK (−z) so it
+//     threads BEHIND the head of the loop in the course below (intermesh);
+//   • two wide LEGS that come forward (+z) — the visible knit "V" on the
+//     technical face;
+//   • a rounded HEAD arch on top (front-ish) that clasps the neck of the loop
+//     in the course above.
+// Result: real over/under chaining — face shows V's, back shows the head bumps.
 function loopCurve() {
   return new THREE.CatmullRomCurve3([
-    new THREE.Vector3(-0.62, -0.58,  0.16),  // left foot, forward
-    new THREE.Vector3(-0.52, -0.22,  0.20),  // left leg, forward (the visible V)
-    new THREE.Vector3(-0.40,  0.12,  0.06),
-    new THREE.Vector3(-0.26,  0.46, -0.16),  // rising, receding to the head
-    new THREE.Vector3( 0.00,  0.64, -0.28),  // head arch, back
-    new THREE.Vector3( 0.26,  0.46, -0.16),
-    new THREE.Vector3( 0.40,  0.12,  0.06),
-    new THREE.Vector3( 0.52, -0.22,  0.20),  // right leg, forward
-    new THREE.Vector3( 0.62, -0.58,  0.16),  // right foot, forward
+    new THREE.Vector3(-0.18, -0.66, -0.26),  // left foot / neck — back, near centre
+    new THREE.Vector3(-0.40, -0.30,  0.04),  // lower left leg, coming forward
+    new THREE.Vector3(-0.52,  0.06,  0.26),  // left leg — forward, the visible V
+    new THREE.Vector3(-0.40,  0.42,  0.16),  // left shoulder
+    new THREE.Vector3( 0.00,  0.66,  0.02),  // head arch, top
+    new THREE.Vector3( 0.40,  0.42,  0.16),  // right shoulder
+    new THREE.Vector3( 0.52,  0.06,  0.26),  // right leg — forward
+    new THREE.Vector3( 0.40, -0.30,  0.04),  // lower right leg
+    new THREE.Vector3( 0.18, -0.66, -0.26),  // right foot / neck — back
   ], false, 'catmullrom', 0.5);
 }
 

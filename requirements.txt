@@ -1,0 +1,70 @@
+==============================================================================
+ KnitAdvisor — Dependencies & Install Guide
+==============================================================================
+This project is a Node.js (Express) backend + a vanilla HTML/CSS/JS frontend.
+There is no Python; this file documents every package and how to install it.
+
+------------------------------------------------------------------------------
+0. SYSTEM REQUIREMENTS
+------------------------------------------------------------------------------
+Node.js  >= 18 LTS        (tested on Node 24)
+npm      >= 9
+(Optional) MySQL 8 server — only if you enable the DB cache / query log.
+                            The app runs without it (memory cache fallback).
+
+------------------------------------------------------------------------------
+1. BACKEND  (runtime — REQUIRED)
+   Install:   cd backend && npm install
+   Source of truth: backend/package.json
+------------------------------------------------------------------------------
+express     ^4.18.2     web server / routing
+cors        ^2.8.5      cross-origin requests
+helmet      ^7.1.0      security headers (CSP disabled by design)
+dotenv      ^16.3.1     .env config loading
+mysql2      ^3.6.5      MySQL client (DB cache / logging; optional at runtime)
+lru-cache   ^10.1.0     in-memory L1 cache
+axios       ^1.6.2      outbound HTTP (AI providers)
+groq-sdk    ^1.2.1      optional AI provider SDK
+crypto      ^1.0.1      hashing for cache keys
+
+  One-liner:
+    cd backend && npm install
+
+------------------------------------------------------------------------------
+2. FRONTEND 3D ENGINE  (vendored — REQUIRED, already in the repo)
+   No npm install needed at runtime; the files are committed and lazy-loaded
+   by the browser via an import map (see frontend/result.html).
+   Location: frontend/js/vendor/
+------------------------------------------------------------------------------
+three            r163    WebGL engine            -> frontend/js/vendor/three.module.js
+OrbitControls    r163    camera orbit/zoom       -> frontend/js/vendor/OrbitControls.js
+
+  To re-vendor / upgrade (only when changing the Three.js version):
+    curl -sSL https://unpkg.com/three@0.163.0/build/three.module.js \
+         -o frontend/js/vendor/three.module.js
+    curl -sSL https://unpkg.com/three@0.163.0/examples/jsm/controls/OrbitControls.js \
+         -o frontend/js/vendor/OrbitControls.js
+
+------------------------------------------------------------------------------
+3. DEV / VERIFICATION TOOLS  (OPTIONAL — only for rendering-QA, not runtime)
+   Used to render the fabric visualization headlessly and inspect the pixels.
+   Install into a throwaway dir so they never ship to production:
+------------------------------------------------------------------------------
+canvas      ^3        2D canvas in Node — renders the 2D fabric view to PNG
+                      install:  npm install canvas --no-save
+puppeteer   ^23       headless Chromium — renders the WebGL 3D view to PNG
+                      install:  npm install puppeteer --no-save
+                      run flags for software WebGL:
+                        --use-gl=angle --use-angle=swiftshader --enable-webgl
+
+  These power the scratch/ QA scripts (git-ignored) that screenshot the
+  renderer so realism can be judged visually instead of guessed.
+
+------------------------------------------------------------------------------
+4. RUN
+------------------------------------------------------------------------------
+  cd backend && npm install && npm start      # serves API + frontend on :3001
+  open  http://localhost:3001/
+
+  NOTE: HTML is served with no-store; after changing front-end files just
+  hard-refresh (Ctrl+Shift+R). Restart `npm start` after backend changes.
