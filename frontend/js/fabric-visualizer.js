@@ -985,23 +985,120 @@ class FabricVisualizer {
     wrap.innerHTML = '';
 
     const W = 560, H = 380, SS = 2;       // SS = supersample for crispness
+    const opts = this._faceOpts();
+    this._loupe = this._loupe || { zoom: 1, fu: 0.5, fv: 0.5 };
+    const MIN = 1, MAX = 9;
+
+    const holder = document.createElement('div');
+    holder.className = 'ka-loupe';
+    holder.innerHTML = `
+      <div class="ka-loupe-bar">
+        <button class="ka-loupe-btn" data-act="out">–</button>
+        <span class="ka-loupe-zoom" id="ka-loupe-zoom">1.0×</span>
+        <button class="ka-loupe-btn" data-act="in">+</button>
+        <button class="ka-loupe-btn" data-act="reset" title="Fit">Fit</button>
+        <span class="ka-loupe-tip">Click to zoom into a point · scroll to magnify · drag to pan</span>
+      </div>
+      <div class="ka-loupe-stage"></div>`;
+    wrap.appendChild(holder);
+    this._injectLoupeCss();
+
+    const stageEl = holder.querySelector('.ka-loupe-stage');
     const canvas = document.createElement('canvas');
     canvas.className = 'viz-canvas';
-    canvas.width  = W * SS;
-    canvas.height = H * SS;
-    canvas.style.width  = W + 'px';
-    canvas.style.height = H + 'px';
-    canvas.style.borderRadius = '10px';
-    wrap.appendChild(canvas);
+    canvas.width = W * SS; canvas.height = H * SS;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    canvas.style.borderRadius = '10px'; canvas.style.cursor = 'zoom-in';
+    stageEl.appendChild(canvas);
     this.canvases.realistic = canvas;
-
     const ctx = canvas.getContext('2d');
-    ctx.scale(SS, SS);
 
-    const opts = this._faceOpts();
-    this._paintFabricFace(ctx, W, H, 'front', opts);
+    const zoomEl = holder.querySelector('#ka-loupe-zoom');
+    const paint = () => {
+      const l = this._loupe;
+      l.fu = Math.max(0.04, Math.min(0.96, l.fu));
+      l.fv = Math.max(0.04, Math.min(0.96, l.fv));
+      ctx.setTransform(SS, 0, 0, SS, 0, 0);
+      this._paintFabricFace(ctx, W, H, 'front', opts, l);
+      zoomEl.textContent = l.zoom.toFixed(1) + '×';
+      canvas.style.cursor = l.zoom >= MAX ? 'zoom-out' : 'zoom-in';
+    };
 
+    // map a screen point on the canvas → fabric focal [0,1]
+    const ptToFocal = (sx, sy) => {
+      const g = this._gridGeom(W, H, opts, this._loupe);
+      const waleF = g.leftWaleF + sx / g.cellW;
+      const courseF = g.botCourseF + (H - sy) / g.cellH;
+      return { fu: waleF / this._TOTAL_W, fv: courseF / this._TOTAL_C };
+    };
+    const zoomAt = (sx, sy, factor) => {
+      const before = ptToFocal(sx, sy);
+      const l = this._loupe;
+      l.zoom = Math.max(MIN, Math.min(MAX, l.zoom * factor));
+      // keep the point under the cursor fixed
+      const g = this._gridGeom(W, H, opts, l);
+      const waleF = before.fu * this._TOTAL_W, courseF = before.fv * this._TOTAL_C;
+      l.fu = (waleF - sx / g.cellW + g.visW / 2) / this._TOTAL_W;
+      l.fv = (courseF - (H - sy) / g.cellH + g.visC / 2) / this._TOTAL_C;
+      paint();
+    };
+
+    const rel = (e) => {
+      const r = canvas.getBoundingClientRect();
+      const p = e.touches ? e.touches[0] : e;
+      return { x: (p.clientX - r.left), y: (p.clientY - r.top) };
+    };
+
+    let dragging = false, moved = false, lx = 0, ly = 0;
+    canvas.addEventListener('mousedown', (e) => { dragging = true; moved = false; const p = rel(e); lx = p.x; ly = p.y; });
+    canvas.addEventListener('mousemove', (e) => {
+      if (!dragging) return;
+      const p = rel(e), g = this._gridGeom(W, H, opts, this._loupe);
+      if (Math.abs(p.x - lx) + Math.abs(p.y - ly) > 2) moved = true;
+      this._loupe.fu -= (p.x - lx) / g.cellW / this._TOTAL_W;
+      this._loupe.fv += (p.y - ly) / g.cellH / this._TOTAL_C;
+      lx = p.x; ly = p.y; paint();
+    });
+    window.addEventListener('mouseup', () => { dragging = false; });
+    canvas.addEventListener('click', (e) => {
+      if (moved) return;                       // was a drag, not a click
+      const p = rel(e);
+      if (this._loupe.zoom >= MAX) { this._loupe = { zoom: 1, fu: 0.5, fv: 0.5 }; paint(); return; }
+      const f = ptToFocal(p.x, p.y);
+      this._loupe.fu = f.fu; this._loupe.fv = f.fv;
+      zoomAt(W / 2, H / 2, 2.2);               // focal already centered → just magnify
+    });
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const p = rel(e);
+      zoomAt(p.x, p.y, e.deltaY < 0 ? 1.18 : 0.85);
+    }, { passive: false });
+
+    holder.querySelector('.ka-loupe-bar').addEventListener('click', (e) => {
+      const act = e.target.getAttribute('data-act'); if (!act) return;
+      if (act === 'in') zoomAt(W / 2, H / 2, 1.4);
+      else if (act === 'out') zoomAt(W / 2, H / 2, 0.7);
+      else { this._loupe = { zoom: 1, fu: 0.5, fv: 0.5 }; paint(); }
+    });
+
+    paint();
     this._updateInfoLine(opts);
+  }
+
+  _injectLoupeCss() {
+    if (document.getElementById('ka-loupe-style')) return;
+    const css = `
+    .ka-loupe{display:flex;flex-direction:column;gap:8px;width:100%;}
+    .ka-loupe-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+    .ka-loupe-btn{font:600 12px/1 var(--mono,monospace);min-width:30px;padding:6px 10px;border-radius:7px;cursor:pointer;
+      border:1px solid rgba(0,0,0,.14);background:#fff;color:#333;transition:all .15s;}
+    .ka-loupe-btn:hover{border-color:#5b8def;color:#2563eb;}
+    .ka-loupe-zoom{font:600 12px var(--mono,monospace);color:#2563eb;min-width:38px;text-align:center;}
+    .ka-loupe-tip{font:10px var(--mono,monospace);color:#9aa;margin-left:6px;}
+    .ka-loupe-stage{display:flex;justify-content:center;overflow:hidden;border-radius:10px;}`;
+    const s = document.createElement('style');
+    s.id = 'ka-loupe-style'; s.textContent = css;
+    document.head.appendChild(s);
   }
 
   /** Collects every parameter the painter needs, ONCE. */
@@ -1071,8 +1168,13 @@ class FabricVisualizer {
     // Double-knit / interlock family
     if (has('interlock'))
       return { type: 'interlock', base: 'double', label: 'interlock', mesh: false, brush: false };
-    if (has('pique', 'piqué', 'lacoste'))
-      return { type: 'pique', base: 'single', label: has('lacoste', 'double') ? 'double lacoste' : 'piqué', mesh: false, brush: false };
+    if (has('pique', 'piqué', 'lacoste')) {
+      let plabel = 'piqué';
+      if (has('honeycomb')) plabel = 'honeycomb piqué';
+      else if (has('double') && has('pique', 'piqué')) plabel = 'double piqué';
+      else if (has('lacoste')) plabel = has('double') ? 'double lacoste' : 'single lacoste';
+      return { type: 'pique', base: 'single', label: plabel, mesh: false, brush: false };
+    }
     if (has('rib'))
       return { type: 'rib', base: 'double', label: this._ribLabel(id, name), mesh: false, brush: false, ribRepeat: this._ribRepeat(id) };
     if (has('interlock', 'double jersey', 'double knit', 'ponte'))
@@ -1091,143 +1193,318 @@ class FabricVisualizer {
   // UNIVERSAL FABRIC FACE PAINTER
   // side: 'front' | 'back'.  Front & back differ per construction.
   // ─────────────────────────────────────────────────────────
-  _paintFabricFace(ctx, W, H, side, opts) {
-    const { dyed, construction: con, countNe } = opts;
+  // view = { zoom, fu, fv } — fu/fv are focal point in fabric space [0,1].
+  // The painter is a MACRO LENS: higher zoom = bigger loops = more anatomy
+  // revealed (LOD), not a stretched bitmap. Front & back differ per knit.
+  _paintFabricFace(ctx, W, H, side, opts, view) {
+    view = view || { zoom: 1, fu: 0.5, fv: 0.5 };
+    const { dyed, construction: con } = opts;
     const brushed = side === 'back' && (this._three.brush || con.brush);
 
-    // stitch sizing — finer yarn (higher Ne) → smaller, denser stitches
-    const dense = con.type === 'interlock' ? 1.25 : con.type === 'rib' ? 1.0 : 1.0;
-    const targetWales = Math.round(Math.min(Math.max((13 + countNe * 0.52) * dense, 16), 38));
-    const sw = W / targetWales;
-    const sh = sw * (con.type === 'rib' ? 0.92 : 0.84);
-    const yarnW = sw * Math.min(Math.max(0.40 + (30 - countNe) * 0.004, 0.34), 0.50);
-
-    // ground (the deep valley colour seen between yarns)
-    ctx.fillStyle = this._shadeColorCss(dyed, -0.42);
+    // ground (deep valley colour between yarns)
+    ctx.fillStyle = this._shadeColorCss(dyed, -0.44);
     ctx.fillRect(0, 0, W, H);
 
-    // brushed back short-circuits structure with a dense pile
-    if (brushed) { this._paintBrushedPile(ctx, W, H, dyed, opts); this._overlaySoftLight(ctx, W, H); return; }
+    if (brushed) { this._paintBrushedPile(ctx, W, H, dyed, opts, view); this._overlaySoftLight(ctx, W, H); return; }
+    if (con.type === 'terry' && side === 'back') { this._paintLoopPile(ctx, W, H, dyed, opts, view); return; }
+    if (con.type === 'mesh' || con.type === 'spacer') { this._paintMeshField(ctx, W, H, side, opts, view); this._overlaySoftLight(ctx, W, H); return; }
+    if (con.type === 'tricot') { this._paintTricotField(ctx, W, H, side, opts, view); this._overlaySoftLight(ctx, W, H); return; }
 
-    switch (con.type) {
-      case 'rib':       this._paintRib(ctx, W, H, sw, sh, yarnW, opts, side); break;
-      case 'interlock': this._paintInterlock(ctx, W, H, sw, sh, yarnW, opts, side); break;
-      case 'pique':     this._paintPique(ctx, W, H, sw, sh, yarnW, opts, side); break;
-      case 'mesh':      this._paintMesh(ctx, W, H, sw, sh, yarnW, opts, side); break;
-      case 'spacer':    this._paintMesh(ctx, W, H, sw, sh, yarnW, opts, side); break;
-      case 'tricot':    this._paintTricot(ctx, W, H, sw, sh, yarnW, opts, side); break;
-      case 'terry':     side === 'back' ? this._paintLoopPile(ctx, W, H, dyed, opts)
-                                        : this._paintStockinette(ctx, W, H, sw, sh, yarnW, opts, 'front'); break;
-      case 'fleece':    this._paintStockinette(ctx, W, H, sw, sh, yarnW, opts, side); break;
-      default:          this._paintStockinette(ctx, W, H, sw, sh, yarnW, opts, side);
-    }
-
-    // shared finishing — fine textile grain, soft studio light
+    this._paintKnitField(ctx, W, H, side, opts, view);
     this._overlayGrain(ctx, W, H);
     this._overlaySoftLight(ctx, W, H);
   }
 
-  // ── STOCKINETTE (single jersey) ──
-  // front: columns of interlocking "V" knit loops.
-  // back : rows of purl bumps (the technical back).
-  _paintStockinette(ctx, W, H, sw, sh, yarnW, opts, side) {
-    const dyed = opts.dyed;
-    const cols = Math.ceil(W / sw) + 1;
-    const rows = Math.ceil(H / sh) + 2;
+  // Virtual swatch dimensions (for seamless panning at any focal point)
+  get _TOTAL_W() { return 160; }
+  get _TOTAL_C() { return 200; }
+
+  /** Cell geometry + visible stitch window for a given zoom/focal. */
+  _gridGeom(W, H, opts, view) {
+    const con = opts.construction, countNe = opts.countNe;
+    // wales visible at zoom 1 — denser (finer yarn → more wales) so the
+    // zoomed-out view reads like real cloth; zooming in enlarges each loop.
+    let walesZ1 = Math.min(Math.max(20 + countNe * 0.85, 30), 58);
+    if (con.type === 'interlock') walesZ1 *= 1.25;
+    else if (con.type === 'rib')  walesZ1 *= 0.8;
+    else if (con.type === 'pique') walesZ1 *= 0.85;
+    const cellW = (W / walesZ1) * view.zoom;
+    const aspect = con.type === 'rib' ? 0.98 : con.type === 'pique' ? 1.0 : 0.82;
+    const cellH = cellW * aspect;
+    const visW = W / cellW, visC = H / cellH;
+    const leftWaleF = view.fu * this._TOTAL_W - visW / 2;
+    const botCourseF = view.fv * this._TOTAL_C - visC / 2;
+    return { cellW, cellH, leftWaleF, botCourseF, visW, visC, lod: cellW };
+  }
+
+  /** Stitch token at a wale/course for a face. Front & back are intentionally
+   *  different (knit V ↔ purl bump), giving real two-sided fabric. */
+  _tokenAt(w, c, side, con) {
+    const mod = (n, m) => ((n % m) + m) % m;
+    let front;
+    switch (con.type) {
+      case 'rib': {
+        const rep = con.ribRepeat || 1;
+        front = mod(w, rep * 2) < rep ? 'knit' : 'purl';
+        break;
+      }
+      case 'interlock': return 'knit';                  // interlock: knit both faces
+      case 'pique': {
+        // tuck cells on a staggered lattice → honeycomb
+        front = (mod(w, 2) === mod(c, 2)) ? 'tuck' : 'knit';
+        break;
+      }
+      default: front = 'knit';
+    }
     if (side === 'back') {
-      for (let r = 0; r < rows; r++)
-        for (let c = 0; c < cols; c++)
-          this._loopPurlBump(ctx, c * sw + sw / 2, H - (r * sh + sh / 2), sw, sh, yarnW, dyed, (r + c) % 2);
-    } else {
-      // sinker loops first (the connecting yarn dipping between wales), then the V loops
-      for (let r = 0; r < rows; r++)
-        for (let c = 0; c < cols; c++)
-          this._loopKnitV(ctx, c * sw + sw / 2, H - (r * sh + sh / 2), sw, sh, yarnW, dyed, opts.sheen);
+      if (front === 'knit') return 'purl';
+      if (front === 'purl') return 'knit';
+      return 'tuck';
     }
+    return front;
   }
 
-  // ── RIB (alternating knit & purl wales; both faces look similar) ──
-  _paintRib(ctx, W, H, sw, sh, yarnW, opts, side) {
-    const dyed = opts.dyed;
-    const rep = (opts.construction.ribRepeat || 1);
-    const cols = Math.ceil(W / sw) + 1;
-    const rows = Math.ceil(H / sh) + 2;
-    const phase = side === 'back' ? rep : 0;   // back swaps knit/purl columns
-    // shade the sunken purl columns darker for depth
-    for (let c = 0; c < cols; c++) {
-      const knitCol = ((c + phase) % (rep * 2)) < rep;
-      if (!knitCol) {
-        ctx.fillStyle = this._shadeColorCss(dyed, -0.30);
-        ctx.fillRect(c * sw, 0, sw, H);
-      }
-    }
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        const cx = c * sw + sw / 2, cy = H - (r * sh + sh / 2);
-        const knitCol = ((c + phase) % (rep * 2)) < rep;
-        if (knitCol) this._loopKnitV(ctx, cx, cy, sw, sh, yarnW, dyed, opts.sheen);
-        else         this._loopPurlBump(ctx, cx, cy, sw * 0.92, sh, yarnW, dyed, r % 2, -0.18);
-      }
-    }
-  }
+  // ── UNIVERSAL KNIT FIELD (jersey / rib / interlock / piqué) ──
+  _paintKnitField(ctx, W, H, side, opts, view) {
+    const dyed = opts.dyed, con = opts.construction;
+    const g = this._gridGeom(W, H, opts, view);
+    const xOf = (w) => (w - g.leftWaleF) * g.cellW + g.cellW / 2;
+    const yOf = (c) => H - ((c - g.botCourseF) * g.cellH + g.cellH / 2);
+    const w0 = Math.floor(g.leftWaleF) - 1, w1 = Math.ceil(g.leftWaleF + g.visW) + 1;
+    const c0 = Math.floor(g.botCourseF) - 1, c1 = Math.ceil(g.botCourseF + g.visC) + 1;
 
-  // ── INTERLOCK (smooth knit on BOTH faces, finer & denser) ──
-  _paintInterlock(ctx, W, H, sw, sh, yarnW, opts, side) {
-    const dyed = opts.dyed;
-    const cols = Math.ceil(W / sw) + 1;
-    const rows = Math.ceil(H / sh) + 2;
-    for (let r = 0; r < rows; r++)
-      for (let c = 0; c < cols; c++)
-        this._loopKnitV(ctx, c * sw + sw / 2, H - (r * sh + sh / 2), sw, sh, yarnW * 0.92, dyed, opts.sheen);
-  }
-
-  // ── PIQUÉ / LACOSTE (jersey ground + regular tuck dimples → textured grid) ──
-  _paintPique(ctx, W, H, sw, sh, yarnW, opts, side) {
-    const dyed = opts.dyed;
-    const cols = Math.ceil(W / sw) + 1;
-    const rows = Math.ceil(H / sh) + 2;
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        const cx = c * sw + sw / 2, cy = H - (r * sh + sh / 2);
-        // tuck dimple on a staggered 2×2 lattice
-        const dimple = ((r % 2) === 0 && (c % 2) === 0) || ((r % 2) === 1 && (c % 2) === 1);
-        if (side === 'front' && dimple) {
-          // recessed cell
-          ctx.save();
-          ctx.fillStyle = this._shadeColorCss(dyed, -0.22);
-          ctx.beginPath();
-          ctx.ellipse(cx, cy, sw * 0.42, sh * 0.42, 0, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.restore();
-          this._loopKnitV(ctx, cx, cy, sw * 0.86, sh * 0.8, yarnW * 0.9, dyed, opts.sheen);
-        } else {
-          this._loopKnitV(ctx, cx, cy, sw, sh, yarnW, dyed, opts.sheen);
+    // rib: shade the sunken purl wales for depth
+    if (con.type === 'rib') {
+      const rep = con.ribRepeat || 1;
+      const mod = (n, m) => ((n % m) + m) % m;
+      for (let w = w0; w <= w1; w++) {
+        const tok = this._tokenAt(w, 0, side, con);
+        if (tok === 'purl') {
+          ctx.fillStyle = this._shadeColorCss(dyed, -0.34);
+          ctx.fillRect(xOf(w) - g.cellW / 2, 0, g.cellW, H);
         }
       }
     }
-  }
 
-  // ── MESH / AIRTEX / POINTELLE — knit ground perforated with regular holes ──
-  _paintMesh(ctx, W, H, sw, sh, yarnW, opts, side) {
-    const dyed = opts.dyed;
-    // knit ground first
-    const cols = Math.ceil(W / sw) + 1;
-    const rows = Math.ceil(H / sh) + 2;
-    for (let r = 0; r < rows; r++)
-      for (let c = 0; c < cols; c++)
-        this._loopKnitV(ctx, c * sw + sw / 2, H - (r * sh + sh / 2), sw, sh, yarnW, dyed, opts.sheen);
-
-    // hole lattice — staggered rows, transfer-stitch eyelets
-    const hsX = sw * 2.4, hsY = sh * 2.6;
-    const holeShape = opts.construction.holeShape || 'round';
-    const rOut = Math.min(hsX, hsY) * 0.42;
-    for (let gy = 0, row = 0; gy < H + hsY; gy += hsY, row++) {
-      const offX = (row % 2) * hsX / 2;
-      for (let gx = 0; gx < W + hsX; gx += hsX) {
-        this._punchHole(ctx, gx + offX, gy, rOut, holeShape, dyed, yarnW);
+    // draw bottom-up so newer courses overlap older (correct intermesh stacking)
+    for (let c = c0; c <= c1; c++) {
+      for (let w = w0; w <= w1; w++) {
+        const tok = this._tokenAt(w, c, side, con);
+        const x = xOf(w), y = yOf(c);
+        if (tok === 'purl')      this._drawPurlLOD(ctx, x, y, g.cellW, g.cellH, dyed, opts);
+        else if (tok === 'tuck') this._drawTuckLOD(ctx, x, y, g.cellW, g.cellH, dyed, opts);
+        else                     this._drawKnitVLOD(ctx, x, y, g.cellW, g.cellH, dyed, opts);
       }
     }
-    this._overlayGrain(ctx, W, H);
+
+    // piqué honeycomb pillow relief on the technical face
+    if (con.type === 'pique' && side === 'front') this._overlayWaffle(ctx, W, H, g, dyed);
+  }
+
+  // ── single knit "V" with LEVEL-OF-DETAIL — the closer you zoom, the more
+  //    real loop anatomy appears: rounded yarn body, ply twist, the head of
+  //    the loop below crossing through (intermesh), dye absorption in crevices.
+  _drawKnitVLOD(ctx, cx, cy, cw, ch, dyed, opts) {
+    const lod = cw;
+    const yw = Math.max(1.1, cw * 0.30);
+    const base = `rgb(${dyed.r},${dyed.g},${dyed.b})`;
+    const hi = this._shadeColorCss(dyed, 0.26);
+    const dk = this._shadeColorCss(dyed, -0.34);
+    const core = this._shadeColorCss(dyed, -0.14);
+    const topY = cy - ch * 0.52, botY = cy + ch * 0.60;
+    const lx = cx - cw * 0.46, rx = cx + cw * 0.46;
+    const hY = topY + ch * 0.16;
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+    const legs = (lw, style, dx, dy) => {
+      ctx.strokeStyle = style; ctx.lineWidth = lw;
+      ctx.beginPath();
+      ctx.moveTo(lx + (dx || 0), hY + (dy || 0));
+      ctx.quadraticCurveTo(cx - cw * 0.27 + (dx || 0), cy + (dy || 0), cx + (dx || 0), botY + (dy || 0));
+      ctx.moveTo(rx + (dx || 0), hY + (dy || 0));
+      ctx.quadraticCurveTo(cx + cw * 0.27 + (dx || 0), cy + (dy || 0), cx + (dx || 0), botY + (dy || 0));
+      ctx.stroke();
+    };
+    const head = (lw, style, dy) => {
+      ctx.strokeStyle = style; ctx.lineWidth = lw;
+      ctx.beginPath();
+      ctx.moveTo(lx, hY + (dy || 0));
+      ctx.quadraticCurveTo(cx, topY - ch * 0.06 + (dy || 0), rx, hY + (dy || 0));
+      ctx.stroke();
+    };
+
+    // dark underside / cast shadow (gives roundness + depth)
+    legs(yw * 1.35, dk);
+    head(yw * 1.3, dk);
+    // yarn body
+    legs(yw, base);
+    head(yw * 0.95, base);
+    if (lod > 20) {            // cylindrical core shading
+      legs(yw * 0.5, core);
+    }
+    // top-left specular highlight (round yarn lit from upper-left)
+    legs(yw * (lod > 40 ? 0.26 : 0.32), hi, -yw * 0.16, -yw * 0.1);
+    head(yw * 0.3, hi, -yw * 0.12);
+
+    if (lod > 46) {
+      // intermesh: head of the loop BELOW crosses over this loop's bottom crook
+      ctx.strokeStyle = dk; ctx.lineWidth = yw * 0.9;
+      ctx.beginPath();
+      ctx.moveTo(cx - cw * 0.18, botY - ch * 0.04);
+      ctx.quadraticCurveTo(cx, botY + ch * 0.10, cx + cw * 0.18, botY - ch * 0.04);
+      ctx.stroke();
+      ctx.strokeStyle = base; ctx.lineWidth = yw * 0.6;
+      ctx.beginPath();
+      ctx.moveTo(cx - cw * 0.13, botY - ch * 0.02);
+      ctx.quadraticCurveTo(cx, botY + ch * 0.06, cx + cw * 0.13, botY - ch * 0.02);
+      ctx.stroke();
+
+      // ply twist — short diagonal fibre striations along the legs (combed cotton)
+      if (opts.fiberType === 'cotton' || opts.fiberType === 'modal' || opts.fiberType === 'viscose') {
+        ctx.save();
+        ctx.strokeStyle = this._shadeColorCss(dyed, 0.10);
+        ctx.lineWidth = Math.max(0.6, yw * 0.10);
+        ctx.globalAlpha = 0.5;
+        for (let t = 0.15; t < 0.95; t += 0.16) {
+          const ly = hY + (botY - hY) * t;
+          const lxp = lx + (cx - lx) * t;
+          ctx.beginPath();
+          ctx.moveTo(lxp - yw * 0.4, ly + yw * 0.3);
+          ctx.lineTo(lxp + yw * 0.4, ly - yw * 0.3);
+          const rxp = rx + (cx - rx) * t;
+          ctx.moveTo(rxp - yw * 0.4, ly - yw * 0.3);
+          ctx.lineTo(rxp + yw * 0.4, ly + yw * 0.3);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+    }
+
+    if (opts.sheen === 'high_sheen' && lod > 16) {
+      legs(yw * 0.12, 'rgba(255,255,255,0.30)', -yw * 0.1, -yw * 0.05);
+    }
+  }
+
+  // ── purl bump (technical back / rib purl wale) — horizontal nested ridges,
+  //    visually the OPPOSITE of the knit V columns. LOD adds depth & sheen.
+  _drawPurlLOD(ctx, cx, cy, cw, ch, dyed, opts) {
+    const lod = cw;
+    const yw = Math.max(1.2, cw * 0.34);
+    const base = this._shadeColorCss(dyed, -0.06);
+    const hi = this._shadeColorCss(dyed, 0.18);
+    const dk = this._shadeColorCss(dyed, -0.38);
+    ctx.lineCap = 'round';
+    // deep recess between bumps
+    ctx.strokeStyle = dk; ctx.lineWidth = yw * 1.4;
+    ctx.beginPath();
+    ctx.moveTo(cx - cw * 0.5, cy + ch * 0.20);
+    ctx.quadraticCurveTo(cx, cy + ch * 0.46, cx + cw * 0.5, cy + ch * 0.20);
+    ctx.stroke();
+    // the bump (a fat arc of yarn lying across the wale)
+    ctx.strokeStyle = base; ctx.lineWidth = yw * 1.18;
+    ctx.beginPath();
+    ctx.moveTo(cx - cw * 0.48, cy + ch * 0.06);
+    ctx.quadraticCurveTo(cx, cy - ch * 0.34, cx + cw * 0.48, cy + ch * 0.06);
+    ctx.stroke();
+    if (lod > 22) {           // crown highlight
+      ctx.strokeStyle = hi; ctx.lineWidth = yw * 0.42;
+      ctx.beginPath();
+      ctx.moveTo(cx - cw * 0.34, cy - ch * 0.04);
+      ctx.quadraticCurveTo(cx, cy - ch * 0.30, cx + cw * 0.34, cy - ch * 0.04);
+      ctx.stroke();
+    }
+    if (lod > 46) {           // the two legs disappearing under the next bump
+      ctx.strokeStyle = dk; ctx.lineWidth = yw * 0.55;
+      ctx.beginPath();
+      ctx.moveTo(cx - cw * 0.30, cy + ch * 0.06);
+      ctx.lineTo(cx - cw * 0.30, cy + ch * 0.30);
+      ctx.moveTo(cx + cw * 0.30, cy + ch * 0.06);
+      ctx.lineTo(cx + cw * 0.30, cy + ch * 0.30);
+      ctx.stroke();
+    }
+  }
+
+  // ── tuck cell (piqué) — a held loop, recessed below the knit plane ──
+  _drawTuckLOD(ctx, cx, cy, cw, ch, dyed, opts) {
+    // recessed shadow pocket
+    ctx.save();
+    const grd = ctx.createRadialGradient(cx, cy, cw * 0.1, cx, cy, cw * 0.55);
+    grd.addColorStop(0, this._shadeColorCss(dyed, -0.30));
+    grd.addColorStop(1, this._shadeColorCss(dyed, -0.10));
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, cw * 0.5, ch * 0.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    // a smaller held loop sitting inside
+    this._drawKnitVLOD(ctx, cx, cy + ch * 0.06, cw * 0.78, ch * 0.74, dyed, opts);
+  }
+
+  // ── honeycomb / waffle relief for piqué technical face ──
+  _overlayWaffle(ctx, W, H, g, dyed) {
+    const pw = g.cellW * 2, ph = g.cellH * 2;
+    if (pw < 8) return;
+    const xStart = -((g.leftWaleF % 2) * g.cellW) - pw;
+    const yStart = (H + ((g.botCourseF % 2) * g.cellH)) % ph - ph;
+    ctx.save();
+    for (let py = yStart; py < H + ph; py += ph) {
+      for (let px = xStart; px < W + pw; px += pw) {
+        const cx = px + pw / 2, cy = py + ph / 2;
+        // raised pillow highlight
+        const grd = ctx.createRadialGradient(cx - pw * 0.12, cy - ph * 0.12, pw * 0.05, cx, cy, pw * 0.6);
+        grd.addColorStop(0, 'rgba(255,255,255,0.13)');
+        grd.addColorStop(0.6, 'rgba(255,255,255,0.02)');
+        grd.addColorStop(1, 'rgba(0,0,0,0.16)');
+        ctx.fillStyle = grd;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, pw * 0.46, ph * 0.46, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    // dark grooves between pillows
+    ctx.strokeStyle = this._shadeColorCss(dyed, -0.40);
+    ctx.globalAlpha = 0.5;
+    ctx.lineWidth = Math.max(1, g.cellW * 0.18);
+    for (let px = xStart; px < W + pw; px += pw) {
+      ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, H); ctx.stroke();
+    }
+    for (let py = yStart; py < H + ph; py += ph) {
+      ctx.beginPath(); ctx.moveTo(0, py); ctx.lineTo(W, py); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // ── MESH / AIRTEX / POINTELLE — knit ground perforated with regular holes,
+  //    zoom-aware so the eyelets magnify with the loops. ──
+  _paintMeshField(ctx, W, H, side, opts, view) {
+    const dyed = opts.dyed;
+    const g = this._gridGeom(W, H, opts, view);
+    const xOf = (w) => (w - g.leftWaleF) * g.cellW + g.cellW / 2;
+    const yOf = (c) => H - ((c - g.botCourseF) * g.cellH + g.cellH / 2);
+    const w0 = Math.floor(g.leftWaleF) - 1, w1 = Math.ceil(g.leftWaleF + g.visW) + 1;
+    const c0 = Math.floor(g.botCourseF) - 1, c1 = Math.ceil(g.botCourseF + g.visC) + 1;
+
+    // plain knit ground (front V / back purl)
+    for (let c = c0; c <= c1; c++)
+      for (let w = w0; w <= w1; w++) {
+        if (side === 'back') this._drawPurlLOD(ctx, xOf(w), yOf(c), g.cellW, g.cellH, dyed, opts);
+        else                 this._drawKnitVLOD(ctx, xOf(w), yOf(c), g.cellW, g.cellH, dyed, opts);
+      }
+
+    // hole lattice locked to the fabric grid (stable while panning/zooming)
+    const stepW = 2.4, stepC = 2.6;
+    const holeShape = opts.construction.holeShape || 'round';
+    const rOut = Math.min(g.cellW * stepW, g.cellH * stepC) * 0.42;
+    const yw = Math.max(1.1, g.cellW * 0.30);
+    const i0 = Math.floor(g.leftWaleF / stepW) - 1, i1 = Math.ceil((g.leftWaleF + g.visW) / stepW) + 1;
+    const j0 = Math.floor(g.botCourseF / stepC) - 1, j1 = Math.ceil((g.botCourseF + g.visC) / stepC) + 1;
+    for (let j = j0; j <= j1; j++) {
+      for (let i = i0; i <= i1; i++) {
+        const waleF = i * stepW + (((j % 2) + 2) % 2) * stepW / 2;
+        const courseF = j * stepC;
+        this._punchHole(ctx, xOf(waleF) - g.cellW / 2, yOf(courseF) + g.cellH / 2, rOut, holeShape, dyed, yw);
+      }
+    }
   }
 
   _punchHole(ctx, cx, cy, r, shape, dyed, yarnW) {
@@ -1260,29 +1537,32 @@ class FabricVisualizer {
     }
   }
 
-  // ── TRICOT (warp knit) — vertical wales of fine zig-zag loops ──
-  _paintTricot(ctx, W, H, sw, sh, yarnW, opts, side) {
+  // ── TRICOT (warp knit) — vertical wales of fine zig-zag loops (zoom-aware) ──
+  _paintTricotField(ctx, W, H, side, opts, view) {
     const dyed = opts.dyed;
-    const cols = Math.ceil(W / sw) + 1;
+    const g = this._gridGeom(W, H, opts, view);
+    const sw = g.cellW, sh = g.cellH;
+    const yarnW = Math.max(1.1, sw * 0.30);
     const base = `rgb(${dyed.r},${dyed.g},${dyed.b})`;
-    const hi = this._shadeColorCss(dyed, 0.20), dk = this._shadeColorCss(dyed, -0.24);
+    const hi = this._shadeColorCss(dyed, 0.20), dk = this._shadeColorCss(dyed, -0.26);
+    const xOf = (w) => (w - g.leftWaleF) * sw + sw / 2;
+    const yOff = ((g.botCourseF % 1) + 1) % 1 * sh;
+    const w0 = Math.floor(g.leftWaleF) - 1, w1 = Math.ceil(g.leftWaleF + g.visW) + 1;
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    for (let c = 0; c < cols; c++) {
-      const cx = c * sw + sw / 2;
-      // technical face: gentle vertical wale ribs; back: diagonal underlap shadows
+    for (let w = w0; w <= w1; w++) {
+      const cx = xOf(w);
       ctx.strokeStyle = side === 'back' ? dk : base;
       ctx.lineWidth = yarnW;
       ctx.beginPath();
-      for (let y = -sh; y < H + sh; y += sh) {
-        const wob = (side === 'back' ? sw * 0.42 : sw * 0.2);
+      for (let y = -sh - yOff; y < H + sh; y += sh) {
+        const wob = side === 'back' ? sw * 0.42 : sw * 0.22;
         ctx.moveTo(cx - wob, y);
         ctx.quadraticCurveTo(cx, y + sh * 0.5, cx + wob, y + sh);
       }
       ctx.stroke();
-      // highlight rib
       ctx.strokeStyle = hi; ctx.lineWidth = yarnW * 0.32;
       ctx.beginPath();
-      for (let y = -sh; y < H + sh; y += sh) {
+      for (let y = -sh - yOff; y < H + sh; y += sh) {
         ctx.moveTo(cx - sw * 0.06, y);
         ctx.quadraticCurveTo(cx + sw * 0.04, y + sh * 0.5, cx - sw * 0.06, y + sh);
       }
@@ -1440,6 +1720,7 @@ class FabricVisualizer {
         ${con.brush || con.pile ? '<button class="ka3d-btn" data-act="brush" title="Brushed back">Brush</button>' : ''}
         <span class="ka3d-sep"></span>
         <button class="ka3d-btn" data-act="zoomout">–</button>
+        <span class="ka3d-zoom">1.7×</span>
         <button class="ka3d-btn" data-act="zoomin">+</button>
         <button class="ka3d-btn" data-act="reset" title="Reset view">⟳</button>
       </div>
@@ -1451,7 +1732,7 @@ class FabricVisualizer {
           <div class="ka3d-edge ka3d-edge-b"></div>
         </div>
       </div>
-      <div class="ka3d-hint">Drag to rotate · scroll to zoom · flip to inspect the back</div>
+      <div class="ka3d-hint">Drag to rotate &amp; flip · scroll / click a point to zoom into the structure</div>
     `;
     wrap.appendChild(stage);
     this._injectThreeCss();
@@ -1463,40 +1744,54 @@ class FabricVisualizer {
       c.style.width = W + 'px'; c.style.height = H + 'px';
     });
 
-    const fctx = frontC.getContext('2d'); fctx.scale(SS, SS);
-    const bctx = backC.getContext('2d');  bctx.scale(SS, SS);
-    this._paintFabricFace(fctx, W, H, 'front', opts);
-    this._paintFabricFace(bctx, W, H, 'back',  opts);
+    const fctx = frontC.getContext('2d');
+    const bctx = backC.getContext('2d');
     this.canvases.threed = frontC;
 
     const cube = stage.querySelector('.ka3d-cube');
     const viewport = stage.querySelector('.ka3d-viewport');
     cube.style.setProperty('--thick', THICK + 'px');
 
+    // init macro state (zoom here drives LOD re-render, NOT a css stretch)
+    const t = this._three;
+    if (t.fu == null) t.fu = 0.5;
+    if (t.fv == null) t.fv = 0.5;
+    if (!t.zoom || t.zoom < 1) t.zoom = 1.7;
+    const MIN = 1, MAX = 9;
+
+    const view = () => ({ zoom: t.zoom, fu: t.fu, fv: t.fv });
+    const repaint = () => {
+      fctx.setTransform(SS, 0, 0, SS, 0, 0);
+      bctx.setTransform(SS, 0, 0, SS, 0, 0);
+      this._paintFabricFace(fctx, W, H, 'front', opts, view());
+      this._paintFabricFace(bctx, W, H, 'back', opts, view());
+      const zEl = stage.querySelector('.ka3d-zoom'); if (zEl) zEl.textContent = t.zoom.toFixed(1) + '×';
+    };
     const apply = () => {
-      const t = this._three;
+      // rotation only — zoom is baked into the re-rendered faces (true macro lens)
       cube.style.transform =
-        `translateZ(-${THICK / 2}px) rotateX(${t.rotX}deg) rotateY(${t.rotY}deg) scale(${t.zoom})`;
+        `translateZ(-${THICK / 2}px) rotateX(${t.rotX}deg) rotateY(${t.rotY}deg)`;
       const back = ((t.rotY % 360) + 360) % 360;
       const showingBack = back > 90 && back < 270;
       stage.querySelector('[data-act="front"]').classList.toggle('active', !showingBack);
       stage.querySelector('[data-act="back"]').classList.toggle('active', showingBack);
     };
-    this._three.painted = true;
+    t.painted = true;
+    repaint();
     apply();
 
-    // drag-rotate
-    const down = (e) => { const t = this._three; t.dragging = true; const p = e.touches ? e.touches[0] : e; t.lastX = p.clientX; t.lastY = p.clientY; viewport.classList.add('grabbing'); };
+    // drag — rotate when near the edges intent? Use SHIFT/secondary? Simplest:
+    // left-drag rotates; this matches the "turn the swatch over" mental model.
+    const down = (e) => { t.dragging = true; const p = e.touches ? e.touches[0] : e; t.lastX = p.clientX; t.lastY = p.clientY; viewport.classList.add('grabbing'); };
     const move = (e) => {
-      const t = this._three; if (!t.dragging) return;
+      if (!t.dragging) return;
       const p = e.touches ? e.touches[0] : e;
       t.rotY += (p.clientX - t.lastX) * 0.6;
-      t.rotX = Math.max(-60, Math.min(60, t.rotX - (p.clientY - t.lastY) * 0.4));
+      t.rotX = Math.max(-62, Math.min(62, t.rotX - (p.clientY - t.lastY) * 0.4));
       t.lastX = p.clientX; t.lastY = p.clientY; apply();
       if (e.cancelable) e.preventDefault();
     };
-    const up = () => { this._three.dragging = false; viewport.classList.remove('grabbing'); };
-    // remove any window listeners from a previous 3D render (avoid leaks/double-rotate)
+    const up = () => { t.dragging = false; viewport.classList.remove('grabbing'); };
     if (this._threeHandlers) {
       window.removeEventListener('mousemove', this._threeHandlers.move);
       window.removeEventListener('mouseup', this._threeHandlers.up);
@@ -1508,27 +1803,56 @@ class FabricVisualizer {
     viewport.addEventListener('touchstart', down, { passive: true });
     viewport.addEventListener('touchmove', move, { passive: false });
     viewport.addEventListener('touchend', up);
+
+    // wheel zooms the macro lens (re-renders detail) toward the cursor's face point
+    const faceRel = (e, faceEl) => {
+      const r = faceEl.getBoundingClientRect();
+      return { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H };
+    };
     viewport.addEventListener('wheel', (e) => {
       e.preventDefault();
-      const t = this._three;
-      t.zoom = Math.max(0.6, Math.min(3, t.zoom * (e.deltaY < 0 ? 1.12 : 0.89)));
-      apply();
+      const showingBack = (() => { const b = ((t.rotY % 360) + 360) % 360; return b > 90 && b < 270; })();
+      const faceEl = showingBack ? backC : frontC;
+      const p = faceRel(e, faceEl);
+      const g0 = this._gridGeom(W, H, opts, view());
+      const waleF = g0.leftWaleF + p.x / g0.cellW, courseF = g0.botCourseF + (H - p.y) / g0.cellH;
+      t.zoom = Math.max(MIN, Math.min(MAX, t.zoom * (e.deltaY < 0 ? 1.16 : 0.86)));
+      const g1 = this._gridGeom(W, H, opts, view());
+      t.fu = Math.max(0.04, Math.min(0.96, (waleF - p.x / g1.cellW + g1.visW / 2) / this._TOTAL_W));
+      t.fv = Math.max(0.04, Math.min(0.96, (courseF - (H - p.y) / g1.cellH + g1.visC / 2) / this._TOTAL_C));
+      repaint();
     }, { passive: false });
+
+    // click a face → focus that point and magnify (macro)
+    const faceClick = (e, faceEl) => {
+      if (t.dragging) return;
+      const p = faceRel(e, faceEl);
+      const g0 = this._gridGeom(W, H, opts, view());
+      const waleF = g0.leftWaleF + p.x / g0.cellW, courseF = g0.botCourseF + (H - p.y) / g0.cellH;
+      t.fu = Math.max(0.04, Math.min(0.96, waleF / this._TOTAL_W));
+      t.fv = Math.max(0.04, Math.min(0.96, courseF / this._TOTAL_C));
+      t.zoom = t.zoom >= MAX ? 1.7 : Math.min(MAX, t.zoom * 1.9);
+      repaint();
+    };
+    let downXY = null;
+    frontC.addEventListener('mousedown', (e) => { downXY = [e.clientX, e.clientY]; });
+    backC.addEventListener('mousedown', (e) => { downXY = [e.clientX, e.clientY]; });
+    frontC.addEventListener('click', (e) => { if (downXY && Math.abs(e.clientX - downXY[0]) + Math.abs(e.clientY - downXY[1]) < 4) faceClick(e, frontC); });
+    backC.addEventListener('click', (e) => { if (downXY && Math.abs(e.clientX - downXY[0]) + Math.abs(e.clientY - downXY[1]) < 4) faceClick(e, backC); });
 
     // buttons
     stage.querySelector('.ka3d-controls').addEventListener('click', (e) => {
       const act = e.target.getAttribute('data-act'); if (!act) return;
-      const t = this._three;
       if (act === 'front') { t.rotY = 0; t.rotX = -14; }
       else if (act === 'back') { t.rotY = 180; t.rotX = -14; }
-      else if (act === 'zoomin') t.zoom = Math.min(3, t.zoom * 1.18);
-      else if (act === 'zoomout') t.zoom = Math.max(0.6, t.zoom * 0.85);
-      else if (act === 'reset') { t.rotY = 0; t.rotX = -14; t.zoom = 1; }
+      else if (act === 'zoomin') { t.zoom = Math.min(MAX, t.zoom * 1.3); repaint(); }
+      else if (act === 'zoomout') { t.zoom = Math.max(MIN, t.zoom * 0.77); repaint(); }
+      else if (act === 'reset') { t.rotY = 0; t.rotX = -14; t.zoom = 1.7; t.fu = 0.5; t.fv = 0.5; repaint(); }
       else if (act === 'brush') {
         t.brush = !t.brush;
         e.target.classList.toggle('active', t.brush);
-        this._paintFabricFace(bctx, W, H, 'back', opts);   // repaint brushed back
-        if ((((t.rotY % 360) + 360) % 360) <= 90) { t.rotY = 180; } // flip to show it
+        if ((((t.rotY % 360) + 360) % 360) <= 90) t.rotY = 180;  // flip to show back
+        repaint();
       }
       apply();
     });
@@ -1542,10 +1866,12 @@ class FabricVisualizer {
     .ka3d-stage{display:flex;flex-direction:column;align-items:center;gap:10px;width:100%;padding:6px 0;}
     .ka3d-controls{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:center;}
     .ka3d-btn{font:600 11px/1 var(--mono,monospace);padding:6px 11px;border-radius:7px;cursor:pointer;
-      border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.04);color:var(--t2,#aab);transition:all .15s;}
-    .ka3d-btn:hover{border-color:rgba(0,255,178,.4);color:var(--a1,#0fb);}
-    .ka3d-btn.active{background:rgba(0,255,178,.12);border-color:rgba(0,255,178,.5);color:var(--a1,#0fb);}
-    .ka3d-sep{width:1px;height:18px;background:rgba(255,255,255,.12);margin:0 3px;}
+      border:1px solid rgba(0,0,0,.14);background:#fff;color:#333;transition:all .15s;}
+    .ka3d-btn:hover{border-color:#5b8def;color:#2563eb;}
+    .ka3d-btn.active{background:#eaf1ff;border-color:#5b8def;color:#2563eb;}
+    .ka3d-sep{width:1px;height:18px;background:rgba(0,0,0,.12);margin:0 3px;}
+    .ka3d-zoom{font:600 11px var(--mono,monospace);color:#2563eb;min-width:36px;text-align:center;}
+    .ka3d-face{cursor:zoom-in;}
     .ka3d-viewport{width:100%;max-width:520px;height:380px;display:flex;align-items:center;justify-content:center;
       perspective:1100px;cursor:grab;overflow:hidden;
       background:radial-gradient(ellipse at 50% 38%,rgba(255,255,255,.05),rgba(0,0,0,.28));border-radius:12px;}

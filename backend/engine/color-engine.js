@@ -369,6 +369,28 @@ function pageGroup(code) {
 // ============================================================
 
 /**
+ * Find the closest EXISTING TCX entry to a parsed "NN-NNNN" code when the
+ * exact code is not in the (partial) database. Prefers the same page group
+ * (first two digits), then minimal numeric distance on the last four digits.
+ * Returns { entry, approximate:true } or null.
+ */
+function nearestTCXByCode(parsedCode) {
+  if (!parsedCode) return null;
+  const m = parsedCode.match(/^(\d{2})-(\d{4})$/);
+  if (!m) return null;
+  const pg = m[1], suffix = parseInt(m[2], 10);
+  let best = null, bestDist = Infinity, bestSamePage = false;
+  for (const entry of TCX_COLORS) {
+    const em = entry.c.match(/^(\d{2})-(\d{4})$/);
+    if (!em) continue;
+    const samePage = em[1] === pg;
+    const dist = Math.abs(parseInt(em[2], 10) - suffix) + (samePage ? 0 : 5000) + Math.abs(parseInt(em[1], 10) - parseInt(pg, 10)) * 200;
+    if (dist < bestDist) { bestDist = dist; best = entry; bestSamePage = samePage; }
+  }
+  return best ? { entry: best, approximate: true, same_page: bestSamePage } : null;
+}
+
+/**
  * Look up a TCX color by its code.
  * Returns FULL visualization-ready data.
  */
@@ -1339,23 +1361,31 @@ function getColorPreview(input) {
   // TCX code
   const tcxCode = parseTCXCode(input);
   if (tcxCode) {
-    const entry = _byCode[tcxCode];
+    let entry = _byCode[tcxCode];
+    let approximate = false;
+    if (!entry) {
+      const near = nearestTCXByCode(tcxCode);
+      if (near) { entry = near.entry; approximate = true; }
+    }
     if (entry) {
       const rgb = hexToRgb(entry.h);
       const hsl = rgb ? rgbToHsl(rgb[0], rgb[1], rgb[2]) : null;
       const lab = rgb ? rgbToLab(rgb[0], rgb[1], rgb[2]) : null;
-      
+
       const isTPG = input.toUpperCase().includes('TPG');
       const isTPX = input.toUpperCase().includes('TPX');
       const suffix = isTPG ? 'TPG' : isTPX ? 'TPX' : 'TCX';
 
       return {
         hex: entry.h, rgb: rgb || [], hsl, lab: lab ? { L: _r(lab.L), a: _r(lab.a), b: _r(lab.b) } : null,
-        name: entry.n, tcx_code: entry.c,
-        tcx_label: `PANTONE ${entry.c} ${suffix}`,
+        name: approximate ? `${entry.n} (≈ ${tcxCode})` : entry.n,
+        tcx_code: approximate ? tcxCode : entry.c,
+        matched_code: entry.c,
+        approximate,
+        tcx_label: `PANTONE ${tcxCode} ${suffix}${approximate ? ` · nearest ${entry.c}` : ''}`,
         family: _detectFamily(entry.h),
         temperature: _colorTemperature(hsl),
-        shade_tier: classifyFromTCX(tcxCode).shade,
+        shade_tier: classifyFromHex(entry.h).shade,
         swatch_css: `background-color: ${entry.h};`,
         text_color: _contrastTextColor(rgb),
         contrast_on_white: contrastRatio(entry.h, '#FFFFFF'),
