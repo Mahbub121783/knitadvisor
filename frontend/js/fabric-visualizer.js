@@ -1781,7 +1781,7 @@ class FabricVisualizer {
 
     const opts = this._faceOpts();
     const con = opts.construction;
-    const WEBGL_TYPES = ['jersey', 'rib', 'interlock', 'pique'];
+    const WEBGL_TYPES = ['jersey', 'rib', 'interlock', 'pique', 'terry', 'fleece'];
     const webglOk = (() => {
       try { return !!window.WebGLRenderingContext && !!document.createElement('canvas').getContext('webgl'); }
       catch (_) { return false; }
@@ -1818,7 +1818,7 @@ class FabricVisualizer {
       tf: opts.tf, fiberType: opts.fiberType, sheen: opts.sheen, sample,
     };
 
-    import('/js/fabric-3d.js?v=20260607b').then(({ Fabric3D }) => {
+    import('/js/fabric-3d.js?v=20260607c').then(({ Fabric3D }) => {
       if (this._destroyed || this.activeTab !== 'threed') return;
       if (this._fabric3d) { try { this._fabric3d.dispose(); } catch (_) {} }
       this._fabric3d = new Fabric3D();
