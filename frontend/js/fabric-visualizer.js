@@ -2116,26 +2116,36 @@ class FabricVisualizer {
       return;
     }
 
-    // 3) Fall back to shade-mode synthesis.
+    // 3) Fall back to shade-mode synthesis — representative dyed colours that
+    //    MATCH the shade swatches shown in the input form (so a shade selection
+    //    looks like a real dyed cloth, not a grey blob).
     const shadeRaw = ((this.result.input || {}).color_shade
       || (this.result.input || {}).effective_shade
-      || (this.result.color || {}).shade || 'medium').toString().toLowerCase();
+      || (this.result.color || {}).shade || 'light_medium').toString().toLowerCase();
 
-    let L;
-    if (/black|dark|navy|deep|charcoal/.test(shadeRaw))            L = 0.16;
-    else if (/light|white|pastel|pale|sky|cream/.test(shadeRaw))  L = 0.80;
-    else if (/fluor|neon|bright/.test(shadeRaw))                  L = 0.62;
-    else                                                          L = 0.44;
-
-    let baseHue = /fluor|neon/.test(shadeRaw)
-      ? { r: 180, g: 230, b: 40 }
-      : { r: 120, g: 124, b: 134 };
-
-    const rgb = this._applyLightness(baseHue, L);
+    const SHADE_HEX = {
+      black: '#1a1a1a',
+      dark_navy: '#1f2d5c', dark: '#1f2d5c', navy: '#1f2d5c',
+      light_medium: '#3f7fc4', medium: '#3f7fc4', light: '#9cc2e6',
+      fluorescent: '#b6ff1a', fluoro: '#b6ff1a', neon: '#b6ff1a',
+      white_melange: '#eceae4', white: '#eceae4',
+      melange: '#8c8c8c', heather: '#8c8c8c', grey: '#8c8c8c', gray: '#8c8c8c',
+    };
+    let hex = SHADE_HEX[shadeRaw];
+    if (!hex) {
+      // keyword scan for free-text shades
+      if (/black|jet|ebony/.test(shadeRaw)) hex = SHADE_HEX.black;
+      else if (/navy|dark|deep|charcoal|maroon/.test(shadeRaw)) hex = SHADE_HEX.dark_navy;
+      else if (/fluor|neon|bright|electric/.test(shadeRaw)) hex = SHADE_HEX.fluorescent;
+      else if (/white|ecru|ivory|cream|snow|optic/.test(shadeRaw)) hex = SHADE_HEX.white_melange;
+      else if (/melange|heather|marl|grey|gray/.test(shadeRaw)) hex = SHADE_HEX.melange;
+      else hex = SHADE_HEX.light_medium;
+    }
+    const rgb = this._hexToRgb(hex);
 
     const fiber = this._classifyFiber();
-    if (fiber === 'cotton') { rgb.r += 6; rgb.b -= 4; }
-    if (fiber === 'polyester' || fiber === 'nylon') { rgb.b += 6; }
+    if (fiber === 'cotton') { rgb.r += 4; rgb.b -= 3; }
+    if (fiber === 'polyester' || fiber === 'nylon') { rgb.b += 5; }
 
     this._dyedColor = {
       r: Math.max(0, Math.min(255, Math.round(rgb.r))),

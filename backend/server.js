@@ -59,7 +59,20 @@ app.use('/admin', adminRoutes);
 app.use('/emergency', emergencyRoutes);
 
 // Static frontend (served by Express in dev, Apache in production)
-app.use(express.static(path.join(__dirname, '..', 'frontend')));
+// IMPORTANT: HTML must never be heuristically cached, otherwise a stale
+// index.html keeps running an old inline script and new front-end logic
+// (e.g. the colour-engine input) silently never reaches the backend.
+app.use(express.static(path.join(__dirname, '..', 'frontend'), {
+  etag: true,
+  lastModified: true,
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    }
+  },
+}));
 
 // Health check
 app.get('/health', (req, res) => {
