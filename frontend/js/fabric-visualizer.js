@@ -1229,7 +1229,11 @@ class FabricVisualizer {
     else if (con.type === 'rib')  walesZ1 *= 0.8;
     else if (con.type === 'pique') walesZ1 *= 0.85;
     const cellW = (W / walesZ1) * view.zoom;
-    const aspect = con.type === 'rib' ? 0.98 : con.type === 'pique' ? 1.0 : 0.82;
+    // loop elongation from tightness — a slacker fabric (low TF / long stitch
+    // length) has taller, more open loops; a tight fabric has short dense loops.
+    const tf = typeof opts.tf === 'number' ? opts.tf : 14;
+    const elong = Math.max(0.72, Math.min(1.0 + (14 - tf) * 0.028, 1.18));
+    const aspect = (con.type === 'rib' ? 0.98 : con.type === 'pique' ? 1.0 : 0.82) * elong;
     const cellH = cellW * aspect;
     const visW = W / cellW, visC = H / cellH;
     const leftWaleF = view.fu * this._TOTAL_W - visW / 2;
@@ -1272,117 +1276,118 @@ class FabricVisualizer {
     const yOf = (c) => H - ((c - g.botCourseF) * g.cellH + g.cellH / 2);
     const w0 = Math.floor(g.leftWaleF) - 1, w1 = Math.ceil(g.leftWaleF + g.visW) + 1;
     const c0 = Math.floor(g.botCourseF) - 1, c1 = Math.ceil(g.botCourseF + g.visC) + 1;
+    const cw = g.cellW, ch = g.cellH;
+    const yw = this._yarnWidth(cw, opts);
 
     // rib: shade the sunken purl wales for depth
     if (con.type === 'rib') {
-      const rep = con.ribRepeat || 1;
-      const mod = (n, m) => ((n % m) + m) % m;
       for (let w = w0; w <= w1; w++) {
-        const tok = this._tokenAt(w, 0, side, con);
-        if (tok === 'purl') {
+        if (this._tokenAt(w, 0, side, con) === 'purl') {
           ctx.fillStyle = this._shadeColorCss(dyed, -0.34);
-          ctx.fillRect(xOf(w) - g.cellW / 2, 0, g.cellW, H);
+          ctx.fillRect(xOf(w) - cw / 2, 0, cw, H);
         }
       }
     }
 
-    // draw bottom-up so newer courses overlap older (correct intermesh stacking)
+    // collect knit cells; purl/tuck are self-contained and drawn first (recessed)
+    const knit = [];
     for (let c = c0; c <= c1; c++) {
       for (let w = w0; w <= w1; w++) {
         const tok = this._tokenAt(w, c, side, con);
         const x = xOf(w), y = yOf(c);
-        if (tok === 'purl')      this._drawPurlLOD(ctx, x, y, g.cellW, g.cellH, dyed, opts);
-        else if (tok === 'tuck') this._drawTuckLOD(ctx, x, y, g.cellW, g.cellH, dyed, opts);
-        else                     this._drawKnitVLOD(ctx, x, y, g.cellW, g.cellH, dyed, opts);
+        if (tok === 'purl')      this._drawPurlLOD(ctx, x, y, cw, ch, dyed, opts);
+        else if (tok === 'tuck') this._drawTuckLOD(ctx, x, y, cw, ch, dyed, opts);
+        else                     knit.push([x, y]);
       }
     }
+
+    // TWO-PASS interlocking loops → correct over/under intermesh:
+    //   pass 1 = all loop LEGS (these dip behind the head of the loop above)
+    //   pass 2 = all loop HEADS on top (so each head clasps the legs above it)
+    for (const [x, y] of knit) this._strokeYarn(ctx, (dx, dy) => this._knitLegsPath(ctx, x, y, cw, ch, dx, dy), yw, dyed, opts);
+    for (const [x, y] of knit) this._strokeYarn(ctx, (dx, dy) => this._knitHeadPath(ctx, x, y, cw, ch, dx, dy), yw * 0.96, dyed, opts);
+
+    // fine fibre/ply detail only when zoomed enough to see it
+    if (cw > 44 && (opts.fiberType === 'cotton' || opts.fiberType === 'modal' || opts.fiberType === 'viscose'))
+      for (const [x, y] of knit) this._plyTwist(ctx, x, y, cw, ch, yw, dyed);
 
     // piqué honeycomb pillow relief on the technical face
     if (con.type === 'pique' && side === 'front') this._overlayWaffle(ctx, W, H, g, dyed);
   }
 
-  // ── single knit "V" with LEVEL-OF-DETAIL — the closer you zoom, the more
-  //    real loop anatomy appears: rounded yarn body, ply twist, the head of
-  //    the loop below crossing through (intermesh), dye absorption in crevices.
-  _drawKnitVLOD(ctx, cx, cy, cw, ch, dyed, opts) {
-    const lod = cw;
-    const yw = Math.max(1.1, cw * 0.30);
-    const base = `rgb(${dyed.r},${dyed.g},${dyed.b})`;
-    const hi = this._shadeColorCss(dyed, 0.26);
-    const dk = this._shadeColorCss(dyed, -0.34);
-    const core = this._shadeColorCss(dyed, -0.14);
-    const topY = cy - ch * 0.52, botY = cy + ch * 0.60;
-    const lx = cx - cw * 0.46, rx = cx + cw * 0.46;
-    const hY = topY + ch * 0.16;
+  // yarn line width from tightness factor (tighter cloth → fuller coverage)
+  _yarnWidth(cw, opts) {
+    const tf = typeof opts.tf === 'number' ? opts.tf : 14;
+    const cover = Math.max(0.24, Math.min(0.30 + (tf - 14) * 0.013, 0.40));
+    return Math.max(1.0, cw * cover);
+  }
+
+  // legs of the knit loop: two arms from the top shoulders down to the bottom
+  // point (which is pulled through the loop below). Forms the stockinette "V".
+  _knitLegsPath(ctx, cx, cy, cw, ch, dx, dy) {
+    dx = dx || 0; dy = dy || 0;
+    const sx = cw * 0.46, shY = cy - ch * 0.34 + dy, botY = cy + ch * 0.58 + dy;
+    ctx.moveTo(cx - sx + dx, shY);
+    ctx.bezierCurveTo(cx - sx + dx, cy - ch * 0.02 + dy, cx - cw * 0.16 + dx, cy + ch * 0.30 + dy, cx + dx, botY);
+    ctx.moveTo(cx + sx + dx, shY);
+    ctx.bezierCurveTo(cx + sx + dx, cy - ch * 0.02 + dy, cx + cw * 0.16 + dx, cy + ch * 0.30 + dy, cx + dx, botY);
+  }
+
+  // head of the knit loop: the top arch connecting the two shoulders. Drawn on
+  // top of the legs so it clasps the loop above (the real intermesh crossing).
+  _knitHeadPath(ctx, cx, cy, cw, ch, dx, dy) {
+    dx = dx || 0; dy = dy || 0;
+    const sx = cw * 0.46, shY = cy - ch * 0.34 + dy;
+    ctx.moveTo(cx - sx + dx, shY);
+    ctx.bezierCurveTo(cx - sx * 0.9 + dx, cy - ch * 0.74 + dy, cx + sx * 0.9 + dx, cy - ch * 0.74 + dy, cx + sx + dx, shY);
+  }
+
+  // round-yarn stroke: cast shadow + body + core shade + top-left specular,
+  // so the yarn reads as a lit cylinder rather than a flat line.
+  _strokeYarn(ctx, build, yw, dyed, opts) {
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-
-    const legs = (lw, style, dx, dy) => {
-      ctx.strokeStyle = style; ctx.lineWidth = lw;
-      ctx.beginPath();
-      ctx.moveTo(lx + (dx || 0), hY + (dy || 0));
-      ctx.quadraticCurveTo(cx - cw * 0.27 + (dx || 0), cy + (dy || 0), cx + (dx || 0), botY + (dy || 0));
-      ctx.moveTo(rx + (dx || 0), hY + (dy || 0));
-      ctx.quadraticCurveTo(cx + cw * 0.27 + (dx || 0), cy + (dy || 0), cx + (dx || 0), botY + (dy || 0));
-      ctx.stroke();
-    };
-    const head = (lw, style, dy) => {
-      ctx.strokeStyle = style; ctx.lineWidth = lw;
-      ctx.beginPath();
-      ctx.moveTo(lx, hY + (dy || 0));
-      ctx.quadraticCurveTo(cx, topY - ch * 0.06 + (dy || 0), rx, hY + (dy || 0));
-      ctx.stroke();
-    };
-
-    // dark underside / cast shadow (gives roundness + depth)
-    legs(yw * 1.35, dk);
-    head(yw * 1.3, dk);
+    // contact shadow (down-right) — gives the loop depth against the ground
+    ctx.strokeStyle = this._shadeColorCss(dyed, -0.42); ctx.lineWidth = yw * 1.32;
+    ctx.beginPath(); build(yw * 0.10, yw * 0.18); ctx.stroke();
     // yarn body
-    legs(yw, base);
-    head(yw * 0.95, base);
-    if (lod > 20) {            // cylindrical core shading
-      legs(yw * 0.5, core);
+    ctx.strokeStyle = `rgb(${dyed.r},${dyed.g},${dyed.b})`; ctx.lineWidth = yw;
+    ctx.beginPath(); build(0, 0); ctx.stroke();
+    if (yw < 1.8) return;                 // tiny loops (zoomed out): keep it cheap & crisp
+    // lower-right core shade for tube roundness
+    ctx.strokeStyle = this._shadeColorCss(dyed, -0.18); ctx.lineWidth = yw * 0.46;
+    ctx.beginPath(); build(yw * 0.13, yw * 0.13); ctx.stroke();
+    // upper-left specular highlight
+    ctx.strokeStyle = this._shadeColorCss(dyed, 0.30); ctx.lineWidth = yw * 0.34;
+    ctx.beginPath(); build(-yw * 0.17, -yw * 0.15); ctx.stroke();
+    if (opts.sheen === 'high_sheen') {
+      ctx.strokeStyle = 'rgba(255,255,255,0.32)'; ctx.lineWidth = yw * 0.12;
+      ctx.beginPath(); build(-yw * 0.2, -yw * 0.17); ctx.stroke();
     }
-    // top-left specular highlight (round yarn lit from upper-left)
-    legs(yw * (lod > 40 ? 0.26 : 0.32), hi, -yw * 0.16, -yw * 0.1);
-    head(yw * 0.3, hi, -yw * 0.12);
+  }
 
-    if (lod > 46) {
-      // intermesh: head of the loop BELOW crosses over this loop's bottom crook
-      ctx.strokeStyle = dk; ctx.lineWidth = yw * 0.9;
+  // short diagonal fibre striations along the legs (combed-cotton ply twist)
+  _plyTwist(ctx, cx, cy, cw, ch, yw, dyed) {
+    ctx.save();
+    ctx.strokeStyle = this._shadeColorCss(dyed, 0.12);
+    ctx.lineWidth = Math.max(0.5, yw * 0.09);
+    ctx.globalAlpha = 0.45;
+    const sx = cw * 0.46, shY = cy - ch * 0.34, botY = cy + ch * 0.58;
+    for (let t = 0.18; t < 0.92; t += 0.14) {
+      const lxp = (cx - sx) + (cx - (cx - sx)) * t, ly = shY + (botY - shY) * t;
       ctx.beginPath();
-      ctx.moveTo(cx - cw * 0.18, botY - ch * 0.04);
-      ctx.quadraticCurveTo(cx, botY + ch * 0.10, cx + cw * 0.18, botY - ch * 0.04);
+      ctx.moveTo(lxp - yw * 0.4, ly + yw * 0.3); ctx.lineTo(lxp + yw * 0.4, ly - yw * 0.3);
+      const rxp = (cx + sx) + (cx - (cx + sx)) * t;
+      ctx.moveTo(rxp - yw * 0.4, ly - yw * 0.3); ctx.lineTo(rxp + yw * 0.4, ly + yw * 0.3);
       ctx.stroke();
-      ctx.strokeStyle = base; ctx.lineWidth = yw * 0.6;
-      ctx.beginPath();
-      ctx.moveTo(cx - cw * 0.13, botY - ch * 0.02);
-      ctx.quadraticCurveTo(cx, botY + ch * 0.06, cx + cw * 0.13, botY - ch * 0.02);
-      ctx.stroke();
-
-      // ply twist — short diagonal fibre striations along the legs (combed cotton)
-      if (opts.fiberType === 'cotton' || opts.fiberType === 'modal' || opts.fiberType === 'viscose') {
-        ctx.save();
-        ctx.strokeStyle = this._shadeColorCss(dyed, 0.10);
-        ctx.lineWidth = Math.max(0.6, yw * 0.10);
-        ctx.globalAlpha = 0.5;
-        for (let t = 0.15; t < 0.95; t += 0.16) {
-          const ly = hY + (botY - hY) * t;
-          const lxp = lx + (cx - lx) * t;
-          ctx.beginPath();
-          ctx.moveTo(lxp - yw * 0.4, ly + yw * 0.3);
-          ctx.lineTo(lxp + yw * 0.4, ly - yw * 0.3);
-          const rxp = rx + (cx - rx) * t;
-          ctx.moveTo(rxp - yw * 0.4, ly - yw * 0.3);
-          ctx.lineTo(rxp + yw * 0.4, ly + yw * 0.3);
-          ctx.stroke();
-        }
-        ctx.restore();
-      }
     }
+    ctx.restore();
+  }
 
-    if (opts.sheen === 'high_sheen' && lod > 16) {
-      legs(yw * 0.12, 'rgba(255,255,255,0.30)', -yw * 0.1, -yw * 0.05);
-    }
+  // solo knit loop (legs+head in one call) for mesh ground / tuck interiors
+  _drawKnitLoopSolo(ctx, cx, cy, cw, ch, dyed, opts) {
+    const yw = this._yarnWidth(cw, opts);
+    this._strokeYarn(ctx, (dx, dy) => this._knitLegsPath(ctx, cx, cy, cw, ch, dx, dy), yw, dyed, opts);
+    this._strokeYarn(ctx, (dx, dy) => this._knitHeadPath(ctx, cx, cy, cw, ch, dx, dy), yw * 0.96, dyed, opts);
   }
 
   // ── purl bump (technical back / rib purl wale) — horizontal nested ridges,
@@ -1437,7 +1442,7 @@ class FabricVisualizer {
     ctx.fill();
     ctx.restore();
     // a smaller held loop sitting inside
-    this._drawKnitVLOD(ctx, cx, cy + ch * 0.06, cw * 0.78, ch * 0.74, dyed, opts);
+    this._drawKnitLoopSolo(ctx, cx, cy + ch * 0.06, cw * 0.78, ch * 0.74, dyed, opts);
   }
 
   // ── honeycomb / waffle relief for piqué technical face ──
@@ -1488,7 +1493,7 @@ class FabricVisualizer {
     for (let c = c0; c <= c1; c++)
       for (let w = w0; w <= w1; w++) {
         if (side === 'back') this._drawPurlLOD(ctx, xOf(w), yOf(c), g.cellW, g.cellH, dyed, opts);
-        else                 this._drawKnitVLOD(ctx, xOf(w), yOf(c), g.cellW, g.cellH, dyed, opts);
+        else                 this._drawKnitLoopSolo(ctx, xOf(w), yOf(c), g.cellW, g.cellH, dyed, opts);
       }
 
     // hole lattice locked to the fabric grid (stable while panning/zooming)
@@ -2066,6 +2071,14 @@ class FabricVisualizer {
     const resolved = this.result.color_resolved || null;
     if (resolved && resolved.hex) {
       this._dyedColor = this._hexToRgb(resolved.hex);
+      this._faceCache = { front: null, back: null, brushBack: null };
+      return;
+    }
+    // 2b) Fallback: a raw hex passed as color_input but not resolved server-side.
+    const rawCI = (this.result.input || {}).color_input || '';
+    const hexCI = String(rawCI).trim().match(/^#?([0-9a-fA-F]{6})$/);
+    if (hexCI) {
+      this._dyedColor = this._hexToRgb('#' + hexCI[1]);
       this._faceCache = { front: null, back: null, brushBack: null };
       return;
     }
