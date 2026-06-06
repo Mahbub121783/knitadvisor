@@ -1142,22 +1142,68 @@ function setShade(val, btn) {
       : `Exact color set → shade tier "${SHADE_LABEL[c.shade_tier] || c.shade_tier}" will drive the dyeing/SL math automatically.`;
   }
 
+  // ── CLIENT-SIDE colour resolver (works with zero network) ──
+  // Guarantees the picker & any hex always produce a live preview and feed
+  // the visualization, even if the backend / a cached api.js is unavailable.
+  function localResolve(input) {
+    const s = (input || '').trim();
+    const m = s.match(/^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/);
+    if (!m) return null;
+    let h = m[1];
+    if (h.length === 3) h = h.split('').map(x => x + x).join('');
+    const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+    const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+    const L = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+    const chroma = d / 255;
+    let hue = 0;
+    if (d > 0.5) {
+      if (max === r) hue = ((g - b) / d % 6) * 60;
+      else if (max === g) hue = ((b - r) / d + 2) * 60;
+      else hue = ((r - g) / d + 4) * 60;
+      if (hue < 0) hue += 360;
+    }
+    let shade;
+    if (L < 0.07) shade = 'black';
+    else if (chroma > 0.55 && L > 0.5) shade = 'fluorescent';
+    else if (L >= 0.86) shade = 'white_melange';
+    else if (L >= 0.40) shade = 'light_medium';
+    else shade = 'dark_navy';
+    let family = 'gray';
+    if (chroma >= 0.08) {
+      if (hue < 15 || hue >= 345) family = 'red';
+      else if (hue < 45) family = 'orange';
+      else if (hue < 70) family = 'yellow';
+      else if (hue < 165) family = 'green';
+      else if (hue < 200) family = 'teal';
+      else if (hue < 255) family = 'blue';
+      else if (hue < 300) family = 'purple';
+      else family = 'pink';
+    } else if (L > 0.85) family = 'white';
+    else if (L < 0.1) family = 'black';
+    const temperature = chroma < 0.08 ? 'neutral' : (hue <= 80 || hue >= 320) ? 'warm' : (hue >= 160 && hue <= 280) ? 'cool' : 'warm';
+    return { hex: '#' + h.toUpperCase(), name: 'Custom Color', family, temperature, shade_tier: shade };
+  }
+
   async function resolve(input) {
     if (!input || !input.trim()) { clearPreview(); return; }
-    try {
-      const data = await apiColorPreview(input.trim());
-      if (data && data.color) showPreview(data.color, input.trim());
-      else clearPreview();
-    } catch (_) {
-      // hex fallback if backend unreachable
-      const m = input.trim().match(/^#?[0-9a-fA-F]{6}$/);
-      if (m) showPreview({ hex: input.trim().startsWith('#') ? input.trim() : '#' + input.trim(), name: 'Custom Color' }, input.trim());
-      else clearPreview();
+    // 1) instant local resolution for any hex (picker path) — never blocks
+    const local = localResolve(input);
+    if (local) showPreview(local, input.trim());
+    // 2) enrich / resolve names & TCX codes via backend when available
+    if (typeof apiColorPreview === 'function') {
+      try {
+        const data = await apiColorPreview(input.trim());
+        if (data && data.color) showPreview(data.color, input.trim());
+        else if (!local) clearPreview();
+      } catch (_) { if (!local) clearPreview(); }
+    } else if (!local) {
+      clearPreview();
     }
   }
 
   async function runSuggest(q) {
     suggest.hidden = true;
+    if (typeof apiColorSearch !== 'function') return;
     if (!q || q.trim().length < 2 || /^#?[0-9a-fA-F]{3,6}$/.test(q.trim()) || /\d{2}-\d{4}/.test(q.trim())) return;
     try {
       const data = await apiColorSearch(q.trim(), 8);
