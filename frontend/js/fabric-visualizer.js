@@ -1326,13 +1326,23 @@ class FabricVisualizer {
       }
     }
 
-    // THREE-PASS interlocking mesh → correct over/under intermesh:
-    //   pass 0 = sinker loops (the course connectors, sit behind)
-    //   pass 1 = all loop LEGS (these dip behind the head of the loop above)
-    //   pass 2 = all loop HEADS on top (so each head clasps the legs above it)
-    if (cw >= 11) for (const [x, y] of knit) this._strokeYarn(ctx, (dx, dy) => this._knitSinkerPath(ctx, x, y, cw, ch, dx, dy), yw * 0.82, dyed, opts);
-    for (const [x, y] of knit) this._strokeYarn(ctx, (dx, dy) => this._knitLegsPath(ctx, x, y, cw, ch, dx, dy), yw, dyed, opts);
-    for (const [x, y] of knit) this._strokeYarn(ctx, (dx, dy) => this._knitHeadPath(ctx, x, y, cw, ch, dx, dy), yw * 0.98, dyed, opts);
+    // The visible stockinette face = columns of interlocking "V" loops.
+    //   • Always draw the loop LEGS (the V columns) — this is what reads as knit.
+    //   • Only at high zoom add the HEAD arch + SINKER connectors so the full
+    //     needle-loop anatomy is revealed (macro lens), WITHOUT turning the
+    //     normal view into a field of scales.
+    const anatomy = cw >= 46;
+    if (anatomy) {
+      // MACRO: one continuous needle loop per stitch (foot→leg→head→leg→foot).
+      // Draw top-of-screen first so each lower loop's head is painted ON TOP of
+      // the upper loop's feet — the real over/under intermesh, cleanly.
+      const ordered = knit.slice().sort((a, b) => a[1] - b[1]);
+      for (const [x, y] of ordered)
+        this._strokeYarn(ctx, (dx, dy) => this._knitLoopFullPath(ctx, x, y, cw, ch, dx, dy), yw, dyed, opts);
+    } else {
+      // NORMAL: the stockinette "V" columns — what reads as knit cloth.
+      for (const [x, y] of knit) this._strokeYarn(ctx, (dx, dy) => this._knitLegsPath(ctx, x, y, cw, ch, dx, dy, false), yw, dyed, opts);
+    }
 
     // miss/float yarn lies straight ON TOP, across the held loops
     for (const [x, y] of miss) this._strokeYarn(ctx, (dx, dy) => {
@@ -1359,64 +1369,80 @@ class FabricVisualizer {
   // yarn line width from tightness factor (tighter cloth → fuller coverage)
   _yarnWidth(cw, opts) {
     const tf = typeof opts.tf === 'number' ? opts.tf : 14;
-    const cover = Math.max(0.24, Math.min(0.30 + (tf - 14) * 0.013, 0.40));
-    return Math.max(1.0, cw * cover);
+    const cover = Math.max(0.32, Math.min(0.40 + (tf - 14) * 0.012, 0.50));
+    return Math.max(1.2, cw * cover);
   }
 
-  // ── Knit needle-loop anatomy (ref. fig: Head + two Legs, intermeshing) ──
-  // The loop is a bulbous HEAD at top with two LEGS that converge downward and
-  // pass through the head of the loop below. Drawn in two passes so each head
-  // clasps the legs of the loop above (true over/under intermesh).
-  //
-  // legs: from the shoulders down, bowing slightly out then in to the foot
-  // point where they thread through the loop below.
-  _knitLegsPath(ctx, cx, cy, cw, ch, dx, dy) {
+  // ── Stockinette "V" loop legs ──
+  // Two arms span the cell from the top shoulders to a bottom point, forming
+  // the classic knit V. The bottom point nestles between the arms of the loop
+  // below (continuous wale columns). `wide` opens the shoulders toward the
+  // neighbouring wales at high zoom so the loop heads can clasp them.
+  _knitLegsPath(ctx, cx, cy, cw, ch, dx, dy, wide) {
     dx = dx || 0; dy = dy || 0;
-    const legX = cw * 0.34, shY = cy - ch * 0.18 + dy;
-    const footX = cw * 0.13, footY = cy + ch * 0.54 + dy;
-    ctx.moveTo(cx - legX + dx, shY);
-    ctx.bezierCurveTo(cx - legX * 1.04 + dx, cy + ch * 0.12 + dy, cx - footX * 1.7 + dx, footY - ch * 0.14 + dy, cx - footX + dx, footY);
-    ctx.moveTo(cx + legX + dx, shY);
-    ctx.bezierCurveTo(cx + legX * 1.04 + dx, cy + ch * 0.12 + dy, cx + footX * 1.7 + dx, footY - ch * 0.14 + dy, cx + footX + dx, footY);
+    const shX = cw * (wide ? 0.50 : 0.48);
+    const topY = cy - ch * 0.52 + dy, botY = cy + ch * 0.54 + dy;
+    const lx = cx - shX + dx, rx = cx + shX + dx, mid = cx + dx;
+    // arms curve in to a soft bottom point (not a sharp spike → less dark gap)
+    ctx.moveTo(lx, topY);
+    ctx.bezierCurveTo(cx - cw * 0.34 + dx, cy - ch * 0.06 + dy, mid - cw * 0.05 + dx, cy + ch * 0.26 + dy, mid, botY);
+    ctx.moveTo(rx, topY);
+    ctx.bezierCurveTo(cx + cw * 0.34 + dx, cy - ch * 0.06 + dy, mid + cw * 0.05 + dx, cy + ch * 0.26 + dy, mid, botY);
   }
 
-  // head: a rounded, slightly over-wide arch (the needle loop top / "bulb").
+  // head: the loop top that arches over the shoulders (revealed at high zoom).
   _knitHeadPath(ctx, cx, cy, cw, ch, dx, dy) {
     dx = dx || 0; dy = dy || 0;
-    const legX = cw * 0.34, shY = cy - ch * 0.18 + dy, topY = cy - ch * 0.60 + dy;
-    ctx.moveTo(cx - legX + dx, shY);
-    ctx.bezierCurveTo(cx - legX * 1.16 + dx, topY, cx + legX * 1.16 + dx, topY, cx + legX + dx, shY);
+    const shX = cw * 0.46, topY = cy - ch * 0.48 + dy, crown = cy - ch * 0.74 + dy;
+    ctx.moveTo(cx - shX + dx, topY);
+    ctx.bezierCurveTo(cx - shX * 0.7 + dx, crown, cx + shX * 0.7 + dx, crown, cx + shX + dx, topY);
   }
 
-  // sinker loop: the yarn arc connecting this needle loop's foot to the next
-  // wale's foot (same course). On the back these become the prominent
-  // half-moons; on the face they sit just behind the needle loops.
+  // ── ONE continuous needle loop (macro view) ── foot → left leg → head arch
+  // → right leg → foot. Legs splay to two separate feet; the loop below's head
+  // rises between them. Drawn as a single yarn path so it reads as a real loop.
+  _knitLoopFullPath(ctx, cx, cy, cw, ch, dx, dy) {
+    dx = dx || 0; dy = dy || 0;
+    const footX = cw * 0.24, footY = cy + ch * 0.56 + dy;
+    const shX = cw * 0.40, shY = cy - ch * 0.28 + dy;
+    const crown = cy - ch * 0.60 + dy;
+    ctx.moveTo(cx - footX + dx, footY);
+    // left leg up to shoulder
+    ctx.bezierCurveTo(cx - cw * 0.40 + dx, cy + ch * 0.06 + dy, cx - shX - cw * 0.02 + dx, cy - ch * 0.08 + dy, cx - shX + dx, shY);
+    // head arch over the top
+    ctx.bezierCurveTo(cx - shX * 0.86 + dx, crown, cx + shX * 0.86 + dx, crown, cx + shX + dx, shY);
+    // right leg down to foot
+    ctx.bezierCurveTo(cx + shX + cw * 0.02 + dx, cy - ch * 0.08 + dy, cx + cw * 0.40 + dx, cy + ch * 0.06 + dy, cx + footX + dx, footY);
+  }
+
+  // sinker loop: short connector between this loop's foot and the next wale's,
+  // sitting just behind the needle loops (revealed at high zoom).
   _knitSinkerPath(ctx, cx, cy, cw, ch, dx, dy) {
     dx = dx || 0; dy = dy || 0;
-    const footX = cw * 0.13, footY = cy + ch * 0.54 + dy;
-    ctx.moveTo(cx + footX + dx, footY);
-    ctx.quadraticCurveTo(cx + cw * 0.5 + dx, footY + ch * 0.22, cx + cw - footX + dx, footY);
+    const botY = cy + ch * 0.50 + dy;
+    ctx.moveTo(cx + dx, botY);
+    ctx.quadraticCurveTo(cx + cw * 0.5 + dx, botY + ch * 0.16, cx + cw + dx, botY);
   }
 
   // round-yarn stroke: cast shadow + body + core shade + top-left specular,
   // so the yarn reads as a lit cylinder rather than a flat line.
   _strokeYarn(ctx, build, yw, dyed, opts) {
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    // contact shadow (down-right) — gives the loop depth against the ground
-    ctx.strokeStyle = this._shadeColorCss(dyed, -0.42); ctx.lineWidth = yw * 1.32;
-    ctx.beginPath(); build(yw * 0.10, yw * 0.18); ctx.stroke();
+    // soft contact shadow (down-right) — depth without harsh banding
+    ctx.strokeStyle = this._shadeColorCss(dyed, -0.26); ctx.lineWidth = yw * 1.22;
+    ctx.beginPath(); build(yw * 0.08, yw * 0.14); ctx.stroke();
     // yarn body
     ctx.strokeStyle = `rgb(${dyed.r},${dyed.g},${dyed.b})`; ctx.lineWidth = yw;
     ctx.beginPath(); build(0, 0); ctx.stroke();
     if (yw < 1.8) return;                 // tiny loops (zoomed out): keep it cheap & crisp
-    // lower-right core shade for tube roundness
-    ctx.strokeStyle = this._shadeColorCss(dyed, -0.18); ctx.lineWidth = yw * 0.46;
-    ctx.beginPath(); build(yw * 0.13, yw * 0.13); ctx.stroke();
-    // upper-left specular highlight
-    ctx.strokeStyle = this._shadeColorCss(dyed, 0.30); ctx.lineWidth = yw * 0.34;
-    ctx.beginPath(); build(-yw * 0.17, -yw * 0.15); ctx.stroke();
+    // lower-right core shade for tube roundness (dye sits deeper here)
+    ctx.strokeStyle = this._shadeColorCss(dyed, -0.13); ctx.lineWidth = yw * 0.5;
+    ctx.beginPath(); build(yw * 0.12, yw * 0.12); ctx.stroke();
+    // upper-left specular highlight (rounded lit yarn)
+    ctx.strokeStyle = this._shadeColorCss(dyed, 0.32); ctx.lineWidth = yw * 0.30;
+    ctx.beginPath(); build(-yw * 0.18, -yw * 0.16); ctx.stroke();
     if (opts.sheen === 'high_sheen') {
-      ctx.strokeStyle = 'rgba(255,255,255,0.32)'; ctx.lineWidth = yw * 0.12;
+      ctx.strokeStyle = 'rgba(255,255,255,0.34)'; ctx.lineWidth = yw * 0.12;
       ctx.beginPath(); build(-yw * 0.2, -yw * 0.17); ctx.stroke();
     }
   }

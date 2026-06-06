@@ -24,3 +24,5 @@ logs/
 dist/
 build/
 .claude/settings.local.json
+scratch/out/
+scratch/render.js
