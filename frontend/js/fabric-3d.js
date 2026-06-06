@@ -260,32 +260,42 @@ export class Fabric3D {
 }
 
 // Place the loop instances for a construction. Separated to keep mount() lean.
+//
+//  • RIB  — alternating wales sit on the front bed (+z, knit ridge) and the
+//    back bed (−z, rotated → its purl heads recede into the valley). The wale
+//    pitch draws in so the knit ridges stand proud, giving real corrugation.
+//    Reversible: the back view shows the same ridge/valley pattern, offset.
+//  • INTERLOCK — two full all-knit jerseys locked face-to-face: a front bed
+//    (knit facing +z) and an ALIGNED back bed (knit facing −z) pushed well
+//    behind so it never pokes through. Both faces read as a fine, stable
+//    all-knit fabric (the defining trait of interlock).
 function scene_addLoops(group, geo, mat, con, sample, wales, courses) {
   const dummy = new THREE.Object3D();
   const rep = con.ribRepeat || 1;
+  const RIB_DEPTH = 0.40;       // front/back bed separation for rib ridges
+  const xPitch = con.type === 'rib' ? PITCH_X * 0.78 : PITCH_X;  // rib draws in
 
-  // helper to add one instanced layer with a placement callback
-  const addLayer = (xOffset, zBase, purlFlip) => {
+  const addLayer = (xOffset, zBase, flip) => {
     const mesh = new THREE.InstancedMesh(geo, mat, wales * courses);
     let i = 0;
     for (let c = 0; c < courses; c++) {
       for (let w = 0; w < wales; w++) {
         const tok = sample(w, c);
-        dummy.position.set(w * PITCH_X + xOffset, c * PITCH_Y, zBase);
+        dummy.position.set(w * xPitch + xOffset, c * PITCH_Y, zBase);
         dummy.rotation.set(0, 0, 0);
         dummy.scale.set(1, 1, 1);
 
         if (con.type === 'rib') {
           const knitCol = (((w % (rep * 2)) + rep * 2) % (rep * 2)) < rep;
-          dummy.position.z = knitCol ? 0.14 : -0.14;
-          if (!knitCol) dummy.rotation.y = Math.PI;      // purl wale shows its back
+          dummy.position.z = zBase + (knitCol ? RIB_DEPTH : -RIB_DEPTH);
+          if (!knitCol) dummy.rotation.y = Math.PI;      // purl wale recedes, shows its back
         }
         if (tok === 'tuck' || tok === 'miss') {
           dummy.scale.y = 1.4;                           // held / elongated loop
           dummy.position.z -= 0.05;
           dummy.position.y += PITCH_Y * 0.18;
         }
-        if (purlFlip) dummy.rotation.y = Math.PI;
+        if (flip) dummy.rotation.y += Math.PI;           // back bed faces −z
         dummy.updateMatrix();
         mesh.setMatrixAt(i++, dummy.matrix);
       }
@@ -295,8 +305,8 @@ function scene_addLoops(group, geo, mat, con, sample, wales, courses) {
   };
 
   if (con.type === 'interlock') {
-    addLayer(0, 0.16, false);                 // front bed
-    addLayer(PITCH_X * 0.5, -0.16, true);     // back bed, half-pitch, flipped
+    addLayer(0, 0.30, false);     // front bed — knit faces the viewer
+    addLayer(0, -0.30, true);     // back bed — aligned, knit faces away, hidden behind
   } else {
     addLayer(0, 0, false);
   }
