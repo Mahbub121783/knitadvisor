@@ -1825,7 +1825,7 @@ class FabricVisualizer {
       physics: opts.physics,
     };
 
-    import('/js/knit3d/index.js?v=20260608d').then(({ Knit3D }) => {
+    import('/js/knit3d/index.js?v=20260608e').then(({ Knit3D }) => {
       if (this._destroyed || this.activeTab !== 'threed') return;
       if (this._fabric3d) { try { this._fabric3d.dispose(); } catch (_) {} }
       this._fabric3d = new Knit3D();

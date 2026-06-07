@@ -12,12 +12,12 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-import { buildYarnPaths } from './topology-builder.js?v=20260608d';
-import { createYarnMaterial, setYarnColorHex } from './yarn-material.js?v=20260608d';
-import { buildFabricMesh, yarnRadius } from './fabric-mesh.js?v=20260608d';
-import { addStudioLighting } from './lighting.js?v=20260608d';
-import { buildPile } from './pile.js?v=20260608d';
-import { BACKING, PATCH } from './constants.js?v=20260608d';
+import { buildYarnPaths } from './topology-builder.js?v=20260608e';
+import { createYarnMaterial, setYarnColorHex } from './yarn-material.js?v=20260608e';
+import { buildFabricMesh, yarnRadius } from './fabric-mesh.js?v=20260608e';
+import { addStudioLighting } from './lighting.js?v=20260608e';
+import { buildPile } from './pile.js?v=20260608e';
+import { BACKING, PITCH_Y, RIB_PITCH_SCALE } from './constants.js?v=20260608e';
 
 const VIEW_HEIGHT = 380;
 
@@ -91,18 +91,24 @@ export class Knit3D {
     this._material = material;
     this._textures = textures;
 
-    // LOD: thin the patch on small viewports / low-DPR devices so weak GPUs
-    // stay smooth (camera zoom still reveals detail).
+    // Size the patch to the viewport so the cloth FILLS the frame (no floating
+    // square): build it landscape to match the canvas aspect, denser on big
+    // screens, lighter on small/low-DPR devices (LOD) so weak GPUs stay smooth.
+    const con = this.opts.construction || {};
+    const aspect = this.camera.aspect || 1.8;
     const lod = this._lodScale();
+    const baseCourses = con.type === 'interlock' ? 30 : 40;
+    const courses = Math.max(12, Math.round(baseCourses * lod));
+    // wales so width/height ≈ canvas aspect (PITCH_Y compresses height; rib draws in)
+    const ribComp = con.type === 'rib' ? 1 / RIB_PITCH_SCALE : 1;
+    const wales = Math.max(14, Math.round(courses * PITCH_Y * aspect * ribComp));
+
     const { paths } = buildYarnPaths({
-      construction: this.opts.construction,
-      sample: this.opts.sample,
-      wales: Math.round((this.opts.construction.base === 'warp' ? PATCH.wales : PATCH.wales) * lod),
-      courses: Math.round(PATCH.courses * lod),
+      construction: con, sample: this.opts.sample, wales, courses,
     });
 
     const radius = yarnRadius(this.opts.countNe, this.opts.tf);
-    const group = buildFabricMesh(paths, material, { radius, radialSegments: 7 });
+    const group = buildFabricMesh(paths, material, { radius, radialSegments: 6 });
     this.group = group;
 
     // measure the loops, then add an opaque backing so the swatch has body and
@@ -115,10 +121,20 @@ export class Knit3D {
 
     this.scene.add(group);
 
-    // centre on the loops + fit to frame
+    // centre on the loops + fit so the fabric COVERS the frame (fills edge-to-edge)
     group.position.sub(center);
-    const maxDim = Math.max(size.x, size.y);
-    this._fitDist = (maxDim / (2 * Math.tan((this.camera.fov * Math.PI / 180) / 2))) * 0.78;
+    this._size = size;
+    this._fitDist = this._coverDistance(size);
+  }
+
+  // Distance at which the patch COVERS the viewport (fills both axes, cropping
+  // the longer one slightly) — vs the old "contain" fit that left big margins.
+  _coverDistance(size) {
+    const t = Math.tan((this.camera.fov * Math.PI / 180) / 2);
+    const aspect = this.camera.aspect || 1.8;
+    const distFillHeight = size.y / (2 * t);
+    const distFillWidth  = size.x / (2 * t * aspect);
+    return Math.min(distFillHeight, distFillWidth) * 0.98;
   }
 
   // density multiplier from viewport — full on desktop, lighter on small/low-DPR
@@ -198,6 +214,18 @@ export class Knit3D {
     this.renderer.setSize(W, H);
     this.camera.aspect = W / H;
     this.camera.updateProjectionMatrix();
+    // keep the cloth filling the frame after a resize (re-cover the new aspect)
+    if (this._size && this.controls) {
+      const newFit = this._coverDistance(this._size);
+      const dir = this.camera.position.clone().sub(this.controls.target);
+      const len = dir.length() || 1;
+      dir.multiplyScalar(newFit / len);
+      this.camera.position.copy(this.controls.target).add(dir);
+      this.controls.minDistance = newFit * 0.35;
+      this.controls.maxDistance = newFit * 2.2;
+      this._fitDist = newFit;
+      this.controls.update();
+    }
   }
 
   dispose() {
