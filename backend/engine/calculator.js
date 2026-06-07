@@ -67,6 +67,7 @@ const { analyzeYarn, recommendYarnGrade } = require('./yarn-engine');
 const { matchFactory, recommendCountFromGSM } = require('./factory-match');
 const { gaugeFromBulkData, estimateProcessLoss, greyRequirementForFinished } = require('./production-data');
 const { analyzeWetProcessing } = require('./wet-processing-engine');
+const { applyFabricPhysics } = require('./fabric-physics');
 
 // ============================================================
 // MAIN CALCULATE FUNCTION
@@ -81,7 +82,8 @@ function calculate(params) {
           color_input,
           target_width, yarn_type, twist_multiplier, finishing_route,
           fiber_grade, spinning_system, yarn_form, slub_thickness, slub_length_cm, slub_spacing_cm,
-          denier, filaments, elastane_denier, elastane_pct, dyeing_method } = normalizeParams(params);
+          denier, filaments, elastane_denier, elastane_pct, dyeing_method,
+          light_source, illuminant } = normalizeParams(params);
 
   if (!fabric) return { error: 'fabric is required', code: 'MISSING_FABRIC' };
   if (!gsm) return { error: 'gsm is required', code: 'MISSING_GSM' };
@@ -137,6 +139,47 @@ function calculate(params) {
     warnings.push(
       `${colorResult.shade.toUpperCase()} shade: SET GREY GSM = ${colorResult.grey_gsm_target} g/m² (finish target: ${gsm} g/m², dye uptake ${adjSign}${colorResult.gsm_adjustment_pct}%). SL set ${colorResult.sl_direction} (factor ×${colorResult.sl_factor}).`
     );
+  }
+
+  // --- 1.65. Fabric optical physics (dye × fibre × construction × finish × light) ---
+  // Reflectance shifts so the rendered colour reads as the REAL dyed/finished cloth
+  // (drives the 3D/2D visualization material + colour). Always attached so the
+  // viewer can use sheen/roughness/shadow even in shade-only mode.
+  let fabricPhysics = null;
+  {
+    const SHADE_HEX = {
+      black: '#1a1a1a', dark_navy: '#1f2d5c', dark: '#1f2d5c', navy: '#1f2d5c',
+      light_medium: '#3f7fc4', medium: '#3f7fc4', light: '#9cc2e6',
+      fluorescent: '#b6ff1a', white_melange: '#eceae4', white: '#eceae4',
+      melange: '#8c8c8c', heather: '#8c8c8c', grey: '#8c8c8c', gray: '#8c8c8c',
+    };
+    const baseHex = (colorResolved && colorResolved.hex)
+      || SHADE_HEX[(effectiveShade || '').toString().toLowerCase()] || '#3f7fc4';
+
+    // map fabric id → CONSTRUCTION_PHYSICS key
+    const fid = `${fabric || ''} ${(fabricDef && fabricDef.name) || ''}`.toLowerCase();
+    let constructionId = 'single_jersey';
+    if (/interlock|double\s*jersey|ponte/.test(fid)) constructionId = 'interlock';
+    else if (/waffle|thermal/.test(fid)) constructionId = 'waffle';
+    else if (/pique|piqu|lacoste|honeycomb/.test(fid)) constructionId = 'pique';
+    else if (/fleece|polar|velour/.test(fid)) constructionId = 'fleece';
+    else if (/terry|loopback|loop\s*knit/.test(fid)) constructionId = 'french_terry';
+    else if (/2\s*[x×]\s*2|wide\s*rib/.test(fid)) constructionId = 'rib_2x2';
+    else if (/rib/.test(fid)) constructionId = 'rib_1x1';
+
+    // map finishing_route → FINISH_PHYSICS key
+    const fr = (finishing_route || '').toString().toLowerCase();
+    let finishId = 'none';
+    if (/vintage/.test(fr)) finishId = 'vintage_wash';
+    else if (/peach|sueded|brush/.test(fr)) finishId = 'peach_finish';
+    else if (/enzyme|garment\s*wash|wash|bio/.test(fr)) finishId = 'enzyme_wash';
+
+    const lightSource = (light_source || illuminant || 'D65');
+    // use the already-parsed fibre map ({cotton:60,polyester:40}) so blends shift correctly
+    const compForPhysics = (parsedComp && parsedComp.fibers) ? parsedComp.fibers : composition;
+    try {
+      fabricPhysics = applyFabricPhysics(baseHex, compForPhysics, constructionId, finishId, lightSource);
+    } catch (_) { fabricPhysics = null; }
   }
 
   // --- 1.7. Warp knit specific handling ---
@@ -715,6 +758,12 @@ function calculate(params) {
       source: 'color_engine',
       derived_shade: !color_shade,
     } : null,
+
+    // Optical physics: dye × fibre × construction × finish × illuminant.
+    // rendered_color.hex = how the dye actually reads on this finished cloth;
+    // physics.{specular_sheen,roughness,shadow_depth,texture_modifier} drive the
+    // 3D/2D material. Computed by fabric-physics engine.
+    fabric_physics: fabricPhysics,
 
     yarn: {
       count_ne: countResult.count_ne,           // integer (industry standard)

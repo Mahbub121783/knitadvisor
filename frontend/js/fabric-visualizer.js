@@ -936,19 +936,22 @@ class FabricVisualizer {
       || (this.result.composition || {}).raw || '';
     if (!comp) return 'cotton';
     const lower = comp.toLowerCase();
-    const order = ['wool', 'modal', 'viscose', 'polyester', 'nylon', 'acrylic', 'cotton'];
+    // silk/linen before viscose so "silk" isn't shadowed; spandex rarely dominant
+    const order = ['silk', 'wool', 'linen', 'hemp', 'modal', 'viscose', 'polyester', 'nylon', 'acrylic', 'spandex', 'cotton'];
+    // handle common aliases
+    const aliased = lower.replace(/elastane|lycra/g, 'spandex').replace(/flax/g, 'linen');
     for (const f of order) {
-      const m = lower.match(new RegExp(`(\\d+)%?\\s*${f}`));
+      const m = aliased.match(new RegExp(`(\\d+)%?\\s*${f}`));
       if (m && parseInt(m[1]) >= 50) return f;
     }
-    for (const f of order) { if (lower.includes(f)) return f; }
+    for (const f of order) { if (aliased.includes(f) && f !== 'spandex') return f; }
     return 'cotton';
   }
 
   _getSheenModel(fiberType) {
-    if (fiberType === 'polyester' || fiberType === 'nylon') return 'high_sheen';
-    if (fiberType === 'modal' || fiberType === 'viscose') return 'gradient';
-    return 'matte';
+    if (['polyester', 'nylon', 'silk'].includes(fiberType)) return 'high_sheen';
+    if (['modal', 'viscose', 'acrylic'].includes(fiberType)) return 'gradient';
+    return 'matte';   // cotton / wool / linen / hemp
   }
 
   _defaultGeomFromCell(cellSize) {
@@ -1121,6 +1124,9 @@ class FabricVisualizer {
       tf:        (result.physical_constraints || {}).tightness_factor || 14,
       construction: this._detectConstruction(),
       pattern:   this._patternMatrix(),
+      // optical physics from the engine: sheen / roughness / shadow_depth /
+      // texture_modifier (peach micro_fuzz, enzyme frosting…). Drives material.
+      physics:   (this.result.fabric_physics || {}).physics || null,
     };
   }
 
@@ -1781,7 +1787,7 @@ class FabricVisualizer {
 
     const opts = this._faceOpts();
     const con = opts.construction;
-    const WEBGL_TYPES = ['jersey', 'rib', 'interlock', 'pique', 'terry', 'fleece'];
+    const WEBGL_TYPES = ['jersey', 'rib', 'interlock', 'pique', 'terry', 'fleece', 'mesh', 'spacer', 'tricot'];
     const webglOk = (() => {
       try { return !!window.WebGLRenderingContext && !!document.createElement('canvas').getContext('webgl'); }
       catch (_) { return false; }
@@ -1816,12 +1822,13 @@ class FabricVisualizer {
     const glOpts = {
       dyed: this._dyedColor, construction: con, countNe: opts.countNe,
       tf: opts.tf, fiberType: opts.fiberType, sheen: opts.sheen, sample,
+      physics: opts.physics,
     };
 
-    import('/js/fabric-3d.js?v=20260607e').then(({ Fabric3D }) => {
+    import('/js/knit3d/index.js?v=20260608d').then(({ Knit3D }) => {
       if (this._destroyed || this.activeTab !== 'threed') return;
       if (this._fabric3d) { try { this._fabric3d.dispose(); } catch (_) {} }
-      this._fabric3d = new Fabric3D();
+      this._fabric3d = new Knit3D();
       this._fabric3d.mount(mount, glOpts);
       loading.remove();
       stage.querySelector('.ka3d-controls').addEventListener('click', (e) => {
@@ -2200,7 +2207,16 @@ class FabricVisualizer {
     // 1) Manual dye-picker override always wins.
     if (this._userColor) { this._dyedColor = this._hexToRgb(this._userColor); this._faceCache = { front: null, back: null, brushBack: null }; return; }
 
-    // 2) Precise color from the Color Engine (result.color_resolved.hex) — true-to-life dye.
+    // 2) Physics-rendered dye — how the colour actually reads on this finished
+    //    cloth (dye × fibre × construction × finish × illuminant). Preferred.
+    const phys = this.result.fabric_physics || null;
+    if (phys && phys.rendered_color && phys.rendered_color.hex) {
+      this._dyedColor = this._hexToRgb(phys.rendered_color.hex);
+      this._faceCache = { front: null, back: null, brushBack: null };
+      return;
+    }
+
+    // 2b) Precise base color from the Color Engine (result.color_resolved.hex).
     const resolved = this.result.color_resolved || null;
     if (resolved && resolved.hex) {
       this._dyedColor = this._hexToRgb(resolved.hex);
