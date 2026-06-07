@@ -12,9 +12,9 @@
 // For warp NET / powernet, laps are periodically skipped → open eyelets.
 
 import * as THREE from 'three';
-import { knitLoop } from './loop-geometry.js?v=20260608d';
-import { stitchJitter } from './noise.js?v=20260608d';
-import { PITCH_X, PITCH_Y, JITTER, PATCH } from './constants.js?v=20260608d';
+import { knitLoop } from './loop-geometry.js?v=20260608e';
+import { stitchJitter } from './noise.js?v=20260608e';
+import { PITCH_X, PITCH_Y, JITTER, PATCH } from './constants.js?v=20260608e';
 
 const UNDERLAP_Z = -0.30;   // underlaps run across the technical back
 

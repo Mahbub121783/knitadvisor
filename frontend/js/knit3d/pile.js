@@ -8,7 +8,7 @@
 // Deterministic placement (hash) so the swatch is stable between renders.
 
 import * as THREE from 'three';
-import { hash2 } from './noise.js?v=20260608d';
+import { hash2 } from './noise.js?v=20260608e';
 
 /**
  * @param {'brush'|'loop'} kind

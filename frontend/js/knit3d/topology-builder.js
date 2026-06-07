@@ -14,14 +14,14 @@
 //     hole cell carries the yarn across the back and the ring loops lean away,
 //     opening the eyelet (chevron / diamond / grid motifs).
 
-import { stitchPoints } from './loop-geometry.js?v=20260608d';
-import { stitchJitter } from './noise.js?v=20260608d';
-import { makePointelle } from './pointelle.js?v=20260608d';
-import { buildWarpPaths } from './warp-topology.js?v=20260608d';
+import { stitchPoints } from './loop-geometry.js?v=20260608e';
+import { stitchJitter } from './noise.js?v=20260608e';
+import { makePointelle } from './pointelle.js?v=20260608e';
+import { buildWarpPaths } from './warp-topology.js?v=20260608e';
 import {
   PITCH_X, PITCH_Y, RIB_PITCH_SCALE, RIB_DEPTH,
   INTERLOCK_DEPTH, INTERLOCK_GAIT, JITTER, PATCH,
-} from './constants.js?v=20260608d';
+} from './constants.js?v=20260608e';
 
 const isHoldToken = (t) => t === 'tuck' || t === 'miss';
 
