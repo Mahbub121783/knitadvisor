@@ -1115,6 +1115,7 @@ class FabricVisualizer {
     const result = this.result;
     const yarn   = result.yarn || {};
     const fiberType = this._classifyFiber();
+    const construction = this._detectConstruction();
     return {
       dyed:      this._dyedColor,
       fiberType,
@@ -1122,12 +1123,47 @@ class FabricVisualizer {
       countNe:   yarn.count_ne || 30,
       gsm:       (result.input || {}).gsm || (result.grammage || {}).gsm || 180,
       tf:        (result.physical_constraints || {}).tightness_factor || 14,
-      construction: this._detectConstruction(),
+      construction,
       pattern:   this._patternMatrix(),
       // optical physics from the engine: sheen / roughness / shadow_depth /
       // texture_modifier (peach micro_fuzz, enzyme frosting…). Drives material.
       physics:   (this.result.fabric_physics || {}).physics || null,
+      // real stitch density (cpc/wpc/aspect/scalar/tex) so GSM·gauge·loop-length
+      // actually drive loop size, count and yarn thickness in the 3D.
+      density:   this._stitchDensity(construction),
     };
+  }
+
+  // Stitch-density model from the engine result (Munden K/LL relations). Drives
+  // loop spacing (aspect), how many stitches to show (scalar), and yarn diameter.
+  _stitchDensity(con) {
+    const r = this.result;
+    const yarn = r.yarn || {};
+    const pc = r.physical_constraints || {};
+    const llMm = (r.loop_length || {}).value_mm || null;
+    const tex = pc.tex || (590.5 / (yarn.count_ne || 30));
+    const gauge = (r.machine || {}).gauge_optimal || (r.machine || {}).gauge_recommended
+      || (r.input || {}).gauge || 24;                 // needles/inch
+    const gsm = (r.input || {}).gsm || (r.grammage || {}).gsm || 180;
+    const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+    // courses/cm & wales/cm — Munden K/LL (cotton plain-knit constants Kc≈5.0,
+    // Kw≈4.1; double-bed packs a little denser). Fall back to gauge if no LL.
+    const dbl = con && (con.base === 'double' || con.type === 'interlock' || con.type === 'rib');
+    const Kc = dbl ? 5.6 : 5.0, Kw = dbl ? 4.6 : 4.1;
+    const llCm = llMm ? llMm / 10 : null;
+    let cpc, wpc;
+    if (llCm && llCm > 0.1) { cpc = Kc / llCm; wpc = Kw / llCm; }
+    else { wpc = gauge / 2.54; cpc = wpc * (Kc / Kw); }
+    wpc = Math.max(wpc, (gauge / 2.54) * 0.7);         // can't be finer than the needle pitch
+
+    const aspect = clamp(cpc / wpc, 0.9, 1.6);          // course/wale spacing ratio
+    // how dense to draw, vs a typical midweight for this construction
+    const refCpc = dbl ? 9.5 : 8.0;
+    let scalar = Math.sqrt(clamp(cpc / refCpc, 0.5, 2.6));
+    scalar *= clamp(gsm / (dbl ? 260 : 190), 0.85, 1.18);   // GSM nudge
+    scalar = clamp(scalar, 0.7, 1.7);
+    return { cpc, wpc, aspect, scalar, llMm: llMm || (llCm ? llCm * 10 : null), tex };
   }
 
   // The real K/T/M needle action matrix (pattern_cylinder) drives tuck/miss
@@ -1135,12 +1171,28 @@ class FabricVisualizer {
   _patternMatrix() {
     const p = this.result.pattern || {};
     const grid = p.pattern_cylinder;
-    if (Array.isArray(grid) && grid.length && Array.isArray(grid[0]) && grid[0].length) {
-      // only meaningful if it actually contains tuck/miss (else it's plain knit)
-      const hasTM = grid.some(row => row.some(c => c === 'T' || c === 'M'));
-      if (hasTM) return { grid, rows: grid.length, cols: grid[0].length };
+    if (!(Array.isArray(grid) && grid.length && Array.isArray(grid[0]) && grid[0].length)) return null;
+    // ALWAYS expose the real matrix (the K/T/M CONTENT is the source of truth);
+    // `hasTM`/`hasM` are just flags for callers (e.g. choosing a hole source).
+    const hasTM = grid.some(row => row.some(c => c === 'T' || c === 'M'));
+    const hasM  = grid.some(row => row.some(c => c === 'M'));
+    const out = { grid, rows: grid.length, cols: grid[0].length, hasTM, hasM };
+    const dial = p.pattern_dial;
+    if (Array.isArray(dial) && dial.length && Array.isArray(dial[0]) && dial[0].length) {
+      out.dial = dial; out.dialRows = dial.length; out.dialCols = dial[0].length;
     }
-    return null;
+    return out;
+  }
+
+  // Yarn twist for the helix bump: direction (S/Z) + twist multiplier (TPI feel).
+  _yarnTwist() {
+    const y = this.result.yarn || {};
+    const inp = this.result.input || {};
+    const dir = (y.twist_direction || inp.twist_direction || 'z').toString().toLowerCase().startsWith('s') ? 's' : 'z';
+    const fiber = this._classifyFiber();
+    const filament = fiber === 'polyester' || fiber === 'nylon' || fiber === 'silk';
+    const tm = parseFloat(inp.twist_multiplier || y.twist_multiplier) || (filament ? 2.4 : 3.8);
+    return { dir, tm };
   }
 
   _updateInfoLine(opts) {
@@ -1157,8 +1209,10 @@ class FabricVisualizer {
   }
 
   // ─────────────────────────────────────────────────────────
-  // CONSTRUCTION DETECTION — maps fabric id/category/name to a
-  // render recipe (face & back differ; brush/mesh/pile flags).
+  // CONSTRUCTION DETECTION — chooses only the render RECIPE (bed count, relief,
+  // pile/brush/mesh flags, hole source). The K/T/M CONTENT always comes from the
+  // real pattern matrix (_patternMatrix → _tokenAt), so a fabric renders its true
+  // structure even when its name doesn't match a keyword here.
   // ─────────────────────────────────────────────────────────
   _detectConstruction() {
     const fabric = this.result.fabric || {};
@@ -1168,20 +1222,25 @@ class FabricVisualizer {
     const s = `${id} ${cat} ${name}`;
     const has = (...k) => k.some(x => s.includes(x));
 
+    // do the real eyelets come from the programme (M cells) or a synthetic motif?
+    const g = (this.result.pattern || {}).pattern_cylinder;
+    const hasM = Array.isArray(g) && g.some(r => Array.isArray(r) && r.some(x => x === 'M'));
+    const holeSource = hasM ? 'pattern' : 'motif';
+
     // Warp knit family → tricot/raschel zig-zag wales
     if (cat.includes('warp') || has('tricot', 'raschel', 'warp_knit')) {
       if (has('mesh', 'net', 'powernet', 'marqui', 'hexagon', 'sandfly'))
-        return { type: 'mesh', base: 'warp', label: 'warp-knit mesh', mesh: true, holeShape: 'hex', brush: false };
+        return { type: 'mesh', base: 'warp', label: 'warp-knit mesh', mesh: true, holeShape: 'hex', holeSource, brush: false };
       if (has('spacer', 'sandwich', '3d'))
-        return { type: 'spacer', base: 'warp', label: '3D spacer mesh', mesh: true, holeShape: 'round', brush: false };
+        return { type: 'spacer', base: 'warp', label: '3D spacer mesh', mesh: true, holeShape: 'round', holeSource, brush: false };
       return { type: 'tricot', base: 'warp', label: 'warp-knit tricot', mesh: false, brush: false };
     }
 
     // Mesh / airtex / mock-mesh (weft) — the holey "breathable" fabrics
     if (has('mesh', 'airtex', 'air-tex', 'eyelet', 'net', 'aertex'))
-      return { type: 'mesh', base: 'single', label: 'mesh / airtex', mesh: true, holeShape: 'round', brush: false };
+      return { type: 'mesh', base: 'single', label: 'mesh / airtex', mesh: true, holeShape: 'round', holeSource, brush: false };
     if (has('pointelle', 'pointel'))
-      return { type: 'mesh', base: 'single', label: 'pointelle', mesh: true, holeShape: 'diamond', brush: false };
+      return { type: 'mesh', base: 'single', label: 'pointelle', mesh: true, holeShape: 'diamond', holeSource, brush: false };
 
     // Pile / brushed family
     if (has('fleece', 'polar'))
@@ -1201,12 +1260,15 @@ class FabricVisualizer {
       else if (has('lacoste')) plabel = has('double') ? 'double lacoste' : 'single lacoste';
       return { type: 'pique', base: 'single', label: plabel, mesh: false, brush: false };
     }
-    if (has('rib'))
+    // RIB only when the fabric category really is rib — NOT "mock rib" (a
+    // single-bed miss/knit jersey whose name merely contains "rib").
+    if (cat === 'rib' || (has('rib') && !has('mock')))
       return { type: 'rib', base: 'double', label: this._ribLabel(id, name), mesh: false, brush: false, ribRepeat: this._ribRepeat(id) };
-    if (has('interlock', 'double jersey', 'double knit', 'ponte'))
+    if (has('double jersey', 'double knit', 'ponte'))
       return { type: 'interlock', base: 'double', label: 'double knit', mesh: false, brush: false };
 
-    // Default: single jersey (stockinette)
+    // Default: single jersey recipe. twill/crepe/mock-rib land here and render
+    // their REAL diagonal/tuck/miss structure via the pattern matrix.
     return { type: 'jersey', base: 'single', label: 'single jersey', mesh: false, brush: false };
   }
 
@@ -1270,7 +1332,7 @@ class FabricVisualizer {
   /** Stitch token at a wale/course for a face. Front & back are intentionally
    *  different (knit V ↔ purl bump), giving real two-sided fabric.
    *  Tuck/miss come from the real K/T/M needle matrix when available. */
-  _tokenAt(w, c, side, opts) {
+  _tokenAt(w, c, side, opts, bed) {
     const con = opts.construction;
     const mod = (n, m) => ((n % m) + m) % m;
     // 1) structural knit/purl from the construction (rib columns, interlock…)
@@ -1284,16 +1346,19 @@ class FabricVisualizer {
       case 'interlock': front = 'knit'; break;          // interlock: knit both faces
       default: front = 'knit';
     }
-    // 2) overlay the real K/T/M programme (tuck/miss) onto knit cells
+    // 2) overlay the REAL K/T/M programme (tuck/miss/transfer) — the source of
+    //    truth. `bed==='dial'` reads the dial (back-bed) matrix when present so
+    //    interlock's two beds interleave correctly (one knits, one misses).
     if (front === 'knit') {
       const pat = opts.pattern;
-      if (pat && pat.grid) {
-        const cell = pat.grid[mod(c, pat.rows)][mod(w, pat.cols)] || 'K';
+      const useDial = bed === 'dial' && pat && pat.dial;
+      const g = useDial ? pat.dial : (pat && pat.grid);
+      const rows = useDial ? pat.dialRows : (pat && pat.rows);
+      const cols = useDial ? pat.dialCols : (pat && pat.cols);
+      if (g) {
+        const cell = g[mod(c, rows)][mod(w, cols)] || 'K';
         if (cell === 'T') front = 'tuck';
         else if (cell === 'M') front = 'miss';
-      } else if (con.type === 'pique') {
-        // synthetic honeycomb tuck lattice when no matrix is supplied
-        front = (mod(w, 2) === mod(c, 2)) ? 'tuck' : 'knit';
       }
     }
     // 3) interlock keeps knit on the back too; others flip knit↔purl
@@ -1817,15 +1882,17 @@ class FabricVisualizer {
     const mount = stage.querySelector('.ka3dgl-mount');
     const loading = stage.querySelector('.ka3dgl-loading');
 
-    // tokens for the patch come from the same K/T/M logic as the 2D view
+    // tokens for the patch come from the same K/T/M logic as the 2D view.
+    // sample = cylinder (front bed); sampleBack = dial (back bed, for interlock).
     const sample = (w, c) => this._tokenAt(w, c, 'front', opts);
+    const sampleBack = (w, c) => this._tokenAt(w, c, 'front', opts, 'dial');
     const glOpts = {
       dyed: this._dyedColor, construction: con, countNe: opts.countNe,
-      tf: opts.tf, fiberType: opts.fiberType, sheen: opts.sheen, sample,
-      physics: opts.physics,
+      tf: opts.tf, fiberType: opts.fiberType, sheen: opts.sheen, sample, sampleBack,
+      physics: opts.physics, density: opts.density, twist: this._yarnTwist(),
     };
 
-    import('/js/knit3d/index.js?v=20260608e').then(({ Knit3D }) => {
+    import('/js/knit3d/index.js?v=20260608f').then(({ Knit3D }) => {
       if (this._destroyed || this.activeTab !== 'threed') return;
       if (this._fabric3d) { try { this._fabric3d.dispose(); } catch (_) {} }
       this._fabric3d = new Knit3D();

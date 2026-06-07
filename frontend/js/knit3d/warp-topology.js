@@ -12,9 +12,9 @@
 // For warp NET / powernet, laps are periodically skipped → open eyelets.
 
 import * as THREE from 'three';
-import { knitLoop } from './loop-geometry.js?v=20260608e';
-import { stitchJitter } from './noise.js?v=20260608e';
-import { PITCH_X, PITCH_Y, JITTER, PATCH } from './constants.js?v=20260608e';
+import { knitLoop } from './loop-geometry.js?v=20260608f';
+import { stitchJitter } from './noise.js?v=20260608f';
+import { PITCH_X, PITCH_Y, JITTER, PATCH } from './constants.js?v=20260608f';
 
 const UNDERLAP_Z = -0.30;   // underlaps run across the technical back
 
@@ -25,6 +25,7 @@ export function buildWarpPaths(opts = {}) {
   const ends = opts.ends || PATCH.wales;
   const courses = opts.courses || PATCH.courses;
   const net = !!opts.net;                    // powernet / marquisette → skip laps
+  const pitchY = opts.pitchY || PITCH_Y;     // density-driven course spacing
   const paths = [];
 
   for (let e = 0; e < ends; e++) {
@@ -36,13 +37,13 @@ export function buildWarpPaths(opts = {}) {
 
       const wale = e + lap(c);
       const cx = wale * PITCH_X;
-      const cy = c * PITCH_Y;
+      const cy = c * pitchY;
       const jit = stitchJitter(e, c, JITTER);
 
       if (miss) {
         // underlap float straight up at the back (leaves an eyelet)
         const fx = cx + jit.x;
-        if (prevFoot) points.push(new THREE.Vector3((prevFoot.x + fx) / 2, cy - PITCH_Y * 0.5, UNDERLAP_Z));
+        if (prevFoot) points.push(new THREE.Vector3((prevFoot.x + fx) / 2, cy - pitchY * 0.5, UNDERLAP_Z));
         prevFoot = new THREE.Vector3(fx, cy, UNDERLAP_Z);
         points.push(prevFoot);
         continue;
