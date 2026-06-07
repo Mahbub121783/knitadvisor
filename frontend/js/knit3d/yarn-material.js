@@ -28,8 +28,10 @@ const FIBER = {
 };
 const SMOOTH = new Set(['polyester', 'nylon', 'silk']);
 
-// Procedural twist + fuzz texture, used as a bump map.
-function twistTexture(synthetic, fuzz) {
+// Procedural twist + fuzz texture (bump map). The helix DIRECTION (S vs Z) and
+// FREQUENCY (twist multiplier / TPI) are data-driven so the yarn reads as the
+// real spun count, not a generic pipe.
+function twistTexture(synthetic, fuzz, twist) {
   const w = 128, h = 128;
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
@@ -37,12 +39,14 @@ function twistTexture(synthetic, fuzz) {
   ctx.fillStyle = '#808080';
   ctx.fillRect(0, 0, w, h);
 
-  const step = 8;
+  const dir = (twist && twist.dir === 's') ? -1 : 1;   // Z = +slope, S = −slope
+  const tm = (twist && twist.tm) || 3.8;               // twist multiplier
+  const step = Math.max(5, Math.min(11, Math.round(13 - tm * 1.6)));  // more twist → tighter helix
   for (let i = -h; i < w + h; i += step) {
     ctx.strokeStyle = '#5d5d5d'; ctx.lineWidth = 2.6;
-    ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i + h, h); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i + dir * h, h); ctx.stroke();
     ctx.strokeStyle = '#a8a8a8'; ctx.lineWidth = 1.3;
-    ctx.beginPath(); ctx.moveTo(i + 3, 0); ctx.lineTo(i + h + 3, h); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(i + dir * 3, 0); ctx.lineTo(i + dir * (h + 3), h); ctx.stroke();
   }
   if (!synthetic) {
     const n = Math.round(3000 * fuzz);
@@ -55,7 +59,7 @@ function twistTexture(synthetic, fuzz) {
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.anisotropy = 4;
-  tex.repeat.set(8, 2);
+  tex.repeat.set(Math.max(6, Math.round(tm * 2.2)), 2);   // TPI → helices per loop
   return tex;
 }
 
@@ -116,7 +120,7 @@ export function createYarnMaterial(opts) {
   material.sheenColor = new THREE.Color(1, 1, 1);
   setYarnColorRGB(material, opts.dyed || { r: 120, g: 124, b: 134 });
 
-  const twist = twistTexture(synthetic, fuzz);
+  const twist = twistTexture(synthetic, fuzz, opts.twist);
   material.bumpMap = twist;
   material.bumpScale = bump;
 

@@ -12,12 +12,12 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-import { buildYarnPaths } from './topology-builder.js?v=20260608e';
-import { createYarnMaterial, setYarnColorHex } from './yarn-material.js?v=20260608e';
-import { buildFabricMesh, yarnRadius } from './fabric-mesh.js?v=20260608e';
-import { addStudioLighting } from './lighting.js?v=20260608e';
-import { buildPile } from './pile.js?v=20260608e';
-import { BACKING, PITCH_Y, RIB_PITCH_SCALE } from './constants.js?v=20260608e';
+import { buildYarnPaths } from './topology-builder.js?v=20260608f';
+import { createYarnMaterial, setYarnColorHex } from './yarn-material.js?v=20260608f';
+import { buildFabricMesh, yarnRadius } from './fabric-mesh.js?v=20260608f';
+import { addStudioLighting, configureShadowCamera } from './lighting.js?v=20260608f';
+import { buildPile } from './pile.js?v=20260608f';
+import { BACKING, PITCH_Y, RIB_PITCH_SCALE } from './constants.js?v=20260608f';
 
 const VIEW_HEIGHT = 380;
 
@@ -35,12 +35,17 @@ export class Knit3D {
     const W = container.clientWidth || 460;
     const H = VIEW_HEIGHT;
 
+    // Real shadows (microfiber self-shadowing) on capable viewports; disabled on
+    // the low-LOD tier (small / low-DPR) to stay smooth.
+    this._shadows = this._lodScale() >= 0.85;
+
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setSize(W, H);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.05;
+    if (this._shadows) { renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; }
     renderer.domElement.style.cssText =
       'width:100%;height:380px;display:block;border-radius:12px;cursor:grab;';
     container.appendChild(renderer.domElement);
@@ -48,12 +53,14 @@ export class Knit3D {
 
     const scene = new THREE.Scene();
     this.scene = scene;
-    addStudioLighting(scene);
+    const lights = addStudioLighting(scene, this._shadows);
+    this._key = lights.key;
 
     const camera = new THREE.PerspectiveCamera(40, W / H, 0.1, 200);
     this.camera = camera;
 
     this._buildFabric();
+    if (this._shadows) configureShadowCamera(this._key, this._size);
 
     // front view BEFORE OrbitControls so it becomes the saved reset state
     camera.position.set(0, 0, this._fitDist);
@@ -87,6 +94,7 @@ export class Knit3D {
       dyed: this.opts.dyed,
       fiberType: this.opts.fiberType,
       physics: this.opts.physics,
+      twist: this.opts.twist,
     });
     this._material = material;
     this._textures = textures;
@@ -94,21 +102,39 @@ export class Knit3D {
     // Size the patch to the viewport so the cloth FILLS the frame (no floating
     // square): build it landscape to match the canvas aspect, denser on big
     // screens, lighter on small/low-DPR devices (LOD) so weak GPUs stay smooth.
+    // Real stitch density (GSM·gauge·loop-length) drives loop height + how many
+    // stitches to show, so a tight 350gsm reads denser than a loose 150gsm.
     const con = this.opts.construction || {};
+    const density = this.opts.density || { aspect: 1.22, scalar: 1, wpc: 9, tex: 20 };
     const aspect = this.camera.aspect || 1.8;
     const lod = this._lodScale();
-    const baseCourses = con.type === 'interlock' ? 30 : 40;
-    const courses = Math.max(12, Math.round(baseCourses * lod));
-    // wales so width/height ≈ canvas aspect (PITCH_Y compresses height; rib draws in)
+    const beds = con.type === 'interlock' ? 2 : 1;
+
+    // effective course spacing (loop height): taller when loose (low cpc/wpc)
     const ribComp = con.type === 'rib' ? 1 / RIB_PITCH_SCALE : 1;
-    const wales = Math.max(14, Math.round(courses * PITCH_Y * aspect * ribComp));
+    const pitchY = PITCH_Y * (1 / Math.max(0.6, Math.min(density.aspect, 1.6)));
+
+    const baseCourses = con.type === 'interlock' ? 30 : 40;
+    let courses = Math.max(12, Math.round(baseCourses * lod * density.scalar));
+    let wales = Math.max(14, Math.round(courses * pitchY * aspect * ribComp));
+    // performance cap — keep total stitches bounded; shrink loops, not the count
+    const CAP = 3200;
+    if (wales * courses * beds > CAP) {
+      const k = Math.sqrt(CAP / (wales * courses * beds));
+      courses = Math.max(12, Math.round(courses * k));
+      wales = Math.max(14, Math.round(wales * k));
+    }
 
     const { paths } = buildYarnPaths({
-      construction: con, sample: this.opts.sample, wales, courses,
+      construction: con, sample: this.opts.sample, sampleBack: this.opts.sampleBack,
+      wales, courses, pitchY,
     });
 
-    const radius = yarnRadius(this.opts.countNe, this.opts.tf);
-    const group = buildFabricMesh(paths, material, { radius, radialSegments: 6 });
+    const radius = yarnRadius(this.opts.countNe, this.opts.tf, density);
+    const group = buildFabricMesh(paths, material, {
+      radius, radialSegments: 6, shadows: this._shadows,
+      fiberType: this.opts.fiberType,
+    });
     this.group = group;
 
     // measure the loops, then add an opaque backing so the swatch has body and
@@ -156,6 +182,7 @@ export class Knit3D {
     const geo = new THREE.PlaneGeometry(size.x * BACKING.pad, size.y * BACKING.pad);
     const plane = new THREE.Mesh(geo, mat);
     plane.position.set(center.x, center.y, BACKING.z);
+    if (this._shadows) plane.receiveShadow = true;   // loops drop contact shadows here
     group.add(plane);
     this._backing = { geo, mat, mesh: plane, baseShade: s };
   }
@@ -169,6 +196,7 @@ export class Knit3D {
       z: box.min.z - radius * (kind === 'loop' ? 0.6 : 1.0),   // behind the fabric
     };
     const { mesh, geometry } = buildPile(kind, bounds, this._material, { radius });
+    if (this._shadows) { mesh.castShadow = true; mesh.receiveShadow = true; }
     group.add(mesh);
     this._pile = { mesh, geometry };
   }

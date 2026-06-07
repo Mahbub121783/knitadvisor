@@ -10,7 +10,7 @@
 //   'diamond'        → vertical diamond eyelet columns (cf. the pink reference)
 //   'round'/other    → a regular scattered eyelet grid (airtex / net)
 
-import { HOLE_PUSH, HOLE_PUSH_Z } from './constants.js?v=20260608e';
+import { HOLE_PUSH, HOLE_PUSH_Z } from './constants.js?v=20260608f';
 
 const mod = (n, m) => ((n % m) + m) % m;
 
@@ -50,19 +50,16 @@ function motifFor(holeShape) {
   return chevron;            // hex / default
 }
 
-/** Build a hole-test + displacement helper for a construction. */
-export function makePointelle(holeShape) {
-  const fn = motifFor(holeShape);
-  const isHole = (w, c) => fn(w, c);
-
-  // Loops adjacent to a hole are pushed away from it (sum over 8 neighbours),
-  // which opens the eyelet instead of letting the loop close the gap.
-  const displacement = (w, c) => {
+// Loops adjacent to a hole are pushed away from it (sum over 8 neighbours),
+// which opens the eyelet instead of letting the loop close the gap. Shared by
+// both the synthetic motif and the real-pattern hole sources.
+function makeDisplacement(isHole) {
+  return (w, c) => {
     let dx = 0, dy = 0, dz = 0;
     for (let ow = -1; ow <= 1; ow++) {
       for (let oc = -1; oc <= 1; oc++) {
         if (!ow && !oc) continue;
-        if (!fn(w + ow, c + oc)) continue;
+        if (!isHole(w + ow, c + oc)) continue;
         const len = Math.hypot(ow, oc) || 1;
         dx -= (ow / len) * HOLE_PUSH;
         dy -= (oc / len) * HOLE_PUSH;
@@ -71,6 +68,20 @@ export function makePointelle(holeShape) {
     }
     return { x: dx, y: dy, z: dz };
   };
+}
 
-  return { isHole, displacement };
+/** Synthetic eyelet motif (chevron/diamond/grid) when the fabric carries no
+ *  real transfer pattern. */
+export function makePointelle(holeShape) {
+  const fn = motifFor(holeShape);
+  const isHole = (w, c) => fn(w, c);
+  return { isHole, displacement: makeDisplacement(isHole) };
+}
+
+/** REAL pointelle holes straight from the fabric's K/T/M matrix: a transfer
+ *  cell surfaces through `sample(w,c)` as 'miss'. This is the source of truth
+ *  (the actual programmed eyelet layout), preferred over the synthetic motif. */
+export function makePatternHoles(sample) {
+  const isHole = (w, c) => sample(w, c) === 'miss';
+  return { isHole, displacement: makeDisplacement(isHole) };
 }
