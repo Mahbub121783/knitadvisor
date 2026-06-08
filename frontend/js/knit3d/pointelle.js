@@ -10,7 +10,7 @@
 //   'diamond'        → vertical diamond eyelet columns (cf. the pink reference)
 //   'round'/other    → a regular scattered eyelet grid (airtex / net)
 
-import { HOLE_PUSH, HOLE_PUSH_Z } from './constants.js?v=20260608f';
+import { HOLE_PUSH, HOLE_PUSH_Z } from './constants.js?v=20260608g';
 
 const mod = (n, m) => ((n % m) + m) % m;
 

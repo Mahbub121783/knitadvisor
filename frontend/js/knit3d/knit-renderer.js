@@ -12,12 +12,13 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-import { buildYarnPaths } from './topology-builder.js?v=20260608f';
-import { createYarnMaterial, setYarnColorHex } from './yarn-material.js?v=20260608f';
-import { buildFabricMesh, yarnRadius } from './fabric-mesh.js?v=20260608f';
-import { addStudioLighting, configureShadowCamera } from './lighting.js?v=20260608f';
-import { buildPile } from './pile.js?v=20260608f';
-import { BACKING, PITCH_Y, RIB_PITCH_SCALE } from './constants.js?v=20260608f';
+import { buildYarnPaths } from './topology-builder.js?v=20260608g';
+import { createYarnMaterial, setYarnColorHex } from './yarn-material.js?v=20260608g';
+import { buildFabricMesh, yarnRadius } from './fabric-mesh.js?v=20260608g';
+import { addStudioLighting, configureShadowCamera } from './lighting.js?v=20260608g';
+import { buildPile } from './pile.js?v=20260608g';
+import { applyDrape } from './drape.js?v=20260608g';
+import { BACKING, PITCH_Y, RIB_PITCH_SCALE } from './constants.js?v=20260608g';
 
 const VIEW_HEIGHT = 380;
 
@@ -77,6 +78,11 @@ export class Knit3D {
     controls.saveState();
     this.controls = controls;
 
+    // real camera-distance LOD: boost fibre relief up close, soften far away
+    // (cheap material-tier swap — only touched on tier transitions)
+    this._lodK = 1;
+    controls.addEventListener('change', () => this._applyLod());
+
     this._ro = new ResizeObserver(() => this.resize());
     this._ro.observe(container);
 
@@ -130,6 +136,13 @@ export class Knit3D {
       wales, courses, pitchY,
     });
 
+    // analytic drape — gentle curve + wrinkles so it reads as real cloth, not a
+    // flat card. Heavier / denser / double-bed fabrics drape less.
+    const doubleBed = con.type === 'interlock' || con.type === 'rib';
+    const drapeAmount = Math.max(0.2, Math.min(
+      0.72 - (density.scalar - 1) * 0.35 - (doubleBed ? 0.15 : 0), 0.75));
+    applyDrape(paths, { amount: drapeAmount });
+
     const radius = yarnRadius(this.opts.countNe, this.opts.tf, density);
     const group = buildFabricMesh(paths, material, {
       radius, radialSegments: 6, shadows: this._shadows,
@@ -161,6 +174,19 @@ export class Knit3D {
     const distFillHeight = size.y / (2 * t);
     const distFillWidth  = size.x / (2 * t * aspect);
     return Math.min(distFillHeight, distFillWidth) * 0.98;
+  }
+
+  // Camera-distance LOD (material tier): near → stronger normal-map relief so
+  // the twist/fibre reads when zoomed in; far → softer so it doesn't shimmer.
+  _applyLod() {
+    const m = this._material;
+    if (!m || !m.userData || !m.userData.baseNormalScale || !this.controls) return;
+    const ratio = this.controls.getDistance() / (this._fitDist || 1);
+    const k = ratio < 0.6 ? 1.4 : ratio > 1.3 ? 0.65 : 1.0;
+    if (k === this._lodK) return;                 // only on tier transition
+    this._lodK = k;
+    const ns = m.userData.baseNormalScale * k;
+    m.normalScale.set(ns, ns);
   }
 
   // density multiplier from viewport — full on desktop, lighter on small/low-DPR

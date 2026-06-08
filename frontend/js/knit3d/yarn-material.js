@@ -28,17 +28,12 @@ const FIBER = {
 };
 const SMOOTH = new Set(['polyester', 'nylon', 'silk']);
 
-// Procedural twist + fuzz texture (bump map). The helix DIRECTION (S vs Z) and
-// FREQUENCY (twist multiplier / TPI) are data-driven so the yarn reads as the
-// real spun count, not a generic pipe.
-function twistTexture(synthetic, fuzz, twist) {
-  const w = 128, h = 128;
-  const c = document.createElement('canvas');
-  c.width = w; c.height = h;
-  const ctx = c.getContext('2d');
+// Draw the twist+fuzz HEIGHTFIELD (grayscale) into ctx. The helix DIRECTION
+// (S vs Z) and FREQUENCY (twist multiplier / TPI) are data-driven so the yarn
+// reads as the real spun count, not a generic pipe. Returns the helix repeat.
+function drawTwistHeight(ctx, w, h, synthetic, fuzz, twist) {
   ctx.fillStyle = '#808080';
   ctx.fillRect(0, 0, w, h);
-
   const dir = (twist && twist.dir === 's') ? -1 : 1;   // Z = +slope, S = −slope
   const tm = (twist && twist.tm) || 3.8;               // twist multiplier
   const step = Math.max(5, Math.min(11, Math.round(13 - tm * 1.6)));  // more twist → tighter helix
@@ -56,10 +51,41 @@ function twistTexture(synthetic, fuzz, twist) {
       ctx.fillRect(Math.random() * w, Math.random() * h, 1, 1.3);
     }
   }
-  const tex = new THREE.CanvasTexture(c);
+  return Math.max(6, Math.round(tm * 2.2));   // TPI → helices per loop
+}
+
+// True tangent-space NORMAL map (Sobel of the heightfield) → far more convincing
+// fibre relief than a bump map under shadowed PBR lighting.
+function twistNormalTexture(synthetic, fuzz, twist) {
+  const w = 128, h = 128;
+  const hc = document.createElement('canvas'); hc.width = w; hc.height = h;
+  const repeatX = drawTwistHeight(hc.getContext('2d'), w, h, synthetic, fuzz, twist);
+  const src = hc.getContext('2d').getImageData(0, 0, w, h).data;
+  const H = (x, y) => src[(((y + h) % h) * w + ((x + w) % w)) * 4] / 255;
+
+  const out = document.createElement('canvas'); out.width = w; out.height = h;
+  const octx = out.getContext('2d');
+  const img = octx.createImageData(w, h);
+  const strength = 2.2;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const dx = (H(x - 1, y) - H(x + 1, y)) * strength;
+      const dy = (H(x, y - 1) - H(x, y + 1)) * strength;
+      const nz = 1.0;
+      const len = Math.hypot(dx, dy, nz) || 1;
+      const i = (y * w + x) * 4;
+      img.data[i]     = (dx / len * 0.5 + 0.5) * 255;
+      img.data[i + 1] = (dy / len * 0.5 + 0.5) * 255;
+      img.data[i + 2] = (nz / len * 0.5 + 0.5) * 255;
+      img.data[i + 3] = 255;
+    }
+  }
+  octx.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(out);
+  tex.colorSpace = THREE.NoColorSpace;     // normal maps must NOT be sRGB-decoded
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.anisotropy = 4;
-  tex.repeat.set(Math.max(6, Math.round(tm * 2.2)), 2);   // TPI → helices per loop
+  tex.repeat.set(repeatX, 2);
   return tex;
 }
 
@@ -120,9 +146,11 @@ export function createYarnMaterial(opts) {
   material.sheenColor = new THREE.Color(1, 1, 1);
   setYarnColorRGB(material, opts.dyed || { r: 120, g: 124, b: 134 });
 
-  const twist = twistTexture(synthetic, fuzz, opts.twist);
-  material.bumpMap = twist;
-  material.bumpScale = bump;
+  const normal = twistNormalTexture(synthetic, fuzz, opts.twist);
+  material.normalMap = normal;
+  const ns = Math.max(0.3, Math.min(bump * 35, 1.4));   // per-fibre relief strength
+  material.normalScale = new THREE.Vector2(ns, ns);
+  material.userData.baseNormalScale = ns;               // LOD swaps around this
 
-  return { material, textures: [twist] };
+  return { material, textures: [normal] };
 }

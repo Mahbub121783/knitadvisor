@@ -6,7 +6,7 @@
 // the wireframe / colour controls act globally).
 
 import * as THREE from 'three';
-import { hash2 } from './noise.js?v=20260608f';
+import { hash2 } from './noise.js?v=20260608g';
 
 // Staple/natural fibres get slub (thick-thin) + nep; smooth filament stays even.
 const NATURAL = new Set(['cotton', 'linen', 'hemp', 'wool', 'viscose', 'modal', 'acrylic']);

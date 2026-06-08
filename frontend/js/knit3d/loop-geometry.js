@@ -15,7 +15,7 @@
 //   sinker          true → append the trailing sinker toward the next wale
 
 import * as THREE from 'three';
-import { PITCH_X, LOOP, TUCK, MISS, TRANSFER_Z } from './constants.js?v=20260608f';
+import { PITCH_X, LOOP, TUCK, MISS, TRANSFER_Z } from './constants.js?v=20260608g';
 
 // Build a local point, applying mirror (z), jitter and the world centre.
 function P(ctx, lx, ly, lz) {
