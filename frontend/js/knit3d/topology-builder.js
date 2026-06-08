@@ -14,14 +14,14 @@
 //     hole cell carries the yarn across the back and the ring loops lean away,
 //     opening the eyelet (chevron / diamond / grid motifs).
 
-import { stitchPoints } from './loop-geometry.js?v=20260608f';
-import { stitchJitter } from './noise.js?v=20260608f';
-import { makePointelle, makePatternHoles } from './pointelle.js?v=20260608f';
-import { buildWarpPaths } from './warp-topology.js?v=20260608f';
+import { stitchPoints } from './loop-geometry.js?v=20260608g';
+import { stitchJitter } from './noise.js?v=20260608g';
+import { makePointelle, makePatternHoles } from './pointelle.js?v=20260608g';
+import { buildWarpPaths } from './warp-topology.js?v=20260608g';
 import {
   PITCH_X, PITCH_Y, RIB_PITCH_SCALE, RIB_DEPTH,
   INTERLOCK_DEPTH, INTERLOCK_GAIT, JITTER, PATCH,
-} from './constants.js?v=20260608f';
+} from './constants.js?v=20260608g';
 
 const isHoldToken = (t) => t === 'tuck' || t === 'miss';
 
@@ -85,17 +85,18 @@ export function buildYarnPaths(opts) {
   if (con.type === 'interlock') {
     const wales = opts.wales || PATCH.interlockWales;
     const courses = opts.courses || PATCH.interlockCourses;
-    // front bed knits the CYLINDER programme; back bed knits the DIAL programme
-    // (their 'M' gaiting interleaves the two beds — true interlock, not 2 jerseys)
-    const sampleBack = opts.sampleBack || sample;
+    // The FINISHED interlock face reads as full knit on BOTH sides (the K/M
+    // per-feed alternation isn't visible in the cloth). So each bed forms a full
+    // knit fabric, gaited half a wale and depth-separated → a dense, solid,
+    // reversible double-knit (not a holey checkerboard).
     for (let c = 0; c < courses; c++) {
       paths.push(buildCourse(c, {
         wales, courses, sample, xPitch: PITCH_X, xOffset: 0, pitchY,
-        baseMirror: false, zBaseFor: () => INTERLOCK_DEPTH,
+        baseMirror: false, forceToken: 'knit', zBaseFor: () => INTERLOCK_DEPTH,
       }));
       paths.push(buildCourse(c, {
-        wales, courses, sample: sampleBack, xPitch: PITCH_X, xOffset: PITCH_X * INTERLOCK_GAIT, pitchY,
-        baseMirror: true, zBaseFor: () => -INTERLOCK_DEPTH,
+        wales, courses, sample, xPitch: PITCH_X, xOffset: PITCH_X * INTERLOCK_GAIT, pitchY,
+        baseMirror: true, forceToken: 'knit', zBaseFor: () => -INTERLOCK_DEPTH,
       }));
     }
     return { paths };
