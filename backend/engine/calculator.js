@@ -36,6 +36,7 @@ const {
   parseComposition,
   getCompositionModifiers,
   classifyColorShade,
+  classifyShadeByDepth,
 } = require('./composition-engine');
 
 const colorEngine = require('./color-engine');
@@ -85,7 +86,7 @@ function calculate(params) {
           target_width, yarn_type, twist_multiplier, finishing_route,
           fiber_grade, spinning_system, yarn_form, slub_thickness, slub_length_cm, slub_spacing_cm,
           denier, filaments, elastane_denier, elastane_pct, dyeing_method,
-          light_source, illuminant } = normalizeParams(params);
+          light_source, illuminant, shade_depth_pct } = normalizeParams(params);
 
   if (!fabric) return { error: 'fabric is required', code: 'MISSING_FABRIC' };
   if (!gsm) return { error: 'gsm is required', code: 'MISSING_GSM' };
@@ -123,32 +124,43 @@ function calculate(params) {
   if (!effectiveShade && colorResolved && colorResolved.shade_tier) {
     effectiveShade = colorResolved.shade_tier;
   }
+  // Continuous dye-depth (%OWF) overrides the 6-tier button entirely when given.
+  const useDepth = shade_depth_pct !== null && shade_depth_pct !== undefined && !isNaN(shade_depth_pct);
 
   // --- 1.6. Color shade analysis + SL adjustment ---
   let colorResult = null;
-  if (effectiveShade) {
-    colorResult = classifyColorShade(effectiveShade);
+  if (useDepth || effectiveShade) {
+    colorResult = useDepth ? classifyShadeByDepth(shade_depth_pct) : classifyColorShade(effectiveShade);
+    if (useDepth) effectiveShade = colorResult.shade; // nearest tier — still needed by family-keyed lookups below
     // Combined SL: composition_factor × shade_factor
     const compSLBefore = compModifiers.sl_factor || 1.0;
     compModifiers.sl_factor = parseFloat((compSLBefore * colorResult.sl_factor).toFixed(4));
-    // Grey GSM: what to knit before dyeing. Single source of truth shared with the
-    // Wet-Processing Critical Path card (wet-processing-engine.js) — both used to run
-    // independent formulas (a flat dye-mass-only factor here vs. an area-shrinkage +
-    // dye-add-on model there) and could disagree by several GSM for the same shade.
     const wetFam = resolveFamily(fabricDef.id, fabricDef.category);
-    const greigeForShade = greigeGsmTarget(gsm, wetFam, effectiveShade, dyeing_method);
-    colorResult.grey_gsm_target = greigeForShade
-      ? greigeForShade.grey_gsm_target
-      : parseFloat((gsm * colorResult.grey_gsm_factor).toFixed(1));
-    colorResult.grey_gsm_factor = parseFloat((colorResult.grey_gsm_target / gsm).toFixed(4));
-    if (greigeForShade) colorResult.gsm_adjustment_pct = greigeForShade.dye_add_on_pct;
+    if (useDepth) {
+      // Continuous mode: trust the %OWF-interpolated grey-GSM directly — the
+      // whole point of giving a real dye-recipe % instead of a button is to
+      // NOT snap to one of 6 buckets, so don't let the discrete real-data
+      // lookup below (keyed by the nearest tier) override it.
+      colorResult.grey_gsm_target = parseFloat((gsm * colorResult.grey_gsm_factor).toFixed(1));
+    } else {
+      // Grey GSM: what to knit before dyeing. Single source of truth shared with the
+      // Wet-Processing Critical Path card (wet-processing-engine.js) — both used to run
+      // independent formulas (a flat dye-mass-only factor here vs. an area-shrinkage +
+      // dye-add-on model there) and could disagree by several GSM for the same shade.
+      const greigeForShade = greigeGsmTarget(gsm, wetFam, effectiveShade, dyeing_method);
+      colorResult.grey_gsm_target = greigeForShade
+        ? greigeForShade.grey_gsm_target
+        : parseFloat((gsm * colorResult.grey_gsm_factor).toFixed(1));
+      colorResult.grey_gsm_factor = parseFloat((colorResult.grey_gsm_target / gsm).toFixed(4));
+      if (greigeForShade) colorResult.gsm_adjustment_pct = greigeForShade.dye_add_on_pct;
+    }
     colorResult.finish_gsm_target = gsm;
     colorResult.comp_sl_factor = compSLBefore;
     colorResult.combined_sl_factor = compModifiers.sl_factor;
     trace.push({ step: '1.6', action: 'color_shade', result: colorResult, sl_factor_combined: compModifiers.sl_factor });
     const adjSign = colorResult.gsm_adjustment_pct >= 0 ? '+' : '';
     warnings.push(
-      `${colorResult.shade.toUpperCase()} shade: SET GREY GSM = ${colorResult.grey_gsm_target} g/m² (finish target: ${gsm} g/m², dye uptake ${adjSign}${colorResult.gsm_adjustment_pct}%). SL set ${colorResult.sl_direction} (factor ×${colorResult.sl_factor}).`
+      `${colorResult.shade.toUpperCase()} shade${useDepth ? ` (${colorResult.owf_pct}% OWF)` : ''}: SET GREY GSM = ${colorResult.grey_gsm_target} g/m² (finish target: ${gsm} g/m², dye uptake ${adjSign}${colorResult.gsm_adjustment_pct}%). SL set ${colorResult.sl_direction} (factor ×${colorResult.sl_factor}).`
     );
   }
 
@@ -1011,6 +1023,10 @@ function normalizeParams(p) {
     elastane_pct: p.elastane_pct ? parseFloat(p.elastane_pct) : null,
     // Wet-processing critical path: dyeing method (reactive default)
     dyeing_method: p.dyeing_method ? String(p.dyeing_method).trim() : null,
+    // Continuous dye-depth override (% OWF) — replaces the 6-tier shade
+    // button with a real dye-concentration value when provided.
+    shade_depth_pct: (p.shade_depth_pct !== undefined && p.shade_depth_pct !== null && p.shade_depth_pct !== '')
+      ? parseFloat(p.shade_depth_pct) : null,
   };
 }
 

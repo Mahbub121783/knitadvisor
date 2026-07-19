@@ -1348,6 +1348,26 @@ function getColorForCosting(input) {
   return { shade_tier: null, dyeing_cost_key: null };
 }
 
+// Common single-word color names, resolved by ΔE2000 distance to a CSS-
+// standard reference hex (same nearestTCX() path already used for raw hex
+// input) rather than by fuzzy name string-matching. searchByName()'s scoring
+// ranks a plain `startsWith` match above a `contains` match with NO semantic
+// check, so typing "black" returned "Blackberry Wine" (#3C2840, family
+// "pink") — it starts with "black" and sorts first alphabetically by Pantone
+// code among the other startsWith matches (Black Iris, Black Forest), while
+// the genuinely near-black "Jet Black" only scored as a lower "contains"
+// match and lost. Same failure mode hit "white" (→ a beige), "gray" (→ a
+// lavender), "yellow" (→ a specific pear variant instead of true yellow),
+// and "grey" (British spelling) matched NOTHING and returned null entirely.
+const COMMON_COLOR_ANCHORS = {
+  black: '#000000', white: '#FFFFFF', red: '#FF0000', green: '#008000',
+  blue: '#0000FF', yellow: '#FFFF00', orange: '#FFA500', purple: '#800080',
+  pink: '#FFC0CB', gray: '#808080', grey: '#808080', navy: '#000080',
+  brown: '#8B4513', maroon: '#800000', teal: '#008080', cream: '#FFFDD0',
+  beige: '#F5F5DC', olive: '#808000', turquoise: '#40E0D0',
+  lavender: '#E6E6FA', burgundy: '#800020', charcoal: '#36454F', ivory: '#FFFFF0',
+};
+
 /**
  * Get complete visualization data for ANY color input.
  * This is the MAIN function for frontend rendering.
@@ -1357,6 +1377,32 @@ function getColorForCosting(input) {
  */
 function getColorPreview(input) {
   if (!input || typeof input !== 'string') return null;
+
+  // Common base color word — resolve by real perceptual distance (ΔE2000) to
+  // the CSS-standard reference, not fuzzy name matching. Takes priority over
+  // the generic name search below for exactly this reason.
+  const anchorHex = COMMON_COLOR_ANCHORS[input.toLowerCase().trim()];
+  if (anchorHex) {
+    const rgb = hexToRgb(anchorHex);
+    const hsl = rgb ? rgbToHsl(rgb[0], rgb[1], rgb[2]) : null;
+    const nearest = nearestTCX(anchorHex, 1);
+    if (nearest.length > 0) {
+      const n = nearest[0];
+      const nRgb = n.rgb.length ? n.rgb : hexToRgb(n.hex);
+      return {
+        hex: n.hex, rgb: nRgb || [], hsl,
+        name: n.name, tcx_code: n.code,
+        tcx_label: n.tcx_label,
+        family: n.family,
+        temperature: _colorTemperature(hsl),
+        shade_tier: classifyFromTCX(n.code).shade,
+        swatch_css: `background-color: ${n.hex};`,
+        text_color: _contrastTextColor(nRgb),
+        contrast_on_white: contrastRatio(n.hex, '#FFFFFF'),
+        contrast_on_black: contrastRatio(n.hex, '#000000'),
+      };
+    }
+  }
 
   // TCX code
   const tcxCode = parseTCXCode(input);
