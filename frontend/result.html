@@ -621,7 +621,7 @@
       <div class="result-section-title">
         <div class="rst-icon purple">🛡️</div>
         <div class="rst-title-text">Fabric Quality & Shrinkage Prediction</div>
-        <span class="badge badge-purple" style="margin-left:auto">Predictive Model</span>
+        <span class="badge badge-purple" id="quality-model-badge" style="margin-left:auto">Predictive Model</span>
       </div>
 
       <div class="range-grid">
@@ -672,6 +672,23 @@
       <div class="result-section-label" style="color:var(--a3);">Recommended Finishing Process</div>
       <ul id="quality-finishing-recs" style="padding-left:16px; margin-top:8px; font-size:12px; color:var(--t2); line-height:1.6; display:flex; flex-direction:column; gap:6px;">
       </ul>
+
+      <!-- Real matched production job (risk-assessment dataset) — only shown
+           for a genuinely close match; see risk-assessment.js confidence gate -->
+      <div id="risk-match-block" class="hidden" style="margin-top:14px; border-top:1px solid var(--line3); padding-top:12px;">
+        <div class="result-section-label" style="color:#fb923c; margin-top:0;">Known Risk Factors <span style="font-size:9px; color:var(--t3); font-weight:400;">— from a matching real production job</span></div>
+        <div style="font-size:10px; color:var(--t3); margin-bottom:8px;" id="risk-match-name">—</div>
+        <div id="risk-match-tags" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;"></div>
+
+        <div class="result-section-label" style="margin-top:8px;">Special Instructions</div>
+        <ul id="risk-match-instructions" style="padding-left:16px; margin-top:6px; font-size:11.5px; color:var(--t2); line-height:1.6; display:flex; flex-direction:column; gap:4px;"></ul>
+
+        <div class="result-section-label" style="margin-top:8px;">Real Process Route</div>
+        <div id="risk-match-route" style="font-size:10px; line-height:1.9; margin-top:4px;"></div>
+
+        <div class="result-section-label" style="margin-top:8px;">Remarks &amp; Quality Notes</div>
+        <ul id="risk-match-remarks" style="padding-left:16px; margin-top:6px; font-size:11.5px; color:var(--t2); line-height:1.6; display:flex; flex-direction:column; gap:4px;"></ul>
+      </div>
     </div>
 
     <!-- ===== WARP KNIT SPECIFICATION ===== -->
@@ -1780,14 +1797,53 @@ function renderQuality(q) {
     document.getElementById('row-finish-route').style.display = 'none';
   }
 
+  // Real matched production job — shrinkage above is the ACTUAL measured
+  // result from that job when this is present, not a formula prediction.
+  const riskMatch = q.risk_match;
+  const hasRiskMatch = !!(riskMatch && riskMatch.ok && riskMatch.show);
+  const modelBadge = document.getElementById('quality-model-badge');
+  if (modelBadge) {
+    if (hasRiskMatch) {
+      modelBadge.textContent = 'Real Factory Match';
+      modelBadge.className = 'badge badge-green';
+    } else {
+      modelBadge.textContent = 'Predictive Model';
+      modelBadge.className = 'badge badge-purple';
+    }
+  }
+
   // Accuracy / test-standard footnote
   const accEl = document.getElementById('quality-accuracy-note');
   if (accEl) {
     const mm = q.model_meta;
-    const calNote = (q.shrinkage?.calibrated || q.spirality?.calibrated) ? ' ✓ Calibrated to your lab data.' : '';
+    const calNote = hasRiskMatch
+      ? ` ✓ Shrinkage matched to a real production job (${riskMatch.matched.name}) — these are actual measured results, not a prediction.`
+      : (q.shrinkage?.calibrated || q.spirality?.calibrated) ? ' ✓ Calibrated to lab data.' : '';
     accEl.innerHTML = mm
       ? `<strong>Model v${mm.version}</strong> — grounded in dominant physical drivers (yarn torque, twist factor, relaxation reference state, finishing route). Tested per ${mm.test_standards.spirality} (spirality) & ${mm.test_standards.shrinkage} (shrinkage). Values carry a ± confidence band; anchor with one lab test for exact figures.${calNote}`
       : '';
+  }
+
+  // Known risk factors / special instructions / real process route — only for
+  // a genuinely close match (risk-assessment.js gates `show` on distance).
+  const riskBlock = document.getElementById('risk-match-block');
+  if (hasRiskMatch) {
+    riskBlock.classList.remove('hidden');
+    const m = riskMatch.matched;
+    document.getElementById('risk-match-name').textContent =
+      `Nearest real job: ${m.name} · ${m.composition_raw} · ${m.gsm} GSM (${riskMatch.confidence} confidence, ${riskMatch.matched && riskMatch.confidence_pct != null ? riskMatch.confidence_pct : ''}%)`;
+    document.getElementById('risk-match-tags').innerHTML = (m.risk_tags || []).map(t =>
+      `<span class="badge" style="background:rgba(251,146,60,.12); color:#fb923c; border:1px solid rgba(251,146,60,.3);">⚠ ${t}</span>`
+    ).join('') || '<span style="font-size:11px;color:var(--t3);">None documented</span>';
+    document.getElementById('risk-match-instructions').innerHTML = (m.special_instructions || []).map(s => `<li>${s}</li>`).join('')
+      || '<li style="color:var(--t3);">None documented</li>';
+    document.getElementById('risk-match-route').innerHTML = (m.process_route || []).map((step, i) =>
+      `<span style="display:inline-block;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:5px;padding:2px 7px;margin:2px;color:var(--t2);">${step}</span>${i < m.process_route.length - 1 ? '<span style="color:var(--t3);margin:0 1px;">→</span>' : ''}`
+    ).join('');
+    document.getElementById('risk-match-remarks').innerHTML = (m.remarks || []).map(s => `<li>${s}</li>`).join('')
+      || '<li style="color:var(--t3);">None documented</li>';
+  } else {
+    riskBlock.classList.add('hidden');
   }
 
   // Pilling

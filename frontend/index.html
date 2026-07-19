@@ -601,6 +601,14 @@
                     <option value="core_spun">Core-Spun (lycra core)</option>
                   </select>
                 </div>
+                <div class="form-group">
+                  <label class="form-label" for="feeder-type-input">Feeder Type <span class="text-dim">(lycra rib)</span></label>
+                  <select id="feeder-type-input" class="form-select">
+                    <option value="">— auto (half feeder) —</option>
+                    <option value="hf">Half Feeder (HF)</option>
+                    <option value="ff">Full Feeder (FF)</option>
+                  </select>
+                </div>
               </div>
               <div class="info-box mt-12" style="font-size:10px; line-height:1.6;">
                 Quality hierarchy: <strong>Supima/Giza (ELS) › Combed › Carded › Open-End › Recycled</strong>.
@@ -879,6 +887,7 @@ const PREFILL_FIELD_MAP = {
   fiber_grade: 'fiber-grade-input',
   spinning_system: 'spinning-input',
   yarn_form: 'yarn-form-input',
+  feeder_type: 'feeder-type-input',
   finishing_route: 'finishing-route-input',
   dyeing_method: 'dyeing-method-input',
   twist_multiplier: 'twist-input',
@@ -1386,6 +1395,7 @@ async function doCalculate() {
     fiber_grade: document.getElementById('fiber-grade-input').value || undefined,
     spinning_system: document.getElementById('spinning-input').value || undefined,
     yarn_form: document.getElementById('yarn-form-input').value || undefined,
+    feeder_type: document.getElementById('feeder-type-input').value || undefined,
     finishing_route: document.getElementById('finishing-route-input').value || undefined,
     dyeing_method: document.getElementById('dyeing-method-input').value || undefined,
     twist_multiplier: parseFloat(document.getElementById('twist-input').value) || undefined,

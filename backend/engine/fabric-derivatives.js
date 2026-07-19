@@ -1953,6 +1953,234 @@ const FABRIC_DERIVATIVES = [
   },
 
   {
+    id: 'rib_3x1',
+    name: '3×1 Rib',
+    name_bn: '৩×১ রিব',
+    category: 'rib',
+    base: 'rib_1x1',
+    machine_type: 'double_bed_circular',
+    gauge_range: { min: 14, max: 22 },
+    gsm_range: { min: 150, max: 480 },
+    count_formula: {
+      type: 'regression',
+      a: -0.117, b: 53.50,
+      source: 'ESTIMATED',
+      note: '3 cylinder needles active, 1 dial needle active.'
+    },
+    ll_multiplier: 1.41,
+    ll_source: 'ESTIMATED — interpolated between 2x1 and 4x1 rib multipliers',
+    typical_gauge: 18,
+    structure: {
+      type: 'weft_knit',
+      courses_per_repeat: 1,
+      wales_per_repeat: 4,
+      beds: ['cylinder', 'dial'],
+      pattern: {
+        C: [['K','K','K','M']],
+        D: [['M','M','M','K']]
+      },
+      cam: [
+        { feed: 1, cylinder: 'K on 3, M on 1', dial: 'M on 3, K on 1', note: '3 active cylinder needles alternate with 1 active dial needle' }
+      ],
+      needle_arrangement: {
+        butt_pattern: 'AAAB_AAAB',
+        description: '3 active cylinder needles followed by 1 active dial needle.'
+      }
+    },
+    appearance: 'Wide vertical face cords with a narrow single-wale back rib. Between 2×1 and 4×1 in density.'
+  },
+
+  {
+    id: 'rib_4x2',
+    name: '4×2 Rib',
+    name_bn: '৪×২ রিব',
+    category: 'rib',
+    base: 'rib_1x1',
+    machine_type: 'double_bed_circular',
+    gauge_range: { min: 12, max: 20 },
+    gsm_range: { min: 160, max: 500 },
+    count_formula: {
+      type: 'regression',
+      a: -0.108, b: 55.50,
+      source: 'ESTIMATED',
+      note: '4 cylinder needles active, 2 dial needles active.'
+    },
+    ll_multiplier: 1.47,
+    ll_source: 'ESTIMATED — wider block than 3x2, more yarn at each rib transition',
+    typical_gauge: 16,
+    structure: {
+      type: 'weft_knit',
+      courses_per_repeat: 1,
+      wales_per_repeat: 6,
+      beds: ['cylinder', 'dial'],
+      pattern: {
+        C: [['K','K','K','K','M','M']],
+        D: [['M','M','M','M','K','K']]
+      },
+      cam: [
+        { feed: 1, cylinder: 'K on 4, M on 2', dial: 'M on 4, K on 2', note: 'Alternating block of 4 cylinder needles active and 2 dial needles active' }
+      ],
+      needle_arrangement: {
+        butt_pattern: 'AAAABB_AAAABB',
+        description: '4 active cylinder needles followed by 2 active dial needles.'
+      }
+    },
+    appearance: 'Broad face panels with a moderate 2-wale back rib. Structured, sweater-weight ribbing.'
+  },
+
+  {
+    id: 'rib_4x3',
+    name: '4×3 Rib',
+    name_bn: '৪×৩ রিব',
+    category: 'rib',
+    base: 'rib_1x1',
+    machine_type: 'double_bed_circular',
+    gauge_range: { min: 10, max: 18 },
+    gsm_range: { min: 170, max: 520 },
+    count_formula: {
+      type: 'regression',
+      a: -0.106, b: 57.00,
+      source: 'ESTIMATED',
+      note: '4 cylinder needles active, 3 dial needles active.'
+    },
+    ll_multiplier: 1.49,
+    ll_source: 'ESTIMATED — near-balanced wide block, between 3x3 and 5x4 in density',
+    typical_gauge: 14,
+    structure: {
+      type: 'weft_knit',
+      courses_per_repeat: 1,
+      wales_per_repeat: 7,
+      beds: ['cylinder', 'dial'],
+      pattern: {
+        C: [['K','K','K','K','M','M','M']],
+        D: [['M','M','M','M','K','K','K']]
+      },
+      cam: [
+        { feed: 1, cylinder: 'K on 4, M on 3', dial: 'M on 4, K on 3', note: 'Alternating block of 4 cylinder needles active and 3 dial needles active' }
+      ],
+      needle_arrangement: {
+        butt_pattern: 'AAAABBB_AAAABBB',
+        description: '4 active cylinder needles followed by 3 active dial needles.'
+      }
+    },
+    appearance: 'Near-balanced broad panels, heavier and bulkier than 3×3. Used in chunky knitwear ribbing.'
+  },
+
+  {
+    id: 'rib_5x1',
+    name: '5×1 Rib',
+    name_bn: '৫×১ রিব',
+    category: 'rib',
+    base: 'rib_1x1',
+    machine_type: 'double_bed_circular',
+    gauge_range: { min: 12, max: 20 },
+    gsm_range: { min: 160, max: 480 },
+    count_formula: {
+      type: 'regression',
+      a: -0.118, b: 53.00,
+      source: 'ESTIMATED',
+      note: '5 cylinder needles active, 1 dial needle active.'
+    },
+    ll_multiplier: 1.40,
+    ll_source: 'ESTIMATED — very sparse backing rib, similar flat-face economy to 4x1',
+    typical_gauge: 16,
+    structure: {
+      type: 'weft_knit',
+      courses_per_repeat: 1,
+      wales_per_repeat: 6,
+      beds: ['cylinder', 'dial'],
+      pattern: {
+        C: [['K','K','K','K','K','M']],
+        D: [['M','M','M','M','M','K']]
+      },
+      cam: [
+        { feed: 1, cylinder: 'K on 5, M on 1', dial: 'M on 5, K on 1', note: '5 active cylinder needles and 1 active dial needle repeating sequence' }
+      ],
+      needle_arrangement: {
+        butt_pattern: 'AAAAAB_AAAAAB',
+        description: '5 active needles on cylinder bed, 1 active needle on dial bed.'
+      }
+    },
+    appearance: 'Very wide flat face panels separated by narrow single-wale channels. Near single-jersey look with rib elasticity at the seam lines.'
+  },
+
+  {
+    id: 'rib_5x3',
+    name: '5×3 Rib',
+    name_bn: '৫×৩ রিব',
+    category: 'rib',
+    base: 'rib_1x1',
+    machine_type: 'double_bed_circular',
+    gauge_range: { min: 10, max: 18 },
+    gsm_range: { min: 180, max: 540 },
+    count_formula: {
+      type: 'regression',
+      a: -0.104, b: 58.00,
+      source: 'ESTIMATED',
+      note: '5 cylinder needles active, 3 dial needles active.'
+    },
+    ll_multiplier: 1.50,
+    ll_source: 'ESTIMATED — wide asymmetric block, heavier than 4x3',
+    typical_gauge: 14,
+    structure: {
+      type: 'weft_knit',
+      courses_per_repeat: 1,
+      wales_per_repeat: 8,
+      beds: ['cylinder', 'dial'],
+      pattern: {
+        C: [['K','K','K','K','K','M','M','M']],
+        D: [['M','M','M','M','M','K','K','K']]
+      },
+      cam: [
+        { feed: 1, cylinder: 'K on 5, M on 3', dial: 'M on 5, K on 3', note: 'Alternating block of 5 cylinder needles active and 3 dial needles active' }
+      ],
+      needle_arrangement: {
+        butt_pattern: 'AAAAABBB_AAAAABBB',
+        description: '5 active cylinder needles followed by 3 active dial needles.'
+      }
+    },
+    appearance: 'Wide face cords with a substantial 3-wale back rib. Heavy, structured — outerwear and collar ribbing.'
+  },
+
+  {
+    id: 'rib_5x4',
+    name: '5×4 Rib',
+    name_bn: '৫×৪ রিব',
+    category: 'rib',
+    base: 'rib_1x1',
+    machine_type: 'double_bed_circular',
+    gauge_range: { min: 8, max: 16 },
+    gsm_range: { min: 190, max: 560 },
+    count_formula: {
+      type: 'regression',
+      a: -0.100, b: 59.00,
+      source: 'ESTIMATED',
+      note: '5 cylinder needles active, 4 dial needles active.'
+    },
+    ll_multiplier: 1.52,
+    ll_source: 'ESTIMATED — near-balanced very wide block, heaviest of the catalogued gauge combos',
+    typical_gauge: 12,
+    structure: {
+      type: 'weft_knit',
+      courses_per_repeat: 1,
+      wales_per_repeat: 9,
+      beds: ['cylinder', 'dial'],
+      pattern: {
+        C: [['K','K','K','K','K','M','M','M','M']],
+        D: [['M','M','M','M','M','K','K','K','K']]
+      },
+      cam: [
+        { feed: 1, cylinder: 'K on 5, M on 4', dial: 'M on 5, K on 4', note: 'Alternating block of 5 cylinder needles active and 4 dial needles active' }
+      ],
+      needle_arrangement: {
+        butt_pattern: 'AAAAABBBB_AAAAABBBB',
+        description: '5 active cylinder needles followed by 4 active dial needles.'
+      }
+    },
+    appearance: 'Near-balanced very wide panels. Bulky, heavyweight ribbing used in chunky cuffs, collars, and sweater bodies at coarse gauge.'
+  },
+
+  {
     id: 'lycra_rib_2x2',
     name: '2×2 Rib + Lycra (Elastane)',
     name_bn: 'লাইক্রা ২×২ রিব',
@@ -2327,6 +2555,12 @@ const LL_MULTIPLIERS_COMPLETE = {
   rib_3x3:           { m: 1.48, gauge_ref: 16, source: 'ESTIMATED' },
   rib_3x2:           { m: 1.46, gauge_ref: 16, source: 'ESTIMATED' },
   rib_4x1:           { m: 1.42, gauge_ref: 18, source: 'ESTIMATED' },
+  rib_3x1:           { m: 1.41, gauge_ref: 18, source: 'ESTIMATED' },
+  rib_4x2:           { m: 1.47, gauge_ref: 16, source: 'ESTIMATED' },
+  rib_4x3:           { m: 1.49, gauge_ref: 14, source: 'ESTIMATED' },
+  rib_5x1:           { m: 1.40, gauge_ref: 16, source: 'ESTIMATED' },
+  rib_5x3:           { m: 1.50, gauge_ref: 14, source: 'ESTIMATED' },
+  rib_5x4:           { m: 1.52, gauge_ref: 12, source: 'ESTIMATED' },
   lycra_rib_2x2:     { m: 1.45, gauge_ref: 18, source: 'ESTIMATED' },
   pointelle_eyelet:  { m: 0.96, gauge_ref: 24, source: 'ESTIMATED' },
   pointelle_chevron: { m: 0.98, gauge_ref: 24, source: 'ESTIMATED' },
@@ -2378,6 +2612,12 @@ const GSM_COUNT_REGRESSION_COMPLETE = {
   rib_3x3:         { a: -0.110, b: 56.00, source: 'ESTIMATED',      gsm_range: [160,320] },
   rib_3x2:         { a: -0.110, b: 55.00, source: 'ESTIMATED',      gsm_range: [150,310] },
   rib_4x1:         { a: -0.115, b: 54.00, source: 'ESTIMATED',      gsm_range: [140,300] },
+  rib_3x1:         { a: -0.117, b: 53.50, source: 'ESTIMATED',      gsm_range: [150,300] },
+  rib_4x2:         { a: -0.108, b: 55.50, source: 'ESTIMATED',      gsm_range: [160,320] },
+  rib_4x3:         { a: -0.106, b: 57.00, source: 'ESTIMATED',      gsm_range: [170,330] },
+  rib_5x1:         { a: -0.118, b: 53.00, source: 'ESTIMATED',      gsm_range: [160,300] },
+  rib_5x3:         { a: -0.104, b: 58.00, source: 'ESTIMATED',      gsm_range: [180,340] },
+  rib_5x4:         { a: -0.100, b: 59.00, source: 'ESTIMATED',      gsm_range: [190,350] },
   pointelle_eyelet:{ a: -0.130, b: 48.00, source: 'ESTIMATED',      gsm_range: [80,180] },
   pointelle_chevron:{a: -0.130, b: 49.00, source: 'ESTIMATED',      gsm_range: [90,200] },
   pointelle_diagonal:{a: -0.135, b: 47.50, source: 'ESTIMATED',     gsm_range: [80,170] },

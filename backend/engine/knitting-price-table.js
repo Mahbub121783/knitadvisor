@@ -455,8 +455,15 @@ const FABRIC_ALIAS = {
   rib_1x1:              'rib_1x1',
   rib_2x1:              'rib_2x1',
   rib_2x2:              'rib_2x2',
+  rib_3x1:              'rib_3x1',
   rib_3x2:              'rib_3x2',
+  rib_3x3:              'rib_3x3',
+  rib_4x1:              'rib_4x1',
   rib_4x2:              'rib_4x2',
+  rib_4x3:              'rib_4x3',
+  rib_5x1:              'rib_5x1',
+  rib_5x3:              'rib_5x3',
+  rib_5x4:              'rib_5x4',
   lycra_rib_1x1:        'rib_1x1',
   lycra_rib_2x2:        'rib_2x2',
   // Pique / Lacoste
@@ -483,7 +490,13 @@ const FABRIC_ALIAS = {
 // ============================================================
 // VARIANT DETECTOR: infer variant key from fabric+composition context
 // ============================================================
-function detectVariant(fabricId, parsedComp, yarnForm, count_ne) {
+// feederType: 'ff' (full feeder — every feeder knits complete rib/lycra course,
+// higher machine utilisation, higher price) or 'hf' (half feeder — alternate
+// feeders, lower utilisation, cheaper) — mill jargon from the official price
+// list itself (every elastane/stripe row is split above30/below30 × ff/hf).
+// When the caller doesn't know/specify it, default to 'hf' (unchanged prior
+// behaviour — most lycra rib orders quoted to KnitAdvisor historically were hf).
+function detectVariant(fabricId, parsedComp, yarnForm, count_ne, feederType) {
   const slub = yarnForm === 'slub' || (fabricId || '').includes('slub');
   const fibers = (parsedComp && parsedComp.fibers) || {};
   const viscose = (fibers.viscose || 0) >= 30;
@@ -499,7 +512,10 @@ function detectVariant(fabricId, parsedComp, yarnForm, count_ne) {
     const slubKey = base + '_slub';
     if (_INDEX[slubKey]) return { fabricKey: slubKey, variant: 'plain' };
   }
-  if (elastane) return { fabricKey: FABRIC_ALIAS[fabricId] || fabricId, variant: 'elastane_hf' };
+  if (elastane) {
+    const preferred = feederType === 'ff' ? 'elastane_ff' : 'elastane_hf';
+    return { fabricKey: FABRIC_ALIAS[fabricId] || fabricId, variant: preferred };
+  }
   return { fabricKey: FABRIC_ALIAS[fabricId] || fabricId, variant: 'plain' };
 }
 
@@ -507,16 +523,26 @@ function detectVariant(fabricId, parsedComp, yarnForm, count_ne) {
 // MAIN LOOKUP: getKnittingPrice(fabricId, countNe, parsedComp, yarnForm)
 // Returns { price_usd_kg, tier, fabric_key, variant, source, note }
 // ============================================================
-function getKnittingPrice(fabricId, countNe, parsedComp, yarnForm) {
+function getKnittingPrice(fabricId, countNe, parsedComp, yarnForm, feederType) {
   const ne = parseFloat(countNe) || 30;
   const tier = ne > 30 ? 'above30' : 'below30';
   const tierLabel = ne > 30 ? `above 30s (${ne}Ne)` : `below/equal 30s (${ne}Ne)`;
 
-  const { fabricKey, variant } = detectVariant(fabricId, parsedComp, yarnForm, ne);
+  const { fabricKey, variant } = detectVariant(fabricId, parsedComp, yarnForm, ne, feederType);
+  let usedVariant = variant;
 
-  // Try exact match, fall back to plain, then generic rib/sj
+  // Try exact match; if this fabric's lycra pricing is only documented for the
+  // OTHER feeder mode (e.g. 5x4 rib's price row is elastane_ff-only), fall back
+  // to that sibling before giving up on real per-fabric data entirely — it's
+  // still a real documented price for this exact structure, just not the exact
+  // feeder mode requested.
   let rec = (_INDEX[fabricKey] && _INDEX[fabricKey][variant]) || null;
-  if (!rec) rec = (_INDEX[fabricKey] && _INDEX[fabricKey]['plain']) || null;
+  if (!rec && (variant === 'elastane_ff' || variant === 'elastane_hf')) {
+    const sibling = variant === 'elastane_ff' ? 'elastane_hf' : 'elastane_ff';
+    rec = (_INDEX[fabricKey] && _INDEX[fabricKey][sibling]) || null;
+    if (rec) usedVariant = sibling;
+  }
+  if (!rec) { rec = (_INDEX[fabricKey] && _INDEX[fabricKey]['plain']) || null; if (rec) usedVariant = 'plain'; }
 
   // Generic fallbacks for un-mapped fabrics
   if (!rec) {
@@ -539,7 +565,8 @@ function getKnittingPrice(fabricId, countNe, parsedComp, yarnForm) {
     tier,
     tier_label: tierLabel,
     fabric_key: fabricKey,
-    variant,
+    variant: usedVariant,
+    requested_variant: variant !== usedVariant ? variant : undefined,
     above30: rec.above30,
     below30: rec.below30,
     source: 'Official Knitting Price List',
