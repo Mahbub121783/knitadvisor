@@ -1372,23 +1372,68 @@ class FabricVisualizer {
     return front;
   }
 
+  // ── RIB SELF-COVERING ──
+  // Real rib fabric "closes in" at rest: the face (cylinder) loops project
+  // forward and visually dominate, while the back (dial) loops recede behind
+  // them. A narrow block (e.g. the lone dial wale in a 4x1) all but vanishes
+  // into a thin sunken channel; a wide block (4+ wales of the same bed) reads
+  // as a near-flat jersey-like panel. This self-covering behaviour is THE
+  // defining visual signature of rib knits — an even, uniform-width
+  // alternation just looks like a striped grid, not a rib. Widths are
+  // assigned per BLOCK (a run of same-bed wales), not per wale, from block
+  // length, then normalized so total width per repeat is unchanged — this
+  // only redistributes rendered width, it never changes wale density/GSM.
+  _ribBlockWeights(repA, repB) {
+    const period = repA + repB;
+    const openness = (n) => Math.min(1.0, 0.35 + 0.16 * n); // 1-wale block ~0.51, 4+ wale block ~1.0 (flat panel)
+    const weights = [];
+    for (let i = 0; i < period; i++) {
+      const isFace = i < repA;
+      const blockLen = isFace ? repA : repB;
+      weights.push(openness(blockLen) * (isFace ? 1.15 : 0.85)); // face dominates visually over back at equal block size
+    }
+    const sum = weights.reduce((s, v) => s + v, 0);
+    const scale = period / sum; // preserve total width per repeat
+    return weights.map(v => v * scale);
+  }
+
   // ── UNIVERSAL KNIT FIELD (jersey / rib / interlock / piqué) ──
   _paintKnitField(ctx, W, H, side, opts, view) {
     const dyed = opts.dyed, con = opts.construction;
     const g = this._gridGeom(W, H, opts, view);
-    const xOf = (w) => (w - g.leftWaleF) * g.cellW + g.cellW / 2;
     const yOf = (c) => H - ((c - g.botCourseF) * g.cellH + g.cellH / 2);
     const w0 = Math.floor(g.leftWaleF) - 1, w1 = Math.ceil(g.leftWaleF + g.visW) + 1;
     const c0 = Math.floor(g.botCourseF) - 1, c1 = Math.ceil(g.botCourseF + g.visC) + 1;
     const cw = g.cellW, ch = g.cellH;
     const yw = this._yarnWidth(cw, opts);
 
+    // rib: self-covering per-wale width (see _ribBlockWeights); everything
+    // else keeps the original uniform grid.
+    let xOf, waleW;
+    if (con.type === 'rib') {
+      const rep = con.ribRepeat || { a: 1, b: 1 };
+      const repA = Math.max(1, rep.a || 1), repB = Math.max(1, rep.b || 1);
+      const period = repA + repB;
+      const weights = this._ribBlockWeights(repA, repB);
+      const posOf = (w) => ((w % period) + period) % period;
+      const prefix = [0];
+      for (let i = 0; i < period; i++) prefix.push(prefix[i] + weights[i]);
+      const cumX = (w) => Math.floor(w / period) * period + prefix[posOf(w)];
+      const leftFloor = Math.floor(g.leftWaleF);
+      const leftBase = cumX(leftFloor) + (g.leftWaleF - leftFloor) * weights[posOf(leftFloor)];
+      waleW = (w) => weights[posOf(w)] * cw;
+      xOf = (w) => (cumX(w) - leftBase) * cw + waleW(w) / 2;
+    } else {
+      waleW = () => cw;
+      xOf = (w) => (w - g.leftWaleF) * cw + cw / 2;
+    }
+
     // rib: shade the sunken purl wales for depth
     if (con.type === 'rib') {
       for (let w = w0; w <= w1; w++) {
         if (this._tokenAt(w, 0, side, opts) === 'purl') {
           ctx.fillStyle = this._shadeColorCss(dyed, -0.34);
-          ctx.fillRect(xOf(w) - cw / 2, 0, cw, H);
+          ctx.fillRect(xOf(w) - waleW(w) / 2, 0, waleW(w), H);
         }
       }
     }
@@ -1398,11 +1443,11 @@ class FabricVisualizer {
     for (let c = c0; c <= c1; c++) {
       for (let w = w0; w <= w1; w++) {
         const tok = this._tokenAt(w, c, side, opts);
-        const x = xOf(w), y = yOf(c);
-        if (tok === 'purl')      this._drawPurlLOD(ctx, x, y, cw, ch, dyed, opts);
-        else if (tok === 'tuck') this._drawTuckLOD(ctx, x, y, cw, ch, dyed, opts);
-        else if (tok === 'miss') { this._drawHeldLoop(ctx, x, y, cw, ch, dyed, opts); miss.push([x, y, c]); }
-        else                     knit.push([x, y]);
+        const x = xOf(w), y = yOf(c), ww = waleW(w);
+        if (tok === 'purl')      this._drawPurlLOD(ctx, x, y, ww, ch, dyed, opts);
+        else if (tok === 'tuck') this._drawTuckLOD(ctx, x, y, ww, ch, dyed, opts);
+        else if (tok === 'miss') { this._drawHeldLoop(ctx, x, y, ww, ch, dyed, opts); miss.push([x, y, c]); }
+        else                     knit.push([x, y, ww]);
       }
     }
 
@@ -1417,11 +1462,11 @@ class FabricVisualizer {
       // Draw top-of-screen first so each lower loop's head is painted ON TOP of
       // the upper loop's feet — the real over/under intermesh, cleanly.
       const ordered = knit.slice().sort((a, b) => a[1] - b[1]);
-      for (const [x, y] of ordered)
-        this._strokeYarn(ctx, (dx, dy) => this._knitLoopFullPath(ctx, x, y, cw, ch, dx, dy), yw, dyed, opts);
+      for (const [x, y, ww] of ordered)
+        this._strokeYarn(ctx, (dx, dy) => this._knitLoopFullPath(ctx, x, y, ww || cw, ch, dx, dy), yw, dyed, opts);
     } else {
       // NORMAL: the stockinette "V" columns — what reads as knit cloth.
-      for (const [x, y] of knit) this._strokeYarn(ctx, (dx, dy) => this._knitLegsPath(ctx, x, y, cw, ch, dx, dy, false), yw, dyed, opts);
+      for (const [x, y, ww] of knit) this._strokeYarn(ctx, (dx, dy) => this._knitLegsPath(ctx, x, y, ww || cw, ch, dx, dy, false), yw, dyed, opts);
     }
 
     // miss/float yarn lies straight ON TOP, across the held loops
