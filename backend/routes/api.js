@@ -55,7 +55,7 @@ router.post('/calculate', async (req, res) => {
     body.fiber_grade, body.spinning_system, body.yarn_form,
     body.finishing_route, body.dyeing_method, body.twist_multiplier,
     body.yarn_price_type, body.yarn_white, body.yarn_organic, body.yarn_ecovero, body.yarn_at_sight,
-    body.denier, body.filaments, body.elastane_denier, body.elastane_pct,
+    body.denier, body.filaments, body.elastane_denier, body.elastane_pct, body.feeder_type,
   ].map(v => v == null ? '' : v).join('_');
   const cacheKey = crypto.createHash('md5').update(cacheInput).digest('hex');
 
@@ -128,6 +128,7 @@ router.post('/calculate', async (req, res) => {
     yarn_organic:      body.yarn_organic,
     yarn_ecovero:      body.yarn_ecovero,
     yarn_at_sight:     body.yarn_at_sight,
+    feeder_type:       body.feeder_type,
     // Warp knit parameters
     denier:          body.denier,
     filaments:       body.filaments,

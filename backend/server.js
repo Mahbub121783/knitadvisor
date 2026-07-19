@@ -31,6 +31,15 @@ const { testConnection, initAdminDatabase, initVizDatabase } = require('./config
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// This runs on cPanel behind Apache/Passenger's reverse proxy — without this,
+// Express never reads X-Forwarded-For, so req.ip resolves to the proxy's own
+// address for EVERY visitor. The per-IP rate limiter below then shares ONE
+// bucket across the entire site's traffic instead of one per real visitor,
+// so unrelated users' requests count against each other and legitimate use
+// (e.g. comparing several fabric types in one session) can trip a 429 that
+// looks like random per-fabric breakage but has nothing to do with the fabric.
+app.set('trust proxy', 1);
+
 // ============================================================
 // MIDDLEWARE
 // ============================================================

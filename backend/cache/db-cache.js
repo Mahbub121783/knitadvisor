@@ -6,15 +6,47 @@ const { query } = require('../config/database');
 
 const DEFAULT_TTL_S = parseInt(process.env.CACHE_TTL_SECONDS) || 2592000; // 30 days
 
+// The calculation engine itself runs in well under 50ms — this L2 lookup only
+// exists to survive server restarts / share across instances, not because
+// calculation is expensive. But it sits on the request's critical path
+// (routes/api.js awaits it before falling through to compute), and the DB is
+// remote (network round-trip, connectTimeout up to 20s on a stalled
+// connection). A slow/degraded DB was silently making every cache-miss
+// request multiple seconds slower than just computing fresh would have been.
+// Cap the wait: if the DB doesn't answer within budget, treat it as a miss —
+// compute happens anyway and is fast, and the fresh result still gets
+// written back to L2 (fire-and-forget, not on this path).
+const GET_TIMEOUT_MS = 80;
+
+function withTimeout(promise, ms) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const timer = setTimeout(() => { if (!settled) { settled = true; resolve({ timedOut: true }); } }, ms);
+    promise.then(
+      (v) => { if (!settled) { settled = true; clearTimeout(timer); resolve({ timedOut: false, value: v }); } },
+      ()  => { if (!settled) { settled = true; clearTimeout(timer); resolve({ timedOut: false, value: undefined, errored: true }); } }
+    );
+  });
+}
+
 module.exports = {
   async get(cacheKey) {
     try {
-      const rows = await query(
-        'SELECT result_json FROM result_cache WHERE cache_key = ? AND expires_at > NOW()',
-        [cacheKey]
+      const outcome = await withTimeout(
+        query('SELECT result_json FROM result_cache WHERE cache_key = ? AND expires_at > NOW()', [cacheKey]),
+        GET_TIMEOUT_MS
       );
+      if (outcome.timedOut) {
+        console.warn('[DB-Cache] get timed out after', GET_TIMEOUT_MS, 'ms — treating as miss');
+        return null;
+      }
+      if (outcome.errored || !outcome.value) return null;
+      const rows = outcome.value;
       if (rows.length > 0) {
-        await query('UPDATE result_cache SET hit_count = hit_count + 1, last_hit = NOW() WHERE cache_key = ?', [cacheKey]);
+        // Hit-count bookkeeping is analytics, not correctness — don't make
+        // the response wait on a second round trip for it.
+        query('UPDATE result_cache SET hit_count = hit_count + 1, last_hit = NOW() WHERE cache_key = ?', [cacheKey])
+          .catch(err => console.error('[DB-Cache] hit_count update error:', err.message));
         return JSON.parse(rows[0].result_json);
       }
       return null;
