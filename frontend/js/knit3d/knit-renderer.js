@@ -155,7 +155,7 @@ export class Knit3D {
     const box = new THREE.Box3().setFromObject(group);
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
-    this._addBacking(group, center, size, radius);
+    this._addBacking(group, center, size, radius, box);
     this._addPile(group, box, radius);
 
     this.scene.add(group);
@@ -198,7 +198,7 @@ export class Knit3D {
     return 1.0;
   }
 
-  _addBacking(group, center, size, radius) {
+  _addBacking(group, center, size, radius, box) {
     const d = this.opts.dyed || { r: 120, g: 124, b: 134 };
     const sd = (this.opts.physics && typeof this.opts.physics.shadow_depth === 'number')
       ? this.opts.physics.shadow_depth : 0.1;
@@ -207,7 +207,16 @@ export class Knit3D {
     mat.color.setRGB((d.r / 255) * s, (d.g / 255) * s, (d.b / 255) * s, THREE.SRGBColorSpace);
     const geo = new THREE.PlaneGeometry(size.x * BACKING.pad, size.y * BACKING.pad);
     const plane = new THREE.Mesh(geo, mat);
-    plane.position.set(center.x, center.y, BACKING.z);
+    // Sit strictly behind the DEEPEST actual loop geometry, not the fixed
+    // single-bed BACKING.z constant. Rib's mirrored purl loops (zBase =
+    // -RIB_DEPTH, then the loop's own local depth profile mirrored on top)
+    // and interlock's back bed both push well past that old fixed plane —
+    // verified every purl control point landed BEHIND it, so the back/
+    // "down" side of a rib never actually rendered, fully occluded by this
+    // plane. box.min.z is the true measured depth of this fabric's mesh, so
+    // this generalizes to any construction without per-type constants.
+    const backZ = box ? Math.min(BACKING.z, box.min.z - radius * 1.5) : BACKING.z;
+    plane.position.set(center.x, center.y, backZ);
     if (this._shadows) plane.receiveShadow = true;   // loops drop contact shadows here
     group.add(plane);
     this._backing = { geo, mat, mesh: plane, baseShade: s };

@@ -338,6 +338,36 @@ function getCompositionModifiers(parsed, fabricId) {
       lycra_denier = 40;
       feed_type = 'full_feed';
       notes.push(`High stretch (${elastane_pct}% elastane) — Full-feed ${lycra_denier}D`);
+    } else if (elastane_pct <= 15) {
+      // Very high stretch — swimwear/shapewear-tier rib. Previously ANY
+      // elastane % above 10 fell through every branch here and silently
+      // reset to count_factor/sl_factor = 1.0, lycra_denier/feed_type =
+      // null — i.e. treated as if the fabric had NO elastane at all, even
+      // though has_elastane was still true. 12-30% is completely normal for
+      // compression/swimwear/powernet-style fabrics, so this wasn't an edge
+      // case — it silently broke the single most elastane-heavy segment.
+      count_factor = 1.08;
+      sl_factor = 0.90;
+      gsm_offset = 0.28;
+      lycra_denier = 70;
+      feed_type = 'full_feed';
+      notes.push(`Very high stretch (${elastane_pct}% elastane) — Full-feed ${lycra_denier}D, compression/shapewear-tier`);
+    } else if (elastane_pct <= 22) {
+      // Compression / swimwear
+      count_factor = 1.10;
+      sl_factor = 0.87;
+      gsm_offset = 0.35;
+      lycra_denier = 70;
+      feed_type = 'full_feed';
+      notes.push(`Compression stretch (${elastane_pct}% elastane) — Full-feed ${lycra_denier}D, swimwear/compression-tier`);
+    } else {
+      // Power-mesh / extreme compression (foundation garments, medical)
+      count_factor = 1.13;
+      sl_factor = 0.84;
+      gsm_offset = 0.45;
+      lycra_denier = 140;
+      feed_type = 'full_feed';
+      notes.push(`Extreme stretch (${elastane_pct}% elastane) — Full-feed ${lycra_denier}D, power-mesh/foundation-tier`);
     }
   }
 
