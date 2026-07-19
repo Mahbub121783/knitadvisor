@@ -288,7 +288,7 @@
       <div class="actions-bar">
         <button class="btn btn-ghost" onclick="window.print()">🖨 Print</button>
         <button class="btn btn-ghost" id="copy-btn" onclick="copyResults()">📋 Copy</button>
-        <a href="/" class="btn btn-secondary">↩ Recalculate</a>
+        <button class="btn btn-secondary" onclick="goRecalculate()">↩ Recalculate</button>
       </div>
     </div>
 
@@ -300,7 +300,7 @@
         <span id="factory-conf" class="badge badge-green" style="margin-left:auto;">—</span>
       </div>
       <div class="info-box text-xs" style="margin-bottom:10px; font-size:10px; line-height:1.5;">
-        Anchored to <strong>real factory greige→finish records</strong> (2700+ measured samples). These are what the machine actually delivered after dyeing + finishing.
+        Anchored to <strong>real factory greige→finish records</strong> (<span id="fac-info-count">—</span> measured samples). These are what the machine actually delivered after dyeing + finishing.
       </div>
       <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:10px;">
         <div style="background:rgba(0,255,178,.08); border:1px solid rgba(0,255,178,.25); border-radius:10px; padding:12px 8px; text-align:center;">
@@ -326,10 +326,17 @@
       <div class="result-section-label" style="margin-top:10px;">Nearest Real Samples</div>
       <div id="fac-records" style="font-size:10px; line-height:1.7;"></div>
       <div class="text-xs text-dim" style="margin-top:6px; font-size:9px;" id="fac-source"></div>
+    </div>
 
-      <!-- Bulk-production conventions (Knitting Master File, 5000+ bookings) -->
-      <div id="fac-bulk-block" class="hidden" style="margin-top:12px; border-top:1px solid var(--line3); padding-top:10px;">
-        <div class="result-section-label" style="margin-bottom:8px;">Bulk Production Data <span class="text-dim" style="font-weight:400;">(5000+ floor bookings)</span></div>
+    <!-- ===== BULK PRODUCTION DATA (Knitting Master File, 5000+ bookings) —
+         independent of whether a Factory R&D nearest-sample match was found above ===== -->
+    <div class="result-section anim-in hidden" id="sec-bulk-production" style="border:1px solid rgba(168,85,247,.3); background:rgba(168,85,247,.04);">
+      <div class="result-section-title">
+        <div class="rst-icon" style="color:#a855f7;">📦</div>
+        <div class="rst-title-text" style="color:#a855f7;">Bulk Production Data</div>
+        <span class="badge" style="margin-left:auto;background:rgba(168,85,247,.12);color:#a855f7;border:1px solid rgba(168,85,247,.3);">5000+ floor bookings</span>
+      </div>
+      <div id="fac-bulk-block">
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
           <div style="background:rgba(0,200,255,.06); border:1px solid rgba(0,200,255,.18); border-radius:10px; padding:11px 8px; text-align:center;">
             <div style="font-size:9px; text-transform:uppercase; letter-spacing:.6px; color:var(--t3); margin-bottom:4px;">Factory Gauge</div>
@@ -434,9 +441,9 @@
       </div>
       <div id="wet-formula" style="font-size:10px;color:var(--t3);font-family:var(--mono,monospace);padding:6px 10px;background:rgba(255,255,255,.03);border-radius:6px;border-left:2px solid rgba(251,146,60,.4);margin-bottom:10px;"></div>
 
-      <!-- Grey GSM by shade -->
-      <div class="result-section-label" style="margin-top:4px;">Grey GSM by Shade (same finish)</div>
-      <div id="wet-shade-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px;"></div>
+      <!-- Grey GSM for every shade lives in the Stitch Length by Color Shade table
+           above (#sec-sl-shade) — same underlying formula, shown once. -->
+      <div style="font-size:10px;color:var(--t3);margin-bottom:10px;">Grey GSM for every shade at this finish target is in <a href="#sec-sl-shade" style="color:#00d1ff;">Stitch Length by Color Shade</a> above.</div>
 
       <!-- Process route -->
       <div class="result-section-label">Process Route</div>
@@ -591,24 +598,21 @@
       </div>
       <div class="info-box text-xs" id="cpa-rpm-desc">—</div>
 
-      <!-- Yarn-quality knitting performance (Uster-driven) -->
+      <!-- Yarn-quality knitting performance (Uster-driven) — raw Uster stats (CVm,
+           IPI, Hairiness, USP) live once in Yarn Specification below; this block keeps
+           only the two fields specific to knitting-performance interpretation. -->
       <div id="cpa-knit-block" class="hidden">
         <div class="result-section-label" style="color:var(--a1); margin-top:12px;">6. Yarn-Quality Knitting Performance <span style="font-size:9px; color:var(--t3); font-weight:400;">(Uster)</span></div>
-        <div class="mini-stats" style="display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin:8px 0;">
-          <div class="mini-stat"><div class="ms-val" id="cpa-knit-cvm">—</div><div class="ms-lbl">CVm %</div></div>
-          <div class="mini-stat"><div class="ms-val" id="cpa-knit-ipi">—</div><div class="ms-lbl">IPI /km</div></div>
-          <div class="mini-stat"><div class="ms-val" id="cpa-knit-h">—</div><div class="ms-lbl">Hairiness H</div></div>
-          <div class="mini-stat"><div class="ms-val" id="cpa-knit-eff">—</div><div class="ms-lbl">Exp. Efficiency</div></div>
-        </div>
         <div class="result-row">
-          <span class="result-key">Uster Percentile (USP)</span>
-          <span class="result-val" id="cpa-knit-usp">—</span>
+          <span class="result-key">Expected Knitting Efficiency</span>
+          <span class="result-val" id="cpa-knit-eff">—</span>
         </div>
         <div class="result-row">
           <span class="result-key">Knitting Rating</span>
           <span class="result-val" id="cpa-knit-rating">—</span>
         </div>
         <div class="info-box text-xs" id="cpa-knit-note" style="margin-top:8px;">—</div>
+        <div style="font-size:9px;color:var(--t3);margin-top:6px;">Raw Uster CVm / IPI / Hairiness / USP — see <a href="#sec-yarn" style="color:var(--a1);">Yarn Specification → Uster Statistics</a> below.</div>
       </div>
     </div>
 
@@ -754,6 +758,7 @@
             <span class="result-val" id="ye-usp">—</span>
           </div>
           <div class="info-box text-xs" id="ye-uster-trace" style="margin-top:6px; font-size:9px;">—</div>
+          <div id="ye-uster-caveat" style="font-size:9px;color:var(--t3);font-style:italic;margin-top:4px;">—</div>
         </div>
 
         <!-- Slub (shown only for slub yarn) -->
@@ -1089,6 +1094,14 @@
 /* ============================================================
    MAIN — Load result on page ready
    ============================================================ */
+// "Recalculate" — kna_pending already holds the exact params that produced the
+// result currently on screen (index.html wrote it before navigating here, and it's
+// never cleared on this page), so just send the user back to the form with a flag
+// telling it to prefill from that same data instead of starting blank.
+function goRecalculate() {
+  window.location.href = 'index.html?recalc=1';
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   // Get pending params from sessionStorage
   const params = loadPending();
@@ -1135,21 +1148,6 @@ function renderWetProcessing(w) {
   document.getElementById('wet-loss').textContent = w.process_loss
     ? `process loss ~${w.process_loss.loss_pct}%` : 'after dye + finish';
   document.getElementById('wet-formula').textContent = g.formula || '';
-
-  // Grey GSM by shade
-  const shadeLbl = {
-    black:'⬛ Black', dark_navy:'🔵 Dark/Navy', light_medium:'▪ Light/Med',
-    fluorescent:'💚 Fluoro', white_melange:'⬜ White', melange:'🌫️ Melange',
-    dark:'⬛ Dark', medium:'▪ Medium', light:'⬜ Light', white:'⬜ White',
-  };
-  document.getElementById('wet-shade-grid').innerHTML = (w.greige_all_shades || []).map(s => {
-    const sel = s.shade === w.shade;
-    return `<div style="text-align:center;padding:7px 4px;border-radius:6px;border:1px solid ${sel ? 'rgba(251,146,60,.5)' : 'rgba(255,255,255,.08)'};${sel ? 'background:rgba(251,146,60,.10);' : ''}">
-      <div style="font-size:9px;color:var(--t3);">${shadeLbl[s.shade] || s.shade}</div>
-      <div style="font-size:15px;font-weight:800;color:${sel ? '#fb923c' : 'var(--t1)'};font-family:var(--head);">${s.grey_gsm}</div>
-      <div style="font-size:8px;color:var(--t3);">+${s.dye_add_on_pct}% dye</div>
-    </div>`;
-  }).join('');
 
   // Process route as chips with arrows
   document.getElementById('wet-route').innerHTML = (w.process_route || []).map((step, i) =>
@@ -1270,13 +1268,23 @@ function renderResult(r, params) {
     const descEl = document.getElementById('rnd-desc');
     const iconEl = document.getElementById('rnd-icon');
     
-    if (v.valid) {
+    // "Factory Verified" (green) requires both a numeric match AND enough real
+    // samples backing the reference — otherwise it's an estimate, not verification.
+    const wellSampled = v.confidence === 'very_high' || v.confidence === 'high';
+    if (v.valid && wellSampled) {
       rndBox.style.background = 'rgba(0, 255, 178, 0.08)';
       rndBox.style.borderColor = 'rgba(0, 255, 178, 0.2)';
       iconEl.textContent = '✅';
       titleEl.textContent = 'Factory Verified';
       titleEl.style.color = 'var(--a1)';
-      descEl.textContent = `Aligns with real factory R&D (Avg: ${v.factory_sl} mm from ${v.factory_samples} samples).`;
+      descEl.textContent = `Aligns with real factory R&D (Avg: ${v.factory_sl} mm from ${v.factory_samples != null ? v.factory_samples + ' samples' : 'a small sample'}).`;
+    } else if (v.valid) {
+      rndBox.style.background = 'rgba(255, 184, 48, 0.08)';
+      rndBox.style.borderColor = 'rgba(255, 184, 48, 0.2)';
+      iconEl.textContent = 'ℹ️';
+      titleEl.textContent = 'Close to Factory Estimate';
+      titleEl.style.color = 'var(--a4)';
+      descEl.textContent = `Close to factory R&D (Avg: ${v.factory_sl} mm), but backed by ${v.factory_samples != null ? 'only ' + v.factory_samples + ' samples' : 'no direct sample count'} — treat as indicative.`;
     } else {
       rndBox.style.background = 'rgba(255, 184, 48, 0.08)';
       rndBox.style.borderColor = 'rgba(255, 184, 48, 0.2)';
@@ -1889,22 +1897,24 @@ function renderFactoryMatch(f) {
     }).join('');
   }
   document.getElementById('fac-source').textContent = f.source || '';
+  const countEl = document.getElementById('fac-info-count');
+  if (countEl) countEl.textContent = f.dataset_size != null ? `${f.dataset_size.toLocaleString()}+` : '2,000+';
 }
 
 /* Bulk production data — process loss + factory gauge convention.
    Lives inside the factory card; shows even when the kNN match is hidden. */
 function renderBulkProductionData(r) {
   const block = document.getElementById('fac-bulk-block');
-  const sec = document.getElementById('sec-factory');
-  if (!block) return;
+  const sec = document.getElementById('sec-bulk-production');
+  if (!block || !sec) return;
 
   const loss = r.process_loss;
   const bg = r.machine && r.machine.optimal && r.machine.optimal.bulk_data_gauge;
-  if (!loss && !bg) { block.classList.add('hidden'); return; }
+  if (!loss && !bg) { sec.classList.add('hidden'); return; }
 
-  // Ensure the parent card is visible even if there was no nearest-sample match.
-  if (sec) sec.classList.remove('hidden');
-  block.classList.remove('hidden');
+  // Independent of the Factory R&D Data Match card — bulk booking conventions exist
+  // even when no nearest-sample match was found (or vice versa).
+  sec.classList.remove('hidden');
 
   // Factory gauge convention
   if (bg) {
@@ -2054,6 +2064,7 @@ function renderYarnExpertise(e, rec) {
     uspEl.textContent = u.usp_rating ? u.usp_rating.label : '—';
     uspEl.className = 'result-val ' + (u.usp_rating && u.usp_rating.usp <= 25 ? 'green font-bold' : u.usp_rating && u.usp_rating.usp <= 50 ? 'white' : 'amber');
     document.getElementById('ye-uster-trace').textContent = u.formula_trace ? `${u.formula_trace.n} · ${u.formula_trace.cvm}` : '';
+    document.getElementById('ye-uster-caveat').textContent = u.note || '';
   } else {
     ub.classList.add('hidden');
   }
@@ -2313,11 +2324,7 @@ function renderCPA(cpa) {
   const kpBlock = document.getElementById('cpa-knit-block');
   if (kp) {
     kpBlock.classList.remove('hidden');
-    document.getElementById('cpa-knit-cvm').textContent = kp.yarn_cvm_pct != null ? `${kp.yarn_cvm_pct}` : '—';
-    document.getElementById('cpa-knit-ipi').textContent = kp.imperfections_ipi != null ? `${kp.imperfections_ipi}` : '—';
-    document.getElementById('cpa-knit-h').textContent   = kp.hairiness_h != null ? `${kp.hairiness_h}` : '—';
     document.getElementById('cpa-knit-eff').textContent = kp.expected_efficiency_pct != null ? `${kp.expected_efficiency_pct}%` : '—';
-    document.getElementById('cpa-knit-usp').textContent = kp.usp_rating || '—';
     const rEl = document.getElementById('cpa-knit-rating');
     rEl.textContent = kp.rating || '—';
     rEl.className = 'result-val ' + (kp.rating === 'Excellent' || kp.rating === 'Good' ? 'green font-bold' : kp.rating === 'Average' ? 'amber font-bold' : 'red font-bold');

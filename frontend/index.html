@@ -850,11 +850,116 @@ let activeCategory = 'all';
 document.addEventListener('DOMContentLoaded', async () => {
   await loadFabrics();
   applyQueryParams();
+
+  // "Recalculate" from result.html — prefill the whole form from the params that
+  // produced the result the user just came from, instead of starting blank.
+  if (new URLSearchParams(window.location.search).get('recalc') === '1') {
+    applyPrefill(loadPending());
+  }
+
   loadRecentsUI();
 
   // Auto-focus GSM input
   document.getElementById('gsm-input').focus();
 });
+
+/* ============================================================
+   RECALCULATE PREFILL — mirrors doCalculate()'s params object in reverse
+   ============================================================ */
+const PREFILL_FIELD_MAP = {
+  gsm: 'gsm-input',
+  composition: 'comp-input',
+  dia: 'dia-input',
+  gauge: 'gauge-input',
+  rpm: 'rpm-input',
+  efficiency: 'eff-input',
+  stitch_length: 'sl-input',
+  feeders: 'feeders-input',
+  target_width: 'width-input',
+  fiber_grade: 'fiber-grade-input',
+  spinning_system: 'spinning-input',
+  yarn_form: 'yarn-form-input',
+  finishing_route: 'finishing-route-input',
+  dyeing_method: 'dyeing-method-input',
+  twist_multiplier: 'twist-input',
+  yarn_price_type: 'yarn-price-type',
+  denier: 'denier-input',
+  filaments: 'filaments-input',
+  elastane_denier: 'elastane-denier-input',
+  elastane_pct: 'elastane-pct-input',
+};
+const PREFILL_CHECKBOX_MAP = {
+  yarn_white: 'yarn-white',
+  yarn_organic: 'yarn-organic',
+  yarn_ecovero: 'yarn-ecovero',
+  yarn_at_sight: 'yarn-at-sight',
+};
+// Fields whose presence should auto-expand the "Machine Specs" collapsible so the
+// user can see what actually got carried over instead of it staying tucked away.
+const PREFILL_OPENS_OPTIONAL = [
+  'dia', 'gauge', 'rpm', 'stitch_length', 'feeders', 'target_width',
+  'fiber_grade', 'spinning_system', 'yarn_form', 'finishing_route',
+  'dyeing_method', 'twist_multiplier', 'yarn_price_type',
+];
+
+function applyPrefill(params) {
+  if (!params) return;
+
+  // Fabric select (needs the dependent UI — dia/gauge labels, warp-knit panel — to
+  // refresh via onFabricChange() same as manual selection would).
+  if (params.fabric) {
+    const sel = document.getElementById('fabric-select');
+    for (const opt of sel.options) {
+      if (opt.value === params.fabric) { sel.value = params.fabric; break; }
+    }
+  }
+
+  Object.entries(PREFILL_FIELD_MAP).forEach(([key, id]) => {
+    if (params[key] == null) return;
+    const el = document.getElementById(id);
+    if (el) el.value = params[key];
+  });
+
+  Object.entries(PREFILL_CHECKBOX_MAP).forEach(([key, id]) => {
+    const el = document.getElementById(id);
+    if (el) el.checked = !!params[key];
+  });
+
+  onFabricChange();
+
+  // Composition chip active-state (mirrors setComp()) — chip values live inline in
+  // their onclick handlers, so match against that rather than a data attribute.
+  if (params.composition) {
+    document.querySelectorAll('.comp-chip').forEach(c => {
+      const m = (c.getAttribute('onclick') || '').match(/setComp\('([^']*)'/);
+      c.classList.toggle('active', !!m && m[1] === params.composition);
+    });
+  }
+
+  // Color shade button active-state (mirrors setShade())
+  if (params.color_shade) {
+    const btn = document.querySelector(`.shade-btn[data-shade="${params.color_shade}"]`);
+    if (typeof setShade === 'function') setShade(params.color_shade, btn || null);
+  }
+
+  // Precise color engine text — set the visible text field and let its own input
+  // handler re-resolve the preview/hidden value (avoids duplicating that logic here).
+  if (params.color_input) {
+    const ceText = document.getElementById('ce-text');
+    if (ceText) {
+      ceText.value = params.color_input;
+      ceText.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  }
+
+  if (PREFILL_OPENS_OPTIONAL.some(k => params[k] != null)) {
+    openOptional();
+  }
+
+  if (typeof showToast === 'function') {
+    showToast('Previous calculation loaded — edit and recalculate', 'info', 3000);
+  }
+}
 
 function applyQueryParams() {
   const params = new URLSearchParams(window.location.search);

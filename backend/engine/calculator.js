@@ -44,6 +44,7 @@ const {
   validateStitchLength,
   getCompositionReference,
   lookupByGSM,
+  FAB_BUCKET_ALIAS,
 } = require('./factory-knowledge');
 
 const { predictQuality } = require('./quality-engine');
@@ -66,7 +67,7 @@ const { recommendMachine } = require('./machine-optimizer');
 const { analyzeYarn, recommendYarnGrade } = require('./yarn-engine');
 const { matchFactory, recommendCountFromGSM } = require('./factory-match');
 const { gaugeFromBulkData, estimateProcessLoss, greyRequirementForFinished } = require('./production-data');
-const { analyzeWetProcessing } = require('./wet-processing-engine');
+const { analyzeWetProcessing, greigeGsmTarget, resolveFamily } = require('./wet-processing-engine');
 const { applyFabricPhysics } = require('./fabric-physics');
 
 // ============================================================
@@ -129,8 +130,17 @@ function calculate(params) {
     // Combined SL: composition_factor × shade_factor
     const compSLBefore = compModifiers.sl_factor || 1.0;
     compModifiers.sl_factor = parseFloat((compSLBefore * colorResult.sl_factor).toFixed(4));
-    // Grey GSM: what to knit before dyeing
-    colorResult.grey_gsm_target = parseFloat((gsm * colorResult.grey_gsm_factor).toFixed(1));
+    // Grey GSM: what to knit before dyeing. Single source of truth shared with the
+    // Wet-Processing Critical Path card (wet-processing-engine.js) — both used to run
+    // independent formulas (a flat dye-mass-only factor here vs. an area-shrinkage +
+    // dye-add-on model there) and could disagree by several GSM for the same shade.
+    const wetFam = resolveFamily(fabricDef.id, fabricDef.category);
+    const greigeForShade = greigeGsmTarget(gsm, wetFam, effectiveShade, dyeing_method);
+    colorResult.grey_gsm_target = greigeForShade
+      ? greigeForShade.grey_gsm_target
+      : parseFloat((gsm * colorResult.grey_gsm_factor).toFixed(1));
+    colorResult.grey_gsm_factor = parseFloat((colorResult.grey_gsm_target / gsm).toFixed(4));
+    if (greigeForShade) colorResult.gsm_adjustment_pct = greigeForShade.dye_add_on_pct;
     colorResult.finish_gsm_target = gsm;
     colorResult.comp_sl_factor = compSLBefore;
     colorResult.combined_sl_factor = compModifiers.sl_factor;
@@ -217,6 +227,7 @@ function calculate(params) {
   // --- 2. Calculate yarn count (with composition modifiers) ---
   const countResult = calculateCount(fabric, gsm, fabricDef, compModifiers, factoryLookup, parsedComp, composition);
   trace.push({ step: 2, action: 'count', ...countResult.trace });
+  if (countResult.warning) warnings.push(countResult.warning);
 
   // --- 2.5. Yarn Expertise Engine (grade, spinning system, strength, evenness) ---
   let yarnExpertise = null, yarnRecommendation = null;
@@ -332,10 +343,14 @@ function calculate(params) {
     // Remove whatever shade factor was applied to ll_mm to get the colour-neutral base.
     const appliedShadeFactor = colorResult ? (colorResult.sl_factor || 1.0) : 1.0;
     const neutralBaseSl = llResult.ll_mm / appliedShadeFactor;          // mm, colour-neutral
+    // Same wet-processing model as the "Color Shade Impact" card and the
+    // Wet-Processing Critical Path card — one grey-GSM number everywhere.
+    const wetFamShades = resolveFamily(fabricDef.id, fabricDef.category);
     const rows = ['black','dark_navy','light_medium','fluorescent','white_melange','melange'].map(s => {
       const sp = classifyColorShade(s);
       const sl = parseFloat((neutralBaseSl * sp.sl_factor).toFixed(3));
-      const greyGsm = parseFloat((gsm * sp.grey_gsm_factor).toFixed(1));
+      const greige = greigeGsmTarget(gsm, wetFamShades, s, dyeing_method);
+      const greyGsm = greige ? greige.grey_gsm_target : parseFloat((gsm * sp.grey_gsm_factor).toFixed(1));
       return {
         shade: s,
         sl_mm: sl,
@@ -344,7 +359,7 @@ function calculate(params) {
         sl_direction: sp.sl_direction,
         grey_gsm: greyGsm,
         finished_gsm: gsm,
-        dye_gain_pct: sp.gsm_adjustment_pct,
+        dye_gain_pct: greige ? greige.dye_add_on_pct : sp.gsm_adjustment_pct,
         dyeing_tier: sp.dyeing_tier,
       };
     });
@@ -364,14 +379,17 @@ function calculate(params) {
   // --- 3.6 Calculate Tightness Factor (TF) ---
   let tfResult = null;
   if (countResult.count_ne > 0 && llResult.ll_cm > 0) {
-    // Determine TF limits for the category
-    let categoryKey = 'default';
-    if (fabricDef.id === 'heavy_jersey') categoryKey = 'heavy_jersey';
-    else if (fabricDef.category.includes('single_jersey')) categoryKey = 'single_jersey';
-    if (fabricDef.category.includes('rib')) categoryKey = 'rib';
-    if (fabricDef.category.includes('interlock')) categoryKey = 'interlock';
-    if (fabricDef.category.includes('fleece') || fabricDef.category.includes('terry')) categoryKey = 'fleece';
-    
+    // Determine TF limits for the fabric's real structural family via the same
+    // FAB_BUCKET_ALIAS used for factory-data lookup (single_jersey/heavy_jersey/
+    // rib/pique/interlock/waffle/fleece/terry) — NOT the coarse `category` field
+    // (only 4 distinct values: single_jersey/rib/interlock/warp_knit). Matching
+    // against `category` used to silently misroute every pile structure (terry,
+    // fleece_2/3_thread, french_terry — all category:'single_jersey') and every
+    // waffle/cardigan/milano variant (all category:'rib') to a limit band tuned
+    // for plain jersey/rib instead of their own — terry/fleece's ground-yarn-only
+    // TF runs far lower than a plain structure's, so this made the vast majority
+    // of REAL terry/fleece production look falsely "too loose".
+    const categoryKey = FAB_BUCKET_ALIAS[fabricDef.id] || 'default';
     const baseLimits = TIGHTNESS_LIMITS[categoryKey] || TIGHTNESS_LIMITS.default;
     let dynamicLimits = { ...baseLimits };
     
@@ -1284,6 +1302,18 @@ function calculateCount(fabricId, gsm, fabricDef, compModifiers = {}, factoryLoo
   const reg = GSM_COUNT_REGRESSION_COMPLETE[fabricId];
   const countFactor = compModifiers.count_factor || 1.0;
 
+  // Multi-yarn fabrics (terry, fleece, french_terry) — checked BEFORE the
+  // generic factory-knowledge lookup below. These structures need a separate
+  // ground+loop(+binder) declaration and feed calculateConsumption()'s
+  // Ground/Loop-count parsing (regex against count_display) — the generic
+  // single-count factory lookup would silently produce a single-yarn
+  // declaration with no "Ground"/"Loop" substrings and break that downstream
+  // calc, even though COMPOSITION_REFERENCE now also has entries for these
+  // fabrics' real fab bucket (used for their SL, not their count/declaration).
+  if (fabricDef.count_formula && fabricDef.count_formula.type === 'multi_yarn') {
+    return lookupMultiYarnCount(fabricId, gsm, fabricDef, parsedComp, rawInputStr);
+  }
+
   // If factory knowledge has an exact/interpolated count, prefer it
   if (factoryLookup && factoryLookup.count_ne) {
     const fCount = factoryLookup.count_ne;
@@ -1304,11 +1334,6 @@ function calculateCount(fabricId, gsm, fabricDef, compModifiers = {}, factoryLoo
     };
   }
 
-  // Multi-yarn fabrics (terry, fleece, french_terry) — use lookup
-  if (fabricDef.count_formula && fabricDef.count_formula.type === 'multi_yarn') {
-    return lookupMultiYarnCount(fabricId, gsm, fabricDef, parsedComp, rawInputStr);
-  }
-
   // Warp knit — no Ne count applicable
   if (fabricDef.category === 'warp_knit') {
     return {
@@ -1321,12 +1346,17 @@ function calculateCount(fabricId, gsm, fabricDef, compModifiers = {}, factoryLoo
   }
 
   // Regression formula: Count = (a × GSM + b) × composition_factor
+  // This linear model is only trustworthy near the GSM span it was fit on —
+  // outside that it can predict zero/negative Ne, which roundToStandardCount()
+  // would otherwise silently floor to 6/1 with no indication anything was
+  // wrong. Flag it instead so the caller can surface a warning.
   if (reg && reg.a !== undefined && reg.a !== null) {
     const count_base = reg.a * gsm + reg.b;
     const count_adjusted = count_base * countFactor;
     // Snap to standard commercial count
     const count_rounded = roundToStandardCount(count_adjusted);
     const advanced_display = generateYarnDeclaration(parsedComp, count_rounded, rawInputStr, fabricId);
+    const outOfModelRange = count_adjusted < 6 || count_adjusted > 80;
 
     return {
       count_ne: count_rounded, // integer — decimal counts are not used in industry declarations
@@ -1334,6 +1364,9 @@ function calculateCount(fabricId, gsm, fabricDef, compModifiers = {}, factoryLoo
       count_display: advanced_display,
       count_rounded,
       source: reg.source,
+      warning: outOfModelRange
+        ? `GSM ${gsm} pushes the ${fabricId.replace(/_/g, ' ')} count formula outside its reliable range (raw estimate ${count_adjusted.toFixed(1)} Ne, clamped to ${count_rounded}/1) — no factory sample data covers this GSM for this fabric; treat the count as indicative only.`
+        : null,
       trace: {
         formula: countFactor !== 1.0
           ? `Count = (${reg.a} × ${gsm} + ${reg.b}) × ${countFactor}`
@@ -1344,6 +1377,7 @@ function calculateCount(fabricId, gsm, fabricDef, compModifiers = {}, factoryLoo
         result: `${count_adjusted.toFixed(2)} Ne → snapped to standard ${count_rounded}/1 Ne`,
         source: reg.source,
         composition_factor: countFactor,
+        out_of_model_range: outOfModelRange,
       }
     };
   }
@@ -1355,6 +1389,62 @@ function calculateCount(fabricId, gsm, fabricDef, compModifiers = {}, factoryLoo
     source: 'NONE',
     trace: { formula: 'No regression data', result: 'Not calculable' }
   };
+}
+
+/**
+ * Interpolate/extrapolate a ground+loop yarn-count row for a target GSM from a
+ * GSM_COUNT_LOOKUP multi-yarn table. Previously this just snapped to the
+ * NEAREST table row regardless of distance — e.g. any GSM above the table's
+ * last point (280/340) silently reused that edge row verbatim, no matter how
+ * far off. Now it interpolates between the two bracketing rows, or — beyond
+ * the table's range — extrapolates ground/loop count from the last segment's
+ * slope (floored at a physically spinnable minimum) so heavy fabrics get a
+ * reasoned estimate instead of a stale light-GSM recipe.
+ */
+function interpolateMultiYarnRow(table, gsm) {
+  const sorted = [...table].sort((a, b) => a.gsm - b.gsm);
+  const exact = sorted.find(r => r.gsm === gsm);
+  if (exact) return { ...exact, source: 'PDF_VERIFIED' };
+
+  let lower = null, upper = null;
+  for (const r of sorted) {
+    if (r.gsm <= gsm) lower = r;
+    if (r.gsm > gsm && !upper) upper = r;
+  }
+
+  if (lower && upper) {
+    const ratio = (gsm - lower.gsm) / (upper.gsm - lower.gsm);
+    const nearest = ratio < 0.5 ? lower : upper;
+    return {
+      ...nearest,
+      gsm,
+      ground_count: Math.round((lower.ground_count + ratio * (upper.ground_count - lower.ground_count)) * 10) / 10,
+      loop_count: (lower.loop_count && upper.loop_count)
+        ? Math.round((lower.loop_count + ratio * (upper.loop_count - lower.loop_count)) * 10) / 10
+        : nearest.loop_count,
+      source: 'FACTORY_INTERPOLATED',
+    };
+  }
+
+  // Beyond the table's range — extrapolate from the last real segment's slope.
+  if (sorted.length >= 2) {
+    const useUpperEnd = lower != null;
+    const a = useUpperEnd ? sorted[sorted.length - 2] : sorted[0];
+    const b = useUpperEnd ? sorted[sorted.length - 1] : sorted[1];
+    const anchor = useUpperEnd ? b : a;
+    const dGsm = gsm - anchor.gsm;
+    const slopeGround = (b.ground_count - a.ground_count) / (b.gsm - a.gsm);
+    const ground_count = Math.max(4, Math.round((anchor.ground_count + slopeGround * dGsm) * 10) / 10);
+    let loop_count = anchor.loop_count;
+    if (a.loop_count && b.loop_count) {
+      const slopeLoop = (b.loop_count - a.loop_count) / (b.gsm - a.gsm);
+      loop_count = Math.max(4, Math.round((anchor.loop_count + slopeLoop * dGsm) * 10) / 10);
+    }
+    return { ...anchor, gsm, ground_count, loop_count, source: 'FACTORY_EXTRAPOLATED' };
+  }
+
+  const only = sorted[0];
+  return { ...only, source: 'FACTORY_NEAREST' };
 }
 
 function lookupMultiYarnCount(fabricId, gsm, fabricDef, parsedComp = null, rawInputStr = '') {
@@ -1375,19 +1465,13 @@ function lookupMultiYarnCount(fabricId, gsm, fabricDef, parsedComp = null, rawIn
     };
   }
 
-  // Find closest or interpolate
-  let best = table[0];
-  let bestDist = Math.abs(gsm - best.gsm);
-  for (const row of table) {
-    const dist = Math.abs(gsm - row.gsm);
-    if (dist < bestDist) { best = row; bestDist = dist; }
-  }
+  const best = interpolateMultiYarnRow(table, gsm);
 
   const result = {
     count_ne: best.ground_count || best.gsm,
     count_display: `Ground: ${generateYarnDeclaration(parsedComp, best.ground_count, rawInputStr)}`,
     count_rounded: best.ground_count,
-    source: 'PDF_VERIFIED',
+    source: best.source,
   };
 
   if (best.loop_count) {
@@ -1405,9 +1489,9 @@ function lookupMultiYarnCount(fabricId, gsm, fabricDef, parsedComp = null, rawIn
   }
 
   result.trace = {
-    formula: `Lookup table (GSM=${gsm}, matched GSM=${best.gsm})`,
+    formula: `Multi-yarn lookup (GSM=${gsm}, ${best.source})`,
     result: result.count_display,
-    source: 'PDF_VERIFIED — GSMtoCountConversion.pdf p.1'
+    source: best.source === 'PDF_VERIFIED' ? 'PDF_VERIFIED — GSMtoCountConversion.pdf p.1' : best.source,
   };
 
   return result;
