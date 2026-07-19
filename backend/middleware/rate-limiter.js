@@ -1,11 +1,18 @@
 /**
  * Simple in-memory rate limiter
- * 60 req/min per IP
+ * 240 req/min per IP
  */
 const limits = new Map();
 
 const WINDOW_MS = 60 * 1000;     // 1 minute
-const MAX_PER_WINDOW = 60;
+// A single "switch fabric and look at it" action already fires 2+ API calls
+// (calculate + pattern), and someone comparing several rib gauge combos back
+// to back easily does that a dozen times in a minute — the old 60/min ceiling
+// left almost no headroom for real interactive use once trust-proxy was fixed
+// to correctly separate visitors (previously it was masked by all traffic
+// sharing one bucket). 240/min is still far below anything a human clicking
+// through the UI could hit, while still bounding scripted abuse.
+const MAX_PER_WINDOW = 240;
 
 function rateLimiter(req, res, next) {
   const ip = req.ip || req.connection.remoteAddress || 'unknown';

@@ -1339,8 +1339,11 @@ class FabricVisualizer {
     let front;
     switch (con.type) {
       case 'rib': {
-        const rep = con.ribRepeat || 1;
-        front = mod(w, rep * 2) < rep ? 'knit' : 'purl';
+        const rep = con.ribRepeat || { a: 1, b: 1 };
+        const repA = Math.max(1, rep.a || 1), repB = Math.max(1, rep.b || 1);
+        // A cylinder-needle wales knit (face cord), then B dial-needle wales
+        // purl (back cord) — the real A:B grouping, not a symmetric guess.
+        front = mod(w, repA + repB) < repA ? 'knit' : 'purl';
         break;
       }
       case 'interlock': front = 'knit'; break;          // interlock: knit both faces
@@ -2381,10 +2384,16 @@ class FabricVisualizer {
     if (inp) inp.value = this._rgbToHex(this._dyedColor);
   }
 
+  // Returns { a, b } — the two needle-group sizes in an "AxB rib" id (e.g.
+  // 'rib_5x4' -> {a:5, b:4}). Previously this only captured A and _tokenAt()
+  // assumed a symmetric A:A grain (mod(w, a*2) < a) — correct by coincidence
+  // for 1x1/2x2/3x3 but WRONG for every asymmetric rib (2x1, 3x2, 4x1, and
+  // all of 3x1/4x2/4x3/5x1/5x3/5x4), which rendered as a symmetric grain
+  // instead of their real A:B wale grouping.
   _ribRepeat(id) {
-    const m = id.match(/(\d+)\s*x\s*\d+/);
-    if (m) return Math.max(1, parseInt(m[1]));
-    return 1;
+    const m = id.match(/(\d+)\s*x\s*(\d+)/);
+    if (m) return { a: Math.max(1, parseInt(m[1])), b: Math.max(1, parseInt(m[2])) };
+    return { a: 1, b: 1 };
   }
 
   _panelMsg(wrap, msg) {

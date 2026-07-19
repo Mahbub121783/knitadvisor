@@ -128,35 +128,26 @@ function renderPatternGrid(container, patternData) {
 // ============================================================
 // SVG RENDERER: TEXTBOOK STYLE
 // ============================================================
-function renderSvgSchematic(patternData) {
-  const { pattern_cylinder, cam_arrangement, needle_arrangement, courses_per_repeat, wales_per_repeat } = patternData;
-  if (!pattern_cylinder) return '';
 
-  const needle_butt_pattern = needle_arrangement ? needle_arrangement.butt_pattern : null;
+/**
+ * Fabric-notation (loop diagram) SVG for ONE bed's K/T/M grid.
+ *   K = teardrop loop: ROUND bulb raised up with its dot CENTRED inside;
+ *       at the bottom the two strands CROSS (interloop = overlap/underlap);
+ *       loops joined by one continuous scalloped running yarn.
+ *   T = tuck: a hump covering only the UPPER part of the dot (dot on base).
+ *   M = miss/float: flat running yarn; bare dot on the baseline.
+ * `dir` flips the whole loop vertically (+1 = loops point up, used for the
+ * cylinder/face bed; -1 = loops point down, used for the dial/back bed —
+ * physically the two beds' loops DO point opposite ways in a real rib).
+ */
+function buildFabricNotationSVG(grid, opts) {
+  opts = opts || {};
+  const dir = opts.dir === -1 ? -1 : 1;
+  const stroke = opts.stroke || '#1A1A1A';
 
-  const baseRows = pattern_cylinder.length;
-  const baseCols = Array.isArray(pattern_cylinder[0]) ? pattern_cylinder[0].length : 1;
-  
-  // Multi-Repeat Tiling for better visualization
-  const repeatX = 3;
-  const repeatY = 2;
-  const cols = baseCols * repeatX;
-  const rows = baseRows * repeatY;
-  
-  const cellSize = 40;
-  const width = cols * cellSize;
-  const height = rows * cellSize;
-  
-  let html = `<div style="display:flex; flex-wrap:wrap; gap:32px; margin-top:16px;">`;
+  const baseRows = grid.length;
+  const baseCols = Array.isArray(grid[0]) ? grid[0].length : 1;
 
-  // ----------------------------------------------------
-  // 1. Fabric Notation (exact reference loop)
-  //    K = teardrop loop: ROUND bulb raised up with its dot CENTRED inside;
-  //        at the bottom the two strands CROSS (interloop = overlap/underlap);
-  //        loops joined by one continuous scalloped running yarn.
-  //    T = tuck: a hump covering only the UPPER part of the dot (dot on base).
-  //    M = miss/float: flat running yarn; bare dot on the baseline.
-  // ----------------------------------------------------
   const cs = 50;                                   // needle pitch / course spacing
   const fnRepeatX = Math.max(3, Math.ceil(6 / baseCols));
   const fnRepeatY = Math.max(3, Math.ceil(4 / baseRows));
@@ -176,8 +167,8 @@ function renderSvgSchematic(patternData) {
   const fnH = fnPadTop + (fnRows - 1) * cs + fnPadBot;
 
   const cellAt = (r, c) => {
-    const rowData = Array.isArray(pattern_cylinder[r % baseRows])
-      ? pattern_cylinder[r % baseRows] : [pattern_cylinder[r % baseRows]];
+    const rowData = Array.isArray(grid[r % baseRows])
+      ? grid[r % baseRows] : [grid[r % baseRows]];
     return (rowData[c % baseCols] || '').toString().toUpperCase();
   };
   const fnX  = (c) => fnPadX + c * cs + cs / 2;          // wale centre (dot x)
@@ -187,7 +178,7 @@ function renderSvgSchematic(patternData) {
 
   for (let r = 0; r < fnRows; r++) {
     const by   = fnBy(r);
-    const topY = by - dTop;
+    const topY = by - dir * dTop;
 
     // ── one continuous running yarn for the whole course ──
     let d = `M ${fnX(0) - p * 0.5} ${by}`;
@@ -199,126 +190,198 @@ function renderSvgSchematic(patternData) {
       if (cell === 'K') {
         // dip + rise crossing to the RIGHT base → up right side, round the top,
         // down left side to the LEFT base → cross back out (interlooping crossover)
-        d += ` Q ${x - p * 0.12} ${by + scallop} ${x + baseOff} ${by}`;
-        d += ` C ${x + R * 1.7} ${by - cs * 0.18} ${x + R * 0.9} ${topY} ${x + R * 0.30} ${topY - R * 0.15}`;
-        d += ` C ${x + R * 0.10} ${topY - R * 0.40} ${x - R * 0.10} ${topY - R * 0.40} ${x - R * 0.30} ${topY - R * 0.15}`;
-        d += ` C ${x - R * 0.9} ${topY} ${x - R * 1.7} ${by - cs * 0.18} ${x - baseOff} ${by}`;
-        d += ` Q ${x + p * 0.12} ${by + scallop} ${xR} ${by}`;
+        d += ` Q ${x - p * 0.12} ${by + dir * scallop} ${x + baseOff} ${by}`;
+        d += ` C ${x + R * 1.7} ${by - dir * cs * 0.18} ${x + R * 0.9} ${topY} ${x + R * 0.30} ${topY - dir * R * 0.15}`;
+        d += ` C ${x + R * 0.10} ${topY - dir * R * 0.40} ${x - R * 0.10} ${topY - dir * R * 0.40} ${x - R * 0.30} ${topY - dir * R * 0.15}`;
+        d += ` C ${x - R * 0.9} ${topY} ${x - R * 1.7} ${by - dir * cs * 0.18} ${x - baseOff} ${by}`;
+        d += ` Q ${x + p * 0.12} ${by + dir * scallop} ${xR} ${by}`;
       } else if (cell === 'T') {
         // tuck hump — covers just the upper part of the dot
         d += ` L ${x - p * 0.30} ${by}`;
-        d += ` Q ${x} ${by - humpH} ${x + p * 0.30} ${by}`;
+        d += ` Q ${x} ${by - dir * humpH} ${x + p * 0.30} ${by}`;
         d += ` L ${xR} ${by}`;
       } else {
         // miss / float — flat run
         d += ` L ${xR} ${by}`;
       }
     }
-    fn += `<path d="${d}" fill="none" stroke="#1A1A1A" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>`;
+    fn += `<path d="${d}" fill="none" stroke="${stroke}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>`;
 
     // dots: centred inside the bulb for K, on the baseline for T/M
     for (let c = 0; c < fnCols; c++) {
       const cell = cellAt(r, c);
-      const dy = cell === 'K' ? by - dDot : by;
-      fn += `<circle cx="${fnX(c)}" cy="${dy}" r="2.3" fill="#1A1A1A"/>`;
+      const dy = cell === 'K' ? by - dir * dDot : by;
+      fn += `<circle cx="${fnX(c)}" cy="${dy}" r="2.3" fill="${stroke}"/>`;
     }
   }
 
   fn += `</svg>`;
+  return fn;
+}
 
-  html += `
-    <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
-      ${fn}
-      <div style="font-size:11px; color:var(--t2); font-weight:500;">Fabric notation</div>
-    </div>
-  `;
+/** Cam-block diagram SVG for ONE bed's K/T/M grid (3×2 tiled repeat). */
+function buildCamGridSVG(grid) {
+  const baseRows = grid.length;
+  const baseCols = Array.isArray(grid[0]) ? grid[0].length : 1;
+  const repeatX = 3, repeatY = 2;
+  const cols = baseCols * repeatX;
+  const rows = baseRows * repeatY;
+  const cellSize = 40;
+  const width = cols * cellSize;
+  const height = rows * cellSize;
 
-  // ----------------------------------------------------
-  // 2. Cam Arrangement
-  // ----------------------------------------------------
-  html += `
-    <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
-      <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" style="background:#FFFFFF; border:1px solid #CCCCCC; border-radius:4px;">
-  `;
+  let svg = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" style="background:#FFFFFF; border:1px solid #CCCCCC; border-radius:4px;">`;
   for (let r = 0; r < rows; r++) {
     const y = height - (r * cellSize) - cellSize;
     const baseR = r % baseRows;
-    const rowData = Array.isArray(pattern_cylinder[baseR]) ? pattern_cylinder[baseR] : [pattern_cylinder[baseR]];
-    
+    const rowData = Array.isArray(grid[baseR]) ? grid[baseR] : [grid[baseR]];
+
     for (let c = 0; c < cols; c++) {
       const x = c * cellSize;
       const baseC = c % baseCols;
       const cell = (rowData[baseC] || '').toString().toUpperCase();
-      
-      // Cam block base
-      html += `<rect x="${x+1}" y="${y+1}" width="${cellSize-2}" height="${cellSize-2}" fill="#F5F5F5" stroke="#CCCCCC" />`;
-      
-      // Needle butt dot path indicator
-      html += `<circle cx="${x + (cellSize/2)}" cy="${y + (cellSize/2) + 6}" r="3" fill="#000000" />`;
-      
+
+      svg += `<rect x="${x+1}" y="${y+1}" width="${cellSize-2}" height="${cellSize-2}" fill="#F5F5F5" stroke="#CCCCCC" />`;
+      svg += `<circle cx="${x + (cellSize/2)}" cy="${y + (cellSize/2) + 6}" r="3" fill="#000000" />`;
+
       if (cell === 'K') {
-        // Sharp Triangle
-        html += `<path d="M ${x+8} ${y+32} L ${x+20} ${y+8} L ${x+32} ${y+32}" fill="none" stroke="#000000" stroke-width="3" stroke-linejoin="miter" />`;
+        svg += `<path d="M ${x+8} ${y+32} L ${x+20} ${y+8} L ${x+32} ${y+32}" fill="none" stroke="#000000" stroke-width="3" stroke-linejoin="miter" />`;
       } else if (cell === 'T') {
-        // Flat top trapezoid
-        html += `<path d="M ${x+8} ${y+32} L ${x+14} ${y+20} L ${x+26} ${y+20} L ${x+32} ${y+32}" fill="none" stroke="#000000" stroke-width="3" stroke-linejoin="miter" />`;
+        svg += `<path d="M ${x+8} ${y+32} L ${x+14} ${y+20} L ${x+26} ${y+20} L ${x+32} ${y+32}" fill="none" stroke="#000000" stroke-width="3" stroke-linejoin="miter" />`;
       } else if (cell === 'M' || cell === '·') {
-        // Flat straight block
-        html += `<path d="M ${x+8} ${y+32} L ${x+32} ${y+32}" fill="none" stroke="#000000" stroke-width="3" stroke-linejoin="miter" />`;
+        svg += `<path d="M ${x+8} ${y+32} L ${x+32} ${y+32}" fill="none" stroke="#000000" stroke-width="3" stroke-linejoin="miter" />`;
       }
     }
   }
+  svg += `</svg>`;
+  return { svg, cellSize };
+}
+
+function renderSvgSchematic(patternData) {
+  const { pattern_cylinder, pattern_dial, needle_arrangement } = patternData;
+  if (!pattern_cylinder) return '';
+
+  const needle_butt_pattern = needle_arrangement ? needle_arrangement.butt_pattern : null;
+  // Double-bed structures (rib/interlock/half-cardigan/milano…) carry a real
+  // pattern_dial grid — DIAL bed. Previously every panel below only ever read
+  // pattern_cylinder, so a rib's diagram rendered identically to a single-bed
+  // fabric's: the defining second bed was silently dropped from all 3 SVGs.
+  const hasDial = Array.isArray(pattern_dial) && pattern_dial.length > 0;
+  const dialColor = '#8A3FFC';
+
+  const baseCols = Array.isArray(pattern_cylinder[0]) ? pattern_cylinder[0].length : 1;
+
+  let html = `<div style="display:flex; flex-wrap:wrap; gap:32px; margin-top:16px;">`;
+
+  // ----------------------------------------------------
+  // 1. Fabric Notation — cylinder, plus dial for double-bed structures
+  // ----------------------------------------------------
   html += `
-      </svg>
-      <div style="font-size:11px; color:var(--t2); font-weight:500;">Cam arrangement</div>
+    <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
+      ${buildFabricNotationSVG(pattern_cylinder, { dir: 1, stroke: '#1A1A1A' })}
+      <div style="font-size:11px; color:var(--t2); font-weight:500;">Fabric notation${hasDial ? ' — Cylinder (face)' : ''}</div>
+    </div>
+  `;
+  if (hasDial) {
+    html += `
+      <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
+        ${buildFabricNotationSVG(pattern_dial, { dir: -1, stroke: dialColor })}
+        <div style="font-size:11px; color:${dialColor}; font-weight:500;">Fabric notation — Dial (back)</div>
+      </div>
+    `;
+  }
+
+  // ----------------------------------------------------
+  // 2. Cam Arrangement — cylinder, plus dial for double-bed structures
+  // ----------------------------------------------------
+  const cylCam = buildCamGridSVG(pattern_cylinder);
+  html += `
+    <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
+      ${cylCam.svg}
+      <div style="font-size:11px; color:var(--t2); font-weight:500;">Cam arrangement${hasDial ? ' — Cylinder' : ''}</div>
+    </div>
+  `;
+  if (hasDial) {
+    const dialCam = buildCamGridSVG(pattern_dial);
+    html += `
+      <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
+        ${dialCam.svg}
+        <div style="font-size:11px; color:${dialColor}; font-weight:500;">Cam arrangement — Dial</div>
+      </div>
+    `;
+  }
+
+  // ----------------------------------------------------
+  // 3. Needle Arrangement
+  //    Double-bed: the physically meaningful "tracks" ARE the two beds —
+  //    derive directly from which wales are engaged (K/T) on each grid,
+  //    rather than parsing the free-text butt_pattern string.
+  //    Single-bed multi-track (e.g. 4-track twill/crepe): parse butt_pattern,
+  //    but strip separator characters first. Patterns like 'C_D_C_D' or
+  //    'AAB_AAB' use '_' purely for human readability; indexing into the raw
+  //    string previously treated '_' as a literal 3rd needle track, which
+  //    corrupted this diagram for every rib fabric (ALL of them use
+  //    underscore-delimited butt patterns).
+  // ----------------------------------------------------
+  const cellSize = 40;
+  let needleSvg, needleCaption;
+
+  if (hasDial) {
+    const dialCols = Array.isArray(pattern_dial[0]) ? pattern_dial[0].length : baseCols;
+    const gridCols = Math.max(baseCols, dialCols) * 3;
+    const width = gridCols * cellSize;
+    const nGridHeight = 2 * cellSize;
+
+    let s = `<svg width="${width}" height="${nGridHeight}" viewBox="0 0 ${width} ${nGridHeight}" style="background:#FFFFFF; border:1px solid #CCCCCC; border-radius:4px;">`;
+    for (let c = 0; c <= gridCols; c++) s += `<line x1="${c*cellSize}" y1="0" x2="${c*cellSize}" y2="${nGridHeight}" stroke="#CCCCCC" stroke-width="1" />`;
+    for (let r = 0; r <= 2; r++) s += `<line x1="0" y1="${r*cellSize}" x2="${width}" y2="${r*cellSize}" stroke="#CCCCCC" stroke-width="1" />`;
+
+    const cylRow = Array.isArray(pattern_cylinder[0]) ? pattern_cylinder[0] : [pattern_cylinder[0]];
+    const dialRow = Array.isArray(pattern_dial[0]) ? pattern_dial[0] : [pattern_dial[0]];
+    for (let c = 0; c < gridCols; c++) {
+      const cylActive = /[KT]/.test((cylRow[c % baseCols] || '').toString().toUpperCase());
+      const dialActive = /[KT]/.test((dialRow[c % dialCols] || '').toString().toUpperCase());
+      const cx = c * cellSize + cellSize / 2;
+      if (cylActive) s += `<circle cx="${cx}" cy="${nGridHeight - cellSize/2}" r="7" fill="#1A1A1A" />`;
+      if (dialActive) s += `<circle cx="${cx}" cy="${cellSize/2}" r="7" fill="${dialColor}" />`;
+    }
+    s += `</svg>`;
+    needleSvg = s;
+    needleCaption = 'Needle arrangement — Cylinder (bottom) / Dial (top)';
+  } else {
+    const cols = baseCols * 3;
+    const width = cols * cellSize;
+    const stripped = (needle_butt_pattern || '').replace(/[^A-Za-z0-9]/g, '');
+    const patternStr = stripped.length ? stripped : 'A'.repeat(baseCols);
+    const distinctButts = Array.from(new Set(patternStr.split(''))); // e.g. ['A', 'B'] -> 2 tracks
+    const numTracks = Math.max(distinctButts.length, 1);
+    const nGridHeight = numTracks * cellSize;
+
+    let s = `<svg width="${width}" height="${nGridHeight}" viewBox="0 0 ${width} ${nGridHeight}" style="background:#FFFFFF; border:1px solid #CCCCCC; border-radius:4px;">`;
+    for (let c = 0; c <= cols; c++) s += `<line x1="${c*cellSize}" y1="0" x2="${c*cellSize}" y2="${nGridHeight}" stroke="#CCCCCC" stroke-width="1" />`;
+    for (let r = 0; r <= numTracks; r++) s += `<line x1="0" y1="${r*cellSize}" x2="${width}" y2="${r*cellSize}" stroke="#CCCCCC" stroke-width="1" />`;
+
+    for (let c = 0; c < cols; c++) {
+      const baseC = c % baseCols;
+      const butt = patternStr[baseC % patternStr.length] || 'A';
+      const trackIdx = distinctButts.indexOf(butt);
+      const safeTrackIdx = trackIdx !== -1 ? trackIdx : 0;
+      const cx = c * cellSize + cellSize / 2;
+      const cy = nGridHeight - (safeTrackIdx * cellSize) - cellSize / 2;
+      s += `<circle cx="${cx}" cy="${cy}" r="7" fill="#000000" />`;
+    }
+    s += `</svg>`;
+    needleSvg = s;
+    needleCaption = 'Needle arrangement';
+  }
+
+  html += `
+    <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
+      ${needleSvg}
+      <div style="font-size:11px; color:var(--t2); font-weight:500;">${needleCaption}</div>
     </div>
   `;
 
-  // ----------------------------------------------------
-  // 3. Needle Arrangement (Grid)
-  // ----------------------------------------------------
-  // Determine physical needle tracks
-  const patternStr = needle_butt_pattern || 'A'.repeat(baseCols);
-  const distinctButts = Array.from(new Set(patternStr.split(''))); // e.g. ['A', 'B'] -> 2 tracks
-  const numTracks = Math.max(distinctButts.length, 1);
-  
-  // Height is based on tracks, width is based on tiled columns
-  const nGridHeight = numTracks * cellSize;
-  
-  html += `
-    <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
-      <svg width="${width}" height="${nGridHeight}" viewBox="0 0 ${width} ${nGridHeight}" style="background:#FFFFFF; border:1px solid #CCCCCC; border-radius:4px;">
-  `;
-  
-  // Draw grid lines
-  for(let c=0; c<=cols; c++) {
-    html += `<line x1="${c*cellSize}" y1="0" x2="${c*cellSize}" y2="${nGridHeight}" stroke="#CCCCCC" stroke-width="1" />`;
-  }
-  for(let r=0; r<=numTracks; r++) {
-    html += `<line x1="0" y1="${r*cellSize}" x2="${width}" y2="${r*cellSize}" stroke="#CCCCCC" stroke-width="1" />`;
-  }
-  
-  // Draw butts
-  for(let c=0; c<cols; c++) {
-    const baseC = c % baseCols;
-    const butt = patternStr[baseC % patternStr.length] || 'A';
-    
-    // Track index determines the row. Track 0 is bottom row.
-    const trackIdx = distinctButts.indexOf(butt); 
-    const safeTrackIdx = trackIdx !== -1 ? trackIdx : 0;
-    
-    const cx = (c * cellSize) + (cellSize / 2);
-    const cy = nGridHeight - (safeTrackIdx * cellSize) - (cellSize / 2);
-    
-    html += `<circle cx="${cx}" cy="${cy}" r="7" fill="#000000" />`;
-  }
-  
-  html += `
-      </svg>
-      <div style="font-size:11px; color:var(--t2); font-weight:500;">Needle arrangement</div>
-    </div>
-  `;
-  
   html += `</div>`;
   return html;
 }
