@@ -526,7 +526,7 @@ function calculateCost(params) {
     knittingDetail = { source: 'user_override', price_usd_kg: knittingBase, note: 'Manual override' };
   } else {
     // Look up from official knitting price table (fabric + count tier)
-    knittingDetail = getKnittingPrice(fabricId, countNe, parsedComp, params.yarn_form || null);
+    knittingDetail = getKnittingPrice(fabricId, countNe, parsedComp, params.yarn_form || null, params.feeder_type || null);
     knittingBase = knittingDetail.price_usd_kg;
     knittingFinal = knittingBase;
   }

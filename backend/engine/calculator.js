@@ -66,6 +66,7 @@ const { analyzeCriticalPath } = require('./critical-path');
 const { recommendMachine } = require('./machine-optimizer');
 const { analyzeYarn, recommendYarnGrade } = require('./yarn-engine');
 const { matchFactory, recommendCountFromGSM } = require('./factory-match');
+const { matchRiskAssessment } = require('./risk-assessment');
 const { gaugeFromBulkData, estimateProcessLoss, greyRequirementForFinished } = require('./production-data');
 const { analyzeWetProcessing, greigeGsmTarget, resolveFamily } = require('./wet-processing-engine');
 const { applyFabricPhysics } = require('./fabric-physics');
@@ -220,7 +221,19 @@ function calculate(params) {
   const factoryRef = getCompositionReference(fabric, parsedComp);
   let factoryLookup = null;
   if (factoryRef && fabricDef.category !== 'warp_knit') {
-    factoryLookup = lookupByGSM(factoryRef, gsm);
+    factoryLookup = lookupByGSM(factoryRef, gsm, resolveFamily(fabricDef.id, fabricDef.category));
+    // Not every fabric family has real sampled data for every composition —
+    // getCompositionReference() falls back to the 100%-cotton reference when
+    // it doesn't (e.g. no real cotton-viscose or poly-dominant RIB records
+    // exist). That fallback is silent at the data layer; surface it here so
+    // (a) calculateCount() below knows to still apply the composition
+    // modifier on top of the cotton baseline instead of returning raw cotton
+    // numbers for a majority-polyester or viscose-blend fabric, and (b) the
+    // user sees why.
+    if (factoryRef._fallback_from) {
+      factoryLookup.blend_fallback = true;
+      warnings.push(`No real factory sample data for a ${factoryRef._fallback_from.replace(/_/g, ' ')} ${fabricDef.name} — using the 100% cotton reference as a base, adjusted for composition. Treat count/SL as indicative for this blend.`);
+    }
     trace.push({ step: '1.8', action: 'factory_lookup', result: factoryLookup });
   }
 
@@ -328,7 +341,7 @@ function calculate(params) {
   // --- 3.5 Cross-Validate Stitch Length with R&D Data ---
   let rndValidation = null;
   if (llResult.ll_mm > 0) {
-    rndValidation = validateStitchLength(fabric, gsm, llResult.ll_mm, gauge, countResult.count_rounded, parsedComp);
+    rndValidation = validateStitchLength(fabric, gsm, llResult.ll_mm, gauge, countResult.count_rounded, parsedComp, resolveFamily(fabricDef.id, fabricDef.category));
     if (rndValidation && rndValidation.valid === false) {
       warnings.push(`Calculated stitch length (${llResult.ll_mm} mm) differs from factory R&D data (${rndValidation.factory_sl} mm) by ${rndValidation.deviation_pct}%.`);
     }
@@ -535,6 +548,34 @@ function calculate(params) {
   const osy = FabricWeightFormulas.gsmToOsy(gsm);
   trace.push({ step: 6, action: 'gsm_to_osy', formula: `OSY = ${gsm} × 0.836 / 28.35`, result: osy });
 
+  // --- 6.0e Real risk-assessment match (50 real production job records) ---
+  // Same fibre-family classification used everywhere else real data is bucketed.
+  let riskMatch = null;
+  let riskCalibration = null;
+  if (fabricDef.category !== 'warp_knit') {
+    const fib = parsedComp ? (parsedComp.fibers || {}) : {};
+    let riskComp = 'cotton';
+    if (/modal/i.test(composition || '')) riskComp = 'modal';
+    else if ((fib.viscose || 0) >= 15) riskComp = 'viscose';
+    else if ((fib.polyester || 0) > 0 && (fib.polyester || 0) >= (fib.cotton || 0)) riskComp = 'pc';
+    else if ((fib.polyester || 0) > 0) riskComp = 'cvc';
+
+    riskMatch = matchRiskAssessment({
+      construction: resolveFamily(fabricDef.id, fabricDef.category),
+      comp: riskComp,
+      gsm,
+    });
+    if (riskMatch && riskMatch.ok && riskMatch.show) {
+      const s = riskMatch.matched.shrinkage;
+      if (s.length && s.width) {
+        // Source records shrinkage as signed (L=-6% = "shrank 6%"); the app's
+        // model uses unsigned magnitude throughout.
+        riskCalibration = { shrinkage_length: Math.abs(s.length.value_pct), shrinkage_width: Math.abs(s.width.value_pct) };
+      }
+      trace.push({ step: '6.0e', action: 'risk_assessment_match', result: `${riskMatch.matched.name} · dist ${riskMatch.distance} · ${riskMatch.confidence}` });
+    }
+  }
+
   // --- 6.1 Predictive Quality ---
   const qualityResult = predictQuality({
     fabric: fabricDef.id,
@@ -548,9 +589,15 @@ function calculate(params) {
     yarn_type: yarn_type || (yarnExpertise ? yarnExpertise.quality_engine_yarn_type : null),
     twist_multiplier,
     finishing_route,
+    // Real matched production job's measured shrinkage overrides the formula
+    // prediction when a close (high-confidence) match exists — see step 6.0e.
+    calibration: riskCalibration,
   });
   if (qualityResult.warnings && qualityResult.warnings.length) {
     qualityResult.warnings.forEach(w => warnings.push(w));
+  }
+  if (riskMatch && riskMatch.ok) {
+    qualityResult.risk_match = riskMatch;
   }
   trace.push({ step: '6.1', action: 'quality_prediction', shrinkage: qualityResult.shrinkage, spirality: qualityResult.spirality });
 
@@ -666,6 +713,8 @@ function calculate(params) {
     siro: !!params.yarn_siro,
     ecovero: !!params.yarn_ecovero,
     at_sight: !!params.yarn_at_sight,
+    yarn_form,
+    feeder_type: params.feeder_type || null, // 'ff' (full feeder) | 'hf' (half feeder, default) — lycra rib knitting-cost tier
   });
   trace.push({ step: '6.2', action: 'costing', total_usd_per_kg: costResult.cost_breakdown_usd.total_per_kg });
 
@@ -876,6 +925,7 @@ function calculate(params) {
       wash_fastness:        qualityResult.wash_fastness,
       finishing_recommendations: qualityResult.finishing_recommendations,
       model_meta:           qualityResult.model_meta,
+      risk_match:           qualityResult.risk_match || null,
     } : null,
 
     // Real factory R&D data match (greige→finish records)
@@ -1054,6 +1104,14 @@ function generateYarnDeclaration(parsedComp, countStrOrNumber, rawInputStr = '',
     if (fabricId === 'heavy_jersey' && num >= 6 && num <= 20) {
       const doubleCount = num * 2;
       baseDecl += ` [or ${doubleCount}/1 × 2 Double-end]`;
+    } else if (fabricId !== 'heavy_jersey' && num >= 6 && num <= 14) {
+      // Below ~14 Ne, a single cotton yarn is weak/hairy and uncommon on its
+      // own — mills commonly ply a finer yarn instead (e.g. heavy sweater-
+      // weight rib at 10/1 is usually really 20/2). Surface the equivalent
+      // 2-ply spec as an alternative, same convention already used for
+      // heavy_jersey above.
+      const doubleCount = num * 2;
+      baseDecl += ` [or ${doubleCount}/1 × 2 Ply]`;
     }
     baseDecl = baseDecl.trim();
     return elastaneStr ? `${baseDecl} + ${elastaneStr}` : baseDecl;
@@ -1316,7 +1374,16 @@ function calculateCount(fabricId, gsm, fabricDef, compModifiers = {}, factoryLoo
 
   // If factory knowledge has an exact/interpolated count, prefer it
   if (factoryLookup && factoryLookup.count_ne) {
-    const fCount = factoryLookup.count_ne;
+    // Real matched-composition data already reflects that blend's true
+    // count/GSM relationship — applying the generic composition modifier on
+    // top would double-correct. But when the lookup had to FALL BACK to the
+    // 100%-cotton reference because no real data exists for this fabric's
+    // actual blend (factoryLookup.blend_fallback, set in calculate() from
+    // getCompositionReference()'s _fallback_from), the raw number is a pure-
+    // cotton number wearing a blend's clothes — apply the modifier so a
+    // majority-polyester or viscose-heavy fabric doesn't come back identical
+    // to 100% cotton.
+    const fCount = factoryLookup.blend_fallback ? factoryLookup.count_ne * countFactor : factoryLookup.count_ne;
     const count_rounded = roundToStandardCount(fCount); // snap to standard commercial sizes
     const advanced_display = generateYarnDeclaration(parsedComp, count_rounded, rawInputStr, fabricId);
     return {
@@ -1326,10 +1393,13 @@ function calculateCount(fabricId, gsm, fabricDef, compModifiers = {}, factoryLoo
       count_rounded,
       source: factoryLookup.source || 'FACTORY_KNOWLEDGE',
       trace: {
-        formula: `Factory knowledge lookup (GSM=${gsm}, composition-aware)`,
+        formula: factoryLookup.blend_fallback
+          ? `Factory knowledge lookup (GSM=${gsm}, 100% cotton reference × composition factor ${countFactor} — no real sample data for this blend)`
+          : `Factory knowledge lookup (GSM=${gsm}, composition-aware)`,
         result: `${fCount.toFixed(2)} Ne → snapped to standard ${count_rounded}/1 Ne`,
         source: factoryLookup.source,
         composition_factor: countFactor,
+        blend_fallback: !!factoryLookup.blend_fallback,
       }
     };
   }

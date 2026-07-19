@@ -48,12 +48,19 @@ const AREA_SHRINK = {
 
 function familyOf(category) {
   if (!category) return 'single_jersey';
+  // Regex substring check (not exact ===) for waffle, matching the pattern
+  // already used for pique/fleece/terry — needed because familyOf() is called
+  // with a fabric ID first (e.g. 'waffle_knit'), and 'waffle_knit's catalog
+  // `category` field is 'rib' (grouped there in fabric-derivatives.js), so an
+  // exact-match check on the literal string 'waffle' would never fire and it'd
+  // silently fall back to rib's area-shrinkage/tightness numbers instead of
+  // its own.
+  if (/waffle/.test(category)) return 'waffle';
   if (category === 'rib') return 'rib';
   if (category === 'interlock') return 'interlock';
   if (/pique|lacoste/.test(category)) return 'pique';
   if (/fleece/.test(category)) return 'fleece';
   if (/terry/.test(category)) return 'terry';
-  if (category === 'waffle') return 'waffle';
   if (category === 'heavy_jersey') return 'heavy_jersey';
   return 'single_jersey';
 }
