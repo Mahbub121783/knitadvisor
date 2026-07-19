@@ -163,6 +163,19 @@ function greigeGsmTarget(finishGsm, category, shade, method) {
   };
 }
 
+/**
+ * Resolve the fabric "family" (used for area-shrinkage lookup) the same way
+ * everywhere. Fabric ID is more specific than category (fleece/terry/pique
+ * are single-bed, so their category is 'single_jersey') — prefer the ID when
+ * it names a structure. Single source of truth so every caller (this engine's
+ * own orchestrator AND calculator.js's colour-shade/SL-by-shade tables) gets
+ * an identical grey-GSM number for the same inputs.
+ */
+function resolveFamily(fabricId, category) {
+  const famFromId = familyOf(fabricId);
+  return famFromId !== 'single_jersey' ? famFromId : familyOf(category);
+}
+
 /** Grey GSM for all 6 shades at once (the floor's "show me all shades" need). */
 function greigeGsmAllShades(finishGsm, category, method) {
   const shadesToShow = ['black','dark_navy','light_medium','fluorescent','white_melange','melange'];
@@ -402,10 +415,7 @@ function analyzeWetProcessing(args) {
   } = args || {};
   if (!finish_gsm || finish_gsm <= 0) return { ok: false, reason: 'finish_gsm_required' };
 
-  // Fabric ID is more specific than category (fleece/terry/pique are single-bed
-  // so their category is 'single_jersey'); prefer the id when it names a structure.
-  const famFromId = familyOf(fabric);
-  const fam = famFromId !== 'single_jersey' ? famFromId : familyOf(category);
+  const fam = resolveFamily(fabric, category);
   const sh = normShade(shade);
   const me = normMethod(dyeing_method);
 
@@ -423,9 +433,11 @@ function analyzeWetProcessing(args) {
     calender: processes.includes('calender'),
   };
 
-  // Greige GSM (headline) + all-shades table.
-  const greige = greigeGsmTarget(finish_gsm, category, sh, me);
-  const greige_all_shades = greigeGsmAllShades(finish_gsm, category, me);
+  // Greige GSM (headline) + all-shades table. Use the resolved fam (not the raw
+  // category) so e.g. terry/fleece get their own area-shrinkage numbers instead
+  // of silently falling back to single_jersey's.
+  const greige = greigeGsmTarget(finish_gsm, fam, sh, me);
+  const greige_all_shades = greigeGsmAllShades(finish_gsm, fam, me);
 
   // Process loss (reuse bulk-file model).
   const lossProcesses = [];
@@ -470,6 +482,7 @@ module.exports = {
   greigeGsmTarget,
   greigeGsmAllShades,
   familyOf,
+  resolveFamily,
   AREA_SHRINK,
   DYE_ADDON,
   MACHINE_STAGES,

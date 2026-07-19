@@ -21,6 +21,8 @@
 
 const { FACTORY_RECORDS, FAB_ALIAS } = require('./factory-dataset');
 
+const TOTAL_RECORDS = FACTORY_RECORDS.length;
+
 // Colour segment → ordinal (for distance) and dye GSM-gain direction.
 const SEG_ORD = { light: 0, medium: 1, dark: 2 };
 
@@ -51,7 +53,7 @@ function matchFactory(q, k = 4) {
   const scored = pool.map(r => {
     const dCount = Math.abs(r.ne - q.count_ne) / 6;          // ~6 Ne ≈ 1 unit
     const dGsm   = Math.abs(r.gsm - q.gsm) / 40;             // ~40 GSM ≈ 1 unit
-    const dGauge = q.gauge ? Math.abs(r.g - q.gauge) / 4 : 0; // ~4 GG ≈ 1 unit
+    const dGauge = (q.gauge != null && r.g != null) ? Math.abs(r.g - q.gauge) / 4 : 0; // ~4 GG ≈ 1 unit
     const dSeg   = Math.abs(SEG_ORD[r.seg] - SEG_ORD[seg]) * 0.5;
     const dComp  = compDistance(r.comp, comp);
     const dist = Math.sqrt(dCount*dCount + dGsm*dGsm + dGauge*dGauge + dSeg*dSeg + dComp*dComp);
@@ -61,18 +63,23 @@ function matchFactory(q, k = 4) {
   const top = scored.slice(0, Math.min(k, scored.length));
 
   // Inverse-distance weights (add epsilon so an exact match doesn't divide by 0).
-  let wSum = 0, sl = 0, fdia = 0, fgsm = 0, fgsmGainNum = 0;
+  // fdia is optional in the real dataset (~9% of records lack it) — track its own
+  // weight sum so a missing value doesn't drag the average toward 0/NaN.
+  let wSum = 0, wSumFdia = 0, sl = 0, fdia = 0, fgsm = 0, fgsmGainNum = 0;
   top.forEach(({ r, dist }) => {
     const w = 1 / (dist + 0.15);
     wSum += w;
     sl   += w * r.sl;
-    fdia += w * (r.fdia || 0);
     fgsm += w * r.fgsm;
     fgsmGainNum += w * ((r.fgsm - r.gsm) / r.gsm); // fractional gain vs that record's grey
+    if (r.fdia != null) {
+      wSumFdia += w;
+      fdia += w * r.fdia;
+    }
   });
 
   const slPred   = parseFloat((sl / wSum).toFixed(3));
-  const fdiaPred = fdia > 0 ? parseFloat((fdia / wSum).toFixed(1)) : null;
+  const fdiaPred = wSumFdia > 0 ? parseFloat((fdia / wSumFdia).toFixed(1)) : null;
   const gainFrac = fgsmGainNum / wSum;                       // typical finish/grey gain
   // Apply the typical gain to the USER's target GSM for a finished-GSM estimate.
   const fgsmPred = parseFloat((q.gsm * (1 + gainFrac)).toFixed(0));
@@ -101,7 +108,8 @@ function matchFactory(q, k = 4) {
       grey_gsm: r.gsm, color: r.seg, sl_mm: r.sl, finished_gsm: r.fgsm, finished_dia_in: r.fdia,
       distance: parseFloat(dist.toFixed(2)),
     })),
-    source: 'Factory ERP R&D Master File (2700+ greige→finish records, 2022)',
+    dataset_size: TOTAL_RECORDS,
+    source: `Factory ERP R&D Master File (${TOTAL_RECORDS.toLocaleString()} greige→finish records, 2022)`,
   };
 }
 

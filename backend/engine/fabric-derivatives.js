@@ -33,7 +33,7 @@ const FABRIC_DERIVATIVES = [
     base: null,
     machine_type: 'single_bed_circular',
     gauge_range: { min: 18, max: 36 },
-    gsm_range: { min: 100, max: 260 },
+    gsm_range: { min: 90, max: 300 },
     count_formula: {
       type: 'regression',
       a: -0.141, b: 50.22,
@@ -70,7 +70,7 @@ const FABRIC_DERIVATIVES = [
     base: 'single_jersey',
     machine_type: 'single_bed_circular',
     gauge_range: { min: 14, max: 20 },
-    gsm_range: { min: 260, max: 350 },
+    gsm_range: { min: 250, max: 420 },
     count_formula: {
       type: 'regression',
       a: -0.0889, b: 37.11,
@@ -106,7 +106,7 @@ const FABRIC_DERIVATIVES = [
     base: 'single_jersey',
     machine_type: 'single_bed_circular',
     gauge_range: { min: 18, max: 28 },
-    gsm_range: { min: 130, max: 300 },
+    gsm_range: { min: 140, max: 300 },
     count_formula: {
       type: 'regression',
       a: -0.146, b: 57.16,
@@ -151,7 +151,7 @@ const FABRIC_DERIVATIVES = [
     base: 'pique_single',
     machine_type: 'single_bed_circular',
     gauge_range: { min: 18, max: 28 },
-    gsm_range: { min: 160, max: 320 },
+    gsm_range: { min: 160, max: 340 },
     count_formula: {
       type: 'regression',
       a: -0.138, b: 55.0,
@@ -194,7 +194,7 @@ const FABRIC_DERIVATIVES = [
     base: 'pique_single',
     machine_type: 'single_bed_circular',
     gauge_range: { min: 18, max: 28 },
-    gsm_range: { min: 160, max: 250 },
+    gsm_range: { min: 150, max: 280 },
     count_formula: {
       type: 'lookup_derived',
       a: -0.169, b: 56.65,
@@ -240,7 +240,7 @@ const FABRIC_DERIVATIVES = [
     base: 'lacoste_single',
     machine_type: 'single_bed_circular',
     gauge_range: { min: 18, max: 28 },
-    gsm_range: { min: 180, max: 280 },
+    gsm_range: { min: 170, max: 320 },
     count_formula: {
       type: 'regression',
       a: -0.167, b: 64.36,
@@ -288,7 +288,7 @@ const FABRIC_DERIVATIVES = [
     base: 'single_jersey',
     machine_type: 'single_bed_circular',
     gauge_range: { min: 16, max: 24 },
-    gsm_range: { min: 200, max: 400 },
+    gsm_range: { min: 200, max: 480 },
     count_formula: {
       type: 'multi_yarn',
       yarns: [
@@ -342,7 +342,7 @@ const FABRIC_DERIVATIVES = [
     base: 'french_terry',
     machine_type: 'single_bed_circular_then_brushing',
     gauge_range: { min: 16, max: 24 },
-    gsm_range: { min: 200, max: 350 },
+    gsm_range: { min: 200, max: 420 },
     count_formula: {
       type: 'multi_yarn',
       note: '2-yarn system: Ground + Fleece inlay',
@@ -391,7 +391,7 @@ const FABRIC_DERIVATIVES = [
     base: 'french_terry',
     machine_type: 'single_bed_circular_then_brushing',
     gauge_range: { min: 16, max: 24 },
-    gsm_range: { min: 200, max: 400 },
+    gsm_range: { min: 200, max: 500 },
     count_formula: {
       type: 'multi_yarn',
       note: '3-yarn system: Face/Ground + Plated/Tie-in + Fleece/Back',
@@ -450,7 +450,7 @@ const FABRIC_DERIVATIVES = [
     base: 'french_terry',
     machine_type: 'single_bed_circular_then_brushing',
     gauge_range: { min: 16, max: 24 },
-    gsm_range: { min: 200, max: 400 },
+    gsm_range: { min: 200, max: 480 },
     count_formula: {
       type: 'multi_yarn',
       note: 'Same base as 3-Thread Fleece',
@@ -511,7 +511,7 @@ const FABRIC_DERIVATIVES = [
     base: 'single_jersey',
     machine_type: 'single_bed_circular_terry',
     gauge_range: { min: 16, max: 22 },
-    gsm_range: { min: 200, max: 350 },
+    gsm_range: { min: 200, max: 600 },
     count_formula: {
       type: 'multi_yarn',
       lookup: [
@@ -555,7 +555,7 @@ const FABRIC_DERIVATIVES = [
     base: 'single_jersey',
     machine_type: 'single_bed_circular_or_flatbed',
     gauge_range: { min: 18, max: 36 },
-    gsm_range: { min: 80, max: 180 },
+    gsm_range: { min: 70, max: 180 },
     count_formula: {
       type: 'regression',
       a: -0.130, b: 47.5,
@@ -599,7 +599,7 @@ const FABRIC_DERIVATIVES = [
     base: 'single_jersey',
     machine_type: 'single_bed_circular',
     gauge_range: { min: 18, max: 32 },
-    gsm_range: { min: 120, max: 260 },
+    gsm_range: { min: 110, max: 280 },
     count_formula: {
       type: 'combined_yarn',
       note: 'Two yarns knit simultaneously. Effective Ne calculated from combined linear density.',
@@ -633,7 +633,7 @@ const FABRIC_DERIVATIVES = [
     base: 'single_jersey',
     machine_type: 'single_bed_circular_electronic',
     gauge_range: { min: 18, max: 28 },
-    gsm_range: { min: 140, max: 280 },
+    gsm_range: { min: 130, max: 300 },
     count_formula: {
       type: 'regression',
       a: -0.130, b: 47.5,
@@ -673,7 +673,7 @@ const FABRIC_DERIVATIVES = [
     base: 'single_jersey',
     machine_type: 'single_bed_circular',
     gauge_range: { min: 18, max: 28 },
-    gsm_range: { min: 140, max: 220 },
+    gsm_range: { min: 130, max: 240 },
     count_formula: {
       type: 'regression',
       a: -0.15, b: 54.0,
@@ -711,7 +711,7 @@ const FABRIC_DERIVATIVES = [
     base: 'single_jersey',
     machine_type: 'single_bed_circular',
     gauge_range: { min: 18, max: 28 },
-    gsm_range: { min: 130, max: 200 },
+    gsm_range: { min: 120, max: 220 },
     count_formula: {
       type: 'regression',
       a: -0.14, b: 52.0,
@@ -749,7 +749,7 @@ const FABRIC_DERIVATIVES = [
     base: 'single_jersey',
     machine_type: 'single_bed_circular',
     gauge_range: { min: 16, max: 24 },
-    gsm_range: { min: 160, max: 280 },
+    gsm_range: { min: 150, max: 300 },
     count_formula: {
       type: 'regression',
       a: -0.14, b: 54.0,
@@ -791,7 +791,7 @@ const FABRIC_DERIVATIVES = [
     base: 'single_jersey',
     machine_type: 'single_bed_circular',
     gauge_range: { min: 18, max: 28 },
-    gsm_range: { min: 130, max: 220 },
+    gsm_range: { min: 120, max: 240 },
     count_formula: {
       type: 'regression',
       a: -0.14, b: 52.0,
@@ -837,7 +837,7 @@ const FABRIC_DERIVATIVES = [
     base: null,
     machine_type: 'double_bed_circular',
     gauge_range: { min: 14, max: 24 },
-    gsm_range: { min: 130, max: 300 },
+    gsm_range: { min: 130, max: 480 },
     count_formula: {
       type: 'regression',
       a: -0.123, b: 54.57,
@@ -876,7 +876,7 @@ const FABRIC_DERIVATIVES = [
     base: 'rib_1x1',
     machine_type: 'double_bed_circular',
     gauge_range: { min: 14, max: 22 },
-    gsm_range: { min: 150, max: 310 },
+    gsm_range: { min: 150, max: 460 },
     count_formula: {
       type: 'regression',
       a: -0.108, b: 56.62,
@@ -915,7 +915,7 @@ const FABRIC_DERIVATIVES = [
     base: 'rib_1x1',
     machine_type: 'double_bed_circular',
     gauge_range: { min: 14, max: 24 },
-    gsm_range: { min: 150, max: 280 },
+    gsm_range: { min: 150, max: 420 },
     count_formula: {
       type: 'regression',
       a: -0.119, b: 59.12,
@@ -955,7 +955,7 @@ const FABRIC_DERIVATIVES = [
     base: 'rib_1x1',
     machine_type: 'double_bed_circular',
     gauge_range: { min: 12, max: 20 },
-    gsm_range: { min: 180, max: 380 },
+    gsm_range: { min: 180, max: 500 },
     count_formula: {
       type: 'regression',
       a: -0.115, b: 53.5,
@@ -994,7 +994,7 @@ const FABRIC_DERIVATIVES = [
     base: 'rib_1x1',
     machine_type: 'double_bed_circular',
     gauge_range: { min: 10, max: 18 },
-    gsm_range: { min: 220, max: 450 },
+    gsm_range: { min: 220, max: 550 },
     count_formula: {
       type: 'regression',
       a: -0.108, b: 52.0,
@@ -1033,7 +1033,7 @@ const FABRIC_DERIVATIVES = [
     base: 'rib_1x1',
     machine_type: 'double_bed_circular',
     gauge_range: { min: 12, max: 24 },
-    gsm_range: { min: 160, max: 340 },
+    gsm_range: { min: 160, max: 450 },
     count_formula: {
       type: 'regression',
       a: -0.120, b: 54.0,
@@ -1072,7 +1072,7 @@ const FABRIC_DERIVATIVES = [
     base: 'rib_1x1',
     machine_type: 'double_bed_circular',
     gauge_range: { min: 12, max: 22 },
-    gsm_range: { min: 180, max: 380 },
+    gsm_range: { min: 180, max: 480 },
     count_formula: {
       type: 'regression',
       a: -0.110, b: 54.0,
@@ -1112,7 +1112,7 @@ const FABRIC_DERIVATIVES = [
     base: 'rib_2x2',
     machine_type: 'double_bed_circular',
     gauge_range: { min: 12, max: 22 },
-    gsm_range: { min: 150, max: 300 },
+    gsm_range: { min: 150, max: 380 },
     count_formula: {
       type: 'regression',
       a: -0.120, b: 54.0,
@@ -1155,7 +1155,7 @@ const FABRIC_DERIVATIVES = [
     base: null,
     machine_type: 'double_bed_circular_interlock',
     gauge_range: { min: 16, max: 32 },
-    gsm_range: { min: 150, max: 380 },
+    gsm_range: { min: 150, max: 450 },
     count_formula: {
       type: 'regression',
       a: -0.206, b: 80.56,
@@ -1196,7 +1196,7 @@ const FABRIC_DERIVATIVES = [
     base: 'interlock',
     machine_type: 'double_bed_circular_interlock',
     gauge_range: { min: 16, max: 28 },
-    gsm_range: { min: 200, max: 350 },
+    gsm_range: { min: 200, max: 420 },
     count_formula: {
       type: 'regression',
       a: -0.170, b: 68.0,
@@ -1237,7 +1237,7 @@ const FABRIC_DERIVATIVES = [
     base: 'interlock',
     machine_type: 'double_bed_circular_interlock',
     gauge_range: { min: 16, max: 28 },
-    gsm_range: { min: 180, max: 320 },
+    gsm_range: { min: 180, max: 360 },
     count_formula: {
       type: 'regression',
       a: -0.150, b: 62.0,
@@ -1277,7 +1277,7 @@ const FABRIC_DERIVATIVES = [
     base: 'interlock',
     machine_type: 'double_bed_circular_interlock',
     gauge_range: { min: 16, max: 28 },
-    gsm_range: { min: 180, max: 320 },
+    gsm_range: { min: 180, max: 360 },
     count_formula: {
       type: 'regression',
       a: -0.150, b: 62.0,
@@ -1317,7 +1317,7 @@ const FABRIC_DERIVATIVES = [
     base: 'interlock',
     machine_type: 'double_bed_circular_interlock',
     gauge_range: { min: 16, max: 28 },
-    gsm_range: { min: 170, max: 300 },
+    gsm_range: { min: 170, max: 320 },
     count_formula: {
       type: 'regression',
       a: -0.160, b: 60.0,
@@ -1357,7 +1357,7 @@ const FABRIC_DERIVATIVES = [
     base: 'interlock',
     machine_type: 'double_bed_circular_interlock',
     gauge_range: { min: 14, max: 22 },
-    gsm_range: { min: 200, max: 380 },
+    gsm_range: { min: 200, max: 420 },
     count_formula: {
       type: 'regression',
       a: -0.130, b: 58.0,
@@ -1399,7 +1399,7 @@ const FABRIC_DERIVATIVES = [
     base: 'interlock',
     machine_type: 'double_bed_circular_interlock',
     gauge_range: { min: 16, max: 26 },
-    gsm_range: { min: 160, max: 320 },
+    gsm_range: { min: 160, max: 360 },
     count_formula: {
       type: 'regression',
       a: -0.140, b: 60.0,
@@ -1441,7 +1441,7 @@ const FABRIC_DERIVATIVES = [
     base: 'interlock',
     machine_type: 'double_bed_circular_interlock',
     gauge_range: { min: 16, max: 28 },
-    gsm_range: { min: 200, max: 360 },
+    gsm_range: { min: 200, max: 400 },
     count_formula: {
       type: 'regression',
       a: -0.150, b: 64.0,
@@ -1481,7 +1481,7 @@ const FABRIC_DERIVATIVES = [
     base: 'interlock',
     machine_type: 'double_bed_circular_interlock',
     gauge_range: { min: 14, max: 24 },
-    gsm_range: { min: 220, max: 400 },
+    gsm_range: { min: 220, max: 420 },
     count_formula: {
       type: 'regression',
       a: -0.130, b: 60.0,
@@ -1519,7 +1519,7 @@ const FABRIC_DERIVATIVES = [
     base: 'interlock',
     machine_type: 'double_bed_circular_interlock',
     gauge_range: { min: 16, max: 28 },
-    gsm_range: { min: 180, max: 320 },
+    gsm_range: { min: 180, max: 360 },
     count_formula: {
       type: 'regression',
       a: -0.190, b: 74.0,
@@ -1558,7 +1558,7 @@ const FABRIC_DERIVATIVES = [
     base: 'interlock',
     machine_type: 'double_bed_circular_interlock',
     gauge_range: { min: 12, max: 22 },
-    gsm_range: { min: 220, max: 420 },
+    gsm_range: { min: 220, max: 480 },
     count_formula: {
       type: 'regression',
       a: -0.155, b: 62.0,
@@ -1598,7 +1598,7 @@ const FABRIC_DERIVATIVES = [
     base: 'interlock',
     machine_type: 'double_bed_circular_interlock',
     gauge_range: { min: 18, max: 28 },
-    gsm_range: { min: 180, max: 320 },
+    gsm_range: { min: 180, max: 340 },
     count_formula: {
       type: 'regression',
       a: -0.150, b: 60.0,
@@ -1808,7 +1808,7 @@ const FABRIC_DERIVATIVES = [
     base: 'rib_1x1',
     machine_type: 'double_bed_circular',
     gauge_range: { min: 14, max: 22 },
-    gsm_range: { min: 140, max: 300 },
+    gsm_range: { min: 140, max: 460 },
     count_formula: {
       type: 'regression',
       a: -0.115, b: 53.00,
@@ -1846,7 +1846,7 @@ const FABRIC_DERIVATIVES = [
     base: 'rib_1x1',
     machine_type: 'double_bed_circular',
     gauge_range: { min: 12, max: 20 },
-    gsm_range: { min: 160, max: 320 },
+    gsm_range: { min: 160, max: 460 },
     count_formula: {
       type: 'regression',
       a: -0.110, b: 56.00,
@@ -1884,7 +1884,7 @@ const FABRIC_DERIVATIVES = [
     base: 'rib_1x1',
     machine_type: 'double_bed_circular',
     gauge_range: { min: 12, max: 20 },
-    gsm_range: { min: 150, max: 310 },
+    gsm_range: { min: 150, max: 450 },
     count_formula: {
       type: 'regression',
       a: -0.110, b: 55.00,
@@ -1922,7 +1922,7 @@ const FABRIC_DERIVATIVES = [
     base: 'rib_1x1',
     machine_type: 'double_bed_circular',
     gauge_range: { min: 14, max: 22 },
-    gsm_range: { min: 140, max: 300 },
+    gsm_range: { min: 140, max: 450 },
     count_formula: {
       type: 'regression',
       a: -0.115, b: 54.00,
@@ -1960,7 +1960,7 @@ const FABRIC_DERIVATIVES = [
     base: 'rib_2x2',
     machine_type: 'double_bed_circular',
     gauge_range: { min: 14, max: 22 },
-    gsm_range: { min: 180, max: 320 },
+    gsm_range: { min: 180, max: 440 },
     count_formula: {
       type: 'regression',
       a: -0.108, b: 56.62,
@@ -1998,7 +1998,7 @@ const FABRIC_DERIVATIVES = [
     base: 'pointelle',
     machine_type: 'single_bed_circular_or_flatbed',
     gauge_range: { min: 18, max: 32 },
-    gsm_range: { min: 80, max: 180 },
+    gsm_range: { min: 70, max: 180 },
     count_formula: {
       type: 'regression',
       a: -0.130, b: 48.00,
@@ -2041,7 +2041,7 @@ const FABRIC_DERIVATIVES = [
     base: 'pointelle',
     machine_type: 'single_bed_circular_or_flatbed',
     gauge_range: { min: 18, max: 32 },
-    gsm_range: { min: 90, max: 200 },
+    gsm_range: { min: 80, max: 200 },
     count_formula: {
       type: 'regression',
       a: -0.130, b: 49.00,
@@ -2092,7 +2092,7 @@ const FABRIC_DERIVATIVES = [
     base: 'pointelle',
     machine_type: 'single_bed_circular_or_flatbed',
     gauge_range: { min: 18, max: 32 },
-    gsm_range: { min: 80, max: 170 },
+    gsm_range: { min: 70, max: 180 },
     count_formula: {
       type: 'regression',
       a: -0.135, b: 47.50,
@@ -2139,7 +2139,7 @@ const FABRIC_DERIVATIVES = [
     base: 'rib_1x1',
     machine_type: 'double_bed_circular',
     gauge_range: { min: 12, max: 20 },
-    gsm_range: { min: 180, max: 350 },
+    gsm_range: { min: 180, max: 320 },
     count_formula: {
       type: 'regression',
       a: -0.105, b: 54.00,
@@ -2190,7 +2190,7 @@ const FABRIC_DERIVATIVES = [
     base: 'rib_1x1',
     machine_type: 'double_bed_circular',
     gauge_range: { min: 10, max: 18 },
-    gsm_range: { min: 200, max: 400 },
+    gsm_range: { min: 200, max: 480 },
     count_formula: {
       type: 'regression',
       a: -0.095, b: 52.00,
@@ -2245,7 +2245,7 @@ const FABRIC_DERIVATIVES = [
     base: 'single_jersey',
     machine_type: 'single_bed_circular',
     gauge_range: { min: 16, max: 28 },
-    gsm_range: { min: 150, max: 280 },
+    gsm_range: { min: 140, max: 300 },
     count_formula: {
       type: 'regression',
       a: -0.138, b: 54.00,

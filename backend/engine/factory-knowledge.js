@@ -1,381 +1,89 @@
 /**
  * KnitAdvisor — Factory Knowledge Database
- * 
- * Distilled from 2710 real factory R&D records (H&M, C&A, OVS buyers)
- * Source: New ERP R&D Master File-2022.xlsx
- * 
- * This module REPLACES the Python-generated rnd-reference.js.
- * All data is permanently embedded — no external files needed.
- * 
- * Structure: COMPOSITION_REFERENCE[fabricId][compositionKey] → count/SL/gauge data
+ *
+ * COMPOSITION_REFERENCE is loaded from backend/data/composition-reference.json,
+ * built by backend/scripts/build-composition-reference.js from the real
+ * factory ERP R&D Master File (2,201 usable greige→finish records — see
+ * backend/engine/factory-dataset.js). Regenerate that JSON whenever the
+ * source records change; don't hand-edit it here.
+ *
+ * The real dataset is keyed by 8 structural buckets (single_jersey, rib,
+ * pique, interlock, fleece, terry, waffle, heavy_jersey) — coarser than the
+ * 54 individual structures in fabric-derivatives.js (the source spreadsheet
+ * doesn't distinguish e.g. 1x1 vs 2x2 vs cardigan rib). FAB_BUCKET_ALIAS below
+ * maps every fabric ID to its nearest real bucket, so every fabric — not just
+ * the ones that happen to share a name with a bucket — gets a real,
+ * sample-count-backed reference instead of silently falling through to the
+ * unclamped GSM→count regression (which produces nonsense, even negative,
+ * counts well within GSM ranges knitters actually use — e.g. heavy rib/fleece
+ * fabrics above ~350-400 GSM).
+ *
+ * Structure: COMPOSITION_REFERENCE[bucket][compositionKey] → count/SL/gauge data
  */
 
+const COMPOSITION_REFERENCE = require('../data/composition-reference.json');
+
 // ============================================================
-// COMPOSITION-AWARE REFERENCE DATA
-// Extracted from factory R&D records, grouped by fabric + composition
+// FABRIC ID → REAL DATA BUCKET
 // ============================================================
-const COMPOSITION_REFERENCE = {
+const FAB_BUCKET_ALIAS = {
+  // single_jersey family — plain + lightweight/structural single-bed variants
+  single_jersey: 'single_jersey',
+  pointelle: 'single_jersey', pointelle_eyelet: 'single_jersey',
+  pointelle_chevron: 'single_jersey', pointelle_diagonal: 'single_jersey',
+  plated_jersey: 'single_jersey', single_jacquard: 'single_jersey',
+  single_cross_tuck: 'single_jersey', mock_rib: 'single_jersey',
+  knitted_twill: 'single_jersey', knitted_crepe: 'single_jersey',
+  moss_stitch: 'single_jersey',
 
-  // ============================================================
-  // SINGLE JERSEY
-  // ============================================================
-  single_jersey: {
-    '100_cotton': {
-      gsm_range: { min: 100, max: 260 },
-      count_map: [
-        { gsm: 120, count_ne: 40, count_display: '40/1', gauge: 28, sl: 2.55 },
-        { gsm: 130, count_ne: 34, count_display: '34/1', gauge: 28, sl: 2.55 },
-        { gsm: 140, count_ne: 32, count_display: '32/1', gauge: 24, sl: 2.61, n: 165 },
-        { gsm: 150, count_ne: 30, count_display: '30/1', gauge: 24, sl: 2.64, n: 190 },
-        { gsm: 160, count_ne: 28, count_display: '28/1', gauge: 24, sl: 2.65, n: 469 },
-        { gsm: 170, count_ne: 26, count_display: '26/1', gauge: 24, sl: 2.75 },
-        { gsm: 180, count_ne: 24, count_display: '24/1', gauge: 24, sl: 2.84, n: 157 },
-        { gsm: 190, count_ne: 22, count_display: '22/1', gauge: 24, sl: 2.86 },
-        { gsm: 200, count_ne: 20, count_display: '20/1', gauge: 24, sl: 2.93, n: 122 },
-        { gsm: 210, count_ne: 18, count_display: '18/1', gauge: 20, sl: 3.01, n: 40 },
-        { gsm: 220, count_ne: 18, count_display: '18/1', gauge: 20, sl: 3.10 },
-        { gsm: 240, count_ne: 16, count_display: '16/1', gauge: 18, sl: 3.20 },
-      ],
-      typical_gauges: [24, 28],
-      typical_dia: [30, 32, 34],
-    },
+  heavy_jersey: 'heavy_jersey',
 
-    'cotton_elastane_hf': {
-      label: 'Cotton + Elastane (Half Feed)',
-      gsm_range: { min: 160, max: 280 },
-      gsm_offset: 0.15,
-      count_map: [
-        { gsm: 160, count_ne: 34, count_display: '34/1+40D', gauge: 28, sl: 2.85 },
-        { gsm: 180, count_ne: 30, count_display: '30/1+40D', gauge: 28, sl: 2.88 },
-        { gsm: 200, count_ne: 26, count_display: '26/1+40D', gauge: 28, sl: 2.90 },
-        { gsm: 220, count_ne: 26, count_display: '26/1+40D', gauge: 28, sl: 2.92 },
-      ],
-      typical_gauges: [28],
-      typical_dia: [30, 32],
-      lycra_denier: 40,
-      feed_type: 'half_feed',
-    },
+  // pique / lacoste (single-bed tuck structures)
+  pique_single: 'pique', pique_double: 'pique',
+  lacoste_single: 'pique', lacoste_pique: 'pique', texipique: 'pique',
 
-    'cotton_elastane_ff': {
-      label: 'Cotton + Elastane (Full Feed)',
-      gsm_range: { min: 160, max: 240 },
-      gsm_offset: 0.10,
-      count_map: [
-        { gsm: 180, count_ne: 34, count_display: '34/1+20D', gauge: 28, sl: 2.90 },
-        { gsm: 200, count_ne: 30, count_display: '30/1+20D', gauge: 28, sl: 2.92 },
-        { gsm: 220, count_ne: 26, count_display: '26/1+20D', gauge: 28, sl: 2.95 },
-      ],
-      typical_gauges: [28],
-      typical_dia: [30, 32],
-      lycra_denier: 20,
-      feed_type: 'full_feed',
-    },
+  // fleece / french terry (loopback single-bed, brushed) — structurally
+  // distinct from toweling terry ('terry' bucket below)
+  french_terry: 'fleece', fleece_2_thread: 'fleece', fleece_3_thread: 'fleece',
+  fleece_diagonal: 'fleece',
 
-    'cotton_polyester': {
-      label: 'Cotton/Polyester Blend',
-      gsm_range: { min: 120, max: 260 },
-      gsm_offset: -0.03,
-      count_map: [
-        { gsm: 140, count_ne: 34, count_display: '34/1', gauge: 24, sl: 2.58 },
-        { gsm: 160, count_ne: 30, count_display: '30/1', gauge: 24, sl: 2.62 },
-        { gsm: 180, count_ne: 26, count_display: '26/1', gauge: 24, sl: 2.78 },
-        { gsm: 200, count_ne: 22, count_display: '22/1', gauge: 24, sl: 2.88 },
-        { gsm: 220, count_ne: 20, count_display: '20/1', gauge: 20, sl: 3.05 },
-      ],
-      typical_gauges: [24, 28],
-    },
+  // toweling terry
+  terry_fabric: 'terry',
 
-    'cotton_viscose': {
-      label: 'Cotton/Viscose Blend',
-      gsm_range: { min: 130, max: 240 },
-      gsm_offset: 0.02,
-      count_map: [
-        { gsm: 150, count_ne: 30, count_display: '30/1', gauge: 24, sl: 2.62 },
-        { gsm: 180, count_ne: 26, count_display: '26/1', gauge: 24, sl: 2.80 },
-        { gsm: 200, count_ne: 22, count_display: '22/1', gauge: 24, sl: 2.90 },
-      ],
-      typical_gauges: [24, 28],
-    },
+  // rib family (all 1x1/2x1/2x2/3x3/4x1 variants, cardigan, milano, cable, drop-needle)
+  rib_1x1: 'rib', rib_2x1: 'rib', rib_2x2: 'rib', rib_3x2: 'rib', rib_3x3: 'rib', rib_4x1: 'rib',
+  lycra_rib_1x1: 'rib', lycra_rib_2x2: 'rib',
+  half_cardigan: 'rib', full_cardigan: 'rib',
+  half_milano: 'rib', full_milano: 'rib',
+  drop_needle_rib: 'rib', cable_rib: 'rib',
 
-    'cotton_poly_elastane': {
-      label: 'Cotton + Polyester + Elastane (3-blend)',
-      gsm_range: { min: 160, max: 280 },
-      gsm_offset: 0.12,
-      count_map: [
-        { gsm: 180, count_ne: 30, count_display: '30/1+40D', gauge: 28, sl: 2.85 },
-        { gsm: 200, count_ne: 26, count_display: '26/1+40D', gauge: 28, sl: 2.88 },
-        { gsm: 220, count_ne: 24, count_display: '24/1+40D', gauge: 24, sl: 2.92 },
-      ],
-      typical_gauges: [24, 28],
-      lycra_denier: 40,
-      feed_type: 'half_feed',
-    },
-  },
+  waffle_knit: 'waffle',
 
-  // ============================================================
-  // HEAVY JERSEY
-  // ============================================================
-  heavy_jersey: {
-    '100_cotton': {
-      gsm_range: { min: 260, max: 350 },
-      count_map: [
-        { gsm: 260, count_ne: 14, count_display: '14/1', gauge: 18, sl: 3.25 },
-        { gsm: 280, count_ne: 12, count_display: '12/1', gauge: 18, sl: 3.32 },
-        { gsm: 300, count_ne: 10, count_display: '10/1', gauge: 16, sl: 3.40 },
-        { gsm: 320, count_ne: 8, count_display: '8/1', gauge: 16, sl: 3.52 },
-        { gsm: 340, count_ne: 7, count_display: '7/1', gauge: 14, sl: 3.61 },
-        { gsm: 350, count_ne: 6, count_display: '6/1', gauge: 14, sl: 3.70 },
-      ],
-      typical_gauges: [14, 16, 18, 20],
-      typical_dia: [30, 32, 34],
-    },
+  // interlock / double-knit family
+  interlock: 'interlock', ponte_di_roma: 'interlock', eight_lock: 'interlock',
+  swiss_double_pique: 'interlock', french_double_pique: 'interlock',
+  gabardine_double: 'interlock', poplin_double: 'interlock', bourrelet: 'interlock',
+  blister_single: 'interlock', relief_single: 'interlock',
 
-    'cotton_elastane_hf': {
-      label: 'Cotton + Elastane (Half Feed)',
-      gsm_range: { min: 260, max: 350 },
-      gsm_offset: 0.15,
-      count_map: [
-        { gsm: 260, count_ne: 20, count_display: '20/1+40D', gauge: 20, sl: 3.10 },
-        { gsm: 280, count_ne: 18, count_display: '18/1+40D', gauge: 20, sl: 3.15 },
-        { gsm: 300, count_ne: 16, count_display: '16/1+40D', gauge: 18, sl: 3.22 },
-        { gsm: 320, count_ne: 14, count_display: '14/1+40D', gauge: 18, sl: 3.28 },
-        { gsm: 340, count_ne: 12, count_display: '12/1+40D', gauge: 16, sl: 3.35 },
-        { gsm: 350, count_ne: 10, count_display: '10/1+70D', gauge: 16, sl: 3.42 },
-      ],
-      typical_gauges: [16, 18, 20],
-      typical_dia: [30, 32],
-      lycra_denier: 40,
-      feed_type: 'half_feed',
-    },
-
-    'cotton_polyester': {
-      label: 'Cotton/Polyester Blend',
-      gsm_range: { min: 260, max: 350 },
-      gsm_offset: -0.03,
-      count_map: [
-        { gsm: 260, count_ne: 14, count_display: '14/1', gauge: 18, sl: 3.22 },
-        { gsm: 280, count_ne: 12, count_display: '12/1', gauge: 18, sl: 3.30 },
-        { gsm: 300, count_ne: 10, count_display: '10/1', gauge: 16, sl: 3.38 },
-        { gsm: 320, count_ne: 8, count_display: '8/1', gauge: 16, sl: 3.50 },
-        { gsm: 340, count_ne: 7, count_display: '7/1', gauge: 14, sl: 3.58 },
-        { gsm: 350, count_ne: 6, count_display: '6/1', gauge: 14, sl: 3.66 },
-      ],
-      typical_gauges: [14, 16, 18],
-      typical_dia: [30, 32],
-    },
-  },
-
-  // ============================================================
-  // RIB 1x1
-  // ============================================================
-  rib_1x1: {
-    '100_cotton': {
-      gsm_range: { min: 130, max: 300 },
-      count_map: [
-        { gsm: 160, count_ne: 34, count_display: '34/1', gauge: 18, sl: 2.55 },
-        { gsm: 180, count_ne: 34, count_display: '34/1', gauge: 18, sl: 2.65, n: 65 },
-        { gsm: 190, count_ne: 30, count_display: '30/1', gauge: 18, sl: 2.70 },
-        { gsm: 200, count_ne: 28, count_display: '28/1', gauge: 18, sl: 2.75, n: 33 },
-        { gsm: 220, count_ne: 26, count_display: '26/1', gauge: 18, sl: 2.80, n: 30 },
-        { gsm: 230, count_ne: 24, count_display: '24/1', gauge: 18, sl: 2.85 },
-        { gsm: 240, count_ne: 24, count_display: '24/1', gauge: 18, sl: 2.90 },
-        { gsm: 280, count_ne: 20, count_display: '20/1', gauge: 18, sl: 3.10 },
-      ],
-      typical_gauges: [18],
-      typical_dia: [26, 28, 30],
-    },
-
-    'cotton_elastane': {
-      label: 'Cotton + Elastane (Lycra Rib)',
-      gsm_range: { min: 150, max: 280 },
-      gsm_offset: 0.18,
-      count_map: [
-        { gsm: 180, count_ne: 34, count_display: '34/1+40D', gauge: 18, sl: 2.60 },
-        { gsm: 200, count_ne: 30, count_display: '30/1+40D', gauge: 18, sl: 2.68 },
-        { gsm: 220, count_ne: 30, count_display: '30/1+40D', gauge: 18, sl: 2.72 },
-        { gsm: 240, count_ne: 26, count_display: '26/1+20D', gauge: 18, sl: 2.78 },
-      ],
-      typical_gauges: [18],
-      lycra_denier: 40,
-      feed_type: 'half_feed',
-    },
-
-    'cotton_poly_elastane': {
-      label: 'Cotton + Polyester + Elastane (3-blend Rib)',
-      gsm_range: { min: 180, max: 300 },
-      gsm_offset: 0.15,
-      count_map: [
-        { gsm: 200, count_ne: 30, count_display: '30/1+40D', gauge: 18, sl: 2.65 },
-        { gsm: 220, count_ne: 28, count_display: '28/1+40D', gauge: 18, sl: 2.72 },
-        { gsm: 240, count_ne: 26, count_display: '26/1+40D', gauge: 18, sl: 2.78 },
-        { gsm: 260, count_ne: 24, count_display: '24/1+40D', gauge: 18, sl: 2.85 },
-      ],
-      typical_gauges: [18],
-      lycra_denier: 40,
-      feed_type: 'half_feed',
-    },
-  },
-
-  // ============================================================
-  // RIB 2x2
-  // ============================================================
-  rib_2x2: {
-    '100_cotton': {
-      gsm_range: { min: 150, max: 310 },
-      count_map: [
-        { gsm: 190, count_ne: 30, count_display: '30/1', gauge: 18, sl: 2.65 },
-        { gsm: 200, count_ne: 30, count_display: '30/1', gauge: 18, sl: 2.68 },
-        { gsm: 220, count_ne: 26, count_display: '26/1', gauge: 18, sl: 2.75, n: 20 },
-        { gsm: 240, count_ne: 24, count_display: '24/1', gauge: 18, sl: 2.80 },
-        { gsm: 260, count_ne: 20, count_display: '20/1', gauge: 18, sl: 2.90 },
-        { gsm: 280, count_ne: 20, count_display: '20/1', gauge: 18, sl: 3.00 },
-      ],
-      typical_gauges: [18],
-    },
-
-    'cotton_elastane': {
-      label: 'Cotton + Elastane (Lycra 2x2 Rib)',
-      gsm_range: { min: 200, max: 300 },
-      gsm_offset: 0.18,
-      count_map: [
-        { gsm: 200, count_ne: 34, count_display: '34/1+20D', gauge: 18, sl: 2.60 },
-        { gsm: 220, count_ne: 34, count_display: '34/1+20D', gauge: 18, sl: 2.65 },
-        { gsm: 240, count_ne: 30, count_display: '30/1+20D', gauge: 18, sl: 2.70 },
-        { gsm: 260, count_ne: 30, count_display: '30/1+20D', gauge: 18, sl: 2.75 },
-      ],
-      typical_gauges: [18],
-      lycra_denier: 20,
-      feed_type: 'full_feed',
-    },
-  },
-
-  // ============================================================
-  // PIQUE
-  // ============================================================
-  pique: {
-    '100_cotton': {
-      gsm_range: { min: 130, max: 280 },
-      count_map: [
-        { gsm: 160, count_ne: 30, count_display: '30/1', gauge: 24, sl: 2.55 },
-        { gsm: 180, count_ne: 30, count_display: '30/1', gauge: 24, sl: 2.60 },
-        { gsm: 200, count_ne: 28, count_display: '28/1', gauge: 24, sl: 2.67, n: 30 },
-        { gsm: 210, count_ne: 24, count_display: '24/1', gauge: 24, sl: 2.70 },
-        { gsm: 220, count_ne: 24, count_display: '24/1', gauge: 24, sl: 2.75, n: 25 },
-        { gsm: 240, count_ne: 20, count_display: '20/1', gauge: 24, sl: 2.85 },
-      ],
-      typical_gauges: [24],
-      typical_dia: [30, 32],
-    },
-
-    'cotton_elastane': {
-      label: 'Pique + Lycra',
-      gsm_range: { min: 200, max: 280 },
-      gsm_offset: 0.12,
-      count_map: [
-        { gsm: 200, count_ne: 34, count_display: '34/1+20D', gauge: 24, sl: 2.62 },
-        { gsm: 210, count_ne: 30, count_display: '30/1+20D', gauge: 24, sl: 2.65 },
-        { gsm: 220, count_ne: 30, count_display: '30/1+20D', gauge: 24, sl: 2.68 },
-      ],
-      typical_gauges: [24],
-      lycra_denier: 20,
-      feed_type: 'full_feed',
-    },
-  },
-
-  // ============================================================
-  // INTERLOCK
-  // ============================================================
-  interlock: {
-    '100_cotton': {
-      gsm_range: { min: 150, max: 380 },
-      count_map: [
-        { gsm: 180, count_ne: 40, count_display: '40/1', gauge: 24, sl: 2.30 },
-        { gsm: 190, count_ne: 40, count_display: '40/1', gauge: 24, sl: 2.35 },
-        { gsm: 200, count_ne: 40, count_display: '40/1', gauge: 24, sl: 2.40 },
-        { gsm: 220, count_ne: 34, count_display: '34/1', gauge: 24, sl: 2.50, n: 20 },
-        { gsm: 240, count_ne: 30, count_display: '30/1', gauge: 24, sl: 2.55, n: 15 },
-        { gsm: 260, count_ne: 28, count_display: '28/1', gauge: 18, sl: 2.60 },
-        { gsm: 280, count_ne: 26, count_display: '26/1', gauge: 18, sl: 2.65 },
-        { gsm: 300, count_ne: 24, count_display: '24/1', gauge: 18, sl: 2.10 },
-        { gsm: 320, count_ne: 24, count_display: '24/1', gauge: 18, sl: 2.15 },
-      ],
-      typical_gauges: [18, 24],
-      typical_dia: [30, 32],
-    },
-  },
-
-  // ============================================================
-  // FLEECE
-  // ============================================================
-  fleece: {
-    '100_cotton': {
-      gsm_range: { min: 200, max: 400 },
-      count_map: [
-        { gsm: 200, count_ne: 36, count_display: 'Ground 36/S + Loop 12/S + Binder 75D', gauge: 20, sl: 4.45 },
-        { gsm: 220, count_ne: 36, count_display: 'Ground 36/S + Loop 14/S + Binder 75D', gauge: 20, sl: 4.45 },
-        { gsm: 240, count_ne: 34, count_display: 'Ground 34/S + Loop 16/S + Binder 75D', gauge: 20, sl: 4.45, n: 50 },
-        { gsm: 260, count_ne: 32, count_display: 'Ground 32/S + Loop 18/S + Binder 75D', gauge: 20, sl: 4.45, n: 80 },
-        { gsm: 280, count_ne: 30, count_display: 'Ground 30/S + Loop 20/S + Binder 75D', gauge: 20, sl: 4.45, n: 40 },
-        { gsm: 300, count_ne: 30, count_display: 'Ground 30/S + Loop 20/S + Binder 75D', gauge: 20, sl: 4.47 },
-        { gsm: 320, count_ne: 28, count_display: 'Ground 28/S + Loop 20/S + Binder 75D', gauge: 20, sl: 4.50 },
-      ],
-      typical_gauges: [20],
-      typical_dia: [30, 34],
-    },
-  },
-
-  // ============================================================
-  // TERRY
-  // ============================================================
-  terry_fabric: {
-    '100_cotton': {
-      gsm_range: { min: 200, max: 350 },
-      count_map: [
-        { gsm: 200, count_ne: 30, count_display: 'Ground 30/S + Pile 30/S', gauge: 20, sl: 4.35 },
-        { gsm: 220, count_ne: 26, count_display: 'Ground 26/S + Pile 26/S', gauge: 20, sl: 4.40 },
-        { gsm: 240, count_ne: 24, count_display: 'Ground 24/S + Pile 24/S', gauge: 20, sl: 4.45 },
-        { gsm: 260, count_ne: 22, count_display: 'Ground 22/S + Pile 22/S', gauge: 20, sl: 4.45, n: 30 },
-        { gsm: 280, count_ne: 20, count_display: 'Ground 20/S + Pile 20/S', gauge: 20, sl: 4.45, n: 25 },
-        { gsm: 300, count_ne: 20, count_display: 'Ground 20/S + Pile 20/S', gauge: 20, sl: 4.50 },
-      ],
-      typical_gauges: [20],
-      typical_dia: [30, 34],
-    },
-  },
-
-  // ============================================================
-  // WAFFLE
-  // ============================================================
-  waffle: {
-    '100_cotton': {
-      gsm_range: { min: 160, max: 280 },
-      count_map: [
-        { gsm: 180, count_ne: 34, count_display: '34/1', gauge: 18, sl: 2.55 },
-        { gsm: 200, count_ne: 28, count_display: '28/1', gauge: 18, sl: 2.62 },
-        { gsm: 220, count_ne: 28, count_display: '28/1', gauge: 18, sl: 2.70, n: 15 },
-        { gsm: 240, count_ne: 24, count_display: '24/1', gauge: 18, sl: 2.80 },
-      ],
-      typical_gauges: [18],
-    },
-  },
-
-  // ============================================================
-  // SLUB SINGLE JERSEY
-  // ============================================================
-  slub_sj: {
-    '100_cotton': {
-      gsm_range: { min: 130, max: 240 },
-      count_map: [
-        { gsm: 140, count_ne: 30, count_display: '30/1', gauge: 24, sl: 2.60 },
-        { gsm: 150, count_ne: 28, count_display: '28/1 Slub', gauge: 24, sl: 2.65, n: 30 },
-        { gsm: 160, count_ne: 28, count_display: '28/1 Slub', gauge: 24, sl: 2.68, n: 40 },
-        { gsm: 180, count_ne: 24, count_display: '24/1 Slub', gauge: 24, sl: 2.75 },
-        { gsm: 200, count_ne: 20, count_display: '20/1 Slub', gauge: 20, sl: 2.90 },
-      ],
-      typical_gauges: [24],
-    },
-  },
+  // warp_knit (tricot/locknit/sharkskin/spacer/powernet) is denier-based, not
+  // Ne/GSM-regression-based — intentionally has no bucket alias; the caller
+  // (calculator.js) never invokes this lookup for category === 'warp_knit'.
 };
+
+// Sample-weighted least-squares slope of `points[i][field]` vs `points[i].gsm`,
+// weighting each point by its real sample count `n` (falls back to 1 if
+// absent) so thin (n=1) tail points don't dominate the trend.
+function weightedSlope(points, field) {
+  let sw = 0, swx = 0, swy = 0, swxx = 0, swxy = 0;
+  for (const p of points) {
+    const w = p.n || 1;
+    const x = p.gsm, y = p[field];
+    sw += w; swx += w * x; swy += w * y; swxx += w * x * x; swxy += w * x * y;
+  }
+  const denom = sw * swxx - swx * swx;
+  if (Math.abs(denom) < 1e-9) return 0;
+  return (sw * swxy - swx * swy) / denom;
+}
 
 // ============================================================
 // LOOKUP FUNCTION
@@ -383,61 +91,48 @@ const COMPOSITION_REFERENCE = {
 
 /**
  * Get the composition-aware reference data for a fabric + composition.
- * 
- * @param {string} fabricId - e.g. 'single_jersey'
+ *
+ * @param {string} fabricId - e.g. 'rib_2x1' (aliased to its real data bucket)
  * @param {object} parsedComp - Result from parseComposition()
  * @returns {object|null} - Reference data block or null
  */
 function getCompositionReference(fabricId, parsedComp) {
-  const fabricData = COMPOSITION_REFERENCE[fabricId];
+  const bucket = FAB_BUCKET_ALIAS[fabricId] || fabricId;
+  const fabricData = COMPOSITION_REFERENCE[bucket];
   if (!fabricData) return null;
 
-  if (!parsedComp) {
-    // Default to 100% cotton
+  if (!parsedComp || !parsedComp.fibers) {
     return fabricData['100_cotton'] || null;
   }
 
-  const { fibers, has_elastane, dominant, fiber_count } = parsedComp;
+  // Same dominant-fibre classification used when the real dataset was built
+  // (build-factory-dataset.js's mapComposition()) — one rule, applied both at
+  // build time and query time, so a user's typed composition lands in the
+  // same bucket a real record with that blend would have.
+  const f = parsedComp.fibers;
+  const cotton = f.cotton || 0, poly = f.polyester || 0, viscose = f.viscose || 0;
+  let key = '100_cotton';
+  if (viscose >= 15) key = 'cotton_viscose';
+  else if (poly > 0 && poly >= cotton) key = 'poly_cotton';
+  else if (poly > 0) key = 'cotton_polyester';
 
-  // 3-component blend (e.g. Cotton+Poly+Elastane)
-  if (fiber_count >= 3 && has_elastane && fibers.cotton && fibers.polyester) {
-    const key = 'cotton_poly_elastane';
-    if (fabricData[key]) return fabricData[key];
-  }
-
-  // Elastane blend
-  if (has_elastane && fibers.cotton) {
-    // Determine feed type
-    const elastPct = fibers.elastane || 0;
-    if (fabricId.includes('rib') || fabricId.includes('pique')) {
-      if (fabricData['cotton_elastane']) return fabricData['cotton_elastane'];
-    }
-    if (elastPct <= 3) {
-      if (fabricData['cotton_elastane_ff']) return fabricData['cotton_elastane_ff'];
-    }
-    if (fabricData['cotton_elastane_hf']) return fabricData['cotton_elastane_hf'];
-    if (fabricData['cotton_elastane']) return fabricData['cotton_elastane'];
-  }
-
-  // Cotton/Polyester
-  if (fibers.cotton && fibers.polyester && !has_elastane) {
-    if (fabricData['cotton_polyester']) return fabricData['cotton_polyester'];
-  }
-
-  // Cotton/Viscose
-  if (fibers.cotton && fibers.viscose) {
-    if (fabricData['cotton_viscose']) return fabricData['cotton_viscose'];
-  }
-
-  // Default: 100% cotton
-  return fabricData['100_cotton'] || null;
+  // Elastane blends aren't split out here (the real dataset has no reliable
+  // elastane% field to bucket on) — SL/count adjustment for elastane is
+  // already applied separately via composition-engine.js's
+  // getCompositionModifiers(). This reference stays a same-fibre-family
+  // sanity check, not a claim of elastane-specific sample backing.
+  return fabricData[key] || fabricData['100_cotton'] || null;
 }
 
 /**
  * Find the closest count/SL data for a given GSM from a reference block.
- * Uses linear interpolation between nearest points.
- * 
- * @param {object} refBlock - Reference data block (e.g. COMPOSITION_REFERENCE.single_jersey['100_cotton'])
+ * Interpolates between real data points; EXTRAPOLATES beyond the last real
+ * point using the nearest segment's slope (rather than silently repeating
+ * the edge value forever) so heavy fabrics above the sampled range still get
+ * a physically-reasoned estimate instead of a stale low-GSM recipe. Confidence
+ * degrades accordingly (source: 'FACTORY_EXTRAPOLATED').
+ *
+ * @param {object} refBlock - Reference data block (e.g. COMPOSITION_REFERENCE.rib['100_cotton'])
  * @param {number} gsm - Target GSM
  * @returns {{ count_ne, count_display, gauge, sl, interpolated, source }}
  */
@@ -446,7 +141,7 @@ function lookupByGSM(refBlock, gsm) {
     return null;
   }
 
-  const map = refBlock.count_map.sort((a, b) => a.gsm - b.gsm);
+  const map = [...refBlock.count_map].sort((a, b) => a.gsm - b.gsm);
 
   // Exact match
   const exact = map.find(m => m.gsm === gsm);
@@ -467,8 +162,6 @@ function lookupByGSM(refBlock, gsm) {
     const ratio = (gsm - lower.gsm) / (upper.gsm - lower.gsm);
     const count_ne = Math.round((lower.count_ne + ratio * (upper.count_ne - lower.count_ne)) * 10) / 10;
     const sl = Math.round((lower.sl + ratio * (upper.sl - lower.sl)) * 1000) / 1000;
-
-    // Use the nearest count display (whichever is closer)
     const nearestPoint = ratio < 0.5 ? lower : upper;
 
     return {
@@ -481,7 +174,39 @@ function lookupByGSM(refBlock, gsm) {
     };
   }
 
-  // Nearest edge
+  // Beyond the sampled range — extrapolate instead of flat-clamping to the
+  // edge value (which used to hand back e.g. a 280 GSM recipe verbatim for a
+  // 600 GSM request). Uses a sample-weighted slope over the last several
+  // points (not just the literal last two) — real factory data is noisy
+  // enough that a 2-point slope can swing on one thin sample (n=1) and, for
+  // SL specifically, even point the wrong direction (shorter loop at higher
+  // GSM, which isn't physically sensible for the same structure/gauge).
+  if (map.length >= 2) {
+    const useUpperEnd = lower != null;
+    const window = useUpperEnd ? map.slice(-Math.min(4, map.length)) : map.slice(0, Math.min(4, map.length));
+    const anchor = useUpperEnd ? window[window.length - 1] : window[0];
+    const slopeNe = weightedSlope(window, 'count_ne');
+    const slopeSl = weightedSlope(window, 'sl');
+    const dGsm = gsm - anchor.gsm;
+    // Floor count at a physically spinnable minimum; heavy fabrics run coarse
+    // yarn but never below ~4 Ne in practice.
+    const count_ne = Math.max(4, Math.round((anchor.count_ne + slopeNe * dGsm) * 10) / 10);
+    // SL should not go BELOW the anchor's real SL as GSM increases further —
+    // heavier fabric never needs a shorter loop for the same structure/gauge.
+    const sl = Math.max(anchor.sl, Math.round((anchor.sl + slopeSl * dGsm) * 1000) / 1000);
+
+    return {
+      count_ne,
+      count_display: `${count_ne}/1 (est.)`,
+      gauge: anchor.gauge,
+      sl,
+      interpolated: false,
+      source: 'FACTORY_EXTRAPOLATED',
+      extrapolated_from_gsm: anchor.gsm,
+    };
+  }
+
+  // Only one data point total — nothing to extrapolate a slope from.
   if (lower) return { ...lower, interpolated: false, source: 'FACTORY_NEAREST' };
   if (upper) return { ...upper, interpolated: false, source: 'FACTORY_NEAREST' };
 
@@ -503,6 +228,7 @@ function validateStitchLength(fabricId, gsm, calculatedSL, gauge, yarnCount, par
 
   let confidence = ref.n && ref.n >= 10 ? 'high' : ref.n && ref.n >= 5 ? 'medium' : 'low';
   if (ref.source === 'FACTORY_EXACT') confidence = 'very_high';
+  if (ref.source === 'FACTORY_EXTRAPOLATED') confidence = 'low';
 
   return {
     valid: deviation <= 15,
@@ -515,11 +241,17 @@ function validateStitchLength(fabricId, gsm, calculatedSL, gauge, yarnCount, par
     confidence,
     source: ref.source,
     interpolated: ref.interpolated || false,
-    message: deviation <= 5
+    extrapolated: ref.source === 'FACTORY_EXTRAPOLATED',
+    // "Factory verified" is only honest when the reference itself is backed by
+    // enough real samples (confidence high/very_high) — a numeric coincidence
+    // against a low/no-sample-count or extrapolated bucket isn't verification.
+    message: (deviation <= 5 && (confidence === 'very_high' || confidence === 'high'))
       ? 'Factory verified ✓'
-      : deviation <= 15
-        ? `Close to factory data (+${Math.round(deviation)}%)`
-        : `Differs from factory data (${Math.round(deviation)}%)`,
+      : ref.source === 'FACTORY_EXTRAPOLATED'
+        ? `Beyond sampled range (extrapolated from ${ref.extrapolated_from_gsm} g/m² data) — treat as indicative`
+        : deviation <= 15
+          ? `Close to factory estimate (+${Math.round(deviation)}%, ${ref.n || 'few'} samples)`
+          : `Differs from factory data (${Math.round(deviation)}%)`,
   };
 }
 
@@ -528,6 +260,7 @@ function validateStitchLength(fabricId, gsm, calculatedSL, gauge, yarnCount, par
 // ============================================================
 module.exports = {
   COMPOSITION_REFERENCE,
+  FAB_BUCKET_ALIAS,
   getCompositionReference,
   lookupByGSM,
   validateStitchLength,

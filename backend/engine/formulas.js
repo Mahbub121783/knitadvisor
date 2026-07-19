@@ -260,14 +260,33 @@ const YarnCountFormulas = {
   }
 };
 
-// Default tight and loose limits for various fabric categories based on industry standards
+// Tight/loose limits per fabric FAMILY (see factory-knowledge.js's
+// FAB_BUCKET_ALIAS — every one of the 54 catalogued fabrics maps to one of
+// these 8 keys). Recalibrated from the real factory dataset
+// (backend/data/factory-records.json, computed TF = sqrt(590.5/Ne)/(SL_cm)
+// against each record's actual ne/sl): min/max ≈ the 2nd/98th percentile of
+// TF genuinely observed in real production for that family, ideal_min/max ≈
+// the 25th/75th percentile. This replaced numbers that were miscalibrated
+// two different ways — (1) rib/interlock/single_jersey ceilings were low
+// enough that 4-11% of REAL, already-produced fabric in the dataset would
+// have been flagged "un-knittable" under them (e.g. a real, exact-match 420
+// GSM rib record sits at TF≈19.6, above the old max of 18); (2) terry/fleece
+// (pile structures, whose ground-yarn-only TF is inherently much lower than a
+// plain structure's) were never actually reaching a dedicated limit at all —
+// a bug in the old category-string matching meant they silently fell back to
+// the single_jersey/default limits, which sit far above where real terry/
+// fleece production actually falls (median TF ≈9.4), so nearly all real
+// terry/fleece would have shown a false "too loose" warning.
 const TIGHTNESS_LIMITS = {
-  'single_jersey': { min: 11, max: 19, ideal_min: 13, ideal_max: 17 },
-  'heavy_jersey': { min: 13, max: 28, ideal_min: 16, ideal_max: 25 },
-  'interlock': { min: 12, max: 20, ideal_min: 14, ideal_max: 18 },
-  'rib': { min: 10, max: 18, ideal_min: 12, ideal_max: 16 },
-  'fleece': { min: 14, max: 22, ideal_min: 16, ideal_max: 20 },
-  'default': { min: 10, max: 22, ideal_min: 12, ideal_max: 20 }
+  'single_jersey': { min: 12, max: 21, ideal_min: 14, ideal_max: 18 },
+  'heavy_jersey':  { min: 10, max: 19, ideal_min: 12, ideal_max: 15 },
+  'rib':           { min: 12, max: 21, ideal_min: 14, ideal_max: 18 },
+  'interlock':     { min: 12, max: 30, ideal_min: 14, ideal_max: 20 },
+  'pique':         { min: 14, max: 21, ideal_min: 16, ideal_max: 19 },
+  'waffle':        { min: 12, max: 28, ideal_min: 14, ideal_max: 19 },
+  'terry':         { min: 7,  max: 17, ideal_min: 8,  ideal_max: 11 },
+  'fleece':        { min: 7,  max: 14, ideal_min: 8,  ideal_max: 10.5 },
+  'default':       { min: 10, max: 22, ideal_min: 12, ideal_max: 20 }
 };
 
 // ============================================================
@@ -356,17 +375,31 @@ const GSM_COUNT_LOOKUP = {
     { count: 22, gsm_min: 270, gsm_max: 280 },
     { count: 20, gsm_min: 280, gsm_max: 310 },
   ],
+  // Rows above 280 GSM (terry) / 340 GSM (fleece 3-thread) are anchored to the
+  // real factory ERP dataset (backend/data/factory-records.json — toweling terry
+  // and fleece ground-yarn count vs. GSM, cotton, averaged per 20-GSM bucket).
+  // Real terry data shows the ground count PLATEAUS around 26-32/1 even at 400
+  // GSM (heavier towel GSM comes mainly from more/looser pile, not a continuously
+  // coarsening ground yarn) — very different from what a straight-line
+  // extrapolation of the old 200-280 GSM rows alone would have predicted.
   'terry_table': [
     { gsm: 200, ground_count: 30, loop_count: 30 },
     { gsm: 220, ground_count: 26, loop_count: 26 },
     { gsm: 240, ground_count: 24, loop_count: 24 },
     { gsm: 260, ground_count: 22, loop_count: 22 },
     { gsm: 280, ground_count: 20, loop_count: 20 },
+    { gsm: 300, ground_count: 31, loop_count: 31 },
+    { gsm: 320, ground_count: 30, loop_count: 30 },
+    { gsm: 340, ground_count: 30, loop_count: 30 },
+    { gsm: 400, ground_count: 26, loop_count: 26 },
+    { gsm: 450, ground_count: 24, loop_count: 24 },
   ],
   'fleece_2_thread_table': [
     { gsm: 220, ground_count: 30, loop_count: 16 },
     { gsm: 250, ground_count: 24, loop_count: 20 },
     { gsm: 280, ground_count: 20, loop_count: 20 },
+    { gsm: 320, ground_count: 24, loop_count: 20 },
+    { gsm: 360, ground_count: 22, loop_count: 20 },
   ],
   'fleece_3_thread_table': [
     { gsm: 200, ground_count: 36, loop_count: 12, binder_denier: 75 },
@@ -378,6 +411,9 @@ const GSM_COUNT_LOOKUP = {
     { gsm: 310, ground_count: 30, loop_count: 16, yarn2_ne: 34 },
     { gsm: 320, ground_count: 28, loop_count: 20, binder_denier: 75 },
     { gsm: 340, ground_count: 28, loop_count: 22, binder_denier: 75 },
+    { gsm: 360, ground_count: 28, loop_count: 24, binder_denier: 75 },
+    { gsm: 400, ground_count: 26, loop_count: 26, binder_denier: 75 },
+    { gsm: 450, ground_count: 24, loop_count: 26, binder_denier: 75 },
   ],
 };
 

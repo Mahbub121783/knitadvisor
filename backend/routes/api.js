@@ -45,8 +45,18 @@ router.post('/calculate', async (req, res) => {
     });
   }
 
-  // Normalize cache key (includes composition + color for unique caching)
-  const cacheInput = `${fabric}_${gsm}_${body.composition||''}_${body.color_shade||''}_${body.color_input||''}_${body.dia||''}_${body.gauge||''}_${body.rpm||''}_${body.efficiency||85}_${body.denier||''}_${body.filaments||''}_${body.elastane_denier||''}_${body.elastane_pct||''}`;
+  // Normalize cache key — must include EVERY field that actually reaches calculate()
+  // below, or two different inputs (e.g. different dyeing_method) collide on the same
+  // cached result.
+  const cacheInput = [
+    fabric, gsm, body.composition, body.color_shade, body.color_input,
+    body.dia, body.gauge, body.rpm, body.efficiency || 85,
+    body.stitch_length, body.feeders, body.target_width,
+    body.fiber_grade, body.spinning_system, body.yarn_form,
+    body.finishing_route, body.dyeing_method, body.twist_multiplier,
+    body.yarn_price_type, body.yarn_white, body.yarn_organic, body.yarn_ecovero, body.yarn_at_sight,
+    body.denier, body.filaments, body.elastane_denier, body.elastane_pct,
+  ].map(v => v == null ? '' : v).join('_');
   const cacheKey = crypto.createHash('md5').update(cacheInput).digest('hex');
 
   // L1 — memory cache
@@ -106,6 +116,18 @@ router.post('/calculate', async (req, res) => {
     efficiency:      body.efficiency,
     stitch_length:   body.stitch_length,
     feeders:         body.feeders,
+    target_width:      body.target_width,
+    fiber_grade:       body.fiber_grade,
+    spinning_system:   body.spinning_system,
+    yarn_form:         body.yarn_form,
+    finishing_route:   body.finishing_route,
+    dyeing_method:     body.dyeing_method,
+    twist_multiplier:  body.twist_multiplier,
+    yarn_price_type:   body.yarn_price_type,
+    yarn_white:        body.yarn_white,
+    yarn_organic:      body.yarn_organic,
+    yarn_ecovero:      body.yarn_ecovero,
+    yarn_at_sight:     body.yarn_at_sight,
     // Warp knit parameters
     denier:          body.denier,
     filaments:       body.filaments,
