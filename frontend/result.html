@@ -840,10 +840,6 @@
         <span class="result-key">Finishing Cost</span>
         <span class="result-val white" id="cost-breakdown-finishing">—</span>
       </div>
-
-      <div class="result-section-label">Margin & Selling Price Scenarios</div>
-      <div id="cost-margin-scenarios" style="display:flex; flex-direction:column; gap:4px; margin-top:8px;">
-      </div>
     </div>
 
     <!-- ===== OPTIMAL SINGLE MACHINE SETUP (expert request) ===== -->
@@ -1721,18 +1717,6 @@ function renderCosting(costing) {
   document.getElementById('cost-breakdown-knitting').textContent = `$${fmt(costing.knitting_per_kg_usd, 2)} / kg`;
   document.getElementById('cost-breakdown-dyeing').textContent = `$${fmt(costing.dyeing_per_kg_usd, 2)} / kg`;
   document.getElementById('cost-breakdown-finishing').textContent = `$${fmt(costing.finishing_per_kg_usd, 2)} / kg`;
-
-  const marginContainer = document.getElementById('cost-margin-scenarios');
-  if (costing.margin_scenarios && costing.margin_scenarios.length > 0) {
-    marginContainer.innerHTML = costing.margin_scenarios.map(m => `
-      <div class="result-row" style="background: rgba(255,255,255,0.02); padding: 6px 10px; border-radius: 4px; border: 1px solid var(--line2);">
-        <span class="result-key">${m.margin_pct}% Margin Scenario</span>
-        <span class="result-val green font-bold">$${fmt(m.selling_price_usd, 2)} / kg</span>
-      </div>
-    `).join('');
-  } else {
-    marginContainer.innerHTML = '<div class="text-dim text-xs">No scenarios available</div>';
-  }
 }
 
 /* ============================================================
