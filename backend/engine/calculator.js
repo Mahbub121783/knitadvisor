@@ -579,6 +579,7 @@ function calculate(params) {
   // --- 6.1 Predictive Quality ---
   const qualityResult = predictQuality({
     fabric: fabricDef.id,
+    category: fabricDef.category,
     gsm,
     stitch_length: llResult.ll_mm > 0 ? llResult.ll_mm : 2.8,
     tightness_factor: tfResult ? tfResult.value : 14.0,
@@ -1033,14 +1034,16 @@ function generateYarnDeclaration(parsedComp, countStrOrNumber, rawInputStr = '',
     const fibers = parsedComp.fibers || {};
     const elastanePct = fibers.elastane || 0;
 
-    // Build elastane declaration string from composition modifiers data
-    // We derive denier from elastane_pct: 3% → 20D, 5% → 40D, 8%+ → 70D
+    // Build elastane declaration string — denier/feed tiers mirror
+    // composition-engine.js's getCompositionModifiers() exactly, up through
+    // the power-mesh/foundation tier (>22%), so the printed yarn declaration
+    // never disagrees with the denier the count/SL calculation actually used.
     if (elastanePct > 0) {
-      // Denier selection mirrors composition-engine.js modifiers
       let elDen = 40;
       if (elastanePct <= 3) elDen = 20;
-      else if (elastanePct <= 8) elDen = 40;
-      else elDen = 70;
+      else if (elastanePct <= 10) elDen = 40;
+      else if (elastanePct <= 22) elDen = 70;
+      else elDen = 140;
       // Feed type: ≤5% = half-feed, >5% = full-feed (industry convention)
       const feedType = elastanePct <= 5 ? 'Half-feed' : 'Full-feed';
       elastaneStr = `${elDen}D Elastane (${feedType})`;

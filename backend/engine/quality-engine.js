@@ -35,6 +35,8 @@
  * No AI. No randomness.
  */
 
+const { resolveFamily } = require('./wet-processing-engine');
+
 // ============================================================
 // BASE SHRINKAGE DATABASE
 // Source: Starfish Industrial Database + peer-reviewed research
@@ -103,6 +105,54 @@ const SHRINKAGE_BASE = {
     cvc:         { length: 3.5,  width: 2.0 },
     viscose:     { length: 5.0,  width: 2.5 },
   },
+  // ── STRUCTURAL-FAMILY FALLBACKS ──
+  // Only ~9 exact fabric IDs were ever listed above, so every OTHER catalogued
+  // fabric — every rib gauge combo except 1x1/2x2 (2x1, 3x1, 3x2, 3x3, 4x1,
+  // 4x2, 4x3, 5x1, 5x3, 5x4, plus cardigan/milano/cable variants), waffle_knit,
+  // heavy_jersey, terry_fabric, pique_double, and more — silently fell back to
+  // single_jersey's numbers (e.g. cotton length 6.5%) instead of anything
+  // resembling their real structure (a real rib is 5.0%). Keyed by the same
+  // structural family resolveFamily() already uses elsewhere (TF limits,
+  // risk-assessment matching), these keys are the fallback BEFORE
+  // single_jersey — so any fabric without its own exact entry still gets a
+  // family-appropriate base instead of a plain-jersey one.
+  rib: { // ESTIMATED — interpolated from rib_1x1/rib_2x2's own per-composition ratios
+    cotton:      { length: 4.8,  width: 5.5 },
+    cvc:         { length: 3.8,  width: 5.0 },
+    pc:          { length: 2.9,  width: 3.9 },
+    polyester:   { length: 1.9,  width: 2.8 },
+    viscose:     { length: 6.2,  width: 6.1 },
+    tencel:      { length: 5.7,  width: 5.5 },
+  },
+  pique: { // ESTIMATED — pique_single's own numbers, generalized to the family
+    cotton:      { length: 5.5,  width: 4.0 },
+    cvc:         { length: 4.5,  width: 3.2 },
+    pc:          { length: 3.0,  width: 2.5 },
+  },
+  terry: { // ESTIMATED — toweling terry: loose supplementary pile loops shrink
+    // more lengthwise than a plain structure but the pile itself absorbs most
+    // of the width relaxation, similar order to the fleece family.
+    cotton:      { length: 7.5,  width: 3.0 },
+    cvc:         { length: 6.0,  width: 2.5 },
+  },
+  fleece: { // ESTIMATED — french_terry's numbers, generalized to the family
+    cotton:      { length: 6.5,  width: 2.0 },
+    cvc:         { length: 5.0,  width: 1.8 },
+    tencel:      { length: 7.0,  width: 1.5 },
+    bamboo:      { length: 6.0,  width: 1.8 },
+  },
+  waffle: { // ESTIMATED — tuck-stitch structure, more dimensionally stable
+    // widthwise than plain jersey but not as locked-down as pique.
+    cotton:      { length: 5.5,  width: 3.5 },
+    cvc:         { length: 4.5,  width: 2.8 },
+  },
+  heavy_jersey: { // ESTIMATED — denser/heavier single-bed structure shrinks
+    // somewhat less than light single_jersey (already closer to relaxed state).
+    cotton:      { length: 5.0,  width: 4.0 },
+    cvc:         { length: 4.2,  width: 2.2 },
+    pc:          { length: 3.2,  width: 1.7 },
+    polyester:   { length: 2.0,  width: 1.2 },
+  },
 };
 
 // ============================================================
@@ -126,6 +176,18 @@ const SPIRALITY_BASE = {
   fleece_3_thread: { cotton: { base_pct: 3.0, tf_sensitivity: 0.25, gsm_sensitivity: -0.005 } },
   fleece_2_thread: { cotton: { base_pct: 5.0, tf_sensitivity: 0.35, gsm_sensitivity: -0.008 } },
   french_terry:    { cotton: { base_pct: 4.0, tf_sensitivity: 0.30, gsm_sensitivity: -0.007 } },
+  // ── STRUCTURAL-FAMILY FALLBACKS (see SHRINKAGE_BASE above for why) ──
+  // Any double-bed rib gauge other than 1x1/2x2 was silently getting
+  // single_jersey's spirality base (6.5%, tf_sensitivity 0.4) — a plain
+  // single-bed structure's twist-liveliness number applied to a fabric whose
+  // two interlocked beds inherently self-cancel torque far more (real ribs
+  // sit near 0.3-0.5%). Averaged from rib_1x1/rib_2x2's own numbers.
+  rib:      { cotton: { base_pct: 0.4, tf_sensitivity: 0.04, gsm_sensitivity: 0 } },
+  pique:    { cotton: { base_pct: 3.5, tf_sensitivity: 0.22, gsm_sensitivity: -0.006 } },
+  terry:    { cotton: { base_pct: 3.0, tf_sensitivity: 0.25, gsm_sensitivity: -0.005 } },
+  fleece:   { cotton: { base_pct: 4.0, tf_sensitivity: 0.30, gsm_sensitivity: -0.007 } },
+  waffle:   { cotton: { base_pct: 3.0, tf_sensitivity: 0.20, gsm_sensitivity: -0.005 } },
+  heavy_jersey: { cotton: { base_pct: 5.0, tf_sensitivity: 0.30, gsm_sensitivity: -0.008 } },
 };
 
 // ============================================================
@@ -338,6 +400,13 @@ function predictQuality(params) {
   const warnings = [];
 
   const fabricId = (params.fabric || 'single_jersey').toLowerCase().trim();
+  // Structural family (rib/interlock/pique/waffle/terry/fleece/heavy_jersey/
+  // single_jersey) — same resolver used everywhere else in the app (TF
+  // limits, risk-assessment matching) — used as the fallback tier below
+  // exact-fabricId matches in SHRINKAGE_BASE/SPIRALITY_BASE, so a fabric
+  // without its own explicit entry still gets a family-appropriate base
+  // instead of always landing on plain single_jersey.
+  const family = resolveFamily(fabricId, params.category);
   const gsm      = parseFloat(params.gsm)           || 180;
   const sl_mm    = parseFloat(params.stitch_length) || 2.8;
   const tf       = parseFloat(params.tightness_factor) || 14.0;
@@ -377,7 +446,7 @@ function predictQuality(params) {
   if (poly > cotton && poly > 50) compKey = 'pc';
 
   // --- BASE SHRINKAGE ---
-  const fabricShrinkage = SHRINKAGE_BASE[fabricId] || SHRINKAGE_BASE.single_jersey;
+  const fabricShrinkage = SHRINKAGE_BASE[fabricId] || SHRINKAGE_BASE[family] || SHRINKAGE_BASE.single_jersey;
   const base = fabricShrinkage[compKey] || fabricShrinkage.cotton || { length: 6.0, width: 3.0 };
 
   // --- MODIFIERS ---
@@ -405,7 +474,7 @@ function predictQuality(params) {
   const finalWidth  = Math.max(0, Math.min(15, widthShrink));
 
   // --- SPIRALITY (v2.0 — yarn torque is the primary driver) ---
-  const fabricSpirality = SPIRALITY_BASE[fabricId] || SPIRALITY_BASE.single_jersey;
+  const fabricSpirality = SPIRALITY_BASE[fabricId] || SPIRALITY_BASE[family] || SPIRALITY_BASE.single_jersey;
   const spiralBase      = fabricSpirality[compKey] || fabricSpirality.cotton || { base_pct: 5.0, tf_sensitivity: 0.3, gsm_sensitivity: -0.008 };
 
   // Structure/TF/GSM component (the v1 regression)
