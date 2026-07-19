@@ -480,6 +480,72 @@ SHADE_PARAMS.dark   = { ...SHADE_PARAMS.dark_navy,    shade_alias_of: 'dark_navy
 SHADE_PARAMS.medium = { ...SHADE_PARAMS.light_medium, shade_alias_of: 'light_medium' };
 SHADE_PARAMS.light  = { ...SHADE_PARAMS.white_melange,shade_alias_of: 'white_melange' };
 
+// ── SHADE DEPTH (continuous %OWF) ───────────────────────────────────────────
+// The 6-tier system above is 6 fixed buckets; real dyeing is a continuous
+// dye-concentration scale (%OWF — dye weight on weight of fabric), and the
+// SAME 4 buckets already document their real %OWF ranges in their notes
+// (white_melange ≈0%, light_medium 1-6%, dark_navy 6-10%, black 10-15%).
+// These are real calibration anchors, not invented numbers — this just
+// interpolates/extrapolates BETWEEN them (same technique already used for
+// heavy-GSM count/SL extrapolation in factory-knowledge.js) so a user who
+// knows their actual dye recipe %OWF gets a continuously-scaled mass-gain
+// and SL factor instead of snapping to the nearest of 6 buckets.
+const OWF_DEPTH_ANCHORS = [
+  { owf: 0,    mass_pct: 0.3, sl_factor: 0.990 },  // white/melange — bleach+OBA only
+  { owf: 3.5,  mass_pct: 2.0, sl_factor: 1.008 },  // light/medium reactive midpoint
+  { owf: 8.0,  mass_pct: 4.0, sl_factor: 1.020 },  // dark/navy reactive midpoint
+  { owf: 12.5, mass_pct: 5.0, sl_factor: 1.030 },  // black vat/reactive midpoint
+];
+
+/**
+ * Classify shade from a continuous dye-depth %OWF value instead of a fixed
+ * tier button. Interpolates between OWF_DEPTH_ANCHORS; extrapolates linearly
+ * from the last segment's slope beyond the highest anchor (e.g. triple-dip
+ * black > 15% OWF), floored so mass gain never goes negative.
+ * @param {number} owfPct  Dye concentration, % on weight of fabric (0-25 typical)
+ * @returns {{ shade, dyeing_tier, gsm_adjustment_pct, grey_gsm_factor, sl_factor, sl_direction, owf_pct, continuous, note }}
+ */
+function classifyShadeByDepth(owfPct) {
+  const pct = Math.max(0, Math.min(25, parseFloat(owfPct)));
+  const anchors = OWF_DEPTH_ANCHORS;
+  let lower = anchors[0], upper = anchors[anchors.length - 1];
+  for (let i = 0; i < anchors.length - 1; i++) {
+    if (pct >= anchors[i].owf && pct <= anchors[i + 1].owf) { lower = anchors[i]; upper = anchors[i + 1]; break; }
+  }
+  let mass, sl;
+  if (pct <= anchors[0].owf) {
+    mass = anchors[0].mass_pct; sl = anchors[0].sl_factor;
+  } else if (pct >= anchors[anchors.length - 1].owf) {
+    // extrapolate from the last real segment's slope
+    const a = anchors[anchors.length - 2], b = anchors[anchors.length - 1];
+    const dOwf = pct - b.owf;
+    const slopeMass = (b.mass_pct - a.mass_pct) / (b.owf - a.owf);
+    const slopeSl = (b.sl_factor - a.sl_factor) / (b.owf - a.owf);
+    mass = Math.max(0, b.mass_pct + slopeMass * dOwf);
+    sl = b.sl_factor + slopeSl * dOwf;
+  } else {
+    const ratio = (pct - lower.owf) / (upper.owf - lower.owf);
+    mass = lower.mass_pct + ratio * (upper.mass_pct - lower.mass_pct);
+    sl = lower.sl_factor + ratio * (upper.sl_factor - lower.sl_factor);
+  }
+  // Nearest discrete tier — needed by consumers that key real production data
+  // off the 6-tier name (e.g. grey-GSM-by-family lookup), not by %OWF.
+  let shade = 'white_melange';
+  if (pct >= 10) shade = 'black';
+  else if (pct >= 6) shade = 'dark_navy';
+  else if (pct >= 1) shade = 'light_medium';
+  return {
+    shade, dyeing_tier: shade,
+    gsm_adjustment_pct: parseFloat(mass.toFixed(2)),
+    grey_gsm_factor: parseFloat((1 / (1 + mass / 100)).toFixed(4)),
+    sl_factor: parseFloat(sl.toFixed(4)),
+    sl_direction: mass > 0.6 ? 'looser' : 'neutral',
+    owf_pct: pct,
+    continuous: true,
+    note: `Continuous shade-depth: ${pct}% OWF → +${mass.toFixed(1)}% mass gain (interpolated from the same real dye-recipe anchors the 6-tier buttons use).`,
+  };
+}
+
 /**
  * Classify a color name/code into the 6-tier shade system.
  * @param {string} colorName
@@ -554,6 +620,7 @@ module.exports = {
   parseComposition,
   getCompositionModifiers,
   classifyColorShade,
+  classifyShadeByDepth,
   SHORTHAND_COMPOSITIONS,
   FIBER_ALIASES,
 };

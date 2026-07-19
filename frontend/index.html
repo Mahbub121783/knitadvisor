@@ -317,6 +317,12 @@
       padding: 10px 12px; border-radius: 10px;
       border: 1px solid rgba(0,255,178,.18); background: rgba(0,255,178,.04);
     }
+    /* `display:flex` above otherwise beats the browser's native
+       [hidden]{display:none} rule (same specificity, author sheet wins) —
+       so this card rendered PERMANENTLY VISIBLE from page load, showing its
+       raw empty placeholder ("—", blank swatch) before any color was ever
+       picked. This is what made the widget look broken/empty in practice. */
+    .ce-preview[hidden] { display: none; }
     .ce-swatch {
       flex: 0 0 46px; width: 46px; height: 46px; border-radius: 8px;
       border: 1px solid rgba(255,255,255,.18);
@@ -518,6 +524,22 @@
           </div>
           <input type="hidden" id="color-input" value="">
           <div class="shade-hint" id="shade-hint"></div>
+        </div>
+
+        <!-- Shade Depth — continuous %OWF (dye concentration), overrides the 6-tier buttons above -->
+        <div class="form-group mb-16">
+          <label class="form-label" style="color:var(--t1);display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" id="depth-toggle" onchange="toggleShadeDepth(this.checked)" style="cursor:pointer;">
+            Shade Depth (%OWF) <span class="badge" style="margin-left:2px;background:rgba(0,255,178,.12);color:var(--a1);border:1px solid rgba(0,255,178,.3)">ADVANCED</span>
+          </label>
+          <div id="depth-controls" style="display:none;margin-top:8px;">
+            <div style="display:flex;align-items:center;gap:12px;">
+              <input type="range" id="depth-slider" min="0" max="20" step="0.5" value="4" style="flex:1 1 auto;" oninput="onDepthInput(this.value)">
+              <input type="number" id="depth-number" min="0" max="25" step="0.5" value="4" class="form-input" style="width:72px;flex:0 0 auto;" oninput="onDepthInput(this.value)">
+              <span class="text-xs text-dim">% OWF</span>
+            </div>
+            <div class="shade-hint" id="depth-hint" style="margin-top:6px;"></div>
+          </div>
         </div>
 
         <!-- Optional machine specs (collapsible) -->
@@ -896,6 +918,7 @@ const PREFILL_FIELD_MAP = {
   filaments: 'filaments-input',
   elastane_denier: 'elastane-denier-input',
   elastane_pct: 'elastane-pct-input',
+  shade_depth_pct: 'depth-number',
 };
 const PREFILL_CHECKBOX_MAP = {
   yarn_white: 'yarn-white',
@@ -943,6 +966,13 @@ function applyPrefill(params) {
       const m = (c.getAttribute('onclick') || '').match(/setComp\('([^']*)'/);
       c.classList.toggle('active', !!m && m[1] === params.composition);
     });
+  }
+
+  // Shade depth (%OWF) — reveal + sync the slider/checkbox when carried over
+  if (params.shade_depth_pct != null) {
+    document.getElementById('depth-toggle').checked = true;
+    toggleShadeDepth(true);
+    onDepthInput(params.shade_depth_pct);
   }
 
   // Color shade button active-state (mirrors setShade())
@@ -1200,6 +1230,31 @@ function setShade(val, btn) {
 }
 
 /* ============================================================
+   SHADE DEPTH — continuous %OWF, overrides the 6-tier buttons
+   ============================================================ */
+function toggleShadeDepth(on) {
+  document.getElementById('depth-controls').style.display = on ? 'block' : 'none';
+  const selector = document.getElementById('shade-selector');
+  selector.style.opacity = on ? '0.35' : '1';
+  selector.style.pointerEvents = on ? 'none' : 'auto';
+  if (on) onDepthInput(document.getElementById('depth-slider').value);
+  else document.getElementById('depth-hint').textContent = '';
+}
+function onDepthInput(val) {
+  let pct = parseFloat(val);
+  if (isNaN(pct)) pct = 0;
+  pct = Math.max(0, Math.min(25, pct));
+  document.getElementById('depth-slider').value = Math.min(20, pct);
+  document.getElementById('depth-number').value = pct;
+  let tier = 'White/Melange';
+  if (pct >= 10) tier = 'Black';
+  else if (pct >= 6) tier = 'Dark/Navy';
+  else if (pct >= 1) tier = 'Light/Medium';
+  document.getElementById('depth-hint').textContent =
+    `${pct}% OWF — continuously scaled dye-mass gain (nearest tier for family data: ${tier}). Real dye-recipe concentration instead of a fixed bucket.`;
+}
+
+/* ============================================================
    COLOR ENGINE WIDGET — precise color → live preview + shade tier
    ============================================================ */
 (function initColorEngine() {
@@ -1385,6 +1440,8 @@ async function doCalculate() {
     composition: document.getElementById('comp-input').value || undefined,
     color_shade: document.getElementById('color-input').value || undefined,
     color_input: document.getElementById('color-engine-input').value || undefined,
+    shade_depth_pct: document.getElementById('depth-toggle').checked
+      ? parseFloat(document.getElementById('depth-number').value) : undefined,
     dia: parseFloat(document.getElementById('dia-input').value) || undefined,
     gauge: parseFloat(document.getElementById('gauge-input').value) || undefined,
     rpm: parseFloat(document.getElementById('rpm-input').value) || undefined,
