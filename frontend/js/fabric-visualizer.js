@@ -365,11 +365,17 @@ class FabricVisualizer {
     // PASS D — legend
     this._drawKtmLegend(ctx, COL, W, H, legendH);
 
-    // info line
+    // info line — describe the REAL construction + actual K/T/M content present
+    // in this grid, instead of a hardcoded "interlock" that showed on every
+    // fabric regardless of its true structure (fleece, rib, jersey…).
     const info = this.container.querySelector('#viz-info-text');
     if (info) {
       const ne = (this.result.yarn || {}).count_ne || '—';
-      info.textContent = `Loop notation · ${cpr}C × ${wpr}W repeat · ${ne} Ne · knit interlock + tuck + float`;
+      const label = (this._detectConstruction().label || 'knit').toLowerCase();
+      const hasT = grid.some(row => row.some(x => x === 'T'));
+      const hasM = grid.some(row => row.some(x => x === 'M'));
+      const extra = [hasT ? 'tuck' : null, hasM ? 'float' : null].filter(Boolean).join(' + ');
+      info.textContent = `Loop notation · ${cpr}C × ${wpr}W repeat · ${ne} Ne · ${label}${extra ? ' + ' + extra : ''}`;
     }
   }
 
@@ -995,13 +1001,16 @@ class FabricVisualizer {
 
     const W = 560, H = 380, SS = 2;       // SS = supersample for crispness
     const opts = this._faceOpts();
-    this._loupe = this._loupe || { zoom: 1, fu: 0.5, fv: 0.5 };
+    this._loupe = this._loupe || { zoom: 1, fu: 0.5, fv: 0.5, side: 'front' };
+    if (!this._loupe.side) this._loupe.side = 'front';
     const MIN = 1, MAX = 9;
 
     const holder = document.createElement('div');
     holder.className = 'ka-loupe';
     holder.innerHTML = `
       <div class="ka-loupe-bar">
+        <button class="ka-loupe-btn ka-loupe-side" data-act="front">Front</button>
+        <button class="ka-loupe-btn ka-loupe-side" data-act="back">Back</button>
         <button class="ka-loupe-btn" data-act="out">–</button>
         <span class="ka-loupe-zoom" id="ka-loupe-zoom">1.0×</span>
         <button class="ka-loupe-btn" data-act="in">+</button>
@@ -1011,6 +1020,10 @@ class FabricVisualizer {
       <div class="ka-loupe-stage"></div>`;
     wrap.appendChild(holder);
     this._injectLoupeCss();
+
+    const sideBtns = holder.querySelectorAll('.ka-loupe-side');
+    const syncSideBtns = () => sideBtns.forEach(b => b.classList.toggle('active', b.getAttribute('data-act') === this._loupe.side));
+    syncSideBtns();
 
     const stageEl = holder.querySelector('.ka-loupe-stage');
     const canvas = document.createElement('canvas');
@@ -1028,7 +1041,7 @@ class FabricVisualizer {
       l.fu = Math.max(0.04, Math.min(0.96, l.fu));
       l.fv = Math.max(0.04, Math.min(0.96, l.fv));
       ctx.setTransform(SS, 0, 0, SS, 0, 0);
-      this._paintFabricFace(ctx, W, H, 'front', opts, l);
+      this._paintFabricFace(ctx, W, H, l.side || 'front', opts, l);
       zoomEl.textContent = l.zoom.toFixed(1) + '×';
       canvas.style.cursor = l.zoom >= MAX ? 'zoom-out' : 'zoom-in';
     };
@@ -1085,9 +1098,10 @@ class FabricVisualizer {
 
     holder.querySelector('.ka-loupe-bar').addEventListener('click', (e) => {
       const act = e.target.getAttribute('data-act'); if (!act) return;
-      if (act === 'in') zoomAt(W / 2, H / 2, 1.4);
+      if (act === 'front' || act === 'back') { this._loupe.side = act; syncSideBtns(); paint(); }
+      else if (act === 'in') zoomAt(W / 2, H / 2, 1.4);
       else if (act === 'out') zoomAt(W / 2, H / 2, 0.7);
-      else { this._loupe = { zoom: 1, fu: 0.5, fv: 0.5 }; paint(); }
+      else { this._loupe = { zoom: 1, fu: 0.5, fv: 0.5, side: this._loupe.side }; paint(); }
     });
 
     paint();
@@ -1102,6 +1116,7 @@ class FabricVisualizer {
     .ka-loupe-btn{font:600 12px/1 var(--mono,monospace);min-width:30px;padding:6px 10px;border-radius:7px;cursor:pointer;
       border:1px solid rgba(0,0,0,.14);background:#fff;color:#333;transition:all .15s;}
     .ka-loupe-btn:hover{border-color:#5b8def;color:#2563eb;}
+    .ka-loupe-side.active{background:#2563eb;border-color:#2563eb;color:#fff;}
     .ka-loupe-zoom{font:600 12px var(--mono,monospace);color:#2563eb;min-width:38px;text-align:center;}
     .ka-loupe-tip{font:10px var(--mono,monospace);color:#9aa;margin-left:6px;}
     .ka-loupe-stage{display:flex;justify-content:center;overflow:hidden;border-radius:10px;}`;
@@ -1121,6 +1136,13 @@ class FabricVisualizer {
       fiberType,
       sheen:     this._getSheenModel(fiberType),
       countNe:   yarn.count_ne || 30,
+      // Multi-yarn structures (3-thread fleece, french terry…) expose a real
+      // loop/pile yarn count and a tie/binder yarn — the PILE is physically
+      // the loop yarn, not the face yarn, so brush/loop rendering must size
+      // off this, not countNe. Falls back to null; consumers derive a generic
+      // ratio from the same canonical diameter formula when it's absent.
+      loopNe:    yarn.yarn2_ne || null,
+      tieNe:     yarn.binder_denier ? (5315 / yarn.binder_denier) : null,
       gsm:       (result.input || {}).gsm || (result.grammage || {}).gsm || 180,
       tf:        (result.physical_constraints || {}).tightness_factor || 14,
       construction,
@@ -1242,13 +1264,19 @@ class FabricVisualizer {
     if (has('pointelle', 'pointel'))
       return { type: 'mesh', base: 'single', label: 'pointelle', mesh: true, holeShape: 'diamond', holeSource, brush: false };
 
-    // Pile / brushed family
+    // Pile / brushed family — all single-cylinder (sinker-fed loop yarn), NOT
+    // double-bed: confirmed by topology-builder's own single-bed routing and by
+    // fabric-derivatives.js's machine_type ('single_bed_circular[_then_brushing]')
+    // for fleece_3_thread/fleece_2_thread/french_terry. `base` feeds
+    // _stitchDensity()'s Munden-constant choice, so mislabeling it 'double' here
+    // silently pulls in rib/interlock's tighter packing constants (Kc/Kw, GSM
+    // reference) for these single-bed structures.
     if (has('fleece', 'polar'))
-      return { type: 'fleece', base: 'double', label: 'fleece', mesh: false, brush: true, pile: 'brush' };
+      return { type: 'fleece', base: 'single', label: 'fleece', mesh: false, brush: true, pile: 'brush' };
     if (has('terry', 'french terry', 'loop knit', 'loopback'))
-      return { type: 'terry', base: 'double', label: 'french terry', mesh: false, brush: false, pile: 'loop' };
+      return { type: 'terry', base: 'single', label: 'french terry', mesh: false, brush: false, pile: 'loop' };
     if (has('velour', 'velvet'))
-      return { type: 'fleece', base: 'double', label: 'velour', mesh: false, brush: true, pile: 'velour' };
+      return { type: 'fleece', base: 'single', label: 'velour', mesh: false, brush: true, pile: 'velour' };
 
     // Double-knit / interlock family
     if (has('interlock'))
@@ -1293,14 +1321,60 @@ class FabricVisualizer {
     ctx.fillStyle = this._shadeColorCss(dyed, -0.44);
     ctx.fillRect(0, 0, W, H);
 
-    if (brushed) { this._paintBrushedPile(ctx, W, H, dyed, opts, view); this._overlaySoftLight(ctx, W, H); return; }
-    if (con.type === 'terry' && side === 'back') { this._paintLoopPile(ctx, W, H, dyed, opts, view); return; }
-    if (con.type === 'mesh' || con.type === 'spacer') { this._paintMeshField(ctx, W, H, side, opts, view); this._overlaySoftLight(ctx, W, H); return; }
-    if (con.type === 'tricot') { this._paintTricotField(ctx, W, H, side, opts, view); this._overlaySoftLight(ctx, W, H); return; }
+    if (brushed) { this._paintBrushedPile(ctx, W, H, dyed, opts, view); this._overlaySoftLight(ctx, W, H); }
+    else if (con.type === 'terry' && side === 'back') { this._paintLoopPile(ctx, W, H, dyed, opts, view); }
+    else if (con.type === 'mesh' || con.type === 'spacer') { this._paintMeshField(ctx, W, H, side, opts, view); this._overlaySoftLight(ctx, W, H); }
+    else if (con.type === 'tricot') { this._paintTricotField(ctx, W, H, side, opts, view); this._overlaySoftLight(ctx, W, H); }
+    else {
+      this._paintKnitField(ctx, W, H, side, opts, view);
+      this._overlayGrain(ctx, W, H);
+      this._overlaySoftLight(ctx, W, H);
+    }
+    // Technical grainline — the standard pattern-cutting marking for the
+    // lengthwise (wale) grain, same convention used on real fabric swatches
+    // and pattern pieces. Runs along +y (constants.js's own "the grain / wale
+    // direction" axis), so cutters know which way is straight-of-grain.
+    this._drawGrainlineIndicator(ctx, W, H);
+  }
 
-    this._paintKnitField(ctx, W, H, side, opts, view);
-    this._overlayGrain(ctx, W, H);
-    this._overlaySoftLight(ctx, W, H);
+  /** Double-headed arrow + "GRAIN" label along the lengthwise (wale/course)
+   *  axis — the technical grainline marking used on real fabric/pattern
+   *  pieces to show straight-of-grain for cutting & layout. */
+  _drawGrainlineIndicator(ctx, W, H) {
+    const x = W * 0.9;
+    const topY = H * 0.09, botY = H * 0.91;
+    const head = Math.max(8, Math.min(16, H * 0.035));
+    const col = '#E11D48';
+
+    ctx.save();
+    // white halo first so the line reads on any dye colour, light or dark
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+    ctx.lineWidth = 4.2;
+    ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(x, topY); ctx.lineTo(x, botY); ctx.stroke();
+
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 1.6;
+    ctx.globalAlpha = 0.9;
+    ctx.beginPath(); ctx.moveTo(x, topY); ctx.lineTo(x, botY); ctx.stroke();
+
+    const arrowhead = (tipY, dir) => {
+      ctx.beginPath();
+      ctx.moveTo(x - head * 0.55, tipY + dir * head);
+      ctx.lineTo(x, tipY);
+      ctx.lineTo(x + head * 0.55, tipY + dir * head);
+      ctx.stroke();
+    };
+    arrowhead(topY, 1);
+    arrowhead(botY, -1);
+
+    ctx.translate(x + 12, (topY + botY) / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.font = "600 10px 'JetBrains Mono', monospace";
+    ctx.fillStyle = col;
+    ctx.textAlign = 'center';
+    ctx.fillText('GRAIN', 0, 0);
+    ctx.restore();
   }
 
   // Virtual swatch dimensions (for seamless panning at any focal point)
@@ -1760,21 +1834,34 @@ class FabricVisualizer {
   }
 
   // ── BRUSHED PILE (fleece back, velour) — soft raised noodly fibre ──
+  // Density, fibre length and stroke weight now come from the same physical
+  // model as the 3D pile (loop-yarn diameter + GSM-aware `scalar`), instead
+  // of fixed constants — a 300gsm fleece reads visibly fuller than a 200gsm
+  // one, and the fibre thickness tracks the real loop yarn count.
   _paintBrushedPile(ctx, W, H, dyed, opts) {
     // base wash slightly lighter & desaturated (raised fibre scatters light)
     ctx.fillStyle = this._shadeColorCss(dyed, 0.06);
     ctx.fillRect(0, 0, W, H);
-    const dense = opts.construction.pile === 'velour' ? 9 : 6;
-    const n = Math.floor(W * H / dense);
+    const isVelour = opts.construction.pile === 'velour';
+    const density = opts.density || {};
+    const scalar = Math.max(0.7, Math.min(typeof density.scalar === 'number' ? density.scalar : 1, 1.6));
+    // canonical diameter formula (see fabric-mesh.js yarnDiameterMm / doc §1.1)
+    const faceDia = 0.907 / Math.sqrt(opts.countNe || 30);
+    const loopDia = opts.loopNe ? 0.907 / Math.sqrt(opts.loopNe) : faceDia * 1.37;
+    const thicknessGain = loopDia / faceDia;
+    // dense = px² per fibre (LOWER = more fibres); heavier GSM & velour pack tighter
+    const dense = (isVelour ? 9 : 6) / scalar;
+    const n = Math.floor(W * H / Math.max(2.5, dense));
+    const lenBase = isVelour ? 2.2 : 3.5;             // velour is sheared shorter
     ctx.lineCap = 'round';
     for (let i = 0; i < n; i++) {
       const x = Math.random() * W, y = Math.random() * H;
       const a = Math.PI * 0.5 + (Math.random() - 0.5) * 1.2;   // mostly downward sweep
-      const len = 3 + Math.random() * 7;
+      const len = lenBase + Math.random() * lenBase * 2;
       const shade = (Math.random() - 0.45) * 0.5;
       ctx.strokeStyle = this._shadeColorCss(dyed, shade);
       ctx.globalAlpha = 0.5 + Math.random() * 0.4;
-      ctx.lineWidth = 0.7 + Math.random() * 0.8;
+      ctx.lineWidth = (0.7 + Math.random() * 0.8) * thicknessGain;
       ctx.beginPath();
       ctx.moveTo(x, y);
       ctx.quadraticCurveTo(x + Math.cos(a) * len * 0.5, y + Math.sin(a) * len * 0.5,
@@ -1785,10 +1872,17 @@ class FabricVisualizer {
   }
 
   // ── LOOP PILE (french terry back) — rows of uncut loops ──
+  // Loop size/repeat and stroke weight now track the real loop-yarn diameter
+  // and GSM-aware density scalar, same physical model as the brushed pile.
   _paintLoopPile(ctx, W, H, dyed, opts) {
     ctx.fillStyle = this._shadeColorCss(dyed, -0.30);
     ctx.fillRect(0, 0, W, H);
-    const sw = 16, sh = 16;
+    const density = opts.density || {};
+    const scalar = Math.max(0.7, Math.min(typeof density.scalar === 'number' ? density.scalar : 1, 1.6));
+    const faceDia = 0.907 / Math.sqrt(opts.countNe || 30);
+    const loopDia = opts.loopNe ? 0.907 / Math.sqrt(opts.loopNe) : faceDia * 1.6;
+    const thicknessGain = loopDia / faceDia;
+    const sw = 16 / scalar, sh = sw;                  // denser fabric → tighter loop repeat
     ctx.lineCap = 'round';
     for (let r = 0; r * sh < H + sh; r++) {
       const oy = r * sh + sh * 0.6;
@@ -1796,12 +1890,12 @@ class FabricVisualizer {
       for (let c = 0; c * sw < W + sw; c++) {
         const cx = c * sw + off + sw / 2;
         ctx.strokeStyle = this._shadeColorCss(dyed, -0.05);
-        ctx.lineWidth = 3.0;
+        ctx.lineWidth = 3.0 * thicknessGain;
         ctx.beginPath();
         ctx.arc(cx, oy, sw * 0.34, Math.PI * 0.05, Math.PI * 0.95, false);
         ctx.stroke();
         ctx.strokeStyle = this._shadeColorCss(dyed, 0.22);
-        ctx.lineWidth = 1.1;
+        ctx.lineWidth = 1.1 * thicknessGain;
         ctx.beginPath();
         ctx.arc(cx, oy - 0.6, sw * 0.30, Math.PI * 0.15, Math.PI * 0.7, false);
         ctx.stroke();
@@ -1936,6 +2030,7 @@ class FabricVisualizer {
     const sampleBack = (w, c) => this._tokenAt(w, c, 'front', opts, 'dial');
     const glOpts = {
       dyed: this._dyedColor, construction: con, countNe: opts.countNe,
+      loopNe: opts.loopNe, tieNe: opts.tieNe,
       tf: opts.tf, fiberType: opts.fiberType, sheen: opts.sheen, sample, sampleBack,
       physics: opts.physics, density: opts.density, twist: this._yarnTwist(),
     };

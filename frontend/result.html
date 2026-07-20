@@ -1480,7 +1480,7 @@ function renderResult(r, params) {
   renderCPA(r.critical_path);
 
   // — Pattern —
-  renderPattern(r.pattern);
+  renderPattern(r.pattern, r.yarn);
 
   // — Fabric Visualization —
   requestAnimationFrame(() => {
@@ -2240,7 +2240,7 @@ function renderProduction(prod, input) {
 /* ============================================================
    PATTERN RENDER
    ============================================================ */
-function renderPattern(pattern) {
+function renderPattern(pattern, yarn) {
   const container = document.getElementById('pattern-container');
   // Relabel the section title depending on fabric structure type.
   const titleEl = document.querySelector('#sec-pattern .rst-title-text');
@@ -2253,7 +2253,7 @@ function renderPattern(pattern) {
     container.innerHTML = `<div class="text-dim text-sm">Pattern data unavailable</div>`;
     return;
   }
-  renderPatternGrid(container, pattern);
+  renderPatternGrid(container, pattern, yarn);
 }
 
 /* ============================================================
