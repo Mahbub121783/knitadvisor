@@ -232,11 +232,16 @@ function orderProviders(providers, strategy) {
 
 // ── Main parse() function ─────────────────────────────────────────────────────
 async function parse(text) {
+  const deadline = Date.now() + PARSE_BUDGET_MS;
   const [providers, strategy] = await Promise.all([getProviders(), getStrategy()]);
 
   const ordered = orderProviders(providers, strategy);
 
   for (const provider of ordered) {
+    if (Date.now() > deadline) {
+      console.error('[Parse] Overall budget exhausted before trying', provider.provider_name);
+      break;
+    }
     // Get all API keys for this provider
     const keys = await getProviderKeys(provider.id);
     if (!keys.length) {
@@ -255,6 +260,7 @@ async function parse(text) {
 
       // Try each model for this key
       for (const model of models) {
+        if (Date.now() > deadline) break;
         try {
           const decryptedKey = decryptApiKey(key.api_key_encrypted);
           const t0 = Date.now();
@@ -370,9 +376,18 @@ async function callProvider(provider, model, apiKey, text) {
   throw new Error(`Unknown provider type: ${type}`);
 }
 
+const PROVIDER_TIMEOUT_MS = parseInt(process.env.AI_PROVIDER_TIMEOUT_MS, 10) || 12000;
+const PARSE_BUDGET_MS = parseInt(process.env.AI_PARSE_BUDGET_MS, 10) || 25000;
+
+function axiosOpts(extra = {}) {
+  return { timeout: PROVIDER_TIMEOUT_MS, ...extra };
+}
+
 // ── Provider-specific callers ─────────────────────────────────────────────────
 async function callGroq(text, apiKey, modelName) {
-  const groq = new Groq({ apiKey });
+  // groq-sdk has its own default timeout and retry policy; pin both so this
+  // path is bounded like the axios ones rather than relying on the default.
+  const groq = new Groq({ apiKey, timeout: PROVIDER_TIMEOUT_MS, maxRetries: 1 });
   const response = await groq.chat.completions.create({
     messages: [{ role: 'system', content: SYSTEM_PROMPT }, { role: 'user', content: text }],
     model: modelName,
@@ -383,12 +398,17 @@ async function callGroq(text, apiKey, modelName) {
   return { parsed: JSON.parse(content), tokens_used: response.usage?.total_tokens || 100 };
 }
 
+// None of the provider calls below set a timeout, and axios has none by
+// default. parse() walks providers x keys x models, so one unresponsive
+// provider held the whole request open indefinitely — the client just hung
+// with nothing logged. Each attempt is bounded, and parse() has an overall
+// budget on top so the worst case stays bounded as models are added.
 async function callGemini(text, apiKey, modelName, apiUrl) {
   const url = `${apiUrl}/${modelName}:generateContent?key=${apiKey}`;
   const response = await axios.post(url, {
     contents: [{ parts: [{ text: `${SYSTEM_PROMPT}\n\n${text}` }] }],
     generationConfig: { temperature: 0.1, responseMimeType: 'application/json' }
-  });
+  }, axiosOpts());
   const content = response.data.candidates[0].content.parts[0].text;
   return { parsed: JSON.parse(content), tokens_used: response.data.usageMetadata?.totalTokenCount || 100 };
 }
@@ -399,7 +419,7 @@ async function callMistral(text, apiKey, modelName, apiUrl) {
     messages: [{ role: 'system', content: SYSTEM_PROMPT }, { role: 'user', content: text }],
     temperature: 0.1,
     response_format: { type: 'json_object' }
-  }, { headers: { Authorization: `Bearer ${apiKey}` } });
+  }, axiosOpts({ headers: { Authorization: `Bearer ${apiKey}` } }));
   const content = response.data.choices[0].message.content;
   return { parsed: JSON.parse(content), tokens_used: response.data.usage?.total_tokens || 100 };
 }
@@ -409,7 +429,7 @@ async function callCohere(text, apiKey, modelName, apiUrl) {
     model: modelName,
     message: text,
     preamble: SYSTEM_PROMPT
-  }, { headers: { Authorization: `Bearer ${apiKey}` } });
+  }, axiosOpts({ headers: { Authorization: `Bearer ${apiKey}` } }));
   const content = response.data.text;
   return { parsed: JSON.parse(content), tokens_used: response.data.meta?.tokens?.output_tokens || 100 };
 }
@@ -420,7 +440,7 @@ async function callOpenAI(text, apiKey, modelName, apiUrl) {
     messages: [{ role: 'system', content: SYSTEM_PROMPT }, { role: 'user', content: text }],
     temperature: 0.1,
     response_format: { type: 'json_object' }
-  }, { headers: { Authorization: `Bearer ${apiKey}` } });
+  }, axiosOpts({ headers: { Authorization: `Bearer ${apiKey}` } }));
   const content = response.data.choices[0].message.content;
   return { parsed: JSON.parse(content), tokens_used: response.data.usage?.total_tokens || 100 };
 }
