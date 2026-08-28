@@ -169,7 +169,13 @@ async function getStrategy() {
 // ── Availability checks ───────────────────────────────────────────────────────
 function isProviderAvailable(provider) {
   if (!provider.is_enabled) return false;
-  if (provider.tokens_today >= provider.daily_limit) return false;
+  // daily_limit counts REQUESTS per day (Groq free tier 14,400/day, Mistral
+  // 10,000/day — see PROVIDER_DEFAULTS). This compared it against tokens_today
+  // instead, and a request costs a few hundred tokens, so a provider was ruled
+  // "over quota" after roughly 25-30 calls rather than fourteen thousand. Groq
+  // and Mistral were both silently excluded that way, which is why parse() fell
+  // through to Gemini and then reported every provider exhausted.
+  if (provider.requests_today >= provider.daily_limit) return false;
   if (provider.cooldown_until && new Date(provider.cooldown_until) > new Date()) return false;
   return true;
 }
@@ -233,6 +239,7 @@ function orderProviders(providers, strategy) {
 // ── Main parse() function ─────────────────────────────────────────────────────
 async function parse(text) {
   const deadline = Date.now() + PARSE_BUDGET_MS;
+  await ensureDailyReset();
   const [providers, strategy] = await Promise.all([getProviders(), getStrategy()]);
 
   const ordered = orderProviders(providers, strategy);
@@ -639,6 +646,46 @@ async function testProvider(provider) {
   throw new Error(lastError ? lastError.message : 'All models failed during connection test');
 }
 
+/**
+ * Zero the per-day counters when the date rolls over.
+ *
+ * resetDailyStats() existed but nothing ever called it outside a manual admin
+ * button, so "today's" counters were really since-the-beginning-of-time
+ * counters. Combined with the limit check above, every provider eventually
+ * crossed its daily limit permanently and the AI feature went dark with no
+ * error anyone would see.
+ */
+let lastResetCheck = null;
+async function ensureDailyReset() {
+  const today = new Date().toISOString().slice(0, 10);
+  if (lastResetCheck === today) return;   // already checked this process, this day
+
+  try {
+    await dbQuery(`
+      CREATE TABLE IF NOT EXISTS ai_provider_meta (
+        meta_key   VARCHAR(32) NOT NULL PRIMARY KEY,
+        meta_value VARCHAR(32) NOT NULL
+      ) ENGINE=InnoDB
+    `);
+    const rows = await dbQuery("SELECT meta_value FROM ai_provider_meta WHERE meta_key = 'last_reset_date'");
+    const stored = rows.length ? rows[0].meta_value : null;
+
+    if (stored !== today) {
+      await resetDailyStats();
+      await dbQuery(
+        "INSERT INTO ai_provider_meta (meta_key, meta_value) VALUES ('last_reset_date', ?) ON DUPLICATE KEY UPDATE meta_value = VALUES(meta_value)",
+        [today]
+      );
+      console.log('[Providers] Daily counters reset for', today, stored ? `(last reset ${stored})` : '(first reset)');
+    }
+    lastResetCheck = today;
+  } catch (err) {
+    // A failed reset must not block parsing — worst case the counters stay stale
+    // for this request and the next one retries.
+    console.error('[Providers] Daily reset check failed:', err.message);
+  }
+}
+
 async function resetDailyStats() {
   await Promise.all([
     dbQuery('UPDATE ai_provider_stats SET tokens_today = 0, requests_today = 0, failures_today = 0, is_healthy = 1, cooldown_until = NULL'),
@@ -669,6 +716,7 @@ module.exports = {
   deleteProvider,
   testProvider,
   resetDailyStats,
+  ensureDailyReset,
   encryptApiKey,
   decryptApiKey,
 };
