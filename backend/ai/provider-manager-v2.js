@@ -12,7 +12,7 @@
 const Groq = require('groq-sdk');
 const axios = require('axios');
 const crypto = require('crypto');
-const { query: dbQuery } = require('../config/database');
+const { query: dbQuery } = require('../db/client');
 
 const SYSTEM_PROMPT = `You are an expert knitting assistant for KnitAdvisor.
 Your task is to parse a user's natural language request (in Bengali, English, or Banglish) and extract the required parameters for fabric calculation.
@@ -119,18 +119,20 @@ async function getProviders() {
 }
 
 async function getProviderKeys(providerId) {
-  return dbQuery('SELECT id, api_key_encrypted, key_index, is_active, is_healthy, cooldown_until FROM ai_provider_keys WHERE provider_id = ? AND is_active = 1 ORDER BY key_index ASC', [providerId]);
+  return dbQuery('SELECT id, api_key_encrypted, key_index, is_active, is_healthy, cooldown_until FROM ai_provider_keys WHERE provider_id = $1 AND is_active = true ORDER BY key_index ASC', [providerId]);
 }
 
 async function getProviderModels(providerId, currentModelId) {
   // Self-healing check: Ensure the model_name from ai_provider_stats exists in ai_provider_models
   try {
-    const stats = await dbQuery('SELECT model_name FROM ai_provider_stats WHERE id = ?', [providerId]);
+    const stats = await dbQuery('SELECT model_name FROM ai_provider_stats WHERE id = $1', [providerId]);
     if (stats.length && stats[0].model_name) {
       const mainModel = stats[0].model_name.trim();
       if (mainModel) {
         await dbQuery(
-          'INSERT IGNORE INTO ai_provider_models (provider_id, model_name, is_active, is_healthy) VALUES (?, ?, 1, 1)',
+          `INSERT INTO ai_provider_models (provider_id, model_name, is_active, is_healthy)
+           VALUES ($1, $2, true, true)
+           ON CONFLICT (provider_id, model_name) DO NOTHING`,
           [providerId, mainModel]
         );
       }
@@ -143,15 +145,15 @@ async function getProviderModels(providerId, currentModelId) {
     return dbQuery(
       `SELECT id, model_name, is_active, is_healthy, avg_response_ms, cooldown_until 
        FROM ai_provider_models 
-       WHERE provider_id = ? AND is_active = 1 
-       ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END ASC, is_healthy DESC, avg_response_ms ASC`,
+       WHERE provider_id = $1 AND is_active = true 
+       ORDER BY CASE WHEN id = $2 THEN 0 ELSE 1 END ASC, is_healthy DESC, avg_response_ms ASC`,
       [providerId, currentModelId]
     );
   }
   return dbQuery(
     `SELECT id, model_name, is_active, is_healthy, avg_response_ms, cooldown_until 
      FROM ai_provider_models 
-     WHERE provider_id = ? AND is_active = 1 
+     WHERE provider_id = $1 AND is_active = true 
      ORDER BY is_healthy DESC, avg_response_ms ASC`,
     [providerId]
   );
@@ -284,22 +286,22 @@ async function parse(text) {
             // Update provider stats
             dbQuery(
               `UPDATE ai_provider_stats
-               SET tokens_today = tokens_today + ?,
+               SET tokens_today = tokens_today + $1,
                    requests_today = requests_today + 1,
-                   current_key_id = ?,
-                   current_model_id = ?
-               WHERE id = ?`,
+                   current_key_id = $2,
+                   current_model_id = $3
+               WHERE id = $4`,
               [result.tokens_used, key.id, model.id, provider.id]
             ),
             // Update key stats
             dbQuery(
               `UPDATE ai_provider_keys
-               SET tokens_today = tokens_today + ?,
+               SET tokens_today = tokens_today + $1,
                    failures_today = 0,
-                   is_healthy = 1,
+                   is_healthy = true,
                    cooldown_until = NULL,
-                   last_used_at = NOW()
-               WHERE id = ?`,
+                   last_used_at = now()
+               WHERE id = $2`,
               [result.tokens_used, key.id]
             ),
             // Update model stats
@@ -307,10 +309,10 @@ async function parse(text) {
               `UPDATE ai_provider_models
                SET requests_today = requests_today + 1,
                    failures_today = 0,
-                   is_healthy = 1,
+                   is_healthy = true,
                    cooldown_until = NULL,
-                   avg_response_ms = ?
-               WHERE id = ?`,
+                   avg_response_ms = $1
+               WHERE id = $2`,
               [newAvg, model.id]
             ),
           ]);
@@ -332,10 +334,10 @@ async function parse(text) {
           await dbQuery(
             `UPDATE ai_provider_models
              SET failures_today = failures_today + 1,
-                 is_healthy = 0,
-                 last_failure_at = NOW(),
-                 cooldown_until = ?
-             WHERE id = ?`,
+                 is_healthy = false,
+                 last_failure_at = now(),
+                 cooldown_until = $1
+             WHERE id = $2`,
             [cooldownUntil, model.id]
           );
           // Continue to next model
@@ -347,9 +349,9 @@ async function parse(text) {
       await dbQuery(
         `UPDATE ai_provider_keys
          SET failures_today = failures_today + 1,
-             is_healthy = 0,
-             cooldown_until = ?
-         WHERE id = ?`,
+             is_healthy = false,
+             cooldown_until = $1
+         WHERE id = $2`,
         [cooldownUntil, key.id]
       );
     }
@@ -359,10 +361,10 @@ async function parse(text) {
     await dbQuery(
       `UPDATE ai_provider_stats
        SET failures_today = failures_today + 1,
-           is_healthy = 0,
-           last_failure_at = NOW(),
-           cooldown_until = ?
-       WHERE id = ?`,
+           is_healthy = false,
+           last_failure_at = now(),
+           cooldown_until = $1
+       WHERE id = $2`,
       [cooldownUntil, provider.id]
     );
   }
@@ -456,66 +458,78 @@ async function callOpenAI(text, apiKey, modelName, apiUrl) {
 async function addApiKey(providerId, apiKeyPlaintext, keyIndex) {
   const encrypted = encryptApiKey(apiKeyPlaintext);
   await dbQuery(
-    'INSERT INTO ai_provider_keys (provider_id, key_index, api_key_encrypted, is_active) VALUES (?, ?, ?, 1) ON DUPLICATE KEY UPDATE api_key_encrypted = ?',
-    [providerId, keyIndex || 1, encrypted, encrypted]
+    `INSERT INTO ai_provider_keys (provider_id, key_index, api_key_encrypted, is_active)
+     VALUES ($1, $2, $3, true)
+     ON CONFLICT (provider_id, key_index)
+     DO UPDATE SET api_key_encrypted = EXCLUDED.api_key_encrypted`,
+    [providerId, keyIndex || 1, encrypted]
   );
 }
 
 async function updateApiKey(providerId, key) {
   const encrypted = encryptApiKey(key);
   await dbQuery(
-    'INSERT INTO ai_provider_keys (provider_id, key_index, api_key_encrypted, is_active, is_healthy) VALUES (?, 1, ?, 1, 1) ON DUPLICATE KEY UPDATE api_key_encrypted = ?, is_active = 1, is_healthy = 1, cooldown_until = NULL',
-    [providerId, encrypted, encrypted]
+    `INSERT INTO ai_provider_keys (provider_id, key_index, api_key_encrypted, is_active, is_healthy)
+     VALUES ($1, 1, $2, true, true)
+     ON CONFLICT (provider_id, key_index)
+     DO UPDATE SET api_key_encrypted = EXCLUDED.api_key_encrypted,
+                   is_active         = true,
+                   is_healthy        = true,
+                   cooldown_until    = NULL`,
+    [providerId, encrypted]
   );
 }
 
 async function getApiKeysInfo(providerId) {
-  const keys = await dbQuery('SELECT id, key_index, is_active, is_healthy, failures_today, tokens_today, last_used_at FROM ai_provider_keys WHERE provider_id = ?', [providerId]);
+  const keys = await dbQuery('SELECT id, key_index, is_active, is_healthy, failures_today, tokens_today, last_used_at FROM ai_provider_keys WHERE provider_id = $1', [providerId]);
   return keys;
 }
 
 async function addModel(providerId, modelName) {
   await dbQuery(
-    'INSERT INTO ai_provider_models (provider_id, model_name, is_active, is_healthy) VALUES (?, ?, 1, 1) ON DUPLICATE KEY UPDATE is_active = 1',
+    `INSERT INTO ai_provider_models (provider_id, model_name, is_active, is_healthy)
+     VALUES ($1, $2, true, true)
+     ON CONFLICT (provider_id, model_name) DO UPDATE SET is_active = true`,
     [providerId, modelName]
   );
 }
 
 async function getModelsInfo(providerId) {
   const models = await dbQuery(
-    'SELECT id, model_name, is_active, is_healthy, avg_response_ms, requests_today, failures_today, last_failure_at FROM ai_provider_models WHERE provider_id = ?',
+    'SELECT id, model_name, is_active, is_healthy, avg_response_ms, requests_today, failures_today, last_failure_at FROM ai_provider_models WHERE provider_id = $1',
     [providerId]
   );
   return models;
 }
 
 async function toggleKeyActive(keyId, isActive) {
-  await dbQuery('UPDATE ai_provider_keys SET is_active = ? WHERE id = ?', [isActive ? 1 : 0, keyId]);
+  await dbQuery('UPDATE ai_provider_keys SET is_active = $1 WHERE id = $2', [isActive, keyId]);
 }
 
 async function toggleModelActive(modelId, isActive) {
-  await dbQuery('UPDATE ai_provider_models SET is_active = ? WHERE id = ?', [isActive ? 1 : 0, modelId]);
+  await dbQuery('UPDATE ai_provider_models SET is_active = $1 WHERE id = $2', [isActive, modelId]);
 }
 
 async function updatePriority(id, newPriority) {
-  const currentRow = await dbQuery('SELECT priority FROM ai_provider_stats WHERE id = ?', [id]);
+  const currentRow = await dbQuery('SELECT priority FROM ai_provider_stats WHERE id = $1', [id]);
   if (!currentRow.length) throw new Error('Provider not found');
   const oldPriority = currentRow[0].priority;
-  const otherRow = await dbQuery('SELECT id FROM ai_provider_stats WHERE priority = ? AND id != ?', [newPriority, id]);
+  const otherRow = await dbQuery('SELECT id FROM ai_provider_stats WHERE priority = $1 AND id != $2', [newPriority, id]);
   if (otherRow.length > 0) {
-    await dbQuery('UPDATE ai_provider_stats SET priority = ? WHERE id = ?', [oldPriority, otherRow[0].id]);
+    await dbQuery('UPDATE ai_provider_stats SET priority = $1 WHERE id = $2', [oldPriority, otherRow[0].id]);
   }
-  await dbQuery('UPDATE ai_provider_stats SET priority = ? WHERE id = ?', [newPriority, id]);
+  await dbQuery('UPDATE ai_provider_stats SET priority = $1 WHERE id = $2', [newPriority, id]);
 }
 
 async function toggleEnabled(id, enabled) {
-  await dbQuery('UPDATE ai_provider_stats SET is_enabled = ? WHERE id = ?', [enabled ? 1 : 0, id]);
+  await dbQuery('UPDATE ai_provider_stats SET is_enabled = $1 WHERE id = $2', [enabled, id]);
 }
 
 async function setStrategy(strategy) {
   await dbQuery(
-    "INSERT INTO ai_provider_config (cfg_key, cfg_value) VALUES ('strategy', ?) ON DUPLICATE KEY UPDATE cfg_value = ?",
-    [strategy, strategy]
+    `INSERT INTO ai_provider_config (cfg_key, cfg_value) VALUES ('strategy', $1)
+     ON CONFLICT (cfg_key) DO UPDATE SET cfg_value = EXCLUDED.cfg_value`,
+    [strategy]
   );
 }
 
@@ -552,13 +566,14 @@ async function addProvider({ provider_type, display_name, api_key_env, model_nam
   const nextPriority = (rows[0]?.maxP || 0) + 1;
 
   // Auto-generate provider_name: provider_type + _N
-  const existing = await dbQuery('SELECT provider_name FROM ai_provider_stats WHERE provider_type = ?', [provider_type]);
+  const existing = await dbQuery('SELECT provider_name FROM ai_provider_stats WHERE provider_type = $1', [provider_type]);
   const providerName = existing.length === 0 ? provider_type : `${provider_type}_${existing.length + 1}`;
 
   const result = await dbQuery(
     `INSERT INTO ai_provider_stats
      (provider_name, display_name, provider_type, priority, daily_limit, per_min_limit, api_key_env, model_name, api_url)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+     RETURNING id`,
     [
       providerName,
       display_name || providerName.toUpperCase(),
@@ -572,12 +587,15 @@ async function addProvider({ provider_type, display_name, api_key_env, model_nam
     ]
   );
 
-  const newProviderId = result.insertId;
+  // Postgres has no LAST_INSERT_ID(); the INSERT above carries RETURNING id.
+  const newProviderId = result[0].id;
 
   // Also add the default model to ai_provider_models table
   const selectedModelName = model_name || defaultModels[provider_type] || 'gpt-4o-mini';
   await dbQuery(
-    'INSERT INTO ai_provider_models (provider_id, model_name, is_active, is_healthy) VALUES (?, ?, 1, 1)',
+    `INSERT INTO ai_provider_models (provider_id, model_name, is_active, is_healthy)
+     VALUES ($1, $2, true, true)
+     ON CONFLICT (provider_id, model_name) DO NOTHING`,
     [newProviderId, selectedModelName]
   );
 
@@ -585,9 +603,9 @@ async function addProvider({ provider_type, display_name, api_key_env, model_nam
 }
 
 async function deleteProvider(id) {
-  await dbQuery('DELETE FROM ai_provider_keys WHERE provider_id = ?', [id]);
-  await dbQuery('DELETE FROM ai_provider_models WHERE provider_id = ?', [id]);
-  await dbQuery('DELETE FROM ai_provider_stats WHERE id = ?', [id]);
+  await dbQuery('DELETE FROM ai_provider_keys WHERE provider_id = $1', [id]);
+  await dbQuery('DELETE FROM ai_provider_models WHERE provider_id = $1', [id]);
+  await dbQuery('DELETE FROM ai_provider_stats WHERE id = $1', [id]);
 }
 
 async function testProvider(provider) {
@@ -610,8 +628,8 @@ async function testProvider(provider) {
 
       // Success! Update this provider's active model and set health
       await Promise.all([
-        dbQuery('UPDATE ai_provider_stats SET current_model_id = ?, model_name = ? WHERE id = ?', [model.id, model.model_name, provider.id]),
-        dbQuery('UPDATE ai_provider_models SET is_healthy = 1, cooldown_until = NULL WHERE id = ?', [model.id])
+        dbQuery('UPDATE ai_provider_stats SET current_model_id = $1, model_name = $2 WHERE id = $3', [model.id, model.model_name, provider.id]),
+        dbQuery('UPDATE ai_provider_models SET is_healthy = true, cooldown_until = NULL WHERE id = $1', [model.id])
       ]);
 
       return result;
@@ -623,8 +641,8 @@ async function testProvider(provider) {
       // We should treat this as a successful key validation!
       if (err.response?.status === 429 || err.message?.includes('429')) {
         await Promise.all([
-          dbQuery('UPDATE ai_provider_stats SET current_model_id = ?, model_name = ? WHERE id = ?', [model.id, model.model_name, provider.id]),
-          dbQuery('UPDATE ai_provider_models SET is_healthy = 1, cooldown_until = NULL WHERE id = ?', [model.id])
+          dbQuery('UPDATE ai_provider_stats SET current_model_id = $1, model_name = $2 WHERE id = $3', [model.id, model.model_name, provider.id]),
+          dbQuery('UPDATE ai_provider_models SET is_healthy = true, cooldown_until = NULL WHERE id = $1', [model.id])
         ]);
         return {
           rate_limited: true,
@@ -637,7 +655,7 @@ async function testProvider(provider) {
       // Mark this specific model as unhealthy/cooldown in DB
       const cooldownUntil = new Date(Date.now() + 5 * 60 * 1000);
       await dbQuery(
-        'UPDATE ai_provider_models SET is_healthy = 0, cooldown_until = ? WHERE id = ?',
+        'UPDATE ai_provider_models SET is_healthy = false, cooldown_until = $1 WHERE id = $2',
         [cooldownUntil, model.id]
       );
     }
@@ -673,7 +691,8 @@ async function ensureDailyReset() {
     if (stored !== today) {
       await resetDailyStats();
       await dbQuery(
-        "INSERT INTO ai_provider_meta (meta_key, meta_value) VALUES ('last_reset_date', ?) ON DUPLICATE KEY UPDATE meta_value = VALUES(meta_value)",
+        `INSERT INTO ai_provider_meta (meta_key, meta_value) VALUES ('last_reset_date', $1)
+         ON CONFLICT (meta_key) DO UPDATE SET meta_value = EXCLUDED.meta_value`,
         [today]
       );
       console.log('[Providers] Daily counters reset for', today, stored ? `(last reset ${stored})` : '(first reset)');
@@ -688,9 +707,9 @@ async function ensureDailyReset() {
 
 async function resetDailyStats() {
   await Promise.all([
-    dbQuery('UPDATE ai_provider_stats SET tokens_today = 0, requests_today = 0, failures_today = 0, is_healthy = 1, cooldown_until = NULL'),
-    dbQuery('UPDATE ai_provider_keys SET tokens_today = 0, failures_today = 0, is_healthy = 1, cooldown_until = NULL'),
-    dbQuery('UPDATE ai_provider_models SET requests_today = 0, failures_today = 0, is_healthy = 1, cooldown_until = NULL')
+    dbQuery('UPDATE ai_provider_stats SET tokens_today = 0, requests_today = 0, failures_today = 0, is_healthy = true, cooldown_until = NULL'),
+    dbQuery('UPDATE ai_provider_keys SET tokens_today = 0, failures_today = 0, is_healthy = true, cooldown_until = NULL'),
+    dbQuery('UPDATE ai_provider_models SET requests_today = 0, failures_today = 0, is_healthy = true, cooldown_until = NULL')
   ]);
 }
 

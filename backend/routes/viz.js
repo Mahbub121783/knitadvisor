@@ -16,7 +16,8 @@ const crypto  = require('crypto');
 const router  = express.Router();
 
 const { generateWeftKnitPaths, generateWarpKnitPaths } = require('../engine/viz-engine');
-const { query } = require('../config/database');
+const vizRepo = require('../db/repositories/viz-repo');
+const { vizCache } = require('../db/repositories/cache-repo');
 
 // ─────────────────────────────────────────────────────────────
 // GET /api/viz-config/:fabric_id
@@ -25,17 +26,10 @@ const { query } = require('../config/database');
 router.get('/viz-config/:fabric_id', async (req, res) => {
   const { fabric_id } = req.params;
   try {
-    const rows = await query(
-      'SELECT * FROM viz_configs WHERE fabric_id = ?',
-      [fabric_id]
-    );
-    if (rows.length > 0) {
-      const cfg = rows[0];
-      if (cfg.bar_colors && typeof cfg.bar_colors === 'string') {
-        try { cfg.bar_colors = JSON.parse(cfg.bar_colors); } catch (_) {}
-      }
-      return res.json({ ok: true, config: cfg, default: false });
-    }
+    // bar_colors is jsonb, so it comes back as an array already — the old
+    // string-sniff-and-JSON.parse fallback is no longer needed.
+    const cfg = await vizRepo.findByFabric(fabric_id);
+    if (cfg) return res.json({ ok: true, config: cfg, default: false });
     return res.json({ ok: true, config: null, default: true });
   } catch (err) {
     console.error('[VizRoute] viz-config error:', err.message);
@@ -67,30 +61,16 @@ router.post('/visualize', async (req, res) => {
 
   // Check cache
   try {
-    const cached = await query(
-      'SELECT path_json FROM viz_render_cache WHERE cache_key = ? AND expires_at > NOW()',
-      [cacheKey]
-    );
-    if (cached.length > 0) {
-      await query(
-        'UPDATE viz_render_cache SET hit_count = hit_count + 1, last_hit = NOW() WHERE cache_key = ?',
-        [cacheKey]
-      );
-      const payload = JSON.parse(cached[0].path_json);
-      return res.json({ ok: true, from_cache: true, ...payload });
-    }
+    const cached = await vizCache.get(cacheKey);
+    if (cached) return res.json({ ok: true, from_cache: true, ...cached });
   } catch (_) { /* cache miss — continue */ }
 
   // Load viz_config for this fabric (or use defaults)
+  // bar_colors is jsonb now, so it arrives as an array — the old
+  // "if it's a string, try to parse it and swallow failures" step is gone.
   let config = {};
   try {
-    const cfgRows = await query('SELECT * FROM viz_configs WHERE fabric_id = ?', [fabric_id]);
-    if (cfgRows.length > 0) {
-      config = cfgRows[0];
-      if (config.bar_colors && typeof config.bar_colors === 'string') {
-        try { config.bar_colors = JSON.parse(config.bar_colors); } catch (_) {}
-      }
-    }
+    config = (await vizRepo.findByFabric(fabric_id)) || {};
   } catch (_) {}
 
   // Generate path data using our own engine
@@ -114,16 +94,7 @@ router.post('/visualize', async (req, res) => {
 
   // Store in viz_render_cache (7-day TTL, safe for production DB)
   try {
-    await query(
-      `INSERT INTO viz_render_cache (cache_key, fabric_id, path_json, render_ms, expires_at)
-       VALUES (?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 7 DAY))
-       ON DUPLICATE KEY UPDATE
-         path_json = VALUES(path_json),
-         render_ms = VALUES(render_ms),
-         hit_count = 0,
-         expires_at = VALUES(expires_at)`,
-      [cacheKey, fabric_id, JSON.stringify(payload), payload.render_ms]
-    );
+    await vizCache.set(cacheKey, fabric_id, payload, payload.render_ms);
   } catch (cacheErr) {
     // Cache write failure is non-fatal — still return the result
     console.warn('[VizRoute] cache write skipped:', cacheErr.message);

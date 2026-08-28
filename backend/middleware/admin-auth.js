@@ -1,50 +1,30 @@
 /**
- * Admin Session Token Authentication
- * 100% Database-driven session store
- * Token = crypto.randomBytes(32).toString('hex') stored as SHA256 hash in DB
- * Passed via X-Admin-Token header
+ * Admin session token authentication.
+ *
+ * Token = crypto.randomBytes(32).toString('hex'), stored as a SHA-256 hash and
+ * presented in the X-Admin-Token header. Hashing the token at rest means a
+ * database read does not hand out live sessions.
+ *
+ * The CREATE TABLE IF NOT EXISTS that used to run on every request path is
+ * gone — the table is owned by db/migrations/001_initial_schema.sql, and
+ * db/seed.js refuses to start against a schema that has not been migrated.
  */
 const crypto = require('crypto');
-const { query: dbQuery } = require('../config/database');
+const adminRepo = require('../db/repositories/admin-repo');
 
-// Ensure admin_sessions table exists
-let tableChecked = false;
-async function ensureSessionsTable() {
-  if (tableChecked) return;
-  try {
-    await dbQuery(`
-      CREATE TABLE IF NOT EXISTS admin_sessions (
-        id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-        token_hash  VARCHAR(64) NOT NULL UNIQUE,
-        ip_address  VARCHAR(45) DEFAULT NULL,
-        created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        expires_at  TIMESTAMP DEFAULT NULL,
-        is_active   TINYINT DEFAULT 1
-      ) ENGINE=InnoDB
-    `);
-    tableChecked = true;
-  } catch (err) {
-    console.warn('[AdminAuth] Could not ensure sessions table:', err.message);
-  }
-}
-
-// adminAuth middleware
 async function adminAuth(req, res, next) {
   const token = req.headers['x-admin-token'];
-
   if (!token) {
     return res.status(401).json({ error: 'Unauthorized: no token' });
   }
 
   try {
-    await ensureSessionsTable();
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-    const rows = await dbQuery(
-      'SELECT id FROM admin_sessions WHERE token_hash = ? AND expires_at > NOW()',
-      [tokenHash]
-    );
-    if (rows.length > 0) {
-      req.adminId = rows[0].id;
+    // Expiry is enforced in SQL, so a caller that forgets to check cannot
+    // accidentally accept a stale session.
+    const session = await adminRepo.sessions.findValid(tokenHash);
+    if (session) {
+      req.sessionId = session.id;
       return next();
     }
   } catch (dbErr) {
@@ -55,37 +35,22 @@ async function adminAuth(req, res, next) {
   return res.status(401).json({ error: 'Unauthorized: invalid or expired token' });
 }
 
-// generateToken
-async function generateToken() {
+function generateToken() {
   const rawToken = crypto.randomBytes(32).toString('hex');
   const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
   return { rawToken, tokenHash };
 }
 
-// createSession
-async function createSession(tokenHash, ipAddress) {
-  const expiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000); // 8 hours
-  await ensureSessionsTable();
-  await dbQuery(
-    'INSERT INTO admin_sessions (token_hash, ip_address, expires_at) VALUES (?, ?, ?)',
-    [tokenHash, ipAddress, expiresAt]
-  );
-  return { expiresAt };
+function createSession(tokenHash, ipAddress) {
+  return adminRepo.sessions.create(tokenHash, ipAddress);
 }
 
-// deleteSession
 async function deleteSession(tokenHash) {
   try {
-    await dbQuery('DELETE FROM admin_sessions WHERE token_hash = ?', [tokenHash]);
+    await adminRepo.sessions.remove(tokenHash);
   } catch (err) {
     console.error('[AdminAuth] Failed to delete session:', err.message);
   }
 }
 
-module.exports = {
-  adminAuth,
-  generateToken,
-  createSession,
-  deleteSession,
-  ensureSessionsTable
-};
+module.exports = { adminAuth, generateToken, createSession, deleteSession };
