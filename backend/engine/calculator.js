@@ -1360,6 +1360,22 @@ function generateFleeceProperties(fabricId, parsedComp) {
   };
 }
 
+// The snap below is to the NEAREST entry in the table, with no notion of how
+// far away the input was. A wildly out-of-range GSM produced e.g. 16,219 Ne,
+// which came back as a confident "80/1" sitting next to count_ne_exact of
+// 16219.9 — two numbers in the same response that cannot both be meaningful.
+// Callers use this to attach a warning when the snap is not a real rounding.
+const STANDARD_COUNT_MIN = 6;
+const STANDARD_COUNT_MAX = 80;
+
+function standardCountWarning(exactNe, rounded) {
+  if (!Number.isFinite(exactNe) || !rounded) return null;
+  if (exactNe >= STANDARD_COUNT_MIN && exactNe <= STANDARD_COUNT_MAX) return null;
+  return `Calculated yarn count ${exactNe.toFixed(1)} Ne falls outside the standard commercial range ` +
+         `(${STANDARD_COUNT_MIN}–${STANDARD_COUNT_MAX} Ne); it was clamped to ${rounded}/1 Ne. ` +
+         `The inputs are likely out of range — treat this count as unusable rather than rounded.`;
+}
+
 function roundToStandardCount(countNe) {
   if (!countNe) return countNe;
   const standardCounts = [6, 7, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 40, 44, 50, 60, 80];
@@ -1410,6 +1426,7 @@ function calculateCount(fabricId, gsm, fabricDef, compModifiers = {}, factoryLoo
       count_ne_exact: parseFloat(fCount.toFixed(2)),
       count_display: advanced_display,
       count_rounded,
+      warning: standardCountWarning(fCount, count_rounded),
       source: factoryLookup.source || 'FACTORY_KNOWLEDGE',
       trace: {
         formula: factoryLookup.blend_fallback
