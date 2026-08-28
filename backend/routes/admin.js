@@ -15,7 +15,20 @@ const providerManager = require('../ai/provider-manager-v2');
 const memCache = require('../cache/memory-cache');
 const dbCache = require('../cache/db-cache');
 const { query: dbQuery } = require('../config/database');
+const { verifyPassword, hashPassword, isLegacyHash } = require('../middleware/password');
+const { createRateLimiter } = require('../middleware/rate-limiter');
 const crypto = require('crypto');
+
+// The global limiter is mounted on /api only, so before this the login endpoint
+// took unlimited guesses. Passwords were also unsalted SHA-256, which a GPU
+// grinds at billions of candidates per second — the two together made the admin
+// panel brute-forceable from the open internet.
+const loginLimiter = createRateLimiter({
+  name: 'admin-login',
+  max: 10,
+  windowMs: 5 * 60 * 1000,
+  message: 'Too many login attempts. Try again in a few minutes.',
+});
 
 // ============================================================
 // PUBLIC: Login / Logout / Ping
@@ -25,7 +38,7 @@ router.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '..', '..', 'frontend', 'admin.html'));
 });
 
-router.post('/login', async (req, res) => {
+router.post('/login', loginLimiter, async (req, res) => {
   const { username, password } = req.body || {};
 
   if (!username || !password) {
@@ -33,14 +46,24 @@ router.post('/login', async (req, res) => {
   }
 
   try {
-    const passHash = crypto.createHash('sha256').update(password).digest('hex');
+    // Fetch by username, then verify in the application. The old query matched
+    // username AND hash in SQL, which only works when every stored hash uses one
+    // scheme — salted hashes can't be recomputed without first reading the salt.
     const rows = await dbQuery(
-      'SELECT id FROM admin_users WHERE username = ? AND password_hash = ?',
-      [username, passHash]
+      'SELECT id, password_hash FROM admin_users WHERE username = ? LIMIT 1',
+      [username]
     );
 
-    if (rows.length === 0) {
+    if (rows.length === 0 || !verifyPassword(password, rows[0].password_hash)) {
       return res.status(401).json({ error: 'Invalid username or password' });
+    }
+
+    // Transparently migrate the row off unsalted SHA-256 now that we hold the
+    // plaintext and know it is correct.
+    if (isLegacyHash(rows[0].password_hash)) {
+      dbQuery('UPDATE admin_users SET password_hash = ? WHERE id = ?', [hashPassword(password), rows[0].id])
+        .then(() => console.log('[Login] Upgraded legacy password hash for user id', rows[0].id))
+        .catch(err => console.error('[Login] Hash upgrade failed:', err.message));
     }
 
     const { rawToken, tokenHash } = await generateToken();
@@ -53,8 +76,9 @@ router.post('/login', async (req, res) => {
       expires_at: sessionResult.expiresAt,
     });
   } catch (err) {
+    // Don't return err.message — database errors name tables, columns and hosts.
     console.error('[Login Error]', err);
-    res.status(500).json({ error: 'Login failed', detail: err.message });
+    res.status(500).json({ error: 'Login failed' });
   }
 });
 
@@ -526,24 +550,33 @@ router.post('/api/settings/credentials', adminAuth, async (req, res) => {
     }
     const admin = rows[0];
 
-    const currentHash = crypto.createHash('sha256').update(current_password).digest('hex');
-    if (currentHash !== admin.password_hash) {
+    if (!verifyPassword(current_password, admin.password_hash)) {
       return res.status(401).json({ error: 'Current password is incorrect' });
     }
 
     if (!new_username && !new_password) {
       return res.status(400).json({ error: 'Provide new_username or new_password' });
     }
+    if (new_password && new_password.length < 12) {
+      return res.status(400).json({ error: 'New password must be at least 12 characters' });
+    }
 
     if (new_username) {
       await dbQuery('UPDATE admin_users SET username = ? WHERE id = ?', [new_username, admin.id]);
     }
     if (new_password) {
-      const newHash = crypto.createHash('sha256').update(new_password).digest('hex');
-      await dbQuery('UPDATE admin_users SET password_hash = ? WHERE id = ?', [newHash, admin.id]);
+      await dbQuery('UPDATE admin_users SET password_hash = ? WHERE id = ?', [hashPassword(new_password), admin.id]);
+      // A password change should not leave older sessions alive — that is the
+      // one moment someone is most likely reacting to a suspected compromise.
+      await dbQuery('DELETE FROM admin_sessions').catch(() => {});
     }
 
-    res.json({ ok: true, message: 'Credentials updated successfully in the database.' });
+    res.json({
+      ok: true,
+      message: new_password
+        ? 'Credentials updated. All sessions were signed out — log in again.'
+        : 'Credentials updated successfully in the database.',
+    });
   } catch (err) {
     console.error('[Settings Credentials Error]', err);
     res.status(500).json({ error: err.message });

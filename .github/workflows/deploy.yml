@@ -6,7 +6,33 @@ on:
       - main
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Dependencies
+        run: npm ci
+        working-directory: ./backend
+
+      - name: Run Engine Test Suites
+        run: npm test
+        working-directory: ./backend
+
+      - name: Audit Production Dependencies
+        run: npm audit --omit=dev --audit-level=high
+        working-directory: ./backend
+
   build-and-deploy:
+    # The engine suites gate the deploy — previously this job went straight
+    # from checkout to FTP upload, so a failing calculation could ship.
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code

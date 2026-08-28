@@ -7,6 +7,23 @@ const API_BASE = (() => {
   return (h === 'localhost' || h === '127.0.0.1') ? 'http://localhost:3001' : window.location.origin;
 })();
 
+// ── HTML ESCAPING ──────────────────────────────────────────
+// Several tables below are built with innerHTML from values that originate in
+// visitor-controlled request bodies: query_logs.input_text is a verbatim
+// JSON.stringify of whatever was POSTed to the public /api/calculate endpoint.
+// Interpolated raw, a crafted request became script that ran here, inside an
+// authenticated admin session with the session token in sessionStorage.
+// Everything from the API is escaped before it reaches innerHTML.
+function esc(v) {
+  if (v === null || v === undefined) return '';
+  return String(v)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // ── TOKEN ──────────────────────────────────────────────────
 function getToken()      { return sessionStorage.getItem('adminToken'); }
 function setToken(t)     { sessionStorage.setItem('adminToken', t); }
@@ -145,13 +162,13 @@ async function loadOverview() {
       return `<div class="ov-health-row">
         <div style="display:flex;align-items:center;gap:10px;">
           <span style="width:7px;height:7px;border-radius:50%;background:${col};display:inline-block;flex-shrink:0;"></span>
-          <span style="font-weight:600;color:var(--t1);font-size:12px;">${p.provider_name.toUpperCase()}</span>
-          <span style="font-size:10px;color:var(--t3);">${p.model_name}</span>
+          <span style="font-weight:600;color:var(--t1);font-size:12px;">${esc(String(p.provider_name).toUpperCase())}</span>
+          <span style="font-size:10px;color:var(--t3);">${esc(p.model_name)}</span>
         </div>
         <div style="display:flex;align-items:center;gap:10px;">
           <span style="font-size:10px;color:${col};">${status}</span>
-          <span style="font-size:10px;color:var(--t3);">Priority #${p.priority}</span>
-          <span style="font-size:10px;color:var(--t3);">${p.requests_today} req/today</span>
+          <span style="font-size:10px;color:var(--t3);">Priority #${esc(p.priority)}</span>
+          <span style="font-size:10px;color:var(--t3);">${esc(p.requests_today)} req/today</span>
         </div>
       </div>`;
     }).join('');
@@ -172,8 +189,8 @@ async function loadOverview() {
         topEl.innerHTML = sorted.map(([f, c]) => `
           <div style="margin-bottom:10px;">
             <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-              <span style="font-size:11px;color:var(--t2);">${f.replace(/_/g,' ')}</span>
-              <span style="font-size:10px;color:var(--t3);">${c}</span>
+              <span style="font-size:11px;color:var(--t2);">${esc(f.replace(/_/g,' '))}</span>
+              <span style="font-size:10px;color:var(--t3);">${esc(c)}</span>
             </div>
             <div style="height:3px;background:var(--bg4);border-radius:2px;">
               <div style="height:3px;background:var(--a1);border-radius:2px;width:${Math.round(c/max*100)}%;"></div>
@@ -219,13 +236,13 @@ async function loadLogs(page, filters) {
       const tr = document.createElement('tr');
       const hit = r.from_cache;
       tr.innerHTML = `
-        <td class="tbl-td">${new Date(r.created_at).toLocaleString()}</td>
-        <td class="tbl-td" title="${r.input_text||''}" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${(r.input_text||'').substring(0,45)}${(r.input_text||'').length>45?'…':''}</td>
-        <td class="tbl-td">${r.parsed_fabric||'—'}</td>
-        <td class="tbl-td">${r.parsed_gsm||'—'}</td>
-        <td class="tbl-td">${r.response_ms||'—'}</td>
+        <td class="tbl-td">${esc(new Date(r.created_at).toLocaleString())}</td>
+        <td class="tbl-td" title="${esc(r.input_text)}" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc((r.input_text||'').substring(0,45))}${(r.input_text||'').length>45?'…':''}</td>
+        <td class="tbl-td">${esc(r.parsed_fabric||'—')}</td>
+        <td class="tbl-td">${esc(r.parsed_gsm||'—')}</td>
+        <td class="tbl-td">${esc(r.response_ms||'—')}</td>
         <td class="tbl-td"><span class="badge ${hit?'badge-green':'badge-red'}">${hit?'HIT':'MISS'}</span></td>
-        <td class="tbl-td">${r.ai_provider||'—'}</td>
+        <td class="tbl-td">${esc(r.ai_provider||'—')}</td>
       `;
       tbody.appendChild(tr);
     }
@@ -270,7 +287,7 @@ async function loadProviders() {
       container.appendChild(buildProviderCard(p));
     }
   } catch (e) {
-    container.innerHTML = `<div style="color:var(--a3);font-size:11px;padding:20px 0;">Error: ${e.message}</div>`;
+    container.innerHTML = `<div style="color:var(--a3);font-size:11px;padding:20px 0;">Error: ${esc(e.message)}</div>`;
     toast('Failed to load providers: ' + e.message, 'error');
   }
 }
@@ -649,7 +666,7 @@ function buildProviderCard(p) {
       const parsed = r.result?.parsed || r.result || {};
       detailEl.style.display = 'block';
       if (isRateLimited) {
-        detailEl.innerHTML = `<strong style="color:var(--a4);">Status Note:</strong> <span style="color:var(--t2);">${r.result?.message || 'API key validated but rate limited.'}</span>`;
+        detailEl.innerHTML = `<strong style="color:var(--a4);">Status Note:</strong> <span style="color:var(--t2);">${esc(r.result?.message || 'API key validated but rate limited.')}</span>`;
       } else {
         detailEl.innerHTML = `<strong style="color:var(--a1);">Parse Result:</strong> ` +
           Object.entries(parsed).filter(([k]) => !['message'].includes(k)).map(([k,v]) =>
@@ -841,14 +858,14 @@ async function loadCacheEntries(page) {
     for (const r of d.rows) {
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td style="padding:9px 10px;color:var(--t2);font-family:var(--mono);font-size:10px;word-break:break-all;">${r.cache_key.substring(0,24)}…</td>
-        <td style="padding:9px 10px;color:var(--t2);font-family:var(--mono);">${r.hit_count}</td>
+        <td style="padding:9px 10px;color:var(--t2);font-family:var(--mono);font-size:10px;word-break:break-all;">${esc(String(r.cache_key).substring(0,24))}…</td>
+        <td style="padding:9px 10px;color:var(--t2);font-family:var(--mono);">${esc(r.hit_count)}</td>
         <td style="padding:9px 10px;color:var(--t2);font-family:var(--mono);">${new Date(r.created_at).toLocaleString()}</td>
         <td style="padding:9px 10px;color:var(--t2);font-family:var(--mono);">${new Date(r.expires_at).toLocaleString()}</td>
         <td style="padding:9px 10px;">
           <div style="display:flex;gap:6px;">
-            <button class="btn btn-ghost btn-xs cache-view" data-key="${r.cache_key}">View</button>
-            <button class="btn btn-danger btn-xs cache-del" data-key="${r.cache_key}">Delete</button>
+            <button class="btn btn-ghost btn-xs cache-view" data-key="${esc(r.cache_key)}">View</button>
+            <button class="btn btn-danger btn-xs cache-del" data-key="${esc(r.cache_key)}">Delete</button>
           </div>
         </td>
       `;
@@ -916,14 +933,14 @@ async function loadInquiries(page, filters) {
       const tr = document.createElement('tr');
       const hit = r.from_cache;
       tr.innerHTML = `
-        <td style="padding:9px 10px;color:var(--t3);font-family:var(--mono);">${r.id}</td>
-        <td style="padding:9px 10px;color:var(--t2);font-family:var(--mono);">${new Date(r.created_at).toLocaleString()}</td>
-        <td style="padding:9px 10px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--t2);" title="${r.input_text||''}">${(r.input_text||'').substring(0,40)}${(r.input_text||'').length>40?'…':''}</td>
-        <td style="padding:9px 10px;color:var(--t2);">${r.parsed_fabric||'—'}</td>
-        <td style="padding:9px 10px;color:var(--t2);">${r.parsed_gsm||'—'}</td>
-        <td style="padding:9px 10px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--t2);" title="${r.parsed_composition||''}">${(r.parsed_composition||'—').substring(0,20)}</td>
-        <td style="padding:9px 10px;color:var(--t2);">${r.ai_provider||'—'}</td>
-        <td style="padding:9px 10px;color:var(--t2);">${r.response_ms||'—'}</td>
+        <td style="padding:9px 10px;color:var(--t3);font-family:var(--mono);">${esc(r.id)}</td>
+        <td style="padding:9px 10px;color:var(--t2);font-family:var(--mono);">${esc(new Date(r.created_at).toLocaleString())}</td>
+        <td style="padding:9px 10px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--t2);" title="${esc(r.input_text)}">${esc((r.input_text||'').substring(0,40))}${(r.input_text||'').length>40?'…':''}</td>
+        <td style="padding:9px 10px;color:var(--t2);">${esc(r.parsed_fabric||'—')}</td>
+        <td style="padding:9px 10px;color:var(--t2);">${esc(r.parsed_gsm||'—')}</td>
+        <td style="padding:9px 10px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--t2);" title="${esc(r.parsed_composition)}">${esc((r.parsed_composition||'—').substring(0,20))}</td>
+        <td style="padding:9px 10px;color:var(--t2);">${esc(r.ai_provider||'—')}</td>
+        <td style="padding:9px 10px;color:var(--t2);">${esc(r.response_ms||'—')}</td>
         <td style="padding:9px 10px;"><span class="badge ${hit?'badge-green':'badge-red'}">${hit?'HIT':'MISS'}</span></td>
       `;
       tbody.appendChild(tr);

@@ -19,12 +19,12 @@
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
+const compression = require('compression');
 const path = require('path');
 
 const apiRoutes = require('./routes/api');
 const vizRoutes = require('./routes/viz');
 const adminRoutes = require('./routes/admin');
-const emergencyRoutes = require('./routes/emergency');
 const rateLimiter = require('./middleware/rate-limiter');
 const { testConnection, initAdminDatabase, initVizDatabase } = require('./config/database');
 
@@ -43,10 +43,62 @@ app.set('trust proxy', 1);
 // ============================================================
 // MIDDLEWARE
 // ============================================================
-app.use(helmet({ contentSecurityPolicy: false }));
-app.use(cors());
-app.use(express.json({ limit: '1mb' }));
-app.use(express.urlencoded({ extended: true }));
+// Apache/Passenger terminates TLS and forwards over plain HTTP, so an http://
+// visitor reaches Express looking identical to an https:// one apart from this
+// header. Without the redirect the HSTS header below never gets a chance to
+// apply — a first-time visitor's whole session, admin login included, can stay
+// in cleartext.
+app.use((req, res, next) => {
+  if (process.env.NODE_ENV !== 'production') return next();
+  if (req.secure || req.get('x-forwarded-proto') === 'https') return next();
+  if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+  return res.redirect(308, 'https://' + req.get('host') + req.originalUrl);
+});
+
+// The admin panel renders log rows built from request bodies, so a CSP is a
+// real second line of defence there rather than decoration. Keep it permissive
+// enough for the existing inline scripts and the Three.js import map, but shut
+// the door on injected external script sources.
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+      imgSrc: ["'self'", 'data:', 'blob:'],
+      connectSrc: ["'self'"],
+      workerSrc: ["'self'", 'blob:'],
+      objectSrc: ["'none'"],
+      frameAncestors: ["'self'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false,
+}));
+
+// Static assets dominate this app's bytes — three.module.js alone is 1.27 MB —
+// and Passenger serves them through Node, not Apache, because the subdomain's
+// document root holds only the Passenger .htaccess. Uncompressed that was a
+// multi-second first paint on every cold visit.
+app.use(compression());
+
+// cors() with no options answers every origin with Access-Control-Allow-Origin:*,
+// which let any site script the API (including the unauthenticated AI parse
+// endpoint) from a visitor's browser. Same-origin is all the frontend needs;
+// extra origins can be listed in CORS_ORIGINS as a comma-separated list.
+const allowedOrigins = (process.env.CORS_ORIGINS || '')
+  .split(',').map(o => o.trim()).filter(Boolean);
+app.use(cors({
+  origin(origin, cb) {
+    if (!origin) return cb(null, true);            // same-origin / curl / server-to-server
+    if (allowedOrigins.includes(origin)) return cb(null, true);
+    return cb(null, false);                        // no CORS headers — browser blocks it
+  },
+  credentials: false,
+}));
+
+app.use(express.json({ limit: '256kb' }));
+app.use(express.urlencoded({ extended: true, limit: '256kb' }));
 
 // Rate limiter on API routes
 app.use('/api', rateLimiter);
@@ -64,8 +116,17 @@ app.use('/api', vizRoutes);
 // Admin routes
 app.use('/admin', adminRoutes);
 
-// Emergency routes (for critical fixes when SSH unavailable)
-app.use('/emergency', emergencyRoutes);
+// Emergency recovery routes are deliberately NOT mounted. They were written for
+// a period when SSH to the cPanel host was unavailable, and every one of them is
+// unauthenticated by design: /write-env can repoint the app at another database,
+// /test-login is an unrate-limited password oracle, /fix-all writes to the DB and
+// restarts the app. SSH works now, so the recovery path they existed for is gone
+// while their exposure was not. Set EMERGENCY_ROUTES=enabled to mount them for a
+// specific incident, and unset it again afterwards.
+if (process.env.EMERGENCY_ROUTES === 'enabled') {
+  console.warn('[Server] EMERGENCY ROUTES MOUNTED — unauthenticated. Disable when done.');
+  app.use('/emergency', require('./routes/emergency'));
+}
 
 // Static frontend (served by Express in dev, Apache in production)
 // IMPORTANT: HTML must never be heuristically cached, otherwise a stale
@@ -79,6 +140,13 @@ app.use(express.static(path.join(__dirname, '..', 'frontend'), {
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
       res.setHeader('Pragma', 'no-cache');
       res.setHeader('Expires', '0');
+    } else if (filePath.includes('vendor')) {
+      // Vendored libraries are pinned to a version and only change when the file
+      // is replaced wholesale, so they can be cached hard. Everything else gets
+      // revalidated so an engine fix reaches browsers on the next load.
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    } else {
+      res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
     }
   },
 }));
@@ -93,13 +161,16 @@ app.get('/health', (req, res) => {
   });
 });
 
-// SPA fallback — serve index.html for frontend routes
-app.get('*', (req, res) => {
-  // Don't serve HTML for API routes
+// This app is a set of real .html pages, not a client-routed SPA, so anything
+// that reached here matched no static file. Serving index.html with a 200 told
+// crawlers every typo URL was a valid page and hid broken links from us.
+app.use((req, res) => {
   if (req.path.startsWith('/api')) {
     return res.status(404).json({ error: 'Not found' });
   }
-  res.sendFile(path.join(__dirname, '..', 'frontend', 'index.html'));
+  res.status(404).sendFile(path.join(__dirname, '..', 'frontend', '404.html'), (err) => {
+    if (err) res.status(404).type('txt').send('404 — Not found');
+  });
 });
 
 // ============================================================

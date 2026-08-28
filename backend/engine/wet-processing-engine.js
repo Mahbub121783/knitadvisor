@@ -46,6 +46,22 @@ const AREA_SHRINK = {
   heavy_jersey:  { L: 2.0, W: 5.0 },
 };
 
+// Mass permanently removed from the fabric during raising/brushing (loop-
+// yarn fibre torn from the floats and vacuumed away as lint). This is a
+// DIFFERENT mechanism from area-shrink/dye add-on above: those add mass or
+// shrink area (both raise finished GSM relative to grey); brushing REMOVES
+// mass, so — for the same finished target — the grey knit must be produced
+// HEAVIER to leave enough fabric after the loss. Terry stays unbrushed (loops
+// uncut) so it carries none.
+//   Source: advanced_fleece_fabrication_visualization.md §5 (4–8% of fabric
+//   mass typical). NOTE this is distinct from production-data.js's
+//   PROCESS_LOSS_MODIFIER.brush (1.5%) — that's a booking/kg-yield loss
+//   figure sourced from real mill bookings (cutting/handling waste on top of
+//   the base loss %), not a per-m² GSM correction. The two intentionally
+//   coexist; they answer different questions ("how many kg to book" vs
+//   "what grey GSM to knit").
+const BRUSH_LOSS_PCT = { fleece: 0.06 };
+
 function familyOf(category) {
   if (!category) return 'single_jersey';
   // Regex substring check (not exact ===) for waffle, matching the pattern
@@ -148,13 +164,21 @@ function greigeGsmTarget(finishGsm, category, shade, method) {
   const Wf = ls.W / 100 + extraArea;             // aggressive routes widen the relax
   const areaFactor = 1 / ((1 - Lf) * (1 - Wf));  // >1 : GSM rises from area shrink
   const dyeFactor = 1 + ((DYE_ADDON[me] || DYE_ADDON.reactive)[sh] || 0.02);
-  const totalRatio = areaFactor * dyeFactor;
+  const brushLossPct = BRUSH_LOSS_PCT[fam] || 0;
+  const brushFactor = 1 - brushLossPct;          // <1 : GSM falls from brushed-off fibre mass
+  const totalRatio = areaFactor * dyeFactor * brushFactor;
 
   // Pigment / AOP-pigment: pad-dry-cure, little wet relax → grey ≈ finish.
   // Disperse heat-set already stabilised → milder area gain.
   const greyGsm = parseFloat((finishGsm / totalRatio).toFixed(0));
   const lowGsm  = parseFloat((finishGsm / (totalRatio * 1.015)).toFixed(0)); // tolerance band
   const highGsm = parseFloat((finishGsm / (totalRatio * 0.985)).toFixed(0));
+
+  const brushClause = brushLossPct
+    ? ` × (1 − BrushLoss ${(brushLossPct * 100).toFixed(0)}%)` : '';
+  const brushExplain = brushLossPct
+    ? ` Raising/brushing then tears out ~${(brushLossPct * 100).toFixed(0)}% of that mass as lint, so the grey must be knit that much heavier up front to still land on ${finishGsm} g/m² after brushing.`
+    : '';
 
   return {
     finish_gsm: finishGsm,
@@ -164,9 +188,10 @@ function greigeGsmTarget(finishGsm, category, shade, method) {
     dyeing_method: me,
     area_shrinkage: { length_pct: ls.L, width_pct: parseFloat((Wf * 100).toFixed(1)), area_factor: parseFloat(areaFactor.toFixed(4)) },
     dye_add_on_pct: parseFloat(((dyeFactor - 1) * 100).toFixed(1)),
+    brush_loss_pct: parseFloat((brushLossPct * 100).toFixed(1)),
     finish_to_grey_ratio: parseFloat(totalRatio.toFixed(4)),
-    formula: `Grey GSM = Finish ${finishGsm} ÷ [AreaFactor ${areaFactor.toFixed(3)} × DyeFactor ${dyeFactor.toFixed(3)}] = ${finishGsm} ÷ ${totalRatio.toFixed(3)} = ${greyGsm} g/m²`,
-    explanation: `Knit GREY at ~${greyGsm} g/m². In ${me.replace('_', ' ')} processing the ${fam.replace('_', ' ')} compacts (area ×${areaFactor.toFixed(3)} → +${((areaFactor - 1) * 100).toFixed(1)}% GSM) and the ${sh} shade deposits dye mass (+${((dyeFactor - 1) * 100).toFixed(1)}% GSM), so the finished fabric rises to the ${finishGsm} g/m² target.`,
+    formula: `Grey GSM = Finish ${finishGsm} ÷ [AreaFactor ${areaFactor.toFixed(3)} × DyeFactor ${dyeFactor.toFixed(3)}${brushClause}] = ${finishGsm} ÷ ${totalRatio.toFixed(3)} = ${greyGsm} g/m²`,
+    explanation: `Knit GREY at ~${greyGsm} g/m². In ${me.replace('_', ' ')} processing the ${fam.replace('_', ' ')} compacts (area ×${areaFactor.toFixed(3)} → +${((areaFactor - 1) * 100).toFixed(1)}% GSM) and the ${sh} shade deposits dye mass (+${((dyeFactor - 1) * 100).toFixed(1)}% GSM), so the finished fabric rises to the ${finishGsm} g/m² target.${brushExplain}`,
   };
 }
 
