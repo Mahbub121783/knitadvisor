@@ -23,7 +23,7 @@ const { GLOSSARY, BASIC_ELEMENTS, FORMATION_CYCLES, QUIZ_QUESTIONS } = require('
 const colorEngine = require('../engine/color-engine');
 
 const memCache = require('../cache/memory-cache');
-const dbCache = require('../cache/db-cache');
+const { resultCache } = require('../db/repositories/cache-repo');
 
 // Cached results are keyed on the inputs alone, and the DB cache holds them for
 // 30 days. That means a calculation-engine fix does not reach anyone whose exact
@@ -32,9 +32,18 @@ const dbCache = require('../cache/db-cache');
 // this whenever engine output changes for the same inputs; it partitions the key
 // space so old entries are simply never looked up again (and expire on their own).
 const ENGINE_VERSION = 'v2';
-const { logQuery } = require('../middleware/logger');
+const logsRepo = require('../db/repositories/logs-repo');
 const { createRateLimiter } = require('../middleware/rate-limiter');
-const { query: dbQuery } = require('../config/database');
+const { query: dbQuery } = require('../db/client');
+
+// Unsalted MD5 of an IP is not pseudonymisation: IPv4 is only 4 billion values,
+// so the digest can be reversed exhaustively. The salt is what makes it one-way
+// in practice; without one configured, a per-process random value at least
+// keeps the logs from being a lookup table.
+const IP_HASH_SALT = process.env.IP_HASH_SALT || crypto.randomBytes(16).toString('hex');
+function hashIp(ip) {
+  return ip ? crypto.createHash('sha256').update(IP_HASH_SALT + ip).digest('hex').slice(0, 32) : null;
+}
 
 // ============================================================
 // POST /api/calculate
@@ -75,7 +84,7 @@ router.post('/calculate', async (req, res) => {
     memResult.response_ms = Date.now() - startTime;
 
     // Log async (don't wait)
-    logQuery(dbQuery, {
+    logsRepo.record({
       input_text: JSON.stringify(body),
       input_type: 'form',
       parsed_fabric: fabric,
@@ -83,21 +92,21 @@ router.post('/calculate', async (req, res) => {
       response_ms: memResult.response_ms,
       from_cache: true,
       cache_key: cacheKey,
-      ip: req.ip,
-      user_agent: req.get('user-agent'),
+      ip_hash: hashIp(req.ip),
+      user_agent: (req.get('user-agent') || '').slice(0, 200),
     }).catch(() => {});
 
     return res.json(memResult);
   }
 
   // L2 — DB cache
-  const dbResult = await dbCache.get(cacheKey);
+  const dbResult = await resultCache.get(cacheKey);
   if (dbResult) {
     dbResult.from_cache = 'database';
     dbResult.response_ms = Date.now() - startTime;
     memCache.set(cacheKey, dbResult); // promote to L1
 
-    logQuery(dbQuery, {
+    logsRepo.record({
       input_text: JSON.stringify(body),
       input_type: 'form',
       parsed_fabric: fabric,
@@ -105,8 +114,8 @@ router.post('/calculate', async (req, res) => {
       response_ms: dbResult.response_ms,
       from_cache: true,
       cache_key: cacheKey,
-      ip: req.ip,
-      user_agent: req.get('user-agent'),
+      ip_hash: hashIp(req.ip),
+      user_agent: (req.get('user-agent') || '').slice(0, 200),
     }).catch(() => {});
 
     return res.json(dbResult);
@@ -154,10 +163,10 @@ router.post('/calculate', async (req, res) => {
 
   // Cache the result (L1 + L2)
   memCache.set(cacheKey, result);
-  dbCache.set(cacheKey, result).catch(() => {});
+  resultCache.set(cacheKey, result).catch(() => {});
 
   // Log async
-  logQuery(dbQuery, {
+  logsRepo.record({
     input_text: JSON.stringify(body),
     input_type: 'form',
     parsed_fabric: fabric,
@@ -168,8 +177,8 @@ router.post('/calculate', async (req, res) => {
     response_ms: result.response_ms,
     from_cache: false,
     cache_key: cacheKey,
-    ip: req.ip,
-    user_agent: req.get('user-agent'),
+    ip_hash: hashIp(req.ip),
+    user_agent: (req.get('user-agent') || '').slice(0, 200),
   }).catch(() => {});
 
   res.json(result);
@@ -420,7 +429,7 @@ router.get('/pattern/:slug', (req, res) => {
 // ============================================================
 router.get('/stats', async (req, res) => {
   const memStats = memCache.stats();
-  const dbStats = await dbCache.stats();
+  const dbStats = await resultCache.stats();
   res.json({
     memory_cache: memStats,
     db_cache: dbStats,

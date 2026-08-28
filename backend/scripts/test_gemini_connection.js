@@ -1,7 +1,7 @@
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 const providerManager = require('../ai/provider-manager-v2');
-const { query } = require('../config/database');
+const { query } = require('../db/client');
 
 async function test() {
   try {

@@ -13,11 +13,24 @@ const router = express.Router();
 const { adminAuth, generateToken, createSession, deleteSession } = require('../middleware/admin-auth');
 const providerManager = require('../ai/provider-manager-v2');
 const memCache = require('../cache/memory-cache');
-const dbCache = require('../cache/db-cache');
-const { query: dbQuery } = require('../config/database');
+const { resultCache } = require('../db/repositories/cache-repo');
+const logsRepo = require('../db/repositories/logs-repo');
+const adminRepo = require('../db/repositories/admin-repo');
+const { query: dbQuery } = require('../db/client');
 const { verifyPassword, hashPassword, isLegacyHash } = require('../middleware/password');
 const { createRateLimiter } = require('../middleware/rate-limiter');
 const crypto = require('crypto');
+
+const CSV_EXPORT_LIMIT = parseInt(process.env.CSV_EXPORT_LIMIT, 10) || 10000;
+
+// A leading =, +, - or @ makes Excel treat the cell as a formula, so text a
+// visitor typed into the calculator can execute when staff open the export.
+const CSV_FORMULA_PREFIXES = ['=', '+', '-', '@', '\t', '\r'];
+function csvCell(value) {
+  const v = value == null ? '' : String(value);
+  const safe = CSV_FORMULA_PREFIXES.includes(v.charAt(0)) ? "'" + v : v;
+  return '"' + safe.replace(/"/g, '""') + '"';
+}
 
 // The global limiter is mounted on /api only, so before this the login endpoint
 // took unlimited guesses. Passwords were also unsalted SHA-256, which a GPU
@@ -50,7 +63,7 @@ router.post('/login', loginLimiter, async (req, res) => {
     // username AND hash in SQL, which only works when every stored hash uses one
     // scheme — salted hashes can't be recomputed without first reading the salt.
     const rows = await dbQuery(
-      'SELECT id, password_hash FROM admin_users WHERE username = ? LIMIT 1',
+      'SELECT id, password_hash FROM admin_users WHERE username = $1 LIMIT 1',
       [username]
     );
 
@@ -61,7 +74,7 @@ router.post('/login', loginLimiter, async (req, res) => {
     // Transparently migrate the row off unsalted SHA-256 now that we hold the
     // plaintext and know it is correct.
     if (isLegacyHash(rows[0].password_hash)) {
-      dbQuery('UPDATE admin_users SET password_hash = ? WHERE id = ?', [hashPassword(password), rows[0].id])
+      dbQuery('UPDATE admin_users SET password_hash = $1 WHERE id = $2', [hashPassword(password), rows[0].id])
         .then(() => console.log('[Login] Upgraded legacy password hash for user id', rows[0].id))
         .catch(err => console.error('[Login] Hash upgrade failed:', err.message));
     }
@@ -108,23 +121,10 @@ router.get('/ping', adminAuth, async (req, res) => {
 // Query Logs
 router.get('/api/logs/stats', adminAuth, async (req, res) => {
   try {
-    const rows = await dbQuery(
-      `SELECT
-        COUNT(*) AS today_total,
-        ROUND(SUM(from_cache) / COUNT(*) * 100, 1) AS cache_hit_pct,
-        ROUND(AVG(response_ms), 0) AS avg_response_ms,
-        SUM(CASE WHEN input_type='natural_language' THEN 1 ELSE 0 END) AS nl_query_count
-      FROM query_logs
-      WHERE DATE(created_at) = CURDATE()`
-    );
-
-    const data = rows[0];
-    res.json({
-      today_total: data.today_total || 0,
-      cache_hit_pct: data.cache_hit_pct || 0,
-      avg_response_ms: data.avg_response_ms || 0,
-      nl_query_count: data.nl_query_count || 0
-    });
+    // Reads the cron-refreshed rollup instead of aggregating query_logs live.
+    // The old query also bucketed by the server's date, which is Mountain time
+    // — "today" flipped around midday in Bangladesh.
+    res.json(await logsRepo.todayStats());
   } catch (err) {
     console.error('[Log Stats Error]', err);
     res.status(500).json({ error: err.message });
@@ -133,52 +133,15 @@ router.get('/api/logs/stats', adminAuth, async (req, res) => {
 
 router.get('/api/logs', adminAuth, async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = 25;
-    const offset = (page - 1) * limit;
-    const fabric = req.query.fabric;
-    const dateFrom = req.query.date_from;
-    const dateTo = req.query.date_to;
-    const fromCache = req.query.from_cache;
-    const nlOnly = req.query.nl_only === 'true';
-
-    let sql = 'SELECT * FROM query_logs WHERE 1=1';
-    const params = [];
-
-    if (fabric) {
-      sql += ' AND parsed_fabric = ?';
-      params.push(fabric);
-    }
-    if (dateFrom) {
-      sql += ' AND DATE(created_at) >= ?';
-      params.push(dateFrom);
-    }
-    if (dateTo) {
-      sql += ' AND DATE(created_at) <= ?';
-      params.push(dateTo);
-    }
-    if (fromCache !== undefined && fromCache !== 'all') {
-      sql += ' AND from_cache = ?';
-      params.push(fromCache === '1' ? 1 : 0);
-    }
-    if (nlOnly) {
-      sql += " AND input_type = 'natural_language'";
-    }
-
-    const countRows = await dbQuery(sql.replace('SELECT *', 'SELECT COUNT(*) as cnt'), params);
-    const total = countRows[0]?.cnt || 0;
-
-    sql += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
-    params.push(limit, offset);
-
-    const rows = await dbQuery(sql, params);
-
-    res.json({
-      rows,
-      total,
-      page,
-      pages: Math.ceil(total / limit)
-    });
+    res.json(await logsRepo.list({
+      page:      parseInt(req.query.page, 10) || 1,
+      fabric:    req.query.fabric,
+      dateFrom:  req.query.date_from,
+      dateTo:    req.query.date_to,
+      fromCache: req.query.from_cache,
+      nlOnly:    req.query.nl_only === 'true',
+      search:    req.query.search,
+    }));
   } catch (err) {
     console.error('[Logs Error]', err);
     res.status(500).json({ error: err.message });
@@ -305,7 +268,7 @@ router.post('/api/providers/:id/apikey', adminAuth, async (req, res) => {
 router.post('/api/providers/:id/test', adminAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const rows = await dbQuery('SELECT * FROM ai_provider_stats WHERE id = ?', [id]);
+    const rows = await dbQuery('SELECT * FROM ai_provider_stats WHERE id = $1', [id]);
     if (!rows.length) return res.status(404).json({ error: 'Provider not found' });
 
     const provider = rows[0];
@@ -321,7 +284,7 @@ router.post('/api/providers/:id/test', adminAuth, async (req, res) => {
 
     // Mark healthy in DB on success
     await dbQuery(
-      'UPDATE ai_provider_stats SET is_healthy = 1, cooldown_until = NULL WHERE id = ?',
+      'UPDATE ai_provider_stats SET is_healthy = true, cooldown_until = NULL WHERE id = $1',
       [id]
     );
 
@@ -330,7 +293,7 @@ router.post('/api/providers/:id/test', adminAuth, async (req, res) => {
     console.error('[Provider Test Error]', err);
     // Mark unhealthy on failure
     const id = parseInt(req.params.id);
-    await dbQuery('UPDATE ai_provider_stats SET is_healthy = 0 WHERE id = ?', [id]).catch(() => {});
+    await dbQuery('UPDATE ai_provider_stats SET is_healthy = false WHERE id = $1', [id]).catch(() => {});
     res.status(500).json({ error: err.message });
   }
 });
@@ -340,12 +303,14 @@ router.patch('/api/providers/:id/model', adminAuth, async (req, res) => {
     const id = parseInt(req.params.id);
     const { model_name } = req.body;
     if (!model_name || !model_name.trim()) return res.status(400).json({ error: 'model_name required' });
-    await dbQuery('UPDATE ai_provider_stats SET model_name = ? WHERE id = ?', [model_name.trim(), id]);
+    await dbQuery('UPDATE ai_provider_stats SET model_name = $1 WHERE id = $2', [model_name.trim(), id]);
     
-    // In v2 context: we should also make sure this model exists in ai_provider_models for this provider
-    // and is active and healthy. Let's do an INSERT ... ON DUPLICATE KEY UPDATE.
+    // Make sure the model also exists in ai_provider_models for this provider,
+    // active and healthy.
     await dbQuery(
-      'INSERT INTO ai_provider_models (provider_id, model_name, is_active, is_healthy) VALUES (?, ?, 1, 1) ON DUPLICATE KEY UPDATE is_active = 1, is_healthy = 1',
+      `INSERT INTO ai_provider_models (provider_id, model_name, is_active, is_healthy)
+       VALUES ($1, $2, true, true)
+       ON CONFLICT (provider_id, model_name) DO UPDATE SET is_active = true, is_healthy = true`,
       [id, model_name.trim()]
     );
     
@@ -370,19 +335,13 @@ router.post('/api/providers/reset-stats', adminAuth, async (req, res) => {
 router.get('/api/cache/stats', adminAuth, async (req, res) => {
   try {
     const memStats = memCache.stats();
-    const dbStats = await dbCache.stats();
-
-    const cacheRows = await dbQuery(
-      'SELECT COUNT(*) as cnt, SUM(hit_count) as hits, MIN(created_at) as oldest, MAX(created_at) as newest FROM result_cache WHERE expires_at > NOW()'
-    );
-
-    const data = cacheRows[0];
+    const dbStats = await resultCache.stats();
     res.json({
-      db_entries: data.cnt || 0,
-      db_hits: data.hits || 0,
+      db_entries: Number(dbStats.entries) || 0,
+      db_hits: Number(dbStats.total_hits) || 0,
       mem_size: memStats.size,
-      oldest_entry: data.oldest,
-      newest_entry: data.newest
+      oldest_entry: dbStats.oldest,
+      newest_entry: dbStats.newest,
     });
   } catch (err) {
     console.error('[Cache Stats Error]', err);
@@ -392,26 +351,10 @@ router.get('/api/cache/stats', adminAuth, async (req, res) => {
 
 router.get('/api/cache/entries', adminAuth, async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 20;
-    const offset = (page - 1) * limit;
-
-    const countRows = await dbQuery(
-      'SELECT COUNT(*) as cnt FROM result_cache WHERE expires_at > NOW()'
-    );
-    const total = countRows[0].cnt || 0;
-
-    const rows = await dbQuery(
-      'SELECT cache_key, hit_count, created_at, expires_at FROM result_cache WHERE expires_at > NOW() ORDER BY created_at DESC LIMIT ? OFFSET ?',
-      [limit, offset]
-    );
-
-    res.json({
-      rows,
-      total,
-      page,
-      pages: Math.ceil(total / limit)
-    });
+    res.json(await resultCache.list({
+      page: parseInt(req.query.page, 10) || 1,
+      limit: parseInt(req.query.limit, 10) || 20,
+    }));
   } catch (err) {
     console.error('[Cache Entries Error]', err);
     res.status(500).json({ error: err.message });
@@ -420,17 +363,9 @@ router.get('/api/cache/entries', adminAuth, async (req, res) => {
 
 router.get('/api/cache/entry/:key', adminAuth, async (req, res) => {
   try {
-    const key = req.params.key;
-    const rows = await dbQuery(
-      'SELECT cache_key, result_json, hit_count, created_at, expires_at FROM result_cache WHERE cache_key = ?',
-      [key]
-    );
-
-    if (!rows.length) {
-      return res.status(404).json({ error: 'Cache entry not found' });
-    }
-
-    res.json(rows[0]);
+    const entry = await resultCache.entry(req.params.key);
+    if (!entry) return res.status(404).json({ error: 'Cache entry not found' });
+    res.json(entry);
   } catch (err) {
     console.error('[Cache Entry Error]', err);
     res.status(500).json({ error: err.message });
@@ -440,7 +375,7 @@ router.get('/api/cache/entry/:key', adminAuth, async (req, res) => {
 router.delete('/api/cache/flush', adminAuth, async (req, res) => {
   try {
     memCache.clear();
-    const deleted = await dbCache.flush();
+    const deleted = await resultCache.flush();
 
     res.json({ ok: true, deleted });
   } catch (err) {
@@ -454,7 +389,7 @@ router.delete('/api/cache/entry/:key', adminAuth, async (req, res) => {
     const key = req.params.key;
 
     memCache.del(key);
-    await dbQuery('DELETE FROM result_cache WHERE cache_key = ?', [key]);
+    await resultCache.remove(key);
 
     res.json({ ok: true });
   } catch (err) {
@@ -469,49 +404,46 @@ router.delete('/api/cache/entry/:key', adminAuth, async (req, res) => {
 
 router.get('/api/inquiries', adminAuth, async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 50;
-    const offset = (page - 1) * limit;
     const format = req.query.format; // 'csv' for download
-
-    let sql = 'SELECT * FROM query_logs';
-    const params = [];
-    const conditions = [];
-
-    if (req.query.fabric) { conditions.push('parsed_fabric = ?'); params.push(req.query.fabric); }
-    if (req.query.date_from) { conditions.push('DATE(created_at) >= ?'); params.push(req.query.date_from); }
-    if (req.query.date_to) { conditions.push('DATE(created_at) <= ?'); params.push(req.query.date_to); }
-    if (conditions.length) sql += ' WHERE ' + conditions.join(' AND ');
+    const filters = {
+      fabric:   req.query.fabric,
+      dateFrom: req.query.date_from,
+      dateTo:   req.query.date_to,
+      search:   req.query.search,
+    };
 
     if (format === 'csv') {
-      // No pagination for CSV — get all
-      const rows = await dbQuery(sql + ' ORDER BY created_at DESC', params);
-      const header = 'ID,Time,Input,Fabric,GSM,Gauge,Dia,Composition,AI Provider,Response Ms,From Cache,IP\n';
-      const csvRows = rows.map(r => [
+      // Bounded rather than "no pagination — get all": an unbounded export
+      // grows with the log table and eventually builds a response big enough
+      // to take the process down.
+      const { rows } = await logsRepo.list({ ...filters, page: 1, limit: CSV_EXPORT_LIMIT });
+      // The old CSV read r.parsed_composition and r.ip_address, neither of
+      // which exists on query_logs — both columns came out empty in every
+      // export ever produced. Dropped rather than left as silent blanks.
+      const header = ['ID', 'Time', 'Input', 'Fabric', 'GSM', 'Gauge', 'Dia',
+                      'AI Provider', 'Response Ms', 'From Cache'].join(',') + '\n';
+      const csv = rows.map(r => [
         r.id,
-        r.created_at,
-        `"${(r.input_text||'').replace(/"/g,'""')}"`,
-        r.parsed_fabric||'',
-        r.parsed_gsm||'',
-        r.parsed_gauge||'',
-        r.parsed_dia||'',
-        `"${(r.parsed_composition||'').replace(/"/g,'""')}"`,
-        r.ai_provider||'',
-        r.response_ms||'',
-        r.from_cache?'1':'0',
-        r.ip_address||''
+        r.created_at.toISOString(),
+        csvCell(r.input_text),
+        csvCell(r.parsed_fabric),
+        r.parsed_gsm ?? '',
+        r.parsed_gauge ?? '',
+        r.parsed_dia ?? '',
+        csvCell(r.ai_provider),
+        r.response_ms ?? '',
+        r.from_cache ? '1' : '0',
       ].join(','));
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', `attachment; filename="inquiries_${Date.now()}.csv"`);
-      return res.send(header + csvRows.join('\n'));
+      return res.send(header + csv.join('\n'));
     }
 
-    const countRows = await dbQuery(sql.replace('SELECT *', 'SELECT COUNT(*) as cnt'), params);
-    const total = countRows[0]?.cnt || 0;
-    sql += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
-    params.push(limit, offset);
-    const rows = await dbQuery(sql, params);
-    res.json({ rows, total, page, pages: Math.ceil(total / limit) });
+    res.json(await logsRepo.list({
+      ...filters,
+      page: parseInt(req.query.page, 10) || 1,
+      limit: parseInt(req.query.limit, 10) || 50,
+    }));
   } catch (err) {
     console.error('[Inquiries Error]', err);
     res.status(500).json({ error: err.message });
@@ -562,10 +494,10 @@ router.post('/api/settings/credentials', adminAuth, async (req, res) => {
     }
 
     if (new_username) {
-      await dbQuery('UPDATE admin_users SET username = ? WHERE id = ?', [new_username, admin.id]);
+      await dbQuery('UPDATE admin_users SET username = $1 WHERE id = $2', [new_username, admin.id]);
     }
     if (new_password) {
-      await dbQuery('UPDATE admin_users SET password_hash = ? WHERE id = ?', [hashPassword(new_password), admin.id]);
+      await dbQuery('UPDATE admin_users SET password_hash = $1 WHERE id = $2', [hashPassword(new_password), admin.id]);
       // A password change should not leave older sessions alive — that is the
       // one moment someone is most likely reacting to a suspected compromise.
       await dbQuery('DELETE FROM admin_sessions').catch(() => {});

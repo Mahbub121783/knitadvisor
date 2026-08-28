@@ -14,7 +14,7 @@
  */
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
-const { query } = require('../config/database');
+const { query } = require('../db/client');
 const { encryptApiKey, decryptApiKey } = require('../ai/provider-manager-v2');
 
 const APPLY = process.argv.includes('--apply');
@@ -44,7 +44,7 @@ async function main() {
     }
 
     if (APPLY) {
-      await query('UPDATE ai_provider_keys SET api_key_encrypted = ? WHERE id = ?', [encryptApiKey(plaintext), row.id]);
+      await query('UPDATE ai_provider_keys SET api_key_encrypted = $1 WHERE id = $2', [encryptApiKey(plaintext), row.id]);
     }
     migrated++;
     console.log(`  id=${row.id} provider=${row.provider_id} — ${APPLY ? 're-encrypted' : 'would re-encrypt'} (${plaintext.length} chars)`);

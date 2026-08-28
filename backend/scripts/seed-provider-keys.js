@@ -5,7 +5,7 @@
  */
 require('dotenv').config({ path: __dirname + '/../.env' });
 const crypto = require('crypto');
-const { query: dbQuery } = require('../config/database');
+const { query: dbQuery } = require('../db/client');
 
 const ENCRYPTION_KEY = crypto.scryptSync(process.env.DB_PASS || 'knitadvisor-secret', 'salt', 32);
 
@@ -47,7 +47,9 @@ async function run() {
       // Add API key
       const encrypted = encryptApiKey(apiKey);
       await dbQuery(
-        'INSERT INTO ai_provider_keys (provider_id, key_index, api_key_encrypted, is_active, is_healthy) VALUES (?, 1, ?, 1, 1)',
+        `INSERT INTO ai_provider_keys (provider_id, key_index, api_key_encrypted, is_active, is_healthy)
+         VALUES ($1, 1, $2, true, true)
+         ON CONFLICT (provider_id, key_index) DO UPDATE SET api_key_encrypted = EXCLUDED.api_key_encrypted`,
         [provider.id, encrypted]
       );
       console.log(`✓ Added API key for ${providerType}`);
@@ -57,7 +59,9 @@ async function run() {
     const models = DEFAULT_MODELS[providerType] || [];
     for (const modelName of models) {
       await dbQuery(
-        'INSERT INTO ai_provider_models (provider_id, model_name, is_active, is_healthy) VALUES (?, ?, 1, 1) ON DUPLICATE KEY UPDATE is_active = 1',
+        `INSERT INTO ai_provider_models (provider_id, model_name, is_active, is_healthy)
+         VALUES ($1, $2, true, true)
+         ON CONFLICT (provider_id, model_name) DO UPDATE SET is_active = true`,
         [provider.id, modelName]
       );
       console.log(`  → Model: ${modelName}`);

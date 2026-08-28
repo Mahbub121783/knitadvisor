@@ -25,8 +25,10 @@ const path = require('path');
 const apiRoutes = require('./routes/api');
 const vizRoutes = require('./routes/viz');
 const adminRoutes = require('./routes/admin');
+const cronRoutes = require('./routes/internal-cron');
 const rateLimiter = require('./middleware/rate-limiter');
-const { testConnection, initAdminDatabase, initVizDatabase } = require('./config/database');
+const { testConnection, poolStats, query } = require('./db/client');
+const seed = require('./db/seed');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -116,6 +118,10 @@ app.use('/api', vizRoutes);
 // Admin routes
 app.use('/admin', adminRoutes);
 
+// Scheduled maintenance, driven by cPanel cron. Secret-gated, not rate limited
+// (cron is the only caller and a 429 would silently skip a backup).
+app.use('/internal-cron', cronRoutes);
+
 // Emergency recovery routes are deliberately NOT mounted. They were written for
 // a period when SSH to the cPanel host was unavailable, and every one of them is
 // unauthenticated by design: /write-env can repoint the app at another database,
@@ -151,13 +157,35 @@ app.use(express.static(path.join(__dirname, '..', 'frontend'), {
   },
 }));
 
+// Deep health check: verifies the database round-trips and reports pool
+// pressure. The plain /health below only proves the process is alive, which is
+// all the existing 5-minute cron ping needs; this one is for diagnosing.
+app.get('/health/deep', async (req, res) => {
+  const started = Date.now();
+  let db;
+  try {
+    const [row] = await query('SELECT now() AS ts');
+    db = { ok: true, latency_ms: Date.now() - started, server_time: row.ts };
+  } catch (err) {
+    db = { ok: false, error: err.message };
+  }
+  res.status(db.ok ? 200 : 503).json({
+    status: db.ok ? 'ok' : 'degraded',
+    uptime: Math.floor(process.uptime()),
+    version: '1.1.0',
+    database: db,
+    pool: poolStats(),
+    memory_mb: Math.round(process.memoryUsage().rss / 1048576),
+  });
+});
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
     uptime: Math.floor(process.uptime()),
     timestamp: new Date().toISOString(),
-    version: '1.0.0',
+    version: '1.1.0',
   });
 });
 
@@ -189,18 +217,26 @@ app.use((err, req, res, next) => {
 // ============================================================
 async function start() {
   console.log('===========================================');
-  console.log('  KnitAdvisor Server v1.0');
+  console.log('  KnitAdvisor Server v1.1 — PostgreSQL');
   console.log('===========================================');
 
-  // Test DB connection
   const dbOk = await testConnection();
   if (!dbOk) {
-    console.warn('[WARN] Database not available. Running without DB cache + logging.');
-    console.warn('[WARN] Calculation engine will still work (in-memory only).');
+    // The engine is pure computation and needs no database, so the app still
+    // serves calculations. What is lost is the L2 cache, query logging and the
+    // admin panel — worth saying explicitly rather than failing obscurely later.
+    console.warn('[WARN] Database not available. Running without L2 cache, logging and admin.');
+    console.warn('[WARN] Calculation engine still works (in-memory only).');
   } else {
-    // Initialize admin database table and default credentials
-    await initAdminDatabase();
-    await initVizDatabase();
+    try {
+      // Refuses to start against an unmigrated schema instead of failing one
+      // request at a time with "relation does not exist".
+      const seeded = await seed.run();
+      console.log('[Seed]', JSON.stringify(seeded));
+    } catch (err) {
+      console.error('[FATAL] ' + err.message);
+      process.exit(1);
+    }
   }
 
   app.listen(PORT, () => {
