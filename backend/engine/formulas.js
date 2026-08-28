@@ -84,8 +84,13 @@ const UnitConverter = {
   // Ne (English count, cotton) ↔ Tex ↔ Denier
   neToTex: ne => 590.5 / ne,
   texToNe: tex => 590.5 / tex,
-  neToDenier: ne => 5905 / ne,  // Denier = Tex × 9 = (590.5/Ne) × 9 = 5314.5/Ne, use 5905 for Dtex
-  denierToNe: d => 5315 / d,
+  // Denier = Tex × 9 = (590.5/Ne) × 9 = 5314.5/Ne. This used to return 5905/Ne,
+  // which is dtex, not denier — so it disagreed with denierToNe below by ~11%
+  // and the pair did not round-trip (30 Ne → 196.8 → 27.0 Ne).
+  neToDenier: ne => 5314.5 / ne,
+  denierToNe: d => 5314.5 / d,
+  neToDtex: ne => 5905 / ne,
+  dtexToNe: dtex => 5905 / dtex,
   texToDenier: tex => tex * 9,
   denierToTex: d => d / 9,
 

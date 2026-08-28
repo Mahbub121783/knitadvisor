@@ -6,8 +6,13 @@
 
 import * as THREE from 'three';
 
-// Returns the key light so the renderer can configure its shadow frustum once
-// the fabric box is measured.
+// Returns the key/fill/rim lights so the renderer can (a) configure the key's
+// shadow frustum once the fabric box is measured, and (b) re-side the whole
+// 3-point rig when the swatch is flipped to its back — see
+// knit-renderer.js `_setLightSide`. Without that re-siding, "front" is a
+// proper studio 3-point setup but "back" only gets the rim's leftover 0.6
+// intensity aimed the wrong way, which is why the flipped view used to read
+// as near-black.
 export function addStudioLighting(scene, withShadow) {
   scene.add(new THREE.HemisphereLight(0xffffff, 0x4a4f5a, 1.5));
 
@@ -29,7 +34,7 @@ export function addStudioLighting(scene, withShadow) {
   scene.add(rim);
 
   scene.add(new THREE.AmbientLight(0xffffff, 0.35));
-  return { key };
+  return { key, fill, rim };
 }
 
 // Size the key light's orthographic shadow camera to cover the patch box.

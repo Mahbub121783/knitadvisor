@@ -7,7 +7,7 @@
 // MAIN RENDER FUNCTION
 // Called with pattern data from GET /api/pattern/:slug
 // ============================================================
-function renderPatternGrid(container, patternData) {
+function renderPatternGrid(container, patternData, yarnInfo) {
   if (!container) return;
 
   // Warp knit — intercept and use specialized renderer
@@ -84,7 +84,7 @@ function renderPatternGrid(container, patternData) {
 
   // — SVG Visualization (Schematic) —
   html += `<div class="result-section-label mt-12 mb-4" style="font-size:12px; border-bottom:1px solid var(--line2); padding-bottom:8px;">Schematic Diagrams</div>`;
-  html += renderSvgSchematic(patternData);
+  html += renderSvgSchematic(patternData, yarnInfo);
 
   // — Cam arrangement —
   if (cam && cam.length > 0) {
@@ -129,6 +129,72 @@ function renderPatternGrid(container, patternData) {
 // SVG RENDERER: TEXTBOOK STYLE
 // ============================================================
 
+// ============================================================
+// MULTI-YARN NOTATION WEIGHT — thick/thin lines by yarn diameter
+// ============================================================
+// Multi-thread structures (3-thread fleece, french terry…) interleave
+// courses fed by physically DIFFERENT yarns — a fine tie/binder, a medium
+// face/ground, a coarse loop/pile — yet the notation grid used to stroke
+// every row identically. Real technical-notation practice varies line
+// weight by yarn thickness, so we do the same here, computed from the exact
+// canonical diameter formula used across the app (d(mm) = 0.907/√Ne — see
+// knit3d/fabric-mesh.js `yarnDiameterMm` and advanced_fleece_fabrication_
+// visualization.md §1.1) whenever real counts are available, falling back
+// to representative ratios derived from that same formula otherwise.
+function yarnDiameterMm(ne) { return 0.907 / Math.sqrt(ne || 30); }
+
+function roleFamily(role) {
+  const r = (role || '').toLowerCase();
+  if (/tie|binder/.test(r)) return 'tie';
+  if (/fleece|loop|pile/.test(r)) return 'loop';
+  return 'face'; // ground, plated, face, or unlabeled
+}
+
+/**
+ * @param {string} role     cam-arrangement yarn label for this row (may be undefined)
+ * @param {object} [yarnInfo] { count_ne, yarn2_ne, binder_denier } — real counts when known
+ * @returns {number} stroke-weight scale relative to the face/ground yarn (1.0)
+ */
+function resolveRowDiameterScale(role, yarnInfo) {
+  const fam = roleFamily(role);
+  if (fam === 'face') return 1.0;
+
+  const faceNe = (yarnInfo && yarnInfo.count_ne) || 30;
+  const dFace = yarnDiameterMm(faceNe);
+
+  if (fam === 'loop') {
+    // real loop-yarn count when known; otherwise the doc's representative
+    // "loop runs coarser than face" ratio (~1.35-1.4x diameter)
+    const loopNe = (yarnInfo && yarnInfo.yarn2_ne) || faceNe * 0.55;
+    const scale = yarnDiameterMm(loopNe) / dFace;
+    return Math.max(0.8, Math.min(scale, 2.0));
+  }
+  // fam === 'tie'
+  const tieNe = (yarnInfo && yarnInfo.binder_denier) ? (5315 / yarnInfo.binder_denier) : faceNe * 1.9;
+  const scale = yarnDiameterMm(tieNe) / dFace;
+  return Math.max(0.4, Math.min(scale, 1.0));
+}
+
+/** Compact "line weight = yarn diameter" legend for multi-yarn notations. */
+function buildYarnWeightLegend(roles, scales) {
+  const seen = new Map();
+  roles.forEach((role, i) => {
+    const fam = roleFamily(role);
+    if (!seen.has(fam)) seen.set(fam, { role: role || fam, scale: scales[i] });
+  });
+  const order = ['face', 'tie', 'loop'];
+  const label = { face: 'Face/Ground', tie: 'Tie/Binder', loop: 'Loop/Pile' };
+  const items = order.filter(f => seen.has(f)).map(f => {
+    const { scale } = seen.get(f);
+    const w = Math.max(1, 2.4 * scale).toFixed(1);
+    return `<span style="display:inline-flex;align-items:center;gap:4px;">
+      <span style="display:inline-block;width:18px;height:${w}px;background:#1A1A1A;border-radius:${w}px;"></span>
+      <span>${label[f]} ${scale.toFixed(2)}×</span>
+    </span>`;
+  });
+  return `<div style="display:flex;gap:12px;font-size:10px;color:var(--t3);margin-top:2px;flex-wrap:wrap;justify-content:center;">${items.join('')}</div>`;
+}
+
 /**
  * Fabric-notation (loop diagram) SVG for ONE bed's K/T/M grid.
  *   K = teardrop loop: ROUND bulb raised up with its dot CENTRED inside;
@@ -144,6 +210,10 @@ function buildFabricNotationSVG(grid, opts) {
   opts = opts || {};
   const dir = opts.dir === -1 ? -1 : 1;
   const stroke = opts.stroke || '#1A1A1A';
+  // per-row (per-feed) stroke-weight scale — see resolveRowDiameterScale().
+  // Multi-yarn structures pass one entry per base row; single-yarn fabrics
+  // simply omit it and every row draws at scale 1.
+  const rowScale = Array.isArray(opts.rowScale) ? opts.rowScale : null;
 
   const baseRows = grid.length;
   const baseCols = Array.isArray(grid[0]) ? grid[0].length : 1;
@@ -205,13 +275,14 @@ function buildFabricNotationSVG(grid, opts) {
         d += ` L ${xR} ${by}`;
       }
     }
-    fn += `<path d="${d}" fill="none" stroke="${stroke}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>`;
+    const scale = rowScale ? (rowScale[r % baseRows] || 1) : 1;
+    fn += `<path d="${d}" fill="none" stroke="${stroke}" stroke-width="${(2.4 * scale).toFixed(2)}" stroke-linecap="round" stroke-linejoin="round"/>`;
 
     // dots: centred inside the bulb for K, on the baseline for T/M
     for (let c = 0; c < fnCols; c++) {
       const cell = cellAt(r, c);
       const dy = cell === 'K' ? by - dir * dDot : by;
-      fn += `<circle cx="${fnX(c)}" cy="${dy}" r="2.3" fill="${stroke}"/>`;
+      fn += `<circle cx="${fnX(c)}" cy="${dy}" r="${(2.3 * scale).toFixed(2)}" fill="${stroke}"/>`;
     }
   }
 
@@ -257,8 +328,8 @@ function buildCamGridSVG(grid) {
   return { svg, cellSize };
 }
 
-function renderSvgSchematic(patternData) {
-  const { pattern_cylinder, pattern_dial, needle_arrangement } = patternData;
+function renderSvgSchematic(patternData, yarnInfo) {
+  const { pattern_cylinder, pattern_dial, needle_arrangement, cam_arrangement } = patternData;
   if (!pattern_cylinder) return '';
 
   const needle_butt_pattern = needle_arrangement ? needle_arrangement.butt_pattern : null;
@@ -271,6 +342,21 @@ function renderSvgSchematic(patternData) {
 
   const baseCols = Array.isArray(pattern_cylinder[0]) ? pattern_cylinder[0].length : 1;
 
+  // Multi-yarn structures (3-thread fleece, french terry…): each pattern_cylinder
+  // ROW is fed by a specific yarn (cam_arrangement[row].yarn — face/ground/tie/
+  // loop). Turn that into a per-row line-weight scale so the notation actually
+  // shows a fine tie yarn thinner and a coarse loop yarn thicker, instead of
+  // every row drawing identically regardless of which yarn forms it.
+  let rowScale = null, yarnRoles = null;
+  if (Array.isArray(cam_arrangement) && cam_arrangement.length === pattern_cylinder.length) {
+    const roles = cam_arrangement.map(c => c && c.yarn);
+    const families = new Set(roles.map(roleFamily));
+    if (families.size > 1) {
+      rowScale = roles.map(role => resolveRowDiameterScale(role, yarnInfo));
+      yarnRoles = roles;
+    }
+  }
+
   let html = `<div style="display:flex; flex-wrap:wrap; gap:32px; margin-top:16px;">`;
 
   // ----------------------------------------------------
@@ -278,8 +364,9 @@ function renderSvgSchematic(patternData) {
   // ----------------------------------------------------
   html += `
     <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
-      ${buildFabricNotationSVG(pattern_cylinder, { dir: 1, stroke: '#1A1A1A' })}
+      ${buildFabricNotationSVG(pattern_cylinder, { dir: 1, stroke: '#1A1A1A', rowScale })}
       <div style="font-size:11px; color:var(--t2); font-weight:500;">Fabric notation${hasDial ? ' — Cylinder (face)' : ''}</div>
+      ${yarnRoles ? buildYarnWeightLegend(yarnRoles, rowScale) : ''}
     </div>
   `;
   if (hasDial) {

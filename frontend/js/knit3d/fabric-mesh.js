@@ -40,18 +40,26 @@ function applySlub(geo, curve, tubular, radial, phase) {
 
 /**
  * Yarn tube radius in SCENE units, from real yarn geometry tied to stitch pitch.
- *   tex = 590.5 / Ne ;  yarn dia (mm) ≈ 0.0444·√tex  (cotton packing)
+ *   tex = 590.5 / Ne ;  yarn dia (mm) = 0.907/√Ne  ==  0.03733·√tex  (cotton
+ *     packing — canonical constant, matches advanced_fleece_fabrication_
+ *     visualization.md §1.1: d(mm) = 0.907/√Ne. Verified against its own
+ *     worked examples: Ne 30 → 0.166mm, Ne 70 → 0.108mm, Ne 16 → 0.227mm.)
  *   wale spacing (mm) = 10 / wales-per-cm
  *   radius = ½ · (dia / waleSpacing) · PITCH_X · coverGain   (overlap for cover)
  * So a fat yarn at fine gauge fully covers; a thin yarn at coarse gauge reads
  * open — i.e. loose vs dense fabrics actually look different. Falls back to a
- * count-only estimate when density is absent.
+ * count-only estimate (same canonical formula, render-space units) when
+ * density is absent.
  */
+export function yarnDiameterMm(ne) {
+  return 0.907 / Math.sqrt(ne || 30);
+}
+
 export function yarnRadius(countNe, tf, density) {
   const ne = countNe || 30;
   const t = typeof tf === 'number' ? tf : 14;
   const tex = (density && density.tex) || (590.5 / ne);
-  const diaMm = 0.0444 * Math.sqrt(tex);          // physical yarn diameter
+  const diaMm = 0.03733 * Math.sqrt(tex);          // physical yarn diameter — see doc §1.1 above
   const tfGain = 1 + (t - 14) * 0.012;             // tighter → fuller coverage
   let r;
   if (density && density.wpc > 0) {
