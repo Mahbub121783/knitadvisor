@@ -37,6 +37,20 @@ function mysqlConfig() {
 
 // MySQL TINYINT(1) comes back as 0/1; Postgres wants real booleans.
 const bool = v => v === 1 || v === true || v === '1';
+
+// parsed_gsm was SMALLINT UNSIGNED in MySQL, which silently clamps anything
+// larger to 65535 instead of rejecting it — a request with gsm 999999 was
+// recorded as 65535, a number that looks real and is not. The Postgres CHECK
+// rejects those rows outright, so rather than widening the constraint to admit
+// the bad data, out-of-range values are imported as NULL: "we did not record a
+// usable GSM" is the truth, and 65535 is not.
+let clampedGsm = 0;
+function gsm(v) {
+  if (v === null || v === undefined) return null;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 0 || n > 20000) { clampedGsm++; return null; }
+  return n;
+}
 // LONGTEXT columns held JSON strings; jsonb wants either an object or valid
 // JSON text. Anything unparseable is dropped rather than aborting the row.
 function json(v) {
@@ -164,7 +178,7 @@ const TABLES = [
                 result_json, response_ms, from_cache, cache_key, ai_provider, ai_tokens_used,
                 ip_hash, user_agent, created_at)
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,coalesce($15, now()))`,
-    map: r => [r.input_text, r.input_type || 'form', r.parsed_fabric, r.parsed_gsm, r.parsed_dia,
+    map: r => [r.input_text, r.input_type || 'form', r.parsed_fabric, gsm(r.parsed_gsm), r.parsed_dia,
                r.parsed_gauge, json(r.result_json), r.response_ms, bool(r.from_cache), r.cache_key,
                r.ai_provider, r.ai_tokens_used, r.ip_hash, (r.user_agent || '').slice(0, 200) || null,
                r.created_at],
