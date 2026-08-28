@@ -48,8 +48,14 @@ jobs:
           local-dir: ./
           # Target cPanel folder path (e.g. /home/tecnedub/repositories/knitadvisor/ or specific folder)
           server-dir: ./knitadvisor/
-          # Optional: Delete old remote files not present in local repo
-          dangerous-clean-slate: true
+          # dangerous-clean-slate was enabled here and it deleted backend/.env on
+          # the server even though the exclude list below names it: clean slate
+          # wipes the target directory before it uploads, so exclusions never get
+          # a chance to protect anything that exists only on the server. That
+          # took production's database credentials with it. Leave this off — the
+          # action's default sync already removes files that were deleted from
+          # the repo, using the .ftp-deploy-sync-state.json manifest.
+          dangerous-clean-slate: false
           # Files to exclude from upload and avoid deleting on the remote server
           exclude: |
             **/.git*
