@@ -24,7 +24,16 @@ const colorEngine = require('../engine/color-engine');
 
 const memCache = require('../cache/memory-cache');
 const dbCache = require('../cache/db-cache');
+
+// Cached results are keyed on the inputs alone, and the DB cache holds them for
+// 30 days. That means a calculation-engine fix does not reach anyone whose exact
+// inputs were already cached — the rib, colour and shrinkage corrections shipped
+// recently would each have been served the pre-fix numbers for a month. Bump
+// this whenever engine output changes for the same inputs; it partitions the key
+// space so old entries are simply never looked up again (and expire on their own).
+const ENGINE_VERSION = 'v2';
 const { logQuery } = require('../middleware/logger');
+const { createRateLimiter } = require('../middleware/rate-limiter');
 const { query: dbQuery } = require('../config/database');
 
 // ============================================================
@@ -57,7 +66,7 @@ router.post('/calculate', async (req, res) => {
     body.yarn_price_type, body.yarn_white, body.yarn_organic, body.yarn_ecovero, body.yarn_at_sight,
     body.denier, body.filaments, body.elastane_denier, body.elastane_pct, body.feeder_type,
   ].map(v => v == null ? '' : v).join('_');
-  const cacheKey = crypto.createHash('md5').update(cacheInput).digest('hex');
+  const cacheKey = crypto.createHash('md5').update(ENGINE_VERSION + '|' + cacheInput).digest('hex');
 
   // L1 — memory cache
   const memResult = memCache.get(cacheKey);
@@ -310,7 +319,17 @@ router.post('/convert', (req, res) => {
   }
 
   const v = parseFloat(value);
-  if (isNaN(v)) return res.status(400).json({ error: 'value must be a number' });
+  if (!Number.isFinite(v)) return res.status(400).json({ error: 'value must be a finite number' });
+
+  // Every conversion here is a ratio with the input in the denominator or a
+  // physical quantity, so zero and negatives have no meaning. Left unchecked,
+  // 0 produced Infinity, which JSON.stringify writes as null — the endpoint
+  // answered HTTP 200 with "result": null instead of reporting bad input, and
+  // a negative count came back as a negative Tex.
+  const isYarn = category === 'yarn' || from === 'gauge' || from === 'pitch';
+  if (v <= 0 && (isYarn || category === 'weight' || category === 'length' || from === 'gsm' || from === 'osy')) {
+    return res.status(400).json({ error: 'value must be greater than zero' });
+  }
 
   try {
     let result, formula;
@@ -349,6 +368,12 @@ router.post('/convert', (req, res) => {
     }
     else {
       return res.status(400).json({ error: `Unknown conversion: ${from} → ${to}` });
+    }
+
+    // Guard the output too: an unforeseen input combination reaching a divide
+    // must surface as an error, never as a silent null in a numeric field.
+    if (!Number.isFinite(result)) {
+      return res.status(400).json({ error: `Conversion ${from} → ${to} is undefined for value ${v}` });
     }
 
     res.json({
@@ -406,17 +431,34 @@ router.get('/stats', async (req, res) => {
 // ============================================================
 // POST /api/parse (AI Natural Language)
 // ============================================================
-router.post('/parse', async (req, res) => {
+// Unlike every other endpoint here, this one costs money on each call: it
+// forwards to paid AI providers. Public and unauthenticated it was a way for
+// anyone to burn the account's provider quota, so it gets its own much tighter
+// budget than general API browsing, plus a length cap — a natural-language
+// fabric query is a sentence, and the body limit alone allowed far more.
+const MAX_PARSE_CHARS = 500;
+const parseLimiter = createRateLimiter({
+  name: 'ai-parse',
+  max: 20,
+  windowMs: 60 * 1000,
+  message: 'Too many natural-language queries. Please wait a minute.',
+});
+
+router.post('/parse', parseLimiter, async (req, res) => {
   const { text } = req.body || {};
-  if (!text || text.trim() === '') {
+  if (!text || typeof text !== 'string' || text.trim() === '') {
     return res.status(400).json({ error: 'text is required' });
+  }
+  if (text.length > MAX_PARSE_CHARS) {
+    return res.status(400).json({ error: `text must be ${MAX_PARSE_CHARS} characters or fewer` });
   }
 
   try {
-    const parsed = await providerManager.parse(text);
+    const parsed = await providerManager.parse(text.trim());
     res.json(parsed);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('[Parse Error]', err.message);
+    res.status(502).json({ error: 'Natural-language parsing is unavailable right now.' });
   }
 });
 

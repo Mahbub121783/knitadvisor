@@ -7,23 +7,41 @@ const mysql = require('mysql2/promise');
 
 let pool = null;
 
+// Credentials come from the environment ONLY. There is deliberately no
+// hardcoded fallback: this file is committed to a public repository, and an
+// earlier version shipped the live host/user/password as defaults here. That
+// meant production silently ran on repo-readable credentials even though no
+// .env existed on the server, so the exposure stayed invisible. Failing loudly
+// on a missing .env is the whole point — a boot failure is recoverable, a
+// leaked database is not.
+const REQUIRED_ENV = ['DB_HOST', 'DB_USER', 'DB_PASS', 'DB_NAME'];
+
+function readDbConfig() {
+  const missing = REQUIRED_ENV.filter(k => !process.env[k]);
+  if (missing.length) {
+    throw new Error(
+      `Missing required database environment variables: ${missing.join(', ')}. ` +
+      'Create backend/.env from backend/.env.example — see REMOTE_DATABASE_GUIDE.md.'
+    );
+  }
+  return {
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASS,
+    database: process.env.DB_NAME,
+    port: parseInt(process.env.DB_PORT, 10) || 3306,
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0,
+    enableKeepAlive: true,
+    keepAliveInitialDelay: 10000,
+    connectTimeout: 20000,
+  };
+}
+
 function getPool() {
   if (!pool) {
-    const config = {
-      host: process.env.DB_HOST || '38.46.220.25',
-      user: process.env.DB_USER || 'tecnedub_knitadvisor',
-      password: process.env.DB_PASS || 'M@hbubu5',
-      database: process.env.DB_NAME || 'tecnedub_knitadvisor',
-      port: parseInt(process.env.DB_PORT) || 3306,
-      waitForConnections: true,
-      connectionLimit: 10,
-      queueLimit: 0,
-      enableKeepAlive: true,
-      keepAliveInitialDelay: 10000,
-      // Handle connection drops
-      connectTimeout: 20000,
-    };
-
+    const config = readDbConfig();
     pool = mysql.createPool(config);
     console.log('[DB] MySQL pool created — host:', config.host, 'db:', config.database);
   }
@@ -65,16 +83,20 @@ async function initAdminDatabase() {
     // 2. Check if there are any admins in the table
     const rows = await query('SELECT COUNT(*) as count FROM admin_users');
     if (rows[0].count === 0) {
-      // Seed default admin: username=knitadvisor, password=knitadvisor2026
-      const crypto = require('crypto');
-      const defaultUser = 'knitadvisor';
-      const defaultPassHash = crypto.createHash('sha256').update('knitadvisor2026').digest('hex');
-      
+      // The seed password used to be the literal 'knitadvisor2026', hardcoded
+      // here in a public repository — i.e. the admin panel shipped with a
+      // published password. Generate a random one instead and print it once to
+      // the server log, which only someone with shell access can read.
+      const { hashPassword, generatePassword } = require('../middleware/password');
+      const defaultUser = process.env.ADMIN_SEED_USER || 'knitadvisor';
+      const seedPassword = process.env.ADMIN_SEED_PASSWORD || generatePassword();
+
       await query(
         'INSERT INTO admin_users (username, password_hash) VALUES (?, ?)',
-        [defaultUser, defaultPassHash]
+        [defaultUser, hashPassword(seedPassword)]
       );
-      console.log('[DB] Default admin user seeded successfully');
+      console.log('[DB] Seeded admin user "%s" with password: %s', defaultUser, seedPassword);
+      console.log('[DB] ^ Change this immediately. It is printed only on first seed.');
     }
   } catch (err) {
     console.error('[DB] Failed to initialize admin database:', err.message);

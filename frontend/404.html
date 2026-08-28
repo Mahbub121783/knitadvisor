@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Page Not Found — KnitAdvisor</title>
+  <meta name="robots" content="noindex">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css?v=20260603c">
+  <style>
+    .nf {
+      min-height: 70vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 48px 0;
+    }
+    .nf-code {
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 2px;
+      color: var(--a1);
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .nf-title {
+      font-family: var(--head);
+      font-size: clamp(28px, 5vw, 44px);
+      font-weight: 800;
+      margin: 12px 0 10px;
+    }
+    .nf-text {
+      color: var(--t3);
+      max-width: 460px;
+      line-height: 1.6;
+      margin-bottom: 28px;
+    }
+    .nf-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+    }
+    .nf-links a {
+      font-family: var(--mono);
+      font-size: 12px;
+      padding: 9px 16px;
+      border: 1px solid var(--bg4);
+      border-radius: 6px;
+      background: var(--bg3);
+      color: var(--t1);
+      text-decoration: none;
+    }
+    .nf-links a:hover { border-color: var(--a1); color: var(--a1); }
+  </style>
+</head>
+<body>
+  <main class="container nf">
+    <div class="nf-code">Error 404</div>
+    <h1 class="nf-title">This page doesn't exist</h1>
+    <p class="nf-text">
+      The address you followed doesn't match any page on KnitAdvisor.
+      It may have been renamed, or the link may be mistyped.
+    </p>
+    <nav class="nf-links">
+      <a href="/">Calculator</a>
+      <a href="converter.html">Unit Converter</a>
+      <a href="patterns.html">Pattern Catalog</a>
+      <a href="diagnostics.html">Diagnostics Hub</a>
+      <a href="weft-calc.html">Weft Calculator</a>
+      <a href="academy.html">Knitting Academy</a>
+    </nav>
+  </main>
+</body>
+</html>

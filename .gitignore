@@ -29,3 +29,6 @@ scratch/render.js
 scratch/shoot3d.js
 scratch/shoot_integ.js
 scratch/shoot_rib.js
+
+# Agent worktree pointers — machine-local paths, not project state
+.claude/worktrees/

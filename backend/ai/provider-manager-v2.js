@@ -64,20 +64,50 @@ const PROVIDER_DEFAULTS = {
 let rrCursor = 0;
 
 // ── AES-256 encryption/decryption for API keys ────────────────────────────────
-const ENCRYPTION_KEY = crypto.scryptSync('knitadvisor-secret', 'salt', 32);
+// The key used to be derived from the literal string 'knitadvisor-secret' with
+// the literal salt 'salt', both committed to a public repository. Encrypting
+// with a published key is not encryption: anyone who could read the database
+// could decrypt every provider key in it. The secret now comes from the
+// environment and the module refuses to touch key material without it.
+//
+// LEGACY_SECRET stays only so scripts/reencrypt-provider-keys.js can migrate
+// rows written under the old scheme. It is never used to encrypt anything new,
+// and reading through it is opt-in per call.
+const LEGACY_SECRET = 'knitadvisor-secret';
+const LEGACY_SALT = 'salt';
+
+let _encryptionKey = null;
+function getEncryptionKey() {
+  if (_encryptionKey) return _encryptionKey;
+  const secret = process.env.API_KEY_ENCRYPTION_SECRET;
+  if (!secret || secret.length < 16) {
+    throw new Error(
+      'API_KEY_ENCRYPTION_SECRET is missing or too short (min 16 chars). ' +
+      'Set it in backend/.env — provider API keys cannot be read or written without it.'
+    );
+  }
+  const salt = process.env.API_KEY_ENCRYPTION_SALT || 'knitadvisor-key-v2';
+  _encryptionKey = crypto.scryptSync(secret, salt, 32);
+  return _encryptionKey;
+}
+
+function legacyEncryptionKey() {
+  return crypto.scryptSync(LEGACY_SECRET, LEGACY_SALT, 32);
+}
 
 function encryptApiKey(plaintext) {
   const iv = crypto.randomBytes(16);
-  const cipher = crypto.createCipheriv('aes-256-cbc', ENCRYPTION_KEY, iv);
+  const cipher = crypto.createCipheriv('aes-256-cbc', getEncryptionKey(), iv);
   let encrypted = cipher.update(plaintext, 'utf8', 'hex');
   encrypted += cipher.final('hex');
   return iv.toString('hex') + ':' + encrypted;
 }
 
-function decryptApiKey(encrypted) {
+function decryptApiKey(encrypted, { legacy = false } = {}) {
   const [ivHex, encryptedHex] = encrypted.split(':');
   const iv = Buffer.from(ivHex, 'hex');
-  const decipher = crypto.createDecipheriv('aes-256-cbc', ENCRYPTION_KEY, iv);
+  const key = legacy ? legacyEncryptionKey() : getEncryptionKey();
+  const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
   let decrypted = decipher.update(encryptedHex, 'hex', 'utf8');
   decrypted += decipher.final('utf8');
   return decrypted;
