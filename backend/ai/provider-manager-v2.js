@@ -679,12 +679,16 @@ async function ensureDailyReset() {
   if (lastResetCheck === today) return;   // already checked this process, this day
 
   try {
-    await dbQuery(`
-      CREATE TABLE IF NOT EXISTS ai_provider_meta (
-        meta_key   VARCHAR(32) NOT NULL PRIMARY KEY,
-        meta_value VARCHAR(32) NOT NULL
-      ) ENGINE=InnoDB
-    `);
+    // This used to CREATE TABLE IF NOT EXISTS with a trailing `ENGINE=InnoDB`,
+    // left over from MySQL. Against PostgreSQL it threw 42601 on every call, so
+    // the whole daily-reset check aborted into the catch below and the counters
+    // it exists to reset never reset — the exact failure the function was
+    // written to fix, reintroduced by the database migration and visible only
+    // as a repeated line in stderr.
+    //
+    // The table is owned by db/migrations/001_initial_schema.sql, so there is
+    // nothing to create here; a request-path CREATE TABLE was always the wrong
+    // place to define schema.
     const rows = await dbQuery("SELECT meta_value FROM ai_provider_meta WHERE meta_key = 'last_reset_date'");
     const stored = rows.length ? rows[0].meta_value : null;
 
