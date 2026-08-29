@@ -158,33 +158,54 @@ const YarnCountFormulas = {
   }
 };
 
-// Tight/loose limits per fabric FAMILY (see factory-knowledge.js's
-// FAB_BUCKET_ALIAS — every one of the 54 catalogued fabrics maps to one of
-// these 8 keys). Recalibrated from the real factory dataset
-// (backend/data/factory-records.json, computed TF = sqrt(590.5/Ne)/(SL_cm)
-// against each record's actual ne/sl): min/max ≈ the 2nd/98th percentile of
-// TF genuinely observed in real production for that family, ideal_min/max ≈
-// the 25th/75th percentile. This replaced numbers that were miscalibrated
-// two different ways — (1) rib/interlock/single_jersey ceilings were low
-// enough that 4-11% of REAL, already-produced fabric in the dataset would
-// have been flagged "un-knittable" under them (e.g. a real, exact-match 420
-// GSM rib record sits at TF≈19.6, above the old max of 18); (2) terry/fleece
-// (pile structures, whose ground-yarn-only TF is inherently much lower than a
-// plain structure's) were never actually reaching a dedicated limit at all —
-// a bug in the old category-string matching meant they silently fell back to
-// the single_jersey/default limits, which sit far above where real terry/
-// fleece production actually falls (median TF ≈9.4), so nearly all real
-// terry/fleece would have shown a false "too loose" warning.
+// Tight/loose limits per fabric FAMILY (see domain/factory-knowledge.js's
+// FAB_BUCKET_ALIAS — every catalogued fabric maps to one of these 8 keys).
+//
+// Derived from the 2,201 real production records in data/factory-records.json,
+// each contributing its own TF = sqrt(590.5/ne) / (sl/10). The two tiers answer
+// two different questions and are built two different ways.
+//
+//   min / max              CAN this be knitted? Set to the observed extremes
+//                          with 1 unit of margin, so it covers 100% of real
+//                          production. Crossing it reports UNKNITTABLE.
+//
+//   ideal_min / ideal_max  is this a NORMAL construction? p10/p90, rounded
+//                          outward, so 82-96% of real production reads as
+//                          normal and the warning is reserved for the tails.
+//
+// Why the hard band is not a percentile. It was briefly set to p2/p98, which
+// sounds rigorous and declares 4% of genuinely shipped fabric physically
+// impossible — a real 200 GSM cotton fleece at TF 13.4 came back
+// UNKNITTABLE_TIGHT. A statistical tail is not a physical limit. Real
+// production defines what is possible, so the hard band takes the extremes.
+//
+// Two records are excluded from the extremes, on physics rather than
+// statistics: both are 18-gauge with a stitch length of 1.05 and 1.1 mm, and
+// an 18 GG needle pitch is 25.4/18 = 1.41 mm. A loop cannot be shorter than
+// the pitch it spans, so those rows are measurement errors, not tight fabric.
+// They alone pushed rib's ceiling from 30 to 41 and would have made the band
+// meaningless. Every other record is kept, outliers included.
+//
+// The ideal band was previously documented as p25/p75, which flags half of all
+// production by construction. On interlock that was severe: its distribution is
+// dense between 13.5 and 14.3 (38 of 50 records at or below 14.0) against an
+// ideal_min of 14, so 76% of real interlock came back warned "too loose".
+//
+// Rounding is OUTWARD, never to-nearest — these distributions are concentrated
+// enough that rounding to the nearest 0.5 cuts through a dense cluster and
+// recreates the same false-warning problem at a smaller scale.
+//
+// Re-derive with scripts/calibrate-tightness.js whenever factory_records grows.
 const TIGHTNESS_LIMITS = {
-  'single_jersey': { min: 12, max: 21, ideal_min: 14, ideal_max: 18 },
-  'heavy_jersey':  { min: 10, max: 19, ideal_min: 12, ideal_max: 15 },
-  'rib':           { min: 12, max: 21, ideal_min: 14, ideal_max: 18 },
-  'interlock':     { min: 12, max: 30, ideal_min: 14, ideal_max: 20 },
-  'pique':         { min: 14, max: 21, ideal_min: 16, ideal_max: 19 },
-  'waffle':        { min: 12, max: 28, ideal_min: 14, ideal_max: 19 },
-  'terry':         { min: 7,  max: 17, ideal_min: 8,  ideal_max: 11 },
-  'fleece':        { min: 7,  max: 14, ideal_min: 8,  ideal_max: 10.5 },
-  'default':       { min: 10, max: 22, ideal_min: 12, ideal_max: 20 }
+  'single_jersey': { min: 8,  max: 32, ideal_min: 14.5, ideal_max: 18.5 },
+  'heavy_jersey':  { min: 11, max: 20, ideal_min: 12.5, ideal_max: 14 },
+  'rib':           { min: 8,  max: 30, ideal_min: 14.5, ideal_max: 18.5 },
+  'interlock':     { min: 12, max: 30, ideal_min: 13.5, ideal_max: 20 },
+  'pique':         { min: 14, max: 22, ideal_min: 17,   ideal_max: 19.5 },
+  'waffle':        { min: 12, max: 28, ideal_min: 14,   ideal_max: 17.5 },
+  'terry':         { min: 7,  max: 22, ideal_min: 9,    ideal_max: 10 },
+  'fleece':        { min: 8,  max: 17, ideal_min: 9,    ideal_max: 10 },
+  'default':       { min: 7,  max: 32, ideal_min: 12,   ideal_max: 20 }
 };
 
 module.exports = { YarnCountFormulas, TIGHTNESS_LIMITS };

@@ -11,19 +11,20 @@
  * Same input → same output, every time.
  */
 
+// GSM_COUNT_REGRESSION, LOOP_LENGTH_MULTIPLIERS, VALIDATION_RANGES and
+// validate() were imported here and never used — the _COMPLETE variants below
+// superseded the first two, and the range check was simply never wired up.
+// validateInputs() is the check that was missing.
 const {
   UnitConverter,
   YarnCountFormulas,
-  GSM_COUNT_REGRESSION,
   GSM_COUNT_LOOKUP,
-  LOOP_LENGTH_MULTIPLIERS,
   MachineFormulas,
   ProductionFormulas,
   FabricWeightFormulas,
-  VALIDATION_RANGES,
   TIGHTNESS_LIMITS,
-  validate,
   BOOK_K_CONSTANTS,
+  validateInputs,
 } = require('./formulas');
 
 const {
@@ -90,6 +91,26 @@ function calculate(params) {
 
   if (!fabric) return { error: 'fabric is required', code: 'MISSING_FABRIC' };
   if (!gsm) return { error: 'gsm is required', code: 'MISSING_GSM' };
+
+  // Two-tier input check. This lives in the engine rather than the route so it
+  // protects every caller — the route, the tests, and any future consumer —
+  // instead of only HTTP. Until now the ONLY bound on GSM was the browser form,
+  // so a direct API call with gsm=5 came back with a confident 44/1 at 2.65 mm:
+  // the factory lookup simply clamped to its nearest data point and the answer
+  // was indistinguishable from a real one. VALIDATION_RANGES and validate()
+  // were imported here and never called.
+  const inputCheck = validateInputs({
+    gsm, gauge, dia, rpm, stitch_length, efficiency, feeders, target_width,
+    denier, elastane_pct,
+  });
+  if (inputCheck.errors.length) {
+    return {
+      error: inputCheck.errors[0],
+      code: 'INPUT_OUT_OF_RANGE',
+      errors: inputCheck.errors,
+    };
+  }
+  warnings.push(...inputCheck.warnings);
 
   // Find fabric definition
   const fabricDef = FABRIC_DERIVATIVES.find(f => f.id === fabric);
@@ -433,10 +454,46 @@ function calculate(params) {
       }
     }
 
-    const tex = UnitConverter.neToTex(countResult.count_ne);
+    // TF only means anything when the count and the stitch length describe the
+    // SAME yarn. For multi-yarn structures they did not: terry and fleece take
+    // their count from the multi-yarn table (a ground + loop declaration) while
+    // the SL comes from a factory record measured against that record's own
+    // single count. A 200 GSM cotton fleece reported a 34/1 ground count against
+    // a 3.7 mm SL that was measured on a 24/1 record — TF 11.26 instead of the
+    // record's own 13.41, tripping WARNING_TIGHT on fabric that ran fine.
+    //
+    // The bands themselves were calibrated from each factory record's own
+    // (ne, sl) pair, so the honest comparison uses the same pairing: when the SL
+    // came from a factory record, take the count from that record too. Only the
+    // TF input changes — the count reported to the user stays the ground/loop
+    // declaration, which is what a knitter actually books.
+    const slFromFactory = llResult.multiplier_source === 'FACTORY_R_D_RECORD';
+    const pairedCount = (slFromFactory && factoryLookup && factoryLookup.count_ne)
+      ? factoryLookup.count_ne
+      : countResult.count_ne;
+    const countMismatch = pairedCount !== countResult.count_ne;
+
+    const tex = UnitConverter.neToTex(pairedCount);
     const tf = YarnCountFormulas.calcTightnessFactor(tex, llResult.ll_cm);
-    
-    tfResult = { value: tf, tex: parseFloat(tex.toFixed(2)), category: categoryKey, limits: dynamicLimits };
+
+    tfResult = {
+      value: tf,
+      tex: parseFloat(tex.toFixed(2)),
+      category: categoryKey,
+      limits: dynamicLimits,
+      // Say which count the TF was computed against whenever it is not the one
+      // shown in the yarn block, so a 34/1 declaration next to a TF derived
+      // from 24/1 is explained rather than looking like an arithmetic error.
+      basis: {
+        count_ne: pairedCount,
+        sl_mm: llResult.ll_mm,
+        source: slFromFactory ? 'factory record (count and SL from the same row)' : 'calculated count and SL',
+        differs_from_declared_count: countMismatch,
+        note: countMismatch
+          ? `Declared count is ${countResult.count_ne}/1 (ground yarn of a multi-yarn structure). TF is computed against ${pairedCount}/1, the count the ${llResult.ll_mm} mm stitch length was actually measured with, because a TF mixing two sources is not comparable to the family's limits.`
+          : null,
+      },
+    };
     let expert_analysis = null;
     
     if (tf) {
@@ -906,6 +963,9 @@ function calculate(params) {
       tightness_factor: tfResult.value,
       tex: tfResult.tex,
       status: tfResult.status,
+      limits: tfResult.limits,
+      family: tfResult.category,
+      basis: tfResult.basis,
       expert_analysis: tfResult.expert_analysis,
     } : null,
 
@@ -990,6 +1050,51 @@ function calculate(params) {
 // STEP CALCULATIONS
 // ============================================================
 
+/**
+ * THE CANONICAL INPUT SURFACE.
+ *
+ * Every field calculate() reads, in one list, exported so callers can derive
+ * their forwarding and their cache key from it instead of restating it.
+ *
+ * This exists because the list used to be restated in three places — the
+ * route's cache key, the route's calculate() call, and normalizeParams() — and
+ * they had silently drifted apart. Three inputs were fully built on both ends
+ * and dead in the middle:
+ *
+ *   shade_depth_pct   the form sent it and the engine had a dedicated %OWF
+ *                     branch for it, but the route never read it off the body,
+ *                     so every request fell back to the nearest of six buttons
+ *   light_source      destructured from normalizeParams() at the top of
+ *   illuminant        calculate(), which never returned them — so the optical
+ *                     physics illuminant was permanently undefined, i.e. D65
+ *   yarn_organic_type read as params.yarn_organic_type by the costing call and
+ *                     never forwarded, so organic yarn was always priced GOTS
+ *
+ * None of them errored. They just quietly did nothing, which is the failure
+ * mode a hand-maintained list produces. Add a field here and it is forwarded
+ * and cache-keyed automatically.
+ */
+const ENGINE_INPUTS = Object.freeze([
+  // required
+  'fabric', 'gsm',
+  // fabric definition
+  'composition',
+  // colour
+  'color_shade', 'color_input', 'shade_depth_pct', 'light_source', 'illuminant',
+  // machine
+  'dia', 'gauge', 'rpm', 'efficiency', 'stitch_length', 'feeders', 'target_width',
+  // yarn
+  'yarn_type', 'twist_multiplier', 'fiber_grade', 'spinning_system', 'yarn_form',
+  'slub_thickness', 'slub_length_cm', 'slub_spacing_cm',
+  // wet processing
+  'finishing_route', 'dyeing_method',
+  // costing
+  'yarn_price_type', 'yarn_white', 'yarn_organic', 'yarn_organic_type',
+  'yarn_ecovero', 'yarn_at_sight', 'feeder_type',
+  // warp knit
+  'denier', 'filaments', 'elastane_denier', 'elastane_pct',
+]);
+
 function normalizeParams(p) {
   return {
     fabric: (p.fabric || '').toLowerCase().trim(),
@@ -1027,6 +1132,13 @@ function normalizeParams(p) {
     // button with a real dye-concentration value when provided.
     shade_depth_pct: (p.shade_depth_pct !== undefined && p.shade_depth_pct !== null && p.shade_depth_pct !== '')
       ? parseFloat(p.shade_depth_pct) : null,
+    // Illuminant for the optical-physics pass. calculate() has always
+    // destructured these two off this return value; they were never in it, so
+    // the lookup silently resolved to the D65 default no matter what a caller
+    // sent. Either spelling is accepted — `illuminant` is the term a colourist
+    // uses, `light_source` the one the UI used.
+    light_source: p.light_source ? String(p.light_source).trim() : null,
+    illuminant: p.illuminant ? String(p.illuminant).trim() : null,
   };
 }
 
@@ -1814,4 +1926,5 @@ module.exports = {
   calculate,
   getAllFabrics,
   getPattern,
+  ENGINE_INPUTS,
 };

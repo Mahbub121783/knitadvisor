@@ -4,9 +4,9 @@
  *
  * Systematic relationships extracted from a real factory **Knitting Master
  * File** (5000+ bulk-production booking rows, Bangladesh RMG, multi-buyer:
- * buyer-ref, buyer-ref, buyer-ref, buyer-ref, buyer-ref, buyer-ref, Accolade, buyer-ref, etc.).
+ * buyer names redacted, one of them Accolade).
  *
- * That file records, for ebuyer-ref production booking, the parameters a knitter
+ * That file records, for every production booking, the parameters a knitter
  * actually committed to the floor — yarn count, the MACHINE GAUGE (GG) and
  * cylinder DIA chosen, the finished open width (F/DIA), the finished GSM, the
  * colour segment, and the realised **process loss %** ("Fo Wise Process Loss").

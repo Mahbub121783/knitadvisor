@@ -80,7 +80,9 @@ module.exports = {
   EfficiencyFormulas:       efficiency.EfficiencyFormulas,
   // validation.js
   VALIDATION_RANGES:        validation.VALIDATION_RANGES,
+  PHYSICAL_BOUNDS:          validation.PHYSICAL_BOUNDS,
   validate:                 validation.validate,
+  validateInputs:           validation.validateInputs,
   // weft.js
   WeftCalculators:          weft.WeftCalculators,
 

@@ -15,9 +15,9 @@ async function record(entry) {
     await query(
       `INSERT INTO query_logs
          (input_text, input_type, parsed_fabric, parsed_gsm, parsed_dia, parsed_gauge,
-          result_json, response_ms, from_cache, cache_key, ai_provider, ai_tokens_used,
+          response_ms, from_cache, cache_key, ai_provider, ai_tokens_used,
           ip_hash, user_agent)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
       [
         entry.input_text ?? null,
         entry.input_type || 'form',
@@ -25,7 +25,6 @@ async function record(entry) {
         entry.parsed_gsm ?? null,
         entry.parsed_dia ?? null,
         entry.parsed_gauge ?? null,
-        entry.result_json ? JSON.stringify(entry.result_json) : null,
         entry.response_ms ?? null,
         !!entry.from_cache,
         entry.cache_key ?? null,
