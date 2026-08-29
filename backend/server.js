@@ -26,9 +26,11 @@ const apiRoutes = require('./routes/api');
 const vizRoutes = require('./routes/viz');
 const adminRoutes = require('./routes/admin');
 const cronRoutes = require('./routes/internal-cron');
+const searchRoutes = require('./routes/search');
 const rateLimiter = require('./middleware/rate-limiter');
 const { testConnection, poolStats, query } = require('./db/client');
 const seed = require('./db/seed');
+const reference = require('./engine/reference');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -114,6 +116,11 @@ app.use('/api', apiRoutes);
 
 // Visualization routes (internal — no external APIs)
 app.use('/api', vizRoutes);
+
+// Fuzzy reference search (pg_trgm). Mounted under /api/search so it sits
+// beside the calculation API without being part of it — nothing here feeds
+// a calculation, it only helps a user find the right input.
+app.use('/api/search', searchRoutes);
 
 // Admin routes
 app.use('/admin', adminRoutes);
@@ -237,6 +244,20 @@ async function start() {
       console.error('[FATAL] ' + err.message);
       process.exit(1);
     }
+  }
+
+  // Load the reference snapshot BEFORE listening. The engine reads it
+  // synchronously on every calculation, so it must be in place before the first
+  // request — and loading it here, once, is what lets calculate() stay
+  // synchronous while the data itself lives in PostgreSQL. Falls back to the
+  // seed files in backend/data/ when the database is unavailable, which is why
+  // the no-database path above can still promise working calculations.
+  const ref = await reference.load();
+  const refStatus = reference.status();
+  console.log(`[Reference] loaded from ${refStatus.origin} —`,
+    JSON.stringify(refStatus.counts));
+  if (refStatus.origin === 'files' && dbOk) {
+    console.warn('[Reference] using seed files despite a working database:', refStatus.last_error);
   }
 
   app.listen(PORT, () => {

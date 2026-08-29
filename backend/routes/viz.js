@@ -15,7 +15,7 @@ const express = require('express');
 const crypto  = require('crypto');
 const router  = express.Router();
 
-const { generateWeftKnitPaths, generateWarpKnitPaths } = require('../engine/viz-engine');
+const { generateWeftKnitPaths, generateWarpKnitPaths } = require('../engine/domain/viz-engine');
 const vizRepo = require('../db/repositories/viz-repo');
 const { vizCache } = require('../db/repositories/cache-repo');
 
