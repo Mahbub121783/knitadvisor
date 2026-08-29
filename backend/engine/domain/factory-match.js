@@ -10,7 +10,7 @@
  *   • dye-uptake GSM gain (finish − grey, % of grey)
  *
  * Method: weighted k-nearest-neighbour over the curated FACTORY_RECORDS.
- * Records must match the fabric category; ebuyer-refthing else contributes a
+ * Records must match the fabric category; everything else contributes a
  * distance. Predictions are an inverse-distance-weighted blend of the k
  * nearest matches, with a confidence score from how close the matches are.
  *
@@ -46,7 +46,7 @@ function matchFactory(q, k = 4) {
   const seg = SEG_ORD[(q.color_segment || 'medium')] != null ? (q.color_segment || 'medium') : 'medium';
   const comp = ['cotton','cvc','pc','modal','viscose'].includes(q.comp) ? q.comp : 'cotton';
 
-  // Score ebuyer-ref record in the same fabric category.
+  // Score every record in the same fabric category.
   const pool = FACTORY_RECORDS.filter(r => r.fab === fabKey);
   if (pool.length === 0) return { ok: false, reason: 'no_fabric_records' };
 

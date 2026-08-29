@@ -82,6 +82,70 @@ async function status() {
   return pending;
 }
 
+/**
+ * Split a migration into individual statements, for the `-- +no-transaction`
+ * path where each has to be sent on its own round trip.
+ *
+ * Deliberately small rather than a real SQL parser: it tracks the three things
+ * that can legitimately contain a semicolon — single-quoted strings,
+ * dollar-quoted bodies ($$ ... $$ or $tag$ ... $tag$, which is how the PL/pgSQL
+ * functions in 001 are written), and comments. That is enough for migrations,
+ * and anything more elaborate belongs in a transactional migration, where the
+ * whole file goes over as one string and none of this applies.
+ */
+function splitStatements(sql) {
+  const out = [];
+  let buf = '';
+  let i = 0;
+
+  while (i < sql.length) {
+    const rest = sql.slice(i);
+
+    const lineComment = rest.match(/^--[^\n]*/);
+    if (lineComment) { buf += lineComment[0]; i += lineComment[0].length; continue; }
+
+    const blockComment = rest.match(/^\/\*[\s\S]*?\*\//);
+    if (blockComment) { buf += blockComment[0]; i += blockComment[0].length; continue; }
+
+    const dollarOpen = rest.match(/^\$([A-Za-z_]\w*)?\$/);
+    if (dollarOpen) {
+      const tag = dollarOpen[0];
+      const close = sql.indexOf(tag, i + tag.length);
+      const end = close === -1 ? sql.length : close + tag.length;
+      buf += sql.slice(i, end);
+      i = end;
+      continue;
+    }
+
+    if (sql[i] === "'") {
+      let j = i + 1;
+      while (j < sql.length) {
+        if (sql[j] === "'" && sql[j + 1] === "'") { j += 2; continue; }
+        if (sql[j] === "'") { j++; break; }
+        j++;
+      }
+      buf += sql.slice(i, j);
+      i = j;
+      continue;
+    }
+
+    if (sql[i] === ';') {
+      if (buf.trim()) out.push(buf.trim());
+      buf = '';
+      i++;
+      continue;
+    }
+
+    buf += sql[i];
+    i++;
+  }
+  if (buf.trim()) out.push(buf.trim());
+
+  // Drop fragments that are only comments — those are not statements.
+  return out.filter(s =>
+    s.replace(/--[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '').trim().length > 0);
+}
+
 async function migrate() {
   const pending = await status();
   const modified = pending.filter(m => m.modified);
@@ -101,20 +165,44 @@ async function migrate() {
   try {
     for (const m of pending) {
       const started = Date.now();
-      process.stdout.write(`\nApplying ${m.name} ... `);
+      // A few statements cannot run inside a transaction block at all — VACUUM,
+      // CREATE INDEX CONCURRENTLY, and ALTER TYPE ... ADD VALUE on older
+      // servers. A migration opts out by putting `-- +no-transaction` on a line
+      // of its own.
+      //
+      // The trade is real and worth stating: such a migration is NOT atomic. If
+      // it fails halfway, the statements that already ran stay applied while the
+      // ledger row is never written, so a re-run replays it from the beginning.
+      // Write them to be idempotent (IF EXISTS / IF NOT EXISTS) — 004 is.
+      const noTx = /^[ \t]*--[ \t]*\+no-transaction[ \t]*$/m.test(m.sql);
+      process.stdout.write(`\nApplying ${m.name}${noTx ? ' [no transaction]' : ''} ... `);
       try {
-        await client.query('BEGIN');
-        await client.query(m.sql);
+        if (!noTx) await client.query('BEGIN');
+        if (noTx) {
+          // Skipping BEGIN is not enough. node-postgres sends a multi-statement
+          // string through the simple query protocol, and PostgreSQL wraps such
+          // a string in an IMPLICIT transaction — so `VACUUM` still fails with
+          // "cannot run inside a transaction block" even with no BEGIN in
+          // sight. The statements have to arrive one round trip at a time.
+          for (const stmt of splitStatements(m.sql)) {
+            await client.query(stmt);
+          }
+        } else {
+          await client.query(m.sql);
+        }
         await client.query(
           'INSERT INTO schema_migrations (version, name, checksum, duration_ms) VALUES ($1,$2,$3,$4)',
           [m.version, m.name, m.checksum, Date.now() - started]
         );
-        await client.query('COMMIT');
+        if (!noTx) await client.query('COMMIT');
         console.log(`ok (${Date.now() - started}ms)`);
       } catch (err) {
-        await client.query('ROLLBACK').catch(() => {});
+        if (!noTx) await client.query('ROLLBACK').catch(() => {});
         console.log('FAILED');
-        throw new Error(`${m.name}: ${err.message}`);
+        throw new Error(
+          `${m.name}: ${err.message}` +
+          (noTx ? ' — runs outside a transaction, so earlier statements in it may have applied.' : '')
+        );
       }
     }
   } finally {
