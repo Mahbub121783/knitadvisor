@@ -32,6 +32,29 @@ const { testConnection, poolStats, query } = require('./db/client');
 const seed = require('./db/seed');
 const reference = require('./engine/reference');
 
+// Load the reference snapshot as soon as this module is required, NOT inside
+// start(). Passenger hooks app.listen() and begins serving the moment the module
+// body finishes, without waiting for start()'s promise — so anything awaited in
+// there can still be pending when the first request lands, and anything that
+// throws before it leaves the snapshot unloaded on a process that is already
+// answering. Kicking it off here ties the load to module evaluation, which
+// Passenger does wait for.
+//
+// The engine reads this snapshot synchronously on every calculation; loading it
+// once, here, is what lets calculate() stay synchronous while the data itself
+// lives in PostgreSQL. load() falls back to the seed files in backend/data/ when
+// the database is unreachable, which is why the no-database path can still
+// promise working calculations.
+const referenceReady = reference.load()
+  .then(() => {
+    const st = reference.status();
+    console.log(`[Reference] loaded from ${st.origin} —`, JSON.stringify(st.counts));
+    if (st.origin === 'files') {
+      console.warn('[Reference] seed-file fallback in use:', st.last_error);
+    }
+  })
+  .catch(err => console.error('[Reference] load failed entirely:', err.message));
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -181,6 +204,11 @@ app.get('/health/deep', async (req, res) => {
     uptime: Math.floor(process.uptime()),
     version: '1.1.0',
     database: db,
+    // Which tier the running process is actually serving reference data from.
+    // A process that fell back to files answers every calculation correctly but
+    // will not see an import until it is restarted, and that is invisible from
+    // the outside — so it is reported here rather than only in the boot log.
+    reference: reference.status(),
     pool: poolStats(),
     memory_mb: Math.round(process.memoryUsage().rss / 1048576),
   });
@@ -246,19 +274,7 @@ async function start() {
     }
   }
 
-  // Load the reference snapshot BEFORE listening. The engine reads it
-  // synchronously on every calculation, so it must be in place before the first
-  // request — and loading it here, once, is what lets calculate() stay
-  // synchronous while the data itself lives in PostgreSQL. Falls back to the
-  // seed files in backend/data/ when the database is unavailable, which is why
-  // the no-database path above can still promise working calculations.
-  const ref = await reference.load();
-  const refStatus = reference.status();
-  console.log(`[Reference] loaded from ${refStatus.origin} —`,
-    JSON.stringify(refStatus.counts));
-  if (refStatus.origin === 'files' && dbOk) {
-    console.warn('[Reference] using seed files despite a working database:', refStatus.last_error);
-  }
+  await referenceReady;
 
   app.listen(PORT, () => {
     console.log(`[Server] Running on port ${PORT}`);
