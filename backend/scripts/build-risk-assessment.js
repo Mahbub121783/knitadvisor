@@ -20,7 +20,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { parseComposition } = require('../engine/composition-engine');
+const { parseComposition } = require('../engine/domain/composition-engine');
 
 const MD_PATH = path.join(__dirname, '..', '..', 'Accurate_Fabric_Risk_Assessment.md');
 const OUT_PATH = path.join(__dirname, '..', 'data', 'risk-assessment.json');

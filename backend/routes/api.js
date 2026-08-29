@@ -10,17 +10,17 @@ const express = require('express');
 const crypto = require('crypto');
 const router = express.Router();
 
-const { calculate, getAllFabrics } = require('../engine/calculator');
+const { calculate, getAllFabrics } = require('../engine/index');
 const { UnitConverter, FabricWeightFormulas, YarnCountFormulas, WeftCalculators } = require('../engine/formulas');
-const { FAULTS_DATABASE, diagnoseFaults } = require('../engine/faults-engine');
+const { FAULTS_DATABASE, diagnoseFaults } = require('../engine/domain/faults-engine');
 const providerManager = require('../ai/provider-manager-v2');
-const { getPattern } = require('../engine/pattern-engine');
-const { calculateStriper, validateStriperInput } = require('../engine/striper-engine');
-const { predictQuality } = require('../engine/quality-engine');
-const { calculateCost, SM_PRICE_MATRIX, YARN_TYPE_CATALOG, SM_SURCHARGES } = require('../engine/costing-engine');
-const { parseComposition } = require('../engine/composition-engine');
-const { GLOSSARY, BASIC_ELEMENTS, FORMATION_CYCLES, QUIZ_QUESTIONS } = require('../engine/academy-engine');
-const colorEngine = require('../engine/color-engine');
+const { getPattern } = require('../engine/domain/pattern-engine');
+const { calculateStriper, validateStriperInput } = require('../engine/domain/striper-engine');
+const { predictQuality } = require('../engine/domain/quality-engine');
+const { calculateCost, SM_PRICE_MATRIX, YARN_TYPE_CATALOG, SM_SURCHARGES } = require('../engine/domain/costing-engine');
+const { parseComposition } = require('../engine/domain/composition-engine');
+const { GLOSSARY, BASIC_ELEMENTS, FORMATION_CYCLES, QUIZ_QUESTIONS } = require('../engine/domain/academy-engine');
+const colorEngine = require('../engine/domain/color-engine');
 
 const memCache = require('../cache/memory-cache');
 const { resultCache } = require('../db/repositories/cache-repo');

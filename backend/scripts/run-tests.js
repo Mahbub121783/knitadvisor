@@ -13,13 +13,13 @@ const { execFileSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
-const ROOT = path.join(__dirname, '..');
+const ROOT = path.join(__dirname, '..', 'tests');
 const SUITES = fs.readdirSync(ROOT)
-  .filter(f => f.startsWith('test_') && f.endsWith('.js'))
+  .filter(f => f.endsWith('.test.js'))
   .sort();
 
 if (SUITES.length === 0) {
-  console.error('No test_*.js suites found in', ROOT);
+  console.error('No *.test.js suites found in', ROOT);
   process.exit(1);
 }
 

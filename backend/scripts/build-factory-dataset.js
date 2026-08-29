@@ -25,7 +25,7 @@
 const path = require('path');
 const fs = require('fs');
 const XLSX = require('xlsx');
-const { parseComposition } = require('../engine/composition-engine');
+const { parseComposition } = require('../engine/domain/composition-engine');
 
 const XLSX_PATH = path.join(__dirname, '..', '..', 'New ERP R&D Master File-2022.xlsx');
 const OUT_PATH = path.join(__dirname, '..', 'data', 'factory-records.json');
