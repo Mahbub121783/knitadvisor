@@ -117,7 +117,10 @@ function verify(payload) {
   check((kinds.CLEAN || 0) >= 400,
         'most sections extracted cleanly', (kinds.CLEAN || 0) + ' clean');
 
-  check((kinds.TABLE || 0) >= 140,
+  // 132 is the real count. The 140 this was first set to came from a run that
+  // had 18 sentences beginning "Table 11.1 gives ..." filed as tables, so the
+  // threshold was calibrated against the defect it was meant to guard.
+  check((kinds.TABLE || 0) >= 125,
         'the printed tables were lifted out and kept in their own right', (kinds.TABLE || 0) + ' tables');
 
   // The check that would have caught the worst loss so far. Table captions are
@@ -142,6 +145,20 @@ function verify(payload) {
   }
   check(gaps.length === 0, 'table numbering runs unbroken in every chapter',
         gaps.length ? 'missing ' + gaps.join(', ') : `${byChapter.size} chapters`);
+
+  // A number appearing twice means something that is not a table was read as
+  // one. Every case so far has been a sentence — "Table 11.1 gives a collection
+  // of values" — which is lifted out of its section AND filed under a number a
+  // real table already holds, so it does damage at both ends. The gap check
+  // above cannot see it, because a duplicate leaves no gap.
+  const seenNumbers = new Map();
+  for (const l of lessons) {
+    if (l.extraction !== 'TABLE' || !l.section_no) continue;
+    seenNumbers.set(l.section_no, (seenNumbers.get(l.section_no) || 0) + 1);
+  }
+  const duped = [...seenNumbers].filter(([, n]) => n > 1).map(([k]) => k);
+  check(duped.length === 0, 'no table number is claimed twice',
+        duped.length ? duped.join(', ') : `${seenNumbers.size} distinct tables`);
 
   // An equation block is short and full of digits, which is exactly what a
   // table row looks like, so one can be swallowed into the table above it.

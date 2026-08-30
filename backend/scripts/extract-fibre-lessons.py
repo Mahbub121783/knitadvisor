@@ -50,7 +50,18 @@ FOOT_BAND = 0.92
 
 COPYRIGHT = re.compile(r'Woodhead Publishing Limited')
 FOLIO = re.compile(r'^\s*\d{1,3}\s*$')
-TABLE_CAPTION = re.compile(r'^Table\s+(\d+\.\d+|A[IVX]+\.\d+)\b')
+# A caption reads "Table 5.1 Densities of some ..." — the number is followed by
+# a title. A sentence reads "Table 5.1 gives a collection of ..." — the number
+# is followed by a verb. Both begin identically, and treating the second as a
+# caption did damage at both ends: it lifted 18 fragments of prose OUT of the
+# sections they belong to, and filed them as tables under numbers that real
+# tables already held.
+#
+# The book capitalises every caption and never opens one with a lower-case
+# word, so one character separates them. Digits and brackets are allowed
+# through because "Table 25.2 Values of n" and "Table 17.6 (Continued)" are
+# both real.
+TABLE_CAPTION = re.compile(r'^Table\s+(\d+\.\d+|A[IVX]+\.\d+)\s+(?![a-z])')
 FIGURE_CAPTION = re.compile(r'^(Fig\.?|Figure)\s+\d+\.\d+\b')
 HEADING_BLOCK = re.compile(r'^\d+(?:\.\d+)+\s*\n')
 # An equation label sits on a line of its own: "(5.1)". It is never part of a
@@ -319,9 +330,25 @@ def main():
     # page — and because the alternative is a second store that has to be kept
     # in step with this one.
     table_count = 0
+    # A long table runs onto the next page under "Table 17.6 (Continued)". That
+    # is one table printed in two pieces, not two tables sharing a number, so
+    # the continuation is appended to the record it continues rather than
+    # stored beside it — where it would look like the duplicate that a
+    # mis-read caption produces.
+    open_tables = {}
     for pdf_page, tables in enumerate(page_tables, start=1):
         for tbl in tables:
             caption = tbl['text'].split('\n')[0].strip()
+            if re.search(r'\(\s*Continued\s*\)', caption, re.I):
+                prev = open_tables.get(tbl['ref'])
+                if prev is not None:
+                    body = tbl['text'].split('\n', 1)
+                    prev['body'] += '\n\n' + (body[1].strip() if len(body) > 1 else '')
+                    prev['char_count'] = len(prev['body'])
+                    prev['pdf_page_end'] = pdf_page
+                    prev['page_end'] = printed_page(pdf_page)
+                    prev['symbol_loss'] = symbol_loss(prev['body'])
+                    continue
             ch = None
             m = re.match(r'^(\d+)\.', tbl['ref'])
             if m:
@@ -345,6 +372,7 @@ def main():
                 'figure_pages': [],
                 'boundary_exact': True,
             })
+            open_tables[tbl['ref']] = lessons[-1]
             table_count += 1
 
     lessons.sort(key=lambda l: (l['pdf_page_start'], l['level'], l['title']))
