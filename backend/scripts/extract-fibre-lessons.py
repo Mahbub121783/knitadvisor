@@ -51,7 +51,15 @@ FOOT_BAND = 0.92
 COPYRIGHT = re.compile(r'Woodhead Publishing Limited')
 FOLIO = re.compile(r'^\s*\d{1,3}\s*$')
 TABLE_CAPTION = re.compile(r'^Table\s+(\d+\.\d+|A[IVX]+\.\d+)\b')
+FIGURE_CAPTION = re.compile(r'^(Fig\.?|Figure)\s+\d+\.\d+\b')
 HEADING_BLOCK = re.compile(r'^\d+(?:\.\d+)+\s*\n')
+# An equation label sits on a line of its own: "(5.1)". It is never part of a
+# table, and letting one through drags the whole equation in after it.
+EQUATION_LABEL = re.compile(r'^\s*\(\d+\.\d+[a-z]?\)\s*$', re.M)
+# The running head is the chapter or book title followed by the folio. Matching
+# it by that shape rather than by position is what lets a table caption survive
+# being floated to the top of a page — where Table 5.2 was, and was deleted.
+RUNNING_HEAD = re.compile(r'\n\s*\d{1,3}\s*$')
 
 
 def digit_ratio(text):
@@ -108,11 +116,21 @@ def page_content(page):
         if not t or COPYRIGHT.search(t) or FOLIO.match(t):
             continue
         top = y0 / height
-        # A short block in the head or foot band is the running head, the
-        # chapter title repeat, or the folio. A long one is body text that
-        # simply starts high or ends low, and is kept.
-        if (top < HEAD_BAND or top > FOOT_BAND) and len(t) < 90:
-            continue
+        if top < HEAD_BAND or top > FOOT_BAND:
+            # A caption is content wherever it sits. Tables float to the top of
+            # a page as readily as to the foot, and dropping short blocks in the
+            # head band by position alone deleted the caption of Table 5.2 —
+            # taking the whole table with it, because the rows that followed
+            # then had nothing to belong to.
+            if TABLE_CAPTION.match(t) or FIGURE_CAPTION.match(t):
+                body.append(t)
+                continue
+            # What actually belongs to the running head is the chapter or book
+            # title with the folio after it, so match that shape instead.
+            if len(t) < 90 and RUNNING_HEAD.search(t):
+                continue
+            if len(t) < 90 and top < HEAD_BAND:
+                continue
         body.append(t)
 
     prose, tables = [], []
@@ -132,7 +150,11 @@ def page_content(page):
         i += 1
         while i < len(body):
             nxt = body[i]
-            if TABLE_CAPTION.match(nxt) or HEADING_BLOCK.match(nxt):
+            if TABLE_CAPTION.match(nxt) or FIGURE_CAPTION.match(nxt) or HEADING_BLOCK.match(nxt):
+                break
+            # An equation block is short and full of digits, so the row test
+            # below waves it through. Its label gives it away.
+            if EQUATION_LABEL.search(nxt):
                 break
             if len(nxt) > 150 and digit_ratio(nxt) < 0.03:
                 break

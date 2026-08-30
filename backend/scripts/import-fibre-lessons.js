@@ -58,6 +58,8 @@ const ANCHORS = [
   // page and is stored under its caption rather than under any section.
   ['Table 5.1', 'Cotton (lumen filled)'],
   ['Table 5.1', '1.55'],
+  // Floated to the TOP of its page, which is how 44 tables were lost.
+  ['Table 5.2', 'Para-aramid (Kevlar, Twaron)'],
   ['1.1.3', 'flexibility, fineness and a high ratio of length to thickness'],
   ['AII.2', 'Viscose CV'],
   ['AII.3', 'Polyester PES'],
@@ -115,8 +117,38 @@ function verify(payload) {
   check((kinds.CLEAN || 0) >= 400,
         'most sections extracted cleanly', (kinds.CLEAN || 0) + ' clean');
 
-  check((kinds.TABLE || 0) >= 100,
+  check((kinds.TABLE || 0) >= 140,
         'the printed tables were lifted out and kept in their own right', (kinds.TABLE || 0) + ' tables');
+
+  // The check that would have caught the worst loss so far. Table captions are
+  // numbered consecutively within a chapter, so a gap means a table went
+  // missing — and 44 of them had, because a table floated to the TOP of a page
+  // put its caption inside the running-head band and the filter deleted it.
+  // Nothing about the totals looked wrong: 106 tables is a plausible number for
+  // a 765-page book, and every anchor still passed because Table 5.1 survived.
+  const byChapter = new Map();
+  for (const l of lessons) {
+    if (l.extraction !== 'TABLE') continue;
+    const m = /^(\d+)\.(\d+)$/.exec(l.section_no || '');
+    if (!m) continue;
+    const ch = Number(m[1]);
+    if (!byChapter.has(ch)) byChapter.set(ch, new Set());
+    byChapter.get(ch).add(Number(m[2]));
+  }
+  const gaps = [];
+  for (const [ch, nums] of [...byChapter].sort((a, b) => a[0] - b[0])) {
+    const top = Math.max(...nums);
+    for (let n = 1; n <= top; n++) if (!nums.has(n)) gaps.push(`${ch}.${n}`);
+  }
+  check(gaps.length === 0, 'table numbering runs unbroken in every chapter',
+        gaps.length ? 'missing ' + gaps.join(', ') : `${byChapter.size} chapters`);
+
+  // An equation block is short and full of digits, which is exactly what a
+  // table row looks like, so one can be swallowed into the table above it.
+  const withEq = lessons.filter(l =>
+    l.extraction === 'TABLE' && /^\s*\(\d+\.\d+[a-z]?\)\s*$/m.test(l.body));
+  check(withEq.length === 0, 'no equation was swallowed into a table',
+        withEq.map(l => l.title.slice(0, 40)).join('; '));
   const lossy = lessons.filter(l => l.symbol_loss > 0);
   check(lossy.length < 100, 'few sections lost maths glyphs to the text layer',
         `${lossy.length} sections, worst ${Math.max(0, ...lessons.map(l => l.symbol_loss))} characters`);
