@@ -454,6 +454,7 @@
             <button class="cat-chip" onclick="filterFabrics('rib', this)">Rib</button>
             <button class="cat-chip" onclick="filterFabrics('interlock', this)">Interlock</button>
             <button class="cat-chip" onclick="filterFabrics('warp_knit', this)">Warp Knit</button>
+            <button class="cat-chip" onclick="filterFabrics('woven', this)">Woven</button>
           </div>
           <select id="fabric-select" class="form-select">
             <option value="">— Select fabric type —</option>
@@ -723,6 +724,55 @@
               </div>
             </div>
 
+            <!-- WOVEN INPUTS (hidden unless a woven quality is selected) -->
+            <div id="woven-panel" class="hidden" style="grid-column: 1 / -1; border-top: 1px solid var(--line2); padding-top: 12px; margin-top: 12px;">
+              <div class="optional-label" style="margin-bottom: 8px;">Woven Construction <span class="text-dim">(pre-filled from the selected quality)</span></div>
+              <div class="optional-row">
+                <div class="inp-group">
+                  <label for="epi-input">Ends / inch (EPI)</label>
+                  <input type="number" id="epi-input" class="form-input" min="1" max="600" step="1" placeholder="e.g. 56">
+                </div>
+                <div class="inp-group">
+                  <label for="ppi-input">Picks / inch (PPI)</label>
+                  <input type="number" id="ppi-input" class="form-input" min="1" max="600" step="1" placeholder="e.g. 44">
+                </div>
+              </div>
+              <div class="optional-row">
+                <div class="inp-group">
+                  <label for="warp-count-input">Warp count</label>
+                  <input type="text" id="warp-count-input" class="form-input" placeholder="e.g. 8s or 2/80s" autocomplete="off">
+                </div>
+                <div class="inp-group">
+                  <label for="weft-count-input">Weft count</label>
+                  <input type="text" id="weft-count-input" class="form-input" placeholder="e.g. 6s or 2/80s" autocomplete="off">
+                </div>
+              </div>
+              <div class="optional-row">
+                <div class="inp-group">
+                  <label for="dent-input">Ends / dent</label>
+                  <input type="number" id="dent-input" class="form-input" min="1" max="8" step="1" value="2">
+                </div>
+                <div class="inp-group">
+                  <label for="wastage-input">Wastage (%)</label>
+                  <input type="number" id="wastage-input" class="form-input" min="0" max="20" step="0.5" value="3">
+                </div>
+              </div>
+              <div class="optional-row">
+                <div class="inp-group">
+                  <label for="cloth-width-input">Width (inch)</label>
+                  <input type="number" id="cloth-width-input" class="form-input" min="10" max="140" step="1" placeholder="e.g. 60">
+                </div>
+                <div class="inp-group">
+                  <label for="cloth-length-input">Length (m)</label>
+                  <input type="number" id="cloth-length-input" class="form-input" min="1" step="1" placeholder="e.g. 1000">
+                </div>
+              </div>
+              <div class="info-box mt-12" style="font-size:10px; line-height:1.6;">
+                Fill in width and length to get the yarn requirement in kilograms, split warp and weft.
+                Leave the sett and counts as they are to use the quality the book prints.
+              </div>
+            </div>
+
             <!-- WARP KNIT INPUTS (hidden for non-warp fabrics) -->
             <div id="warp-knit-panel" class="hidden" style="grid-column: 1 / -1; border-top: 1px solid var(--line2); padding-top: 12px; margin-top: 12px;">
               <div class="optional-label" style="margin-bottom: 8px;">Warp Knit <span class="text-dim">(optional)</span></div>
@@ -756,6 +806,19 @@
             Calculate Everything →
           </button>
           <div class="calc-btn-hint">16+ calculations in &lt;50ms · No internet needed for form input</div>
+        </div>
+
+        <!-- WOVEN RESULT — shown in place, because a woven quality has no
+             costing, quality or dyeing model behind it here and should not be
+             sent to a result page that implies otherwise. -->
+        <div id="woven-result-wrap" class="hidden mt-16">
+          <div class="card">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px;">
+              <div class="h3" id="woven-result-title">Woven Analysis</div>
+              <button class="btn btn-sm" onclick="clearWovenResult()">Clear</button>
+            </div>
+            <div id="woven-result"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -867,6 +930,9 @@
 <script src="assets/js/api.js?v=20260606b"></script>
 <script src="assets/js/ui.js?v=20260606b"></script>
 <script src="assets/js/storage.js?v=20260606b"></script>
+<!-- Draws the woven loom plans in place. Knit results render on result.html;
+     a woven quality answers here, so the renderer has to be on this page too. -->
+<script src="assets/js/pattern-renderer.js?v=20260831a"></script>
 
 <script>
 /* ============================================================
@@ -1066,6 +1132,7 @@ function populateFabricSelect(fabrics, category = 'all') {
     rib: '— Rib Structures —',
     interlock: '— Double Bed (Interlock) —',
     warp_knit: '— Warp Knit —',
+    woven: '— Woven —',
   };
 
   let html = '<option value="">— Select fabric type —</option>';
@@ -1073,8 +1140,10 @@ function populateFabricSelect(fabrics, category = 'all') {
     html += `<optgroup label="${catLabels[cat] || cat}">`;
     items.forEach(f => {
       const sel = f.id === prev ? 'selected' : '';
-      const range = f.gsm_range ? ` (${f.gsm_range[0]}–${f.gsm_range[1]} GSM)` : '';
-      html += `<option value="${f.id}" ${sel}>${f.name}${range}</option>`;
+      const detail = f.is_woven
+        ? (f.construction ? ` (${f.construction} — ${f.nominal_gsm} GSM)` : '')
+        : (f.gsm_range ? ` (${f.gsm_range[0]}–${f.gsm_range[1]} GSM)` : '');
+      html += `<option value="${f.id}" ${sel}>${f.name}${detail}</option>`;
     });
     html += `</optgroup>`;
   });
@@ -1100,6 +1169,27 @@ function onFabricChange() {
   if (fabric.gauge_range) parts.push(`Gauge: ${fabric.gauge_range[0]}–${fabric.gauge_range[1]} GG`);
   if (fabric.is_multi_yarn) parts.push('Multi-yarn (ground + pile)');
   if (fabric.is_warp) parts.push('Warp knit (denier-based)');
+
+  // A woven quality is described by its construction, and by whether that
+  // construction is one the book prints or a working default. Saying which
+  // matters more than the number itself.
+  const wovenPanel = document.getElementById('woven-panel');
+  if (fabric.is_woven) {
+    parts.length = 0;
+    if (fabric.construction) parts.push(fabric.construction);
+    if (fabric.nominal_gsm) parts.push(`${fabric.nominal_gsm} GSM`);
+    parts.push(fabric.sett_source === 'BOOK_VERIFIED'
+      ? 'construction from Gokarneshan (2005)'
+      : 'working default sett — replace with your own');
+    if (!fabric.has_structure) parts.push('weave grid not stored for this structure');
+    info.textContent = parts.join(' · ');
+    warpPanel.classList.add('hidden');
+    wovenPanel.classList.remove('hidden');
+    prefillWovenConstruction(fabric);
+    document.getElementById('optional-body').classList.add('open');
+    return;
+  }
+  wovenPanel.classList.add('hidden');
   info.textContent = parts.join(' · ');
 
   // Show/hide warp knit panel and update field labels
@@ -1127,6 +1217,92 @@ function onFabricChange() {
     document.getElementById('filaments-input').value = '';
     document.getElementById('elastane-denier-input').value = '';
     document.getElementById('elastane-pct-input').value = '';
+  }
+}
+
+/* ============================================================
+   WOVEN CONSTRUCTION
+   ============================================================ */
+
+/**
+ * Put the selected quality's own sett into the form. The fields stay editable
+ * because a merchandiser quotes the cloth in front of them, not the one in the
+ * book — but they start from something real rather than empty.
+ */
+function prefillWovenConstruction(fabric) {
+  const m = (fabric.construction || '').match(/^(\d+)×(\d+),\s*(.+?)\/(.+)$/);
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+  if (m) {
+    set('epi-input', m[1]);
+    set('ppi-input', m[2]);
+    set('warp-count-input', m[3].trim());
+    set('weft-count-input', m[4].trim());
+  } else {
+    ['epi-input', 'ppi-input', 'warp-count-input', 'weft-count-input'].forEach(id => set(id, ''));
+  }
+}
+
+function clearWovenResult() {
+  document.getElementById('woven-result').innerHTML = '';
+  document.getElementById('woven-result-wrap').classList.add('hidden');
+}
+
+async function doWovenCalculate(fabricId, btn) {
+  const numOrUndef = id => {
+    const v = parseFloat((document.getElementById(id) || {}).value);
+    return Number.isFinite(v) ? v : undefined;
+  };
+  const strOrUndef = id => {
+    const v = ((document.getElementById(id) || {}).value || '').trim();
+    return v || undefined;
+  };
+
+  const params = {
+    fabric_id: fabricId,
+    epi: numOrUndef('epi-input'),
+    ppi: numOrUndef('ppi-input'),
+    warp_count: strOrUndef('warp-count-input'),
+    weft_count: strOrUndef('weft-count-input'),
+    ends_per_dent: numOrUndef('dent-input'),
+    wastage_pct: numOrUndef('wastage-input'),
+    width_inch: numOrUndef('cloth-width-input'),
+    length_m: numOrUndef('cloth-length-input'),
+  };
+  Object.keys(params).forEach(k => params[k] === undefined && delete params[k]);
+
+  setButtonLoading(btn, true, 'Calculating...');
+  try {
+    const r = await apiWovenCalculate(params);
+    if (!r.success) {
+      showToast(r.message || r.error || 'Woven calculation failed', 'error');
+      return;
+    }
+    document.getElementById('woven-result-title').textContent = r.fabric.name;
+    // The same payload shape the pattern endpoint returns, so one renderer
+    // serves both this page and the pattern library.
+    renderPatternGrid(document.getElementById('woven-result'), {
+      fabric_type: 'woven',
+      fabric_id: r.fabric.id,
+      fabric_name: r.fabric.name,
+      family: r.fabric.family,
+      construction: r.construction,
+      structure: r.structure,
+      weight: r.weight,
+      cover: r.cover,
+      twill_angle: r.twill_angle,
+      consumption: r.consumption,
+      characteristics: r.fabric.characteristics,
+      end_uses: r.fabric.end_uses,
+      book_page: r.fabric.book_page,
+      notes: r.notes,
+    });
+    const wrap = document.getElementById('woven-result-wrap');
+    wrap.classList.remove('hidden');
+    wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (err) {
+    showToast(err.message || 'API error — is the server running?', 'error');
+  } finally {
+    setButtonLoading(btn, false);
   }
 }
 
@@ -1428,6 +1604,14 @@ async function doCalculate() {
     fabricEl.focus();
     return;
   }
+
+  // A woven cloth has no target GSM to enter: its weight FOLLOWS from the sett
+  // and the counts. So it branches before the knit validation, not after.
+  const selected = allFabrics.find(f => f.id === fabric);
+  if (selected && selected.is_woven) {
+    return doWovenCalculate(fabric, btn);
+  }
+
   if (!gsm || isNaN(gsm) || gsm < 60 || gsm > 500) {
     showToast('Please enter a valid GSM (60–500)', 'error');
     gsmEl.focus();

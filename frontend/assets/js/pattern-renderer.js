@@ -16,6 +16,13 @@ function renderPatternGrid(container, patternData, yarnInfo) {
     return;
   }
 
+  // Woven — the same discriminator mechanism. A woven cloth has no courses or
+  // wales to draw, so it gets the four loom plans instead of a K/T/M grid.
+  if (patternData?.fabric_type === 'woven') {
+    container.innerHTML = renderWovenPattern(patternData);
+    return;
+  }
+
   if (!patternData || (!patternData.pattern_cylinder && !patternData.pattern_dial)) {
     let fallbackHtml = `<div class="text-dim text-sm">Pattern data not available for this fabric.</div>`;
     if (patternData?.structure_note) {
@@ -783,4 +790,317 @@ function buildWarpLappingSVG(notation, barIdx) {
   </div>`;
 
   return svg;
+}
+
+/* ============================================================
+   WOVEN STRUCTURE DESIGN
+   ============================================================
+   A woven cloth is not described by a K/T/M grid, so it gets its own
+   drawing: the four plans a weaver actually sets a loom from, laid out
+   the way every weaving text prints them —
+
+        DRAFTING PLAN   which shaft each warp end is threaded on
+        DESIGN          which ends lift on each pick      PEG PLAN
+        DENTING         which ends share a reed dent      (per shaft)
+
+   Pick 1 sits at the BOTTOM of the design and shaft 1 at the bottom of
+   the draft, because that is the direction cloth grows on a loom. The
+   plans are derived, never transcribed, and the backend refuses to send
+   them unless re-expanding the draft and peg plan reproduces the design
+   exactly — so what is drawn here is always a set-up that weaves the
+   cloth beside it.
+   ============================================================ */
+
+function wovEsc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+const WOVEN_INK = {
+  warpUp: '#1A1A1A',    // an end lifted over the pick
+  weftUp: '#F2F2EF',    // the pick showing instead
+  heald:  '#444444',
+  dent:   '#C87800',
+  grid:   '#D4D4CF',
+  label:  '#999999',
+};
+
+/** One filled/empty square grid, shared by the design, draft and peg plans. */
+function wovGrid(rows, cols, isSet, opts) {
+  const o = Object.assign({ cell: 15, x: 0, y: 0, on: WOVEN_INK.warpUp, off: WOVEN_INK.weftUp }, opts || {});
+  let s = '';
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      // Row 0 is drawn at the BOTTOM so the plan reads the way a loom builds.
+      const y = o.y + (rows - 1 - r) * o.cell;
+      const x = o.x + c * o.cell;
+      s += '<rect x="' + x + '" y="' + y + '" width="' + o.cell + '" height="' + o.cell + '" fill="'
+        + (isSet(r, c) ? o.on : o.off) + '" stroke="' + WOVEN_INK.grid + '" stroke-width="0.75"/>';
+    }
+  }
+  return s;
+}
+
+function wovLabel(x, y, text, anchor) {
+  return '<text x="' + x + '" y="' + y + '" font-size="8.5" fill="' + WOVEN_INK.label
+    + '" font-family="var(--mono, monospace)" text-anchor="' + (anchor || 'start')
+    + '" letter-spacing="0.6">' + wovEsc(text) + '</text>';
+}
+
+/**
+ * The four plans in one figure. Everything is positioned off the design block,
+ * so the three satellites stay aligned to it whatever the repeat.
+ */
+function buildLoomPlanSVG(structure) {
+  const cell = 15;
+  const ends = structure.repeat_ends;
+  const picks = structure.repeat_picks;
+  const healds = structure.draft.healds;
+  const grid = structure.grid;
+  const peg = structure.peg_plan.peg;
+  const assign = structure.draft.assignment;
+
+  const gap = 24, padL = 60, padT = 18;
+  const draftH = healds * cell;
+  const designW = ends * cell;
+  const designH = picks * cell;
+  const pegW = healds * cell;
+
+  const designY = padT + draftH + gap;
+  const dentY = designY + designH + gap;
+  const w = padL + designW + gap + pegW + 150;
+  const h = dentY + cell + 26;
+
+  let svg = '<svg viewBox="0 0 ' + w + ' ' + h + '" width="100%" style="max-width:'
+    + Math.max(w, 300) + 'px;display:block" role="img" '
+    + 'aria-label="Loom plans: drafting plan, design, peg plan and denting order">';
+
+  // DRAFTING PLAN — one mark per end, on the shaft it is threaded through.
+  svg += wovLabel(padL - 7, padT - 5, 'DRAFTING PLAN', 'end');
+  svg += '<g class="woven-draft" role="group" aria-label="Drafting plan: the shaft each warp end is threaded on">'
+    + wovGrid(healds, ends, (hh, e) => assign[e] === hh, { cell, x: padL, y: padT, on: WOVEN_INK.heald })
+    + '</g>';
+  for (let hh = 0; hh < healds; hh++) {
+    svg += wovLabel(padL - 6, padT + (healds - 1 - hh) * cell + cell * 0.72, 'S' + (hh + 1), 'end');
+  }
+
+  // DESIGN — the weave repeat itself.
+  svg += wovLabel(padL - 7, designY - 5, 'DESIGN', 'end');
+  svg += '<g class="woven-design" role="group" aria-label="Design: the weave repeat, filled where the warp lifts">'
+    + wovGrid(picks, ends, (p, e) => !!grid[p][e], { cell, x: padL, y: designY })
+    + '</g>';
+  for (let p = 0; p < picks; p++) {
+    svg += wovLabel(padL - 6, designY + (picks - 1 - p) * cell + cell * 0.72, String(p + 1), 'end');
+  }
+  for (let e = 0; e < ends; e++) {
+    svg += wovLabel(padL + e * cell + cell / 2, designY + designH + 11, String(e + 1), 'middle');
+  }
+
+  // PEG PLAN — the same lifts, expressed per shaft instead of per end.
+  const pegX = padL + designW + gap;
+  svg += wovLabel(pegX, designY - 5, 'PEG PLAN', 'start');
+  svg += '<g class="woven-peg" role="group" aria-label="Peg plan: the shafts raised on each pick">'
+    + wovGrid(picks, healds, (p, hh) => !!peg[p][hh], { cell, x: pegX, y: designY, on: WOVEN_INK.heald })
+    + '</g>';
+  for (let hh = 0; hh < healds; hh++) {
+    svg += wovLabel(pegX + hh * cell + cell / 2, designY + designH + 11, String(hh + 1), 'middle');
+  }
+
+  // DENTING — alternate shading per dent, so a repeat that straddles one shows.
+  if (structure.denting) {
+    const per = structure.denting.ends_per_dent;
+    svg += wovLabel(padL - 7, dentY + cell * 0.72, 'DENTING', 'end');
+    svg += '<g class="woven-denting" role="group" aria-label="Denting: which ends share a reed dent">';
+    for (let e = 0; e < ends; e++) {
+      const dent = Math.floor(e / per);
+      svg += '<rect x="' + (padL + e * cell) + '" y="' + dentY + '" width="' + cell + '" height="' + cell
+        + '" fill="' + (dent % 2 ? 'rgba(200,120,0,0.18)' : 'rgba(200,120,0,0.06)')
+        + '" stroke="' + WOVEN_INK.dent + '" stroke-width="0.75"/>';
+    }
+    svg += '</g>';
+    svg += wovLabel(padL + designW + 8, dentY + cell * 0.72,
+      per + ' ends/dent, ' + structure.denting.reed_count_stockport + ' dents per inch', 'start');
+  }
+
+  return svg + '</svg>';
+}
+
+/**
+ * What the cloth looks like. The repeat is tiled, then each crossing is drawn
+ * as the thread actually on top — a vertical warp band where the end lifts, the
+ * horizontal weft band underneath where it does not. That is why a twill shows
+ * its diagonal here and a satin does not: the picture is the interlacement
+ * itself rather than an illustration of it.
+ */
+function buildClothPreviewSVG(structure, opts) {
+  const o = Object.assign({ warp: '#2E4A7D', weft: '#E8E4DA', target: 40, cell: 11 }, opts || {});
+  const ends = structure.repeat_ends;
+  const picks = structure.repeat_picks;
+  // Whole repeats only, but aim for a similar physical size whatever the repeat.
+  const cols = ends * Math.max(2, Math.round(o.target / ends));
+  const rows = picks * Math.max(2, Math.round(o.target / picks));
+  const c = o.cell;
+  const w = cols * c, h = rows * c;
+
+  let svg = '<svg viewBox="0 0 ' + w + ' ' + h + '" width="100%" style="max-width:' + w
+    + 'px;display:block;border-radius:3px" role="img" aria-label="Cloth appearance, the weave repeat tiled">';
+
+  // Weft first — it is the ground the warp lifts over.
+  for (let r = 0; r < rows; r++) {
+    svg += '<rect x="0" y="' + (r * c) + '" width="' + w + '" height="' + c + '" fill="' + o.weft + '"/>';
+    svg += '<rect x="0" y="' + (r * c) + '" width="' + w + '" height="' + (c * 0.16) + '" fill="rgba(0,0,0,0.07)"/>';
+  }
+  // Then every lifted warp, drawn over it.
+  for (let r = 0; r < rows; r++) {
+    const p = (rows - 1 - r) % picks;   // bottom-up, matching the design plan
+    for (let col = 0; col < cols; col++) {
+      if (!structure.grid[p][col % ends]) continue;
+      svg += '<rect x="' + (col * c) + '" y="' + (r * c) + '" width="' + c + '" height="' + c + '" fill="' + o.warp + '"/>';
+      svg += '<rect x="' + (col * c) + '" y="' + (r * c) + '" width="' + (c * 0.16) + '" height="' + c + '" fill="rgba(255,255,255,0.11)"/>';
+    }
+  }
+  return svg + '</svg>';
+}
+
+function wovStat(label, value, sub) {
+  return '<div class="card-sm"><div class="label">' + wovEsc(label) + '</div>'
+    + '<div class="value-sm mt-4">' + wovEsc(value) + '</div>'
+    + (sub ? '<div class="text-xs text-dim mt-4">' + wovEsc(sub) + '</div>' : '')
+    + '</div>';
+}
+
+function wovStatGrid(cards) {
+  return '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:8px;margin-bottom:14px;">'
+    + cards.filter(Boolean).join('') + '</div>';
+}
+
+function renderWovenPattern(data) {
+  const s = data.structure || {};
+  const c = data.construction || {};
+  let html = '';
+
+  html += '<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:12px;">'
+    + '<span class="badge badge-gray">WOVEN</span>'
+    + '<span class="text-sm" style="color:var(--t2)">' + wovEsc((data.family || '').replace(/_/g, ' ')) + '</span>'
+    + (data.book_page ? '<span class="text-xs text-dim">Gokarneshan (2005) p.' + data.book_page + '</span>' : '')
+    + '</div>';
+
+  if (!s.available) {
+    // The honest gap. Everything the book gives is still shown; the one thing
+    // it cannot give without the figure is the grid, and that is said plainly
+    // rather than filled in with something plausible.
+    html += '<div class="warning-box" style="margin-bottom:14px;">'
+      + '<strong>No weave grid is stored for this structure.</strong>'
+      + '<div class="text-sm mt-8">' + wovEsc(s.note || 'The book draws this weave as a figure rather than stating a rule that generates it.') + '</div>'
+      + '</div>';
+    if (s.draft_hint) {
+      html += '<div class="info-box mb-12"><strong>What the book does say about the set-up</strong>'
+        + '<div class="text-sm mt-4">' + wovEsc(s.draft_hint.slug) + ' draft'
+        + (s.draft_hint.healds ? ', about ' + s.draft_hint.healds + ' shafts' : '')
+        + ' — ' + wovEsc(s.draft_hint.note || '') + '</div></div>';
+    }
+  } else {
+    html += '<div class="mb-16">'
+      + '<div class="label mb-8">Loom Plans <span class="text-dim" style="font-weight:400">— '
+      + wovEsc(s.notation || '') + ', repeat ' + s.repeat_ends + ' × ' + s.repeat_picks + '</span></div>'
+      + '<div style="overflow-x:auto;padding:12px 6px;background:var(--bg2);border:1px solid var(--line);border-radius:4px;">'
+      + buildLoomPlanSVG(s) + '</div>'
+      + '<div class="text-xs text-dim mt-4">Filled square = warp lifted. Pick 1 and shaft 1 sit at the bottom, '
+      + 'the direction the cloth grows. The draft and peg plan are derived from the design and checked against it: '
+      + wovEsc(s.verified || '') + '.</div></div>';
+
+    html += '<div class="mb-16">'
+      + '<div class="label mb-8">Cloth Appearance <span class="text-dim" style="font-weight:400">— the repeat tiled</span></div>'
+      + '<div style="overflow-x:auto;">' + buildClothPreviewSVG(s) + '</div>'
+      + '<div class="text-xs text-dim mt-4">Each crossing shows the thread actually on top, so what you see is the '
+      + 'interlacement rather than a drawing of it.</div></div>';
+
+    const f = s.floats || {};
+    html += '<div class="label mb-8">Structure Geometry</div>' + wovStatGrid([
+      wovStat('Repeat', s.repeat_ends + ' × ' + s.repeat_picks, 'ends × picks'),
+      wovStat('Shafts', String(s.draft.healds), s.draft.type.name),
+      wovStat('Longest float', f.warp_float_max + ' / ' + f.weft_float_max, 'warp / weft, in threads'),
+      wovStat('Average float', String(f.average_float), 'threads per intersection'),
+      wovStat('Firmness', String(f.firmness_vs_plain), 'against plain = 1.00'),
+      wovStat('Warp on face', Math.round((f.warp_up_fraction || 0) * 100) + '%', 'of the repeat area'),
+    ]);
+  }
+
+  if (c.ends_per_inch) {
+    html += '<div class="label mb-8">Construction <span class="text-dim" style="font-weight:400">— '
+      + (c.sett_source === 'BOOK_VERIFIED'
+          ? wovEsc('the book’s own quality, p.' + c.sett_page)
+          : 'a working default, not one of the book’s constructions')
+      + '</span></div>' + wovStatGrid([
+        wovStat('Sett', c.ends_per_inch + ' × ' + c.picks_per_inch, 'ends × picks per inch'),
+        wovStat('Warp yarn', String(c.warp_count), c.warp_resultant_ne + ' Ne resultant'),
+        wovStat('Weft yarn', String(c.weft_count), c.weft_resultant_ne + ' Ne resultant'),
+        c.material ? wovStat('Material', c.material) : null,
+      ]);
+  }
+
+  const w = data.weight;
+  if (w) {
+    const assumedCrimp = w.warp_crimp_source === 'ASSUMED' || w.weft_crimp_source === 'ASSUMED';
+    html += '<div class="label mb-8">Cloth Weight</div>' + wovStatGrid([
+      wovStat('Weight', w.gsm + ' g/m²', w.oz_per_sq_yd + ' oz/yd²'),
+      wovStat('Warp share', w.warp_share_pct + '%', w.warp_gsm + ' of ' + w.gsm + ' g'),
+      wovStat('Warp crimp', w.warp_crimp_pct + '%', w.warp_crimp_source === 'ASSUMED' ? 'assumed' : 'from the book'),
+      wovStat('Weft crimp', w.weft_crimp_pct + '%', w.weft_crimp_source === 'ASSUMED' ? 'assumed' : 'from the book'),
+    ]) + '<div class="text-xs text-dim mb-16">' + wovEsc(w.basis)
+      + (assumedCrimp ? ' The weight is therefore no firmer than the crimp assumed behind it.' : '')
+      + '</div>';
+  }
+
+  const cv = data.cover;
+  if (cv) {
+    html += '<div class="label mb-8">Cover Factor</div>' + wovStatGrid([
+      wovStat('Warp cover', String(cv.warp_cover)),
+      wovStat('Weft cover', String(cv.weft_cover)),
+      wovStat('Cloth cover', String(cv.cloth_cover),
+        cv.jammed ? 'at or past the jamming point' : cv.saturation_pct + '% of this weave’s ceiling'),
+    ]) + '<div class="text-xs text-dim mb-16">Peirce’s cover factor. The 28 inside it is an empirical '
+      + 'plain-weave maximum and does not come from Gokarneshan (2005).</div>';
+  } else if (data.fabric_type === 'woven' && data.weight) {
+    html += '<div class="info-box mb-16 text-sm">Cover factor is not reported for this cloth: its picks per inch '
+      + 'include pile picks, which do not lie in the single plane the formula describes.</div>';
+  }
+
+  // Yarn requirement, when a width and a length were given. The form offers
+  // this explicitly, so leaving it unrendered would be a promise the page breaks.
+  const use = data.consumption;
+  if (use) {
+    html += '<div class="label mb-8">Yarn Requirement <span class="text-dim" style="font-weight:400">— '
+      + use.area_m2 + ' m² of cloth</span></div>' + wovStatGrid([
+        wovStat('Warp', use.warp_kg + ' kg', use.total_ends + ' ends on the beam'),
+        wovStat('Weft', use.weft_kg + ' kg'),
+        wovStat('Net', use.net_kg + ' kg', 'before wastage'),
+        wovStat('Gross', use.gross_kg + ' kg', use.wastage_pct + '% wastage added'),
+      ]) + '<div class="text-xs text-dim mb-16">Each warp end runs '
+      + use.warp_length_m + ' m for this piece — longer than the cloth, because crimp is the '
+      + 'extra length a thread takes bending round the picks. The gross figure is the net plus '
+      + 'wastage, not a second estimate.</div>';
+  }
+
+  const ta = data.twill_angle;
+  if (ta) {
+    html += '<div class="info-box mb-16"><strong>Twill angle — ' + wovEsc(ta.band.label) + '</strong>'
+      + '<div class="text-sm mt-4">The book (p.' + ta.band.page + ') names the band from the sett alone. '
+      + 'The ' + ta.angle_deg + '° figure beside it is derived, not quoted.</div></div>';
+  }
+
+  if (Array.isArray(data.characteristics) && data.characteristics.length) {
+    html += '<div class="label mb-8">Characteristics</div><ul class="text-sm" style="margin:0 0 16px 18px;color:var(--t2)">'
+      + data.characteristics.map(x => '<li>' + wovEsc(x) + '</li>').join('') + '</ul>';
+  }
+  if (Array.isArray(data.end_uses) && data.end_uses.length) {
+    html += '<div class="label mb-8">Typical End Uses</div><div class="mb-16" style="display:flex;flex-wrap:wrap;gap:6px;">'
+      + data.end_uses.map(x => '<span class="badge badge-gray">' + wovEsc(x) + '</span>').join('') + '</div>';
+  }
+  if (Array.isArray(data.notes) && data.notes.length) {
+    html += '<div class="label mb-8">Notes</div>'
+      + data.notes.map(n => '<div class="text-xs text-dim mb-4">• ' + wovEsc(n) + '</div>').join('');
+  }
+
+  return html;
 }

@@ -103,6 +103,92 @@ async function testFormPage() {
   window.close();
 }
 
+/**
+ * The woven path, driven the way a user drives it: pick a woven quality out of
+ * the same dropdown, press the same button, and read the answer off the page.
+ *
+ * It is a separate test from testFormPage because it takes a different branch
+ * at every step — no target GSM, a different panel, a different endpoint, and
+ * an answer rendered in place instead of on the results page. Sharing one test
+ * would have meant sharing none of the code that actually runs.
+ */
+async function testWovenPath() {
+  console.log('\nWOVEN PATH  ' + BASE + '/');
+  const html = await (await fetch(BASE + '/')).text();
+  const { dom, errors } = makeDom(html, BASE + '/');
+  const { window } = dom;
+  await sleep(6000);
+  const doc = window.document;
+
+  const sel = doc.getElementById('fabric-select');
+  const wovenOpts = sel ? [...sel.options].filter(o => o.value.startsWith('woven_')) : [];
+  check(wovenOpts.length >= 20, 'woven qualities are in the fabric dropdown',
+        wovenOpts.length + ' options');
+
+  const group = sel ? [...sel.querySelectorAll('optgroup')].find(g => /woven/i.test(g.label)) : null;
+  check(!!group, 'they are grouped under their own heading', group ? group.label : 'no woven optgroup');
+
+  // The label has to say what the cloth IS. A woven quality with no construction
+  // in its label is indistinguishable from every other woven quality.
+  const denim = wovenOpts.find(o => o.value === 'woven_denim');
+  check(!!denim && /56×44/.test(denim.text) && /8s\/6s/.test(denim.text),
+        'a woven option is labelled by its construction', denim ? denim.text : 'no denim option');
+
+  if (!denim) { window.close(); return; }
+
+  sel.value = 'woven_denim';
+  sel.dispatchEvent(new window.Event('change'));
+  await sleep(300);
+
+  const panel = doc.getElementById('woven-panel');
+  check(!!panel && !panel.classList.contains('hidden'), 'selecting it reveals the woven construction fields');
+  check(doc.getElementById('epi-input').value === '56' && doc.getElementById('ppi-input').value === '44',
+        'the sett is pre-filled from the selected quality',
+        doc.getElementById('epi-input').value + ' x ' + doc.getElementById('ppi-input').value);
+  check(doc.getElementById('warp-count-input').value === '8s',
+        'so are the counts', doc.getElementById('warp-count-input').value);
+
+  const warpPanel = doc.getElementById('warp-knit-panel');
+  check(!!warpPanel && warpPanel.classList.contains('hidden'),
+        'the warp-knit fields stay hidden — they do not apply to a woven cloth');
+
+  doc.getElementById('cloth-width-input').value = '60';
+  doc.getElementById('cloth-length-input').value = '1000';
+  doc.getElementById('calc-btn').click();
+  await sleep(9000);
+
+  const wrap = doc.getElementById('woven-result-wrap');
+  check(!!wrap && !wrap.classList.contains('hidden'), 'the woven answer appears in place');
+
+  const out = doc.getElementById('woven-result');
+  const text = out ? out.textContent : '';
+  check(/DRAFTING PLAN/.test(out ? out.innerHTML : ''), 'the drafting plan is drawn');
+  check(/PEG PLAN/.test(out ? out.innerHTML : ''), 'the peg plan is drawn');
+  check(/DENTING/.test(out ? out.innerHTML : ''), 'the denting order is drawn');
+  check(out ? out.querySelectorAll('svg').length === 2 : false,
+        'both figures are present — loom plans and cloth appearance',
+        out ? out.querySelectorAll('svg').length + ' svg' : 'no container');
+  check(/348\.4 g\/m²/.test(text), 'the cloth weight is shown', (text.match(/[\d.]+ g\/m²/) || ['none'])[0]);
+  check(/steep \/ high angle twill/.test(text), 'the twill is classified by the sett');
+  // The form promises a kilogram figure for the width and length entered, so
+  // the page has to actually produce one.
+  check(/Yarn Requirement/.test(text) && /546\.733 kg/.test(text),
+        'the yarn requirement for 1000 m x 60 in is shown',
+        (text.match(/[\d.]+ kg/g) || ['none']).join(' '));
+  check(!/undefined|NaN|\[object/.test(text), 'no undefined, NaN or [object Object] reached the page');
+
+  // Switching back to a knit fabric must restore the knit form completely.
+  sel.value = 'single_jersey';
+  sel.dispatchEvent(new window.Event('change'));
+  await sleep(300);
+  check(doc.getElementById('woven-panel').classList.contains('hidden'),
+        'switching back to a knit fabric hides the woven fields again');
+
+  const errs = realErrors(errors);
+  check(errs.length === 0, 'no script errors on the woven path', errs.slice(0, 3).join(' | '));
+  window.close();
+}
+
 async function testResultPage() {
   console.log('\nRESULTS PAGE  ' + BASE + '/result.html');
   const html = await (await fetch(BASE + '/result.html')).text();
@@ -256,6 +342,7 @@ async function testCsp() {
   await testCsp();
   await testFormPage();
   await testResultPage();
+  await testWovenPath();
 
   console.log('\n' + '='.repeat(56));
   if (failures.length) {

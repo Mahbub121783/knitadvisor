@@ -23,6 +23,7 @@
       flex-wrap: wrap;
       margin-bottom: 20px;
     }
+    .dot-woven { background: var(--a4); }
     .filter-chip {
       padding: 5px 12px;
       border-radius: 20px;
@@ -178,11 +179,12 @@
 
     <!-- Filter -->
     <div class="filter-bar">
-      <button class="filter-chip active" onclick="filterCat('all', this)">All (29)</button>
+      <button class="filter-chip active" onclick="filterCat('all', this)" id="chip-all">All</button>
       <button class="filter-chip" onclick="filterCat('single_jersey', this)">Single Jersey</button>
       <button class="filter-chip" onclick="filterCat('rib', this)">Rib</button>
       <button class="filter-chip" onclick="filterCat('interlock', this)">Interlock</button>
       <button class="filter-chip" onclick="filterCat('warp_knit', this)">Warp Knit</button>
+      <button class="filter-chip" onclick="filterCat('woven', this)">Woven</button>
     </div>
 
     <!-- Loading state -->
@@ -245,7 +247,7 @@
 
 <script src="assets/js/api.js"></script>
 <script src="assets/js/ui.js"></script>
-<script src="assets/js/pattern-renderer.js?v=20260605i"></script>
+<script src="assets/js/pattern-renderer.js?v=20260831a"></script>
 
 <script>
 let allFabrics = [];
@@ -256,17 +258,21 @@ const CAT_DOT = {
   rib: 'dot-rib',
   interlock: 'dot-inter',
   warp_knit: 'dot-warp',
+  woven: 'dot-woven',
 };
 const CAT_COLOR = {
   single_jersey: 'var(--a1)',
   rib: 'var(--a2)',
   interlock: 'var(--a4)',
   warp_knit: 'var(--a5)',
+  woven: 'var(--a4)',
 };
 
 document.addEventListener('DOMContentLoaded', async () => {
   try {
     allFabrics = await apiFabrics();
+    const allChip = document.getElementById('chip-all');
+    if (allChip) allChip.textContent = `All (${allFabrics.length})`;
     renderGrid(allFabrics);
   } catch (err) {
     document.getElementById('loading-state').innerHTML =
@@ -297,12 +303,19 @@ function renderGrid(fabrics) {
         <div class="fc-name">${f.name}</div>
         ${f.is_multi_yarn ? '<span class="badge badge-blue">multi-yarn</span>' : ''}
         ${f.is_warp ? '<span class="badge badge-gray">warp</span>' : ''}
+        ${f.is_woven ? '<span class="badge badge-gray">woven</span>' : ''}
       </div>
       <div class="fc-body">
         <div class="fc-stats">
+          ${f.is_woven ? `
+          <div class="fc-stat">Construction: <span>${f.construction || '—'}</span></div>
+          <div class="fc-stat">Weight: <span>${f.nominal_gsm ? f.nominal_gsm + ' g/m²' : '—'}</span></div>
+          <div class="fc-stat">Sett: <span style="color:${CAT_COLOR.woven}">${f.sett_source === 'BOOK_VERIFIED' ? 'from the book' : 'working default'}</span></div>
+          ` : `
           <div class="fc-stat">GSM: <span>${f.gsm_range ? f.gsm_range[0] + '–' + f.gsm_range[1] : '—'}</span></div>
           <div class="fc-stat">Gauge: <span>${f.gauge_range ? f.gauge_range[0] + '–' + f.gauge_range[1] + ' GG' : '—'}</span></div>
           <div class="fc-stat">Category: <span style="color:${CAT_COLOR[f.category]}">${f.category?.replace('_',' ') || '—'}</span></div>
+          `}
         </div>
         <div class="mini-pattern-box">
           <div class="text-xs text-dim mb-4">Pattern preview</div>
@@ -323,6 +336,14 @@ async function loadMiniPattern(fabricId) {
     if (!el) return;
     if (pattern?.pattern_cylinder) {
       renderMiniPattern(el, pattern.pattern_cylinder, pattern.pattern_dial);
+    } else if (pattern?.fabric_type === 'woven') {
+      const st = pattern.structure || {};
+      el.innerHTML = st.available
+        ? `<div style="display:flex;align-items:center;gap:8px;">
+             ${buildClothPreviewSVG(st, { cell: 5, target: 16 })}
+             <div class="text-xs text-dim">${st.repeat_ends}×${st.repeat_picks} · ${st.draft.healds} shafts</div>
+           </div>`
+        : '<div class="text-xs text-dim" style="padding:4px 0;">Weave grid not stored — the book draws this one as a figure</div>';
     } else if (pattern?.fabric_type === 'warp_knit') {
       // Warp knit mini preview: show guide bar count and stitch density
       const d = pattern.stitch_density || {};
@@ -352,8 +373,9 @@ async function showDetail(fabricId) {
   if (!fabric) return;
 
   document.getElementById('modal-title').textContent = fabric.name;
-  document.getElementById('modal-sub').textContent =
-    [fabric.category?.replace(/_/g,' '), fabric.gsm_range ? `GSM ${fabric.gsm_range[0]}–${fabric.gsm_range[1]}` : ''].filter(Boolean).join(' · ');
+  document.getElementById('modal-sub').textContent = fabric.is_woven
+    ? [fabric.family?.replace(/_/g,' '), fabric.construction, fabric.nominal_gsm ? `${fabric.nominal_gsm} g/m²` : ''].filter(Boolean).join(' · ')
+    : [fabric.category?.replace(/_/g,' '), fabric.gsm_range ? `GSM ${fabric.gsm_range[0]}–${fabric.gsm_range[1]}` : ''].filter(Boolean).join(' · ');
 
   const body = document.getElementById('modal-body');
   body.innerHTML = '<div class="spinner" style="margin:20px auto;"></div>';
@@ -364,11 +386,14 @@ async function showDetail(fabricId) {
     const pattern = await apiPattern(fabricId);
     let html = '';
 
-    // Stats
-    html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;">
-      <div class="card-sm"><div class="label">GSM Range</div><div class="value-sm mt-4 text-green">${fabric.gsm_range ? fabric.gsm_range[0] + '–' + fabric.gsm_range[1] + ' g/m²' : '—'}</div></div>
-      <div class="card-sm"><div class="label">Gauge Range</div><div class="value-sm mt-4 text-blue">${fabric.gauge_range ? fabric.gauge_range[0] + '–' + fabric.gauge_range[1] + ' GG' : '—'}</div></div>
-    </div>`;
+    // Stats. A woven quality carries its whole summary inside the renderer
+    // below, so repeating knit columns above it would only add two dashes.
+    if (!fabric.is_woven) {
+      html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;">
+        <div class="card-sm"><div class="label">GSM Range</div><div class="value-sm mt-4 text-green">${fabric.gsm_range ? fabric.gsm_range[0] + '–' + fabric.gsm_range[1] + ' g/m²' : '—'}</div></div>
+        <div class="card-sm"><div class="label">Gauge Range</div><div class="value-sm mt-4 text-blue">${fabric.gauge_range ? fabric.gauge_range[0] + '–' + fabric.gauge_range[1] + ' GG' : '—'}</div></div>
+      </div>`;
+    }
 
     html += `<div id="modal-pattern-grid"></div>`;
     html += `<a href="/?fabric=${fabricId}" class="btn btn-primary mt-16" style="display:inline-flex;width:100%">Calculate for this fabric →</a>`;
