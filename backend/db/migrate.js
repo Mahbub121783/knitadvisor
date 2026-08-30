@@ -31,18 +31,29 @@ const LEDGER = `
   )
 `;
 
+const sha = text => crypto.createHash('sha256').update(text).digest('hex');
+
 function discover() {
   if (!fs.existsSync(DIR)) return [];
   return fs.readdirSync(DIR)
     .filter(f => /^\d+_.*\.sql$/.test(f))
     .sort()
     .map(file => {
-      const sql = fs.readFileSync(path.join(DIR, file), 'utf8');
+      const raw = fs.readFileSync(path.join(DIR, file), 'utf8');
+      // Checksum the SQL, not the line endings it happened to arrive in. The
+      // working copy is Windows (CRLF) and the FTP deploy delivers LF, so a
+      // migration nobody has touched still hashes differently on the two
+      // machines. That is a transport artefact, not an edit, and letting it
+      // trip the MODIFIED guard below would block every future migration.
+      const sql = raw.split('\r\n').join('\n');
       return {
         version: file.match(/^(\d+)_/)[1],
         name: file,
         sql,
-        checksum: crypto.createHash('sha256').update(sql).digest('hex'),
+        checksum: sha(sql),
+        // The same text in both renderings, so a checksum recorded before this
+        // normalisation existed is still recognisable as the same SQL.
+        legacyChecksums: [sha(raw), sha(sql.split('\n').join('\r\n'))],
       };
     });
 }
@@ -57,12 +68,19 @@ async function status() {
   const files = discover();
   const done = await applied();
   const pending = [];
+  const restamp = [];
 
   for (const m of files) {
     const rec = done.get(m.version);
     if (!rec) {
       pending.push(m);
       console.log(`  ${m.version}  PENDING   ${m.name}`);
+    } else if (rec.checksum !== m.checksum && m.legacyChecksums.includes(rec.checksum)) {
+      // Same SQL, different line endings. Provable, not assumed: the stored
+      // value is the hash of this very text in its other rendering. Re-stamp
+      // it so the drift settles instead of recurring on every deploy.
+      restamp.push(m);
+      console.log(`  ${m.version}  applied   ${m.name}  (re-stamped: line endings only)`);
     } else if (rec.checksum !== m.checksum) {
       // A migration that already ran must never be edited: databases that
       // applied the old text will not pick the change up, so environments
@@ -79,6 +97,15 @@ async function status() {
       console.warn(`  ${version}  ORPHAN    ${rec.name}  <-- recorded as applied but the file is gone`);
     }
   }
+
+  // Settle any line-ending drift. This rewrites the ledger's checksum only —
+  // the migration itself is not re-run, because it already ran and its SQL has
+  // not changed. Doing it here rather than on the next deploy keeps the drift
+  // from reappearing every time the working copy and the host disagree.
+  for (const m of restamp) {
+    await query('UPDATE schema_migrations SET checksum = $1 WHERE version = $2', [m.checksum, m.version]);
+  }
+
   return pending;
 }
 

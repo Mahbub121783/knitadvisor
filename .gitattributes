@@ -1,0 +1,31 @@
+# The working copy is Windows and the deploy target is Linux, so anything whose
+# bytes are checked — rather than only its meaning — has to be pinned to one
+# line ending or it will differ between the two machines while being the same
+# file.
+#
+# Migrations are the case that actually bit: db/migrate.js records a sha256 of
+# each applied migration to catch someone editing a file that already ran, and
+# a CRLF/LF flip made an untouched migration look edited, which blocked every
+# later migration. migrate.js now normalises before hashing, but pinning the
+# files here fixes it at the source instead of working around it downstream.
+*.sql           text eol=lf
+*.json          text eol=lf
+*.js            text eol=lf
+*.mjs           text eol=lf
+*.css           text eol=lf
+*.html          text eol=lf
+*.md            text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+.env.example    text eol=lf
+
+# Binary — never touch these.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.pdf  binary
+*.woff  binary
+*.woff2 binary
+*.ttf  binary
