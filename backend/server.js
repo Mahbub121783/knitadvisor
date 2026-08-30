@@ -83,25 +83,59 @@ app.use((req, res, next) => {
 });
 
 // The admin panel renders log rows built from request bodies, so a CSP is a
-// real second line of defence there rather than decoration. Keep it permissive
-// enough for the existing inline scripts and the Three.js import map, but shut
-// the door on injected external script sources.
-app.use(helmet({
+// real second line of defence there rather than decoration.
+//
+// It has to be two policies, because the two halves of the site are built
+// differently. admin.html loads all of its code from assets/js/admin.js and
+// carries no inline <script> and no inline handler, so it can take a policy
+// with no 'unsafe-inline' at all — which is the whole reason the CSP was added.
+// The public pages are the opposite: their logic lives in inline <script>
+// blocks and ~60 onclick attributes.
+//
+// One merged policy got this exactly backwards. scriptSrc listed
+// 'unsafe-inline', which gutted the protection on the one page that needed it,
+// while helmet's default scriptSrcAttr: 'none' survived the merge and blocked
+// every onclick on the public pages — so Calculate and every suggestion chip
+// silently did nothing. Note that allowing inline <script> while blocking
+// inline handlers is not a coherent posture anyway: whoever can inject one can
+// inject the other. The directives that do the real work here — objectSrc,
+// connectSrc, frameAncestors, and 'self' on scriptSrc — are identical in both.
+const CSP_SHARED = {
+  defaultSrc: ["'self'"],
+  styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+  fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+  imgSrc: ["'self'", 'data:', 'blob:'],
+  connectSrc: ["'self'"],
+  workerSrc: ["'self'", 'blob:'],
+  objectSrc: ["'none'"],
+  frameAncestors: ["'self'"],
+};
+
+const publicSecurity = helmet({
   contentSecurityPolicy: {
     directives: {
-      defaultSrc: ["'self'"],
+      ...CSP_SHARED,
       scriptSrc: ["'self'", "'unsafe-inline'"],
-      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
-      fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
-      imgSrc: ["'self'", 'data:', 'blob:'],
-      connectSrc: ["'self'"],
-      workerSrc: ["'self'", 'blob:'],
-      objectSrc: ["'none'"],
-      frameAncestors: ["'self'"],
+      scriptSrcAttr: ["'unsafe-inline'"],
     },
   },
   crossOriginEmbedderPolicy: false,
-}));
+});
+
+const adminSecurity = helmet({
+  contentSecurityPolicy: {
+    directives: {
+      ...CSP_SHARED,
+      scriptSrc: ["'self'"],
+      scriptSrcAttr: ["'none'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false,
+});
+
+const ADMIN_SURFACE = /^\/(admin\.html|api\/admin)(\/|$)/;
+app.use((req, res, next) =>
+  (ADMIN_SURFACE.test(req.path) ? adminSecurity : publicSecurity)(req, res, next));
 
 // Static assets dominate this app's bytes — three.module.js alone is 1.27 MB —
 // and Passenger serves them through Node, not Apache, because the subdomain's
@@ -163,6 +197,13 @@ if (process.env.EMERGENCY_ROUTES === 'enabled') {
   console.warn('[Server] EMERGENCY ROUTES MOUNTED — unauthenticated. Disable when done.');
   app.use('/emergency', require('./routes/emergency'));
 }
+
+// Every page now declares <link rel="icon" href="/favicon.svg">, so browsers
+// that honour it never ask for /favicon.ico. Safari and various crawlers ask
+// anyway, and without this the request falls through to the SPA 404 handler and
+// gets 12 KB of 404.html in reply to a request for an icon — which is what put
+// a red "favicon.ico 404" in the console. 204 answers it honestly and cheaply.
+app.get('/favicon.ico', (req, res) => res.status(204).end());
 
 // Static frontend (served by Express in dev, Apache in production)
 // IMPORTANT: HTML must never be heuristically cached, otherwise a stale

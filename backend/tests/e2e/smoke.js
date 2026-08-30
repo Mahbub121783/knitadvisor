@@ -171,9 +171,89 @@ async function testAssets() {
   check(broken === 0, `all ${seen.size} distinct asset references resolve`);
 }
 
+/**
+ * Does the policy the server sends actually permit the page the server sends?
+ *
+ * This is the check that was missing when script-src-attr 'none' shipped
+ * alongside pages built out of ~60 onclick attributes. jsdom does not enforce
+ * CSP, so the DOM tests above ran the handlers happily while every real browser
+ * refused to. Nothing that executes the page in jsdom can ever catch this class
+ * of bug; it has to be read off the wire.
+ *
+ * Written as a comparison rather than an assertion about one directive: for
+ * each page, work out how that page is actually constructed, then resolve the
+ * directive that governs each construct through CSP's real fallback chain.
+ */
+function resolveDirective(csp, name) {
+  // script-src-attr and script-src-elem fall back to script-src, which falls
+  // back to default-src. An explicitly-set directive ends the chain.
+  const chain = { 'script-src-attr': ['script-src-attr', 'script-src', 'default-src'],
+                  'script-src-elem': ['script-src-elem', 'script-src', 'default-src'],
+                  'script-src':      ['script-src', 'default-src'] }[name];
+  for (const d of chain) if (csp[d]) return { directive: d, values: csp[d] };
+  return null;
+}
+
+function parseCsp(header) {
+  const out = {};
+  for (const part of (header || '').split(';')) {
+    const [name, ...values] = part.trim().split(/\s+/);
+    if (name) out[name.toLowerCase()] = values;
+  }
+  return out;
+}
+
+async function testCsp() {
+  console.log('\nCSP  does the sent policy permit the sent page?');
+  const pages = ['', 'result.html', 'converter.html', 'patterns.html', 'weft-calc.html',
+                 'academy.html', 'diagnostics.html', 'admin.html', '404.html'];
+
+  for (const page of pages) {
+    const res = await fetch(`${BASE}/${page}`);
+    const html = await res.text();
+    const csp = parseCsp(res.headers.get('content-security-policy'));
+    const label = '/' + (page || 'index');
+
+    // What does this page actually do?
+    const inlineHandlers = (html.match(/\son[a-z]+\s*=\s*["']/gi) || []).length;
+    const inlineScripts = (html.match(/<script(?![^>]*\ssrc=)[^>]*>[\s\S]*?<\/script>/gi) || [])
+      .filter(s => !/type=["'](importmap|application\/json)["']/i.test(s)).length;
+    const importMaps = /<script[^>]*type=["']importmap["']/i.test(html) ? 1 : 0;
+
+    const needs = [];
+    if (inlineHandlers) needs.push(['script-src-attr', `${inlineHandlers} inline handler(s)`]);
+    if (inlineScripts) needs.push(['script-src-elem', `${inlineScripts} inline <script> block(s)`]);
+    if (importMaps) needs.push(['script-src-elem', 'an import map']);
+
+    if (!needs.length) {
+      // Only the admin surface is *required* to be strict. It is the page the
+      // CSP was added for, it loads every line of its code from an external
+      // file, and a policy with no 'unsafe-inline' is worth something there.
+      // Other pages that happen to carry no inline code are served the public
+      // policy by design, so holding them to admin's standard would be
+      // asserting a decision nobody made.
+      if (page !== 'admin.html') { check(true, `${label} carries no inline code`); continue; }
+      const r = resolveDirective(csp, 'script-src');
+      const lax = !r || r.values.includes("'unsafe-inline'");
+      check(!lax, `${label} is held to a strict policy`,
+            lax ? "but script-src still allows 'unsafe-inline'" : r.values.join(' '));
+      continue;
+    }
+
+    for (const [directive, why] of needs) {
+      const r = resolveDirective(csp, directive);
+      const allowed = !r || r.values.includes("'unsafe-inline'") ||
+                      r.values.some(v => /^'(nonce|sha\d+)-/.test(v));
+      check(allowed, `${label} runs ${why}, and ${directive} permits it`,
+            r ? `${r.directive} ${r.values.join(' ')}` : 'directive absent (allowed)');
+    }
+  }
+}
+
 (async () => {
   console.log('E2E smoke — ' + BASE);
   await testAssets();
+  await testCsp();
   await testFormPage();
   await testResultPage();
 
