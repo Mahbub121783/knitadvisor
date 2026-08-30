@@ -92,10 +92,17 @@ backend/
   db/
     client.js  migrate.js  seed.js
     migrations/               001 schema · 002 analytics · 003 reference data
+                              004 slim query_logs
+                              a migration may declare `-- +no-transaction` when
+                              it needs VACUUM or CREATE INDEX CONCURRENTLY; the
+                              runner then sends its statements one at a time,
+                              because node-postgres wraps a multi-statement
+                              string in an implicit transaction
     repositories/             cache · logs · admin · viz
   data/                       seed JSON — the source the importer reads
   scripts/
     import-reference-data.js  every data source → PostgreSQL
+    calibrate-tightness.js    re-derive the TF bands from factory_records
     migrate-mysql-to-postgres.js  reencrypt-provider-keys.js  run-tests.js
   tests/                      *.test.js — pure engine, no database needed
   middleware/  cache/  ai/
@@ -165,7 +172,7 @@ Restart the app afterwards so the reference snapshot is reloaded.
 ```
 browser  →  POST /api/calculate
             ├─ rate limit (240/min per IP per worker)
-            ├─ cache key = md5(engine_version | 28 input fields)
+            ├─ params and cache key both derived from engine.ENGINE_INPUTS
             ├─ L1 in-process LRU        500 entries · 24 h
             ├─ L2 result_cache          30 days · 80 ms budget, then treated as a miss
             └─ calculate()              synchronous · ~0.9 ms · reads the snapshot
@@ -175,3 +182,45 @@ browser  →  POST /api/calculate
 
 A database outage costs the L2 cache, the log line and the admin panel. It does
 not cost an answer.
+
+
+---
+
+## Two conventions worth knowing before changing things
+
+### One list defines the engine's inputs
+
+`engine/index.js` exports `ENGINE_INPUTS`. The route derives both the forwarded
+parameters and the cache key from it. Adding an input to the engine forwards it
+and keys on it with no change to the route.
+
+This exists because the list used to be restated three times — the cache key,
+the `calculate()` call, and `normalizeParams()` — and they drifted. Three inputs
+were fully built on both ends and dead in the middle: the %OWF shade depth, the
+optical-physics illuminant, and the organic-yarn certification type. None
+errored; they silently did nothing.
+
+If you add an input, also bump `ENGINE_VERSION` in `routes/api.js` — entries
+cached under the old version were computed as if the input did not exist.
+
+### Calibration constants must be re-derivable
+
+`TIGHTNESS_LIMITS` decides whether a construction is reported knittable, warned,
+or refused. It is claimed to be derived from the 2,201 factory records, so
+`scripts/calibrate-tightness.js` derives it and reports drift.
+
+Its two tiers answer different questions and are computed differently:
+
+| tier | question | method |
+|---|---|---|
+| `ideal_min` / `ideal_max` | is this normal? | p10 / p90 |
+| `min` / `max` | is this possible? | the observed extremes, plus margin |
+
+The hard band is deliberately **not** a percentile. Set to p2/p98 it declared 4%
+of genuinely shipped fabric impossible — a harder failure than the false warning
+it replaced. Real production defines what is possible.
+
+One physics-based exclusion applies before taking the extremes: a record whose
+stitch length is shorter than its own needle pitch (25.4 / gauge) is a
+measurement error, not tight fabric. Two such rows alone pushed rib's ceiling
+from 30 to 41.
