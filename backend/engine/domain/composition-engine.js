@@ -45,12 +45,67 @@ const FIBER_ALIASES = {
   'recycel polyester':'polyester',
   'eco coolmax':      'polyester',
 
+  // ── ISO GENERIC CODES ───────────────────────────────────────────────
+  // Buyers quote compositions in these on care labels and specs — "95% CO 5%
+  // EL" is an ordinary way to write a stretch jersey — and the parser
+  // recognised none of them. Worse than none: "EL" resolved to POLYESTER,
+  // because the matcher also compared each alias against the input and the
+  // mis-spelled alias 'recycel polyester' happens to contain "el". A 95/5
+  // cotton-elastane quality parsed as cotton and polyester, which silently
+  // switched off every elastane path downstream — plating, shrinkage, machine
+  // setup, costing.
+  //
+  // The manufactured-fibre codes below are Morton & Hearle, Appendix II
+  // (printed p.740-742), where they are given as the ISO generic names.
+  'cv':               'viscose',      // viscose, cellulose xanthate route
+  'cmd':              'viscose',      // modal — high-wet-modulus viscose. Kept
+                                      // on 'viscose' because that is where the
+                                      // parser has always put modal; the engine
+                                      // does carry separate modal constants and
+                                      // never reaches them, which is a question
+                                      // for whoever changes this deliberately.
+  'cup':              'viscose',      // cupro, cuprammonium route
+  'cly':              'tencel',       // lyocell, organic solvent route
+  'pes':              'polyester',
+  'pa':               'nylon',        // polyamide
+  'pan':              'acrylic',
+  'pp':               'polypropylene',
+  'pe':               'polyethylene',
+  'el':               'elastane',
+  'ea':               'elastane',     // the older EA code, still on labels
+
+  // Natural-fibre codes. NOT from Morton & Hearle — Appendix II covers only
+  // manufactured fibres, opening with the remark that natural fibre names carry
+  // no uncertainty. These four are the ISO 2076 / Textile Institute codes and
+  // are marked separately so the citation above stays true.
+  'co':               'cotton',
+  'wo':               'wool',
+  'se':               'silk',
+  'li':               'linen',
+
   // Elastane / Spandex / Lycra → 'elastane'
   'elastane':         'elastane',
   'spandex':          'elastane',
   'lycra':            'elastane',
   'elast':            'elastane',
   'elas':             'elastane',
+
+  // Wool, acrylic and the rest of what the codes above now admit. yarn-engine
+  // already carries density and regain for wool and acrylic; until now the
+  // parser could not produce either name, so those constants were unreachable
+  // from a composition string.
+  'wool':             'wool',
+  'merino':           'wool',
+  'merino wool':      'wool',
+  'lambswool':        'wool',
+  'acrylic':          'acrylic',
+  'polyacrylonitrile':'acrylic',
+  'silk':             'silk',
+  'mulberry silk':    'silk',
+  'linen':            'linen',
+  'flax':             'linen',
+  'polypropylene':    'polypropylene',
+  'polyethylene':     'polyethylene',
 
   // Viscose / Modal → 'viscose'
   'viscose':          'viscose',
@@ -194,14 +249,26 @@ function parseComposition(input) {
 }
 
 /**
- * Resolve a raw fiber name to its canonical form
+ * Resolve a raw fibre name to its canonical form.
+ *
+ * Exact first, then substring — but a SHORT input is never resolved by
+ * substring, in either direction. It used to be, and the results were wrong in
+ * a way nobody would notice: "EL" reached 'recycel polyester' through
+ * `alias.includes(cleaned)` and a 95/5 cotton-elastane spec came back as cotton
+ * and polyester. Two letters carry no evidence about which of forty-odd fibre
+ * names they were meant to abbreviate, so a code has to be listed explicitly to
+ * be understood — and every code a buyer actually writes now is.
  */
+const MIN_PARTIAL_MATCH = 4;
+
 function resolveFiber(raw) {
   const cleaned = raw.replace(/[^a-z\s\-\/]/g, '').trim();
+  if (!cleaned) return null;
   if (FIBER_ALIASES[cleaned]) return FIBER_ALIASES[cleaned];
+  if (cleaned.length < MIN_PARTIAL_MATCH) return null;
 
-  // Partial match
   for (const [alias, canonical] of Object.entries(FIBER_ALIASES)) {
+    if (alias.length < MIN_PARTIAL_MATCH) continue;
     if (cleaned.includes(alias) || alias.includes(cleaned)) {
       return canonical;
     }
