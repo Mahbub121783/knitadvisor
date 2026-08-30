@@ -38,6 +38,19 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      # Passenger reloads only when backend/tmp/restart.txt changes. Nothing in
+      # this workflow ever touched it, so an FTP deploy shipped new backend code
+      # to a process that carried on running the old code — a server.js fix
+      # could sit on the host indefinitely with the broken version still being
+      # served, looking exactly like a deploy that never arrived. Writing the
+      # commit SHA makes the file differ every run, so the FTP sync uploads it
+      # and Passenger picks up the change. Frontend-only pushes restart too,
+      # which costs a few seconds and keeps the rule simple.
+      - name: Stamp the Passenger restart trigger
+        run: |
+          mkdir -p backend/tmp
+          echo "$GITHUB_SHA" > backend/tmp/restart.txt
+
       - name: FTP Deploy
         uses: SamKirkland/FTP-Deploy-Action@v4.3.4
         with:
