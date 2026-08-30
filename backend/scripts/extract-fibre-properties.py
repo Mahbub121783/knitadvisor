@@ -237,7 +237,9 @@ def main():
                                     'why': 'condition %s has only one of density and specific volume' % (cond or 'unstated')})
                     row_ok = False
                     break
-                for (dd, vv), which in ((( d[0], v[0]), 'value'), ((d[1], v[1]), 'range end')):
+                # Low density goes with high specific volume, which is why the
+                # endpoints cross over here.
+                for (dd, vv), which in (((d[0], v[0]), 'value'), ((d[1], v[1]), 'range end')):
                     if dd is None or vv is None:
                         continue
                     if abs(vv - 1.0 / dd) > 0.011:
@@ -261,6 +263,14 @@ def main():
 
             for idx, (lo, hi) in sorted(cells.items()):
                 prop, cond, rh = spec['columns'][idx]
+                # A specific-volume range is printed DESCENDING, because it is
+                # the reciprocal of an ascending density range: carbon reads
+                # "1.8-2.0" against "0.56-0.55". value_min and value_max have to
+                # mean minimum and maximum or a query for "density under 1.5"
+                # returns nonsense, so the endpoints are ordered here and the
+                # reciprocal check pairs the low density with the HIGH volume.
+                if hi is not None and hi < lo:
+                    lo, hi = hi, lo
                 note = None
                 if cond is None:
                     note = 'The table prints one figure and names no condition.'
