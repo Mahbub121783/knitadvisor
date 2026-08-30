@@ -1,0 +1,487 @@
+{
+  "source": {
+    "title": "Fabric Structure and Design",
+    "author": "N. Gokarneshan",
+    "publisher": "New Age International (P) Ltd.",
+    "year": 2005,
+    "isbn13": "978-81-224-2307-5",
+    "citation_prefix": "Gokarneshan, Fabric Structure and Design (2005)",
+    "note": "Page numbers below are the BOOK's printed page numbers. The PDF page is the book page + 13.",
+    "domain": "woven",
+    "scope_warning": "This book covers woven fabric only. It contains no weft-knitting or warp-knitting content, so it cannot supply K/T/M needle programmes, Munden Kc/Kw constants, or loop-length relations for the knit engine."
+  },
+
+  "weaves": [
+    { "slug": "plain", "name": "Plain (calico / tabby)", "family": "plain", "repeat_ends": 2, "repeat_picks": 2,
+      "loom_equipment": "Plain tappet", "draft": "straight_or_skip", "page": 16,
+      "characteristics": ["maximum number of binding points", "threads interlace 1 up 1 down on alternate order", "thread density is limited", "cloth thickness and mass per unit area are limited", "strongest fabric of any simple combination of threads except gauze/cross weaving"],
+      "end_uses": ["cambric", "muslin", "blanket", "canvas", "dhothi", "saree", "shirting", "suiting"] },
+
+    { "slug": "warp_rib", "name": "Warp rib", "family": "plain_derivative", "loom_equipment": "Plain tappet", "draft": "straight", "page": 17,
+      "derivation": "plain weave extended in the warp direction",
+      "setting_rule": "warp rib effect is enhanced by a high number of ends per inch and a comparatively low number of picks per inch",
+      "end_uses": ["gross grain cloth", "matelasse", "repp cloth", "window blinds", "upholstery", "cambric handkerchief"] },
+
+    { "slug": "weft_rib", "name": "Weft rib", "family": "plain_derivative", "loom_equipment": "Plain tappet", "draft": "straight", "page": 17,
+      "derivation": "plain weave extended in the weft direction",
+      "setting_rule": "weft rib requires a high number of picks per inch and a comparatively low number of ends per inch",
+      "end_uses": ["gross grain cloth", "matelasse", "repp cloth", "upholstery", "handkerchief"] },
+
+    { "slug": "matt_rib", "name": "Matt rib (hopsack / basket)", "family": "plain_derivative", "loom_equipment": "Plain tappet", "draft": "straight", "page": 20,
+      "derivation": "plain weave extended in BOTH warp and weft directions",
+      "end_uses": ["dress materials", "shirtings", "sail cloth", "duck cloth"] },
+
+    { "slug": "twill", "name": "Twill", "family": "twill", "loom_equipment": "Twill tappet", "draft": "straight", "page": 22,
+      "characteristics": ["diagonal lines run from one selvedge to another", "more ends and picks per unit area than plain cloth", "fewer binding points than plain cloth", "better cover than plain weave", "more cloth thickness and mass per unit area"],
+      "end_uses": ["drill cloth", "khaki uniforms", "denim", "blankets", "shirtings", "hangings", "soft furnishings"] },
+
+    { "slug": "satin_sateen", "name": "Satin / Sateen", "family": "rearranged_twill", "loom_equipment": "Satin/Sateen tappet", "draft": "straight_or_sateen", "page": 27,
+      "definition": "satin is a warp-faced rearranged twill; sateen is a weft-faced rearranged twill - satin is the reverse side of sateen",
+      "characteristics": ["either warp or weft faced", "no prominent weave structure", "only one binding point in each end or pick", "no continuous twill lines", "poor seam strength due to thread mobility", "more thread density possible in warp and weft", "more mass per unit area possible", "fewer binding points and longer floats", "construction requires move numbers (intervals of selection)"],
+      "end_uses": ["denim", "interlining cloth", "ribbons", "lustrous dress materials", "children's dress materials"] },
+
+    { "slug": "corkscrew", "name": "Corkscrew", "family": "rearranged_twill", "page": 31,
+      "requirements": ["repeat size must be an odd number", "warp float must be one greater than weft float for warp-faced (and vice versa for weft-faced)"],
+      "characteristics": ["hard weave", "firm and compact texture", "good strength, durability and warmth"],
+      "end_uses": ["worsted garment fabrics"] },
+
+    { "slug": "honeycomb_ordinary", "name": "Ordinary honey comb", "family": "honeycomb", "loom_equipment": "Dobby with fast reed", "draft": "pointed", "page": 37,
+      "characteristics": ["cell-like appearance with ridges and hollows", "single line crossing a single line, or double line crossing a double diagonal line", "more warp and weft floats", "moisture absorbent due to floats", "constructed with pointed drafts", "reversible - similar effect on both sides", "forms one cell per repeat"],
+      "end_uses": ["towels", "bed covers", "quilts"] },
+
+    { "slug": "honeycomb_brighton", "name": "Brighton honey comb", "family": "honeycomb", "loom_equipment": "Dobby with fast reed", "draft": "straight", "page": 39,
+      "characteristics": ["non-reversible - face differs from back", "constructed on straight drafts only", "repeat size is a multiple of 4", "longest float is N/2 - 1 where N is the repeat size", "a single diagonal line crosses a double diagonal line", "forms 4 cells per repeat (two large, two small)"],
+      "end_uses": ["bed covers", "quilts"] },
+
+    { "slug": "huckaback", "name": "Huck a back", "family": "huckaback", "loom_equipment": "Dobby with fast reed", "draft": "straight", "page": 42,
+      "characteristics": ["repeat divided into four equal parts - two filled with plain weave, two with long float motif", "plain weave gives firmness to the cloth", "long float motif gives moisture absorbency"],
+      "end_uses": ["linen and cotton bath towels", "linen glass cloths"] },
+
+    { "slug": "crepe", "name": "Crepe (crape / oatmeal)", "family": "crepe", "loom_equipment": "Dobby with fast reed", "draft": "straight", "page": 45,
+      "characteristics": ["contain no twilled or other prominent effects", "cloth covered by minute spots or seeds", "highly irregular puckered surface", "high twist yarns used with controlled shrinkage"],
+      "construction_methods": ["upon a sateen base", "combination of a floating weave with plain threads", "by reversing a small motif", "insertion of one weave over another"],
+      "end_uses": ["brocade jacquard grounds", "cotton piece goods", "cretonne furniture covers", "curtains", "wall hangings"] },
+
+    { "slug": "bedford_cord", "name": "Bedford cord", "family": "cord", "loom_equipment": "Dobby with fast reed and heavy beat up", "draft": "straight", "page": 50,
+      "characteristics": ["longitudinal warp lines with fine sunken lines between", "constructed on a pair of picks or alternate picks", "face ends weave the cord, cutting ends weave plain", "wadding threads never interlace with weft and need a separate, more heavily tensioned beam"],
+      "end_uses": ["dress materials", "military dresses", "suitings", "heavy woollen and worsted fabrics"] },
+
+    { "slug": "welt_pique", "name": "Welts and piques", "family": "welt", "loom_equipment": "Dobby with fast reed, two warp beams, drop boxes (2x1 or 2x2)", "draft": "straight", "page": 56,
+      "characteristics": ["pronounced ridges and furrows running transversely (weft way)", "plain face fabric plus a series of tight back stitching warp threads on a separately weighted beam", "consecutive unstitched picks should not exceed twelve"],
+      "types": ["ordinary welt", "weft wadded welt (loose back)", "fast back welt"],
+      "end_uses": ["shirtings", "ties", "vestings"] },
+
+    { "slug": "mock_leno", "name": "Mock leno (imitation leno)", "family": "leno", "loom_equipment": "Dobby with fast reed", "draft": "straight", "page": 62,
+      "types": ["perforated fabrics imitating open gauze effects", "distorted thread effects imitating spider or net leno styles"],
+      "end_uses": ["canvas cloths", "cheap window curtains", "light dress fabrics", "blouses", "aprons"] },
+
+    { "slug": "warp_backed", "name": "Warp backed", "family": "backed", "loom_equipment": "Dobby with two warp beams and fast reed", "draft": "divided", "page": 68,
+      "characteristics": ["two series of warp, one series of weft", "face to back warp ratio generally 1:1, sometimes 2:1", "warp-faced weaves are suitable; back weave chosen to leave long weft floats on the back"],
+      "end_uses": ["shawls", "heavier dress materials", "overcoats"] },
+
+    { "slug": "weft_backed", "name": "Weft backed", "family": "backed", "loom_equipment": "Dobby with drop box and fast reed", "draft": "straight", "page": 69,
+      "characteristics": ["two series of weft, one series of warp", "a drop box is required", "weft-faced weave is suitable since it has longer warp floats on the back"],
+      "end_uses": ["shawls", "heavier dress materials", "overcoats"] },
+
+    { "slug": "velveteen", "name": "Weft pile (velveteen)", "family": "pile", "loom_equipment": "Dobby/Jacquard with drop boxes", "draft": "straight", "page": 73,
+      "characteristics": ["two systems of weft, one system of warp", "long floats of weft, cut or uncut - no loops, unlike warp pile", "very high weft density: up to 200 picks/cm in the finest fabrics; 50-100 picks/cm for low and medium quality", "high weft density achieved by a low warp sett under higher warp tension"],
+      "types": ["plain (all over) velveteen", "weft plush", "corded velveteen (corduroy / fustian)", "figured velveteen"],
+      "end_uses": ["dress materials", "suitings", "furnishing", "bed covers", "pillow covers", "artificial fur cloth", "upholstery", "interlining cloth"] },
+
+    { "slug": "terry", "name": "Warp pile - Turkish / terry", "family": "pile", "loom_equipment": "Terry loom with two warp beams and staggering reed", "draft": "divided", "page": 80,
+      "characteristics": ["pile is NOT cut", "one series of weft, two series of warp (ground and pile)", "normally formed on 3 picks; 4, 5 and 6 pick structures exist but are costly", "ground beam heavily tensioned, pile beam only slightly tensioned", "denting order generally two ends per dent (one ground, one pile)"],
+      "end_uses": ["towels", "mats", "curtains", "over coats", "dressing gowns"] },
+
+    { "slug": "wire_pile", "name": "Warp pile - wire pile (velvet)", "family": "pile", "draft": "divided", "page": 86,
+      "characteristics": ["pile formed over a wire inserted across the warp; wire cross-section determines pile height", "plain wires give looped pile, bladed wires give cut pile", "12 to 50 wires between the point of withdrawal and re-insertion", "U binding suits short dense pile; W binding is superior for long pile subject to rubbing"],
+      "end_uses": ["upholstery (uncut mocquettes)", "carpeting (Brussels, cord, boucle)", "apparel velvets", "plushes", "cut mocquettes", "Wilton and velvet pile carpets"] },
+
+    { "slug": "extra_warp_figured", "name": "Extra warp figured", "family": "figured", "loom_equipment": "Dobby/Jacquard with fast reed and two or more warp beams", "draft": "divided", "page": 93,
+      "ground_to_figuring_ratios": ["1:1", "1:2", "2:1", "2:2"],
+      "end_uses": ["bed covers", "furnishings", "fine tie cloth"] },
+
+    { "slug": "extra_weft_figured", "name": "Extra weft figured", "family": "figured", "loom_equipment": "Dobby/Jacquard with drop box", "draft": "straight", "page": 95,
+      "ground_to_figuring_ratios": ["1:2", "2:2", "2:4"],
+      "end_uses": ["bed covers", "furnishings", "fine tie cloth"] },
+
+    { "slug": "double_cloth", "name": "Double cloth", "family": "double", "loom_equipment": "Dobby/Jacquard with fast reed and drop box", "draft": "divided", "page": 100,
+      "characteristics": ["minimum two series of warp and two series of weft", "objectives are thermal resistance and good appearance/feel"],
+      "types": ["self thread stitched", "centre thread stitched", "stitched by thread interchange", "stitched by cloth interchange", "alternate single and double ply", "double width (unstitched)", "tubular (unstitched)"],
+      "end_uses": ["hose pipes", "filter cloths", "insulation fabrics", "overcoats"] }
+  ],
+
+  "constructions": [
+    { "cloth": "Plain shirting", "weave_slug": "plain", "ends_per_inch": 84, "picks_per_inch": 80, "warp_count": "2/80s", "weft_count": "2/80s", "material": "polyester cotton", "page": 130, "table": "Appendix II" },
+    { "cloth": "Warp rib", "weave_slug": "warp_rib", "ends_per_inch": 126, "picks_per_inch": 38, "warp_count": "30s", "weft_count": "15s", "material": "cotton", "page": 19 },
+    { "cloth": "Weft rib", "weave_slug": "weft_rib", "ends_per_inch": 56, "picks_per_inch": 100, "warp_count": "2/14s & 36s", "weft_count": "18s", "material": "cotton", "page": 19 },
+    { "cloth": "Matt rib", "weave_slug": "matt_rib", "ends_per_inch": 44, "picks_per_inch": 44, "warp_count": "20s", "weft_count": "20s", "material": "cotton", "page": 130, "table": "Appendix II" },
+    { "cloth": "Crepe (good quality, medium weight)", "weave_slug": "crepe", "ends_per_inch": 56, "picks_per_inch": 56, "warp_count": "18s", "weft_count": "18s", "material": "cotton", "page": 48,
+      "note": "warp yarn should have a little more twist than the weft" },
+    { "cloth": "Huck a back", "weave_slug": "huckaback", "ends_per_inch": 44, "picks_per_inch": 30, "warp_count": "10s", "weft_count": "10s", "material": "cotton", "page": 130, "table": "Appendix II" },
+    { "cloth": "Honey comb - heavy cloth", "weave_slug": "honeycomb_ordinary", "ends_per_inch": 50, "picks_per_inch": 20, "warp_count": "2/6s", "weft_count": "2/6s", "material": "cotton", "page": 40 },
+    { "cloth": "Honey comb - lighter cloth", "weave_slug": "honeycomb_ordinary", "ends_per_inch": 88, "picks_per_inch": 82, "warp_count": "25s", "weft_count": "16s", "material": "cotton", "page": 40 },
+    { "cloth": "Bedford cord - worsted dress fabric", "weave_slug": "bedford_cord", "ends_per_inch": 92, "picks_per_inch": 82, "warp_count": "2/20s", "weft_count": "18s", "material": "worsted", "page": 51 },
+    { "cloth": "London cord (cotton twill faced Bedford cord)", "weave_slug": "bedford_cord", "ends_per_inch": 86, "picks_per_inch": 78, "warp_count": "14s", "weft_count": "20s", "material": "cotton", "page": 51 },
+    { "cloth": "Welt / pique", "weave_slug": "welt_pique", "ends_per_inch_min": 92, "ends_per_inch_max": 132, "picks_per_inch_min": 96, "picks_per_inch_max": 152, "warp_count": "30s - 60s (face); 20s - 2/30s (stitching)", "weft_count": "40s - 70s", "material": "cotton", "page": 56 },
+    { "cloth": "Plain back velveteen", "weave_slug": "velveteen", "ends_per_inch": 72, "picks_per_inch": 82, "warp_count": "2/30s", "weft_count": "50s", "material": "cotton", "page": 75,
+      "picks_note": "ground weft only", "tufts_per_sq_inch": 1060, "weft_contraction_pct": 12.5 },
+    { "cloth": "All over plain back velveteen", "weave_slug": "velveteen", "ends_per_inch": 72, "picks_per_inch": 304, "warp_count": "2/30s", "weft_count": "40s", "material": "cotton", "page": 77,
+      "picks_note": "includes pile and ground", "tufts_per_sq_inch": 1016, "weft_crimp_pct": 15 },
+    { "cloth": "Twill back velveteen - type 1", "weave_slug": "velveteen", "ends_per_inch": 38, "picks_per_inch": 244, "warp_count": "2/10s", "weft_count": "16s", "material": "cotton", "page": 77,
+      "picks_note": "includes ground and pile picks", "tufts_per_sq_inch": 400, "weft_crimp_pct": 17 },
+    { "cloth": "Twill back velveteen - type 2", "weave_slug": "velveteen", "ends_per_inch": 72, "picks_per_inch": 520, "warp_count": "2/36s", "weft_count": "60s", "material": "cotton", "page": 77,
+      "picks_note": "includes ground and pile picks", "tufts_per_sq_inch": 1880, "weft_crimp_pct": 17 },
+    { "cloth": "Weft plush", "weave_slug": "velveteen", "ends_per_inch": 48, "picks_per_inch": 214, "warp_count": "2/20s cotton", "weft_count": "24s cotton (ground); 18s acrylic (pile)", "material": "cotton / acrylic", "page": 78,
+      "picks_note": "includes ground and pile weft" },
+    { "cloth": "Corduroy", "weave_slug": "velveteen", "ends_per_inch": 30, "picks_per_inch": 426, "warp_count": "2/10s", "weft_count": "18s", "material": "cotton", "page": 79,
+      "picks_note": "includes ground and pile picks", "tufts_per_sq_inch": 568, "weft_crimp_pct": 20 },
+    { "cloth": "Terry - good quality 3 pick, 100% cotton", "weave_slug": "terry", "ends_per_inch": 50, "picks_per_inch": 56, "warp_count": "2/10s (ground); two ends of 2/10s (pile)", "weft_count": "16s", "material": "cotton", "page": 84,
+      "width_shrinkage_pct": 12, "pile_warp_m_per_100cm": 500, "ground_warp_m_per_100cm": 120 },
+    { "cloth": "Terry - cheaper quality", "weave_slug": "terry", "picks_per_inch_min": 36, "warp_count": "14s (ground); 16s (pile)", "weft_count": "20s", "material": "cotton", "page": 85 },
+    { "cloth": "Velvet dress material (wire pile)", "weave_slug": "wire_pile", "ends_per_inch_min": 26, "ends_per_inch_max": 40, "warp_count": "2/20s - 2/30s (ground); 30s - 60s (pile)", "weft_count": "2/20s - 2/30s cotton", "material": "cotton", "page": 88,
+      "ends_note": "pile warp only", "wires_per_inch_min": 15, "wires_per_inch_max": 30, "pile_height_mm_min": 1.5, "pile_height_mm_max": 3 },
+    { "cloth": "Upholstery plush (wire pile)", "weave_slug": "wire_pile", "ends_per_inch_min": 26, "ends_per_inch_max": 30, "warp_count": "2/10s cotton or viscose (ground); 2/8s - 2/12s worsted (pile)", "weft_count": "60 tex two fold or single cotton / staple viscose rayon", "material": "cotton / worsted / viscose", "page": 88,
+      "ends_note": "pile warp only", "wires_per_inch_min": 20, "wires_per_inch_max": 30, "pile_height_mm_min": 2.5, "pile_height_mm_max": 2.5 },
+    { "cloth": "Upholstery mocquette (uncut pile)", "weave_slug": "wire_pile", "ends_per_inch": 34, "picks_per_inch": 30, "warp_count": "2/8s (pile and ground)", "weft_count": "5s or 6s", "material": "cotton", "page": 89,
+      "ends_note": "34 pile ends/inch and 34 ground ends/inch", "wires_per_inch": 16, "pile_height_mm_min": 1.5, "pile_height_mm_max": 2 },
+    { "cloth": "Extra warp figured", "weave_slug": "extra_warp_figured", "ends_per_inch": 30, "picks_per_cm": 30, "warp_count": "20s (ground); 16s (extra)", "weft_count": "3s", "material": "cotton", "page": 98,
+      "ground_warp_crimp_pct": 22.5, "extra_warp_crimp_pct_min": 6, "extra_warp_crimp_pct_max": 8, "ends_per_mail_eye": 2, "double_ends_per_inch": 30 },
+    { "cloth": "Extra weft figured", "weave_slug": "extra_weft_figured", "ends_per_inch": 82, "picks_per_cm": 82, "warp_count": "2/40s cotton", "weft_count": "40s cotton (ground); 30s (extra)", "material": "cotton", "page": 98,
+      "picks_note": "ground picks" },
+    { "cloth": "Denim", "weave_slug": "twill", "ends_per_inch": 56, "picks_per_inch": 44, "warp_count": "8s", "weft_count": "6s", "material": "cotton", "page": 130, "table": "Appendix II" },
+    { "cloth": "Satin", "weave_slug": "satin_sateen", "ends_per_inch": 88, "picks_per_inch": 48, "warp_count": "2/40s", "weft_count": "2/20s", "material": "cotton", "page": 130, "table": "Appendix II" },
+    { "cloth": "Velvet", "weave_slug": "wire_pile", "ends_per_inch": 30, "picks_per_inch": 20, "warp_count": "2/20s & 30s", "weft_count": "2/20s", "material": "viscose", "page": 130, "table": "Appendix II" }
+  ],
+
+  "rules": {
+    "satin_move_numbers": {
+      "page": 30,
+      "description": "Suitable move numbers (intervals of selection) for constructing satin weaves. Reciprocals produce equivalent results. Where more than two intervals are listed, the book marks the best distribution in heavy type.",
+      "table": { "5": [2], "7": [2, 3], "8": [3], "9": [2, 4], "10": [3], "11": [2, 3, 4, 5], "12": [5], "13": [2, 3, 4, 5, 6], "14": [3, 5], "15": [2, 4, 7] },
+      "selection_rules": [
+        "the move number must not equal the repeat of the weave",
+        "it must not be one less than the repeat size",
+        "it must not be a factor of the repeat size",
+        "it must not be a multiple of a factor of the repeat size"
+      ],
+      "selection_rules_page": 28
+    },
+    "broken_twill_skip": {
+      "page": 34,
+      "formula": "ends_to_miss = N/2 - 1",
+      "variables": { "N": "number of threads in the repeat of the base twill" },
+      "worked_example": { "N": 4, "result": 1, "text": "4/2 - 1 = 2 - 1 = 1" },
+      "constraint": "no similar ends must be missed in any two or three consecutive repeats"
+    },
+    "brighton_honeycomb_float": {
+      "page": 39,
+      "formula": "longest_float = N/2 - 1",
+      "variables": { "N": "repeat size of the weave" },
+      "constraints": ["repeat size must be a multiple of 4", "straight drafts only", "forms 4 cells per repeat"]
+    },
+    "twill_angle": {
+      "page": 24,
+      "description": "The angle between the diagonal twill line and an axis parallel to the weft, governed by the ratio of ends/inch to picks/inch.",
+      "bands": [
+        { "condition": "epi == ppi", "angle_deg": 45, "label": "45 degree twill" },
+        { "condition": "epi > ppi", "angle_deg": null, "label": "steep / high angle twill", "note": "obtuse, greater than 45 degrees" },
+        { "condition": "ppi > epi", "angle_deg": null, "label": "flat / low angle twill", "note": "acute, less than 45 degrees" }
+      ]
+    },
+    "weave_repeat_size": {
+      "page": 8,
+      "formula": "repeat_size = warp_float + weft_float",
+      "worked_example": { "weave": "2/1 twill", "result": "3 x 3" }
+    },
+    "corkscrew_constraints": {
+      "page": 31,
+      "constraints": ["repeat size must be an odd number", "warp float must exceed weft float by one for warp-faced weaves, and vice versa for weft-faced"]
+    },
+    "twill_prominence_factors": {
+      "page": 24,
+      "factors": [
+        "nature of the yarn - a coarse yarn of lower twist gives a greater twill effect than a fine yarn of higher twist; doubled or ply yarns have a stronger effect than singles",
+        "nature of the weave - longer floats give more prominence (3/1 is more prominent than 2/2); an increase in float length must be balanced by proportionately increasing threads/inch",
+        "warp and weft threads per inch - prominence increases proportionately with thread density",
+        "relative direction of twill and yarn twist - Z twill with Z twist (or S with S) shows LESS prominence; Z twill with S twist (or S with Z) gives MORE prominence"
+      ]
+    },
+    "firmness_vs_cover": {
+      "page": 25,
+      "principle": "Firmness depends on the number of intersections. More intersections means better firmness but restricted thread density and less cover; fewer intersections means greater cover through longer floats.",
+      "worked_example": {
+        "repeat_threads": 8,
+        "cases": [
+          { "case": 1, "weave": "4/4 twill (floating)", "space_occupied_threads": 10, "firmness": "minimum", "cover": "maximum" },
+          { "case": 2, "weave": "combination of 3/2 and 1/2 twill", "space_occupied_threads": 12, "firmness": "intermediate", "cover": "intermediate" },
+          { "case": 3, "weave": "combination of 3/1, 1/1 and 1/1", "space_occupied_threads": 14, "firmness": "maximum", "cover": "minimum" }
+        ]
+      }
+    },
+    "velveteen_shrinkage": {
+      "page": 77,
+      "width_shrinkage_pct_min": 12.5,
+      "width_shrinkage_pct_max": 20,
+      "length_contraction_pct_min": 2.5,
+      "length_contraction_pct_max": 4,
+      "note": "width-wise shrinkage depends on the weight of the velveteen"
+    },
+    "velveteen_pile_length": {
+      "page": 80,
+      "depends_on": ["warp thread density", "number of warp ends over which the pile weft floats"],
+      "principle": "pile length increases with reduced warp thread density per cm, or with an increase in the number of warp threads the pile weft passes over",
+      "density_depends_on": ["count of the weft yarn", "the pile length", "the pile density per cm"]
+    },
+    "terry_pile_height": {
+      "page": 85,
+      "fell_distance_mm_min": 10,
+      "fell_distance_mm_max": 15,
+      "principle": "pile height depends on the distance between the fell and the two loose picks (three-pick terry). Higher pile gives a softer feel. Pile yarns are made of lower twist to assist moisture absorption."
+    },
+    "wire_pile_depth": {
+      "page": 87,
+      "depth_mm_min": 1.5,
+      "depth_mm_max": 25,
+      "note": "1.5 mm for short pile fabrics up to 25 mm for imitation fur fabrics and carpetings",
+      "wires_between_withdrawal_and_insertion_min": 12,
+      "wires_between_withdrawal_and_insertion_max": 50
+    },
+    "weft_pile_pick_density": {
+      "page": 73,
+      "finest_picks_per_cm_max": 200,
+      "low_medium_picks_per_cm_min": 50,
+      "low_medium_picks_per_cm_max": 100
+    },
+    "backed_fabric_ratios": {
+      "page": 71,
+      "warp_backed_end_orders": ["1 face : 1 back", "2 face : 1 back", "3 face : 1 back"],
+      "weft_backed_pick_orders": ["1 face : 1 back", "2 face : 1 back", "3 face : 1 back", "2 face : 2 back", "4 face : 2 back"]
+    },
+    "double_cloth_weave_selection": {
+      "page": 103,
+      "principle": "The face and back weaves must have a similar relative number of intersections even when the weaves differ.",
+      "examples": [
+        { "face_to_back_ratio": "1:1", "face_weave": "3/1 twill", "back_weave": "2/2 twill or 2/3 twill" },
+        { "face_to_back_ratio": "2:1", "face_weave": "plain", "back_weave": "2 and 2 matt rib or 2/2 twill" },
+        { "face_to_back_ratio": "2:1", "face_weave": "3/1 twill", "back_weave": "4/4 twill" }
+      ],
+      "preferred_ratios": ["1:1", "2:1"]
+    },
+    "reed_and_denting": {
+      "page": 4,
+      "reed_count_definition": "the number of dents in two inches",
+      "heald_count_definition": "the number of heald wires in one inch",
+      "common_denting_orders": [1, 2, 3, 4],
+      "denting_page": 13,
+      "shuttle_weight_kg": 0.45,
+      "multiple_box_colouring_capacity_min": 2,
+      "multiple_box_colouring_capacity_max": 24,
+      "tappet_max_heald_shafts": 8,
+      "dobby_max_heald_shafts": 40,
+      "capacity_page": 2
+    }
+  },
+
+  "colour_theory": {
+    "light_theory": {
+      "page": 117,
+      "type": "additive",
+      "primaries": ["red", "blue", "green"],
+      "secondaries": { "yellow": ["red", "green"], "purple": ["red", "blue"], "blue-green": ["blue", "green"] },
+      "complementary_pairs": [["blue", "yellow"], ["green", "purple"], ["red", "bluish green"]],
+      "chromatic_circle_divisions": 12,
+      "note": "mixing the three primaries in the right proportion produces white"
+    },
+    "pigment_theory": {
+      "page": 118,
+      "type": "subtractive",
+      "basis": "Brewster theory",
+      "primaries": ["red", "yellow", "blue"],
+      "secondaries": { "green": ["yellow", "blue"], "purple": ["red", "blue"], "orange": ["red", "yellow"] },
+      "tertiaries": {
+        "russet": { "from": ["purple", "orange"], "dominant": "red" },
+        "citron": { "from": ["green", "orange"], "dominant": "yellow" },
+        "olive": { "from": ["green", "purple"], "dominant": "blue" }
+      },
+      "brewster_circle_divisions": 18,
+      "note": "tertiaries are duller than primaries and secondaries because one primary predominates"
+    },
+    "definitions": {
+      "page": 120,
+      "tone": "results from mixing a colour with white or black",
+      "tint": "a lighter tone - a colour mixed with white in different proportions",
+      "shade": "a darker tone - a colour mixed with black in different proportions",
+      "coloured_grey": "a neutral or broken colour from mixing a normal colour with both black and white in varying proportions",
+      "mode_shade": "a broken colour in which a certain hue predominates",
+      "monochromatic_contrast": "two tones of the same colour combined",
+      "polychromatic_contrast": "two or more different colours combined, alike or different in tone",
+      "successive_contrast": "the colours are far enough apart that one is perceived after the other",
+      "simultaneous_contrast": "the colours are placed in juxtaposition so both are seen at once",
+      "contrast_of_hue": "each colour influences its neighbour - a dark colour makes an adjacent light colour look lighter, and vice versa",
+      "colour_harmony": "any combination of hues that is pleasing to the observer",
+      "harmony_of_analogy": "combining tones of the same colour that do not differ widely, or closely related hues of equal depth - of chief value for quiet effects",
+      "harmony_of_contrast": "combining widely different tones of one colour, or unlike colours - useful for clear and smart effects",
+      "divisional_colours": "colours introduced to separate two contrasting colours that would otherwise appear blurred at their joining"
+    },
+    "visual_effects": {
+      "page": 119,
+      "red": "brilliant and cheerful, gives an impression of warmth, appears to advance towards the observer",
+      "blue": "a cold colour, appears to recede from the eye",
+      "yellow": "very luminous and vivid, conveys the idea of purity",
+      "orange": "very strong, warm and bright, but less intense than yellow",
+      "green": "retiring and rather cold, but cheerful and fresh",
+      "purple": "rich and deep, unsurpassed for bloom and softness"
+    },
+    "lustre_factors": {
+      "page": 116,
+      "factors": ["characteristics of the fibres", "manner of arrangement of fibres in the yarn", "the type of weave", "the type of finishing treatment"],
+      "principles": [
+        "polyester and viscose have smooth uniform surfaces and give high lustre; irregular twisted fibres such as cotton give poor lustre",
+        "filament yarns of low twist present long continuous surfaces and reflect well; spun staple yarns have higher twist, which breaks surface continuity and reduces lustre",
+        "a weave with longer floats (such as sateen) presents large continuous areas of yarn and raises lustre",
+        "calendering and beetling raise lustre by increasing surface regularity; raising destroys it by disturbing the surface"
+      ]
+    },
+    "colour_application_methods": {
+      "page": 122,
+      "methods": [
+        "combining two or more fibre types and dyeing the fabric made from them",
+        "printing the spun yarn in different colours",
+        "arranging differently dyed yarns alternately and weaving them in an irregular or broken manner",
+        "adding small dyed tufts of fibre before spinning, giving a spotted colour effect on the yarn",
+        "blending fibres of different colours to produce a mixture yarn",
+        "twisting differently coloured threads together to produce fancy yarns",
+        "printing slivers in strands of different colours to produce melange yarns"
+      ]
+    }
+  },
+
+  "colour_weave_effects": [
+    { "slug": "continuous_line", "name": "Continuous line effect", "page": 123,
+      "weave": "2/2 twill", "warping_order": "2 dark, 2 light", "wefting_order": "2 dark, 2 light",
+      "description": "the line produced by the pattern runs lengthwise along the cloth" },
+    { "slug": "hounds_tooth", "name": "Hound's tooth pattern", "page": 124,
+      "weave": "2/2 twill", "warping_order": "4 dark, 4 light", "wefting_order": "4 dark, 4 light",
+      "description": "the classic broken-check figure formed by a 4-and-4 colouring on a 2/2 twill" },
+    { "slug": "birds_eye", "name": "Bird's eye and spot effect", "page": 125,
+      "weave": "2/2 twill", "warping_order": "2 dark, 2 light", "wefting_order": "1 dark, 1 light",
+      "description": "the cloth surface is covered with distinct small detached spots of colour; a spot forms where a warp colour is intersected by the same colour of weft" },
+    { "slug": "hairline", "name": "Hairline effect", "page": 125,
+      "weave": "3/1 twill (4 thread)", "warping_order": "1 dark, 4 light", "wefting_order": "1 dark, 4 light",
+      "description": "solid vertical or horizontal lines, each line one thread wide; wider lines are possible by arranging weave and colouring suitably" },
+    { "slug": "step_pattern", "name": "Step pattern", "page": 125,
+      "weave": "2/2 twill", "warping_order": "1 dark, 1 light", "wefting_order": "1 dark, 1 light",
+      "description": "vertical and horizontal lines unite and form zig-zag lines of colour running diagonally; an ordinary twill with equal warp and weft floats is suitable" },
+    { "slug": "all_over", "name": "All over effect", "page": 126,
+      "weave": "2/2 twill", "warping_order": "3 dark, 2 light", "wefting_order": "3 dark, 2 light",
+      "description": "the colour effect runs unbroken over the surface; the colour-plan repeat and the weave repeat are arranged so two or more weave repeats are needed for one pattern repeat" }
+  ],
+
+  "glossary": [
+    { "term": "Alpaca cloth", "definition": "A cloth in which alpaca weft is used, with a plain or weft-faced twill weave. Used for dress fabrics and lining cloths.", "page": 131 },
+    { "term": "Amazo", "definition": "A 5-end satin fabric with worsted warp and woollen weft, milled and raised to impart a soft feel. Used as dress material.", "page": 131 },
+    { "term": "Armure", "definition": "A fabric constructed with warp rib weave, suitable as a dress fabric.", "page": 131 },
+    { "term": "Atlas", "definition": "A silk fabric constructed with an eight-end satin weave. With cotton weft it suits lining cloths.", "page": 131 },
+    { "term": "Bag cloth", "definition": "A light, open cloth woven with plain or 2/2 twill, used for grocery purposes.", "page": 131 },
+    { "term": "Batiste", "definition": "Cotton plain cloth finished to give the feel of muslin and cambric. Used for dresses and linings.", "page": 131 },
+    { "term": "Beaver cloth", "definition": "A milled and raised woollen fabric made in various weights using backed and double weaves. Used as overcoating.", "page": 131 },
+    { "term": "Bedford cords", "definition": "A fabric with ridges and furrows giving a warp-way stripe resembling cords. Cotton or worsted. Used for dress fabrics and military wear.", "page": 132 },
+    { "term": "Belting", "definition": "Narrow-width fabric of cotton, wool or silk in plain, twill or sateen. Used for skirt tops, ornamentation and power transmission.", "page": 132 },
+    { "term": "Beige", "definition": "A worsted or cotton fabric using a 2/2 twill weave.", "page": 132 },
+    { "term": "Blanket", "definition": "A heavy fabric of wool or a wool-cotton admixture; cotton, acrylic and polypropylene are also used.", "page": 132 },
+    { "term": "Blazer cloth", "definition": "A milled, raised woollen cloth finished with a fibrous surface. Used for sports jackets and caps.", "page": 132 },
+    { "term": "Box cloth", "definition": "A woollen cloth milled heavily to impart a felt-like appearance.", "page": 132 },
+    { "term": "Broad cloth", "definition": "An old woollen cloth of fine merino wool in plain weave, heavily milled and finished for dress use.", "page": 132 },
+    { "term": "Brocade", "definition": "A heavy silk fabric with figured ornamentation produced on a jacquard.", "page": 132 },
+    { "term": "Calendered cloth", "definition": "Cloth passed between heated rollers under pressure, giving a smooth glossy surface. Normally applied to cotton and linen.", "page": 132 },
+    { "term": "Calico", "definition": "Various types of plain woven cotton cloth coarser than muslin.", "page": 133 },
+    { "term": "Cambric", "definition": "A cloth of high quality cotton yarn given a special finish for a stiff feel and bright appearance. Used for summer dresses and dress linings.", "page": 133 },
+    { "term": "Casement cloth", "definition": "A plain woven cotton cloth with a soft, full handle.", "page": 133 },
+    { "term": "Chiffon", "definition": "A silk fabric of very soft filmy texture, made of hard twisted yarn and woven in the gummed condition.", "page": 133 },
+    { "term": "Chintzed fabric", "definition": "A cloth in which different colours of weft replace one another in succeeding horizontal sections of a design, forming a figure in more colours than there are series of weft threads.", "page": 133 },
+    { "term": "Corded fabric", "definition": "A fabric in which rib effects run longitudinally in the cloth.", "page": 133 },
+    { "term": "Corduroy", "definition": "A weft pile or velveteen in which the pile forms ribs or cords along the warp direction.", "page": 133 },
+    { "term": "Corkscrew fabric", "definition": "A fine worsted fabric with a warp rib twill effect running at a flat angle.", "page": 133 },
+    { "term": "Crepe fabric", "definition": "A fabric with an irregular or broken surface appearance, using a combination of sateen with twill or plain weaves.", "page": 133 },
+    { "term": "Cretonne", "definition": "A fabric woven with plain, twill, crepe or small fancy weaves, ornamented with elaborate printed designs.", "page": 133 },
+    { "term": "Damask", "definition": "A silk fabric with a weft sateen figure on a warp satin, twill or plain ground.", "page": 134 },
+    { "term": "Denim", "definition": "A strong heavy warp-faced cotton cloth in 3/1 twill. Warp usually dyed brown or blue, weft bleached.", "page": 134 },
+    { "term": "Dhooties", "definition": "Soft light cotton fabrics 2-5 yards long, with a plain grey body and an ordinary or fancy border.", "page": 134 },
+    { "term": "Drills", "definition": "Warp-faced cotton fabrics in 3, 4 and 5 thread warp-faced twills and 5 thread satin, with twill lines running opposite to the warp twist direction for a prominent twill effect.", "page": 134 },
+    { "term": "Duck", "definition": "A very heavy strong cotton fabric in plain weave. Used for sail cloth, belting and tent cloth.", "page": 134 },
+    { "term": "Dungaree", "definition": "A fabric similar to denim but usually dyed in both warp and weft.", "page": 134 },
+    { "term": "Felted cloth", "definition": "A woollen cloth subjected to pressure and moisture so the fibres mat and interlock into a dense, full, compact structure.", "page": 134 },
+    { "term": "Flannel", "definition": "A plain or twill cloth, generally of woollen yarns, milled and raised to give a very soft handle.", "page": 134 },
+    { "term": "Flannelette", "definition": "A cotton fabric in plain or 2/2 twill finished with a fibrous surface in imitation of wool flannel.", "page": 134 },
+    { "term": "Fustian", "definition": "A velveteen of high pick density, also known as corduroy. Cut weft floats form warp-way fringes giving a rib or cord appearance.", "page": 135 },
+    { "term": "Gabardine", "definition": "A fabric woven in 2/2 twill construction, commonly of cotton or worsted.", "page": 135 },
+    { "term": "Gauze", "definition": "A fabric of open construction resembling a wire mesh.", "page": 135 },
+    { "term": "Georgette", "definition": "A fine silk fabric of highly twisted yarns, with S and Z twist arranged 2 and 2 in warp and weft, giving a crepe-like appearance.", "page": 135 },
+    { "term": "Gingham", "definition": "A cotton fabric in plain weave with firm texture, normally produced with a check effect.", "page": 135 },
+    { "term": "Glass cloth", "definition": "A cotton or linen cloth used exclusively for cleaning glassware.", "page": 135 },
+    { "term": "Grey cloth", "definition": "The cloth as taken from the loom.", "page": 135 },
+    { "term": "Grosgrain", "definition": "A blended warp rib fabric of fine silk warp with coarser silk, cotton or worsted weft, with high warp density and low pick density.", "page": 135 },
+    { "term": "Hair line", "definition": "A simple colour and weave effect producing solid lines warp or weft way; line thickness depends on the thickness and number of coloured yarns.", "page": 135 },
+    { "term": "Hessian cloth", "definition": "A plain woven jute cloth produced in a wide range of qualities, used for wrapping and packing.", "page": 135 },
+    { "term": "Imperial cloth", "definition": "A worsted cloth woven as 2/2 twill, suitable for coatings and costumes.", "page": 136 },
+    { "term": "Italian cloth", "definition": "A blended cloth with yarn-dyed cotton warp and woollen weft dyed in the fabric state, finished for a lustrous appearance.", "page": 136 },
+    { "term": "Khakhi", "definition": "A cloth made for military purposes, yellowish brown, made from a mixture of differently dyed fibres.", "page": 136 },
+    { "term": "Leno", "definition": "A net-like fabric made by causing one warp end to cross over another, using doup healds.", "page": 136 },
+    { "term": "Limbric", "definition": "A cotton fabric of fine warp and coarse, soft-spun lustrous weft; pick density usually exceeds warp thread density.", "page": 136 },
+    { "term": "London shrunk cloth", "definition": "A woollen cloth preshrunk by post treatment with hot and cold washes.", "page": 136 },
+    { "term": "Long cloth", "definition": "A cotton fabric woven as plain in a close texture.", "page": 136 },
+    { "term": "Matelasse", "definition": "A figured double or treble cloth using wadding threads to give a raised appearance to the figure.", "page": 136 },
+    { "term": "Mull", "definition": "A superfine cotton cloth in plain weave, bleached and finished for a soft feel.", "page": 136 },
+    { "term": "Muslin", "definition": "A soft fine fabric of cotton, silk or worsted, woven as plain in an open texture.", "page": 136 },
+    { "term": "Napped cloth", "definition": "A cotton or wool cloth given a raising treatment to make it fibrous or hairy.", "page": 137 },
+    { "term": "Oatmeal", "definition": "Crepe fabrics with a rough texture; the weave is generally irregular.", "page": 137 },
+    { "term": "Pile fabric", "definition": "A fabric characterised by long floats or loops of yarn. Warp pile forms loops (cut or uncut); weft pile forms long floats (cut or uncut).", "page": 137 },
+    { "term": "Plush", "definition": "A weft pile fabric with long floats of weft.", "page": 137 },
+    { "term": "Poplin", "definition": "A warp rib cloth with fine warp and coarse weft, made from cotton, wool, silk or a combination.", "page": 137 },
+    { "term": "Quilts", "definition": "Figured heavy cotton fabrics using honeycomb, tapestry, repp or alhambra weaves.", "page": 137 },
+    { "term": "Repp", "definition": "A warp rib fabric in which rib lines alternate coarse and fine ends, interlaced by corresponding coarse and fine picks.", "page": 137 },
+    { "term": "Rugs", "definition": "Woollen cloths woven as single and double layered structures; single cloths are woven as twills with broad check effects.", "page": 137 },
+    { "term": "Russian cords", "definition": "A leno structure in which a coloured crossing end crosses over a standard warp end of contrasting colour.", "page": 137 },
+    { "term": "Scrim", "definition": "An inferior quality of cotton muslin cloth.", "page": 138 },
+    { "term": "Serge", "definition": "A worsted or woollen cloth in twill construction with a rough feel.", "page": 138 },
+    { "term": "Sheeting", "definition": "A plain or 2/2 twill fabric of cotton, linen or a polyester-cotton blend, in medium to coarse counts.", "page": 138 },
+    { "term": "Taffeta", "definition": "A closely sett plain silk fabric using a coarse weft and finer warp.", "page": 138 },
+    { "term": "Tartan", "definition": "A woollen or worsted 2/2 twill cloth in elaborate check designs.", "page": 138 },
+    { "term": "Terry", "definition": "A warp pile fabric with loops of warp threads alternating with ground threads. Ideal for towels.", "page": 138 },
+    { "term": "Tussore", "definition": "A plain woven cloth of silk or cotton; the cotton version is mercerised and dyed to imitate silk.", "page": 138 },
+    { "term": "Tweed", "definition": "A woollen cloth made in forms ranging from fine to coarse textures. Used for suitings and overcoatings.", "page": 138 },
+    { "term": "Velvet", "definition": "A warp pile fabric similar to terry but with short cut piles.", "page": 138 }
+  ],
+
+  "loom": {
+    "page": 1,
+    "motions": {
+      "primary": ["shedding - opens the warp sheet into layers to let the shuttle pass", "picking - propels the shuttle carrying weft from one end of the loom to the other", "beat up - lays the previously laid weft to the fell of the cloth"],
+      "secondary": ["take up - winds cloth onto the cloth roller and influences pick density", "let off - releases warp from the weaver's beam at a uniform rate, keeping warp tension constant"],
+      "auxiliary": ["warp stop motion - stops the loom on warp breakage, preventing missing ends and floats", "weft stop motion - stops the loom on weft exhaustion or breakage, preventing cracks", "warp protector - prevents multiple warp breakages when the shuttle is trapped in the shed"]
+    },
+    "classification": {
+      "hand_loom": ["dobby", "jacquard"],
+      "power_loom_shuttle": ["non automatic", "semi automatic", "automatic"],
+      "power_loom_shuttleless": ["projectile", "rapier", "air jet", "water jet"],
+      "warp_patterning": ["tappet", "dobby", "jacquard"],
+      "weft_patterning": ["multiple boxes"]
+    },
+    "warp_path": ["weaver's beam", "two bars of back rest", "back lease rod", "front lease rod", "back heald", "front heald", "reed", "fell of the cloth", "temple", "breast beam", "emery roller", "tension rod", "cloth roller"],
+    "warp_path_page": 3
+  },
+
+  "drafts": {
+    "page": 9,
+    "types": [
+      { "slug": "straight", "name": "Straight draft", "page": 9, "description": "The drafting order progresses successively from the first to the last heald frame. The peg plan is the same as the design, so no separate peg plan is needed." },
+      { "slug": "skip", "name": "Skip draft", "page": 10, "description": "Uses twice or more the minimum number of heald frames to distribute warp threads more uniformly and prevent abrasion from overcrowding. Normally used for plain and twill weaves up to a repeat of 4." },
+      { "slug": "sateen", "name": "Sateen draft", "page": 11, "description": "Serves the same purpose as the skip draft, but is used for weaves with a repeat size of more than 5." },
+      { "slug": "pointed", "name": "Pointed draft", "page": 11, "description": "The straight draft is reversed after half the repeat warp way. The number of heald shafts is about half the repeat size. Suits pointed twill, diamond weaves and ordinary honeycombs." },
+      { "slug": "broken", "name": "Broken draft", "page": 11, "description": "Resembles the pointed draft but the pointed effect is broken. Suits herringbone twills." },
+      { "slug": "divided", "name": "Divided draft", "page": 12, "description": "Used for weaves having two series of warp threads such as terry, double cloth and warp backed cloth. The two sets are divided into two groups of heald shafts." },
+      { "slug": "grouped", "name": "Grouped draft", "page": 12, "description": "Used for stripe and check designs where the stripes have different weaves. The repeat is determined by the number of stripes and the number of threads in each stripe." },
+      { "slug": "combined", "name": "Combined draft", "page": 13, "description": "Two or more draft types applied simultaneously. The most complicated, chosen only where there are technological or economic reasons." }
+    ]
+  }
+}
