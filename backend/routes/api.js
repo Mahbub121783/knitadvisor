@@ -10,17 +10,17 @@ const express = require('express');
 const crypto = require('crypto');
 const router = express.Router();
 
-const { calculate, getAllFabrics } = require('../engine/calculator');
+const { calculate, getAllFabrics, ENGINE_INPUTS } = require('../engine/index');
 const { UnitConverter, FabricWeightFormulas, YarnCountFormulas, WeftCalculators } = require('../engine/formulas');
-const { FAULTS_DATABASE, diagnoseFaults } = require('../engine/faults-engine');
+const { FAULTS_DATABASE, diagnoseFaults } = require('../engine/domain/faults-engine');
 const providerManager = require('../ai/provider-manager-v2');
-const { getPattern } = require('../engine/pattern-engine');
-const { calculateStriper, validateStriperInput } = require('../engine/striper-engine');
-const { predictQuality } = require('../engine/quality-engine');
-const { calculateCost, SM_PRICE_MATRIX, YARN_TYPE_CATALOG, SM_SURCHARGES } = require('../engine/costing-engine');
-const { parseComposition } = require('../engine/composition-engine');
-const { GLOSSARY, BASIC_ELEMENTS, FORMATION_CYCLES, QUIZ_QUESTIONS } = require('../engine/academy-engine');
-const colorEngine = require('../engine/color-engine');
+const { getPattern } = require('../engine/domain/pattern-engine');
+const { calculateStriper, validateStriperInput } = require('../engine/domain/striper-engine');
+const { predictQuality } = require('../engine/domain/quality-engine');
+const { calculateCost, SM_PRICE_MATRIX, YARN_TYPE_CATALOG, SM_SURCHARGES } = require('../engine/domain/costing-engine');
+const { parseComposition } = require('../engine/domain/composition-engine');
+const { GLOSSARY, BASIC_ELEMENTS, FORMATION_CYCLES, QUIZ_QUESTIONS } = require('../engine/domain/academy-engine');
+const colorEngine = require('../engine/domain/color-engine');
 
 const memCache = require('../cache/memory-cache');
 const { resultCache } = require('../db/repositories/cache-repo');
@@ -31,7 +31,19 @@ const { resultCache } = require('../db/repositories/cache-repo');
 // recently would each have been served the pre-fix numbers for a month. Bump
 // this whenever engine output changes for the same inputs; it partitions the key
 // space so old entries are simply never looked up again (and expire on their own).
-const ENGINE_VERSION = 'v2';
+//
+// v3: three inputs that the route silently dropped now reach the engine
+// (shade_depth_pct, the illuminant pair, yarn_organic_type). Any entry cached
+// under v2 was computed as if they were absent, so those keys must not be
+// reused even though the inputs hash the same way today.
+//
+// v4: the tightness-factor bands were recalibrated and the TF itself is now
+// computed against the count its stitch length was measured with. Same inputs,
+// different verdict — a v3 entry can still report UNKNITTABLE for a
+// construction that now reads KNITTABLE. This is exactly the case the version
+// prefix exists for, and it is easy to forget: changing a CONSTANT the engine
+// reads changes engine output just as surely as changing its code.
+const ENGINE_VERSION = 'v4';
 const logsRepo = require('../db/repositories/logs-repo');
 const { createRateLimiter } = require('../middleware/rate-limiter');
 const { query: dbQuery } = require('../db/client');
@@ -63,18 +75,27 @@ router.post('/calculate', async (req, res) => {
     });
   }
 
-  // Normalize cache key — must include EVERY field that actually reaches calculate()
-  // below, or two different inputs (e.g. different dyeing_method) collide on the same
-  // cached result.
-  const cacheInput = [
-    fabric, gsm, body.composition, body.color_shade, body.color_input,
-    body.dia, body.gauge, body.rpm, body.efficiency || 85,
-    body.stitch_length, body.feeders, body.target_width,
-    body.fiber_grade, body.spinning_system, body.yarn_form,
-    body.finishing_route, body.dyeing_method, body.twist_multiplier,
-    body.yarn_price_type, body.yarn_white, body.yarn_organic, body.yarn_ecovero, body.yarn_at_sight,
-    body.denier, body.filaments, body.elastane_denier, body.elastane_pct, body.feeder_type,
-  ].map(v => v == null ? '' : v).join('_');
+  // Both the engine params and the cache key are derived from the engine's own
+  // canonical input list. They used to be two hand-maintained arrays that had
+  // to agree with each other and with normalizeParams(), and they had drifted:
+  // a field missing from the params list is silently ignored by the engine, and
+  // a field missing from the key makes two genuinely different requests collide
+  // on one cached answer. Deriving both from ENGINE_INPUTS makes the two
+  // impossible to desynchronise — adding an input to the engine forwards it and
+  // keys on it with no change here.
+  const engineParams = {};
+  for (const field of ENGINE_INPUTS) {
+    if (body[field] !== undefined) engineParams[field] = body[field];
+  }
+  engineParams.fabric = fabric;
+  engineParams.gsm = gsm;
+  // Normalise the one input that has a default, so "omitted" and "sent as 85"
+  // are the same cache entry rather than two entries holding the same answer.
+  engineParams.efficiency = body.efficiency || 85;
+
+  const cacheInput = ENGINE_INPUTS
+    .map(f => (engineParams[f] == null ? '' : engineParams[f]))
+    .join('_');
   const cacheKey = crypto.createHash('md5').update(ENGINE_VERSION + '|' + cacheInput).digest('hex');
 
   // L1 — memory cache
@@ -122,37 +143,7 @@ router.post('/calculate', async (req, res) => {
   }
 
   // Cache miss — calculate
-  const result = calculate({
-    fabric,
-    gsm,
-    composition:     body.composition,
-    color_shade:     body.color_shade,
-    color_input:     body.color_input,
-    dia:             body.dia,
-    gauge:           body.gauge,
-    rpm:             body.rpm,
-    efficiency:      body.efficiency,
-    stitch_length:   body.stitch_length,
-    feeders:         body.feeders,
-    target_width:      body.target_width,
-    fiber_grade:       body.fiber_grade,
-    spinning_system:   body.spinning_system,
-    yarn_form:         body.yarn_form,
-    finishing_route:   body.finishing_route,
-    dyeing_method:     body.dyeing_method,
-    twist_multiplier:  body.twist_multiplier,
-    yarn_price_type:   body.yarn_price_type,
-    yarn_white:        body.yarn_white,
-    yarn_organic:      body.yarn_organic,
-    yarn_ecovero:      body.yarn_ecovero,
-    yarn_at_sight:     body.yarn_at_sight,
-    feeder_type:       body.feeder_type,
-    // Warp knit parameters
-    denier:          body.denier,
-    filaments:       body.filaments,
-    elastane_denier: body.elastane_denier,
-    elastane_pct:    body.elastane_pct,
-  });
+  const result = calculate(engineParams);
 
   if (result.error) {
     return res.status(400).json(result);
@@ -173,7 +164,6 @@ router.post('/calculate', async (req, res) => {
     parsed_gsm: gsm,
     parsed_dia: body.dia || null,
     parsed_gauge: body.gauge || null,
-    result_json: result,
     response_ms: result.response_ms,
     from_cache: false,
     cache_key: cacheKey,
