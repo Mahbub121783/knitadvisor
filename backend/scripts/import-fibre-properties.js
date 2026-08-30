@@ -172,7 +172,10 @@ async function write(payload) {
          (fibre_slug, property, value, value_min, value_max, unit, condition,
           temperature_c, rh_pct, method, source_key, page, table_ref, book_refs, quality, note)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
-       ON CONFLICT (fibre_slug, property, condition, page) DO UPDATE SET
+       -- Targets the expression index from migration 008, not the columns: a
+       -- plain UNIQUE treats NULLs as distinct, so rows whose condition the
+       -- book never stated would be inserted afresh on every run.
+       ON CONFLICT (fibre_slug, property, (coalesce(condition, '')), page) DO UPDATE SET
          value = EXCLUDED.value, value_min = EXCLUDED.value_min,
          value_max = EXCLUDED.value_max, unit = EXCLUDED.unit,
          rh_pct = EXCLUDED.rh_pct, table_ref = EXCLUDED.table_ref,
@@ -209,6 +212,21 @@ async function write(payload) {
     `SELECT property, condition, count(*)::int AS n
        FROM fibre_properties GROUP BY property, condition ORDER BY property, condition`);
   rows.forEach(r => console.log(`  ${r.property.padEnd(16)} ${(r.condition || 'unstated').padEnd(10)} ${r.n}`));
+
+  // The table must now hold exactly what the file holds. If it holds more, an
+  // upsert failed to match and inserted a duplicate instead of updating — which
+  // is how 13 extra rows reached production before migration 008. Counting
+  // after the write is the only place that shows up.
+  const [{ total }] = await query('SELECT count(*)::int AS total FROM fibre_properties');
+  if (total !== payload.properties.length) {
+    console.error(`
+[Import] the table holds ${total} rows but the file has ` +
+                  `${payload.properties.length}. An upsert did not match its own key.`);
+    process.exitCode = 1;
+    return;
+  }
+  console.log(`
+${total} rows, matching the file exactly.`);
 })()
   .catch(err => { console.error('\n[Import] ' + err.message); process.exitCode = 1; })
   .finally(() => close());
