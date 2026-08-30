@@ -32,3 +32,6 @@ scratch/shoot_rib.js
 
 # Agent worktree pointers — machine-local paths, not project state
 .claude/worktrees/
+
+# local-only verification scratch
+.verify/
