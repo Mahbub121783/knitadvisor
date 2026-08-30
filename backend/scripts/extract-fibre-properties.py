@@ -45,6 +45,8 @@ SOURCE_KEY = 'morton_hearle_2008'
 BODY_OFFSET = 19
 
 CELL = re.compile(r'^(\d+(?:\.\d+)?)(?:[–—-](\d+(?:\.\d+)?))?$')
+CITATION = re.compile(r'^\[[\d,\s–—-]+\]$')
+DASH = re.compile(r'^[–—-]$')
 
 # Each table: the PDF page it is on, the vertical band its data rows occupy, and
 # what each column of figures means, left to right.
@@ -62,15 +64,51 @@ TABLES = {
         'pdf_page': 185, 'y_from': 310, 'y_to': 460,
         'columns': [('density', None, None), ('specific_volume', None, None)],
     },
+    # Chapter 7. Three columns that are routinely conflated and should not be:
+    #   commercial_regain  the allowance yarn is bought and sold at (BS 4784:1973)
+    #   moisture_regain    what the fibre actually holds at 65% r.h., 20 C
+    #   regain_hysteresis  how much MORE it holds coming down from wet than up
+    #                      from dry, at the same humidity
+    # The engine carries one number per fibre and calls it regain. It is the
+    # middle one. The other two have no home in the engine at all, and the third
+    # is worth 1-2% of fabric weight on a cloth that has been wet.
+    '7.3': {
+        'pdf_page': 207, 'y_from': 145, 'y_to': 345,
+        'columns': [('commercial_regain', 'conventional allowance', None),
+                    ('moisture_regain', '65% r.h.', 65.0),
+                    ('regain_hysteresis', '65% r.h.', 65.0)],
+        'unit_override': {'commercial_regain': '%', 'moisture_regain': '%',
+                          'regain_hysteresis': '%'},
+        'paired_check': False,
+    },
 }
 
-UNITS = {'density': 'g/cm3', 'specific_volume': 'cm3/g'}
+UNITS = {'density': 'g/cm3', 'specific_volume': 'cm3/g',
+         'commercial_regain': '%', 'moisture_regain': '%', 'regain_hysteresis': '%'}
 
 # How each printed fibre name is filed. Written out rather than inferred from
 # the name, because the classification is a judgement and belongs in one
 # reviewable place. `engine` names the key in FIBER_PROPERTIES (yarn-engine.js)
 # where the engine already carries a value, so the two can be compared.
 FIBRES = {
+    # Table 7.3 prints the same fibres under shorter names, and adds several the
+    # density tables do not carry.
+    'Cotton':                           ('cotton', 'Cotton', 'cellulose', 'natural', 'cellulose', 'cotton'),
+    'Mercerised cotton':                ('mercerised_cotton', 'Mercerised cotton', 'cellulose', 'natural', 'cellulose', None),
+    'Hemp':                             ('hemp', 'Hemp', 'cellulose', 'natural', 'cellulose', None),
+    'Flax':                             ('flax', 'Flax (linen)', 'cellulose', 'natural', 'cellulose', 'linen'),
+    'Jute':                             ('jute', 'Jute', 'cellulose', 'natural', 'cellulose', None),
+    'Secondary acetate':                ('acetate', 'Acetate / triacetate', 'cellulose', 'regenerated', 'cellulose ethanoate', None),
+    'Triacetate':                       ('triacetate', 'Triacetate', 'cellulose', 'regenerated', 'cellulose triethanoate', None),
+    'Casein':                           ('casein', 'Regenerated protein (casein)', 'protein', 'regenerated', 'casein', None),
+    'Nylon 6.6, Nylon 6':               ('nylon', 'Nylon 6.6 / nylon 6', 'polyamide', 'synthetic', 'polyamide', 'nylon'),
+    'Polyester':                        ('polyester', 'Polyester (PET)', 'polyester', 'synthetic', 'polyethylene terephthalate', 'polyester'),
+    'Acrylic':                          ('acrylic', 'Acrylic (PAN)', 'vinyl', 'synthetic', 'polyacrylonitrile', 'acrylic'),
+    'Modacrylic':                       ('modacrylic', 'Modacrylic', 'vinyl', 'synthetic', 'modacrylic', None),
+    'Polyvinyl alcohol':                ('pval', 'Polyvinyl alcohol (vinylal)', 'vinyl', 'synthetic', 'polyvinyl alcohol', None),
+    'Polylactic acid':                  ('pla', 'Polylactic acid (PLA)', 'polyester', 'synthetic', 'polylactic acid', None),
+    'Meta-aramid (Nomex)':              ('meta_aramid', 'Meta-aramid (Nomex)', 'high_performance', 'synthetic', 'aromatic polyamide', None),
+
     'Cotton (lumen filled)':            ('cotton', 'Cotton', 'cellulose', 'natural', 'cellulose', 'cotton'),
     'Viscose rayon':                    ('viscose', 'Viscose rayon', 'cellulose', 'regenerated', 'cellulose', 'viscose'),
     'Secondary acetate, triacetate':    ('acetate', 'Acetate / triacetate', 'cellulose', 'regenerated', 'cellulose ethanoate', None),
@@ -140,10 +178,20 @@ def figure_columns(lines, expected):
     """
     Where the columns of figures sit, found from the data rather than declared.
 
-    A real column appears in most rows. A stray one appears in a single row and
-    is not a measurement at all: "Nylon 6.6, nylon 6" ends in a bare 6, which
-    reads as a figure and would otherwise invent a fifth column for the whole
-    table.
+    A real column is populated; a stray is not. "Nylon 6.6, nylon 6" ends in a
+    bare 6 that reads as a figure and would otherwise invent an extra column for
+    the whole table.
+
+    Populated used to mean "in at least half the rows", which was calibrated on
+    the density tables where every cell is filled. Table 7.3 leaves a dash in
+    two of its three columns for most fibres, so both real columns fell under
+    that bar and the table was refused whole.
+
+    So the rule is ranking, not a threshold: take the `expected` best-populated
+    clusters. That needs no number chosen in advance, and it fails loudly rather
+    than quietly — if the cluster just outside the cut is as populated as the
+    one just inside, there is no honest way to say which is a column, and the
+    table is refused.
     """
     xs = sorted({round(x) for line in lines for x, t in line if CELL.match(t)})
     clusters = []
@@ -153,14 +201,22 @@ def figure_columns(lines, expected):
         else:
             clusters.append([x])
 
-    centres = []
+    scored = []
     for group in clusters:
         lo, hi = min(group) - 12, max(group) + 12
         seen = sum(1 for line in lines
                    if any(lo <= x <= hi and CELL.match(t) for x, t in line))
-        if seen >= len(lines) / 2:
-            centres.append(sum(group) / len(group))
-    return centres if len(centres) == expected else None
+        scored.append((seen, sum(group) / len(group)))
+
+    if len(scored) < expected:
+        return None
+    scored.sort(key=lambda r: -r[0])
+    kept, dropped = scored[:expected], scored[expected:]
+    if dropped and kept[-1][0] <= dropped[0][0]:
+        return None                      # the cut falls inside a tie
+    if kept[-1][0] == 0:
+        return None
+    return sorted(c for _, c in kept)
 
 
 def read_rows(page, y_from, y_to, centres):
@@ -172,21 +228,59 @@ def read_rows(page, y_from, y_to, centres):
     and deciding what is a figure by looking at the text alone truncates the
     fibre's own name.
     """
+    # Everything left of the first column belongs to the fibre's name;
+    # everything at or right of it belongs to the figures.
+    label_edge = min(centres) - 30 if centres else 1e9
+
     rows = []
     for line in read_lines(page, y_from, y_to):
-        label, cells = [], {}
+        label, cells, ambiguous, qualifiers = [], {}, set(), []
         for x, t in line:
+            t = t.strip()
+            if not t:
+                continue
+            if x < label_edge:
+                # "[13]" after a fibre name is the book's own citation, not part
+                # of the name and not a measurement.
+                if not CITATION.match(t):
+                    label.append(t)
+                continue
+            if DASH.match(t):
+                continue                 # an empty cell, printed as a dash
             m = CELL.match(t)
+            if not m:
+                # A word inside the figure region qualifies the number beside
+                # it: "up to 12" is a bound, "1.5 or 3" is a choice, "low
+                # modulus 7 to high modulus 1.2" is two fibres in one row. The
+                # number alone would misrepresent all three, so the row is
+                # refused rather than stripped of its qualifier.
+                qualifiers.append(t)
+                continue
             idx = min(range(len(centres)), key=lambda i: abs(centres[i] - x)) if centres else None
             if m and idx is not None and abs(centres[idx] - x) <= 30:
+                if idx in cells:
+                    # Two figures in one column. The book writes these as
+                    # alternatives or as a pair of reported values — polyester's
+                    # allowance is "1.5 or 3", acetate's regain "6, 6.9" — and
+                    # there is no way to choose between them here. Taking the
+                    # last one, which is what a plain assignment does, would
+                    # silently store 3 for a fibre the book gives as 1.5 or 3.
+                    ambiguous.add(idx)
                 cells[idx] = (float(m.group(1)),
                               float(m.group(2)) if m.group(2) else None)
             else:
-                label.append(t)
+                qualifiers.append(t)
         name = ' '.join(label).strip()
-        if name and cells:
-            rows.append((name, cells))
+        if name and (cells or qualifiers):
+            rows.append((name, cells, sorted(ambiguous), qualifiers))
     return rows
+
+
+def cells_by_property(cells, spec, wanted):
+    for idx, (lo, hi) in cells.items():
+        if spec['columns'][idx][0] == wanted:
+            return (lo, hi)
+    return None
 
 
 def main():
@@ -215,7 +309,19 @@ def main():
         m = re.search(r'Table\s+' + re.escape(ref) + r'[^\n]*?\[([^\]]+)\]', caption)
         book_refs = m.group(1) if m else None
 
-        for label, cells in rows:
+        for label, cells, ambiguous, qualifiers in rows:
+            if qualifiers:
+                refused.append({'table': ref, 'name': label,
+                                'why': 'the figures are qualified in words ("%s"), so a bare number would misstate them'
+                                       % ' '.join(qualifiers)[:40]})
+                continue
+            if not cells:
+                continue
+            if ambiguous:
+                refused.append({'table': ref, 'name': label,
+                                'why': 'two figures share column %s — the book gives alternatives, not one value'
+                                       % ', '.join(spec['columns'][i][0] for i in ambiguous)})
+                continue
             meta = FIBRES.get(label)
             if not meta:
                 refused.append({'table': ref, 'name': label, 'why': 'no classification recorded for this name'})
@@ -230,6 +336,33 @@ def main():
                 by_cond.setdefault(cond, {})[prop] = (lo, hi)
 
             row_ok = True
+            if spec.get('paired_check', True):
+                pass
+            else:
+                # Table 7.3 has its own consistency rules instead of the
+                # reciprocal: hysteresis is the amount by which desorption
+                # EXCEEDS absorption, so it can never be negative; and the
+                # commercial allowance is a trading figure set at or above the
+                # measured regain, never below it.
+                hyst = cells_by_property(cells, spec, 'regain_hysteresis')
+                absorb = cells_by_property(cells, spec, 'moisture_regain')
+                comm = cells_by_property(cells, spec, 'commercial_regain')
+                if hyst is not None and hyst[0] < 0:
+                    refused.append({'table': ref, 'name': label,
+                                    'why': 'desorption minus absorption is negative (%.2f)' % hyst[0]})
+                    continue
+                if comm is not None and absorb is not None:
+                    # The allowance is a nominal trading figure that sits inside
+                    # or above the measured band, never wholly below it. It is
+                    # NOT required to exceed the top of the band: the book gives
+                    # viscose as 13% against a measured 12-14%, and an earlier
+                    # version of this check called the book wrong for it.
+                    floor = absorb[0]
+                    if comm[0] < floor - 0.51:
+                        refused.append({'table': ref, 'name': label,
+                                        'why': 'commercial allowance %.2f is below the whole measured band (from %.2f)' % (comm[0], floor)})
+                        continue
+                by_cond = {}
             for cond, pair in by_cond.items():
                 d, v = pair.get('density'), pair.get('specific_volume')
                 if not d or not v:
@@ -281,7 +414,7 @@ def main():
                     'value': None if hi is not None else lo,
                     'value_min': lo if hi is not None else None,
                     'value_max': hi if hi is not None else None,
-                    'unit': UNITS[prop], 'condition': cond, 'rh_pct': rh,
+                    'unit': UNITS.get(prop, '%'), 'condition': cond, 'rh_pct': rh,
                     'temperature_c': None, 'method': None,
                     'source_key': SOURCE_KEY, 'page': printed_page,
                     'table_ref': 'Table ' + ref, 'book_refs': book_refs,

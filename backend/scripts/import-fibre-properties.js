@@ -57,10 +57,29 @@ function verify(payload) {
   console.log('\nGATE\n');
 
   check(payload.source.key === 'morton_hearle_2008', 'the source key is the expected one');
-  check(refused.length === 0, 'the extractor refused nothing',
-        refused.map(r => `${r.name}: ${r.why}`).join('; '));
-  check(fibres.length >= 40, 'all three density tables were read', fibres.length + ' fibres');
-  check(properties.length >= 100, 'both properties came through for each condition',
+  // A refusal is the extractor working, not failing: Table 7.3 prints figures
+  // the book qualifies in words — "up to 12", "1.5 or 3", "low modulus 7 to
+  // high modulus 1.2" — and a bare number would misstate every one of them.
+  //
+  // But an UNDECLARED refusal is a loss nobody sees. So the set is named here.
+  // A new one fails the gate, which is the only way anyone finds out that a
+  // row stopped parsing.
+  const EXPECTED_REFUSALS = [
+    'Mercerised cotton', 'Secondary acetate', 'Wool', 'Nylon 6.6, Nylon 6',
+    'Polyester', 'Para-aramid', '(Kevlar, Twaron)',
+  ];
+  const refusedNames = refused.map(r => r.name).sort();
+  const unexpected = refusedNames.filter(n => !EXPECTED_REFUSALS.includes(n));
+  const recovered = EXPECTED_REFUSALS.filter(n => !refusedNames.includes(n));
+  check(unexpected.length === 0, 'nothing was refused that was not expected to be',
+        unexpected.join('; '));
+  check(recovered.length === 0,
+        'the rows the book qualifies in words are still the ones being refused',
+        recovered.length ? 'these now parse — check they parse CORRECTLY: ' + recovered.join(', ') : '');
+  check(refused.every(r => r.why && r.why.length > 10),
+        'every refusal states a reason');
+  check(fibres.length >= 45, 'the density and regain tables were read', fibres.length + ' fibres');
+  check(properties.length >= 125, 'every column of every table came through',
         properties.length + ' measurements');
 
   // Classification has to satisfy the same constraints the table does, so a bad
@@ -88,11 +107,16 @@ function verify(payload) {
   const known = new Set(slips.map(s => s.fibre + '|specific_volume'));
   const broken = [];
   for (const f of fibres) {
-    const conds = new Set(properties.filter(p => p.fibre_slug === f.slug).map(p => p.condition));
+    // Only the conditions that actually carry a density. A fibre now also has
+    // regain rows, at conditions where no density was ever measured, and an
+    // earlier version of this check called those a broken pair.
+    const conds = new Set(properties
+      .filter(p => p.fibre_slug === f.slug && p.property === 'density')
+      .map(p => p.condition));
     for (const cond of conds) {
       const d = properties.find(p => p.fibre_slug === f.slug && p.property === 'density' && p.condition === cond);
       const v = properties.find(p => p.fibre_slug === f.slug && p.property === 'specific_volume' && p.condition === cond);
-      if (!d || !v) { broken.push(`${f.slug}/${cond}: only one of the pair`); continue; }
+      if (!d || !v) { broken.push(`${f.slug}/${cond}: a density with no specific volume`); continue; }
       // Specific volume is the reciprocal of density, so across a range the
       // LOW density pairs with the HIGH specific volume. Comparing min to min
       // would fail every correctly-read range in Tables 5.2 and 5.3.
@@ -117,6 +141,9 @@ function verify(payload) {
     const v = p.value != null ? p.value : p.value_min;
     if (p.property === 'density') return !(v >= 0.5 && v <= 8.0);
     if (p.property === 'specific_volume') return !(v >= 0.1 && v <= 2.5);
+    // No fibre holds its own weight in water at 65% r.h.; the highest in the
+    // book is wool at 14-19%.
+    if (p.property.includes('regain')) return !(v >= 0 && v <= 100);
     return false;
   });
   check(daft.length === 0, 'every value is physically possible', daft.map(p => p.fibre_slug).join(', '));
@@ -129,6 +156,31 @@ function verify(payload) {
     p.value_min != null && p.value_max != null && p.value_min > p.value_max);
   check(unordered.length === 0, 'every range runs low to high',
         unordered.map(p => `${p.fibre_slug}/${p.property} ${p.value_min}-${p.value_max}`).join('; '));
+
+  // ── Regain, which has its own two consistency rules ───────────────────
+  // Hysteresis is the amount by which DESORPTION exceeds absorption, so it can
+  // never be negative; and the commercial allowance is a trading figure that
+  // sits inside or above the measured band, never wholly below it.
+  const negativeHysteresis = properties.filter(p =>
+    p.property === 'regain_hysteresis' && (p.value != null ? p.value : p.value_min) < 0);
+  check(negativeHysteresis.length === 0,
+        'desorption regain always exceeds absorption regain',
+        negativeHysteresis.map(p => p.fibre_slug).join(', '));
+
+  const belowBand = [];
+  for (const f of fibres) {
+    const a = properties.find(p => p.fibre_slug === f.slug && p.property === 'moisture_regain');
+    const c = properties.find(p => p.fibre_slug === f.slug && p.property === 'commercial_regain');
+    if (!a || !c) continue;
+    const floor = a.value != null ? a.value : a.value_min;
+    const allowance = c.value != null ? c.value : c.value_min;
+    if (allowance < floor - 0.51) belowBand.push(`${f.slug}: ${allowance} < ${floor}`);
+  }
+  check(belowBand.length === 0,
+        'no commercial allowance falls below the measured regain band', belowBand.join('; '));
+
+  const regains = properties.filter(p => p.property.includes('regain'));
+  check(regains.length >= 20, 'the regain table came through', regains.length + ' regain rows');
 
   const badPage = properties.filter(p => !(p.page >= 1 && p.page <= 746));
   check(badPage.length === 0, 'every citation points inside the book', badPage.length + ' do not');

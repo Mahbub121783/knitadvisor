@@ -54,6 +54,43 @@ const bookValue = (slug, property, condition) => props.properties.find(
 
 const num = row => (row ? (row.value != null ? row.value : (row.value_min + row.value_max) / 2) : null);
 
+/**
+ * Regain. Unlike density this is not one number: the book prints a measured
+ * absorption regain at 65% r.h. AND a commercial allowance, and they are not
+ * the same figure. Cotton is 7-8% measured and 8.5% by allowance; polyester
+ * 0.4% measured and 1.5 or 3% by allowance. Yarn is bought and sold at the
+ * allowance; fabric weighs what the measurement says. The engine carries one
+ * value and it is the measured one, so that is what this compares — but the
+ * gap is reported, because a merchandiser quoting weight and a merchandiser
+ * quoting yarn cost are using different numbers and should know it.
+ */
+function compareRegain(engine, byEngineKey) {
+  const rows = [];
+  for (const [key, row] of Object.entries(engine)) {
+    const fibre = byEngineKey.get(key);
+    if (!fibre) continue;
+    const measured = bookValue(fibre.slug, 'moisture_regain', '65% r.h.');
+    const allowance = bookValue(fibre.slug, 'commercial_regain', 'conventional allowance');
+    if (!measured && !allowance) continue;
+
+    const lo = measured ? (measured.value != null ? measured.value : measured.value_min) : null;
+    const hi = measured ? (measured.value != null ? measured.value : measured.value_max) : null;
+    const inBand = lo != null && row.regain >= lo - 0.05 && row.regain <= hi + 0.05;
+
+    rows.push({
+      key,
+      have: row.regain,
+      measured: measured ? (measured.value != null ? String(measured.value) : `${lo}–${hi}`) : null,
+      allowance: allowance ? (allowance.value != null ? String(allowance.value) : `${allowance.value_min}–${allowance.value_max}`) : null,
+      page: (measured || allowance || {}).page || fibre.page,
+      verdict: lo == null ? 'no measured regain in the book'
+             : inBand ? 'inside the measured band'
+             : `OUTSIDE the measured band`,
+    });
+  }
+  return rows;
+}
+
 function main() {
   const engine = FIBER_PROPERTIES;
   const byEngineKey = new Map(props.fibres.filter(f => f.engine_key).map(f => [f.engine_key, f]));
@@ -73,17 +110,24 @@ function main() {
 
     const near = (a, b) => a != null && b != null && Math.abs(a - b) < 0.005;
 
+    // Cite the page the MEASUREMENT is printed on, not the fibre's. A fibre row
+    // carries whichever table defined it last, so acrylic's density from Table
+    // 5.1 was being reported against p.188 — the page of the regain table.
+    const row65 = bookValue(fibre.slug, 'density', PREFERRED_CONDITION);
+    const rowDry = bookValue(fibre.slug, 'density', 'dry');
+    const page = (row65 || rowDry || {}).page || fibre.page;
+
     if (near(have, conditioned)) {
-      agree.push({ key, have, conditioned, dry, page: fibre.page });
+      agree.push({ key, have, conditioned, dry, page });
     } else if (near(have, dry)) {
-      wrongCondition.push({ key, have, conditioned, dry, page: fibre.page });
+      wrongCondition.push({ key, have, conditioned, dry, page });
     } else {
-      disagree.push({ key, have, conditioned, dry, page: fibre.page,
+      disagree.push({ key, have, conditioned, dry, page,
                       delta: conditioned != null ? have - conditioned : null });
     }
   }
 
-  const w = s => String(s == null ? '—' : s);
+  const w = s => String(s == null || s === '' ? '—' : s);
   console.log('FIBRE DENSITY — engine constants against Morton & Hearle Table 5.1\n');
   console.log('  %s %s %s %s  %s', 'fibre'.padEnd(12), 'engine'.padEnd(7),
               'dry'.padEnd(7), '65% r.h.'.padEnd(9), 'verdict');
@@ -103,6 +147,29 @@ function main() {
   console.log('\n%d agree · %d use the wrong condition · %d disagree · %d unsourced',
               agree.length, wrongCondition.length, disagree.length, unsourced.length);
   console.log('%d fibres in the book that the engine has never carried a value for.', missing);
+
+  // ── Regain ────────────────────────────────────────────────────────────
+  const regain = compareRegain(engine, byEngineKey);
+  if (regain.length) {
+    console.log('\n\nMOISTURE REGAIN — engine against Morton & Hearle Table 7.3\n');
+    console.log('  %s %s %s %s  %s', 'fibre'.padEnd(12), 'engine'.padEnd(7),
+                'measured'.padEnd(10), 'allowance'.padEnd(10), 'verdict');
+    for (const r of regain) {
+      console.log('  %s %s %s %s  %s', r.key.padEnd(12), w(r.have).padEnd(7),
+                  w(r.measured).padEnd(10), w(r.allowance).padEnd(10),
+                  `${r.verdict}, p.${r.page}`);
+    }
+    const off = regain.filter(r => r.verdict.startsWith('OUTSIDE'));
+    const withAllowance = regain.filter(r => r.allowance);
+    console.log('\n%d of %d regains sit inside the measured band.',
+                regain.length - off.length, regain.length);
+    if (withAllowance.length) {
+      console.log('%d of them also have a commercial allowance, which is the figure yarn',
+                  withAllowance.length);
+      console.log('is traded at and which the engine does not carry at all.');
+    }
+    if (STRICT && off.length) process.exitCode = 1;
+  }
 
   if (wrongCondition.length || disagree.length) {
     console.log('\nThe engine feeds these densities to blendPhysical() and from there to');
