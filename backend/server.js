@@ -21,6 +21,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
 const path = require('path');
+const fs = require('fs');
 
 const apiRoutes = require('./routes/api');
 const vizRoutes = require('./routes/viz');
@@ -256,12 +257,29 @@ app.get('/health/deep', async (req, res) => {
 });
 
 // Health check
+// The build this process actually booted with. Passenger reloads when
+// backend/tmp/restart.txt changes and the deploy writes the commit SHA into
+// that file, so reading it at boot tells us which revision is SERVING — not
+// which one is on disk. Those have come apart twice: once because the trigger
+// was uploaded before the code it was meant to activate, and once because the
+// trigger was not uploaded at all, and both times the deploy reported success
+// while the previous revision carried on answering. Reporting it here lets the
+// workflow assert the deploy took, instead of assuming it.
+const BOOT_BUILD = (() => {
+  try {
+    return fs.readFileSync(path.join(__dirname, 'tmp', 'restart.txt'), 'utf8').trim().slice(0, 40);
+  } catch {
+    return null;
+  }
+})();
+
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
     uptime: Math.floor(process.uptime()),
     timestamp: new Date().toISOString(),
     version: '1.1.0',
+    build: BOOT_BUILD,
   });
 });
 
