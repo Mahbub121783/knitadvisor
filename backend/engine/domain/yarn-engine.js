@@ -194,18 +194,32 @@ function yarnDiameterMm(ne, blendDensity) {
 
 /** Blend-weighted density & regain from a fibers{} map (percentages). */
 function blendPhysical(fibers) {
-  if (!fibers) return { density: 1.52, regain: 7.5, rkm_idx: 1.0 };
+  const cottonDefault = { density: 1.52, regain: 7.5, rkm_idx: 1.0,
+                          unweighed: [], weighed_pct: 0, assumed: true };
+  if (!fibers) return cottonDefault;
+
   let wsum = 0, dsum = 0, rsum = 0, rkm = 0;
+  const unweighed = [];
   for (const [f, pct] of Object.entries(fibers)) {
     const p = FIBER_PROPERTIES[f];
-    if (!p || !pct) continue;
+    if (!pct) continue;
+    if (!p) { unweighed.push(f); continue; }
     wsum += pct; dsum += p.density * pct; rsum += p.regain * pct; rkm += p.rkm * pct;
   }
-  if (wsum === 0) return { density: 1.52, regain: 7.5, rkm_idx: 1.0 };
+  if (wsum === 0) return { ...cottonDefault, unweighed };
+
+  // A fibre with no row in FIBER_PROPERTIES used to be skipped and the rest
+  // renormalised, so "70% cotton 30% linen" came out with cotton's density
+  // exactly — the linen simply vanished and nothing said so. The parser can now
+  // name silk, linen, polypropylene and polyethylene, none of which have
+  // properties here yet, so the omission is reported instead of hidden.
   return {
     density: parseFloat((dsum / wsum).toFixed(3)),
     regain:  parseFloat((rsum / wsum).toFixed(2)),
     rkm_idx: parseFloat((rkm / wsum).toFixed(3)),
+    unweighed,
+    weighed_pct: parseFloat(wsum.toFixed(1)),
+    assumed: false,
   };
 }
 
