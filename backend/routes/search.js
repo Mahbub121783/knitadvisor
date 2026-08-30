@@ -183,4 +183,76 @@ router.get('/faults', searchLimiter, async (req, res) => {
   }
 });
 
+// ============================================================
+// GET /api/search/woven?q=gaberdeen&limit=10
+// ============================================================
+//
+// One endpoint across THREE tables on purpose. The woven reference from
+// Gokarneshan (2005) splits a term over `woven_glossary`, `woven_weaves` and
+// `woven_constructions` depending on how the book treated it, and the split is
+// not something a user can be expected to know: "huckaback" has a whole chapter
+// and so is a weave row with no glossary entry, while "gabardine" only ever
+// appears in the glossary. A search that hit one table would silently miss the
+// other half of the book.
+//
+// Each row carries the book page it came from, because a reference that cannot
+// be re-checked is worth much less than one that can.
+router.get('/woven', searchLimiter, async (req, res) => {
+  const q = term(req);
+  if (!q) return res.json({ success: true, query: null, results: [] });
+  const limit = clampLimit(req.query.limit, 10, 30);
+
+  try {
+    // MIN_SIMILARITY matters more here than anywhere else in this file. Measured
+    // against these 73 terms, the PostgreSQL default of 0.3 drops
+    // "gaberdeen"→Gabardine (0.176) and "hessain"→Hessian cloth (0.222) — both
+    // the ordinary way a knitter mis-spells them — while 0.15 keeps both.
+    const rows = await query(
+      `WITH hits AS (
+         SELECT 'glossary' AS kind, term AS label, definition AS detail,
+                NULL::text AS family, page, similarity(term, $1) AS score
+           FROM woven_glossary
+          WHERE similarity(term, $1) >= $2
+
+         UNION ALL
+
+         SELECT 'weave', name, payload->>'definition', family, page,
+                GREATEST(similarity(name, $1), similarity(replace(slug,'_',' '), $1))
+           FROM woven_weaves
+          WHERE GREATEST(similarity(name, $1), similarity(replace(slug,'_',' '), $1)) >= $2
+
+         UNION ALL
+
+         SELECT 'construction', cloth,
+                concat_ws(' · ', warp_count, weft_count, material),
+                weave_slug, page, similarity(cloth, $1)
+           FROM woven_constructions
+          WHERE similarity(cloth, $1) >= $2
+       )
+       SELECT * FROM hits ORDER BY score DESC, label LIMIT $3`,
+      [q, MIN_SIMILARITY, limit]
+    );
+
+    res.json({
+      success: true,
+      query: q,
+      source: 'Gokarneshan, Fabric Structure and Design (2005)',
+      results: rows.map(r => ({
+        kind: r.kind,
+        label: r.label,
+        detail: r.detail,
+        family: r.family,
+        page: r.page,
+        // The scan is paginated 13 ahead of the printed page, so give both
+        // rather than making the reader remember the offset.
+        pdf_page: r.page + 13,
+        score: Number(r.score),
+      })),
+    });
+  } catch (err) {
+    console.error('[Search] woven failed:', err.message);
+    res.json({ success: true, query: q, results: [], degraded: true });
+  }
+});
+
 module.exports = router;
