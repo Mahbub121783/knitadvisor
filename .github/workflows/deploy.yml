@@ -104,3 +104,31 @@ jobs:
           # Its own manifest, so this tiny sync never reasons about the files
           # the main deploy uploaded.
           state-name: .ftp-deploy-restart-state.json
+
+      # Assert the deploy actually took. Twice now a run has reported success
+      # with the previous revision still answering: once because the restart
+      # trigger arrived before the code it activates, and once because the
+      # trigger step above did not update it at all. Both were found by hand,
+      # days apart, and both looked exactly like a deploy that never happened.
+      #
+      # /health reports the build the running process booted with, read from
+      # the same restart.txt Passenger watches. Comparing it to this commit is
+      # the difference between "the files are on the server" and "the server is
+      # running them".
+      - name: Verify the deployed build is the one serving
+        run: |
+          set -u
+          for i in $(seq 1 20); do
+            served=$(curl -fsS --max-time 15 https://knitadvisor.onlinetextileschool.com/health \
+                     | sed -n 's/.*"build":"\([^"]*\)".*/\1/p' || true)
+            if [ "$served" = "$GITHUB_SHA" ]; then
+              echo "serving $served after $((i * 15))s"
+              exit 0
+            fi
+            echo "attempt $i: serving '${served:-none}', want $GITHUB_SHA"
+            sleep 15
+          done
+          echo "::error::The site is still serving '${served:-none}' five minutes after deploy."
+          echo "Files may be on the host while Passenger runs the previous revision."
+          echo "Check that the restart trigger step uploaded backend/tmp/restart.txt."
+          exit 1
