@@ -93,7 +93,10 @@ function verify(payload) {
       const d = properties.find(p => p.fibre_slug === f.slug && p.property === 'density' && p.condition === cond);
       const v = properties.find(p => p.fibre_slug === f.slug && p.property === 'specific_volume' && p.condition === cond);
       if (!d || !v) { broken.push(`${f.slug}/${cond}: only one of the pair`); continue; }
-      const pairs = [[point(d), point(v)], [d.value_min, v.value_min], [d.value_max, v.value_max]];
+      // Specific volume is the reciprocal of density, so across a range the
+      // LOW density pairs with the HIGH specific volume. Comparing min to min
+      // would fail every correctly-read range in Tables 5.2 and 5.3.
+      const pairs = [[point(d), point(v)], [d.value_min, v.value_max], [d.value_max, v.value_min]];
       for (const [dd, vv] of pairs) {
         if (dd == null || vv == null) continue;
         if (Math.abs(vv - 1 / dd) > 0.011 && !known.has(f.slug + '|specific_volume')) {
@@ -117,6 +120,15 @@ function verify(payload) {
     return false;
   });
   check(daft.length === 0, 'every value is physically possible', daft.map(p => p.fibre_slug).join(', '));
+
+  // The database enforces value_min <= value_max, and the first import hit it:
+  // specific-volume ranges are printed descending because they are reciprocals
+  // of ascending densities. Checking it here means the next such case is a
+  // readable message rather than a constraint violation halfway through a write.
+  const unordered = properties.filter(p =>
+    p.value_min != null && p.value_max != null && p.value_min > p.value_max);
+  check(unordered.length === 0, 'every range runs low to high',
+        unordered.map(p => `${p.fibre_slug}/${p.property} ${p.value_min}-${p.value_max}`).join('; '));
 
   const badPage = properties.filter(p => !(p.page >= 1 && p.page <= 746));
   check(badPage.length === 0, 'every citation points inside the book', badPage.length + ' do not');
