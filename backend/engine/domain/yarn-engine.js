@@ -133,19 +133,49 @@ const DEFAULT_SPINNING = { fine: 'combed', medium: 'combed', coarse: 'carded' };
 
 // ============================================================
 // 3. FIBER DENSITY + REGAIN  (blend GSM/diameter physics)
-//    density g/cm³, moisture regain % at 65% RH.
-//    Source: textile fibre handbooks (ASTM D1909 regain).
+//
+//    density  g/cm³, AT 65% r.h. — not dry. Fabric weight is measured on
+//             conditioned cloth and GSM is quoted on conditioned cloth, so a
+//             dry density would be the wrong number for a calculation about
+//             cloth as it is sold. The two differ by up to 2% (cotton is 1.55
+//             dry and 1.52 conditioned), which is exactly enough to look
+//             plausible while being wrong.
+//    regain   % at 65% RH.
+//    rkm      NOT a tenacity. It is a dimensionless strength index relative to
+//             cotton = 1.00, multiplied against SPINNING_SYSTEMS.rkm (which IS
+//             cN/tex) at line ~269. The name collides with that one; the two
+//             are used correctly today, but read the multiplication before
+//             changing either.
+//
+//    SOURCE — density: Morton & Hearle, "Physical Properties of Textile
+//    Fibres", 4th edn (2008), Table 5.1, printed p.165. Every figure below is
+//    the 65% r.h. column of that table, and
+//    scripts/check-engine-against-book.js compares them against the extracted
+//    measurements in data/fibre-properties.json so the two cannot drift.
+//
+//    SOURCE — regain: still "textile fibre handbooks (ASTM D1909)", with no
+//    edition and no page. Chapter 7 of the same book gives regain properly and
+//    has not been read yet; these figures are not yet checkable.
 // ============================================================
 const FIBER_PROPERTIES = {
-  cotton:    { density: 1.52, regain: 7.5,  rkm: 1.00 },
-  polyester: { density: 1.38, regain: 0.4,  rkm: 1.25 },
-  viscose:   { density: 1.52, regain: 13.0, rkm: 0.60 },
+  cotton:    { density: 1.52, regain: 7.5,  rkm: 1.00 },   // Table 5.1 p.165
+  polyester: { density: 1.39, regain: 0.4,  rkm: 1.25 },   // was 1.38 — Table 5.1 gives 1.39
+  viscose:   { density: 1.49, regain: 13.0, rkm: 0.60 },   // was 1.52, which is the DRY figure
+  nylon:     { density: 1.14, regain: 4.2,  rkm: 1.40 },   // Table 5.1 p.165
+  wool:      { density: 1.31, regain: 16.0, rkm: 0.50 },   // Table 5.1 p.165
+  acrylic:   { density: 1.19, regain: 1.5,  rkm: 0.70 },   // was 1.17 — Table 5.1 gives 1.19
+
+  // UNSOURCED. Table 5.1 has no row for any of these four, and the closest
+  // rows are not substitutes: modal is a high-wet-modulus viscose and lyocell
+  // (Tencel) an organic-solvent one, so both are near viscose rayon but the
+  // book does not say how near, and bamboo is usually a viscose-route fibre
+  // sold under its own name. Assigning viscose's 1.49 to them would turn a
+  // guess into a citation. The values below are what the engine has always
+  // used; they stay until a source is found, and the checker lists them as
+  // unsourced every time it runs.
   modal:     { density: 1.52, regain: 12.5, rkm: 0.85 },
   tencel:    { density: 1.50, regain: 11.5, rkm: 1.05 },
   bamboo:    { density: 1.50, regain: 13.0, rkm: 0.55 },
-  nylon:     { density: 1.14, regain: 4.2,  rkm: 1.40 },
-  wool:      { density: 1.31, regain: 16.0, rkm: 0.50 },
-  acrylic:   { density: 1.17, regain: 1.5,  rkm: 0.70 },
   elastane:  { density: 1.20, regain: 1.0,  rkm: 0.80 },
 };
 
