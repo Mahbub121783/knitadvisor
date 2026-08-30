@@ -15,6 +15,8 @@ const { UnitConverter, FabricWeightFormulas, YarnCountFormulas, WeftCalculators 
 const { FAULTS_DATABASE, diagnoseFaults } = require('../engine/domain/faults-engine');
 const providerManager = require('../ai/provider-manager-v2');
 const { getPattern } = require('../engine/domain/pattern-engine');
+const { calculateWoven, listWovenFabrics } = require('../engine/domain/woven-engine');
+const { isWovenId } = require('../engine/catalog/woven-derivatives');
 const { calculateStriper, validateStriperInput } = require('../engine/domain/striper-engine');
 const { predictQuality } = require('../engine/domain/quality-engine');
 const { calculateCost, SM_PRICE_MATRIX, YARN_TYPE_CATALOG, SM_SURCHARGES } = require('../engine/domain/costing-engine');
@@ -390,8 +392,37 @@ router.post('/convert', (req, res) => {
 // ============================================================
 // GET /api/fabrics
 // ============================================================
+//
+// Knit and woven qualities come from two separate catalogs and are merged
+// only here, at the edge, where the difference stops mattering: to someone
+// filling in a form they are all just "a fabric you can pick". Below this
+// line they stay apart, because a woven cloth has no gauge, no stitch length
+// and no course or wale, and a shared row would have to leave half its
+// columns null and hope the reader knows which half.
+//
+// A woven row carries `construction` ("56x44, 8s/6s") where a knit row
+// carries `gsm_range`, because that is how each kind of quality is actually
+// named in a buyer's email.
 router.get('/fabrics', (req, res) => {
-  const fabrics = getAllFabrics();
+  const knit = getAllFabrics();
+  const woven = listWovenFabrics().map(f => ({
+    id: f.id,
+    name: f.name,
+    name_bn: f.name_bn,
+    category: 'woven',
+    family: f.family,
+    gsm_range: null,
+    gauge_range: null,
+    is_multi_yarn: false,
+    is_warp: false,
+    is_woven: true,
+    construction: f.construction,
+    nominal_gsm: f.nominal_gsm,
+    sett_source: f.sett_source,
+    has_structure: f.has_structure,
+    book_page: f.book_page,
+  }));
+  const fabrics = [...knit, ...woven];
   const cat = req.query.category;
   if (cat) {
     return res.json(fabrics.filter(f => f.category === cat));
@@ -400,12 +431,62 @@ router.get('/fabrics', (req, res) => {
 });
 
 // ============================================================
+// POST /api/woven/calculate
+// ============================================================
+//
+// A separate call from /calculate rather than a branch inside it. The knit
+// engine answers "what yarn and machine give me this GSM"; the woven engine
+// answers "what does this construction weigh and how is it set up on a loom".
+// They share no input beyond the fabric name, so one endpoint would be two
+// endpoints wearing one URL.
+router.post('/woven/calculate', (req, res) => {
+  try {
+    const result = calculateWoven(req.body || {});
+    if (!result.success) return res.status(400).json(result);
+    res.json(result);
+  } catch (err) {
+    console.error('[Woven] calculate failed:', err);
+    res.status(500).json({ success: false, error: 'WOVEN_CALCULATION_FAILED', message: err.message });
+  }
+});
+
+// ============================================================
+// GET /api/woven/fabrics
+// ============================================================
+router.get('/woven/fabrics', (req, res) => res.json(listWovenFabrics()));
+
+// ============================================================
 // GET /api/pattern/:slug
 // ============================================================
 router.get('/pattern/:slug', (req, res) => {
   const gsm = req.query.gsm ? parseFloat(req.query.gsm) : null;
   const gauge = req.query.gauge ? parseFloat(req.query.gauge) : null;
   const composition = req.query.composition || null;
+
+  // A woven id answers with its loom plans instead of a K/T/M grid. The
+  // `fabric_type` discriminator is the same mechanism warp knit already uses,
+  // so the renderer picks the right drawing without the caller knowing which
+  // catalog the id came from.
+  if (isWovenId(req.params.slug)) {
+    const r = calculateWoven({ fabric_id: req.params.slug });
+    if (!r.success) return res.status(404).json({ error: `Pattern not found for: ${req.params.slug}` });
+    return res.json({
+      fabric_type: 'woven',
+      fabric_id: r.fabric.id,
+      fabric_name: r.fabric.name,
+      family: r.fabric.family,
+      weave_slug: r.fabric.weave_slug,
+      construction: r.construction,
+      structure: r.structure,
+      weight: r.weight,
+      cover: r.cover,
+      twill_angle: r.twill_angle,
+      characteristics: r.fabric.characteristics,
+      end_uses: r.fabric.end_uses,
+      book_page: r.fabric.book_page,
+      notes: r.notes,
+    });
+  }
 
   const pattern = getPattern(req.params.slug, gsm, gauge, composition);
   if (!pattern) {

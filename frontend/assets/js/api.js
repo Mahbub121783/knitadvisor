@@ -49,6 +49,22 @@ async function apiCalculate(params) {
 }
 
 // ============================================================
+// POST /api/woven/calculate
+// params: { fabric_id, epi?, ppi?, warp_count?, weft_count?,
+//           width_inch?, length_m?, ends_per_dent?, wastage_pct? }
+//
+// A separate endpoint from /api/calculate rather than a flag on it: the knit
+// engine answers "what yarn and machine give me this GSM", the woven engine
+// answers "what does this construction weigh and how is it set up on a loom".
+// ============================================================
+async function apiWovenCalculate(params) {
+  return apiFetch('/api/woven/calculate', {
+    method: 'POST',
+    body: params,
+  });
+}
+
+// ============================================================
 // POST /api/convert
 // params: { value, from, to, category? }
 // ============================================================
