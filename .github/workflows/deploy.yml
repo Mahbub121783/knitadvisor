@@ -46,6 +46,14 @@ jobs:
       # commit SHA makes the file differ every run, so the FTP sync uploads it
       # and Passenger picks up the change. Frontend-only pushes restart too,
       # which costs a few seconds and keeps the rule simple.
+      #
+      # The stamp is written here but uploaded in a SEPARATE step after the
+      # code, and backend/tmp is excluded from the main upload below. Sending
+      # it with everything else left the order to the FTP client: on the deploy
+      # of 0761c62 the trigger arrived before routes/api.js, so Passenger
+      # restarted onto the previous code and the new endpoints answered 404
+      # while the correct file sat on disk beside them — the same silent
+      # failure this step exists to prevent, one layer further in.
       - name: Stamp the Passenger restart trigger
         run: |
           mkdir -p backend/tmp
@@ -78,3 +86,21 @@ jobs:
             backend/.env
             backend/node_modules/**
             database/backups/**
+            backend/tmp/**
+
+      # The restart trigger goes up on its own, after every code file has
+      # landed. Passenger watches this one file, so uploading it last is what
+      # makes "restart" mean "restart onto the code that was just deployed"
+      # rather than "restart onto whatever happens to be on disk right now".
+      - name: Trigger the Passenger restart
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: ./backend/tmp/
+          server-dir: ./knitadvisor/backend/tmp/
+          dangerous-clean-slate: false
+          # Its own manifest, so this tiny sync never reasons about the files
+          # the main deploy uploaded.
+          state-name: .ftp-deploy-restart-state.json
