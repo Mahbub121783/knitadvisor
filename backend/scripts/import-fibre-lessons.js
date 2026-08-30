@@ -224,7 +224,27 @@ async function write(payload) {
     );
     if (r[0] && r[0].is_insert) inserted++; else updated++;
   }
-  return { inserted, updated };
+
+  // Rows that used to be in the file and are not any more. An upsert leaves
+  // them behind, which is how 18 sentences that had been mis-read as table
+  // captions survived in production after the extractor stopped producing
+  // them: the table held 747 lessons for a 728-lesson file and nothing said so.
+  // The separator must be the same character on both sides. One draft had
+  // chr(0) in the SQL and a literal NUL in the key, which is worse than a
+  // mismatch: PostgreSQL text cannot hold a NUL byte at all, so the parameter
+  // would have been rejected outright — and had it slipped through, a
+  // separator matching nothing turns this DELETE into "remove every row for
+  // the source". A tab is safe and appears in no lesson title.
+  const SEP = '	';
+  const keys = lessons.map(l => `${l.pdf_page_start}${SEP}${l.title}`);
+  const stale = await query(
+    `DELETE FROM fibre_lessons
+      WHERE source_key = $1
+        AND (pdf_page_start::text || $3 || title) <> ALL($2::text[])
+      RETURNING title`,
+    ['morton_hearle_2008', keys, SEP]);
+
+  return { inserted, updated, deleted: stale.length, staleTitles: stale.map(r => r.title) };
 }
 
 (async () => {
@@ -247,12 +267,23 @@ async function write(payload) {
     console.log('\nDry run. Re-run with --write to import.');
     return;
   }
-  const { inserted, updated } = await write(payload);
-  console.log(`\nImported: ${inserted} new, ${updated} updated.`);
+  const { inserted, updated, deleted, staleTitles } = await write(payload);
+  console.log(`\nImported: ${inserted} new, ${updated} updated, ${deleted} removed.`);
+  if (deleted) {
+    staleTitles.slice(0, 8).forEach(t => console.log(`  removed: ${t.slice(0, 70)}`));
+    if (deleted > 8) console.log(`  ...and ${deleted - 8} more`);
+  }
 
   const [{ count }] = await query('SELECT count(*)::int AS count FROM fibre_lessons');
   const [{ chars }] = await query('SELECT coalesce(sum(char_count),0)::bigint AS chars FROM fibre_lessons');
   console.log(`fibre_lessons now holds ${count} lessons, ${Number(chars).toLocaleString('en-US')} characters.`);
+
+  // The table must hold exactly what the file holds — no leftovers, no
+  // duplicates. This is the only place either would show up.
+  if (count !== payload.lessons.length) {
+    console.error(`\n[Import] the table holds ${count} lessons but the file has ${payload.lessons.length}.`);
+    process.exitCode = 1;
+  }
 })()
   .catch(err => { console.error('\n[Import] ' + err.message); process.exitCode = 1; })
   .finally(() => close());
