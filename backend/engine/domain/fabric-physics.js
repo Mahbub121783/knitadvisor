@@ -23,6 +23,35 @@ const colorEngine = require('./color-engine');
  * L_shift: Lightness shift in CIELAB (0-100 scale shift)
  * S_shift: Saturation shift in HSL (0-100 scale shift)
  * sheen: Specular reflection factor (0 = matte, 1 = high gloss)
+ *
+ * SHEEN IS A RENDERING PARAMETER, NOT A MEASUREMENT — and chapter 24 of Morton
+ * & Hearle is the reason it has to stay that way, which is worth writing down
+ * because the obvious "fix" is wrong.
+ *
+ * The tempting move is to derive sheen from the refractive index, which the
+ * book measures for every fibre here (Table 24.3, p.702). Do the arithmetic and
+ * it collapses. Fresnel reflectance at normal incidence is ((n-1)/(n+1))², and
+ * across every fibre in that table it spans 0.036 to 0.053 — a factor of 1.46.
+ * The sheen values below span 0.05 to 0.90, a factor of 18. Worse, the ORDER
+ * disagrees: cotton's mean index of 1.547 reflects MORE than nylon's 1.540 and
+ * more than viscose's 1.526, while the table below rates cotton 0.10 against
+ * nylon's 0.85. No scaling of one produces the other.
+ *
+ * The book says why, in words, on p.706: "Irregularities on the surface of the
+ * fibre and in its cross-sectional shape will cause light to be reflected in
+ * various directions and will reduce the lustre... lustre is greatest in
+ * regular filaments, such as those of silk and the manufactured fibres." Lustre
+ * is geometry — cross-sectional shape, surface regularity, and whether the
+ * fibre is a continuous filament or a staple — not refractive index. Nylon is
+ * glossy because it is a smooth round filament, not because of how it bends
+ * light, and cotton is matte because it is a flat convoluted ribbon.
+ *
+ * So these numbers stay what they always were: appearance parameters chosen to
+ * render a preview. What has changed is that they are now labelled as such, and
+ * the measured optical constants live in the reference layer (property
+ * `refractive_index_parallel`, `birefringence`) where they can be used for what
+ * they actually indicate — molecular orientation — instead of being pressed
+ * into a job they cannot do.
  * roughness: Surface scattering factor (0 = smooth, 1 = very rough)
  */
 const FIBER_PHYSICS = {

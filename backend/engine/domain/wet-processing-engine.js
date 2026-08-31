@@ -257,9 +257,30 @@ const MACHINE_STAGES = [
   {
     key: 'mercerizing', name: 'Mercerizing', cat: 'pre-treatment',
     purpose: 'Caustic (26–30°Bé) under tension swells the fibre → lustre↑, dye uptake↑ (15–30% dye saving), strength↑, dimensional stability↑. Premium combed goods.',
+    // WHY it gives lustre, measured rather than asserted. Adderley found cotton
+    // lustre tracks one thing only — how flat the fibre's cross-section is —
+    // and "no correlation was found between lustre and fibre length, linear
+    // density, diameter". Mercerisation pulls the convolutions out and rounds
+    // the section, and the lustre follows it up the table:
+    //
+    //   American FGM     a/b 3.07  →  lustre 5.7
+    //   Antigua Sea Is.  a/b 1.91  →  lustre 10.7
+    //   mercerised C     a/b 1.47  →  lustre 13.9
+    //
+    // Two and a half times the lustre, from geometry alone. That is also why
+    // the first failure below is what it is: without tension the fibre swells
+    // and then relaxes back to a flat section, so the caustic is spent and the
+    // lustre never arrives.
+    measured: {
+      basis: 'lustre tracks cross-sectional ellipticity a/b, nothing else',
+      series: [{ cotton: 'American FGM', ab: 3.07, lustre: 5.7 },
+               { cotton: 'Antigua Sea Island', ab: 1.91, lustre: 10.7 },
+               { cotton: 'mercerised C', ab: 1.47, lustre: 13.9 }],
+      source: 'Morton & Hearle, Table 24.5, p.706',
+    },
     when: (c) => c.combed && c.cottonRich,
     problems: [
-      { problem: 'No lustre / no benefit', cause: 'Insufficient tension during caustic', solution: 'Maintain clip/chain tension through impregnation', remedy: 'Verify lustre on sample' },
+      { problem: 'No lustre / no benefit', cause: 'Insufficient tension during caustic — the fibre swells and relaxes back to a flat, convoluted section, and lustre tracks that section and nothing else', solution: 'Maintain clip/chain tension through impregnation', remedy: 'Verify lustre on sample', formula: 'Lustre rises as the axis ratio a/b falls: 3.07→5.7, 1.47→13.9 (Table 24.5, p.706)' },
       { problem: 'Streaky / uneven dyeing', cause: 'Uneven caustic pickup', solution: 'Uniform pad, controlled caustic conc.', remedy: 'Mercerize evenly or skip for solids' },
       { problem: 'Shade shift, harsh hand', cause: 'Residual alkali not washed', solution: 'Thorough neutralise + hot wash', remedy: 'Check residual alkali (phenolphthalein)' },
     ],

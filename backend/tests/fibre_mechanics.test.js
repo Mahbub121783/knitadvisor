@@ -269,4 +269,53 @@ assert(wfelt.findings.some(f => f.severity === 'severe' && /friction against the
   'felting is reported as a severe finding on a wool fabric');
 assert(!wetMechanics({ cotton: 100 }, {}).findings.some(f => /against the scales/.test(f.finding)));
 
+// ── Optical (chapter 24) ───────────────────────────────
+// The tempting mistake, guarded against. Sheen in fabric-physics.js is a
+// rendering parameter and CANNOT be derived from refractive index: Fresnel
+// reflectance across every fibre in Table 24.3 spans a factor of 1.46, while
+// the sheen constants span 18, and the two even disagree about whether cotton
+// or nylon reflects more. This asserts the arithmetic that says so, so nobody
+// "sources" sheen from the indices later and quietly makes the model worse.
+{
+  const book = require('../data/fibre-properties.json');
+  const idx = (slug, prop) => {
+    const r = book.properties.find(p => p.fibre_slug === slug && p.property === prop &&
+      !/ramie/.test(p.condition || ''));
+    return r ? r.value : null;
+  };
+  const R = slug => {
+    const par = idx(slug, 'refractive_index_parallel');
+    const per = idx(slug, 'refractive_index_perpendicular');
+    if (par == null || per == null) return null;
+    const n = (par + 2 * per) / 3;
+    return ((n - 1) / (n + 1)) ** 2;
+  };
+  const slugs = ['cotton', 'viscose', 'acetate', 'wool', 'silk', 'nylon', 'polyester', 'acrylic'];
+  const Rs = slugs.map(R).filter(v => v != null);
+  assert.strictEqual(Rs.length, slugs.length, 'every fibre compared has both indices');
+  const spread = Math.max(...Rs) / Math.min(...Rs);
+  assert(spread < 2, `Fresnel reflectance spans only ${spread.toFixed(2)}x across all fibres`);
+  // And the order disagrees with the appearance model, which is the sharper
+  // half of the argument.
+  assert(R('cotton') > R('nylon'),
+    'cotton reflects MORE than nylon by refractive index, though it looks far duller');
+
+  // Birefringence measures molecular orientation, and two fibres run negative.
+  const bir = slug => idx(slug, 'birefringence');
+  assert(bir('triacetate') < 0 && bir('polyester') > 0.15,
+    'the signed birefringences survive into the data the engine reads');
+
+  // Lustre tracks how round the cotton is, and mercerisation rounds it.
+  const cottons = book.properties.filter(p => p.property === 'lustre');
+  assert.strictEqual(cottons.length, 15);
+  const ab = cond => (book.properties.find(p => p.property === 'fibre_ellipticity' &&
+    p.condition === cond) || {}).value;
+  const merc = cottons.filter(c => /mercerised/.test(c.condition));
+  const nat = cottons.filter(c => !/mercerised/.test(c.condition));
+  assert(Math.min(...merc.map(c => c.value)) > Math.max(...nat.map(c => c.value)),
+    'mercerised cotton is more lustrous than every natural variety');
+  assert(Math.max(...merc.map(c => ab(c.condition))) < Math.min(...nat.map(c => ab(c.condition))),
+    'because it is rounder than every one of them');
+}
+
 console.log('\n✓ All fibre mechanics tests passed.');

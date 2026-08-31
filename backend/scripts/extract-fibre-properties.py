@@ -50,6 +50,11 @@ CELL = re.compile(r'^(\d+(?:\.\d+)?)(?:[–—-](\d+(?:\.\d+)?))?$')
 # one measurement, so its cells are read with this and not with CELL.
 LIST_CELL = re.compile(r'^\d+(?:\.\d+)?(?:\s*,\s*\d+(?:\.\d+)?)*,?$')
 CITATION = re.compile(r'^\[[\d,\s–—-]+\]$')
+# A leading dash followed by digits is a negative number, not a range with a
+# missing start. Only tables that declare `allow_negative` are read this way,
+# because everywhere else a dash is an empty cell and reading it as a sign
+# would turn every blank into a figure.
+SIGNED = re.compile(r'^[–—-](\d+(?:\.\d+)?)$')
 DASH = re.compile(r'^[–—-]$')
 
 # Each table: the PDF page it is on, the vertical band its data rows occupy, and
@@ -318,6 +323,85 @@ TABLES = {
         'friction_check': True,
         'paired_check': False,
     },
+    # ---- Chapter 24, optical ----------------------------------------------
+    # This chapter was read to source `sheen` in fabric-physics.js, and the
+    # honest result is that it CANNOT be sourced from here — see the note in
+    # that file. What the chapter does give is two real things.
+    #
+    # 24.3 is the refractive indices, along the fibre and across it. The gap
+    # between them, the birefringence, measures how well the molecules are
+    # lined up with the fibre axis, and chapter 13 shows it correlating with
+    # cotton's tenacity better than fineness does. Polyester's 0.188 against
+    # cotton's 0.046 is the most orientated fibre in the table by a factor of
+    # four; triacetate and Acrilan run slightly NEGATIVE, meaning their chains
+    # lie across the fibre rather than along it, which is why the reader has to
+    # accept a signed value here.
+    #
+    # 24.5 is the one that matters for a fabric advisor. Lustre in cotton
+    # tracks the cross-section's ELLIPTICITY — how flat the fibre is — and
+    # nothing else: "no correlation was found between lustre and fibre length,
+    # linear density, diameter". American FGM at a/b = 3.07 measures 5.7;
+    # mercerised cotton at 1.47 measures 13.9. The book states the mechanism
+    # outright: mercerisation removes the convolutions and makes the fibres
+    # rounder, and that is what raises the lustre. Two and a half times, from
+    # geometry alone.
+    '24.3': {
+        'pdf_page': 721, 'y_from': 210, 'y_to': 360,
+        'allow_negative': True,
+        'columns': [('refractive_index_parallel', 'light polarised along the fibre', None),
+                    ('refractive_index_perpendicular', 'light polarised across the fibre', None),
+                    ('birefringence', None, None)],
+        'row_map': {
+            'Cotton':                   ('cotton', None),
+            # One row for two fibres, so it is filed under flax with the pairing
+            # said out loud rather than silently claimed for one of them.
+            'Ramie and flax':           ('flax', 'measured together with ramie'),
+            'Viscose rayon':            ('viscose', None),
+            'Secondary acetate':        ('acetate', None),
+            'Triacetate':               ('triacetate', None),
+            'Wool':                     ('wool', None),
+            'Silk':                     ('silk', None),
+            'Casein':                   ('casein', None),
+            'Vicara (zein)':            ('vicara', None),
+            'Nylon':                    ('nylon', None),
+            'Terylene polyester fibre': ('polyester', None),
+            'Orlon acrylic fibre':      ('acrylic', None),
+            'Acrilan acrylic fibre':    ('acrylic_acrilan', None),
+            'Polyethylene':             ('polyethylene', None),
+            'Glass':                    ('glass', None),
+        },
+        'optical_check': True,
+        'paired_check': False,
+    },
+    '24.5': {
+        'pdf_page': 725, 'y_from': 220, 'y_to': 372,
+        'hierarchical': True,
+        'columns': [('fibre_ellipticity', None, None),
+                    ('lustre', None, None),
+                    ('convolutions_per_cm', None, None)],
+        # Fifteen cottons, not fifteen fibres. They all file under `cotton` with
+        # the variety in the condition, which keeps the fibre list honest and
+        # still lets the whole series be queried back as a series.
+        'row_map': {
+            'American FGM':           ('cotton', 'American FGM'),
+            'Peruvian':               ('cotton', 'Peruvian'),
+            'Sakel S':                ('cotton', 'Sakel S'),
+            'St Kitts Sea Island':    ('cotton', 'St Kitts Sea Island'),
+            'Surat':                  ('cotton', 'Surat'),
+            'US 12, Sea Island':      ('cotton', 'US 12, Sea Island'),
+            'Abassi':                 ('cotton', 'Abassi'),
+            'Texas':                  ('cotton', 'Texas'),
+            'Barbados Sea Island':    ('cotton', 'Barbados Sea Island'),
+            'Sakel CR':               ('cotton', 'Sakel CR'),
+            'Egyptian, grown in Peru': ('cotton', 'Egyptian, grown in Peru'),
+            'Antigua Sea Island':     ('cotton', 'Antigua Sea Island'),
+            'Mercerised A':           ('cotton', 'mercerised A'),
+            'Mercerised A B':         ('cotton', 'mercerised B'),
+            'Mercerised A C':         ('cotton', 'mercerised C'),
+        },
+        'lustre_check': True,
+        'paired_check': False,
+    },
     '13.7': {
         'pdf_page': 331, 'y_from': 175, 'y_to': 320,
         'rotated': True, 'hierarchical': True, 'label_edge_offset': 24,
@@ -355,7 +439,12 @@ UNITS = {'density': 'g/cm3', 'specific_volume': 'cm3/g',
          # A coefficient of friction is a force over a force.
          'friction_static': '1', 'friction_kinetic': '1',
          'friction_crossed_fibres': '1', 'friction_parallel_fibres': '1',
-         'friction_over_guide': '1'}
+         'friction_over_guide': '1',
+         'refractive_index_parallel': '1', 'refractive_index_perpendicular': '1',
+         'birefringence': '1', 'fibre_ellipticity': '1',
+         # The book's own word. Adderley's scale is relative and has no unit; it
+         # is stored because the SERIES is the finding, not any one value.
+         'lustre': 'arbitrary', 'convolutions_per_cm': '1/cm'}
 
 # How each printed fibre name is filed. Written out rather than inferred from
 # the name, because the classification is a judgement and belongs in one
@@ -531,6 +620,9 @@ FIBRES = {
     # friction of the bright one over a fibre pulley. They are separate rows in
     # the book and separate fibres here.
     'Acetate, dull':                    ('acetate_dull', 'Acetate (dull, delustred)', 'cellulose', 'regenerated', 'cellulose ethanoate', None),
+
+    'Vicara (zein)':                    ('vicara', 'Vicara (zein protein)', 'protein', 'regenerated', 'zein', None),
+    'Acrilan acrylic fibre':            ('acrylic_acrilan', 'Acrylic (Acrilan)', 'vinyl', 'synthetic', 'polyacrylonitrile', None),
 }
 
 # The first printed name that defines each slug, so a table which names rows by
@@ -638,7 +730,7 @@ def figure_columns(lines, expected, multi_value=False, cluster_gap=25):
 
 def read_rows(page, y_from, y_to, centres, rotated=False,
               label_edge_offset=30, hierarchical=False, multi_value=False,
-              keep_citations=False):
+              keep_citations=False, allow_negative=False):
     """
     Rows of (name, {column index: (low, high)}), split on the column positions.
 
@@ -696,8 +788,21 @@ def read_rows(page, y_from, y_to, centres, rotated=False,
                 if keep_citations or not CITATION.match(t):
                     label.append(t)
                 continue
+            if CITATION.match(t):
+                # The book's reference column sits to the right of the figures
+                # in some tables. It is not a measurement and its brackets stop
+                # it being read as one, but without this it would be treated as
+                # a word among the figures and refuse the whole row.
+                continue
             if DASH.match(t):
                 continue                 # an empty cell, printed as a dash
+            if allow_negative:
+                neg = SIGNED.match(t)
+                if neg:
+                    idxn = min(range(len(centres)), key=lambda i: abs(centres[i] - x))
+                    if abs(centres[idxn] - x) <= 30:
+                        cells[idxn] = (-float(neg.group(1)), None)
+                        continue
             if multi_value:
                 # Table 25.6 puts three different kinds of cell in one column:
                 # "0.47" is one measurement, "0.20-0.25" is a range, and
@@ -980,6 +1085,59 @@ def friction_slip(cells, spec):
     return None
 
 
+def optical_slip(cells, spec):
+    """
+    Why this refractive-index row should not be believed, or None.
+
+    The birefringence is DEFINED as the difference between the two indices, so
+    the row proves itself: if the printed difference is not the printed
+    subtraction, a column has been read in the wrong place. That is the whole
+    check, and it is exact rather than approximate — the book prints all three
+    to the same precision.
+
+    The indices themselves must also be above 1, since light does not travel
+    faster in a fibre than in vacuum, and below 2, since nothing organic comes
+    close. Polyester is the highest here at 1.725.
+    """
+    par = cells_by_property(cells, spec, 'refractive_index_parallel')
+    per = cells_by_property(cells, spec, 'refractive_index_perpendicular')
+    bir = cells_by_property(cells, spec, 'birefringence')
+    if not (par and per and bir):
+        return 'the row is missing one of the two indices or the birefringence'
+    for label, v in (('n parallel', par[0]), ('n perpendicular', per[0])):
+        if not (1.0 < v < 2.0):
+            return '%s is %.4g, which is not a refractive index for a fibre' % (label, v)
+    want = par[0] - per[0]
+    if abs(bir[0] - want) > 0.0011:
+        return ('birefringence %.4g is not n(parallel) - n(perpendicular) = %.4g'
+                % (bir[0], want))
+    return None
+
+
+def lustre_slip(cells, spec):
+    """
+    Why this lustre row should not be believed, or None.
+
+    Ellipticity is a ratio of the long axis to the short one, so it cannot be
+    below 1 — a value under 1 would mean the axes had been divided the other way
+    up. Cotton convolutions run around 20-35 per cm and lustre on Adderley's
+    arbitrary scale runs 5-15; both are bounded loosely, because the point of
+    the table is the trend and not any single figure.
+    """
+    ell = cells_by_property(cells, spec, 'fibre_ellipticity')
+    lus = cells_by_property(cells, spec, 'lustre')
+    con = cells_by_property(cells, spec, 'convolutions_per_cm')
+    if not ell or not lus:
+        return 'the row is missing its ellipticity or its lustre'
+    if not (1.0 <= ell[0] <= 10.0):
+        return 'ellipticity %.4g is not a ratio of a long axis to a short one' % ell[0]
+    if not (0 < lus[0] <= 100):
+        return 'lustre %.4g is off the scale the table uses' % lus[0]
+    if con is not None and not (0 < con[0] <= 100):
+        return 'convolutions %.4g per cm is not a cotton fibre' % con[0]
+    return None
+
+
 def ratio_slip(cells, spec):
     """
     Why this row of Table 13.7 should not be believed, or None.
@@ -1034,7 +1192,8 @@ def main():
                          spec.get('label_edge_offset', 30),
                          spec.get('hierarchical', False),
                          spec.get('multi_value', False),
-                         spec.get('keep_citations', False))
+                         spec.get('keep_citations', False),
+                         spec.get('allow_negative', False))
         if not rows:
             refused.append({'table': ref, 'name': '(whole table)', 'why': 'no rows found in the declared band'})
             continue
@@ -1101,6 +1260,18 @@ def main():
                 by_cond.setdefault(cond, {})[prop] = (lo, hi)
 
             row_ok = True
+            if spec.get('optical_check'):
+                why = optical_slip(cells, spec)
+                if why:
+                    refused.append({'table': ref, 'name': label, 'why': why})
+                    continue
+                by_cond = {}
+            if spec.get('lustre_check'):
+                why = lustre_slip(cells, spec)
+                if why:
+                    refused.append({'table': ref, 'name': label, 'why': why})
+                    continue
+                by_cond = {}
             if spec.get('friction_check') and cells:
                 why = friction_slip(cells, spec)
                 if why:
