@@ -154,6 +154,47 @@ assert(r.fibre_advisory.findings.length >= 3);
 assert((r.formula_trace || []).some(t => t.action === 'fibre_advisory'),
   'and it must appear in the trace, so the reasoning is followable');
 
+// ── Moisture: the two figures that were stored and never used ───────────
+// Commercial regain is what yarn is TRADED at; measured regain is what the
+// fabric holds. Cotton is 8.5% against 7.5%, so a shipment invoiced at the
+// allowance is about 0.9% heavier than the same fibre conditioned in the store.
+// Nothing was spilled and no process caused it, which is why it gets booked as
+// waste and hides real waste of the same size.
+const { moistureEconomics } = require('../engine/domain/yarn-engine');
+const mc = moistureEconomics({ cotton: 100 });
+assert.strictEqual(mc.commercial_allowance_pct, 8.5);
+assert(mc.invoice_over_conditioned_pct > 0.8 && mc.invoice_over_conditioned_pct < 1.1,
+  `cotton's invoice-vs-conditioned gap should be about 0.9%, got ${mc.invoice_over_conditioned_pct}`);
+// Viscose's allowance sits at the middle of its measured band, so there is no
+// gap at all — the rule must not invent one.
+assert.strictEqual(moistureEconomics({ viscose: 100 }).invoice_over_conditioned_pct, 0);
+// The book refuses to publish a single allowance for polyester ("1.5 or 3"), so
+// none is averaged in.
+assert.strictEqual(moistureEconomics({ polyester: 100 }), null,
+  'a fibre with no published allowance must not get one by averaging');
+const blendM = moistureEconomics({ cotton: 60, polyester: 40 });
+assert.strictEqual(blendM.covered_pct, 60);
+assert(blendM.unmeasured.includes('polyester'));
+
+const cost = fibreAdvisory({ cotton: 100 }, sj).findings.find(f => f.topic === 'yarn costing');
+assert(cost && /commercial allowance/.test(cost.claim));
+assert(/booked as waste/.test(cost.mechanism), 'the finding must say why it hides');
+// And on a blend it must not state the cotton figure as the fabric's.
+const costBlend = fibreAdvisory({ cotton: 60, polyester: 40 }, sj)
+  .findings.find(f => f.topic === 'yarn costing');
+assert(/measured over only 60%/.test(costBlend.claim));
+
+// Hysteresis scales with the fabric's own GSM, so it needs one to speak.
+const gsmF = fibreAdvisory({ cotton: 100 }, sj).findings.find(f => f.topic === 'GSM measurement');
+// Quoted in this fabric's own units: 180 g/m2 x 0.9% = 1.62 g/m2.
+assert(gsmF, "a cotton fabric with a GSM should get the hysteresis note");
+const grams = parseFloat((gsmF.claim.match(/about ([\d.]+) g\/m/) || [])[1]);
+assert(Math.abs(grams - 180 * 0.9 / 100) < 0.01,
+  `the effect must be scaled to this fabric's GSM, got ${grams}`);
+assert(!fibreAdvisory({ cotton: 100 }, { fabricId: 'single_jersey', category: 'single_jersey' })
+  .findings.some(f => f.topic === 'GSM measurement'),
+  'with no GSM given there is nothing to scale, so it says nothing');
+
 console.log(`  ${fibreAdvisory({ cotton: 60, polyester: 40 }, sj).findings.length} findings on a 60/40 CVC single jersey`);
 console.log(`  ${fibreAdvisory({ viscose: 100 }, sj).findings.length} on a viscose single jersey`);
 console.log('\n✓ All fibre advisory tests passed.');
