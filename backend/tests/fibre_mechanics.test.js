@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { blendMechanics, blendPhysical, blendFriction, fibreVariability,
+const { blendMechanics, blendPhysical, blendFriction, blendRecovery, fibreVariability,
         weakLinkSensitivity, FIBER_PROPERTIES } = require('../engine/domain/yarn-engine');
 const { wetMechanics, dimensionalRisk, analyzeWetProcessing } =
   require('../engine/domain/wet-processing-engine');
@@ -317,5 +317,42 @@ assert(!wetMechanics({ cotton: 100 }, {}).findings.some(f => /against the scales
   assert(Math.max(...merc.map(c => ab(c.condition))) < Math.min(...nat.map(c => ab(c.condition))),
     'because it is rounder than every one of them');
 }
+
+// ── Elastic recovery (chapter 15) ──────────────────────
+// Recovery can only get worse as the fibre is pulled further.
+for (const [key, row] of Object.entries(FIBER_PROPERTIES)) {
+  if (!row.recovery) continue;
+  for (const branch of ['rh60', 'rh90']) {
+    const s = [row.recovery[branch].e1, row.recovery[branch].e5, row.recovery[branch].e10]
+      .filter(v => v != null);
+    for (let i = 1; i < s.length; i++) {
+      assert(s[i] <= s[i - 1], `${key} ${branch}: recovery rises from ${s[i - 1]} to ${s[i]}`);
+    }
+    for (const v of s) assert(v >= 0 && v <= 100, `${key}: ${v} is not a percentage`);
+  }
+}
+
+// The ordering a knitter lives with, and it is not the strength ordering:
+// nylon holds its shape, viscose does not, and cotton is fine until it isn't.
+assert.strictEqual(blendRecovery({ nylon: 100 }, 60).severity, 'low');
+assert.strictEqual(blendRecovery({ viscose: 100 }, 60).severity, 'severe');
+assert.strictEqual(blendRecovery({ cotton: 100 }, 60).severity, 'high');
+assert(blendRecovery({ cotton: 100 }, 60).collapse_1_to_5 > 30,
+  "cotton's recovery collapses between a 1% pull and a 5% one");
+assert(blendRecovery({ nylon: 100 }, 60).collapse_1_to_5 <= 2,
+  'nylon barely changes across the same range');
+
+// Table 15.2 predates elastane, and an elastomer governs recovery outright, so
+// the verdict is withheld rather than computed from the fibres that are left.
+// Getting this wrong would call a stretch jersey a bagging risk.
+const stretch = blendRecovery({ cotton: 95, elastane: 5 }, 60);
+assert.strictEqual(stretch.severity, null);
+assert(/elastane governs recovery/.test(stretch.withheld_because));
+assert(stretch.from_5pct.recovery === 52, 'the measured part is still reported');
+
+// Humidity is a real variable here, not a rounding: wool recovers better wet.
+assert(blendRecovery({ wool: 100 }, 90).from_5pct.recovery >
+       blendRecovery({ wool: 100 }, 60).from_5pct.recovery,
+  'wool recovers better at 90% r.h. than at 60%, which the table shows plainly');
 
 console.log('\n✓ All fibre mechanics tests passed.');

@@ -239,7 +239,10 @@ const FIBER_PROPERTIES = {
                // and by the fibre's own convolutions.
                friction: { crossed: [0.29, 0.57], crossed_kind: 'list', parallel: 0.22,
                            guide: { steel: 0.29, porcelain: 0.32, pulley: 0.23, ceramic: 0.24 },
-                           page: 723, table: 'Table 25.6' } },
+                           page: 723, table: 'Table 25.6' } ,
+               recovery: { rh60: { e1: 91, e5: 52, e10: null },
+                           rh90: { e1: 83, e5: 59, e10: null },
+                           page: 344, table: 'Table 15.2' },},
   polyester: { density: 1.39, regain: 0.4,  rkm: 1.25,     // was 1.38 — Table 5.1 gives 1.39
                tensile: { tenacity: 0.47, extension: 15.0, modulus: 10.6,
                           grade: 'Terylene, medium-tenacity', page: 292, table: 'Table 13.2',
@@ -251,7 +254,10 @@ const FIBER_PROPERTIES = {
                // The highest parallel-fibre friction in Table 25.6(a). Good
                // cohesion in a spun yarn; also the reason a polyester-rich
                // blend resists drafting and pills once a fibre end works free.
-               friction: { parallel: 0.58, page: 723, table: 'Table 25.6' } },
+               friction: { parallel: 0.58, page: 723, table: 'Table 25.6' } ,
+               recovery: { rh60: { e1: 98, e5: 65, e10: 51 },
+                           rh90: { e1: 92, e5: 60, e10: 47 },
+                           page: 344, table: 'Table 15.2' },},
   viscose:   { density: 1.49, regain: 13.0, rkm: 0.60,     // was 1.52, which is the DRY figure
                tensile: { tenacity: 0.21, extension: 15.7, modulus: 6.5,
                           grade: 'Fibro, staple', page: 290, table: 'Table 13.1',
@@ -277,7 +283,10 @@ const FIBER_PROPERTIES = {
                            page: 723, table: 'Table 25.6' },
                // Table 14.6 calls this row "Rayon".
                variability: { fineness: 12, breaking_load: 20, tenacity: 17,
-                              extension: 23, page: 335, table: 'Table 14.6' } },
+                              extension: 23, page: 335, table: 'Table 14.6' } ,
+               recovery: { rh60: { e1: 67, e5: 32, e10: 23 },
+                           rh90: { e1: 60, e5: 28, e10: 27 },
+                           page: 344, table: 'Table 15.2' },},
   nylon:     { density: 1.14, regain: 4.2,  rkm: 1.40,     // Table 5.1 p.165
                tensile: { tenacity: 0.48, extension: 20.0, modulus: 3.0,
                           grade: 'nylon 6.6, medium-tenacity', page: 292, table: 'Table 13.2',
@@ -293,7 +302,10 @@ const FIBER_PROPERTIES = {
                friction: { crossed: [0.14, 0.6], crossed_kind: 'range', parallel: 0.47,
                            static: 0.47, kinetic: 0.40,
                            guide: { steel: 0.32, porcelain: 0.43, pulley: 0.20, ceramic: 0.19 },
-                           page: 723, table: 'Table 25.6' } },
+                           page: 723, table: 'Table 25.6' } ,
+               recovery: { rh60: { e1: 90, e5: 89, e10: 89 },
+                           rh90: { e1: 92, e5: 90, e10: null },
+                           page: 344, table: 'Table 15.2' },},
   wool:      { density: 1.31, regain: 16.0, rkm: 0.50,     // Table 5.1 p.165
                tensile: { tenacity: 0.11, extension: 42.5, modulus: 2.3,
                           grade: 'Botany 64s (merino)', page: 290, table: 'Table 13.1',
@@ -318,7 +330,10 @@ const FIBER_PROPERTIES = {
                              against_scales: { crossed: [0.38, 0.49], parallel: 0.14,
                                                static: 0.61, kinetic: 0.38 },
                            },
-                           page: 723, table: 'Tables 25.3 and 25.6' } },
+                           page: 723, table: 'Tables 25.3 and 25.6' } ,
+               recovery: { rh60: { e1: 99, e5: 69, e10: 51 },
+                           rh90: { e1: 94, e5: 82, e10: 56 },
+                           page: 344, table: 'Table 15.2' },},
   acrylic:   { density: 1.19, regain: 1.5,  rkm: 0.70,     // was 1.17 — Table 5.1 gives 1.19
                tensile: { tenacity: 0.27, extension: 25.0, modulus: 6.2,
                           grade: 'Orlon 42, staple', page: 292, table: 'Table 13.2',
@@ -328,7 +343,10 @@ const FIBER_PROPERTIES = {
                           // is dyed near the boil, and this is why it comes out
                           // of the machine to whatever length it was held at.
                           wet: { ten: 0.84, ext: 1.08, mod: 1.00 },
-                          hot_wet: { ten: 0.35, ext: 4.26, mod: 0.02 } } },
+                          hot_wet: { ten: 0.35, ext: 4.26, mod: 0.02 } } ,
+               recovery: { rh60: { e1: 92, e5: 50, e10: 43 },
+                           rh90: { e1: 90, e5: 48, e10: 39 },
+                           page: 344, table: 'Table 15.2' },},
 
   // UNSOURCED. Table 5.1 has no row for any of these four, and the closest
   // rows are not substitutes: modal is a high-wet-modulus viscose and lyocell
@@ -361,7 +379,10 @@ const FIBER_PROPERTIES = {
                variability: { fineness: 17, breaking_load: 19, tenacity: 20,
                               extension: 15, page: 335, table: 'Table 14.6' },
                friction: { crossed: 0.26, parallel: 0.52,
-                           page: 723, table: 'Table 25.6' } },
+                           page: 723, table: 'Table 25.6' } ,
+               recovery: { rh60: { e1: 84, e5: 52, e10: 34 },
+                           rh90: { e1: 78, e5: 58, e10: 45 },
+                           page: 344, table: 'Table 15.2' },},
   // Regain is not in Table 7.3. Polypropylene is a hydrocarbon with no polar
   // group for water to attach to, and the book's own chapter 7 explains regain
   // in exactly those terms, so zero is the physics rather than a placeholder —
@@ -426,6 +447,82 @@ function yarnDiameterMm(ne, blendDensity) {
   const d_in_cotton = 1 / (28 * Math.sqrt(ne));
   const densityScale = Math.sqrt(1.52 / (blendDensity || 1.52)); // lighter fibre → bulkier → larger d
   return parseFloat((d_in_cotton * 25.4 * densityScale).toFixed(4));
+}
+
+/**
+ * Elastic recovery: how much of a stretch comes back, and how much stays.
+ *
+ * This is what a customer means by "it went out of shape". A garment is not
+ * pulled once to breaking; it is pulled a few per cent, thousands of times, at
+ * the elbow and the knee and the seat. What matters there is not tenacity but
+ * how much of each pull is returned.
+ *
+ * The fibres separate completely, and the separation is not where a strength
+ * table would put it. Nylon returns 89% even after being stretched 10%. Viscose
+ * returns 23%. Cotton returns 91% at 1% extension and 52% at 5%, which is
+ * exactly the experience of a cotton tee that fits in the shop and not after a
+ * week: at small strains it recovers, and at the strains a body actually
+ * imposes it does not.
+ *
+ * The recovery is kept per extension rather than averaged into one figure,
+ * because the collapse between 1% and 5% IS the finding — a single number per
+ * fibre would erase the only part worth knowing.
+ */
+function blendRecovery(fibers, rh) {
+  if (!fibers) return null;
+  const branch = rh === 90 ? 'rh90' : 'rh60';
+  const parts = [];
+  const unmeasured = [];
+  for (const [name, pct] of Object.entries(fibers)) {
+    if (!pct) continue;
+    const r = (FIBER_PROPERTIES[name] || {}).recovery;
+    if (!r) { unmeasured.push(name); continue; }
+    parts.push({ name, pct, r: r[branch] });
+  }
+  if (!parts.length) return null;
+
+  const at = field => {
+    const have = parts.filter(x => x.r[field] != null);
+    if (!have.length) return null;
+    const w = have.reduce((a, x) => a + x.pct, 0);
+    return { recovery: round3(have.reduce((a, x) => a + x.r[field] * x.pct, 0) / w),
+             from_pct: round3(w) };
+  };
+
+  const e1 = at('e1'), e5 = at('e5'), e10 = at('e10');
+  // What stays is what did not come back. A garment strained 5% and left with
+  // 48% of it is a garment that has grown, and the number a merchandiser can
+  // act on is the growth, not the recovery.
+  const growth = e5 ? round3(100 - e5.recovery) : null;
+
+  // Table 15.2 was published in 1950 and there is no elastane in it. An
+  // elastomer at 3-5% dominates a fabric's recovery completely — that is the
+  // entire reason it is put there — so a severity computed from the other 95%
+  // would be not merely incomplete but backwards: it would call a stretch
+  // jersey a bagging risk. Where one is present and unmeasured, the recoveries
+  // are still reported for the fibres that have them and the VERDICT is
+  // withheld, which is the honest half of what can be said.
+  const ELASTOMERIC = ['elastane', 'spandex', 'lycra', 'rubber'];
+  const dominant = unmeasured.filter(n => ELASTOMERIC.includes(n));
+
+  return {
+    humidity_pct: rh === 90 ? 90 : 60,
+    from_1pct: e1, from_5pct: e5, from_10pct: e10,
+    // The drop between a 1% pull and a 5% one. Nylon barely moves; cotton falls
+    // off a cliff. This is the number that separates a fibre that holds its
+    // shape from one that does not, and it is invisible in any strength figure.
+    collapse_1_to_5: (e1 && e5) ? round3(e1.recovery - e5.recovery) : null,
+    permanent_growth_at_5pct: growth,
+    severity: (growth == null || dominant.length) ? null
+            : growth >= 55 ? 'severe' : growth >= 40 ? 'high'
+            : growth >= 25 ? 'moderate' : 'low',
+    withheld_because: dominant.length
+      ? `${dominant.join(', ')} governs recovery and Table 15.2 predates it, so the `
+        + 'figures above describe only the rest of the blend'
+      : null,
+    unmeasured,
+    source: 'Morton & Hearle, Table 15.2, p.344 (Beste and Hoffman).',
+  };
 }
 
 /**
@@ -965,6 +1062,7 @@ function analyzeYarn(args = {}) {
     // made of. Morton & Hearle chapter 14.
     fibre_variability: fibreVariability(fibers),
     fibre_friction: blendFriction(fibers),
+    elastic_recovery: blendRecovery(fibers, 60),
     uster: uster && uster.ok ? uster : null,
     quality_rank,
     price_index: price_idx,
@@ -1013,6 +1111,7 @@ function recommendYarnGrade(countNe, fabricCategory) {
 module.exports = {
   blendMechanics,
   blendFriction,
+  blendRecovery,
   fibreVariability,
   weakLinkSensitivity,
   analyzeYarn,

@@ -402,6 +402,68 @@ TABLES = {
         'lustre_check': True,
         'paired_check': False,
     },
+    # ---- Chapter 15, elastic recovery --------------------------------------
+    # The single most common complaint about a knitted garment is that it goes
+    # out of shape — the elbows bag, the knees seat, the neck opens and stays
+    # open. This is that, measured.
+    #
+    # 15.2 gives elastic recovery at three extensions and two humidities, and
+    # the fibres separate completely. Nylon recovers 89% even after being pulled
+    # 10%. Viscose recovers 23%. Cotton manages 91% at 1% extension and 52% at
+    # 5%, which is the whole story of a cotton tee that fits at the shop and not
+    # after a week: at small strains it comes back, and at garment-wearing
+    # strains it does not.
+    #
+    # It is stored at every extension the book gives rather than averaged,
+    # because the collapse between 1% and 5% IS the finding. A single "recovery"
+    # figure per fibre would erase exactly the thing that matters.
+    #
+    # 15.1 gives the yield point — the stress beyond which recovery stops being
+    # complete — from two different constructions, and the book notes that the
+    # stress-strain values run higher than the recovery ones. They do, in every
+    # row, which makes the table check itself.
+    '15.1': {
+        'pdf_page': 363, 'y_from': 318, 'y_to': 400,
+        'columns': [('yield_stress', 'yield point from the stress-strain curve', None),
+                    ('yield_strain', 'yield point from the stress-strain curve', None),
+                    ('yield_stress', 'yield point from the recovery curve', None),
+                    ('yield_strain', 'yield point from the recovery curve', None)],
+        'row_map': {
+            'Cotton':           ('cotton', None),
+            'Viscose rayon':    ('viscose', None),
+            'Acetate':          ('acetate', None),
+            'Stretched rayon':  ('viscose_ht', None),
+            'Wool':             ('wool', None),
+            'Casein':           ('casein', None),
+            'Silk':             ('silk', None),
+            'Nylon':            ('nylon', None),
+        },
+        'yield_check': True,
+        'paired_check': False,
+    },
+    '15.2': {
+        'pdf_page': 363, 'y_from': 495, 'y_to': 620,
+        'hierarchical': True,
+        'columns': [('elastic_recovery', 'from 1% extension, 60% r.h.', 60.0),
+                    ('elastic_recovery', 'from 1% extension, 90% r.h.', 90.0),
+                    ('elastic_recovery', 'from 5% extension, 60% r.h.', 60.0),
+                    ('elastic_recovery', 'from 5% extension, 90% r.h.', 90.0),
+                    ('elastic_recovery', 'from 10% extension, 60% r.h.', 60.0),
+                    ('elastic_recovery', 'from 10% extension, 90% r.h.', 90.0)],
+        'row_map': {
+            'Cotton':                                  ('cotton', None),
+            'Viscose rayon':                           ('viscose', None),
+            'Acetate':                                 ('acetate', None),
+            'Wool':                                    ('wool', None),
+            'Silk':                                    ('silk', None),
+            'Nylon':                                   ('nylon', None),
+            'Polyethylene terephthalate (Dacron)':     ('polyester', None),
+            'Polyacrylonitrile (Orlon)':               ('acrylic', None),
+            'Casein':                                  ('casein', None),
+        },
+        'recovery_check': True,
+        'paired_check': False,
+    },
     '13.7': {
         'pdf_page': 331, 'y_from': 175, 'y_to': 320,
         'rotated': True, 'hierarchical': True, 'label_edge_offset': 24,
@@ -444,7 +506,8 @@ UNITS = {'density': 'g/cm3', 'specific_volume': 'cm3/g',
          'birefringence': '1', 'fibre_ellipticity': '1',
          # The book's own word. Adderley's scale is relative and has no unit; it
          # is stored because the SERIES is the finding, not any one value.
-         'lustre': 'arbitrary', 'convolutions_per_cm': '1/cm'}
+         'lustre': 'arbitrary', 'convolutions_per_cm': '1/cm',
+         'elastic_recovery': '%'}
 
 # How each printed fibre name is filed. Written out rather than inferred from
 # the name, because the classification is a judgement and belongs in one
@@ -1138,6 +1201,63 @@ def lustre_slip(cells, spec):
     return None
 
 
+def recovery_slip(cells, spec):
+    """
+    Why this elastic-recovery row should not be believed, or None.
+
+    A recovery is a percentage of the imposed extension that comes back, so it
+    lies between 0 and 100. And it can only get worse as the fibre is pulled
+    further: stretching past the point where recovery was already incomplete
+    cannot make more of it come back. Every row in Table 15.2 obeys that at both
+    humidities, so a row where recovery RISES with extension has had its columns
+    read out of order.
+    """
+    by_ext = {}
+    for idx, (lo, hi) in cells.items():
+        prop, cond, rh = spec['columns'][idx]
+        if prop != 'elastic_recovery':
+            continue
+        if not (0 <= lo <= 100):
+            return 'recovery %.4g is not a percentage' % lo
+        ext = float(cond.split('%')[0].replace('from', '').strip())
+        by_ext.setdefault(rh, []).append((ext, lo))
+    for rh, series in by_ext.items():
+        series.sort()
+        for (e1, v1), (e2, v2) in zip(series, series[1:]):
+            if v2 > v1 + 0.5:
+                return ('recovery at %g%% r.h. rises from %g to %g as the extension goes '
+                        'from %g%% to %g%%, which is not something a fibre does'
+                        % (rh, v1, v2, e1, e2))
+    return None
+
+
+def yield_slip(cells, spec):
+    """
+    Why this yield-point row should not be believed, or None.
+
+    The book observes that the yield values taken from stress-strain curves run
+    higher than those taken from recovery curves, and every row bears it out.
+    That is the check: it is the book's own reading of its own table, so a row
+    that breaks it has been read wrongly here rather than measured wrongly
+    there.
+    """
+    cols = spec['columns']
+    def at(prop, cond):
+        for idx, (lo, hi) in cells.items():
+            if cols[idx][0] == prop and cols[idx][1] == cond:
+                return lo
+        return None
+    ss = at('yield_stress', 'yield point from the stress-strain curve')
+    rc = at('yield_stress', 'yield point from the recovery curve')
+    for label, v in (('stress-strain', ss), ('recovery', rc)):
+        if v is not None and v <= 0:
+            return 'the %s yield stress is %.4g' % (label, v)
+    if ss is not None and rc is not None and ss < rc:
+        return ('the stress-strain yield stress %.4g is below the recovery one %.4g, '
+                'against the book\'s own observation that it runs higher' % (ss, rc))
+    return None
+
+
 def ratio_slip(cells, spec):
     """
     Why this row of Table 13.7 should not be believed, or None.
@@ -1260,6 +1380,18 @@ def main():
                 by_cond.setdefault(cond, {})[prop] = (lo, hi)
 
             row_ok = True
+            if spec.get('recovery_check'):
+                why = recovery_slip(cells, spec)
+                if why:
+                    refused.append({'table': ref, 'name': label, 'why': why})
+                    continue
+                by_cond = {}
+            if spec.get('yield_check'):
+                why = yield_slip(cells, spec)
+                if why:
+                    refused.append({'table': ref, 'name': label, 'why': why})
+                    continue
+                by_cond = {}
             if spec.get('optical_check'):
                 why = optical_slip(cells, spec)
                 if why:
