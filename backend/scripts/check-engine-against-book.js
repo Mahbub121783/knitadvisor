@@ -156,6 +156,43 @@ function compareTensile(engine, byEngineKey) {
   return rows;
 }
 
+/**
+ * Swelling. Same principle as the tensile comparison — these were copied out of
+ * the extraction, so any drift means one side was edited and not the other —
+ * but the values are ranges rather than points, and the range endpoints have to
+ * match exactly for the same reason: the low and high figures are two different
+ * laboratories' results, not a tolerance.
+ */
+function compareSwelling(engine, byEngineKey) {
+  const FIELDS = [['area', 'transverse_swelling_area'],
+                  ['axial', 'axial_swelling'],
+                  ['volume', 'volume_swelling']];
+  const rows = [];
+  for (const [key, row] of Object.entries(engine)) {
+    if (!row.swelling) continue;
+    const fibre = byEngineKey.get(key);
+    if (!fibre) { rows.push({ key, verdict: 'no fibre in the book claims this engine key' }); continue; }
+    const wrong = [];
+    for (const [field, property] of FIELDS) {
+      const book = props.properties.find(x => x.fibre_slug === fibre.slug &&
+        x.property === property && x.page === row.swelling.page);
+      const have = row.swelling[field];
+      if (!book && !have) continue;
+      if (!book) { wrong.push(`${property}: the engine has ${JSON.stringify(have)}, the book nothing`); continue; }
+      if (!have) { wrong.push(`${property}: the book has a value the engine dropped`); continue; }
+      const lo = book.value != null ? book.value : book.value_min;
+      const hi = book.value != null ? book.value : book.value_max;
+      if (Math.abs(lo - have[0]) > 1e-6 || Math.abs(hi - have[1]) > 1e-6) {
+        wrong.push(`${property}: engine ${have[0]}-${have[1]}, book ${lo}-${hi}`);
+      }
+    }
+    rows.push({ key, row, wrong,
+                verdict: wrong.length ? 'DISAGREES: ' + wrong.join('; ')
+                                      : `matches ${row.swelling.table} p.${row.swelling.page}` });
+  }
+  return rows;
+}
+
 function main() {
   const engine = FIBER_PROPERTIES;
   const byEngineKey = new Map(props.fibres.filter(f => f.engine_key).map(f => [f.engine_key, f]));
@@ -268,6 +305,24 @@ function main() {
     console.log('a less useful one than a citation would be.');
   }
   if (STRICT && tensileOff.length) process.exitCode = 1;
+
+  // ── Swelling ──────────────────────────────────────────────────────────
+  const swelling = compareSwelling(engine, byEngineKey);
+  console.log('\n\nSWELLING IN WATER — engine against Table 11.1\n');
+  console.log('  %s %s %s  %s', 'fibre'.padEnd(14), 'area %'.padEnd(11),
+              'volume %'.padEnd(11), 'verdict');
+  for (const r of swelling) {
+    const sw = r.row && r.row.swelling;
+    const fmt = v => (v ? `${v[0]}-${v[1]}` : '—');
+    console.log('  %s %s %s  %s', r.key.padEnd(14),
+                fmt(sw && sw.area).padEnd(11), fmt(sw && sw.volume).padEnd(11), r.verdict);
+  }
+  const swellOff = swelling.filter(r => r.wrong && r.wrong.length);
+  const noSwell = Object.keys(engine).length - swelling.length;
+  console.log('\n%d fibres carry swelling; %d disagree; %d have none, because Table 11.1',
+              swelling.length, swellOff.length, noSwell);
+  console.log('predates most synthetics and the book measures no substitute for them.');
+  if (STRICT && swellOff.length) process.exitCode = 1;
 
   if (wrongCondition.length || disagree.length) {
     console.log('\nThe engine feeds these densities to blendPhysical() and from there to');

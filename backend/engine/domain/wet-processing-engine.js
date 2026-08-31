@@ -508,6 +508,41 @@ function wetMechanics(fibers, ctx) {
       source: 'Table 13.7, p.312',
     });
   }
+  // Swelling. The fibre gets bigger in water as well as softer, and the two
+  // findings are different advice: the modulus one is about tension, this one
+  // is about width and about how much the fabric can be expected to move back.
+  if (m.swelling_area_pct && m.yarn_diameter_gain_pct) {
+    const [dLo, dHi] = m.yarn_diameter_gain_pct;
+    const big = dHi >= 15;
+    findings.push({
+      severity: big ? 'moderate' : 'info',
+      finding: `Fibre cross-section swells ${m.swelling_area_pct[0]}–${m.swelling_area_pct[1]}% in water, `
+             + `thickening the yarn by roughly ${dLo}–${dHi}%`,
+      means: big
+        ? 'A yarn that much thicker cannot sit in the same loop, so the fabric takes up '
+        + 'width while it is wet and the courses close in. This is where width movement '
+        + 'comes from; it is not the same thing as shrinkage, which is what remains after '
+        + 'it has dried and relaxed.'
+        : 'The yarn barely changes size in water, so this fabric holds its dimensions '
+        + 'through wet processing for reasons of fibre rather than of finishing.',
+      do: big
+        ? 'Set the stenter width against the RELAXED dry dimension, not the wet one, and '
+        + 'allow the fabric to relax before any dimensional reading is taken.'
+        : 'No swelling allowance needed on width.',
+      source: `Table 11.1, p.240 — diameter gain derived as sqrt(1 + area/100), assuming yarn packing is unchanged${
+        m.swelling_covered_pct < m.measured_pct ? `; covers ${m.swelling_covered_pct}% of the blend` : ''}`,
+    });
+  }
+  if (m.no_swelling_data && m.no_swelling_data.length && m.swelling_area_pct) {
+    findings.push({
+      severity: 'info',
+      finding: `Table 11.1 does not measure ${m.no_swelling_data.join(', ')}`,
+      means: 'It was compiled before most synthetics, so the swelling figures above '
+           + 'describe only the fibres it covers rather than the whole blend.',
+      do: `Read the swelling figures as covering ${m.swelling_covered_pct}% of the blend by mass.`,
+      source: null,
+    });
+  }
   if (!m.blend_average_reliable) {
     findings.push({
       severity: 'info',
@@ -551,6 +586,9 @@ function wetMechanics(fibers, ctx) {
                       modulus: hotMod == null ? null : parseFloat(hotMod.toFixed(3)) },
     dimensional_risk: cold,
     dimensional_risk_in_bath: hot,
+    swelling_area_pct: m.swelling_area_pct,
+    yarn_diameter_gain_pct: m.yarn_diameter_gain_pct,
+    swelling_covered_pct: m.swelling_covered_pct,
     tenacity_upper_bound_n_tex: m.tenacity_upper_bound_n_tex,
     modulus_n_tex: m.modulus_n_tex,
     extension_pct: m.extension_pct,
