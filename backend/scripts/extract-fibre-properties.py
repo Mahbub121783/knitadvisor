@@ -464,6 +464,37 @@ TABLES = {
         'recovery_check': True,
         'paired_check': False,
     },
+    # ---- Chapter 19, abrasion: READ, AND DELIBERATELY NOT STORED ----------
+    # Table 19.7 (p.556) gives abrasion and wear relative to nylon = 100 over
+    # fourteen published tests. It is the durability table this engine most
+    # wants, and it is not here on purpose.
+    #
+    # The reader was built and it works: the rotated page transposes cleanly,
+    # the ten rows are found, wrapped names are joined to the figures that
+    # follow them, and the bands come out ordered exactly as a textile person
+    # would expect — polyester and nylon at the top, viscose, acetate and casein
+    # two orders of magnitude below.
+    #
+    # It was dropped over the reference fibre. The caption says the results are
+    # "reduced so as to give nylon the value 100", so nylon must read 100 in
+    # every column. It does not: two columns print "100, 4" and "100, 73", both
+    # at the same 8-point body size as every other figure, so neither is a
+    # footnote marker. Under a normalisation to 100 the reference cannot also be
+    # 4 in the same column, which means the table's structure is not what this
+    # reader thinks it is — there is something in those columns it has not
+    # understood.
+    #
+    # The two ways forward from there were both worse than stopping. Shipping
+    # the band gives nylon 4-100, which any textile person would see is wrong.
+    # Forcing nylon to 100 and dropping the odd figures is inventing data to fit
+    # an assumption. So the table is left out, and this note is the reason, so
+    # that the next attempt starts from the actual problem — what the second
+    # figure in those two cells is — rather than rebuilding the reader.
+    #
+    # Nothing downstream depends on it: `pilling_tendency` in yarn-engine
+    # remains an unsourced per-spinning-system constant, and the pilling
+    # advisory is derived from work of rupture (Tables 13.1/13.2) instead, which
+    # is measured and needs no normalisation.
     '13.7': {
         'pdf_page': 331, 'y_from': 175, 'y_to': 320,
         'rotated': True, 'hierarchical': True, 'label_edge_offset': 24,
@@ -507,7 +538,8 @@ UNITS = {'density': 'g/cm3', 'specific_volume': 'cm3/g',
          # The book's own word. Adderley's scale is relative and has no unit; it
          # is stored because the SERIES is the finding, not any one value.
          'lustre': 'arbitrary', 'convolutions_per_cm': '1/cm',
-         'elastic_recovery': '%'}
+         'elastic_recovery': '%',
+         'abrasion_resistance_index': '1'}
 
 # How each printed fibre name is filed. Written out rather than inferred from
 # the name, because the classification is a judgement and belongs in one
@@ -789,6 +821,53 @@ def figure_columns(lines, expected, multi_value=False, cluster_gap=25):
     if kept[-1][0] == 0:
         return None
     return sorted(c for _, c in kept)
+
+
+def read_all_figures(page, y_from, y_to, rotated, label_edge, row_map):
+    """
+    Every figure on each declared row, with no column assignment at all.
+
+    Table 19.7 defeats column reading three ways at once: fourteen conditions
+    labelled only A to N and defined on another page, cells holding two or three
+    figures from different workers, and fibre names that wrap onto a second line
+    which ALSO carries data. Any one is handled elsewhere in this file; together
+    the chance of a figure landing under the wrong condition is high, and a
+    wrong abrasion number is worse than none.
+
+    But the table does not need column reading to be useful, because the book
+    is not claiming a number. It prints fourteen tests precisely BECAUSE they
+    disagree — polyester runs from 21 to 696 across them — and what survives
+    that disagreement is the ordering, which is emphatic and consistent.
+
+    So this reads the row and nothing else: the declared name, then every figure
+    to the right of the label. A wrapped continuation is any left-margin line
+    whose label is not in `row_map`, which makes the row inventory a declared
+    fact the gate can check rather than an inference that can slip.
+    """
+    rows, current = [], None
+    for line in read_lines(page, y_from, y_to, rotated):
+        label = ' '.join(t for x, t in line if x < label_edge and not CITATION.match(t)).strip()
+        figures = []
+        for x, t in line:
+            if x < label_edge:
+                continue
+            for piece in t.replace(',', ' ').split():
+                m = CELL.match(piece)
+                if m:
+                    figures.append(float(m.group(1)))
+                    if m.group(2):
+                        figures.append(float(m.group(2)))
+        if label and label in row_map:
+            current = {'name': label, 'figures': figures}
+            rows.append(current)
+        elif current is not None:
+            # A wrapped name ("polyester fibres" under "Terylene, Dacron"), or a
+            # line that is only the tail of a cell. Either way its figures
+            # belong to the row above.
+            current['figures'].extend(figures)
+            if label:
+                current['name'] += ' ' + label
+    return rows
 
 
 def read_rows(page, y_from, y_to, centres, rotated=False,
@@ -1301,6 +1380,53 @@ def main():
         page = doc[spec['pdf_page'] - 1]
         printed_page = spec['pdf_page'] - BODY_OFFSET
         rotated = spec.get('rotated', False)
+
+        if spec.get('collect_all'):
+            got = read_all_figures(page, spec['y_from'], spec['y_to'], rotated,
+                                   spec['label_edge'], spec['row_map'])
+            missing = [n for n in spec['row_map'] if not any(r['name'].startswith(n) for r in got)]
+            if missing:
+                refused.append({'table': ref, 'name': '(whole table)',
+                                'why': 'declared rows not found: ' + ', '.join(missing)})
+                continue
+            for row in got:
+                slug = spec['row_map'][next(n for n in spec['row_map'] if row['name'].startswith(n))]
+                vals = row['figures']
+                if len(vals) < 2:
+                    refused.append({'table': ref, 'name': row['name'],
+                                    'why': 'only %d figure(s) found on the row' % len(vals)})
+                    continue
+                meta = FIBRES.get(FIBRE_BY_SLUG.get(slug, ''))
+                if not meta:
+                    refused.append({'table': ref, 'name': row['name'],
+                                    'why': 'row maps to slug "%s", which no fibre defines' % slug})
+                    continue
+                name, gclass, origin, polymer, engine = meta[1:]
+                fibres.setdefault(slug, {'slug': slug, 'name': name, 'generic_class': gclass,
+                                         'origin': origin, 'polymer': polymer,
+                                         'engine_key': engine,
+                                         'page': spec['pdf_page'] - BODY_OFFSET,
+                                         'printed_name': row['name']})
+                properties.append({
+                    'fibre_slug': slug, 'property': spec['property'],
+                    'value': None, 'value_min': min(vals), 'value_max': max(vals),
+                    'unit': UNITS.get(spec['property'], '1'),
+                    'condition': spec['condition'], 'rh_pct': None,
+                    'temperature_c': None, 'method': None,
+                    'source_key': SOURCE_KEY, 'page': spec['pdf_page'] - BODY_OFFSET,
+                    'table_ref': 'Table ' + ref, 'book_refs': None,
+                    'quality': 'BOOK_TABLE',
+                    'value_count': len(vals),
+                    'cell_kind': 'list',
+                    'note': 'The band across %d figures the book prints for this fibre over 14 '
+                            'separate tests: %s. They disagree by more than an order of '
+                            'magnitude because flat rubbing, edge rubbing, flexing and '
+                            'laundering wear a fabric by different mechanisms. Only the '
+                            'ORDERING between fibres survives that, and no mean of these is '
+                            'meaningful.' % (len(vals), ', '.join('%g' % v for v in sorted(vals))),
+                })
+            continue
+
         lines = read_lines(page, spec['y_from'], spec['y_to'], rotated)
         centres = figure_columns(lines, len(spec['columns']), spec.get('multi_value', False),
                                  spec.get('cluster_gap', 25))
