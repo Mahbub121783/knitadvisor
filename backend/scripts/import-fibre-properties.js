@@ -80,7 +80,7 @@ function verify(payload) {
         'every refusal states a reason');
   check(fibres.length >= 72, 'every declared table was read',
         fibres.length + ' fibres');
-  check(properties.length >= 655, 'every column of every table came through',
+  check(properties.length >= 735, 'every column of every table came through',
         properties.length + ' measurements');
 
   // Classification has to satisfy the same constraints the table does, so a bad
@@ -612,6 +612,50 @@ function verify(payload) {
   check(rho < -0.85,
         'lustre still runs against ellipticity across the whole series',
         `Spearman rho = ${rho.toFixed(3)}`);
+
+  // ── Chapter 15: elastic recovery ──────────────────────────────────────
+  const rec = properties.filter(p => p.property === 'elastic_recovery');
+  check(rec.length >= 50, 'Table 15.2 came through at every extension', rec.length + ' rows');
+  check(rec.every(p => p.value >= 0 && p.value <= 100), 'every recovery is a percentage');
+
+  // Recovery can only get worse as the fibre is pulled further: stretching past
+  // the point where recovery was already incomplete cannot bring more back.
+  const rising = [];
+  for (const slug of new Set(rec.map(p => p.fibre_slug))) {
+    for (const rh of [60, 90]) {
+      const series = [1, 5, 10].map(e => rec.find(p => p.fibre_slug === slug &&
+        p.rh_pct === rh && p.condition.startsWith(`from ${e}% `))).filter(Boolean);
+      for (let i = 1; i < series.length; i++) {
+        if (series[i].value > series[i - 1].value + 0.5) {
+          rising.push(`${slug} at ${rh}%: ${series[i - 1].value} → ${series[i].value}`);
+        }
+      }
+    }
+  }
+  check(rising.length === 0,
+        'recovery never improves as the fibre is stretched further', rising.join('; '));
+
+  // The two fibres a knitter most needs told apart, and the gap between them.
+  const rv = (slug, e) => { const r = rec.find(p => p.fibre_slug === slug &&
+    p.rh_pct === 60 && p.condition.startsWith(`from ${e}% `)); return r ? r.value : null; };
+  check(rv('nylon', 10) >= 85 && rv('viscose', 10) <= 30,
+        'nylon still recovers from a 10% pull and viscose still does not',
+        `nylon ${rv('nylon', 10)}, viscose ${rv('viscose', 10)}`);
+  check(rv('cotton', 1) - rv('cotton', 5) > 30,
+        "cotton's recovery still collapses between a 1% pull and a 5% one",
+        `${rv('cotton', 1)} → ${rv('cotton', 5)}`);
+
+  // Table 15.1, checked against the book's own reading of it.
+  const ySS = properties.filter(p => p.property === 'yield_stress' &&
+    p.condition === 'yield point from the stress-strain curve');
+  const yieldOff = ySS.filter(a => {
+    const b = properties.find(p => p.property === 'yield_stress' &&
+      p.fibre_slug === a.fibre_slug && p.condition === 'yield point from the recovery curve');
+    return b && a.value < b.value;
+  });
+  check(ySS.length >= 7 && yieldOff.length === 0,
+        'the stress-strain yield still runs above the recovery yield, as the book says',
+        yieldOff.map(x => x.fibre_slug).join(', '));
 
   const badPage = properties.filter(p => !(p.page >= 1 && p.page <= 746));
   check(badPage.length === 0, 'every citation points inside the book', badPage.length + ' do not');
