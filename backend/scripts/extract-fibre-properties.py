@@ -225,6 +225,99 @@ TABLES = {
         'cv_check': True,
         'paired_check': False,
     },
+    # ---- Chapter 25, friction ---------------------------------------------
+    # Friction is how a fabric holds together at all. Chapter 3 puts it
+    # plainly: "a fabric is a discontinuous solid, which is held together by
+    # friction and utilises the strength of the millions of separate fibres."
+    # Nothing in this engine has had a number for it.
+    #
+    # Three things come out of these tables that the engine can use.
+    #
+    # WOOL FELTS BECAUSE ITS FRICTION HAS A DIRECTION. Wool fibre sliding over
+    # wool with its scales measures 0.13 static; sliding against them, 0.61 —
+    # nearly five times. Under agitation the fibre can move one way and not the
+    # other, so it ratchets root-first and the mass consolidates, permanently.
+    # That is felting, complete, in two numbers. No other fibre in the book has
+    # a directional friction at all.
+    #
+    # STICK-SLIP. Static friction always exceeds kinetic, and the size of the
+    # gap is how violently a yarn grabs and releases as it runs. Nylon is
+    # 0.47/0.40, a ratio of 1.18; wool against its scales is 0.61/0.38, a ratio
+    # of 1.61. A high ratio means the tension in the yarn is not steady, and
+    # unsteady tension at the needle is unsteady stitch length.
+    #
+    # GUIDE MATERIAL IS A REAL VARIABLE, not a preference. In Table 25.6(b) the
+    # hard smooth guides — steel and porcelain — give a higher friction than a
+    # fibre pulley or ceramic for EVERY yarn in the table, and the gap is not
+    # small: bright acetate runs at 0.38 over steel and 0.19 over a pulley, half
+    # as much. Between the pulley and ceramic there is no consistent winner, so
+    # nothing here says ceramic is best; what it says is that the hard guides
+    # cost roughly twice the tension, measured rather than asserted.
+    #
+    # The rows here name a PAIR of surfaces, not a fibre, so each table declares
+    # what its rows mean rather than looking them up in FIBRES.
+    '25.3': {
+        'pdf_page': 738, 'y_from': 105, 'y_to': 252,
+        'hierarchical': True, 'keep_citations': True,
+        'columns': [('friction_static', None, None),
+                    ('friction_kinetic', None, None)],
+        'row_map': {
+            'Rayon on rayon':                    ('viscose', 'on viscose rayon'),
+            # The same pair again from a second reference, at 0.22/0.14 against
+            # 0.35/0.26. Two laboratories, one contact, a 60% difference — kept
+            # apart by the citation the book prints.
+            'Rayon on rayon [30]':               ('viscose', 'on viscose rayon, ref. [30]'),
+            'Nylon on nylon':                    ('nylon', 'on nylon'),
+            'Wool on wool with scales':          ('wool', 'on wool, with the scales'),
+            'Wool on wool against scales':       ('wool', 'on wool, against the scales'),
+            'Wool on wool fibres in same direction': ('wool', 'on wool, fibres in the same direction'),
+            'Wool on rayon with scales':         ('wool', 'on viscose rayon, with the scales'),
+            'Wool on rayon against scales':      ('wool', 'on viscose rayon, against the scales'),
+            'Wool on nylon with scales':         ('wool', 'on nylon, with the scales'),
+            'Wool on nylon against scales':      ('wool', 'on nylon, against the scales'),
+        },
+        'friction_check': True,
+        'paired_check': False,
+    },
+    '25.6a': {
+        'pdf_page': 742, 'y_from': 112, 'y_to': 232,
+        'multi_value': True,
+        'columns': [('friction_crossed_fibres', None, None),
+                    ('friction_parallel_fibres', None, None)],
+        'row_map': {
+            'Nylon':                    ('nylon', 'fibre on fibre'),
+            'Silk':                     ('silk', 'fibre on fibre'),
+            'Viscose rayon':            ('viscose', 'fibre on fibre'),
+            'Acetate':                  ('acetate', 'fibre on fibre'),
+            'Cotton':                   ('cotton', 'fibre on fibre'),
+            'Glass':                    ('glass', 'fibre on fibre'),
+            'Jute':                     ('jute', 'fibre on fibre'),
+            'Casein':                   ('casein', 'fibre on fibre'),
+            'Saran':                    ('pvdc', 'fibre on fibre'),
+            'Terylene polyester fibre': ('polyester', 'fibre on fibre'),
+            'Wool, with scales':        ('wool', 'fibre on fibre, with the scales'),
+            'Wool, against scale':      ('wool', 'fibre on fibre, against the scales'),
+        },
+        'friction_check': True,
+        'paired_check': False,
+    },
+    '25.6b': {
+        'pdf_page': 742, 'y_from': 285, 'y_to': 350,
+        'columns': [('friction_over_guide', 'over hard steel', None),
+                    ('friction_over_guide', 'over porcelain', None),
+                    ('friction_over_guide', 'over a fibre pulley', None),
+                    ('friction_over_guide', 'over ceramic', None)],
+        'row_map': {
+            'Viscose rayon':   ('viscose', None),
+            'Acetate, bright': ('acetate', 'bright'),
+            'Acetate, dull':   ('acetate_dull', 'dull'),
+            'Grey cotton':     ('cotton', 'grey'),
+            'Nylon':           ('nylon', None),
+            'Linen':           ('flax', None),
+        },
+        'friction_check': True,
+        'paired_check': False,
+    },
     '13.7': {
         'pdf_page': 331, 'y_from': 175, 'y_to': 320,
         'rotated': True, 'hierarchical': True, 'label_edge_offset': 24,
@@ -258,7 +351,11 @@ UNITS = {'density': 'g/cm3', 'specific_volume': 'cm3/g',
          'axial_swelling': '%', 'volume_swelling': '%',
          'tenacity_sd': 'N/tex',
          'cv_fineness': '%', 'cv_breaking_load': '%', 'cv_tenacity': '%',
-         'cv_breaking_extension': '%'}
+         'cv_breaking_extension': '%',
+         # A coefficient of friction is a force over a force.
+         'friction_static': '1', 'friction_kinetic': '1',
+         'friction_crossed_fibres': '1', 'friction_parallel_fibres': '1',
+         'friction_over_guide': '1'}
 
 # How each printed fibre name is filed. Written out rather than inferred from
 # the name, because the classification is a judgement and belongs in one
@@ -428,7 +525,21 @@ FIBRES = {
     # jute, hemp and ramie would put four measurements where the book took one.
     'Bast fibres':                      ('bast_fibres', 'Bast fibres (flax, hemp, jute, ramie)', 'cellulose', 'natural', 'cellulose', None),
     'Rayon':                            ('viscose', 'Viscose rayon', 'cellulose', 'regenerated', 'cellulose', 'viscose'),
+
+    # Bright and dull acetate are the same polymer with different surfaces, and
+    # friction is a surface property: the delustred yarn runs at half the
+    # friction of the bright one over a fibre pulley. They are separate rows in
+    # the book and separate fibres here.
+    'Acetate, dull':                    ('acetate_dull', 'Acetate (dull, delustred)', 'cellulose', 'regenerated', 'cellulose ethanoate', None),
 }
+
+# The first printed name that defines each slug, so a table which names rows by
+# contact pair ("Wool on rayon") can still reach the fibre's classification
+# without repeating it.
+FIBRE_BY_SLUG = {}
+for _printed, _meta in FIBRES.items():
+    FIBRE_BY_SLUG.setdefault(_meta[0], _printed)
+
 
 # Rows the reciprocal test rejects that are the BOOK's arithmetic, not a
 # mis-parse. Each has to be argued, not merely listed, and is imported with the
@@ -526,7 +637,8 @@ def figure_columns(lines, expected, multi_value=False, cluster_gap=25):
 
 
 def read_rows(page, y_from, y_to, centres, rotated=False,
-              label_edge_offset=30, hierarchical=False, multi_value=False):
+              label_edge_offset=30, hierarchical=False, multi_value=False,
+              keep_citations=False):
     """
     Rows of (name, {column index: (low, high)}), split on the column positions.
 
@@ -568,31 +680,48 @@ def read_rows(page, y_from, y_to, centres, rotated=False,
     parent, last = None, None
     for line in lines:
         label, cells, ambiguous, qualifiers, lists = [], {}, set(), [], {}
+        ranged = set()
         for x, t in line:
             t = t.strip()
             if not t:
                 continue
             if x < label_edge:
                 # "[13]" after a fibre name is the book's own citation, not part
-                # of the name and not a measurement.
-                if not CITATION.match(t):
+                # of the name and not a measurement — except where the same pair
+                # is measured twice from two references and the citation is the
+                # only thing telling the rows apart. Table 25.3 prints "Rayon on
+                # rayon" twice, at 0.35 and at 0.22; dropping "[30]" from the
+                # second collapses it onto the first and the disagreement
+                # disappears without trace.
+                if keep_citations or not CITATION.match(t):
                     label.append(t)
                 continue
             if DASH.match(t):
                 continue                 # an empty cell, printed as a dash
             if multi_value:
-                if not LIST_CELL.match(t):
+                # Table 25.6 puts three different kinds of cell in one column:
+                # "0.47" is one measurement, "0.20-0.25" is a range, and
+                # "0.29, 0.57" is two workers who disagree. They mean different
+                # things and must not be flattened into each other, so the kind
+                # is recorded with the values and settled once the whole cell
+                # has been read.
+                mm = CELL.match(t)
+                if mm:
+                    vals = [float(mm.group(1))]
+                    if mm.group(2):
+                        vals.append(float(mm.group(2)))
+                elif LIST_CELL.match(t):
+                    vals = [float(v) for v in t.strip(',').split(',') if v.strip()]
+                else:
                     qualifiers.append(t)
                     continue
                 idx = min(range(len(centres)), key=lambda i: abs(centres[i] - x))
                 if abs(centres[idx] - x) > 45:
                     qualifiers.append(t)
                     continue
-                # Several workers' figures in one cell, sometimes run together
-                # in a single word ("123,126,"), sometimes set as separate words
-                # on the same line. Both end up in the same list.
-                lists.setdefault(idx, []).extend(
-                    float(v) for v in t.strip(',').split(',') if v.strip())
+                if mm and mm.group(2):
+                    ranged.add(idx)
+                lists.setdefault(idx, []).extend(vals)
                 continue
             m = CELL.match(t)
             if not m:
@@ -622,16 +751,17 @@ def read_rows(page, y_from, y_to, centres, rotated=False,
         if multi_value and not name and lists and rows:
             for idx, vals in lists.items():
                 rows[-1][4].setdefault(idx, []).extend(vals)
+            rows[-1][5].update(ranged)
             continue
 
         if multi_value:
             if name and (lists or qualifiers):
-                rows.append((name, cells, sorted(ambiguous), qualifiers, lists))
+                rows.append((name, cells, sorted(ambiguous), qualifiers, lists, set(ranged)))
             continue
 
         if not hierarchical:
             if name and (cells or qualifiers):
-                rows.append((name, cells, sorted(ambiguous), qualifiers, {}))
+                rows.append((name, cells, sorted(ambiguous), qualifiers, {}, set()))
             continue
 
         # Three kinds of line, told apart by indent and by whether they carry
@@ -656,7 +786,7 @@ def read_rows(page, y_from, y_to, centres, rotated=False,
             # for "Viscose rayon" itself and then indents Fibro and Tenasco
             # under it — so the parent is set, not cleared.
             parent = name
-        rows.append((full, cells, sorted(ambiguous), qualifiers, {}))
+        rows.append((full, cells, sorted(ambiguous), qualifiers, {}, set()))
         last = len(rows) - 1
     return rows
 
@@ -814,6 +944,42 @@ def cv_slip(cells, spec):
     return None
 
 
+def friction_slip(cells, spec):
+    """
+    Why this friction row should not be believed, or None.
+
+    Two things hold for every coefficient of friction, and neither depends on
+    knowing the materials.
+
+    It is a force divided by a force, so it is positive; and although it is not
+    bounded by 1 in general — rubber on rubber exceeds it — nothing in a textile
+    context comes near 2, so a figure above that is a units slip rather than a
+    surprising fibre.
+
+    Static friction is the force needed to start sliding and kinetic the force
+    needed to keep it going, and starting is never easier than continuing. So
+    where a row prints both, static cannot be the smaller. That ordering is what
+    makes the pair worth storing at all: the gap between them is the stick-slip,
+    and a row where they came out the wrong way round has had its columns
+    swapped.
+    """
+    for idx, (lo, hi) in cells.items():
+        for v in (lo, hi):
+            if v is None:
+                continue
+            if not (0 < v <= 2.0):
+                return '%s is %.4g, which is not a coefficient of friction' % (
+                    spec['columns'][idx][0], v)
+
+    st = cells_by_property(cells, spec, 'friction_static')
+    ki = cells_by_property(cells, spec, 'friction_kinetic')
+    if st and ki and st[0] is not None and ki[0] is not None:
+        if st[0] < ki[0] - 1e-9:
+            return ('static friction %.4g is below kinetic %.4g, but starting a slide '
+                    'is never easier than continuing one' % (st[0], ki[0]))
+    return None
+
+
 def ratio_slip(cells, spec):
     """
     Why this row of Table 13.7 should not be believed, or None.
@@ -867,7 +1033,8 @@ def main():
         rows = read_rows(page, spec['y_from'], spec['y_to'], centres, rotated,
                          spec.get('label_edge_offset', 30),
                          spec.get('hierarchical', False),
-                         spec.get('multi_value', False))
+                         spec.get('multi_value', False),
+                         spec.get('keep_citations', False))
         if not rows:
             refused.append({'table': ref, 'name': '(whole table)', 'why': 'no rows found in the declared band'})
             continue
@@ -880,7 +1047,7 @@ def main():
         m = re.search(r'Table\s+' + re.escape(ref) + r'[^\n]*?\[([^\]]+)\]', caption)
         book_refs = m.group(1) if m else None
 
-        for label, cells, ambiguous, qualifiers, lists in rows:
+        for label, cells, ambiguous, qualifiers, lists, ranged in rows:
             if qualifiers:
                 refused.append({'table': ref, 'name': label,
                                 'why': 'the figures are qualified in words ("%s"), so a bare number would misstate them'
@@ -897,11 +1064,34 @@ def main():
                                 'why': 'two figures share column %s — the book gives alternatives, not one value'
                                        % ', '.join(spec['columns'][i][0] for i in ambiguous)})
                 continue
-            meta = FIBRES.get(label)
-            if not meta:
-                refused.append({'table': ref, 'name': label, 'why': 'no classification recorded for this name'})
-                continue
-            slug, name, gclass, origin, polymer, engine = meta
+            # Friction is not a property of a fibre; it is a property of two
+            # surfaces touching. "Wool on rayon, against scales" is one
+            # measurement and there is no fibre it belongs to on its own, so
+            # these tables name the pair in the row and the table declares what
+            # each row means. The slug is the fibre being rubbed and the
+            # counterface goes into the condition, which keeps the row
+            # answerable to "what is wool's friction?" without pretending the
+            # counterface was not there.
+            row_map = spec.get('row_map')
+            if row_map is not None:
+                if label not in row_map:
+                    refused.append({'table': ref, 'name': label,
+                                    'why': 'this table declares no meaning for this row'})
+                    continue
+                slug, row_condition = row_map[label]
+                meta = FIBRES.get(FIBRE_BY_SLUG.get(slug, ''))
+                if not meta:
+                    refused.append({'table': ref, 'name': label,
+                                    'why': 'row maps to slug "%s", which no fibre defines' % slug})
+                    continue
+                name, gclass, origin, polymer, engine = meta[1:]
+            else:
+                row_condition = None
+                meta = FIBRES.get(label)
+                if not meta:
+                    refused.append({'table': ref, 'name': label, 'why': 'no classification recorded for this name'})
+                    continue
+                slug, name, gclass, origin, polymer, engine = meta
 
             # Pair each density with the specific volume measured at the same
             # condition, and hold them to being reciprocals.
@@ -911,6 +1101,12 @@ def main():
                 by_cond.setdefault(cond, {})[prop] = (lo, hi)
 
             row_ok = True
+            if spec.get('friction_check') and cells:
+                why = friction_slip(cells, spec)
+                if why:
+                    refused.append({'table': ref, 'name': label, 'why': why})
+                    continue
+                by_cond = {}
             if spec.get('weak_link_check'):
                 why = weak_link_slip(cells, spec)
                 if why:
@@ -923,8 +1119,11 @@ def main():
                     refused.append({'table': ref, 'name': label, 'why': why})
                     continue
                 by_cond = {}
-            if spec.get('swelling_check'):
-                why = swelling_slip(lists, spec)
+            if spec.get('multi_value'):
+                as_cells = {i: (min(v), max(v)) for i, v in lists.items()}
+                why = (swelling_slip(lists, spec) if spec.get('swelling_check')
+                       else friction_slip(as_cells, spec) if spec.get('friction_check')
+                       else None)
                 if why:
                     refused.append({'table': ref, 'name': label, 'why': why})
                     continue
@@ -933,7 +1132,30 @@ def main():
                                          'page': printed_page, 'printed_name': label})
                 for idx, vals in sorted(lists.items()):
                     prop, cond, rh = spec['columns'][idx]
+                    cond = ', '.join(x for x in (row_condition, cond) if x) or None
                     lo, hi = min(vals), max(vals)
+                    # Three kinds of cell, three different statements. "0.47" is
+                    # one measurement. "0.20-0.25" is one worker's range.
+                    # "0.29, 0.57" is two workers who disagree. They come out of
+                    # the page as the same pair of numbers and mean quite
+                    # different things, so the note has to say which.
+                    if idx in ranged and len(vals) == 2:
+                        kind, why = 'range', 'The table prints this as a range.'
+                    elif idx in ranged:
+                        kind, why = 'mixed', None
+                    elif len(vals) == 1:
+                        kind, why = 'single', 'The table prints one value.'
+                    else:
+                        kind, why = 'list', (
+                            'The table collects %d independently reported values: %s. '
+                            'Stored as their range; the book itself notes "considerable '
+                            'discrepancies in the values of a given quantity obtained by '
+                            'different people".' % (len(vals), ', '.join('%g' % v for v in vals)))
+                    if kind == 'mixed':
+                        refused.append({'table': ref, 'name': label,
+                                        'why': 'a cell mixes a printed range with separate figures, '
+                                               'and the two cannot be stored as one span'})
+                        break
                     properties.append({
                         'fibre_slug': slug, 'property': prop,
                         'value': lo if len(vals) == 1 else None,
@@ -951,16 +1173,8 @@ def main():
                         # from the middle of a cell. Losing 126 out of
                         # "123,126," leaves viscose reading 74-127 either way.
                         'value_count': len(vals),
-                        # The individual figures are kept because the range on
-                        # its own would read as one worker's uncertainty, and it
-                        # is not: it is the disagreement between %d separate
-                        # published measurements, which the book prints
-                        # precisely so the reader can see it.
-                        'note': 'The table collects %d independently reported values: %s. '
-                                'Stored as their range; the book itself notes "considerable '
-                                'discrepancies in the values of a given quantity obtained by '
-                                'different people".' % (len(vals),
-                                                        ', '.join('%g' % v for v in vals)),
+                        'cell_kind': kind,
+                        'note': why,
                     })
                 continue
             if spec.get('tensile_check'):
@@ -1049,6 +1263,11 @@ def main():
                 # reciprocal check pairs the low density with the HIGH volume.
                 if hi is not None and hi < lo:
                     lo, hi = hi, lo
+                # A row condition and a column condition are both real and
+                # neither replaces the other: in Table 25.6(b) the row is the
+                # yarn and the column is what it runs over, and the measurement
+                # is only meaningful as both together.
+                cond = ', '.join(x for x in (row_condition, cond) if x) or None
                 note = None
                 if cond is None:
                     note = 'The table prints one figure and names no condition.'
@@ -1065,6 +1284,17 @@ def main():
                     'table_ref': 'Table ' + ref, 'book_refs': book_refs,
                     'quality': 'BOOK_TABLE', 'note': note,
                 })
+
+    # A declared table that stored nothing is a fault, never a result. Twice now
+    # a table has been located, had its columns found and its rows read, and
+    # then lost every one of them to a branch that did not apply — silently,
+    # because a row that is skipped is not a row that is refused. Counting what
+    # each table actually contributed is the only thing that catches it without
+    # knowing in advance which branch went wrong.
+    for ref in TABLES:
+        if not any(pr['table_ref'] == 'Table ' + ref for pr in properties):
+            refused.append({'table': ref, 'name': '(whole table)',
+                            'why': 'the table was read but stored no measurements'})
 
     payload = {
         'source': {'key': SOURCE_KEY, 'tables': sorted(TABLES), 'chapter': 5,

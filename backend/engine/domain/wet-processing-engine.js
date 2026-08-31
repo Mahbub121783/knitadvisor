@@ -28,7 +28,7 @@
 'use strict';
 
 const { estimateProcessLoss } = require('../catalog/production-data');
-const { blendMechanics } = require('./yarn-engine');
+const { blendMechanics, blendFriction } = require('./yarn-engine');
 
 // ============================================================
 // 1. AREA-SHRINKAGE (compaction GSM gain) BY FABRIC FAMILY
@@ -543,6 +543,49 @@ function wetMechanics(fibers, ctx) {
       source: null,
     });
   }
+  // Felting, which is the one wet-processing failure that cannot be undone.
+  //
+  // Wool's friction depends on which way the fibre is moving: 0.13 to start a
+  // slide with the scales, 0.61 against them. Agitation in water therefore lets
+  // each fibre travel root-first and not tip-first, so the whole mass ratchets
+  // inwards and locks. Every other fabric fault in this engine is a matter of
+  // degree; this one is a change of state.
+  const fr = blendFriction(fibers);
+  if (fr && fr.felting) {
+    const f = fr.felting;
+    findings.push({
+      severity: f.severity === 'high' ? 'severe' : f.severity === 'moderate' ? 'high' : 'moderate',
+      finding: `${f.pct_of_blend}% ${f.fibre} — friction against the scales is `
+             + `${f.directional_ratio}× friction with them (${f.with_scales_static} vs ${f.against_scales_static})`,
+      means: 'This is the felting mechanism. Because the fibre slides easily one way and '
+           + 'not the other, agitation in water makes it ratchet root-first and the fabric '
+           + 'consolidates and locks. Unlike shrinkage it does not relax back, and unlike '
+           + 'a shade fault it cannot be reprocessed out.',
+      do: 'Keep the bath cool and the mechanical action low, avoid rope handling and long '
+        + 'runs, and use a shrink-resist route if the fabric has to be machine washed. '
+        + 'Where the wool is a minor part of a blend the risk falls with it, but it does '
+        + 'not go away.',
+      source: 'Tables 25.3 p.719 and 25.6 p.723',
+    });
+  }
+
+  // Stick-slip: how violently the yarn grabs and releases as it runs. Unsteady
+  // tension at the needle is unsteady stitch length, which is a fabric fault
+  // before it is a yarn fault.
+  if (fr && fr.stick_slip_ratio != null && fr.stick_slip_ratio >= 1.3) {
+    findings.push({
+      severity: 'moderate',
+      finding: `Static friction is ${fr.stick_slip_ratio}× kinetic`,
+      means: 'The yarn needs noticeably more force to start moving than to keep moving, so '
+           + 'it runs in grabs and releases rather than smoothly. The tension at the needle '
+           + 'varies with it, and so does the stitch length.',
+      do: 'Run over ceramic or a fibre pulley rather than steel or porcelain, keep the '
+        + 'yarn path short, and check stitch-length variation before blaming the machine.',
+      source: `Table 25.3, p.719${fr.stick_slip_from_pct < 100
+        ? `; measured for ${fr.stick_slip_from_pct}% of the blend` : ''}`,
+    });
+  }
+
   if (!m.blend_average_reliable) {
     findings.push({
       severity: 'info',
@@ -586,6 +629,7 @@ function wetMechanics(fibers, ctx) {
                       modulus: hotMod == null ? null : parseFloat(hotMod.toFixed(3)) },
     dimensional_risk: cold,
     dimensional_risk_in_bath: hot,
+    friction: fr,
     swelling_area_pct: m.swelling_area_pct,
     yarn_diameter_gain_pct: m.yarn_diameter_gain_pct,
     swelling_covered_pct: m.swelling_covered_pct,

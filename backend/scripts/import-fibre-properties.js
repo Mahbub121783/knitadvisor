@@ -78,9 +78,9 @@ function verify(payload) {
         recovered.length ? 'these now parse — check they parse CORRECTLY: ' + recovered.join(', ') : '');
   check(refused.every(r => r.why && r.why.length > 10),
         'every refusal states a reason');
-  check(fibres.length >= 69, 'every declared table was read',
+  check(fibres.length >= 70, 'every declared table was read',
         fibres.length + ' fibres');
-  check(properties.length >= 505, 'every column of every table came through',
+  check(properties.length >= 570, 'every column of every table came through',
         properties.length + ' measurements');
 
   // Classification has to satisfy the same constraints the table does, so a bad
@@ -449,6 +449,95 @@ function verify(payload) {
   check(cotCv != null && nyCv != null && cotCv > 3 * nyCv,
         "cotton's fibres still vary several times as much as nylon's, as the text says",
         `cotton ${cotCv}%, nylon ${nyCv}%`);
+
+  // ── Chapter 25: friction ──────────────────────────────────────────────
+  const FRICTION = ['friction_static', 'friction_kinetic', 'friction_crossed_fibres',
+                    'friction_parallel_fibres', 'friction_over_guide'];
+  const fric = properties.filter(p => FRICTION.includes(p.property));
+  check(fric.length >= 60, 'the friction tables came through', fric.length + ' contacts');
+  check(fric.every(p => { const v = p.value != null ? p.value : p.value_max; return v > 0 && v <= 2; }),
+        'every coefficient of friction is a positive number under two');
+
+  // Starting a slide is never easier than continuing one, so static cannot come
+  // out below kinetic. A row where it does has had its two columns swapped.
+  const stickSlip = [];
+  for (const st of properties.filter(p => p.property === 'friction_static')) {
+    const ki = properties.find(p => p.property === 'friction_kinetic' &&
+      p.fibre_slug === st.fibre_slug && p.condition === st.condition && p.page === st.page);
+    if (!ki) { stickSlip.push(`${st.fibre_slug} ${st.condition}: static with no kinetic`); continue; }
+    if (st.value < ki.value) stickSlip.push(`${st.fibre_slug} ${st.condition}: ${st.value} < ${ki.value}`);
+  }
+  check(stickSlip.length === 0,
+        'static friction is never below kinetic, and every static has its kinetic',
+        stickSlip.join('; '));
+
+  // The one that matters most. Wool's friction has a DIRECTION — 0.13 with the
+  // scales, 0.61 against them — and that difference is the whole mechanism of
+  // felting. If it ever stopped appearing, the two rows had been collapsed into
+  // one and the engine would have lost the only reason wool mats.
+  const wool = (cond, prop) => {
+    const r = properties.find(p => p.fibre_slug === 'wool' && p.property === prop &&
+      p.condition === cond);
+    return r ? (r.value != null ? r.value : r.value_max) : null;
+  };
+  const withScales = wool('on wool, with the scales', 'friction_static');
+  const against = wool('on wool, against the scales', 'friction_static');
+  check(withScales != null && against != null && against > 2 * withScales,
+        "wool's friction against its scales is still several times its friction with them",
+        `with ${withScales}, against ${against}`);
+
+  // And it is a property of the wool, not of the pair: it survives every
+  // counterface the book tried.
+  const directional = [];
+  for (const face of ['on wool', 'on viscose rayon', 'on nylon']) {
+    const w = wool(`${face}, with the scales`, 'friction_static');
+    const a = wool(`${face}, against the scales`, 'friction_static');
+    if (w == null || a == null) { directional.push(`${face}: one direction missing`); continue; }
+    if (a <= w) directional.push(`${face}: against ${a} is not above with ${w}`);
+  }
+  check(directional.length === 0,
+        'the direction is in the wool, not in the counterface — it holds against all three',
+        directional.join('; '));
+
+  // Steel and porcelain run higher than a fibre pulley or ceramic for every
+  // yarn in Table 25.6(b). Nothing here claims ceramic beats the pulley; it
+  // does not, consistently.
+  const guideOf = (slug, cond) => {
+    const r = properties.find(p => p.property === 'friction_over_guide' &&
+      p.fibre_slug === slug && p.condition === cond);
+    return r ? r.value : null;
+  };
+  const guideRows = properties.filter(p => p.property === 'friction_over_guide');
+  const prefixes = [...new Set(guideRows.map(p => p.condition.replace(/over .*/, '')))];
+  const softer = [];
+  for (const slug of new Set(guideRows.map(p => p.fibre_slug))) {
+    for (const pre of prefixes) {
+      const hard = ['over hard steel', 'over porcelain'].map(g => guideOf(slug, pre + g)).filter(v => v != null);
+      const soft = ['over a fibre pulley', 'over ceramic'].map(g => guideOf(slug, pre + g)).filter(v => v != null);
+      if (!hard.length || !soft.length) continue;
+      if (Math.min(...hard) < Math.max(...soft)) {
+        softer.push(`${slug} ${pre}: hard ${Math.min(...hard)}, soft ${Math.max(...soft)}`);
+      }
+    }
+  }
+  check(softer.length === 0,
+        'steel and porcelain run higher than a fibre pulley or ceramic for every yarn',
+        softer.join('; '));
+
+  // A printed range and two workers disagreeing are different statements and
+  // arrive as the same pair of numbers. Nylon's 0.14-0.6 is one range; cotton's
+  // "0.29, 0.57" is two people. Both must say which they are.
+  const kinds = properties.filter(p => p.cell_kind);
+  check(kinds.every(p => ['single', 'range', 'list'].includes(p.cell_kind)),
+        'every multi-value cell records how the book printed it');
+  const nylonCrossed = properties.find(p => p.fibre_slug === 'nylon' && p.property === 'friction_crossed_fibres');
+  const cottonCrossed = properties.find(p => p.fibre_slug === 'cotton' && p.property === 'friction_crossed_fibres');
+  check(nylonCrossed && nylonCrossed.cell_kind === 'range',
+        "nylon's 0.14-0.6 is stored as the range the book prints",
+        nylonCrossed ? nylonCrossed.cell_kind : 'missing');
+  check(cottonCrossed && cottonCrossed.cell_kind === 'list',
+        "cotton's 0.29 and 0.57 are stored as two workers, not as a range",
+        cottonCrossed ? cottonCrossed.cell_kind : 'missing');
 
   const badPage = properties.filter(p => !(p.page >= 1 && p.page <= 746));
   check(badPage.length === 0, 'every citation points inside the book', badPage.length + ' do not');
