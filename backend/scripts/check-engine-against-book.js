@@ -236,6 +236,92 @@ function compareVariability(engine, byEngineKey) {
   return rows;
 }
 
+/**
+ * Friction. The rows name a contact rather than a fibre, so the comparison has
+ * to match on the counterface as well: "wool" alone is not a key here, and
+ * looking one up without the condition would compare wool-on-wool against
+ * wool-on-nylon and call the difference an error.
+ */
+function compareFriction(engine, byEngineKey) {
+  const rows = [];
+  for (const [key, row] of Object.entries(engine)) {
+    if (!row.friction) continue;
+    const fibre = byEngineKey.get(key);
+    if (!fibre) { rows.push({ key, verdict: 'no fibre in the book claims this engine key' }); continue; }
+    const f = row.friction;
+    const wrong = [];
+    const look = (property, condition) => props.properties.find(x =>
+      x.fibre_slug === fibre.slug && x.property === property && x.condition === condition);
+
+    const span = v => (Array.isArray(v) ? v : [v, v]);
+    const pairsMatch = (book, want) => {
+      const lo = book.value != null ? book.value : book.value_min;
+      const hi = book.value != null ? book.value : book.value_max;
+      const [wlo, whi] = span(want);
+      return Math.abs(lo - wlo) < 1e-9 && Math.abs(hi - whi) < 1e-9;
+    };
+
+    // Fibre-on-fibre. Wool's engine row carries its WITH-scales figures at the
+    // top level, so that is the condition to compare against.
+    const cond = f.directional ? 'fibre on fibre, with the scales' : 'fibre on fibre';
+    for (const [field, property] of [['crossed', 'friction_crossed_fibres'],
+                                     ['parallel', 'friction_parallel_fibres']]) {
+      if (f[field] == null) continue;
+      const book = look(property, cond);
+      if (!book) { wrong.push(`${property} (${cond}) is not in the book`); continue; }
+      if (!pairsMatch(book, f[field])) {
+        wrong.push(`${property}: engine ${JSON.stringify(f[field])}, book ${book.value != null ? book.value : book.value_min + '-' + book.value_max}`);
+      }
+    }
+
+    // Static and kinetic, on the fibre's own kind.
+    if (f.static != null) {
+      const selfCond = f.directional ? 'on wool, with the scales'
+                     : key === 'viscose' ? 'on viscose rayon' : `on ${key}`;
+      for (const [field, property] of [['static', 'friction_static'], ['kinetic', 'friction_kinetic']]) {
+        const book = look(property, selfCond);
+        if (!book) { wrong.push(`${property} (${selfCond}) is not in the book`); continue; }
+        if (Math.abs(book.value - f[field]) > 1e-9) {
+          wrong.push(`${property}: engine ${f[field]}, book ${book.value}`);
+        }
+      }
+    }
+
+    // The directional pair, which is the whole of the felting mechanism.
+    if (f.directional) {
+      for (const [side, cnd] of [['with_scales', 'on wool, with the scales'],
+                                 ['against_scales', 'on wool, against the scales']]) {
+        for (const [field, property] of [['static', 'friction_static'], ['kinetic', 'friction_kinetic']]) {
+          const book = look(property, cnd);
+          if (!book) { wrong.push(`${property} (${cnd}) is not in the book`); continue; }
+          if (Math.abs(book.value - f.directional[side][field]) > 1e-9) {
+            wrong.push(`${side}.${field}: engine ${f.directional[side][field]}, book ${book.value}`);
+          }
+        }
+      }
+    }
+
+    // Guides. Only cotton carries a row prefix in the book ("grey cotton"),
+    // and acetate's bright/dull split never reaches the engine.
+    if (f.guide) {
+      const prefix = key === 'cotton' ? 'grey, ' : '';
+      for (const [field, guide] of [['steel', 'over hard steel'], ['porcelain', 'over porcelain'],
+                                    ['pulley', 'over a fibre pulley'], ['ceramic', 'over ceramic']]) {
+        if (f.guide[field] == null) continue;
+        const book = look('friction_over_guide', prefix + guide);
+        if (!book) { wrong.push(`guide ${guide} is not in the book`); continue; }
+        if (Math.abs(book.value - f.guide[field]) > 1e-9) {
+          wrong.push(`guide ${field}: engine ${f.guide[field]}, book ${book.value}`);
+        }
+      }
+    }
+
+    rows.push({ key, f, wrong,
+                verdict: wrong.length ? 'DISAGREES: ' + wrong.join('; ') : `matches ${f.table} p.${f.page}` });
+  }
+  return rows;
+}
+
 function main() {
   const engine = FIBER_PROPERTIES;
   const byEngineKey = new Map(props.fibres.filter(f => f.engine_key).map(f => [f.engine_key, f]));
@@ -382,6 +468,24 @@ function main() {
   console.log('\n%d fibres carry variability or weak-link figures; %d disagree.',
               varia.length, variaOff.length);
   if (STRICT && variaOff.length) process.exitCode = 1;
+
+  // ── Friction ──────────────────────────────────────────────
+  const fric = compareFriction(engine, byEngineKey);
+  console.log('\n\nFRICTION — engine against Tables 25.3 and 25.6\n');
+  console.log('  %s %s %s  %s', 'fibre'.padEnd(14), 'parallel'.padEnd(10),
+              'directional'.padEnd(13), 'verdict');
+  for (const r of fric) {
+    const f = r.f, d = f && f.directional;
+    console.log('  %s %s %s  %s', r.key.padEnd(14),
+                String(f && f.parallel != null ? f.parallel : '—').padEnd(10),
+                (d ? `${d.with_scales.static} / ${d.against_scales.static}` : '—').padEnd(13),
+                r.verdict);
+  }
+  const fricOff = fric.filter(r => r.wrong && r.wrong.length);
+  console.log('\n%d fibres carry friction; %d disagree. Only wool has a direction, which is',
+              fric.length, fricOff.length);
+  console.log('why only wool felts.');
+  if (STRICT && fricOff.length) process.exitCode = 1;
 
   if (wrongCondition.length || disagree.length) {
     console.log('\nThe engine feeds these densities to blendPhysical() and from there to');

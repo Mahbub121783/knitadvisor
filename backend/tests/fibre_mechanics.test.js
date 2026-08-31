@@ -1,6 +1,6 @@
 const assert = require('assert');
-const { blendMechanics, blendPhysical, fibreVariability, weakLinkSensitivity,
-        FIBER_PROPERTIES } = require('../engine/domain/yarn-engine');
+const { blendMechanics, blendPhysical, blendFriction, fibreVariability,
+        weakLinkSensitivity, FIBER_PROPERTIES } = require('../engine/domain/yarn-engine');
 const { wetMechanics, dimensionalRisk, analyzeWetProcessing } =
   require('../engine/domain/wet-processing-engine');
 
@@ -204,5 +204,69 @@ assert(Math.abs(FIBER_PROPERTIES.cotton.tensile.tenacity
   'Table 13.1 and Table 14.1 disagree about cotton at 1 cm');
 assert.strictEqual(FIBER_PROPERTIES.nylon.weak_link.cm1, 0.47,
   'Table 14.1 puts nylon at 1 cm exactly where Table 13.1 does');
+
+// ── Friction (chapter 25) ──────────────────────────────
+// Static friction is the force to START a slide and kinetic the force to keep
+// it going; starting is never easier. Any row where it is has swapped columns.
+for (const [key, row] of Object.entries(FIBER_PROPERTIES)) {
+  const f = row.friction;
+  if (!f) continue;
+  if (f.static != null && f.kinetic != null) {
+    assert(f.static >= f.kinetic, `${key}: static ${f.static} below kinetic ${f.kinetic}`);
+  }
+  for (const v of [f.parallel, f.static, f.kinetic].filter(x => x != null)) {
+    assert(v > 0 && v <= 2, `${key}: ${v} is not a coefficient of friction`);
+  }
+}
+
+// Wool is the only fibre in the book whose friction has a direction, and that
+// asymmetry is the entire mechanism of felting. 0.13 to start a slide with the
+// scales, 0.61 against them.
+const woolF = FIBER_PROPERTIES.wool.friction;
+assert(woolF.directional, 'wool carries the directional pair');
+assert.strictEqual(woolF.directional.with_scales.static, 0.13);
+assert.strictEqual(woolF.directional.against_scales.static, 0.61);
+for (const key of Object.keys(FIBER_PROPERTIES)) {
+  if (key === 'wool') continue;
+  assert(!(FIBER_PROPERTIES[key].friction || {}).directional,
+    `${key} must not carry a directional friction — only wool has one`);
+}
+
+// Nylon's 0.14–0.6 is a range the book prints; cotton's 0.29 and 0.57 are two
+// workers who disagree. They arrive as the same pair of numbers and mean
+// different things, so the engine records which.
+assert.strictEqual(FIBER_PROPERTIES.nylon.friction.crossed_kind, 'range');
+assert.strictEqual(FIBER_PROPERTIES.cotton.friction.crossed_kind, 'list');
+
+const wf = blendFriction({ wool: 100 });
+assert.strictEqual(wf.felting.directional_ratio, 4.692);
+assert.strictEqual(wf.felting.severity, 'high');
+assert.strictEqual(blendFriction({ wool: 5, cotton: 95 }).felting.severity, 'low',
+  'a trace of wool is still a felting risk, but a smaller one');
+assert.strictEqual(blendFriction({ cotton: 100 }).felting, null,
+  'cotton does not felt, and nothing pretends it might');
+assert.strictEqual(blendFriction({ modal: 100 }), null,
+  'a fibre with no friction row returns nothing rather than a default');
+
+// Steel and porcelain always cost more tension than a pulley or ceramic, but by
+// a fibre-dependent amount — never a flat factor of two.
+for (const key of ['cotton', 'viscose', 'nylon']) {
+  const g = FIBER_PROPERTIES[key].friction.guide;
+  assert(Math.min(g.steel, g.porcelain) > Math.max(g.pulley, g.ceramic),
+    `${key}: a hard guide should run higher than a soft one`);
+}
+
+// Coverage is reported separately for each derived figure, because only three
+// fibres in the book have both a static and a kinetic value.
+const mixed = blendFriction({ wool: 50, polyester: 50 });
+assert.strictEqual(mixed.stick_slip_from_pct, 50);
+assert.strictEqual(mixed.covered_pct, 100);
+
+// The felting finding has to reach the wet-processing report, which is where a
+// user would act on it.
+const wfelt = wetMechanics({ wool: 100 }, {});
+assert(wfelt.findings.some(f => f.severity === 'severe' && /friction against the scales/.test(f.finding)),
+  'felting is reported as a severe finding on a wool fabric');
+assert(!wetMechanics({ cotton: 100 }, {}).findings.some(f => /against the scales/.test(f.finding)));
 
 console.log('\n✓ All fibre mechanics tests passed.');

@@ -231,7 +231,15 @@ const FIBER_PROPERTIES = {
                // Nearly doubles between a 1 cm and a 0.1 mm specimen: cotton's
                // strength is set by its weak places, not by its cellulose.
                weak_link: { cm1: 0.31, mm1: 0.43, mm01: 0.59,
-                            page: 324, table: 'Table 14.1' } },
+                            page: 324, table: 'Table 14.1' },
+               // Crossed is two workers who disagree (0.29 and 0.57), not a
+               // range. Cotton's PARALLEL friction is the lowest in the book at
+               // 0.22, which is worth pausing on: a cotton yarn does not hold
+               // together by smooth-surface grip, it holds together by twist
+               // and by the fibre's own convolutions.
+               friction: { crossed: [0.29, 0.57], crossed_kind: 'list', parallel: 0.22,
+                           guide: { steel: 0.29, porcelain: 0.32, pulley: 0.23, ceramic: 0.24 },
+                           page: 723, table: 'Table 25.6' } },
   polyester: { density: 1.39, regain: 0.4,  rkm: 1.25,     // was 1.38 — Table 5.1 gives 1.39
                tensile: { tenacity: 0.47, extension: 15.0, modulus: 10.6,
                           grade: 'Terylene, medium-tenacity', page: 292, table: 'Table 13.2',
@@ -239,7 +247,11 @@ const FIBER_PROPERTIES = {
                           // keeps 42% of its modulus and stretches 40% further,
                           // which is the whole reason polyester is heat-set.
                           wet: { ten: 1.00, ext: 1.00, mod: 1.00 },
-                          hot_wet: { ten: 0.72, ext: 1.40, mod: 0.42 } } },
+                          hot_wet: { ten: 0.72, ext: 1.40, mod: 0.42 } },
+               // The highest parallel-fibre friction in Table 25.6(a). Good
+               // cohesion in a spun yarn; also the reason a polyester-rich
+               // blend resists drafting and pills once a fibre end works free.
+               friction: { parallel: 0.58, page: 723, table: 'Table 25.6' } },
   viscose:   { density: 1.49, regain: 13.0, rkm: 0.60,     // was 1.52, which is the DRY figure
                tensile: { tenacity: 0.21, extension: 15.7, modulus: 6.5,
                           grade: 'Fibro, staple', page: 290, table: 'Table 13.1',
@@ -256,6 +268,13 @@ const FIBER_PROPERTIES = {
                // movement while the length broadly holds.
                swelling: { area: [50, 114], axial: [3.7, 4.8], volume: [74, 127],
                            page: 240, table: 'Table 11.1' },
+               // The highest guide friction of any yarn in Table 25.6(b), on
+               // top of the lowest wet modulus in Table 13.7. Viscose is the
+               // fibre that is hardest to run at steady tension and least able
+               // to survive an unsteady one.
+               friction: { crossed: 0.19, parallel: 0.43, static: 0.35, kinetic: 0.26,
+                           guide: { steel: 0.39, porcelain: 0.43, pulley: 0.36, ceramic: 0.30 },
+                           page: 723, table: 'Table 25.6' },
                // Table 14.6 calls this row "Rayon".
                variability: { fineness: 12, breaking_load: 20, tenacity: 17,
                               extension: 23, page: 335, table: 'Table 14.6' } },
@@ -269,7 +288,12 @@ const FIBER_PROPERTIES = {
                variability: { fineness: 9, breaking_load: 8, tenacity: 7,
                               extension: 18, page: 335, table: 'Table 14.6' },
                weak_link: { cm1: 0.47, mm1: 0.50, mm01: 0.54,
-                            page: 324, table: 'Table 14.1' } },
+                            page: 324, table: 'Table 14.1' },
+               // 0.14-0.6 IS a range in the book, unlike cotton's pair.
+               friction: { crossed: [0.14, 0.6], crossed_kind: 'range', parallel: 0.47,
+                           static: 0.47, kinetic: 0.40,
+                           guide: { steel: 0.32, porcelain: 0.43, pulley: 0.20, ceramic: 0.19 },
+                           page: 723, table: 'Table 25.6' } },
   wool:      { density: 1.31, regain: 16.0, rkm: 0.50,     // Table 5.1 p.165
                tensile: { tenacity: 0.11, extension: 42.5, modulus: 2.3,
                           grade: 'Botany 64s (merino)', page: 290, table: 'Table 13.1',
@@ -278,7 +302,23 @@ const FIBER_PROPERTIES = {
                swelling: { area: [25, 26], axial: null, volume: [36, 41],
                            page: 240, table: 'Table 11.1' },
                variability: { fineness: 21, breaking_load: 34, tenacity: 28,
-                              extension: 32, page: 335, table: 'Table 14.6' } },
+                              extension: 32, page: 335, table: 'Table 14.6' },
+               // The only directional friction in the book, and the whole
+               // mechanism of felting. Wool sliding over wool WITH its scales
+               // needs 0.13 to start; AGAINST them, 0.61. Under agitation it
+               // can therefore move one way and not the other, so it ratchets
+               // root-first and the mass consolidates — permanently, because
+               // nothing reverses a ratchet. No other fibre here has it, which
+               // is why no other fibre felts.
+               friction: { crossed: [0.20, 0.25], crossed_kind: 'range', parallel: 0.11,
+                           static: 0.13, kinetic: 0.11,
+                           directional: {
+                             with_scales:    { crossed: [0.20, 0.25], parallel: 0.11,
+                                               static: 0.13, kinetic: 0.11 },
+                             against_scales: { crossed: [0.38, 0.49], parallel: 0.14,
+                                               static: 0.61, kinetic: 0.38 },
+                           },
+                           page: 723, table: 'Tables 25.3 and 25.6' } },
   acrylic:   { density: 1.19, regain: 1.5,  rkm: 0.70,     // was 1.17 — Table 5.1 gives 1.19
                tensile: { tenacity: 0.27, extension: 25.0, modulus: 6.2,
                           grade: 'Orlon 42, staple', page: 292, table: 'Table 13.2',
@@ -319,7 +359,9 @@ const FIBER_PROPERTIES = {
                swelling: { area: [19, 19], axial: [1.3, 1.6], volume: [30, 32],
                            page: 240, table: 'Table 11.1' },
                variability: { fineness: 17, breaking_load: 19, tenacity: 20,
-                              extension: 15, page: 335, table: 'Table 14.6' } },
+                              extension: 15, page: 335, table: 'Table 14.6' },
+               friction: { crossed: 0.26, parallel: 0.52,
+                           page: 723, table: 'Table 25.6' } },
   // Regain is not in Table 7.3. Polypropylene is a hydrocarbon with no polar
   // group for water to attach to, and the book's own chapter 7 explains regain
   // in exactly those terms, so zero is the physics rather than a placeholder —
@@ -384,6 +426,117 @@ function yarnDiameterMm(ne, blendDensity) {
   const d_in_cotton = 1 / (28 * Math.sqrt(ne));
   const densityScale = Math.sqrt(1.52 / (blendDensity || 1.52)); // lighter fibre → bulkier → larger d
   return parseFloat((d_in_cotton * 25.4 * densityScale).toFixed(4));
+}
+
+/**
+ * Friction, which is the only reason a fabric is a fabric.
+ *
+ * Chapter 3 of the book puts it in one sentence: "a fabric is a discontinuous
+ * solid, which is held together by friction and utilises the strength of the
+ * millions of separate fibres." Nothing in this engine has ever had a number
+ * for it.
+ *
+ * Returns blend means, plus the two things the numbers are actually good for:
+ * whether the yarn will run at steady tension, and whether the fabric will felt.
+ *
+ * WHAT THIS DOES NOT DO. It does not predict yarn strength from fibre cohesion,
+ * and it does not adjust `hairiness_idx` or `torque_idx`. Those would need a
+ * migration-length model relating fibre friction, twist and gripping length,
+ * which this book does not give and which is not going to be guessed at here.
+ */
+function blendFriction(fibers) {
+  if (!fibers) return null;
+  const parts = [];
+  let mass = 0;
+  const unmeasured = [];
+  for (const [name, pct] of Object.entries(fibers)) {
+    if (!pct) continue;
+    const f = (FIBER_PROPERTIES[name] || {}).friction;
+    if (!f) { unmeasured.push(name); continue; }
+    parts.push({ name, pct, f });
+    mass += pct;
+  }
+  if (!parts.length) return null;
+
+  const meanOf = pick => {
+    const have = parts.filter(x => pick(x.f) != null);
+    if (!have.length) return null;
+    const w = have.reduce((a, x) => a + x.pct, 0);
+    return round3(have.reduce((a, x) => a + pick(x.f) * x.pct, 0) / w);
+  };
+
+  const staticMu = meanOf(f => f.static);
+  const kineticMu = meanOf(f => f.kinetic);
+
+  // The gap between starting a slide and continuing one is how violently a yarn
+  // grabs and releases as it runs. Unsteady tension at the needle is unsteady
+  // stitch length, and that is a fabric fault before it is a yarn fault.
+  const stickSlip = staticMu != null && kineticMu != null && kineticMu > 0
+    ? round3(staticMu / kineticMu) : null;
+  // Only three fibres in the book have both a static and a kinetic figure, so
+  // a blend's stick-slip is often computed over part of it. Saying which part
+  // is the difference between a mean and a claim.
+  const stickSlipPct = round3(parts.filter(x => x.f.static != null && x.f.kinetic != null)
+                                   .reduce((a, x) => a + x.pct, 0));
+
+  // Felting. Only wool has a friction that depends on which way the fibre is
+  // moving, and that asymmetry is the entire mechanism: agitation lets the
+  // fibre travel root-first and not tip-first, so it ratchets in one direction
+  // and the mass consolidates. It cannot be undone.
+  const directional = parts.filter(x => x.f.directional);
+  const feltPct = round3(directional.reduce((a, x) => a + x.pct, 0));
+  let felting = null;
+  if (directional.length) {
+    const d = directional[0].f.directional;
+    const ratio = round3(d.against_scales.static / d.with_scales.static);
+    felting = {
+      fibre: directional[0].name,
+      pct_of_blend: feltPct,
+      with_scales_static: d.with_scales.static,
+      against_scales_static: d.against_scales.static,
+      directional_ratio: ratio,
+      // A fibre present at a few per cent cannot lock a whole fabric together,
+      // and the trade's own rule of thumb sits near a fifth. The band below is
+      // set on the blend fraction and is a judgement, not a measurement — which
+      // is why the measured ratio is reported beside it rather than buried.
+      severity: feltPct >= 50 ? 'high' : feltPct >= 20 ? 'moderate' : 'low',
+    };
+  }
+
+  const guideMean = which => {
+    const have = parts.filter(x => x.f.guide && x.f.guide[which] != null);
+    if (!have.length) return null;
+    const w = have.reduce((a, x) => a + x.pct, 0);
+    return round3(have.reduce((a, x) => a + x.f.guide[which] * x.pct, 0) / w);
+  };
+  const guide = {
+    steel: guideMean('steel'), porcelain: guideMean('porcelain'),
+    pulley: guideMean('pulley'), ceramic: guideMean('ceramic'),
+  };
+  const hard = [guide.steel, guide.porcelain].filter(v => v != null);
+  const soft = [guide.pulley, guide.ceramic].filter(v => v != null);
+  const guidePenalty = hard.length && soft.length
+    ? round3(Math.min(...hard) / Math.max(...soft)) : null;
+
+  return {
+    parallel_mu: meanOf(f => f.parallel),
+    static_mu: staticMu,
+    kinetic_mu: kineticMu,
+    stick_slip_ratio: stickSlip,
+    stick_slip_from_pct: stickSlipPct,
+    guide_mu: guide,
+    // How much more tension a hard guide costs than a pulley or ceramic, taken
+    // as the most conservative comparison there is: the BEST hard guide against
+    // the WORST soft one. Across the six yarns in Table 25.6(b) it runs from
+    // 1.08 for viscose to 1.90 for bright acetate — so the hard guides are
+    // always worse, but by a fibre-dependent amount and not by a flat factor
+    // of two.
+    hard_guide_penalty: guidePenalty,
+    felting,
+    covered_pct: round3(mass),
+    unmeasured,
+    source: 'Morton & Hearle, Tables 25.3 (p.719) and 25.6 (p.723).',
+  };
 }
 
 /**
@@ -811,6 +964,7 @@ function analyzeYarn(args = {}) {
     // is a prediction about THIS yarn, and this is a fact about the fibre it is
     // made of. Morton & Hearle chapter 14.
     fibre_variability: fibreVariability(fibers),
+    fibre_friction: blendFriction(fibers),
     uster: uster && uster.ok ? uster : null,
     quality_rank,
     price_index: price_idx,
@@ -858,6 +1012,7 @@ function recommendYarnGrade(countNe, fabricCategory) {
 
 module.exports = {
   blendMechanics,
+  blendFriction,
   fibreVariability,
   weakLinkSensitivity,
   analyzeYarn,
