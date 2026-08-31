@@ -429,6 +429,7 @@
       </div>
       <div id="fa-headline" style="font-size:12px;line-height:1.65;color:var(--t1);margin-bottom:10px;font-weight:600;"></div>
       <div id="fa-findings"></div>
+      <div id="fa-deferred"></div>
       <div id="fa-gaps" style="margin-top:10px;"></div>
       <div id="fa-source" style="margin-top:9px;font-size:9px;color:var(--t3);line-height:1.5;"></div>
     </div>
@@ -1207,6 +1208,15 @@ function renderFibreAdvisory(a) {
       </div>
     </details>`;
   }).join('');
+
+  // Topics handed to the wet-processing card rather than printed twice. Saying
+  // so is the difference between a deliberate handover and a missing finding.
+  const moved = a.deferred_to_wet_processing || [];
+  document.getElementById('fa-deferred').innerHTML = moved.length ? `
+    <div style="font-size:9px;color:var(--t3);margin-bottom:8px;line-height:1.55;">
+      ${moved.map(esc).join(' and ')} ${moved.length > 1 ? 'are' : 'is'} reported on the
+      Wet-Processing card below, from the process side — not repeated here.
+    </div>` : '';
 
   // Naming what is NOT known is part of the answer, not a footnote. A reader
   // has to be able to tell "no risk found" from "never looked".

@@ -771,6 +771,9 @@ function calculate(params) {
       elastane_pct: parsedComp ? parsedComp.elastane_pct : null,
       spinning: spinning_system || (yarnExpertise ? yarnExpertise.spinning_system : null),
       count_ne: countResult ? countResult.count_ne : null,
+      // The wet card is rendered for this calculation, so the advisory hands it
+      // the topics they share instead of printing them twice.
+      wet_card_present: !!(wetProcessing && wetProcessing.ok),
       mercerised: /mercer/i.test(String(finishing_route || '')) || wpProcs.includes('mercerizing'),
     });
     if (fibreAdvice && fibreAdvice.ok) {
