@@ -81,9 +81,25 @@ const article = name => {
   return (/^[aeiou]/i.test(w) ? 'an ' : 'a ') + w;
 };
 
+/**
+ * Every finding declares what it is ABOUT, and the two are held to different
+ * standards.
+ *
+ *   scope 'fabric'  a claim about the cloth in front of the user. Computed over
+ *                   part of a blend, it must say so in the claim itself, because
+ *                   "this fabric grows 48%" is false when half the blend was
+ *                   never measured.
+ *   scope 'fibre'   a claim about one named fibre, or an option to consider.
+ *                   "Cotton's strength is set by its weak points" is true of
+ *                   cotton whatever else is in the yarn, and appending a
+ *                   coverage caveat to it would be noise pretending to be rigour.
+ *
+ * The distinction is real and worth keeping: over-qualifying is its own way of
+ * being unhelpful, and a report where every sentence hedges is one nobody reads.
+ */
 function finding(o) {
   if (!o.claim || !o.mechanism || !o.action || !o.evidence) return null;
-  return o;
+  return { scope: 'fabric', ...o };
 }
 
 /**
@@ -252,7 +268,22 @@ function fibreAdvisory(fibers, ctx = {}) {
   const fric = blendFriction(fibers);
   const rec = blendRecovery(fibers, 60);
   const vary = fibreVariability(fibers);
-  const weak = weakLinkSensitivity(fibers);
+  // weakLinkSensitivity takes a single fibre key, not a blend. Passing the map
+  // returned null for every fabric, so this index was dead from the day it was
+  // added — present in the output, always empty, and nothing said so.
+  const weakEach = Object.entries(fibers)
+    .filter(([, pct]) => pct > 0)
+    .map(([name, pct]) => ({ name, pct, w: weakLinkSensitivity(name) }))
+    .filter(x => x.w);
+  // The blend behaves like its MOST weak-link-sensitive component: a chain
+  // breaks at its weakest link whatever the other links are made of.
+  const weak = weakEach.length
+    ? { ...weakEach.reduce((a, b) => (b.w.gain_to_0_1mm_pct > a.w.gain_to_0_1mm_pct ? b : a)).w,
+        governed_by: weakEach.reduce((a, b) =>
+          (b.w.gain_to_0_1mm_pct > a.w.gain_to_0_1mm_pct ? b : a)).name,
+        unmeasured: Object.keys(fibers).filter(n =>
+          fibers[n] > 0 && !weakEach.some(x => x.name === n)) }
+    : null;
   const moist = moistureEconomics(fibers);
   const yld = ctx.count_ne ? yieldTension(fibers, ctx.count_ne) : null;
   const pill = pillingIndex(fibers);
@@ -515,7 +546,7 @@ function fibreAdvisory(fibers, ctx = {}) {
   // this module exists to avoid.
   if ((fibers.cotton || 0) >= 50 && ctx.mercerised !== true) {
     push({
-      topic: 'lustre', severity: 'info',
+      topic: 'lustre', severity: 'info', scope: 'fibre',
       claim: 'Mercerising under tension would raise this fabric\'s lustre by roughly two and a '
         + 'half times.',
       mechanism: 'Cotton lustre tracks one thing — how flat the fibre\'s cross-section is. '
@@ -603,6 +634,31 @@ function fibreAdvisory(fibers, ctx = {}) {
       confidence: yld.unmeasured.length
         ? `no yield point for ${yld.unmeasured.join(', ')}; the ceiling is set by the measured fibres`
         : 'upper bound — fibre yield, not yarn yield',
+    });
+  }
+
+  // ── 12. How much of the yarn's strength is decided by its worst spot ───
+  // A fibre tested over 1 cm is weaker than the same fibre tested over 0.1 mm,
+  // because a longer specimen contains more chances of a flaw. How much weaker
+  // is a measure of how far a fibre's strength is governed by its faults rather
+  // than by its substance — and the fibres are not alike in it at all.
+  if (weak && weak.gain_to_0_1mm_pct >= 40) {
+    push({
+      topic: 'fibre damage sensitivity', severity: 'moderate', scope: 'fibre',
+      claim: `${weak.governed_by}'s strength is set by its weak points, not its substance — `
+        + `${weak.gain_to_0_1mm_pct}% stronger when tested short enough to miss them.`,
+      mechanism: `Over a 1 cm gauge ${weak.governed_by} breaks at ${weak.at_1cm_n_tex} N/tex; `
+        + `over 0.1 mm, where a specimen is too short to contain a flaw, it reaches `
+        + `${weak.at_0_1mm_n_tex}. The difference is not experimental scatter — it is the `
+        + `strength the fibre would have if it had no weak spots. Nylon gains only 15% on the `
+        + `same test, so its strength really is its substance.`,
+      action: 'Mechanical damage in blowroom and carding costs this fibre far more than it '
+        + 'would a synthetic, because it adds weak points to a fibre already governed by them. '
+        + 'Keep beater speeds and card settings gentle, and expect short-term CV and yarn '
+        + 'breaks — not average strength — to be the figure that moves.',
+      evidence: [{ table: 'Table 14.1', page: 324 }],
+      confidence: weak.unmeasured.length
+        ? `no weak-link data for ${weak.unmeasured.join(', ')}` : 'measured',
     });
   }
 

@@ -70,9 +70,18 @@ assert(/no measured fibre properties/i.test(modal.headline),
 const half = fibreAdvisory({ cotton: 50, modal: 50 }, sj);
 assert.strictEqual(half.coverage.measured_pct, 50);
 for (const f of half.findings) {
-  if (f.topic === 'lustre') continue;          // an option, not a measurement of this cloth
+  // A fibre-scoped claim names its own fibre — "cotton's strength is set by its
+  // weak points" is true of the cotton whatever else is in the yarn — so a
+  // coverage caveat there would be noise pretending to be rigour. Only claims
+  // about the CLOTH have to carry it.
+  if (f.scope === 'fibre') continue;
   assert(/measured over only 50% of the blend/.test(f.claim),
     `${f.topic}: a claim computed from half a blend must say so in the CLAIM, not a footnote`);
+}
+// And every finding must declare which it is, so the rule above cannot be
+// escaped by forgetting to say.
+for (const f of half.findings) {
+  assert(['fabric', 'fibre'].includes(f.scope), `${f.topic}: undeclared scope`);
 }
 
 // ── Pilling, derived from the work of rupture ───────────────────────────
@@ -269,6 +278,26 @@ assert(/cam/.test(knitTension.action));
 // A woven structure holds the yarn far more tightly than a loop does, so the
 // same fibre must not be given the same shape-retention verdict in both.
 assert(bagOf(wovenAdv).claim !== bagOf(fibreAdvisory({ cotton: 100 }, sj)).claim);
+
+// ── The weak link, and the dead index that hid it ───────────────────────
+// weakLinkSensitivity takes ONE fibre key, not a blend map. It was being called
+// with the map, so it returned null for every fabric — the index was present in
+// the output, permanently empty, and nothing said so. This asserts it is alive.
+const wl = fibreAdvisory({ cotton: 100 }, sj).indices.weak_link;
+assert(wl && wl.governed_by === 'cotton', 'the weak-link index must not be null');
+assert.strictEqual(wl.gain_to_0_1mm_pct, 90);
+
+// Cotton gains 90% when tested too short to contain a flaw; nylon gains 15%.
+// So cotton's strength is its weak points and nylon's is its substance, and
+// only one of them should be warned about mechanical damage in preparation.
+assert(fibreAdvisory({ cotton: 100 }, sj)
+  .findings.some(f => f.topic === 'fibre damage sensitivity'));
+assert(!fibreAdvisory({ nylon: 100 }, sj)
+  .findings.some(f => f.topic === 'fibre damage sensitivity'),
+  'nylon gains only 15% and must not be told its strength is flaw-governed');
+// A blend is governed by its MOST sensitive component, not the average.
+assert.strictEqual(fibreAdvisory({ cotton: 60, polyester: 40 }, sj)
+  .indices.weak_link.governed_by, 'cotton');
 
 console.log(`  ${fibreAdvisory({ cotton: 60, polyester: 40 }, sj).findings.length} findings on a 60/40 CVC single jersey`);
 console.log(`  ${fibreAdvisory({ viscose: 100 }, sj).findings.length} on a viscose single jersey`);
