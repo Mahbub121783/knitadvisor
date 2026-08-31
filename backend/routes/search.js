@@ -255,4 +255,120 @@ router.get('/woven', searchLimiter, async (req, res) => {
   }
 });
 
+// ============================================================
+// GET /api/search/fibre?q=
+// ============================================================
+//
+// The fibre reference layer holds 728 lessons and 740 measurements out of
+// Morton & Hearle, and until now there was no way to ask it anything. The
+// advisory reasons about a fabric you are calculating; this answers a question
+// you simply have.
+//
+// Three kinds of hit, deliberately kept apart rather than blended into one
+// relevance score:
+//
+//   measurement  a number, with its condition, unit and printed page. This is
+//                what someone usually wants and it is returned first.
+//   fibre        the fibre itself, for "what is polynosic".
+//   lesson       the book's own prose, full-text ranked.
+//
+// Measurements are matched on the FIBRE's name, not the property's, because
+// "cotton tenacity" should find cotton's tenacity and not every tenacity in the
+// book. The property is filtered separately when the query names one.
+router.get('/fibre', searchLimiter, async (req, res) => {
+  const q = term(req);
+  if (!q) return res.json({ success: true, query: null, results: [] });
+  const limit = clampLimit(req.query.limit, 12, 40);
+
+  // "cotton tenacity" is two things: a fibre and a property. Splitting them
+  // lets the query answer the actual question instead of ranking every row
+  // that happens to contain either word.
+  const PROPERTY_WORDS = {
+    tenacity: 'tenacity', strength: 'tenacity', tensile: 'tenacity',
+    modulus: 'initial_modulus', stiffness: 'initial_modulus',
+    extension: 'breaking_extension', elongation: 'breaking_extension',
+    density: 'density', regain: 'moisture_regain', moisture: 'moisture_regain',
+    friction: 'friction_%', recovery: 'elastic_recovery', elastic: 'elastic_recovery',
+    swelling: '%swelling%', lustre: 'lustre', refractive: 'refractive_%',
+    birefringence: 'birefringence', yield: 'yield_%', pilling: 'work_of_rupture',
+    toughness: 'work_of_rupture',
+  };
+  const words = q.toLowerCase().split(/\s+/);
+  const propLike = words.map(w => PROPERTY_WORDS[w]).find(Boolean) || null;
+  const fibreTerm = words.filter(w => !PROPERTY_WORDS[w]).join(' ').trim() || q;
+
+  try {
+    const [measurements, fibres, lessons] = await Promise.all([
+      query(
+        `SELECT f.name, f.slug, p.property, p.value, p.value_min, p.value_max,
+                p.unit, p.condition, p.page, p.table_ref, p.note,
+                similarity(f.name, $1) AS score
+           FROM fibre_properties p
+           JOIN fibres f ON f.slug = p.fibre_slug
+          WHERE similarity(f.name, $1) >= $2
+            AND ($3::text IS NULL OR p.property LIKE $3)
+          ORDER BY score DESC, f.name, p.property, p.condition
+          LIMIT $4`,
+        [fibreTerm, MIN_SIMILARITY, propLike, limit]
+      ),
+      query(
+        `SELECT slug, name, generic_class, origin, polymer, page,
+                similarity(name, $1) AS score
+           FROM fibres
+          WHERE similarity(name, $1) >= $2
+          ORDER BY score DESC LIMIT 8`,
+        [fibreTerm, MIN_SIMILARITY]
+      ),
+      // Full text over the book's own prose. websearch_to_tsquery takes what a
+      // person actually types — quoted phrases, OR, a leading minus — instead
+      // of throwing on the punctuation that plainto_ would swallow silently.
+      query(
+        `SELECT chapter_no, chapter_title, section_no, title, page_start, page_end,
+                pdf_page_start, char_count,
+                ts_headline('english', body, websearch_to_tsquery('english', $1),
+                            'MaxWords=42, MinWords=18, MaxFragments=2, FragmentDelimiter=" … "') AS snippet,
+                ts_rank(search, websearch_to_tsquery('english', $1)) AS score
+           FROM fibre_lessons
+          WHERE search @@ websearch_to_tsquery('english', $1)
+          ORDER BY score DESC, char_count DESC
+          LIMIT $2`,
+        [q, limit]
+      ),
+    ]);
+
+    const span = r => (r.value != null ? String(r.value)
+                     : `${r.value_min}–${r.value_max}`);
+
+    res.json({
+      success: true,
+      query: q,
+      // What the query was understood to be asking. A user who types "cotton
+      // tenacity" and gets densities should be able to see why.
+      understood_as: { fibre: fibreTerm, property: propLike || 'any' },
+      source: 'Morton & Hearle, Physical Properties of Textile Fibres, 4th edn (2008)',
+      measurements: measurements.map(r => ({
+        fibre: r.name, slug: r.slug, property: r.property,
+        value: span(r), unit: r.unit, condition: r.condition,
+        page: r.page, pdf_page: r.page + 19, table: r.table_ref, note: r.note,
+        score: Number(r.score),
+      })),
+      fibres: fibres.map(r => ({
+        slug: r.slug, name: r.name, generic_class: r.generic_class,
+        origin: r.origin, polymer: r.polymer,
+        page: r.page, pdf_page: r.page + 19, score: Number(r.score),
+      })),
+      lessons: lessons.map(r => ({
+        chapter: r.chapter_no, chapter_title: r.chapter_title,
+        section: r.section_no, title: r.title,
+        page_start: r.page_start, page_end: r.page_end,
+        pdf_page: r.pdf_page_start, chars: r.char_count,
+        snippet: r.snippet, score: Number(r.score),
+      })),
+    });
+  } catch (err) {
+    console.error('[Search] fibre failed:', err.message);
+    res.json({ success: true, query: q, measurements: [], fibres: [], lessons: [], degraded: true });
+  }
+});
+
 module.exports = router;
