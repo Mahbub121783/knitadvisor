@@ -770,6 +770,7 @@ function calculate(params) {
       has_elastane: parsedComp ? !!parsedComp.has_elastane : false,
       elastane_pct: parsedComp ? parsedComp.elastane_pct : null,
       spinning: spinning_system || (yarnExpertise ? yarnExpertise.spinning_system : null),
+      count_ne: countResult ? countResult.count_ne : null,
       mercerised: /mercer/i.test(String(finishing_route || '')) || wpProcs.includes('mercerizing'),
     });
     if (fibreAdvice && fibreAdvice.ok) {
