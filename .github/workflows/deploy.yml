@@ -32,6 +32,44 @@ jobs:
   build-and-deploy:
     # The engine suites gate the deploy — previously this job went straight
     # from checkout to FTP upload, so a failing calculation could ship.
+    #
+    # EVERY RUN FROM 30 AUGUST FAILED, AND THE SITE KEPT SERVING 28 AUGUST'S
+    # CODE. Thirteen deploys in a row went red and nobody looked, because each
+    # one uploaded every file correctly first: the code was on the host, the
+    # site answered, and only `uptime` on /health gave it away. Passenger was
+    # still running the process it had booted five commits earlier.
+    #
+    # The FTP step failed, so the restart step after it was skipped, so
+    # Passenger never reloaded — and because the step that failed is the one
+    # that WRITES the sync manifest, the manifest stayed frozen at the last
+    # green run. Every subsequent deploy therefore recomputed the same diff
+    # against the same stale manifest and failed the same way. It could not
+    # recover on its own, and it did not.
+    #
+    # What broke it was the 30 August restructure (ea8741e), which moved files
+    # into layers and deleted a `scratch/` directory. The action derives its
+    # deletions from the manifest, so from then on every run tried to remove
+    # paths that the previous failed run had already removed. The run logs
+    # would say exactly which path — they need admin rights on the repository
+    # to download, which this diagnosis did not have, so it was reached by
+    # comparing the host's tree against `git ls-files` instead: every file in
+    # the repo was present and correct on the server, and the only things there
+    # that the repo no longer had were `scratch/` and a stray root `tmp/`.
+    # That is an upload that completes and a cleanup that does not.
+    #
+    # The repair is to point the main deploy at a NEW manifest name below. With
+    # no manifest to diff against, the action uploads everything once and
+    # computes no deletions at all, then writes a manifest that matches
+    # reality. Nothing is deleted from the host to achieve it and the old
+    # manifest is left where it is, so this is reversible by changing one line
+    # back.
+    #
+    # The cost is that `scratch/` and the root `tmp/` stay on the server as
+    # orphans. They are inert — three pre-PostgreSQL dev scripts that require
+    # a `backend/config/database` module the restructure deleted, and an empty
+    # file in a directory Passenger does not watch — so they are dead weight
+    # rather than a hazard, and removing them is a separate decision from
+    # getting deploys working again.
     needs: test
     runs-on: ubuntu-latest
     steps:
@@ -77,6 +115,10 @@ jobs:
           # action's default sync already removes files that were deleted from
           # the repo, using the .ftp-deploy-sync-state.json manifest.
           dangerous-clean-slate: false
+          # A DELIBERATELY NEW MANIFEST NAME. Read the note above the job for
+          # why; the short version is that the old one stopped being updated on
+          # 28 August and every run since has failed at this step.
+          state-name: .ftp-deploy-sync-state-v2.json
           # Files to exclude from upload and avoid deleting on the remote server
           exclude: |
             **/.git*
