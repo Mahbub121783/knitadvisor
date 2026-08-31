@@ -230,6 +230,46 @@ assert(/translation/.test(yf.mechanism), 'and the mechanism must name the step i
 assert(!fibreAdvisory({ cotton: 100 }, sj).findings.some(f => /stops coming back/.test(f.claim)),
   'without a count there is nothing to quote and it stays silent');
 
+// ── The same fact must not appear on two cards ──────────────────────────
+// The wet-processing card reports these from the process side. Printed twice
+// and worded differently they read as a bug, and a reader is left wondering
+// which number to believe. So they are handed over — and the handover is
+// recorded, because a finding that vanishes silently is worse than a repeated
+// one.
+const withWet = fibreAdvisory({ viscose: 100 }, { ...sj, wet_card_present: true });
+const without = fibreAdvisory({ viscose: 100 }, sj);
+assert(without.findings.some(f => f.topic === 'wet processing'));
+assert(!withWet.findings.some(f => f.topic === 'wet processing'));
+assert(withWet.deferred_to_wet_processing.includes('wet processing'),
+  'a deferred topic must be named, not silently dropped');
+// Felting too — and a woven quality, which has no wet card, must still get it.
+const woolWet = fibreAdvisory({ wool: 100 }, { ...il, wet_card_present: true });
+assert(woolWet.deferred_to_wet_processing.includes('felting'));
+assert(fibreAdvisory({ wool: 100 }, { fabricId: 'woven_plain_shirting', category: 'woven' })
+  .findings.some(f => f.topic === 'felting'),
+  'with no wet card the advisory must carry felting itself');
+// Everything else stays put.
+for (const t of ['pilling', 'handle', 'shape retention']) {
+  assert(withWet.findings.some(f => f.topic === t) === without.findings.some(f => f.topic === t),
+    `${t} is not a wet-card topic and must not move`);
+}
+
+// ── A loom is not a knitting machine ────────────────────────────────────
+const wovenAdv = fibreAdvisory({ cotton: 100 },
+  { fabricId: 'woven_plain_shirting', category: 'woven', count_ne: 40, gsm: 120 });
+const wovenTension = wovenAdv.findings.find(f => /stops coming back/.test(f.claim));
+assert.strictEqual(wovenTension.topic, 'yarn tension');
+assert(!/cam|needle|loop length/.test(wovenTension.action),
+  'woven advice must not talk about cams, needles or loop length');
+const knitTension = fibreAdvisory({ cotton: 100 }, { ...sj, count_ne: 30 })
+  .findings.find(f => /stops coming back/.test(f.claim));
+assert.strictEqual(knitTension.topic, 'knitting tension');
+assert(/cam/.test(knitTension.action));
+
+// A woven structure holds the yarn far more tightly than a loop does, so the
+// same fibre must not be given the same shape-retention verdict in both.
+assert(bagOf(wovenAdv).claim !== bagOf(fibreAdvisory({ cotton: 100 }, sj)).claim);
+
 console.log(`  ${fibreAdvisory({ cotton: 60, polyester: 40 }, sj).findings.length} findings on a 60/40 CVC single jersey`);
 console.log(`  ${fibreAdvisory({ viscose: 100 }, sj).findings.length} on a viscose single jersey`);
 console.log('\n✓ All fibre advisory tests passed.');

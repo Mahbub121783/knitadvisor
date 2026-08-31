@@ -18,6 +18,8 @@
 
 const woven = require('../formulas/woven');
 const design = require('../formulas/woven-design');
+const { parseComposition } = require('./composition-engine');
+const { fibreAdvisory } = require('./fibre-advisory');
 const cloth = require('../formulas/woven-cloth');
 const { WOVEN_DERIVATIVES, buildWeaveGrid, getWovenFabric } = require('../catalog/woven-derivatives');
 
@@ -172,8 +174,31 @@ function calculateWoven(params = {}) {
   if (warp.ambiguous || weft.ambiguous) notes.push(`The book prints more than one yarn for this cloth (warp "${warpRaw}", weft "${weftRaw}"). The first was taken; confirm which is actually on the beam.`);
   if (structure.denting && structure.denting.warning) notes.push(structure.denting.warning);
 
+  // The fibre reference layer applies to woven cloth exactly as it does to
+  // knitted: pilling, handle, felting, blend strength and the wet-processing
+  // behaviour are properties of the fibre and the yarn, not of the machine that
+  // interlaced them. What changes is how much of the fibre's behaviour survives
+  // into the fabric — a woven structure holds a yarn far more tightly than a
+  // loop does — and the advisory scales for that on its own.
+  const compText = params.composition || fabric.sett.material || null;
+  const parsedComp = compText ? parseComposition(compText) : null;
+  const advisory = parsedComp && parsedComp.fibers
+    ? fibreAdvisory(parsedComp.fibers, {
+        fabricId: fabric.id,
+        category: 'woven',
+        gsm: weight && weight.gsm != null ? weight.gsm : null,
+        // Warp and weft can differ; the warp is the yarn under sustained
+        // tension on the loom, so it governs the yield-tension ceiling.
+        count_ne: warp.resultant_ne || null,
+        has_elastane: !!parsedComp.has_elastane,
+        elastane_pct: parsedComp.elastane_pct || null,
+      })
+    : null;
+
   return {
     success: true,
+    fibre_advisory: (advisory && advisory.ok) ? advisory : null,
+    composition: parsedComp,
     fabric: {
       id: fabric.id, name: fabric.name, name_bn: fabric.name_bn || null,
       category: 'woven', family: fabric.family, weave_slug: fabric.weave_slug,

@@ -258,9 +258,38 @@ function fibreAdvisory(fibers, ctx = {}) {
   const pill = pillingIndex(fibers);
   const hand = handleIndex(fibers);
   const struct = structureFreedom(ctx);
+  // A loom is not a knitting machine and a woven fabric has no cam. The same
+  // physics reaches the reader in the words of the process actually in front of
+  // them, decided once here rather than assumed in each finding.
+  const isWoven = String(ctx.category || '').toLowerCase() === 'woven'
+    || /woven/.test(String(ctx.fabricId || '').toLowerCase());
+  const mc = isWoven
+    ? { topic: 'yarn tension', place: 'at the reed and healds',
+        symptom: 'width and length drifting off the loom state',
+        fix: 'measure the running warp tension before re-setting the let-off' }
+    : { topic: 'knitting tension', place: 'at the needle',
+        symptom: '"loop length right on the machine, wrong on the table"',
+        fix: 'measure the running tension before re-cutting the cam' };
 
   const findings = [];
-  const push = f => { const v = finding(f); if (v) findings.push(v); };
+  // The wet-processing card reports the same fibre mechanics from the process
+  // side, so when it is on the page these topics would appear twice, worded
+  // differently — which reads as a bug and makes a reader wonder which number
+  // to believe. They are handed over rather than repeated, and the handover is
+  // recorded so nothing disappears without trace. When there is no wet card —
+  // a woven quality, or a calculation with no dyeing route — the advisory
+  // carries them itself.
+  const DEFER_TO_WET_CARD = ['wet processing', 'felting'];
+  const deferred = [];
+  const push = f => {
+    const v = finding(f);
+    if (!v) return;
+    if (ctx.wet_card_present && DEFER_TO_WET_CARD.includes(v.topic)) {
+      deferred.push(v.topic);
+      return;
+    }
+    findings.push(v);
+  };
 
   // ── 1. Will it go out of shape? ────────────────────────────────────────
   // Recovery is a fibre property; bagging is a garment outcome. The step
@@ -421,15 +450,15 @@ function fibreAdvisory(fibers, ctx = {}) {
   }
 
   // ── 6. Running the yarn: stick-slip and guides ─────────────────────────
-  if (fric && fric.stick_slip_ratio != null && fric.stick_slip_ratio >= 1.3) {
+  if (!ctx.wet_card_present && fric && fric.stick_slip_ratio != null && fric.stick_slip_ratio >= 1.3) {
     push({
-      topic: 'knitting tension', severity: 'moderate',
+      topic: mc.topic, severity: 'moderate',
       claim: `This yarn will run in grabs and releases rather than smoothly `
         + `(static friction is ${fric.stick_slip_ratio}× kinetic).`,
-      mechanism: 'Starting a slide takes more force than continuing one, and the bigger that gap '
-        + 'the more the yarn sticks, breaks free and overshoots. Tension at the needle varies '
-        + 'with it, and stitch length varies with the tension — which shows up as barré or as '
-        + 'GSM drifting across the roll.',
+      mechanism: `Starting a slide takes more force than continuing one, and the bigger that gap `
+        + `the more the yarn sticks, breaks free and overshoots. Tension ${mc.place} varies with `
+        + `it, and so does the length of yarn laid in — which shows up as barré or as GSM `
+        + `drifting across the roll.`,
       action: `Run over ceramic or a fibre pulley rather than steel or porcelain`
         + `${fric.hard_guide_penalty ? ` — the hard guides cost about ${fric.hard_guide_penalty}× `
           + `the tension here` : ''}. Keep the yarn path short and check stitch-length variation `
@@ -553,7 +582,7 @@ function fibreAdvisory(fibers, ctx = {}) {
   // on the machine once there is a linear density to multiply it by.
   if (yld) {
     push({
-      topic: 'knitting tension', severity: 'info',
+      topic: mc.topic, severity: 'info',
       claim: `Past roughly ${round1(yld.fibre_ceiling_cn)} cN of yarn tension at `
         + `${yld.count_ne} Ne, extension stops coming back — and that is an UPPER bound, `
         + `so the yarn's real limit is lower.`,
@@ -567,10 +596,9 @@ function fibreAdvisory(fibers, ctx = {}) {
         + `of their strength reaches the yarn. The book does not measure that translation, so `
         + `no factor is applied — the number is a ceiling the yarn cannot exceed, not the yarn's `
         + `own limit.`,
-      action: 'This is the mechanism behind "loop length right on the machine, wrong on the '
-        + 'table": tension past yield is not stored in the loop, it is spent. Keep input '
-        + 'tension well under the figure above, and if relaxed dimensions keep drifting from '
-        + 'the set stitch length, measure the running tension before re-cutting the cam.',
+      action: `This is the mechanism behind ${mc.symptom}: tension past yield is not stored in `
+        + `the cloth, it is spent. Keep tension well under the figure above, and if relaxed `
+        + `dimensions keep drifting, ${mc.fix}.`,
       evidence: [{ table: yld.evidence.table, page: yld.evidence.page }],
       confidence: yld.unmeasured.length
         ? `no yield point for ${yld.unmeasured.join(', ')}; the ceiling is set by the measured fibres`
@@ -621,11 +649,17 @@ function fibreAdvisory(fibers, ctx = {}) {
       mechanics: mech,
     },
     findings,
+    // Not hidden — handed over. A reader who wonders why felting is missing from
+    // a wool fabric's list can see that it was reported next door.
+    deferred_to_wet_processing: [...new Set(deferred)],
     // A reader must be able to tell "no risk found" from "never looked".
     not_known: gaps,
     headline: findings.length
       ? findings[0].claim
-      : 'Nothing in the measured properties flags a risk for this construction.',
+      : deferred.length
+        ? `The fibre risks for this fabric are reported on the wet-processing card `
+          + `(${[...new Set(deferred)].join(', ')}).`
+        : 'Nothing in the measured properties flags a risk for this construction.',
     source: SOURCE,
   };
 }
