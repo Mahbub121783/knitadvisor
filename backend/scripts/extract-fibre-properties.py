@@ -81,10 +81,83 @@ TABLES = {
                           'regain_hysteresis': '%'},
         'paired_check': False,
     },
+
+    # ---- Chapter 13, tensile properties -------------------------------------
+    # The engine has never had a real fibre strength. It carries `rkm`, a
+    # dimensionless index with cotton set to 1.00 and every other fibre guessed
+    # relative to it. These three tables are the measured article, in N/tex.
+    #
+    # 13.1 is Meredith's 1945 survey — the natural fibres, the early rayons and
+    # the wools, measured on one apparatus at one rate, which is why the fibres
+    # in it are comparable with each other in a way that a table assembled from
+    # different laboratories is not. It prints a work factor, and that column
+    # turns the table into its own proof: work of rupture must equal tenacity x
+    # breaking extension x work factor, and every row is held to it.
+    #
+    # 13.2 is the manufactured fibres as they are actually sold — medium- and
+    # high-tenacity and staple grades kept apart, which matters because a
+    # polyester staple yarn and a polyester tyre yarn differ by 20% in tenacity
+    # and the engine has one number for "polyester".
+    #
+    # 13.7 is the one no calculation here has ever had: what wetting does. Not a
+    # property but a RATIO, wet against 65% r.h., and the numbers are severe.
+    # Viscose keeps half its strength and three per cent of its initial modulus.
+    # That single figure is why a viscose knit comes out of the dyehouse longer
+    # and narrower than it went in, and the engine could not say so.
+    '13.1': {
+        'pdf_page': 309, 'y_from': 370, 'y_to': 620,
+        'hierarchical': True, 'label_edge_offset': 25,
+        'columns': [('tenacity', '65% r.h., 20 C', 65.0),
+                    ('breaking_extension', '65% r.h., 20 C', 65.0),
+                    ('work_of_rupture', '65% r.h., 20 C', 65.0),
+                    ('initial_modulus', '65% r.h., 20 C', 65.0),
+                    ('yield_stress', '65% r.h., 20 C', 65.0),
+                    ('yield_strain', '65% r.h., 20 C', 65.0),
+                    ('work_factor', '65% r.h., 20 C', 65.0)],
+        'temperature_c': 20.0,
+        'tensile_check': True,
+        'paired_check': False,
+    },
+    '13.2': {
+        'pdf_page': 311, 'y_from': 118, 'y_to': 395,
+        'hierarchical': True,
+        'columns': [('tenacity', '65% r.h., 20 C', 65.0),
+                    ('breaking_extension', '65% r.h., 20 C', 65.0),
+                    ('work_of_rupture', '65% r.h., 20 C', 65.0),
+                    ('initial_modulus', '65% r.h., 20 C', 65.0)],
+        'temperature_c': 20.0,
+        'tensile_check': True,
+        'paired_check': False,
+    },
+    '13.7': {
+        'pdf_page': 331, 'y_from': 175, 'y_to': 320,
+        'rotated': True, 'hierarchical': True, 'label_edge_offset': 24,
+        'columns': [('tenacity_ratio', 'wet / 65% r.h.', None),
+                    ('breaking_extension_ratio', 'wet / 65% r.h.', None),
+                    ('work_of_rupture_ratio', 'wet / 65% r.h.', None),
+                    ('initial_modulus_ratio', 'wet / 65% r.h.', None),
+                    ('tenacity_ratio', 'wet 95 C / wet 20 C', None),
+                    ('breaking_extension_ratio', 'wet 95 C / wet 20 C', None),
+                    ('work_of_rupture_ratio', 'wet 95 C / wet 20 C', None),
+                    ('initial_modulus_ratio', 'wet 95 C / wet 20 C', None)],
+        'ratio_check': True,
+        'paired_check': False,
+    },
 }
 
 UNITS = {'density': 'g/cm3', 'specific_volume': 'cm3/g',
-         'commercial_regain': '%', 'moisture_regain': '%', 'regain_hysteresis': '%'}
+         'commercial_regain': '%', 'moisture_regain': '%', 'regain_hysteresis': '%',
+         # Specific stress, not stress: textile practice divides force by linear
+         # density rather than by area, because a fibre's cross-section is
+         # neither round nor constant and its mass per unit length is what is
+         # actually measured. N/tex is newtons per tex; multiply by density in
+         # g/cm3 to get GPa.
+         'tenacity': 'N/tex', 'initial_modulus': 'N/tex',
+         'work_of_rupture': 'mN/tex', 'yield_stress': 'mN/tex',
+         'breaking_extension': '%', 'yield_strain': '%',
+         'work_factor': '1',
+         'tenacity_ratio': '1', 'breaking_extension_ratio': '1',
+         'work_of_rupture_ratio': '1', 'initial_modulus_ratio': '1'}
 
 # How each printed fibre name is filed. Written out rather than inferred from
 # the name, because the classification is a judgement and belongs in one
@@ -113,14 +186,14 @@ FIBRES = {
     'Viscose rayon':                    ('viscose', 'Viscose rayon', 'cellulose', 'regenerated', 'cellulose', 'viscose'),
     'Secondary acetate, triacetate':    ('acetate', 'Acetate / triacetate', 'cellulose', 'regenerated', 'cellulose ethanoate', None),
     'Wool':                             ('wool', 'Wool', 'protein', 'natural', 'keratin', 'wool'),
-    'Silk':                             ('silk', 'Silk', 'protein', 'natural', 'fibroin', None),
+    'Silk':                             ('silk', 'Silk', 'protein', 'natural', 'fibroin', 'silk'),
     'Regenerated protein (casein)':     ('casein', 'Regenerated protein (casein)', 'protein', 'regenerated', 'casein', None),
     'Alginate':                         ('alginate', 'Alginate', 'other', 'regenerated', 'alginic acid salt', None),
     'Nylon 6.6, nylon 6':               ('nylon', 'Nylon 6.6 / nylon 6', 'polyamide', 'synthetic', 'polyamide', 'nylon'),
     'Polyester (PET)':                  ('polyester', 'Polyester (PET)', 'polyester', 'synthetic', 'polyethylene terephthalate', 'polyester'),
     'Acrylic (PAN)':                    ('acrylic', 'Acrylic (PAN)', 'vinyl', 'synthetic', 'polyacrylonitrile', 'acrylic'),
-    'Polyethylene (high density)':      ('polyethylene', 'Polyethylene (high density)', 'polyolefin', 'synthetic', 'polyethylene', None),
-    'Polypropylene':                    ('polypropylene', 'Polypropylene', 'polyolefin', 'synthetic', 'polypropylene', None),
+    'Polyethylene (high density)':      ('polyethylene', 'Polyethylene (high density)', 'polyolefin', 'synthetic', 'polyethylene', 'polyethylene'),
+    'Polypropylene':                    ('polypropylene', 'Polypropylene', 'polyolefin', 'synthetic', 'polypropylene', 'polypropylene'),
     'Modacrylic (Dynel)':               ('modacrylic_dynel', 'Modacrylic (Dynel)', 'vinyl', 'synthetic', 'modacrylic', None),
     'Modacrylic (Teklan)':              ('modacrylic_teklan', 'Modacrylic (Teklan)', 'vinyl', 'synthetic', 'modacrylic', None),
     'Polyvinyl chloride (PVC)':         ('pvc', 'Polyvinyl chloride (PVC)', 'vinyl', 'synthetic', 'polyvinyl chloride', None),
@@ -152,12 +225,104 @@ FIBRES = {
     'Polyamide-imide (Kermel)':         ('polyamide_imide', 'Polyamide-imide (Kermel)', 'high_performance', 'synthetic', 'polyamide-imide', None),
     'Polybenzimidazole (PBI)':          ('pbi', 'Polybenzimidazole (PBI)', 'high_performance', 'synthetic', 'polybenzimidazole', None),
     'Semi-carbon (oxidised acrylic)':   ('semi_carbon', 'Semi-carbon (oxidised acrylic)', 'carbon', 'synthetic', 'oxidised polyacrylonitrile', None),
+
+    # ---- Chapter 13 -------------------------------------------------------
+    # The tensile tables do not give one row per fibre; they give one row per
+    # GRADE, and the grades differ by more than the fibres do. Nylon 6.6 runs
+    # from 0.37 N/tex as staple to 0.66 as high-tenacity filament: a 78% spread
+    # inside a single generic name. Filing all of them under 'nylon' would make
+    # the fibre's tenacity depend on which row was imported last.
+    #
+    # So each grade gets its own slug, and exactly one of them is nominated as
+    # the fibre the engine means by that name. The nomination is a judgement,
+    # and it is the same judgement every time: THE GRADE USED IN APPAREL YARN.
+    # This is a knit and woven advisor, so where the book offers a choice the
+    # staple or regular-tenacity row is taken and the tyre-cord, industrial and
+    # high-tenacity rows are stored beside it under their own names.
+    #
+    #   cotton      Uppers, over St Vincent and Bengals. Uppers is American
+    #               Upland, which is the cotton nearly all apparel is made of,
+    #               and it is the cotton the book itself carries forward into
+    #               Table 13.7.
+    #   viscose     Fibro, which the caption to Fig. 13.11 identifies as staple
+    #               viscose rayon, over Courtaulds continuous filament and over
+    #               Tenasco, which is a tyre yarn.
+    #   wool        Botany 64s. The Bradford count 64s IS merino, which is what
+    #               Table 13.7 calls its wool, so the two tables agree.
+    #   polyester   Terylene medium-tenacity.
+    #   nylon       nylon 6.6 medium-tenacity.
+    #   acrylic     Orlon 42 staple.
+    #   elastane    the polyurethane elastomer of Table 13.2. The engine has
+    #               carried elastane since it was written and has never had a
+    #               measured figure for it.
+    #
+    # polynosic is deliberately NOT given the engine key 'modal'. Modal is the
+    # generic name for high-wet-modulus viscose and polynosic is one class of
+    # it, so they are relatives rather than the same thing, and the engine's
+    # modal figures stay marked unsourced rather than acquiring a citation that
+    # would not survive being checked.
+    'Cotton St Vincent':                ('cotton_st_vincent', 'Cotton (St Vincent)', 'cellulose', 'natural', 'cellulose', None),
+    'Cotton Upper':                     ('cotton', 'Cotton', 'cellulose', 'natural', 'cellulose', 'cotton'),
+    'Cotton Bengals':                   ('cotton_bengals', 'Cotton (Bengals)', 'cellulose', 'natural', 'cellulose', None),
+    'Cotton, Uppers':                   ('cotton', 'Cotton', 'cellulose', 'natural', 'cellulose', 'cotton'),
+    'Ramie':                            ('ramie', 'Ramie', 'cellulose', 'natural', 'cellulose', None),
+    'Viscose rayon Courtaulds continuous- filament':
+                                        ('viscose_filament', 'Viscose rayon (continuous filament)', 'cellulose', 'regenerated', 'cellulose', None),
+    'Viscose rayon Fibro':              ('viscose', 'Viscose rayon', 'cellulose', 'regenerated', 'cellulose', 'viscose'),
+    'Viscose rayon normal':             ('viscose', 'Viscose rayon', 'cellulose', 'regenerated', 'cellulose', 'viscose'),
+    'Viscose rayon Tenasco':            ('viscose_tenasco', 'Viscose rayon (Tenasco, tyre yarn)', 'cellulose', 'regenerated', 'cellulose', None),
+    'Viscose rayon high-tenacity':      ('viscose_ht', 'Viscose rayon (high-tenacity)', 'cellulose', 'regenerated', 'cellulose', None),
+    'Viscose rayon polynosic':          ('polynosic', 'Polynosic (high wet modulus rayon)', 'cellulose', 'regenerated', 'cellulose', None),
+    'Acetate (Celanese)':               ('acetate', 'Acetate / triacetate', 'cellulose', 'regenerated', 'cellulose ethanoate', None),
+    'Acetate':                          ('acetate', 'Acetate / triacetate', 'cellulose', 'regenerated', 'cellulose ethanoate', None),
+    'Fortisan (cellulose)':             ('fortisan', 'Fortisan (saponified acetate)', 'cellulose', 'regenerated', 'cellulose', None),
+    'Nylon':                            ('nylon', 'Nylon 6.6 / nylon 6', 'polyamide', 'synthetic', 'polyamide', 'nylon'),
+    'Nylon 6.6 medium-tenacity':        ('nylon', 'Nylon 6.6 / nylon 6', 'polyamide', 'synthetic', 'polyamide', 'nylon'),
+    'Nylon 6.6 high-tenacity':          ('nylon66_ht', 'Nylon 6.6 (high-tenacity)', 'polyamide', 'synthetic', 'polyamide', None),
+    'Nylon 6.6 staple fibre':           ('nylon66_staple', 'Nylon 6.6 (staple)', 'polyamide', 'synthetic', 'polyamide', None),
+    'Nylon 6 (Perlon)':                 ('nylon6', 'Nylon 6 (Perlon)', 'polyamide', 'synthetic', 'polyamide', None),
+    'Wool Botany 64s':                  ('wool', 'Wool', 'protein', 'natural', 'keratin', 'wool'),
+    'Wool, merino':                     ('wool', 'Wool', 'protein', 'natural', 'keratin', 'wool'),
+    'Wool Crossbred 56s':               ('wool_crossbred_56s', 'Wool (crossbred 56s)', 'protein', 'natural', 'keratin', None),
+    'Wool Crossbred 36s':               ('wool_crossbred_36s', 'Wool (crossbred 36s)', 'protein', 'natural', 'keratin', None),
+    'Fibrolane (casein)':               ('casein', 'Regenerated protein (casein)', 'protein', 'regenerated', 'casein', None),
+    'Polyester fibre (Terylene) medium-tenacity':
+                                        ('polyester', 'Polyester (PET)', 'polyester', 'synthetic', 'polyethylene terephthalate', 'polyester'),
+    'Terylene (polyester fibre)':       ('polyester', 'Polyester (PET)', 'polyester', 'synthetic', 'polyethylene terephthalate', 'polyester'),
+    'Polyester fibre (Terylene) high-tenacity':
+                                        ('polyester_ht', 'Polyester (high-tenacity)', 'polyester', 'synthetic', 'polyethylene terephthalate', None),
+    # "stape fibre" is the book's own typo, kept as printed so the key matches
+    # what the page actually says.
+    'Polyester fibre (Terylene) stape fibre':
+                                        ('polyester_staple', 'Polyester (staple)', 'polyester', 'synthetic', 'polyethylene terephthalate', None),
+    'Acrylic (Orlon 42 staple-fibre)':  ('acrylic', 'Acrylic (PAN)', 'vinyl', 'synthetic', 'polyacrylonitrile', 'acrylic'),
+    'Orlon (acrylic fibre)':            ('acrylic', 'Acrylic (PAN)', 'vinyl', 'synthetic', 'polyacrylonitrile', 'acrylic'),
+    'Poly(vinyl alcohol)':              ('pval', 'Polyvinyl alcohol (vinylal)', 'vinyl', 'synthetic', 'polyvinyl alcohol', None),
+    'Poly(vinyl chloride)':             ('pvc', 'Polyvinyl chloride (PVC)', 'vinyl', 'synthetic', 'polyvinyl chloride', None),
+    'Polyethylene Courlene (low-density)':
+                                        ('polyethylene_ld', 'Polyethylene (low density)', 'polyolefin', 'synthetic', 'polyethylene', None),
+    'Polyethylene Courlene X3 (high-density)':
+                                        ('polyethylene', 'Polyethylene (high density)', 'polyolefin', 'synthetic', 'polyethylene', 'polyethylene'),
+    'Polypropylene (Ulstron)':          ('polypropylene', 'Polypropylene', 'polyolefin', 'synthetic', 'polypropylene', 'polypropylene'),
+    # "Polyprpylene" is the book's typo too.
+    'Polyprpylene fibre':               ('polypropylene', 'Polypropylene', 'polyolefin', 'synthetic', 'polypropylene', 'polypropylene'),
+    'Elastomer polyurethane':           ('elastane', 'Elastane (polyurethane elastomer)', 'elastomer', 'synthetic', 'segmented polyurethane', 'elastane'),
+    'Elastomer rubber':                 ('rubber', 'Rubber', 'elastomer', 'natural', 'polyisoprene', None),
+    'Fibreglass':                       ('glass', 'Glass', 'inorganic', 'inorganic', 'silicate glass', None),
+    'Steel wire':                       ('steel', 'Steel', 'inorganic', 'inorganic', 'steel', None),
 }
 
 # Rows the reciprocal test rejects that are the BOOK's arithmetic, not a
 # mis-parse. Each has to be argued, not merely listed, and is imported with the
 # discrepancy recorded on the row.
 KNOWN_BOOK_DISCREPANCIES = {
+    ('viscose_tenasco', 'work_factor'):
+        'Table 13.1 gives Tenasco as 0.27 N/tex at 16.9% with a work of rupture of 19.7 mN/tex '
+        'and a work factor of 0.50, but 0.27 x 16.9 x 0.50 x 10 is 22.8, not 19.7. The work '
+        'factor that fits the other three figures is 0.43. Every other row in the table satisfies '
+        'the identity to within 4.6% and this one misses by 13.7%, so it is the book\'s misprint '
+        'rather than a reading error. All four figures are stored as printed; none is corrected.',
+
     ('carbon', 'specific_volume'):
         'The book prints 1.8-2.0 g/cm3 with specific volume 0.56-0.55, but 1/2.0 is 0.50, not 0.55. '
         'Every other range in Tables 5.2 and 5.3 satisfies the reciprocal exactly, so this is the '
@@ -165,12 +330,34 @@ KNOWN_BOOK_DISCREPANCIES = {
 }
 
 
-def read_lines(page, y_from, y_to):
+def placed_words(page, rotated):
+    """
+    Every word as (across, down, text) in the coordinates the table is READ in.
+
+    Table 13.7 is set sideways on the page, so its printed rows run down the
+    page and its printed columns run across it. PyMuPDF reports the position a
+    word is drawn at, which for that table is the rotated position: the whole
+    fibre list shares one y and each column of ratios shares one x. Everything
+    below — column clustering, the label edge, the indent test — assumes the
+    printed geometry, so the rotation is undone once, here, and nothing further
+    down has to know about it.
+
+    The mapping is a quarter turn: the printed across-axis is -y (the text
+    advances towards the top of the page), and the printed down-axis is x.
+    """
+    for x0, y0, x1, y1, text, *_ in page.get_text('words'):
+        if rotated:
+            yield (-y1, x0, text)
+        else:
+            yield (x0, y0, text)
+
+
+def read_lines(page, y_from, y_to, rotated=False):
     """The words of each printed line, left to right, within a vertical band."""
-    words = [w for w in page.get_text('words') if y_from <= w[1] <= y_to]
     lines = {}
-    for x0, y0, x1, y1, text, *_ in words:
-        lines.setdefault(round(y0), []).append((x0, text))
+    for across, down, text in placed_words(page, rotated):
+        if y_from <= down <= y_to:
+            lines.setdefault(round(down), []).append((across, text))
     return [sorted(lines[y]) for y in sorted(lines)]
 
 
@@ -219,7 +406,8 @@ def figure_columns(lines, expected):
     return sorted(c for _, c in kept)
 
 
-def read_rows(page, y_from, y_to, centres):
+def read_rows(page, y_from, y_to, centres, rotated=False,
+              label_edge_offset=30, hierarchical=False):
     """
     Rows of (name, {column index: (low, high)}), split on the column positions.
 
@@ -230,10 +418,36 @@ def read_rows(page, y_from, y_to, centres):
     """
     # Everything left of the first column belongs to the fibre's name;
     # everything at or right of it belongs to the figures.
-    label_edge = min(centres) - 30 if centres else 1e9
+    #
+    # The offset is per-table because it is a trade-off, not a constant: too
+    # small and a qualifying word inside the figure region ("up to 12" in Table
+    # 7.3) gets read as part of the fibre's name instead of refusing the row;
+    # too large and the last word of a long name gets read as a figure.
+    #
+    # Two tables carry it explicitly. Table 13.1 must: "Crossbred 56s" reaches
+    # to 27 points short of its first column, so the default 30 cuts the wool
+    # grade off and refuses the row. Table 13.7 need not, quite — "Terylene
+    # (polyester fibre)" clears the default by a single point — but one point is
+    # not a margin, and a margin that survives by rounding is one that has not
+    # been chosen. Widening the offset to 45 does cut the name, and the gate
+    # catches it, which is the evidence that this line is load-bearing.
+    label_edge = min(centres) - label_edge_offset if centres else 1e9
+
+    lines = read_lines(page, y_from, y_to, rotated)
+
+    # Where the outer level of the label column starts. Tables 13.1, 13.2 and
+    # 13.7 group their rows: "Viscose rayon" on one line, then "high-tenacity"
+    # and "polynosic" indented beneath it. The indent is the only thing that
+    # says so, and without it the stored fibre is called "polynosic" with no
+    # record that it is a rayon, or worse, "high-tenacity" — which appears under
+    # viscose rayon AND under nylon 6.6 in the same table.
+    outer = min((min(x for x, t in line if x < label_edge)
+                 for line in lines
+                 if any(x < label_edge for x, t in line)), default=0.0)
 
     rows = []
-    for line in read_lines(page, y_from, y_to):
+    parent, last = None, None
+    for line in lines:
         label, cells, ambiguous, qualifiers = [], {}, set(), []
         for x, t in line:
             t = t.strip()
@@ -271,9 +485,126 @@ def read_rows(page, y_from, y_to, centres):
             else:
                 qualifiers.append(t)
         name = ' '.join(label).strip()
-        if name and (cells or qualifiers):
-            rows.append((name, cells, sorted(ambiguous), qualifiers))
+        if not hierarchical:
+            if name and (cells or qualifiers):
+                rows.append((name, cells, sorted(ambiguous), qualifiers))
+            continue
+
+        # Three kinds of line, told apart by indent and by whether they carry
+        # figures. The rules are exhaustive, so a line the book sets in a way
+        # not covered here produces a name that matches nothing in FIBRES and
+        # is refused — loudly — rather than being filed under the wrong fibre.
+        indented = bool(label) and min(x for x, t in line if x < label_edge) > outer + 4
+        if not label:
+            continue
+        if not cells and not qualifiers:
+            if indented and last is not None:
+                # A continuation of the name above: "Acetate" then "(Celanese)",
+                # "Courlene X3" then "(high-density)".
+                rows[last] = (rows[last][0] + ' ' + name,) + rows[last][1:]
+            else:
+                # A group heading: it names the rows indented beneath it.
+                parent = name
+            continue
+        full = (parent + ' ' + name) if (indented and parent) else name
+        if not indented:
+            # An outer row can still head a group — Table 13.1 prints figures
+            # for "Viscose rayon" itself and then indents Fibro and Tenasco
+            # under it — so the parent is set, not cleared.
+            parent = name
+        rows.append((full, cells, sorted(ambiguous), qualifiers))
+        last = len(rows) - 1
     return rows
+
+
+def tensile_slip(cells, spec, slug):
+    """
+    Why this tensile row should not be believed, or None.
+
+    Two relations tie the four tensile figures together, and both come from what
+    the quantities MEAN rather than from any expectation about a particular
+    fibre, so they hold for cotton and for Kevlar alike.
+
+    Work of rupture is the area under the stress-strain curve. The work factor
+    is that area as a fraction of the rectangle around it, so
+
+        work of rupture = work factor x tenacity x breaking extension
+
+    exactly, once the units are reconciled: tenacity is N/tex, extension a
+    percentage and work of rupture mN/tex, which puts a factor of 10 in.
+    Table 13.1 prints the work factor, so it checks itself: a column
+    mis-assigned by one place breaks the identity immediately. Table 13.2 does
+    not print it, so the factor is derived instead and required to be a
+    fraction, because an area cannot exceed the rectangle around it.
+
+    Initial modulus is the slope at the origin. Every fibre in these tables has
+    a stress-strain curve that lies above the chord to its breaking point, so
+    the initial slope cannot be shallower than that chord. Glass and the
+    elastomers come closest, being nearly linear to break, which is why the
+    comparison allows 10%.
+    """
+    ten = cells_by_property(cells, spec, 'tenacity')
+    ext = cells_by_property(cells, spec, 'breaking_extension')
+    wor = cells_by_property(cells, spec, 'work_of_rupture')
+    mod = cells_by_property(cells, spec, 'initial_modulus')
+    wf = cells_by_property(cells, spec, 'work_factor')
+    if not (ten and ext and wor and mod):
+        return 'the row is missing one of tenacity, extension, work of rupture, initial modulus'
+
+    # Ranges are printed low-to-high on both, so the endpoints pair straight
+    # across: a fibre at the weak end of its band also breaks at the low
+    # extension the table gives.
+    for which in (0, 1):
+        t, e, w = ten[which], ext[which], wor[which]
+        if t is None or e is None or w is None:
+            continue
+        rect = t * e * 10.0
+        if rect <= 0:
+            return 'tenacity or extension is zero'
+        if wf is not None and wf[which] is not None:
+            want = rect * wf[which]
+            known = (slug, 'work_factor') in KNOWN_BOOK_DISCREPANCIES
+            if abs(w - want) > max(0.5, 0.06 * want) and not known:
+                return ('work of rupture %.4g does not match tenacity x extension x work '
+                        'factor = %.4g' % (w, want))
+        else:
+            f = w / rect
+            if not (0.20 <= f <= 1.0):
+                return ('work of rupture %.4g implies a work factor of %.2f, which is not '
+                        'the area under a stress-strain curve' % (w, f))
+        secant = t * 100.0 / e
+        if mod[which] is not None and mod[which] < 0.9 * secant:
+            return ('initial modulus %.4g is below the chord to the breaking point, %.4g'
+                    % (mod[which], secant))
+    return None
+
+
+def ratio_slip(cells, spec):
+    """
+    Why this row of Table 13.7 should not be believed, or None.
+
+    These are ratios of one measurement to another, so the only thing that can
+    be said about them without knowing the fibre is that they are positive and
+    finite. The band is set wide deliberately: acrylic's breaking extension
+    really does go up more than fourfold in boiling water, and viscose's initial
+    modulus really does fall to a fiftieth of its conditioned value. A tighter
+    band would refuse the two rows the table exists to report.
+
+    What is NOT allowed is a gap. Every fibre in this table has all eight
+    ratios, so a missing one means a column was lost, not that the book left a
+    cell empty.
+    """
+    for idx, (lo, hi) in cells.items():
+        for v in (lo, hi):
+            if v is None:
+                continue
+            if not (0.001 <= v <= 10.0):
+                return ('%s is %.4g, which is not a ratio of two measurements'
+                        % (spec['columns'][idx][0], v))
+    if len(cells) != len(spec['columns']):
+        return ('%d of the %d ratios are missing'
+                % (len(spec['columns']) - len(cells), len(spec['columns'])))
+    return None
 
 
 def cells_by_property(cells, spec, wanted):
@@ -290,13 +621,16 @@ def main():
     for ref, spec in TABLES.items():
         page = doc[spec['pdf_page'] - 1]
         printed_page = spec['pdf_page'] - BODY_OFFSET
-        lines = read_lines(page, spec['y_from'], spec['y_to'])
+        rotated = spec.get('rotated', False)
+        lines = read_lines(page, spec['y_from'], spec['y_to'], rotated)
         centres = figure_columns(lines, len(spec['columns']))
         if centres is None:
             refused.append({'table': ref, 'name': '(whole table)',
                             'why': 'the figures do not form %d columns' % len(spec['columns'])})
             continue
-        rows = read_rows(page, spec['y_from'], spec['y_to'], centres)
+        rows = read_rows(page, spec['y_from'], spec['y_to'], centres, rotated,
+                         spec.get('label_edge_offset', 30),
+                         spec.get('hierarchical', False))
         if not rows:
             refused.append({'table': ref, 'name': '(whole table)', 'why': 'no rows found in the declared band'})
             continue
@@ -336,7 +670,22 @@ def main():
                 by_cond.setdefault(cond, {})[prop] = (lo, hi)
 
             row_ok = True
-            if spec.get('paired_check', True):
+            if spec.get('tensile_check'):
+                if (slug, 'work_factor') in KNOWN_BOOK_DISCREPANCIES:
+                    discrepancies.append({'fibre': slug, 'table': ref, 'which': 'work factor',
+                                          'note': KNOWN_BOOK_DISCREPANCIES[(slug, 'work_factor')]})
+                why = tensile_slip(cells, spec, slug)
+                if why:
+                    refused.append({'table': ref, 'name': label, 'why': why})
+                    continue
+                by_cond = {}
+            elif spec.get('ratio_check'):
+                why = ratio_slip(cells, spec)
+                if why:
+                    refused.append({'table': ref, 'name': label, 'why': why})
+                    continue
+                by_cond = {}
+            elif spec.get('paired_check', True):
                 pass
             else:
                 # Table 7.3 has its own consistency rules instead of the
@@ -390,9 +739,9 @@ def main():
             if not row_ok:
                 continue
 
-            fibres[slug] = {'slug': slug, 'name': name, 'generic_class': gclass,
-                            'origin': origin, 'polymer': polymer, 'engine_key': engine,
-                            'page': printed_page, 'printed_name': label}
+            fibres.setdefault(slug, {'slug': slug, 'name': name, 'generic_class': gclass,
+                                     'origin': origin, 'polymer': polymer, 'engine_key': engine,
+                                     'page': printed_page, 'printed_name': label})
 
             for idx, (lo, hi) in sorted(cells.items()):
                 prop, cond, rh = spec['columns'][idx]
@@ -415,7 +764,7 @@ def main():
                     'value_min': lo if hi is not None else None,
                     'value_max': hi if hi is not None else None,
                     'unit': UNITS.get(prop, '%'), 'condition': cond, 'rh_pct': rh,
-                    'temperature_c': None, 'method': None,
+                    'temperature_c': spec.get('temperature_c'), 'method': None,
                     'source_key': SOURCE_KEY, 'page': printed_page,
                     'table_ref': 'Table ' + ref, 'book_refs': book_refs,
                     'quality': 'BOOK_TABLE', 'note': note,

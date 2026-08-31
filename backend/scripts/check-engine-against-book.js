@@ -91,11 +91,77 @@ function compareRegain(engine, byEngineKey) {
   return rows;
 }
 
+/**
+ * Tensile properties, and the wet ratios.
+ *
+ * Unlike density and regain these are not approximations the engine arrived at
+ * from somewhere else and has to be reconciled with — they were copied out of
+ * the extraction, so this comparison should be exact. That is the point of
+ * running it: an exact comparison that stops being exact means somebody edited
+ * one of the two and not the other, which is the only way a hard-coded constant
+ * ever goes wrong.
+ *
+ * The one thing it cannot check is the choice of GRADE. Table 13.2 gives nylon
+ * 6.6 three times over, and nothing here can say the engine picked the right
+ * one; it can only say the engine's figures are the ones printed against the
+ * grade whose slug it claims. That judgement is written down in yarn-engine.js
+ * and has to be read, not tested.
+ */
+function compareTensile(engine, byEngineKey) {
+  const FIELDS = [
+    ['tenacity', 'tenacity'],
+    ['extension', 'breaking_extension'],
+    ['modulus', 'initial_modulus'],
+  ];
+  const RATIOS = [
+    ['wet', 'wet / 65% r.h.'],
+    ['hot_wet', 'wet 95 C / wet 20 C'],
+  ];
+  const RATIO_FIELDS = [['ten', 'tenacity_ratio'], ['ext', 'breaking_extension_ratio'],
+                        ['mod', 'initial_modulus_ratio']];
+
+  const rows = [];
+  for (const [key, row] of Object.entries(engine)) {
+    const t = row.tensile;
+    if (!t) { rows.push({ key, verdict: 'the engine carries no tensile data' }); continue; }
+    const fibre = byEngineKey.get(key);
+    if (!fibre) { rows.push({ key, t, verdict: 'no fibre in the book claims this engine key' }); continue; }
+
+    const wrong = [];
+    for (const [field, property] of FIELDS) {
+      const book = props.properties.find(x => x.fibre_slug === fibre.slug &&
+        x.property === property && x.page === t.page);
+      if (!book) { wrong.push(`${property} is not on p.${t.page}`); continue; }
+      const v = book.value != null ? book.value : book.value_min;
+      // Both sides are printed to at most four significant figures, so an exact
+      // comparison is the right one; a tolerance here would hide a typo.
+      if (Math.abs(v - t[field]) > 1e-6) wrong.push(`${property}: engine ${t[field]}, book ${v}`);
+    }
+    for (const [group, condition] of RATIOS) {
+      if (!t[group]) continue;
+      for (const [field, property] of RATIO_FIELDS) {
+        const book = props.properties.find(x => x.fibre_slug === fibre.slug &&
+          x.property === property && x.condition === condition);
+        if (!book) { wrong.push(`${property} (${condition}) is not in the book for ${fibre.slug}`); continue; }
+        const v = book.value != null ? book.value : book.value_min;
+        if (Math.abs(v - t[group][field]) > 1e-6) {
+          wrong.push(`${group}.${field}: engine ${t[group][field]}, book ${v}`);
+        }
+      }
+    }
+    rows.push({ key, t, wrong,
+                verdict: wrong.length ? 'DISAGREES: ' + wrong.join('; ')
+                                      : `matches ${t.table} p.${t.page} (${t.grade})` });
+  }
+  return rows;
+}
+
 function main() {
   const engine = FIBER_PROPERTIES;
   const byEngineKey = new Map(props.fibres.filter(f => f.engine_key).map(f => [f.engine_key, f]));
 
   const wrongCondition = [];
+  const noDensity = [];
   const disagree = [];
   const unsourced = [];
   const agree = [];
@@ -117,7 +183,13 @@ function main() {
     const rowDry = bookValue(fibre.slug, 'density', 'dry');
     const page = (row65 || rowDry || {}).page || fibre.page;
 
-    if (near(have, conditioned)) {
+    if (conditioned == null && dry == null) {
+      // The book measures this fibre — chapter 13 gives elastane a full set of
+      // tensile properties — but chapter 5 never weighed it. That is a gap in
+      // the source, not a disagreement with it, and calling it "DISAGREES by ?"
+      // pointed the reader at the engine when the missing figure is the book's.
+      noDensity.push({ key, have, conditioned, dry, page });
+    } else if (near(have, conditioned)) {
       agree.push({ key, have, conditioned, dry, page });
     } else if (near(have, dry)) {
       wrongCondition.push({ key, have, conditioned, dry, page });
@@ -135,6 +207,8 @@ function main() {
     r.key.padEnd(12), w(r.have).padEnd(7), w(r.dry).padEnd(7), w(r.conditioned).padEnd(9), verdict);
 
   agree.forEach(r => line(r, `agrees, p.${r.page}`));
+  noDensity.forEach(r => line(r,
+    'the book measures this fibre but never weighed it — density is unsourced'));
   wrongCondition.forEach(r => line(r, `WRONG CONDITION — this is the dry figure, p.${r.page}`));
   disagree.forEach(r => line(r,
     `DISAGREES by ${r.delta != null ? (r.delta > 0 ? '+' : '') + r.delta.toFixed(2) : '?'}, p.${r.page}`));
@@ -144,8 +218,10 @@ function main() {
 
   const missing = props.fibres.filter(f => !f.engine_key).length;
 
-  console.log('\n%d agree · %d use the wrong condition · %d disagree · %d unsourced',
-              agree.length, wrongCondition.length, disagree.length, unsourced.length);
+  console.log('\n%d agree · %d use the wrong condition · %d disagree · %d unsourced · ' +
+              '%d measured but never weighed',
+              agree.length, wrongCondition.length, disagree.length, unsourced.length,
+              noDensity.length);
   console.log('%d fibres in the book that the engine has never carried a value for.', missing);
 
   // ── Regain ────────────────────────────────────────────────────────────
@@ -170,6 +246,28 @@ function main() {
     }
     if (STRICT && off.length) process.exitCode = 1;
   }
+
+  // ── Tensile ───────────────────────────────────────────────────────────
+  const tensile = compareTensile(engine, byEngineKey);
+  console.log('\n\nTENSILE PROPERTIES — engine against Tables 13.1, 13.2 and 13.7\n');
+  console.log('  %s %s %s %s  %s', 'fibre'.padEnd(14), 'N/tex'.padEnd(8),
+              'ext %'.padEnd(7), 'mod'.padEnd(7), 'verdict');
+  for (const r of tensile) {
+    console.log('  %s %s %s %s  %s', r.key.padEnd(14),
+                w(r.t && r.t.tenacity).padEnd(8), w(r.t && r.t.extension).padEnd(7),
+                w(r.t && r.t.modulus).padEnd(7), r.verdict);
+  }
+  const tensileOff = tensile.filter(r => r.wrong && r.wrong.length);
+  const tensileNone = tensile.filter(r => !r.t);
+  console.log('\n%d fibres carry measured mechanics; %d of them disagree with the book; ' +
+              '%d have none.',
+              tensile.length - tensileNone.length, tensileOff.length, tensileNone.length);
+  if (tensileNone.length) {
+    console.log('Without them a blend containing that fibre reports its wet behaviour for');
+    console.log('only the part of the blend the book covers, which is the honest answer but');
+    console.log('a less useful one than a citation would be.');
+  }
+  if (STRICT && tensileOff.length) process.exitCode = 1;
 
   if (wrongCondition.length || disagree.length) {
     console.log('\nThe engine feeds these densities to blendPhysical() and from there to');

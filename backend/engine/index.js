@@ -755,6 +755,18 @@ function calculate(params) {
     });
     if (wetProcessing && wetProcessing.ok) {
       trace.push({ step: '6.1e', action: 'wet_processing', result: `Grey ${wetProcessing.greige.grey_gsm_target} g/m² → finish ${gsm} · ${wetProcessing.machine_critical_path.length} machine stages · ${wetProcessing.dyeing_method}` });
+      // The measured half of that card, kept as its own step because it is the
+      // only part of the wet-processing model that cites a source rather than a
+      // mill convention, and a reader following the trace should be able to see
+      // where the two meet.
+      const wm = wetProcessing.wet_mechanics;
+      if (wm) {
+        trace.push({ step: '6.1f', action: 'fibre_mechanics_wet',
+          result: `Wet vs conditioned — tenacity ${Math.round(wm.wet_vs_conditioned.tenacity * 100)}%, ` +
+                  `initial modulus ${Math.round(wm.wet_vs_conditioned.modulus * 100)}% · ` +
+                  `dimensional risk ${wm.dimensional_risk} (bath ${wm.dimensional_risk_in_bath}) · ` +
+                  `Morton & Hearle Table 13.7 p.312` });
+      }
     }
   }
 
