@@ -223,7 +223,15 @@ const FIBER_PROPERTIES = {
                           wet: { ten: 1.11, ext: 1.11, mod: 0.33 },
                           hot_wet: { ten: 1.00, ext: 1.00, mod: 1.00 } },
                swelling: { area: [21, 42], axial: null, volume: null,
-                           page: 240, table: 'Table 11.1' } },
+                           page: 240, table: 'Table 11.1' },
+               // The fibres of one cotton sample differ from each other more
+               // than any other property in this file differs between fibres.
+               variability: { fineness: 24, breaking_load: 46, tenacity: 43,
+                              extension: 40, page: 335, table: 'Table 14.6' },
+               // Nearly doubles between a 1 cm and a 0.1 mm specimen: cotton's
+               // strength is set by its weak places, not by its cellulose.
+               weak_link: { cm1: 0.31, mm1: 0.43, mm01: 0.59,
+                            page: 324, table: 'Table 14.1' } },
   polyester: { density: 1.39, regain: 0.4,  rkm: 1.25,     // was 1.38 — Table 5.1 gives 1.39
                tensile: { tenacity: 0.47, extension: 15.0, modulus: 10.6,
                           grade: 'Terylene, medium-tenacity', page: 292, table: 'Table 13.2',
@@ -247,21 +255,30 @@ const FIBER_PROPERTIES = {
                // its length: the anisotropy is what a knit shows as width
                // movement while the length broadly holds.
                swelling: { area: [50, 114], axial: [3.7, 4.8], volume: [74, 127],
-                           page: 240, table: 'Table 11.1' } },
+                           page: 240, table: 'Table 11.1' },
+               // Table 14.6 calls this row "Rayon".
+               variability: { fineness: 12, breaking_load: 20, tenacity: 17,
+                              extension: 23, page: 335, table: 'Table 14.6' } },
   nylon:     { density: 1.14, regain: 4.2,  rkm: 1.40,     // Table 5.1 p.165
                tensile: { tenacity: 0.48, extension: 20.0, modulus: 3.0,
                           grade: 'nylon 6.6, medium-tenacity', page: 292, table: 'Table 13.2',
                           wet: { ten: 0.80, ext: 1.05, mod: 0.82 },
                           hot_wet: { ten: 0.79, ext: 1.76, mod: 0.21 } },
                swelling: { area: [1.6, 3.2], axial: [2.7, 2.9], volume: [8.1, 11.0],
-                           page: 240, table: 'Table 11.1' } },
+                           page: 240, table: 'Table 11.1' },
+               variability: { fineness: 9, breaking_load: 8, tenacity: 7,
+                              extension: 18, page: 335, table: 'Table 14.6' },
+               weak_link: { cm1: 0.47, mm1: 0.50, mm01: 0.54,
+                            page: 324, table: 'Table 14.1' } },
   wool:      { density: 1.31, regain: 16.0, rkm: 0.50,     // Table 5.1 p.165
                tensile: { tenacity: 0.11, extension: 42.5, modulus: 2.3,
                           grade: 'Botany 64s (merino)', page: 290, table: 'Table 13.1',
                           wet: { ten: 0.69, ext: 1.33, mod: 0.40 },
                           hot_wet: { ten: 0.55, ext: 1.37, mod: 0.50 } },
                swelling: { area: [25, 26], axial: null, volume: [36, 41],
-                           page: 240, table: 'Table 11.1' } },
+                           page: 240, table: 'Table 11.1' },
+               variability: { fineness: 21, breaking_load: 34, tenacity: 28,
+                              extension: 32, page: 335, table: 'Table 14.6' } },
   acrylic:   { density: 1.19, regain: 1.5,  rkm: 0.70,     // was 1.17 — Table 5.1 gives 1.19
                tensile: { tenacity: 0.27, extension: 25.0, modulus: 6.2,
                           grade: 'Orlon 42, staple', page: 292, table: 'Table 13.2',
@@ -300,7 +317,9 @@ const FIBER_PROPERTIES = {
                           wet: { ten: 0.92, ext: 1.63, mod: 0.25 },
                           hot_wet: { ten: 0.71, ext: 0.96, mod: 0.67 } },
                swelling: { area: [19, 19], axial: [1.3, 1.6], volume: [30, 32],
-                           page: 240, table: 'Table 11.1' } },
+                           page: 240, table: 'Table 11.1' },
+               variability: { fineness: 17, breaking_load: 19, tenacity: 20,
+                              extension: 15, page: 335, table: 'Table 14.6' } },
   // Regain is not in Table 7.3. Polypropylene is a hydrocarbon with no polar
   // group for water to attach to, and the book's own chapter 7 explains regain
   // in exactly those terms, so zero is the physics rather than a placeholder —
@@ -365,6 +384,101 @@ function yarnDiameterMm(ne, blendDensity) {
   const d_in_cotton = 1 / (28 * Math.sqrt(ne));
   const densityScale = Math.sqrt(1.52 / (blendDensity || 1.52)); // lighter fibre → bulkier → larger d
   return parseFloat((d_in_cotton * 25.4 * densityScale).toFixed(4));
+}
+
+/**
+ * How much the individual fibres in this blend differ from one another.
+ *
+ * Every other figure in this file is a mean, and a mean says nothing about
+ * spread. For cotton the spread is most of the story: its fibres vary 43% in
+ * tenacity and 24% in fineness from one to the next, where nylon varies 7% and
+ * 9%. Six times, between two fibres whose average strengths are within a half
+ * of each other.
+ *
+ * WHAT THIS DOES NOT DO. It does not predict a yarn's Uster CV%. That would
+ * need the number of fibres in the yarn's cross-section and a limit-irregularity
+ * model, and neither is in this book — the fineness figures here are a spread
+ * about a mean the book does not give per fibre, so the fibre count cannot be
+ * worked out from it. `evenness_u_pct` stays where it is, sourced from Uster
+ * Statistics.
+ *
+ * What it does is say WHY a given yarn is hard or easy to make even, in
+ * measured terms, so the two numbers can be read together instead of the mill
+ * figure standing alone with nothing behind it.
+ *
+ * Source: Morton & Hearle Table 14.6, p.335 — coefficients of variation among
+ * 1 cm specimens, measured by Meredith.
+ */
+function fibreVariability(fibers) {
+  if (!fibers) return null;
+  const parts = [];
+  let mass = 0;
+  const unmeasured = [];
+  for (const [name, pct] of Object.entries(fibers)) {
+    if (!pct) continue;
+    const v = (FIBER_PROPERTIES[name] || {}).variability;
+    if (!v) { unmeasured.push(name); continue; }
+    parts.push({ name, pct, v });
+    mass += pct;
+  }
+  if (!parts.length) return null;
+
+  const mean = key => round3(parts.reduce((a, x) => a + x.v[key] * x.pct, 0) / mass);
+  const tenacityCv = mean('tenacity');
+  const finenessCv = mean('fineness');
+
+  // Bands taken from the book's own three-way description of this table: "the
+  // natural vegetable fibres show a large coefficient of variation; the natural
+  // protein fibres and rayon are rather more regular, and synthetic fibres such
+  // as nylon show only a small variability." Cotton and bast sit at 40-43,
+  // wool and silk and rayon at 17-28, nylon at 7 — so the gaps fall either side
+  // of 30 and 12.
+  const consistency = tenacityCv >= 30 ? 'low'
+                    : tenacityCv >= 12 ? 'moderate'
+                    : 'high';
+
+  return {
+    tenacity_cv_pct: tenacityCv,
+    fineness_cv_pct: finenessCv,
+    breaking_load_cv_pct: mean('breaking_load'),
+    breaking_extension_cv_pct: mean('extension'),
+    consistency,
+    means: consistency === 'low'
+      ? 'The fibres in this blend differ widely from one another, so the yarn needs more '
+      + 'fibres in its cross-section before it averages out. Evenness, strength CV and '
+      + 'the benefit of combing all follow from this rather than from the machine.'
+      : consistency === 'high'
+      ? 'The fibres are nearly identical to one another, so yarn irregularity here comes '
+      + 'from drafting and machine setting rather than from the raw material.'
+      : 'Moderate fibre-to-fibre spread — between a natural vegetable fibre and a synthetic.',
+    covered_pct: round3(mass),
+    unmeasured,
+    source: 'Morton & Hearle, Table 14.6, p.335',
+  };
+}
+
+/**
+ * How much of a fibre's measured strength is an artefact of the test length.
+ *
+ * A fibre breaks at its weakest place, so a longer specimen has more chances of
+ * one and tests weaker. Cotton goes 0.31 N/tex over 1 cm, 0.43 over 1 mm and
+ * 0.59 over 0.1 mm — it nearly doubles. Nylon goes 0.47, 0.50, 0.54.
+ *
+ * The ratio between the two ends is therefore a measure of how much a fibre's
+ * strength depends on its flaws rather than on its polymer, and it is worth
+ * having beside the tenacity because every tenacity in this engine comes from a
+ * 1 cm test while the yarn it describes is loaded over metres.
+ */
+function weakLinkSensitivity(key) {
+  const w = (FIBER_PROPERTIES[key] || {}).weak_link;
+  if (!w) return null;
+  return {
+    at_1cm_n_tex: w.cm1,
+    at_1mm_n_tex: w.mm1,
+    at_0_1mm_n_tex: w.mm01,
+    gain_to_0_1mm_pct: Math.round(((w.mm01 / w.cm1) - 1) * 100),
+    page: w.page, table: w.table,
+  };
 }
 
 /**
@@ -693,6 +807,10 @@ function analyzeYarn(args = {}) {
       torque_idx: parseFloat(torque.toFixed(2)),
       pilling_tendency,
     },
+    // Measured, and separate from `properties` on purpose: everything in there
+    // is a prediction about THIS yarn, and this is a fact about the fibre it is
+    // made of. Morton & Hearle chapter 14.
+    fibre_variability: fibreVariability(fibers),
     uster: uster && uster.ok ? uster : null,
     quality_rank,
     price_index: price_idx,
@@ -740,6 +858,8 @@ function recommendYarnGrade(countNe, fabricCategory) {
 
 module.exports = {
   blendMechanics,
+  fibreVariability,
+  weakLinkSensitivity,
   analyzeYarn,
   recommendYarnGrade,
   blendCountFactor,

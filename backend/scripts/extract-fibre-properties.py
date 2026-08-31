@@ -171,6 +171,60 @@ TABLES = {
         'swelling_check': True,
         'paired_check': False,
     },
+    # ---- Chapter 14, variability ------------------------------------------
+    # Two ideas, and the engine has never had either.
+    #
+    # THE WEAK-LINK EFFECT. A fibre breaks at its weakest place, so the longer
+    # the piece tested the more chances there are of a weak place in it and the
+    # lower the strength comes out. Table 14.1 measures the same cotton at three
+    # test lengths: 0.31 N/tex over 1 cm, 0.43 over 1 mm, 0.59 over 0.1 mm — it
+    # nearly doubles. Nylon goes 0.47, 0.50, 0.54, barely moving. Cotton's
+    # strength is set by its weak places; nylon's is set by the polymer.
+    #
+    # This also CHECKS the chapter 13 extraction from outside it. Table 13.1 is
+    # measured at 1 cm and gives cotton 0.32 and nylon 0.47; Table 14.1 is a
+    # different table on a different page and gives 0.31 and 0.47. Two readings
+    # of the same physical fact, taken by this parser from two separate
+    # coordinate grids, agreeing. Nothing else in this file has that.
+    #
+    # HOW MUCH A FIBRE VARIES FROM ITSELF. Table 14.6 is the coefficient of
+    # variation between individual fibres in one sample, and the spread across
+    # fibre types is enormous: cotton's tenacity varies 43% fibre to fibre,
+    # nylon's 7%. That single comparison is behind most of what a spinner knows
+    # about the two — why a cotton yarn needs more fibres in its cross-section
+    # to come out even, why cotton yarn strength is quoted with a CV and
+    # filament nylon is not, and why blending a synthetic into cotton steadies
+    # it out of proportion to how much is added.
+    '14.1': {
+        'pdf_page': 343, 'y_from': 300, 'y_to': 325,
+        'columns': [('tenacity', '1 cm test length', None),
+                    ('tenacity', '1 mm test length', None),
+                    ('tenacity', '0.1 mm test length', None)],
+        'weak_link_check': True,
+        'paired_check': False,
+    },
+    '14.3': {
+        'pdf_page': 346, 'y_from': 342, 'y_to': 388,
+        'columns': [('tenacity', '1 cm test length', None),
+                    ('tenacity_sd', '1 cm test length', None),
+                    # The third column is Peirce's theory applied to the first
+                    # two, not a measurement. It is read so the column count
+                    # matches what is printed, and then dropped: a calculated
+                    # figure filed beside measured ones is how a model ends up
+                    # being cited as evidence for itself.
+                    (None, None, None),
+                    ('tenacity', '1 mm test length', None)],
+        'paired_check': False,
+    },
+    '14.6': {
+        'pdf_page': 354, 'y_from': 528, 'y_to': 592,
+        'columns': [('cv_fineness', '1 cm specimens', None),
+                    ('cv_breaking_load', '1 cm specimens', None),
+                    ('cv_tenacity', '1 cm specimens', None),
+                    ('cv_breaking_extension', '1 cm specimens', None)],
+        'cv_check': True,
+        'paired_check': False,
+    },
     '13.7': {
         'pdf_page': 331, 'y_from': 175, 'y_to': 320,
         'rotated': True, 'hierarchical': True, 'label_edge_offset': 24,
@@ -201,7 +255,10 @@ UNITS = {'density': 'g/cm3', 'specific_volume': 'cm3/g',
          'tenacity_ratio': '1', 'breaking_extension_ratio': '1',
          'work_of_rupture_ratio': '1', 'initial_modulus_ratio': '1',
          'transverse_swelling_diameter': '%', 'transverse_swelling_area': '%',
-         'axial_swelling': '%', 'volume_swelling': '%'}
+         'axial_swelling': '%', 'volume_swelling': '%',
+         'tenacity_sd': 'N/tex',
+         'cv_fineness': '%', 'cv_breaking_load': '%', 'cv_tenacity': '%',
+         'cv_breaking_extension': '%'}
 
 # How each printed fibre name is filed. Written out rather than inferred from
 # the name, because the classification is a judgement and belongs in one
@@ -354,6 +411,23 @@ FIBRES = {
     'Elastomer rubber':                 ('rubber', 'Rubber', 'elastomer', 'natural', 'polyisoprene', None),
     'Fibreglass':                       ('glass', 'Glass', 'inorganic', 'inorganic', 'silicate glass', None),
     'Steel wire':                       ('steel', 'Steel', 'inorganic', 'inorganic', 'steel', None),
+
+    # ---- Chapter 14 -------------------------------------------------------
+    # Table 14.3 names four cotton varieties. Uppers is the same variety the
+    # engine takes its cotton from, so it files under 'cotton' — at a different
+    # page, and therefore as a separate measurement, which is the point: it is
+    # a second laboratory's figure for the same cotton and it differs (0.288
+    # against 0.32), which is exactly the fibre-to-fibre variation Table 14.6
+    # goes on to quantify.
+    'Sakel':                            ('cotton_sakel', 'Cotton (Sakel)', 'cellulose', 'natural', 'cellulose', None),
+    'Uppers':                           ('cotton', 'Cotton', 'cellulose', 'natural', 'cellulose', 'cotton'),
+    'St Vincent':                       ('cotton_st_vincent', 'Cotton (St Vincent)', 'cellulose', 'natural', 'cellulose', None),
+    'Ishan':                            ('cotton_ishan', 'Cotton (Ishan)', 'cellulose', 'natural', 'cellulose', None),
+    # Table 14.6 measures the bast fibres as one group rather than separately.
+    # Storing it under a group slug keeps that honest; splitting it into flax,
+    # jute, hemp and ramie would put four measurements where the book took one.
+    'Bast fibres':                      ('bast_fibres', 'Bast fibres (flax, hemp, jute, ramie)', 'cellulose', 'natural', 'cellulose', None),
+    'Rayon':                            ('viscose', 'Viscose rayon', 'cellulose', 'regenerated', 'cellulose', 'viscose'),
 }
 
 # Rows the reciprocal test rejects that are the BOOK's arithmetic, not a
@@ -692,6 +766,54 @@ def swelling_slip(lists, spec):
     return None
 
 
+def weak_link_slip(cells, spec):
+    """
+    Why this weak-link row should not be believed, or None.
+
+    A fibre breaks at its weakest place, so a shorter specimen contains fewer
+    weak places and must test at least as strong. That ordering is the whole
+    content of the weak-link effect and it cannot go the other way, which makes
+    it a check that needs nothing but the row itself: the columns run 1 cm,
+    1 mm, 0.1 mm, so the figures must not decrease along them.
+
+    A column read one place out of order breaks it immediately, and so does a
+    row whose label was cut short and picked up a figure from its own name.
+    """
+    order = ['1 cm test length', '1 mm test length', '0.1 mm test length']
+    seq = []
+    for cond in order:
+        for idx, (lo, hi) in cells.items():
+            if spec['columns'][idx][1] == cond:
+                seq.append((cond, lo))
+    for (c1, v1), (c2, v2) in zip(seq, seq[1:]):
+        if v2 < v1 - 1e-9:
+            return ('tenacity falls from %.4g at %s to %.4g at %s, but a shorter '
+                    'specimen cannot be weaker' % (v1, c1, v2, c2))
+    return None
+
+
+def cv_slip(cells, spec):
+    """
+    Why this coefficient-of-variation row should not be believed, or None.
+
+    A coefficient of variation is a standard deviation over a mean, as a
+    percentage. It cannot be negative, and above about 100% the mean stops
+    meaning anything for a quantity that cannot go below zero — the highest in
+    this table is cotton's breaking load at 46%.
+    """
+    for idx, (lo, hi) in cells.items():
+        for v in (lo, hi):
+            if v is None:
+                continue
+            if not (0 < v <= 100):
+                return ('%s is %.4g%%, which is not a coefficient of variation'
+                        % (spec['columns'][idx][0], v))
+    if len(cells) != len(spec['columns']):
+        return '%d of the %d columns are missing' % (
+            len(spec['columns']) - len(cells), len(spec['columns']))
+    return None
+
+
 def ratio_slip(cells, spec):
     """
     Why this row of Table 13.7 should not be believed, or None.
@@ -789,6 +911,18 @@ def main():
                 by_cond.setdefault(cond, {})[prop] = (lo, hi)
 
             row_ok = True
+            if spec.get('weak_link_check'):
+                why = weak_link_slip(cells, spec)
+                if why:
+                    refused.append({'table': ref, 'name': label, 'why': why})
+                    continue
+                by_cond = {}
+            elif spec.get('cv_check'):
+                why = cv_slip(cells, spec)
+                if why:
+                    refused.append({'table': ref, 'name': label, 'why': why})
+                    continue
+                by_cond = {}
             if spec.get('swelling_check'):
                 why = swelling_slip(lists, spec)
                 if why:
@@ -904,6 +1038,9 @@ def main():
 
             for idx, (lo, hi) in sorted(cells.items()):
                 prop, cond, rh = spec['columns'][idx]
+                if prop is None:
+                    continue     # read so the column count matches; not stored
+
                 # A specific-volume range is printed DESCENDING, because it is
                 # the reciprocal of an ascending density range: carbon reads
                 # "1.8-2.0" against "0.56-0.55". value_min and value_max have to
