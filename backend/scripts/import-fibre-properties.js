@@ -78,9 +78,9 @@ function verify(payload) {
         recovered.length ? 'these now parse — check they parse CORRECTLY: ' + recovered.join(', ') : '');
   check(refused.every(r => r.why && r.why.length > 10),
         'every refusal states a reason');
-  check(fibres.length >= 70, 'every declared table was read',
+  check(fibres.length >= 72, 'every declared table was read',
         fibres.length + ' fibres');
-  check(properties.length >= 570, 'every column of every table came through',
+  check(properties.length >= 655, 'every column of every table came through',
         properties.length + ' measurements');
 
   // Classification has to satisfy the same constraints the table does, so a bad
@@ -538,6 +538,80 @@ function verify(payload) {
   check(cottonCrossed && cottonCrossed.cell_kind === 'list',
         "cotton's 0.29 and 0.57 are stored as two workers, not as a range",
         cottonCrossed ? cottonCrossed.cell_kind : 'missing');
+
+  // ── Chapter 24: optical ───────────────────────────────────────────────
+  const optical = properties.filter(p => /^(refractive_index|birefringence)/.test(p.property));
+  check(optical.length >= 42, 'the refractive indices came through', optical.length + ' rows');
+
+  // Birefringence is DEFINED as the difference between the two indices, so
+  // every row proves itself. A column read one place out breaks it at once.
+  const birOff = [];
+  for (const b of properties.filter(p => p.property === 'birefringence')) {
+    const at = pr => properties.find(x => x.fibre_slug === b.fibre_slug &&
+      x.property === pr && x.page === b.page &&
+      (x.condition || '').replace(/,? ?light polarised.*/, '') === (b.condition || ''));
+    const par = at('refractive_index_parallel'), per = at('refractive_index_perpendicular');
+    if (!par || !per) { birOff.push(`${b.fibre_slug}: an index is missing`); continue; }
+    if (Math.abs(b.value - (par.value - per.value)) > 0.0011) {
+      birOff.push(`${b.fibre_slug}: ${b.value} is not ${par.value} - ${per.value}`);
+    }
+  }
+  check(birOff.length === 0,
+        'every birefringence is the difference between its own two indices',
+        birOff.join('; '));
+
+  // Two fibres in the book are negatively birefringent: their chains lie across
+  // the fibre, not along it. If these ever come back positive, the sign was
+  // dropped and the physics reversed.
+  const negative = properties.filter(p => p.property === 'birefringence' && p.value < 0)
+                             .map(p => p.fibre_slug).sort();
+  check(negative.join(',') === 'acrylic_acrilan,triacetate',
+        'triacetate and Acrilan keep their negative birefringence',
+        negative.join(', ') || 'none are negative');
+
+  // Polyester is the most orientated fibre in the table by a wide margin, which
+  // is the single fact chapter 13 leans on when it links orientation to
+  // strength.
+  const bir = s2 => { const r = properties.find(p => p.property === 'birefringence' && p.fibre_slug === s2); return r ? r.value : null; };
+  check(bir('polyester') > 3 * bir('cotton'),
+        'polyester is still far more orientated than cotton',
+        `polyester ${bir('polyester')}, cotton ${bir('cotton')}`);
+
+  // ── Chapter 24: lustre ────────────────────────────────────────────────
+  // The finding is the SERIES, not any row: lustre rises as the cross-section
+  // gets rounder, and mercerised cotton sits at the round end. If this ever
+  // stops holding, the two columns have been swapped.
+  const lus = properties.filter(p => p.property === 'lustre');
+  const ell = properties.filter(p => p.property === 'fibre_ellipticity');
+  check(lus.length === 15 && ell.length === 15,
+        'all fifteen cottons of Table 24.5 came through',
+        `${lus.length} lustres, ${ell.length} ellipticities`);
+  const pairs = lus.map(l => ({
+    variety: l.condition, lustre: l.value,
+    ab: (ell.find(e => e.condition === l.condition) || {}).value,
+  })).filter(x => x.ab != null);
+  check(pairs.length === 15, 'every lustre has its ellipticity');
+  const rounded = pairs.filter(x => /mercerised/.test(x.variety));
+  const natural = pairs.filter(x => !/mercerised/.test(x.variety));
+  check(Math.max(...rounded.map(x => x.ab)) < Math.min(...natural.map(x => x.ab)),
+        'mercerised cotton is rounder than every natural variety measured');
+  check(Math.min(...rounded.map(x => x.lustre)) > Math.max(...natural.map(x => x.lustre)),
+        'and more lustrous than every one of them');
+
+  // Spearman rank correlation between ellipticity and lustre. It should be
+  // strongly NEGATIVE: flatter fibre, duller cloth. Rank rather than value,
+  // because the lustre scale is arbitrary and only its order means anything.
+  const rank = key => {
+    const sorted = [...pairs].sort((a, b2) => a[key] - b2[key]);
+    const r = new Map(); sorted.forEach((x, i) => r.set(x.variety, i + 1)); return r;
+  };
+  const ra = rank('ab'), rl = rank('lustre');
+  const n = pairs.length;
+  const d2 = pairs.reduce((acc, x) => acc + (ra.get(x.variety) - rl.get(x.variety)) ** 2, 0);
+  const rho = 1 - (6 * d2) / (n * (n * n - 1));
+  check(rho < -0.85,
+        'lustre still runs against ellipticity across the whole series',
+        `Spearman rho = ${rho.toFixed(3)}`);
 
   const badPage = properties.filter(p => !(p.page >= 1 && p.page <= 746));
   check(badPage.length === 0, 'every citation points inside the book', badPage.length + ' do not');
