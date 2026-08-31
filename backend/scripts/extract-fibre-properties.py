@@ -45,6 +45,10 @@ SOURCE_KEY = 'morton_hearle_2008'
 BODY_OFFSET = 19
 
 CELL = re.compile(r'^(\d+(?:\.\d+)?)(?:[–—-](\d+(?:\.\d+)?))?$')
+# "20," "16.5," "123,126," — one worker's figure, or several run together. Table
+# 11.1 prints a cell as a list of independently reported values rather than as
+# one measurement, so its cells are read with this and not with CELL.
+LIST_CELL = re.compile(r'^\d+(?:\.\d+)?(?:\s*,\s*\d+(?:\.\d+)?)*,?$')
 CITATION = re.compile(r'^\[[\d,\s–—-]+\]$')
 DASH = re.compile(r'^[–—-]$')
 
@@ -129,6 +133,44 @@ TABLES = {
         'tensile_check': True,
         'paired_check': False,
     },
+    # ---- Chapter 11, swelling ---------------------------------------------
+    # The other half of what water does. Chapter 13 says the fibre goes soft;
+    # this says it also gets BIGGER, and by how much in which direction.
+    # Viscose rayon swells 50-114% in cross-sectional AREA and 74-127% by
+    # volume, against 0.4-0.5% along its length. Cotton is 21-42% in area.
+    # Nylon is 1.6-3.2%. That anisotropy — large across, negligible along — is
+    # the mechanism a knit expresses as width change while the length holds.
+    #
+    # It is NOT fabric shrinkage and nothing here should be read as a shrinkage
+    # figure. A fibre swelling 50% in area makes the yarn thicker, which forces
+    # the loop to take up differently; how much of that reaches the cloth
+    # depends on the structure, and the engine's shrinkage factors stay as they
+    # are. This says why the shrinkage happens, not how much.
+    #
+    # UNIQUE IN THE BOOK: each cell is a LIST. The book collects values from
+    # several independent workers and prints them side by side, and the text
+    # immediately above the table says so — "there are considerable
+    # discrepancies in the values of a given quantity obtained by different
+    # people". Collapsing that to one number would state a precision the source
+    # explicitly disclaims, so the spread is stored as the range and every
+    # reported value is kept on the row.
+    '11.1': {
+        'pdf_page': 259, 'y_from': 505, 'y_to': 620,
+        'multi_value': True, 'label_edge_offset': 40,
+        # A cell holding several figures is wide, so the default 25-point gap
+        # between column clusters swallowed the axial column into the area one:
+        # area's last figure sits at x=257 and axial's first at x=281. Inside a
+        # cell the figures are never more than 14 points apart and between
+        # columns never less than 24, so anything in between separates them and
+        # 18 is the middle of that band.
+        'cluster_gap': 18,
+        'columns': [('transverse_swelling_diameter', 'immersed in water', None),
+                    ('transverse_swelling_area', 'immersed in water', None),
+                    ('axial_swelling', 'immersed in water', None),
+                    ('volume_swelling', 'immersed in water', None)],
+        'swelling_check': True,
+        'paired_check': False,
+    },
     '13.7': {
         'pdf_page': 331, 'y_from': 175, 'y_to': 320,
         'rotated': True, 'hierarchical': True, 'label_edge_offset': 24,
@@ -157,7 +199,9 @@ UNITS = {'density': 'g/cm3', 'specific_volume': 'cm3/g',
          'breaking_extension': '%', 'yield_strain': '%',
          'work_factor': '1',
          'tenacity_ratio': '1', 'breaking_extension_ratio': '1',
-         'work_of_rupture_ratio': '1', 'initial_modulus_ratio': '1'}
+         'work_of_rupture_ratio': '1', 'initial_modulus_ratio': '1',
+         'transverse_swelling_diameter': '%', 'transverse_swelling_area': '%',
+         'axial_swelling': '%', 'volume_swelling': '%'}
 
 # How each printed fibre name is filed. Written out rather than inferred from
 # the name, because the classification is a judgement and belongs in one
@@ -361,7 +405,7 @@ def read_lines(page, y_from, y_to, rotated=False):
     return [sorted(lines[y]) for y in sorted(lines)]
 
 
-def figure_columns(lines, expected):
+def figure_columns(lines, expected, multi_value=False, cluster_gap=25):
     """
     Where the columns of figures sit, found from the data rather than declared.
 
@@ -380,10 +424,11 @@ def figure_columns(lines, expected):
     one just inside, there is no honest way to say which is a column, and the
     table is refused.
     """
-    xs = sorted({round(x) for line in lines for x, t in line if CELL.match(t)})
+    pattern = LIST_CELL if multi_value else CELL
+    xs = sorted({round(x) for line in lines for x, t in line if pattern.match(t)})
     clusters = []
     for x in xs:
-        if clusters and x - clusters[-1][-1] <= 25:
+        if clusters and x - clusters[-1][-1] <= cluster_gap:
             clusters[-1].append(x)
         else:
             clusters.append([x])
@@ -392,7 +437,7 @@ def figure_columns(lines, expected):
     for group in clusters:
         lo, hi = min(group) - 12, max(group) + 12
         seen = sum(1 for line in lines
-                   if any(lo <= x <= hi and CELL.match(t) for x, t in line))
+                   if any(lo <= x <= hi and pattern.match(t) for x, t in line))
         scored.append((seen, sum(group) / len(group)))
 
     if len(scored) < expected:
@@ -407,7 +452,7 @@ def figure_columns(lines, expected):
 
 
 def read_rows(page, y_from, y_to, centres, rotated=False,
-              label_edge_offset=30, hierarchical=False):
+              label_edge_offset=30, hierarchical=False, multi_value=False):
     """
     Rows of (name, {column index: (low, high)}), split on the column positions.
 
@@ -448,7 +493,7 @@ def read_rows(page, y_from, y_to, centres, rotated=False,
     rows = []
     parent, last = None, None
     for line in lines:
-        label, cells, ambiguous, qualifiers = [], {}, set(), []
+        label, cells, ambiguous, qualifiers, lists = [], {}, set(), [], {}
         for x, t in line:
             t = t.strip()
             if not t:
@@ -461,6 +506,20 @@ def read_rows(page, y_from, y_to, centres, rotated=False,
                 continue
             if DASH.match(t):
                 continue                 # an empty cell, printed as a dash
+            if multi_value:
+                if not LIST_CELL.match(t):
+                    qualifiers.append(t)
+                    continue
+                idx = min(range(len(centres)), key=lambda i: abs(centres[i] - x))
+                if abs(centres[idx] - x) > 45:
+                    qualifiers.append(t)
+                    continue
+                # Several workers' figures in one cell, sometimes run together
+                # in a single word ("123,126,"), sometimes set as separate words
+                # on the same line. Both end up in the same list.
+                lists.setdefault(idx, []).extend(
+                    float(v) for v in t.strip(',').split(',') if v.strip())
+                continue
             m = CELL.match(t)
             if not m:
                 # A word inside the figure region qualifies the number beside
@@ -485,9 +544,20 @@ def read_rows(page, y_from, y_to, centres, rotated=False,
             else:
                 qualifiers.append(t)
         name = ' '.join(label).strip()
+
+        if multi_value and not name and lists and rows:
+            for idx, vals in lists.items():
+                rows[-1][4].setdefault(idx, []).extend(vals)
+            continue
+
+        if multi_value:
+            if name and (lists or qualifiers):
+                rows.append((name, cells, sorted(ambiguous), qualifiers, lists))
+            continue
+
         if not hierarchical:
             if name and (cells or qualifiers):
-                rows.append((name, cells, sorted(ambiguous), qualifiers))
+                rows.append((name, cells, sorted(ambiguous), qualifiers, {}))
             continue
 
         # Three kinds of line, told apart by indent and by whether they carry
@@ -512,7 +582,7 @@ def read_rows(page, y_from, y_to, centres, rotated=False,
             # for "Viscose rayon" itself and then indents Fibro and Tenasco
             # under it — so the parent is set, not cleared.
             parent = name
-        rows.append((full, cells, sorted(ambiguous), qualifiers))
+        rows.append((full, cells, sorted(ambiguous), qualifiers, {}))
         last = len(rows) - 1
     return rows
 
@@ -579,6 +649,49 @@ def tensile_slip(cells, spec, slug):
     return None
 
 
+def swelling_slip(lists, spec):
+    """
+    Why this swelling row should not be believed, or None.
+
+    Only one relation here is safe to insist on, and it is the one that follows
+    from geometry rather than from any expectation about fibres: a body cannot
+    swell more in cross-sectional area than it does in volume, since the volume
+    change is the area change compounded with the length change and no fibre in
+    this table gets shorter in water.
+
+    What is NOT checked is area against diameter, and that omission is the
+    book's own point. Section 11.2.3 says diameter swelling "is not a sound way
+    of expressing transverse swelling of a fibre with an irregular
+    cross-section, since it will vary according to the position in which the
+    'diameter' is drawn", and acetate proves it: 9-14% by diameter against 6-8%
+    by area, which is impossible for a circle and perfectly ordinary for the
+    lobed cross-section acetate actually has. A check there would reject the
+    row the text exists to explain.
+
+    The values inside a cell are not one measurement either. They are several
+    workers' results, and the paragraph above the table says they disagree, so
+    the spread between them is data and not error.
+    """
+    def span(prop):
+        for idx, vals in lists.items():
+            if spec['columns'][idx][0] == prop and vals:
+                return min(vals), max(vals)
+        return None
+
+    for idx, vals in lists.items():
+        for v in vals:
+            if not (0 <= v <= 300):
+                return '%s reports %.4g%%, which is not a swelling' % (
+                    spec['columns'][idx][0], v)
+
+    area, vol = span('transverse_swelling_area'), span('volume_swelling')
+    if area and vol:
+        if vol[1] < area[0]:
+            return ('every reported volume swelling (%g-%g%%) is below every reported '
+                    'area swelling (%g-%g%%)' % (vol[0], vol[1], area[0], area[1]))
+    return None
+
+
 def ratio_slip(cells, spec):
     """
     Why this row of Table 13.7 should not be believed, or None.
@@ -623,14 +736,16 @@ def main():
         printed_page = spec['pdf_page'] - BODY_OFFSET
         rotated = spec.get('rotated', False)
         lines = read_lines(page, spec['y_from'], spec['y_to'], rotated)
-        centres = figure_columns(lines, len(spec['columns']))
+        centres = figure_columns(lines, len(spec['columns']), spec.get('multi_value', False),
+                                 spec.get('cluster_gap', 25))
         if centres is None:
             refused.append({'table': ref, 'name': '(whole table)',
                             'why': 'the figures do not form %d columns' % len(spec['columns'])})
             continue
         rows = read_rows(page, spec['y_from'], spec['y_to'], centres, rotated,
                          spec.get('label_edge_offset', 30),
-                         spec.get('hierarchical', False))
+                         spec.get('hierarchical', False),
+                         spec.get('multi_value', False))
         if not rows:
             refused.append({'table': ref, 'name': '(whole table)', 'why': 'no rows found in the declared band'})
             continue
@@ -643,13 +758,17 @@ def main():
         m = re.search(r'Table\s+' + re.escape(ref) + r'[^\n]*?\[([^\]]+)\]', caption)
         book_refs = m.group(1) if m else None
 
-        for label, cells, ambiguous, qualifiers in rows:
+        for label, cells, ambiguous, qualifiers, lists in rows:
             if qualifiers:
                 refused.append({'table': ref, 'name': label,
                                 'why': 'the figures are qualified in words ("%s"), so a bare number would misstate them'
                                        % ' '.join(qualifiers)[:40]})
                 continue
-            if not cells:
+            # A multi-value table fills `lists`, not `cells`, so testing only
+            # `cells` here dropped every row of Table 11.1 — with no refusal
+            # recorded, because a skip is not a refusal. The table came through
+            # the column check, produced nine rows, and then vanished.
+            if not cells and not lists:
                 continue
             if ambiguous:
                 refused.append({'table': ref, 'name': label,
@@ -670,6 +789,46 @@ def main():
                 by_cond.setdefault(cond, {})[prop] = (lo, hi)
 
             row_ok = True
+            if spec.get('swelling_check'):
+                why = swelling_slip(lists, spec)
+                if why:
+                    refused.append({'table': ref, 'name': label, 'why': why})
+                    continue
+                fibres.setdefault(slug, {'slug': slug, 'name': name, 'generic_class': gclass,
+                                         'origin': origin, 'polymer': polymer, 'engine_key': engine,
+                                         'page': printed_page, 'printed_name': label})
+                for idx, vals in sorted(lists.items()):
+                    prop, cond, rh = spec['columns'][idx]
+                    lo, hi = min(vals), max(vals)
+                    properties.append({
+                        'fibre_slug': slug, 'property': prop,
+                        'value': lo if len(vals) == 1 else None,
+                        'value_min': None if len(vals) == 1 else lo,
+                        'value_max': None if len(vals) == 1 else hi,
+                        'unit': UNITS.get(prop, '%'), 'condition': cond, 'rh_pct': rh,
+                        'temperature_c': spec.get('temperature_c'), 'method': None,
+                        'source_key': SOURCE_KEY, 'page': printed_page,
+                        'table_ref': 'Table ' + ref, 'book_refs': book_refs,
+                        'quality': 'BOOK_TABLE',
+                        # How many separate figures the page prints in this
+                        # cell. It is not stored in the database — the note
+                        # carries the figures themselves — but the gate totals
+                        # it, because a range cannot show that a value was lost
+                        # from the middle of a cell. Losing 126 out of
+                        # "123,126," leaves viscose reading 74-127 either way.
+                        'value_count': len(vals),
+                        # The individual figures are kept because the range on
+                        # its own would read as one worker's uncertainty, and it
+                        # is not: it is the disagreement between %d separate
+                        # published measurements, which the book prints
+                        # precisely so the reader can see it.
+                        'note': 'The table collects %d independently reported values: %s. '
+                                'Stored as their range; the book itself notes "considerable '
+                                'discrepancies in the values of a given quantity obtained by '
+                                'different people".' % (len(vals),
+                                                        ', '.join('%g' % v for v in vals)),
+                    })
+                continue
             if spec.get('tensile_check'):
                 if (slug, 'work_factor') in KNOWN_BOOK_DISCREPANCIES:
                     discrepancies.append({'fibre': slug, 'table': ref, 'which': 'work factor',

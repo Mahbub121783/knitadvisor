@@ -78,9 +78,9 @@ function verify(payload) {
         recovered.length ? 'these now parse — check they parse CORRECTLY: ' + recovered.join(', ') : '');
   check(refused.every(r => r.why && r.why.length > 10),
         'every refusal states a reason');
-  check(fibres.length >= 63, 'the density, regain and tensile tables were read',
+  check(fibres.length >= 65, 'the density, regain, tensile and swelling tables were read',
         fibres.length + ' fibres');
-  check(properties.length >= 430, 'every column of every table came through',
+  check(properties.length >= 465, 'every column of every table came through',
         properties.length + ' measurements');
 
   // Classification has to satisfy the same constraints the table does, so a bad
@@ -300,6 +300,81 @@ function verify(payload) {
   const contested = [...claims].filter(([, v]) => v.length > 1);
   check(contested.length === 0, 'no engine key is claimed by two fibres',
         contested.map(([k, v]) => `${k}: ${v.join(' and ')}`).join('; '));
+
+  // ── Swelling, chapter 11 ──────────────────────────────────────────────
+  const SWELL = ['transverse_swelling_diameter', 'transverse_swelling_area',
+                 'axial_swelling', 'volume_swelling'];
+  const swell = new Map();
+  for (const pr of properties) {
+    if (!SWELL.includes(pr.property)) continue;
+    if (!swell.has(pr.fibre_slug)) swell.set(pr.fibre_slug, {});
+    swell.get(pr.fibre_slug)[pr.property] = pr;
+  }
+  check(swell.size >= 9, 'the swelling table came through', swell.size + ' fibres');
+
+  // A body cannot swell more in cross-section than it does in volume: the
+  // volume change is the area change compounded with the length change, and
+  // nothing here gets shorter in water. This is geometry, so it holds for every
+  // fibre regardless of shape.
+  const impossible = [];
+  for (const [slug, r] of swell) {
+    const a = r.transverse_swelling_area, v = r.volume_swelling;
+    if (!a || !v) continue;
+    const aLo = a.value != null ? a.value : a.value_min;
+    const vHi = v.value != null ? v.value : v.value_max;
+    if (vHi < aLo) impossible.push(`${slug}: volume up to ${vHi}%, area from ${aLo}%`);
+  }
+  check(impossible.length === 0,
+        'no fibre swells more in cross-section than it does in volume',
+        impossible.join('; '));
+
+  // Table 11.1 is the only table in the book whose rows WRAP: viscose reports
+  // nine volume figures and they do not fit on one line, so three of them sit
+  // on the next line with no fibre name against them. If the continuation is
+  // not merged the row still exists and still looks reasonable — it just says
+  // 109-117 instead of 74-127, and nothing anywhere would say a value was
+  // dropped. This anchor is the only thing that would notice.
+  const vs = (swell.get('viscose') || {}).volume_swelling;
+  check(vs && vs.value_min === 74 && vs.value_max === 127,
+        'the wrapped viscose row kept the values printed on its continuation lines',
+        vs ? `${vs.value_min}-${vs.value_max}, expected 74-127` : 'no viscose volume swelling at all');
+
+  // Acetate swells more by diameter than by area, which is impossible for a
+  // circle and ordinary for a lobed cross-section — section 11.2.3 says exactly
+  // that, and this row is the book's own illustration of it. It is asserted
+  // rather than tolerated: if it ever stopped being inverted, the reading
+  // changed, not the acetate.
+  const ac = swell.get('acetate') || {};
+  const acD = ac.transverse_swelling_diameter, acA = ac.transverse_swelling_area;
+  check(acD && acA && acD.value_max > acA.value_max,
+        "acetate's diameter swelling still exceeds its area swelling, as the book prints it",
+        acD && acA ? `diameter ${acD.value_max}, area ${acA.value_max}` : 'one of the two is missing');
+
+  // A range cannot show that a figure went missing from the middle of a cell.
+  // Viscose's volume swelling is printed partly as separate words and partly as
+  // one run-together word, "123,126,"; drop the 126 and the row still reads
+  // 74-127 and every other check still passes. Only counting catches it.
+  //
+  // Sixty-seven is what page 240 prints, counted off the page cell by cell:
+  // 6 cotton, 4 mercerised cotton, 3 flax, 3 jute, 20 viscose, 7 acetate,
+  // 8 wool, 8 silk, 8 nylon.
+  const swellRows = properties.filter(p => p.table_ref === 'Table 11.1');
+  const figures = swellRows.reduce((a, p) => a + (p.value_count || 0), 0);
+  check(figures === 67, 'every figure the swelling table prints was read',
+        figures + ' of 67');
+  const vsCount = (swellRows.find(p =>
+    p.fibre_slug === 'viscose' && p.property === 'volume_swelling') || {}).value_count;
+  check(vsCount === 9, 'viscose volume swelling kept all nine reported figures',
+        vsCount + ' of 9');
+
+  // The individual figures are what make the range interpretable, since it is a
+  // disagreement between workers and not one worker's uncertainty.
+  const bareRange = properties.filter(p =>
+    SWELL.includes(p.property) && p.value_min != null &&
+    !(p.note && /independently reported values/.test(p.note)));
+  check(bareRange.length === 0,
+        'every swelling range keeps the separate figures it was built from',
+        bareRange.map(p => `${p.fibre_slug}/${p.property}`).join(', '));
 
   const badPage = properties.filter(p => !(p.page >= 1 && p.page <= 746));
   check(badPage.length === 0, 'every citation points inside the book', badPage.length + ' do not');

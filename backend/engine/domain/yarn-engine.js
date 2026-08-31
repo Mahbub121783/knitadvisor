@@ -173,6 +173,17 @@ const DEFAULT_SPINNING = { fine: 'combed', medium: 'combed', coarse: 'carded' };
 //                        65% r.h. — so 1.00 means water changes nothing
 //    hot_wet    { ten, ext, mod }   wet at 95 C divided by wet at 20 C, which
 //                        is the difference between a rinse and a dyebath
+//    swelling   { area, axial, volume }  the percentage each grows by when the
+//                        fibre is immersed in water, as [low, high]. The range
+//                        is a DISAGREEMENT BETWEEN LABORATORIES, not one
+//                        laboratory's uncertainty: Table 11.1 collects several
+//                        workers' published figures side by side and the text
+//                        above it says they diverge. Area is the figure to use
+//                        — the book's section 11.2.3 says diameter swelling is
+//                        meaningless for a fibre whose cross-section is not
+//                        round, and acetate proves it by swelling more in
+//                        diameter than in area. Only five fibres have it;
+//                        Table 11.1 predates most synthetics.
 //
 //    SOURCE: Morton & Hearle 4th edn, Table 13.1 (p.290), Table 13.2 (p.292)
 //    and Table 13.7 (p.312), extracted by coordinate and verified against the
@@ -210,7 +221,9 @@ const FIBER_PROPERTIES = {
                           // cotton survives rope dyeing at tensions that would
                           // damage a rayon.
                           wet: { ten: 1.11, ext: 1.11, mod: 0.33 },
-                          hot_wet: { ten: 1.00, ext: 1.00, mod: 1.00 } } },
+                          hot_wet: { ten: 1.00, ext: 1.00, mod: 1.00 } },
+               swelling: { area: [21, 42], axial: null, volume: null,
+                           page: 240, table: 'Table 11.1' } },
   polyester: { density: 1.39, regain: 0.4,  rkm: 1.25,     // was 1.38 — Table 5.1 gives 1.39
                tensile: { tenacity: 0.47, extension: 15.0, modulus: 10.6,
                           grade: 'Terylene, medium-tenacity', page: 292, table: 'Table 13.2',
@@ -229,17 +242,26 @@ const FIBER_PROPERTIES = {
                           // was knitted. Under any tension at all it extends,
                           // and it sets in whatever shape it dried in.
                           wet: { ten: 0.50, ext: 1.58, mod: 0.03 },
-                          hot_wet: { ten: 0.90, ext: 1.03, mod: 0.80 } } },
+                          hot_wet: { ten: 0.90, ext: 1.03, mod: 0.80 } },
+               // It roughly doubles in cross-section. Against 3.7-4.8% along
+               // its length: the anisotropy is what a knit shows as width
+               // movement while the length broadly holds.
+               swelling: { area: [50, 114], axial: [3.7, 4.8], volume: [74, 127],
+                           page: 240, table: 'Table 11.1' } },
   nylon:     { density: 1.14, regain: 4.2,  rkm: 1.40,     // Table 5.1 p.165
                tensile: { tenacity: 0.48, extension: 20.0, modulus: 3.0,
                           grade: 'nylon 6.6, medium-tenacity', page: 292, table: 'Table 13.2',
                           wet: { ten: 0.80, ext: 1.05, mod: 0.82 },
-                          hot_wet: { ten: 0.79, ext: 1.76, mod: 0.21 } } },
+                          hot_wet: { ten: 0.79, ext: 1.76, mod: 0.21 } },
+               swelling: { area: [1.6, 3.2], axial: [2.7, 2.9], volume: [8.1, 11.0],
+                           page: 240, table: 'Table 11.1' } },
   wool:      { density: 1.31, regain: 16.0, rkm: 0.50,     // Table 5.1 p.165
                tensile: { tenacity: 0.11, extension: 42.5, modulus: 2.3,
                           grade: 'Botany 64s (merino)', page: 290, table: 'Table 13.1',
                           wet: { ten: 0.69, ext: 1.33, mod: 0.40 },
-                          hot_wet: { ten: 0.55, ext: 1.37, mod: 0.50 } } },
+                          hot_wet: { ten: 0.55, ext: 1.37, mod: 0.50 } },
+               swelling: { area: [25, 26], axial: null, volume: [36, 41],
+                           page: 240, table: 'Table 11.1' } },
   acrylic:   { density: 1.19, regain: 1.5,  rkm: 0.70,     // was 1.17 — Table 5.1 gives 1.19
                tensile: { tenacity: 0.27, extension: 25.0, modulus: 6.2,
                           grade: 'Orlon 42, staple', page: 292, table: 'Table 13.2',
@@ -276,7 +298,9 @@ const FIBER_PROPERTIES = {
                tensile: { tenacity: 0.38, extension: 23.4, modulus: 7.3,
                           grade: 'silk', page: 290, table: 'Table 13.1',
                           wet: { ten: 0.92, ext: 1.63, mod: 0.25 },
-                          hot_wet: { ten: 0.71, ext: 0.96, mod: 0.67 } } },
+                          hot_wet: { ten: 0.71, ext: 0.96, mod: 0.67 } },
+               swelling: { area: [19, 19], axial: [1.3, 1.6], volume: [30, 32],
+                           page: 240, table: 'Table 11.1' } },
   // Regain is not in Table 7.3. Polypropylene is a hydrocarbon with no polar
   // group for water to attach to, and the book's own chapter 7 explains regain
   // in exactly those terms, so zero is the physics rather than a placeholder —
@@ -385,7 +409,10 @@ function blendMechanics(fibers) {
     if (!pct) continue;
     const p = FIBER_PROPERTIES[name];
     if (!p || !p.tensile) { unmeasured.push(name); continue; }
-    parts.push({ name, pct, t: p.tensile });
+    // `swelling` sits beside `tensile` on the fibre, not inside it: they come
+    // from different chapters measured on different apparatus, and nesting one
+    // in the other would imply they were taken together.
+    parts.push({ name, pct, t: p.tensile, s: p.swelling });
     mass += pct;
   }
   if (!parts.length) return null;
@@ -400,6 +427,16 @@ function blendMechanics(fibers) {
     const w = known.reduce((a, x) => a + x.pct, 0);
     return round3(known.reduce((a, x) => a + x.t[group][key] * x.pct, 0) / w);
   };
+
+  // Swelling, over the fibres that have it. A fibre with no measured swelling
+  // is excluded and named, for the same reason it is excluded from the wet
+  // ratios: absent is not zero.
+  const swollen = parts.filter(x => x.s && x.s.area);
+  const swellWeight = swollen.reduce((a, x) => a + x.pct, 0);
+  const swellArea = swellWeight
+    ? [round3(swollen.reduce((a, x) => a + x.s.area[0] * x.pct, 0) / swellWeight),
+       round3(swollen.reduce((a, x) => a + x.s.area[1] * x.pct, 0) / swellWeight)]
+    : null;
 
   const weakest = parts.reduce((a, x) => (x.t.extension < a.t.extension ? x : a), parts[0]);
   const strongest = parts.reduce((a, x) => (x.t.extension > a.t.extension ? x : a), parts[0]);
@@ -429,6 +466,24 @@ function blendMechanics(fibers) {
       extension: wetMean('hot_wet', 'ext'),
       modulus: wetMean('hot_wet', 'mod'),
     },
+
+    // Fibre cross-sectional area in water, and what that does to the yarn's
+    // DIAMETER, which is the form a knitter can use. The conversion is
+    // geometric — a diameter grows as the square root of an area — and it
+    // assumes the yarn's packing factor is unchanged, which is an
+    // approximation: fibres that swell also press on each other and the yarn
+    // does not expand quite that freely. It is stated as an upper bound for
+    // the same reason the blend tenacity is.
+    swelling_area_pct: swellArea,
+    // Rounded to whole per cent on purpose. The input range is a disagreement
+    // between laboratories spanning more than two to one, so "22.474" would
+    // claim a precision that no part of the chain has.
+    yarn_diameter_gain_pct: swellArea
+      ? [Math.round((Math.sqrt(1 + swellArea[0] / 100) - 1) * 100),
+         Math.round((Math.sqrt(1 + swellArea[1] / 100) - 1) * 100)]
+      : null,
+    swelling_covered_pct: round3(swellWeight),
+    no_swelling_data: parts.filter(x => !(x.s && x.s.area)).map(x => x.name),
 
     measured_pct: round3(mass),
     unmeasured,

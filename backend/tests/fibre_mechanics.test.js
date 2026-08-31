@@ -128,4 +128,44 @@ assert.strictEqual(silkBlend.rkm_idx, 1.0, "so it equals cotton's index exactly"
 assert(Math.abs(silkBlend.density - (1.52 * 0.7 + 1.34 * 0.3)) < 0.001,
   'density is still averaged over the whole blend');
 
+// ── Swelling (Table 11.1, p.240) ─────────────────────────────────
+// Ranges here are a disagreement between laboratories, so both endpoints are
+// real published figures and neither may be rounded away.
+assert.deepStrictEqual(FIBER_PROPERTIES.viscose.swelling.area, [50, 114]);
+assert.deepStrictEqual(FIBER_PROPERTIES.viscose.swelling.volume, [74, 127]);
+assert.deepStrictEqual(FIBER_PROPERTIES.cotton.swelling.area, [21, 42]);
+assert.strictEqual(FIBER_PROPERTIES.cotton.swelling.volume, null,
+  'the book gives cotton no volume swelling, and null is not zero');
+assert(!FIBER_PROPERTIES.polyester.swelling,
+  'Table 11.1 predates polyester and nothing is invented for it');
+
+// Volume swelling can never be below area swelling: volume is area compounded
+// with length, and no fibre in the table gets shorter in water.
+for (const [key, row] of Object.entries(FIBER_PROPERTIES)) {
+  if (!row.swelling || !row.swelling.volume) continue;
+  assert(row.swelling.volume[1] >= row.swelling.area[0],
+    `${key}: volume swelling below area swelling`);
+}
+
+// A fibre swelling 50–114% in area thickens the yarn by sqrt(1 + area/100) − 1,
+// which for viscose is 22–46%. Whole per cent, because the input range spans
+// more than two to one and is a disagreement between workers.
+const vsw = blendMechanics({ viscose: 100 });
+assert.deepStrictEqual(vsw.swelling_area_pct, [50, 114]);
+assert.deepStrictEqual(vsw.yarn_diameter_gain_pct, [22, 46]);
+assert.deepStrictEqual(vsw.no_swelling_data, []);
+
+// Polyester has no swelling row, so it is excluded from the mean and named —
+// not counted as zero, which would halve the figure and read as a measurement.
+const cvcSw = blendMechanics({ cotton: 60, polyester: 40 });
+assert.deepStrictEqual(cvcSw.swelling_area_pct, [21, 42],
+  'the mean is over cotton alone, so it equals cotton exactly');
+assert.strictEqual(cvcSw.swelling_covered_pct, 60);
+assert.deepStrictEqual(cvcSw.no_swelling_data, ['polyester']);
+
+const wsw = wetMechanics({ viscose: 100 }, {});
+assert(wsw.findings.some(f => /swells 50.114%/.test(f.finding)),
+  'the swelling finding reaches the report');
+assert.deepStrictEqual(wsw.yarn_diameter_gain_pct, [22, 46]);
+
 console.log('\n✓ All fibre mechanics tests passed.');
