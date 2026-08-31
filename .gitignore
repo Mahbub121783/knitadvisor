@@ -35,3 +35,7 @@ scratch/shoot_rib.js
 
 # local-only verification scratch
 .verify/
+
+# Python bytecode from running the extraction scripts
+__pycache__/
+*.pyc
