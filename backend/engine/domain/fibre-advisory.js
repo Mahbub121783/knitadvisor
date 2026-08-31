@@ -44,7 +44,7 @@
 
 const {
   FIBER_PROPERTIES, blendMechanics, blendFriction, blendRecovery,
-  fibreVariability, weakLinkSensitivity,
+  fibreVariability, weakLinkSensitivity, moistureEconomics,
 } = require('./yarn-engine');
 
 const SOURCE = 'Morton & Hearle, Physical Properties of Textile Fibres, 4th edn (2008), '
@@ -253,6 +253,7 @@ function fibreAdvisory(fibers, ctx = {}) {
   const rec = blendRecovery(fibers, 60);
   const vary = fibreVariability(fibers);
   const weak = weakLinkSensitivity(fibers);
+  const moist = moistureEconomics(fibers);
   const pill = pillingIndex(fibers);
   const hand = handleIndex(fibers);
   const struct = structureFreedom(ctx);
@@ -499,6 +500,53 @@ function fibreAdvisory(fibers, ctx = {}) {
     });
   }
 
+  // ── 10. What the moisture costs ────────────────────────────────────────
+  // Not a fabric fault — an accounting one, and it is systematic and in one
+  // direction, which is exactly why it gets written off as waste.
+  if (moist && moist.invoice_over_conditioned_pct != null
+      && moist.invoice_over_conditioned_pct >= 0.3) {
+    push({
+      topic: 'yarn costing', severity: 'moderate',
+      claim: qualify(`Yarn invoiced at the ${moist.commercial_allowance_pct}% commercial `
+        + `allowance weighs about ${moist.invoice_over_conditioned_pct}% more than the same `
+        + `fibre conditioned in your store.`,
+        moist.covered_pct, [...moist.unmeasured, ...moist.no_allowance_published]),
+      mechanism: `Yarn is traded at a conventional allowance fixed by standard — `
+        + `${moist.commercial_allowance_pct}% here — while the fibre at 65% r.h. actually holds `
+        + `less. A tonne invoiced at the allowance carries `
+        + `${round2(1000 / (1 + moist.commercial_allowance_pct / 100))} kg of dry fibre, and `
+        + `conditioned at its real regain that same fibre weighs under a tonne. No process `
+        + `caused the difference and nothing was spilled, which is precisely why it ends up `
+        + `booked as waste.`,
+      action: 'Reconcile yarn receipts at a stated regain rather than as-weighed, and carry '
+        + `${moist.invoice_over_conditioned_pct}% as a costing line rather than in the process `
+        + 'loss figure — otherwise it hides real waste of the same size.',
+      evidence: [{ table: 'Table 7.3', page: 188 }],
+      confidence: moist.no_allowance_published.length
+        ? `the book publishes no allowance for ${moist.no_allowance_published.join(', ')}`
+        : 'measured',
+    });
+  }
+
+  // GSM disputes between two competent labs usually come down to this.
+  if (moist && moist.hysteresis_pct != null && moist.hysteresis_pct >= 0.8 && ctx.gsm) {
+    const grams = round2(ctx.gsm * moist.hysteresis_pct / 100);
+    push({
+      topic: 'GSM measurement', severity: 'info',
+      claim: qualify(`A GSM cut taken straight off the stenter can read about ${grams} g/m² `
+        + `heavier than the same cloth conditioned up from dry.`,
+        moist.covered_pct, moist.unmeasured),
+      mechanism: `A fibre coming DOWN to 65% r.h. from wet holds more water than the same fibre `
+        + `coming UP to it from dry — ${moist.hysteresis_pct}% more here. Every fabric that has `
+        + `been through a dyehouse is on the wet side of that hysteresis, so two labs can both `
+        + `condition correctly and still disagree by this much.`,
+      action: 'Specify the conditioning branch, not just the atmosphere, when a GSM is contested '
+        + '(ISO 139: pre-dry, then condition up from dry). Do not chase this as a process fault.',
+      evidence: [{ table: 'Table 7.3', page: 188 }],
+      confidence: `measured over ${moist.covered_pct}% of the blend`,
+    });
+  }
+
   // ── What is NOT known ──────────────────────────────────────────────────
   const gaps = [];
   if (silentOn.length) {
@@ -531,6 +579,7 @@ function fibreAdvisory(fibers, ctx = {}) {
       structure_freedom: struct.value,
     },
     indices: {
+      moisture: moist,
       pilling: pill,
       handle: hand,
       recovery: rec,

@@ -251,7 +251,8 @@ const FIBER_PROPERTIES = {
                            page: 723, table: 'Table 25.6' } ,
                recovery: { rh60: { e1: 91, e5: 52, e10: null },
                            rh90: { e1: 83, e5: 59, e10: null },
-                           page: 344, table: 'Table 15.2' },},
+                           page: 344, table: 'Table 15.2' },
+               regain_detail: { commercial: 8.5, measured: [7, 8], hysteresis: 0.9, page: 188, table: 'Table 7.3' },},
   polyester: { density: 1.39, regain: 0.4,  rkm: 1.25,     // was 1.38 — Table 5.1 gives 1.39
                tensile: { tenacity: 0.47, extension: 15.0, modulus: 10.6, work_of_rupture: 53,
                           grade: 'Terylene, medium-tenacity', page: 292, table: 'Table 13.2',
@@ -295,7 +296,8 @@ const FIBER_PROPERTIES = {
                               extension: 23, page: 335, table: 'Table 14.6' } ,
                recovery: { rh60: { e1: 67, e5: 32, e10: 23 },
                            rh90: { e1: 60, e5: 28, e10: 27 },
-                           page: 344, table: 'Table 15.2' },},
+                           page: 344, table: 'Table 15.2' },
+               regain_detail: { commercial: 13, measured: [12, 14], hysteresis: 1.8, page: 188, table: 'Table 7.3' },},
   nylon:     { density: 1.14, regain: 4.2,  rkm: 1.40,     // Table 5.1 p.165
                tensile: { tenacity: 0.48, extension: 20.0, modulus: 3.0, work_of_rupture: 63,
                           grade: 'nylon 6.6, medium-tenacity', page: 292, table: 'Table 13.2',
@@ -355,7 +357,8 @@ const FIBER_PROPERTIES = {
                           hot_wet: { ten: 0.35, ext: 4.26, mod: 0.02 } } ,
                recovery: { rh60: { e1: 92, e5: 50, e10: 43 },
                            rh90: { e1: 90, e5: 48, e10: 39 },
-                           page: 344, table: 'Table 15.2' },},
+                           page: 344, table: 'Table 15.2' },
+               regain_detail: { commercial: null, measured: [1, 2], hysteresis: null, page: 188, table: 'Table 7.3' },},
 
   // UNSOURCED. Table 5.1 has no row for any of these four, and the closest
   // rows are not substitutes: modal is a high-wet-modulus viscose and lyocell
@@ -391,7 +394,8 @@ const FIBER_PROPERTIES = {
                            page: 723, table: 'Table 25.6' } ,
                recovery: { rh60: { e1: 84, e5: 52, e10: 34 },
                            rh90: { e1: 78, e5: 58, e10: 45 },
-                           page: 344, table: 'Table 15.2' },},
+                           page: 344, table: 'Table 15.2' },
+               regain_detail: { commercial: 11, measured: 10, hysteresis: 1.2, page: 188, table: 'Table 7.3' },},
   // Regain is not in Table 7.3. Polypropylene is a hydrocarbon with no polar
   // group for water to attach to, and the book's own chapter 7 explains regain
   // in exactly those terms, so zero is the physics rather than a placeholder —
@@ -456,6 +460,78 @@ function yarnDiameterMm(ne, blendDensity) {
   const d_in_cotton = 1 / (28 * Math.sqrt(ne));
   const densityScale = Math.sqrt(1.52 / (blendDensity || 1.52)); // lighter fibre → bulkier → larger d
   return parseFloat((d_in_cotton * 25.4 * densityScale).toFixed(4));
+}
+
+/**
+ * What the moisture in a fibre costs, and what it does to a GSM reading.
+ *
+ * Two figures that have sat in the reference layer unused, and both are money.
+ *
+ * COMMERCIAL REGAIN IS NOT MEASURED REGAIN. Yarn is bought and sold at a
+ * conventional allowance set by standard — 8.5% for cotton under BS 4784 — while
+ * the fibre at 65% r.h. actually holds 7 to 8%. A mill invoiced for 1000 kg of
+ * cotton yarn at the allowance has been charged for 1000/1.085 = 921.7 kg of
+ * dry fibre; conditioned in the store at its real 7.5% that same fibre weighs
+ * 990.8 kg. Nine kilos in a thousand, on every shipment, systematic and in one
+ * direction. It is not waste and no process caused it, which is exactly why it
+ * gets attributed to waste.
+ *
+ * HYSTERESIS MOVES A GSM READING. A fibre coming DOWN to 65% r.h. from wet
+ * holds more water than the same fibre coming UP to 65% from dry — 0.9% more
+ * for cotton, 1.8% for viscose. Every fabric that has been through a dyehouse
+ * is on the desorption branch. So a GSM cut from a roll fresh off the stenter
+ * reads systematically heavier than the same cloth conditioned from dry, which
+ * is a real and repeatable disagreement between two labs both doing it right.
+ */
+function moistureEconomics(fibers) {
+  if (!fibers) return null;
+  const parts = [];
+  const noAllowance = [];
+  const unmeasured = [];
+  for (const [name, pct] of Object.entries(fibers)) {
+    if (!pct) continue;
+    const r = (FIBER_PROPERTIES[name] || {}).regain_detail;
+    if (!r) { unmeasured.push(name); continue; }
+    parts.push({ name, pct, r });
+    if (r.commercial == null) noAllowance.push(name);
+  }
+  if (!parts.length) return null;
+
+  const mid = v => (Array.isArray(v) ? (v[0] + v[1]) / 2 : v);
+
+  // Weighted over the fibres that HAVE an allowance. Averaging in a fibre whose
+  // allowance the book refuses to state — the book prints "1.5 or 3" for
+  // polyester, not a number — would invent one.
+  const withAllowance = parts.filter(x => x.r.commercial != null);
+  let overstatement = null, allowancePct = null;
+  if (withAllowance.length) {
+    const w = withAllowance.reduce((a, x) => a + x.pct, 0);
+    const comm = withAllowance.reduce((a, x) => a + x.r.commercial * x.pct, 0) / w;
+    const meas = withAllowance.reduce((a, x) => a + mid(x.r.measured) * x.pct, 0) / w;
+    // Mass invoiced at the allowance against mass held at 65% r.h., per unit of
+    // dry fibre. Positive means the invoice is heavier than the cloth.
+    overstatement = round3(((1 + comm / 100) / (1 + meas / 100) - 1) * 100);
+    allowancePct = round3(comm);
+  }
+
+  const withHyst = parts.filter(x => x.r.hysteresis != null);
+  let hysteresis = null;
+  if (withHyst.length) {
+    const w = withHyst.reduce((a, x) => a + x.pct, 0);
+    hysteresis = round3(withHyst.reduce((a, x) => a + x.r.hysteresis * x.pct, 0) / w);
+  }
+
+  return {
+    commercial_allowance_pct: allowancePct,
+    // How much heavier a shipment invoiced at the allowance is than the same
+    // fibre conditioned at 65% r.h.
+    invoice_over_conditioned_pct: overstatement,
+    hysteresis_pct: hysteresis,
+    covered_pct: round3(parts.reduce((a, x) => a + x.pct, 0)),
+    no_allowance_published: noAllowance,
+    unmeasured,
+    source: 'Morton & Hearle, Table 7.3, p.188 (allowances per BS 4784:1973).',
+  };
 }
 
 /**
@@ -1121,6 +1197,7 @@ module.exports = {
   blendMechanics,
   blendFriction,
   blendRecovery,
+  moistureEconomics,
   fibreVariability,
   weakLinkSensitivity,
   analyzeYarn,
