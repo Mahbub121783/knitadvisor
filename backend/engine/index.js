@@ -72,6 +72,7 @@ const { matchRiskAssessment } = require('./domain/risk-assessment');
 const { gaugeFromBulkData, estimateProcessLoss, greyRequirementForFinished } = require('./catalog/production-data');
 const { analyzeWetProcessing, greigeGsmTarget, resolveFamily } = require('./domain/wet-processing-engine');
 const { applyFabricPhysics } = require('./domain/fabric-physics');
+const { fibreAdvisory } = require('./domain/fibre-advisory');
 
 // ============================================================
 // MAIN CALCULATE FUNCTION
@@ -735,6 +736,7 @@ function calculate(params) {
   // and the machine-by-machine problem/cause/solution/remedy for this fabric,
   // shade and dyeing method. The expert "explain the whole critical path" answer.
   let wetProcessing = null;
+  let fibreAdvice = null;
   if (fabricDef.category !== 'warp_knit' && gsm) {
     const fib = parsedComp ? (parsedComp.fibers || {}) : { cotton: 100 };
     const wpProcs = [];
@@ -753,6 +755,34 @@ function calculate(params) {
       spinning: spinning_system || (yarnExpertise ? yarnExpertise.spinning_system : null),
       processes: wpProcs,
     });
+    // The fibre reference layer, reasoning about THIS fabric.
+    //
+    // Everything measured out of Morton & Hearle used to leave the engine
+    // through the wet-processing card alone, so a merchandiser calculating a
+    // fabric never saw any of it. This is the other door, and it is deliberately
+    // computed for every calculation rather than only for wet-processed goods:
+    // pilling, handle, shape retention and blend strength are properties of the
+    // cloth whether or not it ever enters a dyehouse.
+    fibreAdvice = fibreAdvisory(fib, {
+      fabricId: fabricDef.id,
+      category: fabricDef.category,
+      gsm,
+      has_elastane: parsedComp ? !!parsedComp.has_elastane : false,
+      elastane_pct: parsedComp ? parsedComp.elastane_pct : null,
+      spinning: spinning_system || (yarnExpertise ? yarnExpertise.spinning_system : null),
+      mercerised: /mercer/i.test(String(finishing_route || '')) || wpProcs.includes('mercerizing'),
+    });
+    if (fibreAdvice && fibreAdvice.ok) {
+      const worst = fibreAdvice.findings[0];
+      trace.push({
+        step: '6.1g', action: 'fibre_advisory',
+        result: `${fibreAdvice.findings.length} finding(s) over `
+              + `${fibreAdvice.coverage.measured_pct}% of the blend`
+              + (worst ? ` · top: ${worst.topic} (${worst.severity})` : '')
+              + (fibreAdvice.not_known.length ? ` · ${fibreAdvice.not_known.length} gap(s) named` : ''),
+      });
+    }
+
     if (wetProcessing && wetProcessing.ok) {
       trace.push({ step: '6.1e', action: 'wet_processing', result: `Grey ${wetProcessing.greige.grey_gsm_target} g/m² → finish ${gsm} · ${wetProcessing.machine_critical_path.length} machine stages · ${wetProcessing.dyeing_method}` });
       // The measured half of that card, kept as its own step because it is the
@@ -958,6 +988,10 @@ function calculate(params) {
     sl_by_shade: slByShade,
 
     wet_processing: (wetProcessing && wetProcessing.ok) ? wetProcessing : null,
+
+    // The measured fibre science, reasoning about this fabric. Present on every
+    // calculation, not only wet-processed ones.
+    fibre_advisory: (fibreAdvice && fibreAdvice.ok) ? fibreAdvice : null,
 
     machine: {
       gauge_recommended: machineResult.gauge_range,

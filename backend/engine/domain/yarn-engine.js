@@ -141,6 +141,15 @@ const DEFAULT_SPINNING = { fine: 'combed', medium: 'combed', coarse: 'carded' };
 //             dry and 1.52 conditioned), which is exactly enough to look
 //             plausible while being wrong.
 //    regain   % at 65% RH.
+//    tensile.work_of_rupture
+//             mN/tex, the area under the stress-strain curve — the ENERGY needed
+//             to break one fibre, as against the force. It is the quantity that
+//             decides whether a pill stays on the cloth: every staple yarn works
+//             fibre ends to the surface, and what separates a fabric that pills
+//             from one that does not is whether the fibres anchoring the pill
+//             break when it is rubbed. Cotton is 10.7 and polyester 53, which is
+//             the whole of why poly-cotton pills and cotton does not.
+//             Extracted from the same printed row as the tenacity beside it.
 //    rkm      NOT a tenacity. It is a dimensionless strength index relative to
 //             cotton = 1.00, multiplied against SPINNING_SYSTEMS.rkm (which IS
 //             cN/tex) at line ~269. The name collides with that one; the two
@@ -213,7 +222,7 @@ const DEFAULT_SPINNING = { fine: 'combed', medium: 'combed', coarse: 'carded' };
 // ============================================================
 const FIBER_PROPERTIES = {
   cotton:    { density: 1.52, regain: 7.5,  rkm: 1.00,     // Table 5.1 p.165
-               tensile: { tenacity: 0.32, extension: 7.1, modulus: 5.0,
+               tensile: { tenacity: 0.32, extension: 7.1, modulus: 5.0, work_of_rupture: 10.7,
                           grade: 'Uppers', page: 290, table: 'Table 13.1',
                           // Cotton is one of the two fibres in the book that
                           // get STRONGER wet. The cellulose swells, more chains
@@ -244,7 +253,7 @@ const FIBER_PROPERTIES = {
                            rh90: { e1: 83, e5: 59, e10: null },
                            page: 344, table: 'Table 15.2' },},
   polyester: { density: 1.39, regain: 0.4,  rkm: 1.25,     // was 1.38 — Table 5.1 gives 1.39
-               tensile: { tenacity: 0.47, extension: 15.0, modulus: 10.6,
+               tensile: { tenacity: 0.47, extension: 15.0, modulus: 10.6, work_of_rupture: 53,
                           grade: 'Terylene, medium-tenacity', page: 292, table: 'Table 13.2',
                           // Water does nothing to it. Heat does: at 95 C wet it
                           // keeps 42% of its modulus and stretches 40% further,
@@ -259,7 +268,7 @@ const FIBER_PROPERTIES = {
                            rh90: { e1: 92, e5: 60, e10: 47 },
                            page: 344, table: 'Table 15.2' },},
   viscose:   { density: 1.49, regain: 13.0, rkm: 0.60,     // was 1.52, which is the DRY figure
-               tensile: { tenacity: 0.21, extension: 15.7, modulus: 6.5,
+               tensile: { tenacity: 0.21, extension: 15.7, modulus: 6.5, work_of_rupture: 18.8,
                           grade: 'Fibro, staple', page: 290, table: 'Table 13.1',
                           // The most consequential four numbers in this file.
                           // Wet viscose keeps half its strength and THREE PER
@@ -288,7 +297,7 @@ const FIBER_PROPERTIES = {
                            rh90: { e1: 60, e5: 28, e10: 27 },
                            page: 344, table: 'Table 15.2' },},
   nylon:     { density: 1.14, regain: 4.2,  rkm: 1.40,     // Table 5.1 p.165
-               tensile: { tenacity: 0.48, extension: 20.0, modulus: 3.0,
+               tensile: { tenacity: 0.48, extension: 20.0, modulus: 3.0, work_of_rupture: 63,
                           grade: 'nylon 6.6, medium-tenacity', page: 292, table: 'Table 13.2',
                           wet: { ten: 0.80, ext: 1.05, mod: 0.82 },
                           hot_wet: { ten: 0.79, ext: 1.76, mod: 0.21 } },
@@ -307,7 +316,7 @@ const FIBER_PROPERTIES = {
                            rh90: { e1: 92, e5: 90, e10: null },
                            page: 344, table: 'Table 15.2' },},
   wool:      { density: 1.31, regain: 16.0, rkm: 0.50,     // Table 5.1 p.165
-               tensile: { tenacity: 0.11, extension: 42.5, modulus: 2.3,
+               tensile: { tenacity: 0.11, extension: 42.5, modulus: 2.3, work_of_rupture: 30.9,
                           grade: 'Botany 64s (merino)', page: 290, table: 'Table 13.1',
                           wet: { ten: 0.69, ext: 1.33, mod: 0.40 },
                           hot_wet: { ten: 0.55, ext: 1.37, mod: 0.50 } },
@@ -335,7 +344,7 @@ const FIBER_PROPERTIES = {
                            rh90: { e1: 94, e5: 82, e10: 56 },
                            page: 344, table: 'Table 15.2' },},
   acrylic:   { density: 1.19, regain: 1.5,  rkm: 0.70,     // was 1.17 — Table 5.1 gives 1.19
-               tensile: { tenacity: 0.27, extension: 25.0, modulus: 6.2,
+               tensile: { tenacity: 0.27, extension: 25.0, modulus: 6.2, work_of_rupture: 47,
                           grade: 'Orlon 42, staple', page: 292, table: 'Table 13.2',
                           // Cold water leaves acrylic alone entirely. Boiling
                           // water does not: it keeps a FIFTIETH of its modulus
@@ -370,7 +379,7 @@ const FIBER_PROPERTIES = {
   // averages it over the fibres that have one and reports the rest, so a blend
   // containing silk still gets a sourced density and regain.
   silk:      { density: 1.34, regain: 10.0,                // Table 5.1 p.165, Table 7.3 p.188
-               tensile: { tenacity: 0.38, extension: 23.4, modulus: 7.3,
+               tensile: { tenacity: 0.38, extension: 23.4, modulus: 7.3, work_of_rupture: 59.7,
                           grade: 'silk', page: 290, table: 'Table 13.1',
                           wet: { ten: 0.92, ext: 1.63, mod: 0.25 },
                           hot_wet: { ten: 0.71, ext: 0.96, mod: 0.67 } },
@@ -388,7 +397,7 @@ const FIBER_PROPERTIES = {
   // in exactly those terms, so zero is the physics rather than a placeholder —
   // but it is still not a measurement, and it is marked as such here.
   polypropylene: { density: 0.91, regain: 0.0, regain_assumed: true,  // Table 5.1 p.165
-               tensile: { tenacity: 0.65, extension: 17.0, modulus: 7.1,
+               tensile: { tenacity: 0.65, extension: 17.0, modulus: 7.1, work_of_rupture: 71,
                           grade: 'Ulstron', page: 292, table: 'Table 13.2',
                           // Water does nothing at all — all four ratios are
                           // 1.00 — but at 95 C it keeps a fifth of its modulus
@@ -397,7 +406,7 @@ const FIBER_PROPERTIES = {
                           wet: { ten: 1.00, ext: 1.00, mod: 1.00 },
                           hot_wet: { ten: 0.45, ext: 2.47, mod: 0.21 } } },
   polyethylene: { density: 0.95, regain: 0.0, regain_assumed: true,   // Table 5.1 p.165
-               tensile: { tenacity: 0.34, extension: 10.0, modulus: 4.4,
+               tensile: { tenacity: 0.34, extension: 10.0, modulus: 4.4, work_of_rupture: 19,
                           grade: 'Courlene X3, high density', page: 292, table: 'Table 13.2',
                           wet: null, hot_wet: null } },
   //
@@ -428,7 +437,7 @@ const FIBER_PROPERTIES = {
   tencel:    { density: 1.50, regain: 11.5, rkm: 1.05 },
   bamboo:    { density: 1.50, regain: 13.0, rkm: 0.55 },
   elastane:  { density: 1.20, regain: 1.0,  rkm: 0.80,
-               tensile: { tenacity: 0.0309, extension: 540.0, modulus: 0.0071,
+               tensile: { tenacity: 0.0309, extension: 540.0, modulus: 0.0071, work_of_rupture: 65,
                           grade: 'polyurethane elastomer', page: 292, table: 'Table 13.2',
                           // Table 13.7 does not list an elastomer, so what
                           // water does to it is not known from this book and is
