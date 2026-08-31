@@ -252,7 +252,8 @@ const FIBER_PROPERTIES = {
                recovery: { rh60: { e1: 91, e5: 52, e10: null },
                            rh90: { e1: 83, e5: 59, e10: null },
                            page: 344, table: 'Table 15.2' },
-               regain_detail: { commercial: 8.5, measured: [7, 8], hysteresis: 0.9, page: 188, table: 'Table 7.3' },},
+               regain_detail: { commercial: 8.5, measured: [7, 8], hysteresis: 0.9, page: 188, table: 'Table 7.3' },
+               yield_point: { stress_mn_tex: 9,   strain_pct: 1, page: 344, table: 'Table 15.1' },},
   polyester: { density: 1.39, regain: 0.4,  rkm: 1.25,     // was 1.38 — Table 5.1 gives 1.39
                tensile: { tenacity: 0.47, extension: 15.0, modulus: 10.6, work_of_rupture: 53,
                           grade: 'Terylene, medium-tenacity', page: 292, table: 'Table 13.2',
@@ -297,7 +298,8 @@ const FIBER_PROPERTIES = {
                recovery: { rh60: { e1: 67, e5: 32, e10: 23 },
                            rh90: { e1: 60, e5: 28, e10: 27 },
                            page: 344, table: 'Table 15.2' },
-               regain_detail: { commercial: 13, measured: [12, 14], hysteresis: 1.8, page: 188, table: 'Table 7.3' },},
+               regain_detail: { commercial: 13, measured: [12, 14], hysteresis: 1.8, page: 188, table: 'Table 7.3' },
+               yield_point: { stress_mn_tex: 39,  strain_pct: 1, page: 344, table: 'Table 15.1' },},
   nylon:     { density: 1.14, regain: 4.2,  rkm: 1.40,     // Table 5.1 p.165
                tensile: { tenacity: 0.48, extension: 20.0, modulus: 3.0, work_of_rupture: 63,
                           grade: 'nylon 6.6, medium-tenacity', page: 292, table: 'Table 13.2',
@@ -316,7 +318,8 @@ const FIBER_PROPERTIES = {
                            page: 723, table: 'Table 25.6' } ,
                recovery: { rh60: { e1: 90, e5: 89, e10: 89 },
                            rh90: { e1: 92, e5: 90, e10: null },
-                           page: 344, table: 'Table 15.2' },},
+                           page: 344, table: 'Table 15.2' },
+               yield_point: { stress_mn_tex: 127, strain_pct: 8, page: 344, table: 'Table 15.1' },},
   wool:      { density: 1.31, regain: 16.0, rkm: 0.50,     // Table 5.1 p.165
                tensile: { tenacity: 0.11, extension: 42.5, modulus: 2.3, work_of_rupture: 30.9,
                           grade: 'Botany 64s (merino)', page: 290, table: 'Table 13.1',
@@ -344,7 +347,8 @@ const FIBER_PROPERTIES = {
                            page: 723, table: 'Tables 25.3 and 25.6' } ,
                recovery: { rh60: { e1: 99, e5: 69, e10: 51 },
                            rh90: { e1: 94, e5: 82, e10: 56 },
-                           page: 344, table: 'Table 15.2' },},
+                           page: 344, table: 'Table 15.2' },
+               yield_point: { stress_mn_tex: 39,  strain_pct: 4, page: 344, table: 'Table 15.1' },},
   acrylic:   { density: 1.19, regain: 1.5,  rkm: 0.70,     // was 1.17 — Table 5.1 gives 1.19
                tensile: { tenacity: 0.27, extension: 25.0, modulus: 6.2, work_of_rupture: 47,
                           grade: 'Orlon 42, staple', page: 292, table: 'Table 13.2',
@@ -395,7 +399,8 @@ const FIBER_PROPERTIES = {
                recovery: { rh60: { e1: 84, e5: 52, e10: 34 },
                            rh90: { e1: 78, e5: 58, e10: 45 },
                            page: 344, table: 'Table 15.2' },
-               regain_detail: { commercial: 11, measured: 10, hysteresis: 1.2, page: 188, table: 'Table 7.3' },},
+               regain_detail: { commercial: 11, measured: 10, hysteresis: 1.2, page: 188, table: 'Table 7.3' },
+               yield_point: { stress_mn_tex: 98,  strain_pct: 4, page: 344, table: 'Table 15.1' },},
   // Regain is not in Table 7.3. Polypropylene is a hydrocarbon with no polar
   // group for water to attach to, and the book's own chapter 7 explains regain
   // in exactly those terms, so zero is the physics rather than a placeholder —
@@ -460,6 +465,63 @@ function yarnDiameterMm(ne, blendDensity) {
   const d_in_cotton = 1 / (28 * Math.sqrt(ne));
   const densityScale = Math.sqrt(1.52 / (blendDensity || 1.52)); // lighter fibre → bulkier → larger d
   return parseFloat((d_in_cotton * 25.4 * densityScale).toFixed(4));
+}
+
+/**
+ * The yield point, expressed as the yarn tension a knitter can actually read.
+ *
+ * Above its yield stress a fibre stops recovering fully: whatever extension is
+ * imposed past that point stays. In a knitting machine that is not an abstract
+ * property — it is the difference between a fabric that relaxes back to the
+ * stitch length it was set to and one that does not, and it is the mechanism
+ * behind "the loop length is right on the machine and wrong on the table".
+ *
+ * The fibres are far apart on it. Cotton yields at 9 mN/tex and nylon at 127,
+ * fourteen times as much, so the same tension that is harmless on a nylon is
+ * past the point of no return on a cotton.
+ *
+ * THE STEP THIS CANNOT MEASURE, stated rather than hidden. What is printed is
+ * the FIBRE's yield stress. A yarn is not a bundle of parallel fibres: twist
+ * puts them at an angle to the load, and only some of the fibre's strength
+ * reaches the yarn — the translation efficiency. The book does not measure it,
+ * so the ceiling below is the fibre's, and it is an UPPER bound on the yarn's.
+ * The real yarn figure is lower, typically by something like a half, and this
+ * says so instead of quietly applying a factor nobody sourced.
+ */
+function yieldTension(fibers, countNe) {
+  if (!fibers || !countNe || countNe <= 0) return null;
+  const parts = [];
+  const unmeasured = [];
+  for (const [name, pct] of Object.entries(fibers)) {
+    if (!pct) continue;
+    const y = (FIBER_PROPERTIES[name] || {}).yield_point;
+    if (!y) { unmeasured.push(name); continue; }
+    parts.push({ name, pct, y });
+  }
+  if (!parts.length) return null;
+
+  // A blend yields where its WEAKEST component does: once the cotton in a
+  // poly-cotton has passed its yield point, that part of the load is
+  // permanently taken, whatever the polyester is still doing. Averaging would
+  // put the ceiling above the point where damage has already begun in part of
+  // the yarn.
+  const weakest = parts.reduce((a, b) => (b.y.stress_mn_tex < a.y.stress_mn_tex ? b : a));
+  const tex = 590.5 / countNe;
+  // mN/tex x tex = mN; 10 mN = 1 cN.
+  const ceilingCn = round3(weakest.y.stress_mn_tex * tex / 10);
+
+  return {
+    governed_by: weakest.name,
+    yield_stress_mn_tex: weakest.y.stress_mn_tex,
+    yield_strain_pct: weakest.y.strain_pct,
+    count_ne: countNe,
+    tex: round3(tex),
+    // An upper bound on the yarn, not the yarn's own figure. See above.
+    fibre_ceiling_cn: ceilingCn,
+    is_upper_bound: true,
+    unmeasured,
+    evidence: { table: weakest.y.table, page: weakest.y.page },
+  };
 }
 
 /**
@@ -1198,6 +1260,7 @@ module.exports = {
   blendFriction,
   blendRecovery,
   moistureEconomics,
+  yieldTension,
   fibreVariability,
   weakLinkSensitivity,
   analyzeYarn,

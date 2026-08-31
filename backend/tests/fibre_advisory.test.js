@@ -195,6 +195,41 @@ assert(!fibreAdvisory({ cotton: 100 }, { fabricId: 'single_jersey', category: 's
   .findings.some(f => f.topic === 'GSM measurement'),
   'with no GSM given there is nothing to scale, so it says nothing');
 
+// ── Yield point: the tension past which a loop stops coming back ────────
+const { yieldTension } = require('../engine/domain/yarn-engine');
+// A blend yields where its WEAKEST fibre does. Once the cotton in a poly-cotton
+// has passed its yield point that deformation is taken, whatever the polyester
+// is still doing — so an average would put the ceiling above the point where
+// damage has already begun.
+const yc = yieldTension({ cotton: 60, polyester: 40 }, 30);
+assert.strictEqual(yc.governed_by, 'cotton');
+assert.strictEqual(yc.yield_stress_mn_tex, 9);
+assert(yc.fibre_ceiling_cn > 17 && yc.fibre_ceiling_cn < 18,
+  `9 mN/tex at 19.68 tex is 17.7 cN, got ${yc.fibre_ceiling_cn}`);
+// Nylon yields fourteen times higher than cotton, so the same tension that
+// ruins one is nothing to the other.
+assert(yieldTension({ nylon: 100 }, 30).fibre_ceiling_cn >
+       10 * yieldTension({ cotton: 100 }, 30).fibre_ceiling_cn);
+// The ceiling scales with the count, because a stress is not a tension until
+// there is a linear density to multiply it by.
+assert(yieldTension({ cotton: 100 }, 20).fibre_ceiling_cn >
+       yieldTension({ cotton: 100 }, 30).fibre_ceiling_cn,
+  'a coarser yarn carries more force at the same stress');
+assert.strictEqual(yieldTension({ cotton: 100 }, null), null,
+  'with no count there is no tension to quote, and none is invented');
+assert.strictEqual(yc.is_upper_bound, true);
+
+// The claim must say it is an upper bound. A yarn is twisted, so only part of
+// the fibre's strength reaches it; the book does not measure that translation,
+// so no factor is applied and the limitation is stated instead of hidden.
+const yf = fibreAdvisory({ cotton: 100 }, { ...sj, count_ne: 30 })
+  .findings.find(f => /stops coming back/.test(f.claim));
+assert(yf, 'a fabric with a count should get the yield-tension finding');
+assert(/UPPER bound/.test(yf.claim), 'the claim itself must carry the bound');
+assert(/translation/.test(yf.mechanism), 'and the mechanism must name the step it cannot measure');
+assert(!fibreAdvisory({ cotton: 100 }, sj).findings.some(f => /stops coming back/.test(f.claim)),
+  'without a count there is nothing to quote and it stays silent');
+
 console.log(`  ${fibreAdvisory({ cotton: 60, polyester: 40 }, sj).findings.length} findings on a 60/40 CVC single jersey`);
 console.log(`  ${fibreAdvisory({ viscose: 100 }, sj).findings.length} on a viscose single jersey`);
 console.log('\n✓ All fibre advisory tests passed.');

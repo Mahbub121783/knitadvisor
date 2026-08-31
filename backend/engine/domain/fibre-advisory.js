@@ -44,7 +44,7 @@
 
 const {
   FIBER_PROPERTIES, blendMechanics, blendFriction, blendRecovery,
-  fibreVariability, weakLinkSensitivity, moistureEconomics,
+  fibreVariability, weakLinkSensitivity, moistureEconomics, yieldTension,
 } = require('./yarn-engine');
 
 const SOURCE = 'Morton & Hearle, Physical Properties of Textile Fibres, 4th edn (2008), '
@@ -254,6 +254,7 @@ function fibreAdvisory(fibers, ctx = {}) {
   const vary = fibreVariability(fibers);
   const weak = weakLinkSensitivity(fibers);
   const moist = moistureEconomics(fibers);
+  const yld = ctx.count_ne ? yieldTension(fibers, ctx.count_ne) : null;
   const pill = pillingIndex(fibers);
   const hand = handleIndex(fibers);
   const struct = structureFreedom(ctx);
@@ -547,6 +548,36 @@ function fibreAdvisory(fibers, ctx = {}) {
     });
   }
 
+  // ── 11. How hard the yarn can be pulled before the loop stops coming back
+  // Needs the count, because a stress only becomes a tension a knitter can set
+  // on the machine once there is a linear density to multiply it by.
+  if (yld) {
+    push({
+      topic: 'knitting tension', severity: 'info',
+      claim: `Past roughly ${round1(yld.fibre_ceiling_cn)} cN of yarn tension at `
+        + `${yld.count_ne} Ne, extension stops coming back — and that is an UPPER bound, `
+        + `so the yarn's real limit is lower.`,
+      mechanism: `Above its yield stress a fibre no longer recovers fully: whatever is imposed `
+        + `past that point stays. This blend yields where its weakest component does — `
+        + `${yld.governed_by} at ${yld.yield_stress_mn_tex} mN/tex, reached at only `
+        + `${yld.yield_strain_pct}% extension — because once that fibre has passed its yield `
+        + `point the deformation is taken, whatever the others are still doing. At `
+        + `${yld.tex} tex that stress is ${round1(yld.fibre_ceiling_cn)} cN. The figure is the `
+        + `FIBRE's: a yarn is twisted, so the fibres sit at an angle to the load and only part `
+        + `of their strength reaches the yarn. The book does not measure that translation, so `
+        + `no factor is applied — the number is a ceiling the yarn cannot exceed, not the yarn's `
+        + `own limit.`,
+      action: 'This is the mechanism behind "loop length right on the machine, wrong on the '
+        + 'table": tension past yield is not stored in the loop, it is spent. Keep input '
+        + 'tension well under the figure above, and if relaxed dimensions keep drifting from '
+        + 'the set stitch length, measure the running tension before re-cutting the cam.',
+      evidence: [{ table: yld.evidence.table, page: yld.evidence.page }],
+      confidence: yld.unmeasured.length
+        ? `no yield point for ${yld.unmeasured.join(', ')}; the ceiling is set by the measured fibres`
+        : 'upper bound — fibre yield, not yarn yield',
+    });
+  }
+
   // ── What is NOT known ──────────────────────────────────────────────────
   const gaps = [];
   if (silentOn.length) {
@@ -580,6 +611,7 @@ function fibreAdvisory(fibers, ctx = {}) {
     },
     indices: {
       moisture: moist,
+      yield_tension: yld,
       pilling: pill,
       handle: hand,
       recovery: rec,
