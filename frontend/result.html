@@ -454,6 +454,14 @@
       <div class="result-section-label">Machine-Wise Critical Path (problem → cause → solution → remedy)</div>
       <div id="wet-machines" style="margin-bottom:10px;"></div>
 
+      <!-- Measured fibre mechanics: what the fibre does once it is wet.
+           Everything above this point is mill convention; this block is the
+           only part of the card that cites a measurement. -->
+      <div id="wet-mech-wrap" class="hidden">
+        <div class="result-section-label">Fibre Mechanics in Water — measured</div>
+        <div id="wet-mech" style="margin-bottom:10px;"></div>
+      </div>
+
       <!-- Structure + colour issues -->
       <div class="result-section-label">Fabric-Structure Issues</div>
       <div id="wet-struct" style="margin-bottom:10px;"></div>
@@ -1186,6 +1194,60 @@ function renderWetProcessing(w) {
           </div>`).join('')}
       </div>
     </details>`).join('');
+
+  // ---- Measured fibre mechanics ------------------------------------------
+  // The ratios are Morton & Hearle Table 13.7: every tensile property wet,
+  // divided by the same property at 65% r.h. A ratio under 1 is a loss, over 1
+  // a gain, and the modulus column is the one that explains dimensional
+  // change — a fabric that cannot resist being stretched while wet dries in
+  // whatever shape it was pulled into.
+  const m = w.wet_mechanics;
+  const mechWrap = document.getElementById('wet-mech-wrap');
+  if (!m) {
+    mechWrap.classList.add('hidden');
+  } else {
+    mechWrap.classList.remove('hidden');
+    const TONE = { severe: '#ff8080', high: '#fb923c', moderate: '#fbbf24', low: '#4ade80', info: '#00d1ff' };
+    const pct = v => (v == null ? '—' : Math.round(v * 100) + '%');
+    const bar = (label, v) => {
+      // 100% is the conditioned value, so the scale runs to 2x to leave room
+      // for the fibres that gain rather than lose.
+      const width = v == null ? 0 : Math.min(100, (v / 2) * 100);
+      const tone = v == null ? 'var(--t3)' : (v < 0.4 ? TONE.severe : v < 0.8 ? TONE.moderate : TONE.low);
+      return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;font-size:10px;">
+        <span style="width:78px;color:var(--t3);">${esc(label)}</span>
+        <span style="flex:1;height:6px;background:rgba(255,255,255,.06);border-radius:3px;overflow:hidden;">
+          <span style="display:block;height:100%;width:${width}%;background:${tone};"></span></span>
+        <span style="width:44px;text-align:right;font-weight:700;color:${tone};">${pct(v)}</span></div>`;
+    };
+    const riskChip = (label, level) => `<span style="display:inline-block;background:rgba(255,255,255,.05);
+      border:1px solid ${TONE[level] || 'rgba(255,255,255,.15)'};border-radius:5px;padding:2px 7px;margin:2px;
+      font-size:10px;color:${TONE[level] || 'var(--t2)'};font-weight:700;">${esc(label)}: ${esc(level || '—')}</span>`;
+
+    document.getElementById('wet-mech').innerHTML = `
+      <div style="margin-bottom:8px;">
+        ${riskChip('Wet dimensional risk', m.dimensional_risk)}
+        ${riskChip('In the dyebath', m.dimensional_risk_in_bath)}
+        ${m.wet_covered_pct != null && m.wet_covered_pct < 100
+          ? `<span style="font-size:10px;color:var(--t3);margin-left:4px;">covers ${m.wet_covered_pct}% of the blend</span>` : ''}
+      </div>
+      <div style="padding:8px 10px;margin-bottom:8px;background:rgba(255,255,255,.02);border-radius:6px;">
+        <div style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">
+          Wet, as a share of the same property at 65% r.h.</div>
+        ${bar('Tenacity', m.wet_vs_conditioned.tenacity)}
+        ${bar('Extension', m.wet_vs_conditioned.extension)}
+        ${bar('Initial modulus', m.wet_vs_conditioned.modulus)}
+      </div>
+      ${(m.findings || []).map(f => `
+        <div style="padding:6px 8px;margin-bottom:5px;background:rgba(255,255,255,.02);border-radius:5px;
+                    border-left:2px solid ${TONE[f.severity] || 'rgba(255,255,255,.2)'};font-size:10px;line-height:1.6;">
+          <div style="color:${TONE[f.severity] || 'var(--t1)'};font-weight:700;">${esc(f.finding)}</div>
+          <div style="color:var(--t3);">${esc(f.means)}</div>
+          <div style="color:var(--t2);"><b>Do:</b> ${esc(f.do)}</div>
+          ${f.source ? `<div style="color:var(--t3);font-size:9px;">${esc(f.source)}</div>` : ''}
+        </div>`).join('')}
+      <div style="font-size:9px;color:var(--t3);margin-top:4px;">${esc(m.source)}</div>`;
+  }
 
   // Structure issues
   document.getElementById('wet-struct').innerHTML = (w.fabric_structure_issues || []).map(i => `

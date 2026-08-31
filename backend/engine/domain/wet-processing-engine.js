@@ -28,6 +28,7 @@
 'use strict';
 
 const { estimateProcessLoss } = require('../catalog/production-data');
+const { blendMechanics } = require('./yarn-engine');
 
 // ============================================================
 // 1. AREA-SHRINKAGE (compaction GSM gain) BY FABRIC FAMILY
@@ -401,6 +402,168 @@ const COLOUR_CHEMICAL = {
 };
 
 // ============================================================
+// 8. WHAT THE FIBRE ACTUALLY DOES IN THE MACHINE
+//
+// Everything above this point is mill convention: shrinkage factors and dye
+// add-ons calibrated against real grey-to-finish records. They say what
+// happens. This section says WHY, from measured single-fibre mechanics, and it
+// is the first thing in this engine that can be checked against a book.
+//
+// The measurements are Morton & Hearle Table 13.7 (p.312): every tensile
+// property WET, divided by the same property at 65% r.h., and then wet at 95 C
+// divided by wet at 20 C. Two columns matter more than the rest.
+//
+// Wet tenacity is the obvious one — viscose keeps half its strength — but wet
+// INITIAL MODULUS is the one that explains the dyehouse. Modulus is resistance
+// to being stretched. Viscose keeps 3% of it. A wet viscose knit under rope
+// tension is not being strained towards its breaking point; it is simply going
+// wherever it is pulled, and then drying there. That is the mechanism behind
+// width loss and length gain, and no shrinkage factor explains it, because the
+// factor is a measurement of the outcome and this is its cause.
+//
+// The thresholds below are set on the ratios themselves rather than on
+// composition percentages, so they mean something physical: "the fabric is
+// more than six times as easy to stretch wet as dry" is a statement about the
+// cloth, where "contains 30% viscose" is a statement about the paperwork.
+// ============================================================
+
+// A fibre that gains strength in water is not at dimensional risk from a low
+// modulus in the way one that loses strength is: cotton drops to a third of
+// its modulus wet and is rope-dyed every day without trouble, because it is
+// also 11% STRONGER wet and simply carries the tension. So both figures have
+// to be low before this reports a problem.
+function dimensionalRisk(mod, ten) {
+  if (mod == null) return null;
+  if (mod < 0.15) return 'severe';
+  if (ten != null && ten >= 1.0) return 'low';
+  if (mod < 0.35) return 'high';
+  if (mod < 0.60) return 'moderate';
+  return 'low';
+}
+
+const PCT = r => (r == null ? '—' : Math.round(r * 100) + '%');
+
+function wetMechanics(fibers, ctx) {
+  const m = blendMechanics(fibers);
+  if (!m) return null;
+
+  const findings = [];
+  // How much of the blend the WET figures actually describe, which is not the
+  // same as how much has tensile data at all.
+  const wetCovered = parseFloat(
+    (m.measured_pct - m.no_wet_data.reduce((a, f) => a + (fibers[f] || 0), 0)).toFixed(1));
+  const cold = dimensionalRisk(m.wet.modulus, m.wet.tenacity);
+  // The dyebath, not the rinse. A hot-wet ratio multiplies the cold-wet one,
+  // because the book measures 95 C wet against 20 C wet, not against dry.
+  const hotMod = m.wet.modulus != null && m.hot_wet.modulus != null
+    ? m.wet.modulus * m.hot_wet.modulus : null;
+  const hotTen = m.wet.tenacity != null && m.hot_wet.tenacity != null
+    ? m.wet.tenacity * m.hot_wet.tenacity : null;
+  const hot = dimensionalRisk(hotMod, hotTen);
+
+  if (cold === 'severe' || cold === 'high') {
+    findings.push({
+      severity: cold,
+      finding: `Wet initial modulus is ${PCT(m.wet.modulus)} of the conditioned value`,
+      means: 'The fabric offers almost no resistance to being stretched while it is wet, '
+           + 'and it sets in whatever shape it dries in. Length gain and width loss here '
+           + 'are not shrinkage — they are the cloth being pulled and then fixed.',
+      do: 'Process open-width rather than in rope. Keep line tension to the minimum the '
+        + 'machine will run at while the fabric is wet, set width on the stenter before '
+        + 'it dries, and take the dimensional reading only after it has relaxed dry.',
+      source: 'Table 13.7, p.312',
+    });
+  }
+  if (m.wet.tenacity != null && m.wet.tenacity < 0.8) {
+    findings.push({
+      severity: m.wet.tenacity < 0.6 ? 'high' : 'moderate',
+      finding: `Wet tenacity is ${PCT(m.wet.tenacity)} of the conditioned value`,
+      means: 'Any tension the machine applies is working against a weaker fabric than the '
+           + 'one that was inspected grey. Rope marks, edge damage and needle-line breaks '
+           + 'start here.',
+      do: 'Reduce batch load, lower rope speed, and inspect for damage wet rather than '
+        + 'after drying, when it is already set.',
+      source: 'Table 13.7, p.312',
+    });
+  }
+  if (hotMod != null && hot !== cold && hot !== 'low') {
+    findings.push({
+      severity: hotMod < 0.10 ? 'high' : 'moderate',
+      finding: `In the dyebath the modulus falls further, to ${PCT(hotMod)} of the dry value`,
+      means: 'The fibre softens with heat as well as with water, so the fabric is at its '
+           + 'most deformable at exactly the point in the process where it is held longest.',
+      do: 'Hold the bath at the lowest temperature the recipe allows, and do not raise '
+        + 'tension to recover width while hot — it will come back out on the stenter.',
+      source: 'Table 13.7, p.312, wet 95 °C against wet 20 °C',
+    });
+  }
+  if (m.wet.tenacity != null && m.wet.tenacity > 1.0) {
+    findings.push({
+      severity: 'info',
+      finding: `Wet tenacity is ${PCT(m.wet.tenacity)} — this blend is STRONGER wet than dry`,
+      means: 'Cellulose swells in water and more of the chain network shares the load. It '
+           + 'is why cotton tolerates rope dyeing at tensions that would damage a rayon.',
+      do: 'No wet-strength restriction. The usual rope-route limits still apply for '
+        + 'creasing and shade, not for strength.',
+      source: 'Table 13.7, p.312',
+    });
+  }
+  if (!m.blend_average_reliable) {
+    findings.push({
+      severity: 'info',
+      finding: `${m.breaks_first} reaches its breaking extension first, at ${m.breaks_first_at_pct}%`,
+      means: 'The components of this blend do not break together — the extensions are '
+           + `${m.extension_spread}:1 apart — so the yarn fails when the shorter-extension `
+           + 'fibre does, while the other is still well below its own limit. Blend strength '
+           + 'therefore does not rise in a straight line with blend ratio.',
+      do: 'Read the tenacity figure as an upper bound, not a prediction, and take burst '
+        + 'strength from a test rather than from the blend arithmetic.',
+      source: 'Tables 13.1 and 13.2, breaking extensions',
+    });
+  }
+  if (m.no_wet_data.length) {
+    findings.push({
+      severity: 'info',
+      finding: `The book measures no wet behaviour for ${m.no_wet_data.join(', ')}`,
+      means: 'Table 13.7 lists no elastomer, so what water does to elastane is not known '
+           + 'from this source. It is left out of the wet averages rather than counted as '
+           + '1.00, which would have said water leaves it alone.',
+      do: 'Take elastane wet behaviour from the supplier data sheet; the figures above '
+        + `describe the other ${wetCovered}% of the blend.`,
+      source: null,
+    });
+  }
+  if (m.unmeasured.length) {
+    findings.push({
+      severity: 'info',
+      finding: `No measured mechanics for ${m.unmeasured.join(', ')}`,
+      means: 'Those fibres are absent from the averages above rather than assumed neutral, '
+           + 'so the figures describe only the part of the blend the book covers.',
+      do: `Treat the figures as covering ${m.measured_pct}% of the blend by mass.`,
+      source: null,
+    });
+  }
+
+  return {
+    wet_vs_conditioned: m.wet,
+    hot_wet_vs_wet: m.hot_wet,
+    dry_to_dyebath: { tenacity: hotTen == null ? null : parseFloat(hotTen.toFixed(3)),
+                      modulus: hotMod == null ? null : parseFloat(hotMod.toFixed(3)) },
+    dimensional_risk: cold,
+    dimensional_risk_in_bath: hot,
+    tenacity_upper_bound_n_tex: m.tenacity_upper_bound_n_tex,
+    modulus_n_tex: m.modulus_n_tex,
+    extension_pct: m.extension_pct,
+    breaks_first: m.breaks_first,
+    covered_pct: m.measured_pct,
+    wet_covered_pct: wetCovered,
+    findings,
+    sources: m.sources,
+    source: m.source,
+  };
+}
+
+// ============================================================
 // 7. PROCESS ROUTE (ordered machine sequence) BY METHOD
 // ============================================================
 function processRoute(method, ctx) {
@@ -493,6 +656,7 @@ function analyzeWetProcessing(args) {
   const colour_issues = COLOUR_CHEMICAL[sh] || [];
 
   const route = processRoute(me, ctx);
+  const wet_mechanics = wetMechanics(fibers, ctx);
 
   return {
     ok: true,
@@ -504,13 +668,19 @@ function analyzeWetProcessing(args) {
     machine_critical_path: machine_path,
     fabric_structure_issues: structure_issues,
     colour_chemical_issues: colour_issues,
-    summary: `${fam.replace('_', ' ')} · ${me.replace('_', ' ')} · ${sh}: knit GREY ~${greige.grey_gsm_target} g/m² (range ${greige.grey_gsm_range[0]}–${greige.grey_gsm_range[1]}) to deliver ${finish_gsm} g/m² finished. ${machine_path.length} machine stages on the critical path; process loss ~${process_loss.loss_pct}%.`,
+    wet_mechanics,
+    summary: `${fam.replace('_', ' ')} · ${me.replace('_', ' ')} · ${sh}: knit GREY ~${greige.grey_gsm_target} g/m² (range ${greige.grey_gsm_range[0]}–${greige.grey_gsm_range[1]}) to deliver ${finish_gsm} g/m² finished. ${machine_path.length} machine stages on the critical path; process loss ~${process_loss.loss_pct}%.${
+      wet_mechanics && wet_mechanics.dimensional_risk && wet_mechanics.dimensional_risk !== 'low'
+        ? ` Wet dimensional risk ${wet_mechanics.dimensional_risk}: initial modulus falls to ${PCT(wet_mechanics.wet_vs_conditioned.modulus)} of dry.`
+        : ''}`,
     source: 'Wet-processing critical-path model — calibrated to factory grey→finish R&D (shrinkage/dye gain) + Knitting Master File (process loss).',
   };
 }
 
 module.exports = {
   analyzeWetProcessing,
+  wetMechanics,
+  dimensionalRisk,
   greigeGsmTarget,
   greigeGsmAllShades,
   familyOf,

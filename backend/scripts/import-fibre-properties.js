@@ -2,8 +2,8 @@
 /**
  * IMPORT THE FIBRE MEASUREMENTS
  * =============================
- * Loads data/fibre-properties.json — the density tables of Morton & Hearle
- * chapter 5, read off the page by coordinate — into `fibres` and
+ * Loads data/fibre-properties.json — the density, regain and tensile tables of
+ * Morton & Hearle, read off the page by coordinate — into `fibres` and
  * `fibre_properties`.
  *
  *   node scripts/import-fibre-properties.js            check only
@@ -78,8 +78,9 @@ function verify(payload) {
         recovered.length ? 'these now parse — check they parse CORRECTLY: ' + recovered.join(', ') : '');
   check(refused.every(r => r.why && r.why.length > 10),
         'every refusal states a reason');
-  check(fibres.length >= 45, 'the density and regain tables were read', fibres.length + ' fibres');
-  check(properties.length >= 125, 'every column of every table came through',
+  check(fibres.length >= 63, 'the density, regain and tensile tables were read',
+        fibres.length + ' fibres');
+  check(properties.length >= 430, 'every column of every table came through',
         properties.length + ' measurements');
 
   // Classification has to satisfy the same constraints the table does, so a bad
@@ -97,7 +98,7 @@ function verify(payload) {
   // Conditions must be typed consistently, or "density at 65% r.h." stops being
   // a question the database can answer.
   const badRh = properties.filter(p =>
-    (p.condition === '65% r.h.' && p.rh_pct !== 65) ||
+    (p.condition && p.condition.startsWith('65% r.h.') && p.rh_pct !== 65) ||
     (p.condition === 'dry' && p.rh_pct !== 0) ||
     (p.condition === null && p.rh_pct !== null));
   check(badRh.length === 0, 'the stated condition and the typed humidity agree', badRh.length + ' disagree');
@@ -131,9 +132,16 @@ function verify(payload) {
   }
   check(broken.length === 0, 'specific volume is the reciprocal of density in every row',
         broken.slice(0, 4).join('; '));
-  check(slips.length === 1 && slips[0].fibre === 'carbon',
-        'exactly one row fails it, and it is the one the book itself gets wrong',
-        slips.map(s => s.fibre).join(', '));
+  // Two rows in the whole book fail an identity the book itself sets up, and
+  // both are the book's arithmetic rather than ours. They are named, so a third
+  // one appearing is a failure and not a shrug.
+  const EXPECTED_SLIPS = ['carbon', 'viscose_tenasco'];
+  const slipNames = slips.map(x => x.fibre).sort();
+  check(slipNames.join(',') === EXPECTED_SLIPS.slice().sort().join(','),
+        'the only rows failing a book identity are the two the book gets wrong',
+        slipNames.join(', '));
+  check(slips.every(x => x.note && x.note.length > 80),
+        'each of them is argued, not merely listed');
 
   // Physical sanity, matching the table's own CHECK so nothing is rejected at
   // write time that could have been caught here with a readable message.
@@ -181,6 +189,117 @@ function verify(payload) {
 
   const regains = properties.filter(p => p.property.includes('regain'));
   check(regains.length >= 20, 'the regain table came through', regains.length + ' regain rows');
+
+  // ── Tensile properties, chapter 13 ────────────────────────────────────
+  //
+  // The tensile tables have an identity of their own, and it is a better check
+  // than the reciprocal because it ties FOUR columns together instead of two:
+  //
+  //     work of rupture = work factor x tenacity x breaking extension
+  //
+  // Work of rupture is the area under the stress-strain curve and the work
+  // factor is that area as a fraction of the rectangle enclosing it, so the
+  // relation is a definition, not a correlation. A column read one place off
+  // breaks it at once. Table 13.1 prints the work factor and so checks itself;
+  // Table 13.2 does not, so the factor is derived and required to be a
+  // fraction, an area being unable to exceed the rectangle around it.
+  //
+  // Re-derived here from the file rather than trusted from the extractor, for
+  // the same reason the reciprocal is.
+  const TENSILE = ['tenacity', 'breaking_extension', 'work_of_rupture', 'initial_modulus'];
+  const val = r => (r.value != null ? r.value : r.value_min);
+
+  const tensileRows = new Map();          // fibre|page -> {property: row}
+  for (const pr of properties) {
+    if (!/^Table 13\.[12]$/.test(pr.table_ref || '')) continue;
+    const key = pr.fibre_slug + '|' + pr.page;
+    if (!tensileRows.has(key)) tensileRows.set(key, {});
+    tensileRows.get(key)[pr.property] = pr;
+  }
+  check(tensileRows.size >= 35, 'the tensile tables came through',
+        tensileRows.size + ' fibre-grades measured');
+
+  const incomplete = [...tensileRows].filter(([, r]) => TENSILE.some(t => !r[t]));
+  check(incomplete.length === 0,
+        'every tensile row carries all four of tenacity, extension, work of rupture and modulus',
+        incomplete.map(([k]) => k).join(', '));
+
+  const brokenWork = [], brokenModulus = [];
+  for (const [key, r] of tensileRows) {
+    if (TENSILE.some(t => !r[t])) continue;
+    const slug = key.split('|')[0];
+    const t = val(r.tenacity), e = val(r.breaking_extension);
+    const w = val(r.work_of_rupture), m = val(r.initial_modulus);
+    // tenacity N/tex, extension %, work of rupture mN/tex — hence the 10.
+    const rect = t * e * 10;
+    if (r.work_factor) {
+      const want = rect * val(r.work_factor);
+      if (Math.abs(w - want) > Math.max(0.5, 0.06 * want) && !EXPECTED_SLIPS.includes(slug)) {
+        brokenWork.push(`${key}: ${w} against ${want.toFixed(2)}`);
+      }
+    } else {
+      const f = w / rect;
+      if (!(f >= 0.20 && f <= 1.0)) brokenWork.push(`${key}: implied work factor ${f.toFixed(2)}`);
+    }
+    // The stress-strain curve lies above the chord to its breaking point, so
+    // the slope at the origin cannot be shallower than that chord. Glass and
+    // the elastomers are nearly linear to break, hence the 10% allowance.
+    const chord = t * 100 / e;
+    if (m < 0.9 * chord) brokenModulus.push(`${key}: modulus ${m} under chord ${chord.toFixed(2)}`);
+  }
+  check(brokenWork.length === 0,
+        'work of rupture is the area under the curve in every tensile row',
+        brokenWork.slice(0, 4).join('; '));
+  check(brokenModulus.length === 0,
+        'no initial modulus is shallower than the chord to its breaking point',
+        brokenModulus.slice(0, 4).join('; '));
+
+  // Table 13.7 gives eight ratios for every fibre it lists. A fibre with fewer
+  // means a column was lost, not that the book left a cell empty.
+  const RATIOS = ['tenacity_ratio', 'breaking_extension_ratio',
+                  'work_of_rupture_ratio', 'initial_modulus_ratio'];
+  const ratioRows = new Map();
+  for (const pr of properties) {
+    if (!RATIOS.includes(pr.property)) continue;
+    ratioRows.set(pr.fibre_slug, (ratioRows.get(pr.fibre_slug) || 0) + 1);
+  }
+  const shortRatios = [...ratioRows].filter(([, n]) => n !== 8);
+  check(ratioRows.size >= 12, 'the wet/dry ratio table came through',
+        ratioRows.size + ' fibres');
+  check(shortRatios.length === 0,
+        'every fibre in the ratio table has all eight ratios',
+        shortRatios.map(([k, n]) => `${k}: ${n}`).join(', '));
+
+  const daftRatio = properties.filter(p =>
+    RATIOS.includes(p.property) && !(val(p) > 0 && val(p) <= 10));
+  check(daftRatio.length === 0, 'every ratio is a positive number under ten',
+        daftRatio.map(p => `${p.fibre_slug}/${p.property}`).join(', '));
+
+  // A ratio is dimensionless and a percentage is not. Storing "0.50" and "50"
+  // under one property name would make every comparison wrong by a factor of
+  // 100 with nothing to show for it, so the unit is held to one value per
+  // property across the whole file.
+  const unitsBy = new Map();
+  for (const pr of properties) {
+    if (!unitsBy.has(pr.property)) unitsBy.set(pr.property, new Set());
+    unitsBy.get(pr.property).add(pr.unit);
+  }
+  const mixedUnits = [...unitsBy].filter(([, u]) => u.size !== 1);
+  check(mixedUnits.length === 0, 'each property is stored in exactly one unit',
+        mixedUnits.map(([k, u]) => `${k}: ${[...u].join('/')}`).join('; '));
+
+  // Chapter 13 stores grades — nylon 6.6 runs from 0.37 N/tex as staple to 0.66
+  // as high-tenacity filament — and exactly one grade per generic name may
+  // claim the engine's key for it. Two claimants and the fibre the engine
+  // compares against depends on import order, which is how a fibre acquires a
+  // tenacity nobody chose.
+  const claims = new Map();
+  for (const f of fibres.filter(x => x.engine_key)) {
+    claims.set(f.engine_key, (claims.get(f.engine_key) || []).concat(f.slug));
+  }
+  const contested = [...claims].filter(([, v]) => v.length > 1);
+  check(contested.length === 0, 'no engine key is claimed by two fibres',
+        contested.map(([k, v]) => `${k}: ${v.join(' and ')}`).join('; '));
 
   const badPage = properties.filter(p => !(p.page >= 1 && p.page <= 746));
   check(badPage.length === 0, 'every citation points inside the book', badPage.length + ' do not');
@@ -242,7 +361,7 @@ async function write(payload) {
 
 (async () => {
   const payload = JSON.parse(fs.readFileSync(FILE, 'utf8'));
-  console.log('Fibre measurements — Morton & Hearle chapter 5, Tables %s',
+  console.log('Fibre measurements — Morton & Hearle, Tables %s',
               payload.source.tables.join(', '));
 
   const ok = verify(payload);
