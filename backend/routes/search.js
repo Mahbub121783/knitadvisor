@@ -307,7 +307,21 @@ router.get('/fibre', searchLimiter, async (req, res) => {
            JOIN fibres f ON f.slug = p.fibre_slug
           WHERE similarity(f.name, $1) >= $2
             AND ($3::text IS NULL OR p.property LIKE $3)
-          ORDER BY score DESC, f.name, p.property, p.condition
+          ORDER BY score DESC, f.name, p.property,
+                   -- The STANDARD testing atmosphere first. Asked for cotton's
+                   -- tenacity, an alphabetical ordering of conditions led with
+                   -- 0.59 N/tex at a 0.1 mm test length — a laboratory figure
+                   -- for how much stronger the fibre is when the specimen is
+                   -- too short to contain a flaw. True, cited, and the wrong
+                   -- first answer to the question actually asked. The figure a
+                   -- textile person means is the one at 65% r.h., 20 C.
+                   CASE
+                     WHEN p.condition LIKE '65%% r.h.%%' THEN 0
+                     WHEN p.condition IS NULL             THEN 1
+                     WHEN p.condition LIKE 'conventional%%' THEN 2
+                     ELSE 3
+                   END,
+                   p.condition
           LIMIT $4`,
         [fibreTerm, MIN_SIMILARITY, propLike, limit]
       ),
@@ -336,8 +350,10 @@ router.get('/fibre', searchLimiter, async (req, res) => {
       ),
     ]);
 
-    const span = r => (r.value != null ? String(r.value)
-                     : `${r.value_min}–${r.value_max}`);
+    // numeric comes back as "0.5900"; a reader wants 0.59.
+    const trim = v => (v == null ? null : String(Number(v)));
+    const span = r => (r.value != null ? trim(r.value)
+                     : `${trim(r.value_min)}–${trim(r.value_max)}`);
 
     res.json({
       success: true,
