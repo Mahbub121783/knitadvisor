@@ -420,6 +420,19 @@
     </div>
 
     <!-- ===== WET-PROCESSING CRITICAL PATH (greige GSM + machine-wise) ===== -->
+    <!-- Fibre science, reasoning about this fabric -->
+    <div class="result-section anim-in hidden" id="sec-fibre-advisory" style="border:1px solid rgba(129,140,248,.3); background:rgba(129,140,248,.04);">
+      <div class="result-section-title">
+        <div class="rst-icon" style="color:#818cf8;">🧪</div>
+        <div class="rst-title-text" style="color:#818cf8;">Fibre Science — what the measurements say about this fabric</div>
+        <span id="fa-badge" class="badge" style="margin-left:auto;background:rgba(129,140,248,.12);color:#818cf8;border:1px solid rgba(129,140,248,.3);">—</span>
+      </div>
+      <div id="fa-headline" style="font-size:12px;line-height:1.65;color:var(--t1);margin-bottom:10px;font-weight:600;"></div>
+      <div id="fa-findings"></div>
+      <div id="fa-gaps" style="margin-top:10px;"></div>
+      <div id="fa-source" style="margin-top:9px;font-size:9px;color:var(--t3);line-height:1.5;"></div>
+    </div>
+
     <div class="result-section anim-in hidden" id="sec-wet" style="border:1px solid rgba(251,146,60,.3); background:rgba(251,146,60,.04);">
       <div class="result-section-title">
         <div class="rst-icon" style="color:#fb923c;">🏭</div>
@@ -1155,6 +1168,60 @@ document.addEventListener('DOMContentLoaded', async () => {
 /* ============================================================
    RENDER WET-PROCESSING CRITICAL PATH
    ============================================================ */
+// — Fibre Science —
+// The reference layer's own reasoning. Each finding is printed as the four
+// things that make it advice rather than trivia: the claim, the mechanism, what
+// to do, and the table and printed page it came from. A finding without all
+// four never leaves the engine, so nothing here can be a bare assertion.
+function renderFibreAdvisory(a) {
+  const esc = (x) => String(x == null ? '' : x).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  document.getElementById('sec-fibre-advisory').classList.remove('hidden');
+
+  const TONE = {
+    severe:   { c: '#ff4d6d', bg: 'rgba(255,77,109,.10)', b: 'rgba(255,77,109,.30)', label: 'severe' },
+    high:     { c: '#fb923c', bg: 'rgba(251,146,60,.10)', b: 'rgba(251,146,60,.28)', label: 'high' },
+    moderate: { c: '#fbbf24', bg: 'rgba(251,191,36,.09)', b: 'rgba(251,191,36,.25)', label: 'moderate' },
+    info:     { c: '#818cf8', bg: 'rgba(129,140,248,.07)', b: 'rgba(129,140,248,.20)', label: 'note' },
+  };
+
+  const cov = a.coverage || {};
+  document.getElementById('fa-badge').textContent =
+    `${a.findings.length} finding${a.findings.length === 1 ? '' : 's'} · covers ${cov.measured_pct}%`;
+  document.getElementById('fa-headline').textContent = a.headline || '';
+
+  document.getElementById('fa-findings').innerHTML = (a.findings || []).map(f => {
+    const t = TONE[f.severity] || TONE.info;
+    const ev = (f.evidence || []).map(e => `${esc(e.table)}, p.${e.page}`).join('; ');
+    return `
+    <details style="margin-bottom:6px;border:1px solid ${t.b};border-radius:7px;overflow:hidden;background:${t.bg};">
+      <summary style="cursor:pointer;padding:8px 10px;font-size:11px;font-weight:700;color:var(--t1);list-style:none;">
+        <span style="color:${t.c};">▸</span>
+        <span style="font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:${t.c};font-weight:800;">${t.label}</span>
+        <span style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.4px;">&nbsp;· ${esc(f.topic)}</span>
+        <div style="margin-top:3px;font-weight:600;line-height:1.55;color:var(--t1);">${esc(f.claim)}</div>
+      </summary>
+      <div style="padding:2px 10px 9px 10px;font-size:10px;line-height:1.65;color:var(--t2);">
+        <div style="margin-bottom:6px;"><span style="color:${t.c};font-weight:700;">Why:</span> ${esc(f.mechanism)}</div>
+        <div style="margin-bottom:6px;"><span style="color:${t.c};font-weight:700;">Do:</span> ${esc(f.action)}</div>
+        <div style="font-size:9px;color:var(--t3);">Source: ${ev}${f.confidence ? ` · ${esc(f.confidence)}` : ''}</div>
+      </div>
+    </details>`;
+  }).join('');
+
+  // Naming what is NOT known is part of the answer, not a footnote. A reader
+  // has to be able to tell "no risk found" from "never looked".
+  const gaps = a.not_known || [];
+  document.getElementById('fa-gaps').innerHTML = gaps.length ? `
+    <div style="border:1px dashed rgba(255,255,255,.16);border-radius:7px;padding:8px 10px;background:rgba(255,255,255,.02);">
+      <div style="font-size:9px;text-transform:uppercase;letter-spacing:.6px;color:var(--t3);margin-bottom:5px;font-weight:800;">Not known — and therefore not claimed</div>
+      <ul style="margin:0;padding-left:15px;font-size:10px;line-height:1.6;color:var(--t2);">
+        ${gaps.map(g => `<li>${esc(g)}</li>`).join('')}
+      </ul>
+    </div>` : '';
+
+  document.getElementById('fa-source').textContent = a.source || '';
+}
+
 function renderWetProcessing(w) {
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
   document.getElementById('sec-wet').classList.remove('hidden');
@@ -1439,6 +1506,11 @@ function renderResult(r, params) {
       </tr>`;
     }).join('');
     document.getElementById('sl-shade-note').textContent = (sbs.note || '') + ' ' + (sbs.reference || '');
+  }
+
+  // — Fibre Science —
+  if (r.fibre_advisory && r.fibre_advisory.ok) {
+    renderFibreAdvisory(r.fibre_advisory);
   }
 
   // — Wet-Processing Critical Path —
