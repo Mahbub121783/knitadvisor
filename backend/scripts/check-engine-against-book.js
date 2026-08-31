@@ -193,6 +193,49 @@ function compareSwelling(engine, byEngineKey) {
   return rows;
 }
 
+/**
+ * Variability and the weak link. Copied from the extraction like the tensile
+ * block, so an exact comparison is the right one: a tolerance here would hide a
+ * typo rather than absorb a real difference.
+ */
+function compareVariability(engine, byEngineKey) {
+  const CV = [['fineness', 'cv_fineness'], ['breaking_load', 'cv_breaking_load'],
+              ['tenacity', 'cv_tenacity'], ['extension', 'cv_breaking_extension']];
+  const WL = [['cm1', '1 cm test length'], ['mm1', '1 mm test length'],
+              ['mm01', '0.1 mm test length']];
+  const rows = [];
+  for (const [key, row] of Object.entries(engine)) {
+    if (!row.variability && !row.weak_link) continue;
+    const fibre = byEngineKey.get(key);
+    if (!fibre) { rows.push({ key, verdict: 'no fibre in the book claims this engine key' }); continue; }
+    const wrong = [];
+    if (row.variability) {
+      for (const [field, property] of CV) {
+        const book = props.properties.find(x => x.fibre_slug === fibre.slug &&
+          x.property === property && x.page === row.variability.page);
+        if (!book) { wrong.push(`${property} is not on p.${row.variability.page}`); continue; }
+        if (Math.abs(book.value - row.variability[field]) > 1e-9) {
+          wrong.push(`${property}: engine ${row.variability[field]}, book ${book.value}`);
+        }
+      }
+    }
+    if (row.weak_link) {
+      for (const [field, condition] of WL) {
+        const book = props.properties.find(x => x.fibre_slug === fibre.slug &&
+          x.property === 'tenacity' && x.condition === condition &&
+          x.page === row.weak_link.page);
+        if (!book) { wrong.push(`tenacity at ${condition} is not on p.${row.weak_link.page}`); continue; }
+        if (Math.abs(book.value - row.weak_link[field]) > 1e-9) {
+          wrong.push(`${condition}: engine ${row.weak_link[field]}, book ${book.value}`);
+        }
+      }
+    }
+    rows.push({ key, row, wrong,
+                verdict: wrong.length ? 'DISAGREES: ' + wrong.join('; ') : 'matches chapter 14' });
+  }
+  return rows;
+}
+
 function main() {
   const engine = FIBER_PROPERTIES;
   const byEngineKey = new Map(props.fibres.filter(f => f.engine_key).map(f => [f.engine_key, f]));
@@ -323,6 +366,22 @@ function main() {
               swelling.length, swellOff.length, noSwell);
   console.log('predates most synthetics and the book measures no substitute for them.');
   if (STRICT && swellOff.length) process.exitCode = 1;
+
+  // ── Variability and the weak link ─────────────────────────
+  const varia = compareVariability(engine, byEngineKey);
+  console.log('\n\nVARIABILITY AND THE WEAK LINK — engine against chapter 14\n');
+  console.log('  %s %s %s  %s', 'fibre'.padEnd(14), 'tenacity CV'.padEnd(12),
+              '1cm to 0.1mm'.padEnd(14), 'verdict');
+  for (const r of varia) {
+    const v = r.row && r.row.variability, wl = r.row && r.row.weak_link;
+    console.log('  %s %s %s  %s', r.key.padEnd(14),
+                (v ? v.tenacity + '%' : '—').padEnd(12),
+                (wl ? `${wl.cm1} to ${wl.mm01}` : '—').padEnd(14), r.verdict);
+  }
+  const variaOff = varia.filter(r => r.wrong && r.wrong.length);
+  console.log('\n%d fibres carry variability or weak-link figures; %d disagree.',
+              varia.length, variaOff.length);
+  if (STRICT && variaOff.length) process.exitCode = 1;
 
   if (wrongCondition.length || disagree.length) {
     console.log('\nThe engine feeds these densities to blendPhysical() and from there to');

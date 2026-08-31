@@ -1,5 +1,6 @@
 const assert = require('assert');
-const { blendMechanics, blendPhysical, FIBER_PROPERTIES } = require('../engine/domain/yarn-engine');
+const { blendMechanics, blendPhysical, fibreVariability, weakLinkSensitivity,
+        FIBER_PROPERTIES } = require('../engine/domain/yarn-engine');
 const { wetMechanics, dimensionalRisk, analyzeWetProcessing } =
   require('../engine/domain/wet-processing-engine');
 
@@ -167,5 +168,41 @@ const wsw = wetMechanics({ viscose: 100 }, {});
 assert(wsw.findings.some(f => /swells 50.114%/.test(f.finding)),
   'the swelling finding reaches the report');
 assert.deepStrictEqual(wsw.yarn_diameter_gain_pct, [22, 46]);
+
+// ── Variability and the weak link (chapter 14) ─────────
+// Cotton's fibres differ from each other six times as much as nylon's. That one
+// comparison is behind most of what a spinner knows about the two.
+assert.strictEqual(FIBER_PROPERTIES.cotton.variability.tenacity, 43);
+assert.strictEqual(FIBER_PROPERTIES.nylon.variability.tenacity, 7);
+assert.strictEqual(fibreVariability({ cotton: 100 }).consistency, 'low');
+assert.strictEqual(fibreVariability({ nylon: 100 }).consistency, 'high');
+assert.strictEqual(fibreVariability({ viscose: 100 }).consistency, 'moderate');
+
+// Polyester has no row in Table 14.6, so it is named rather than averaged in.
+const cvBlend = fibreVariability({ cotton: 60, polyester: 40 });
+assert.strictEqual(cvBlend.covered_pct, 60);
+assert.deepStrictEqual(cvBlend.unmeasured, ['polyester']);
+assert.strictEqual(fibreVariability({ polyester: 100 }), null);
+
+// The weak-link effect: a shorter specimen holds fewer weak places, so it
+// cannot test weaker. Cotton gains 90% between 1 cm and 0.1 mm; nylon 15%.
+for (const key of ['cotton', 'nylon']) {
+  const w = weakLinkSensitivity(key);
+  assert(w.at_1cm_n_tex <= w.at_1mm_n_tex && w.at_1mm_n_tex <= w.at_0_1mm_n_tex,
+    `${key}: strength falls on a shorter specimen`);
+}
+assert.strictEqual(weakLinkSensitivity('cotton').gain_to_0_1mm_pct, 90);
+assert.strictEqual(weakLinkSensitivity('nylon').gain_to_0_1mm_pct, 15);
+assert.strictEqual(weakLinkSensitivity('wool'), null,
+  'Table 14.1 measures only cotton and nylon, and nothing is invented for wool');
+
+// Chapters 13 and 14 measure the same fibres at the same 1 cm test length and
+// have to agree. This is the only cross-chapter check there is: everything else
+// tests the extraction against itself, and a consistent misreading passes that.
+assert(Math.abs(FIBER_PROPERTIES.cotton.tensile.tenacity
+                - weakLinkSensitivity('cotton').at_1cm_n_tex) <= 0.05 * 0.31,
+  'Table 13.1 and Table 14.1 disagree about cotton at 1 cm');
+assert.strictEqual(FIBER_PROPERTIES.nylon.weak_link.cm1, 0.47,
+  'Table 14.1 puts nylon at 1 cm exactly where Table 13.1 does');
 
 console.log('\n✓ All fibre mechanics tests passed.');

@@ -78,9 +78,9 @@ function verify(payload) {
         recovered.length ? 'these now parse — check they parse CORRECTLY: ' + recovered.join(', ') : '');
   check(refused.every(r => r.why && r.why.length > 10),
         'every refusal states a reason');
-  check(fibres.length >= 65, 'the density, regain, tensile and swelling tables were read',
+  check(fibres.length >= 69, 'every declared table was read',
         fibres.length + ' fibres');
-  check(properties.length >= 465, 'every column of every table came through',
+  check(properties.length >= 505, 'every column of every table came through',
         properties.length + ' measurements');
 
   // Classification has to satisfy the same constraints the table does, so a bad
@@ -375,6 +375,80 @@ function verify(payload) {
   check(bareRange.length === 0,
         'every swelling range keeps the separate figures it was built from',
         bareRange.map(p => `${p.fibre_slug}/${p.property}`).join(', '));
+
+  // ── Chapter 14: the weak link, and how much a fibre varies from itself ─
+  //
+  // THE CHECK THIS FILE HAS NEVER HAD. Everything above tests the extraction
+  // against itself — a reciprocal, an identity, a range ordering — and a
+  // consistent misreading passes all of them. This one does not: Tables 13.1
+  // and 14.1 are different tables, on different pages, in different chapters,
+  // measuring the same thing at the same 1 cm test length. Two separate
+  // coordinate grids, read independently, have to agree.
+  const at = (slug, cond, page) => properties.find(p =>
+    p.fibre_slug === slug && p.property === 'tenacity' &&
+    p.condition === cond && (page == null || p.page === page));
+
+  const crossTable = [];
+  for (const slug of ['cotton', 'nylon']) {
+    const ch13 = at(slug, '65% r.h., 20 C');
+    const ch14 = at(slug, '1 cm test length', 324);
+    if (!ch13 || !ch14) { crossTable.push(`${slug}: only one of the two tables has it`); continue; }
+    // Meredith reports 0.32 and 0.31 for cotton — a different specimen of the
+    // same variety, printed to two figures. 5% is the width of that, not a
+    // tolerance chosen to make the check pass.
+    const rel = Math.abs(ch13.value - ch14.value) / ch14.value;
+    if (rel > 0.05) {
+      crossTable.push(`${slug}: Table 13.1 p.${ch13.page} says ${ch13.value}, Table 14.1 p.${ch14.page} says ${ch14.value}`);
+    }
+  }
+  check(crossTable.length === 0,
+        'chapters 13 and 14 agree on the fibres they both measure at 1 cm',
+        crossTable.join('; '));
+
+  // A shorter specimen holds fewer weak places, so it cannot test weaker. The
+  // ordering is the whole content of the weak-link effect.
+  const LENGTHS = ['1 cm test length', '1 mm test length', '0.1 mm test length'];
+  const backwards = [];
+  for (const slug of new Set(properties.filter(p => LENGTHS.includes(p.condition)).map(p => p.fibre_slug))) {
+    for (const page of new Set(properties.filter(p =>
+      p.fibre_slug === slug && LENGTHS.includes(p.condition)).map(p => p.page))) {
+      const seq = LENGTHS.map(c => at(slug, c, page)).filter(Boolean).map(r => r.value);
+      for (let i = 1; i < seq.length; i++) {
+        if (seq[i] < seq[i - 1]) backwards.push(`${slug} p.${page}: ${seq[i - 1]} then ${seq[i]}`);
+      }
+    }
+  }
+  check(backwards.length === 0,
+        'no fibre tests weaker over a shorter specimen than a longer one',
+        backwards.join('; '));
+
+  // Table 14.3's third column is Peirce's theory applied to the first two, not
+  // a measurement, and it is dropped. 0.688 is the value it prints for two of
+  // the four varieties, so its presence anywhere means a calculated figure got
+  // filed beside measured ones.
+  const calculated = properties.filter(p =>
+    p.table_ref === 'Table 14.3' && p.property === 'tenacity' && p.value === 0.688);
+  check(calculated.length === 0,
+        "the calculated column of Table 14.3 was read for its position and not stored",
+        calculated.length + ' calculated values were stored as measurements');
+
+  // Coefficients of variation, and the conclusion the book draws from them in
+  // its own words: "the natural vegetable fibres show a large coefficient of
+  // variation; the natural protein fibres and rayon are rather more regular,
+  // and synthetic fibres such as nylon show only a small variability." If the
+  // extraction ever stopped saying that, it stopped reading the table.
+  const cv = (slug, prop) => {
+    const r = properties.find(p => p.fibre_slug === slug && p.property === prop);
+    return r ? (r.value != null ? r.value : r.value_min) : null;
+  };
+  const cvRows = properties.filter(p => p.property.startsWith('cv_'));
+  check(cvRows.length === 24, 'the variability table came through', cvRows.length + ' of 24');
+  check(cvRows.every(p => { const v = p.value != null ? p.value : p.value_min; return v > 0 && v <= 100; }),
+        'every coefficient of variation is a percentage above zero');
+  const cotCv = cv('cotton', 'cv_tenacity'), nyCv = cv('nylon', 'cv_tenacity');
+  check(cotCv != null && nyCv != null && cotCv > 3 * nyCv,
+        "cotton's fibres still vary several times as much as nylon's, as the text says",
+        `cotton ${cotCv}%, nylon ${nyCv}%`);
 
   const badPage = properties.filter(p => !(p.page >= 1 && p.page <= 746));
   check(badPage.length === 0, 'every citation points inside the book', badPage.length + ' do not');
