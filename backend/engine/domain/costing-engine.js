@@ -30,6 +30,11 @@
 // Rows = product type + variant | Cols = yarn count (Ne)
 // Source: Industry-Verified Price Database — May 2, 2026
 // ============================================================
+// The date this list was compiled. It exists as a value and not just as a
+// comment so that it can be REPORTED: a price whose age cannot be printed is
+// a price nobody can judge.
+const PRICE_LIST_DATE = '2026-05-02';
+
 const SM_PRICE_MATRIX = {
   // ----- 100% Cotton Carded Regular -----
   'carded_regular': {
@@ -331,6 +336,93 @@ function getPriceFromMatrix(yarnTypeKey, countNe) {
 }
 
 // ============================================================
+// HELPER: RESOLVE THE PRICE — live quote first, reference list second
+// ============================================================
+/**
+ * Where a yarn price actually comes from, and how old it is.
+ *
+ * The matrix below this comment is headed "Updated May 2026". Measured against
+ * the market on 29 August 2026 it was 3% high on cotton and 5-7% high on CVC
+ * and PC — and nothing could say so, because a number typed into a source file
+ * carries no date. That is the whole reason this function exists.
+ *
+ * `live` is injected rather than required, so the engine stays a pure module
+ * that a test or a script can run with no database behind it. When nothing is
+ * injected, everything below behaves exactly as it did before.
+ *
+ * THREE THINGS IT WILL NOT DO
+ *
+ * 1. It will not interpolate. The feed prints nine counts and this engine costs
+ *    fifteen; the six it does not print are covered by the reference list
+ *    already, and filling them from neighbouring quotes would produce a number
+ *    that is not a quote wearing a quote's date.
+ * 2. It will not silently prefer a stale quote to the list. Past the staleness
+ *    limit the live figure is still returned — a real price from six weeks ago
+ *    beats a typed one from four months ago — but it is labelled, and the label
+ *    travels with it to the page.
+ * 3. It will not hide which one it used. Every result carries `price_source`.
+ */
+const LIVE_PRICE_MAX_AGE_DAYS = 60;
+
+function resolveYarnPrice(yarnTypeKey, countNe, live) {
+  const listed = getPriceFromMatrix(yarnTypeKey, countNe);
+
+  let quote = null;
+  if (typeof live === 'function') {
+    try {
+      quote = live(yarnTypeKey, countNe);
+    } catch {
+      // A price lookup must never be able to fail a costing. Falling back to
+      // the reference list is always available and always says so.
+      quote = null;
+    }
+  }
+
+  if (quote && typeof quote.price_usd_kg === 'number' &&
+      quote.price_usd_kg > 0 && quote.age_days != null &&
+      quote.age_days <= LIVE_PRICE_MAX_AGE_DAYS) {
+    return {
+      price: quote.price_usd_kg,
+      price_source: {
+        kind: 'market',
+        last_updated: quote.quoted_on,
+        age_days: quote.age_days,
+        freshness: quote.age_days <= 7 ? 'current'
+                 : quote.age_days <= 21 ? 'recent' : 'stale',
+        as_published: quote.as_published || null,
+        matched: quote.label || null,
+        // Kept for traceability rather than display: the user asked for the
+        // date to be what is shown, not the publisher's name.
+        attribution: quote.source || null,
+        // What the typed list would have said, and by how much it is out. This
+        // is the number that makes the drift visible instead of theoretical.
+        reference_price: listed,
+        reference_gap_pct: listed
+          ? Math.round(((quote.price_usd_kg - listed) / listed) * 1000) / 10 : null,
+      },
+    };
+  }
+
+  return {
+    price: listed,
+    price_source: {
+      kind: 'reference_list',
+      last_updated: PRICE_LIST_DATE,
+      age_days: null,
+      freshness: 'reference',
+      // Why the live figure was not used, so "no live price" and "never looked"
+      // do not read the same — the same distinction the fibre advisory makes.
+      why: typeof live !== 'function'
+        ? 'no market feed is connected to this calculation'
+        : !quote
+          ? `the market list carries no quote for ${yarnTypeKey} at ${countNe}Ne`
+          : `the newest quote for this item is ${quote.age_days} days old, past the `
+            + `${LIVE_PRICE_MAX_AGE_DAYS}-day limit`,
+    },
+  };
+}
+
+// ============================================================
 // HELPER: AUTO-DETECT BEST YARN TYPE FROM PARSED COMPOSITION
 // ============================================================
 function autoDetectYarnType(parsedComp, countNe, options = {}) {
@@ -438,12 +530,25 @@ function calculateCost(params) {
     yarnLabel   = detected.label;
   }
 
-  // ---- 2. GET BASE PRICE FROM SM MATRIX ----
-  let basePrice = getPriceFromMatrix(yarnTypeKey, countNe);
+  // ---- 2. GET BASE PRICE: market quote first, reference list second ----
+  const resolved = resolveYarnPrice(yarnTypeKey, countNe, params.live_prices);
+  let basePrice = resolved.price;
+  let priceSource = resolved.price_source;
+
   if (basePrice === null) {
-    // Fallback: user-provided price or default
+    // Neither a quote nor a listed price. A caller-supplied figure is better
+    // than the old hard-coded 3.35, and where there is not even that, the
+    // guess is labelled as one rather than dressed as a reference price.
     basePrice = params.yarn_price_per_kg ? parseFloat(params.yarn_price_per_kg) : 3.35;
+    priceSource = {
+      kind: params.yarn_price_per_kg ? 'user_supplied' : 'fallback_guess',
+      last_updated: null, age_days: null, freshness: 'unknown',
+      why: `nothing prices "${yarnTypeKey}" at ${countNe}Ne`,
+    };
     warnings.push(`No reference price found for yarn type "${yarnTypeKey}" at count ${countNe}Ne. Using fallback price $${basePrice}/kg.`);
+  } else if (priceSource.kind === 'market' && priceSource.freshness === 'stale') {
+    warnings.push(`The market price used here was published on ${priceSource.last_updated}, ` +
+      `${priceSource.age_days} days ago.`);
   }
 
   // ---- 3. APPLY SURCHARGES ----
@@ -600,6 +705,12 @@ function calculateCost(params) {
     success: true,
     response_ms: Date.now() - startTime,
 
+    // Collected since this engine was written and never returned, so the one
+    // warning it already raised — "no reference price found, using a fallback
+    // of $3.35" — has never reached anybody. A costing that silently guessed
+    // its main input is exactly the thing a warning list is for.
+    warnings,
+
     yarn: {
       type_key:          yarnTypeKey,
       type_label:        yarnLabel,
@@ -609,7 +720,17 @@ function calculateCost(params) {
       surcharges:        surchargesApplied,
       surcharge_total:   round4(surchargeTotal),
       final_price_usd:   finalYarnPrice,
-      source:            'KnitAdvisor Certified Price Database — May 2, 2026',
+      // Where this price came from and how old it is. It used to be a fixed
+      // string naming the May 2026 list, printed under every price whether
+      // that is where the price came from or not.
+      price_source:      priceSource,
+      source:            priceSource.kind === 'market'
+        ? `Market quote, last updated ${priceSource.last_updated}`
+        : priceSource.kind === 'reference_list'
+          ? `KnitAdvisor reference price list, ${PRICE_LIST_DATE}`
+          : priceSource.kind === 'user_supplied'
+            ? 'Price supplied with the request'
+            : 'No reference price — fallback figure',
       // Elastane separate yarn (when applicable)
       elastane: elastaneDetail,
     },
@@ -673,7 +794,14 @@ function calculateCost(params) {
     garment: garmentCost,
 
     formula_trace: {
-      yarn_price:   `Reference Matrix[${yarnTypeKey}][${Math.round(countNe)}Ne] = $${basePrice} + surcharges($${round4(surchargeTotal)}) = $${finalYarnPrice}`,
+      yarn_price:   `${priceSource.kind === 'market'
+          ? `Market quote[${yarnTypeKey}][${Math.round(countNe)}Ne] as at ${priceSource.last_updated}`
+          : `Reference Matrix[${yarnTypeKey}][${Math.round(countNe)}Ne]`} = $${basePrice}` +
+        ` + surcharges($${round4(surchargeTotal)}) = $${finalYarnPrice}` +
+        (priceSource.reference_gap_pct != null
+          ? ` — the reference list would have said $${priceSource.reference_price}, ` +
+            `${priceSource.reference_gap_pct > 0 ? '+' : ''}${priceSource.reference_gap_pct}%`
+          : ''),
       elastane_blend: elastaneDetail ? `Base yarn $${finalYarnPrice} × ${100 - elastanePct}% + Elastane $${elastaneDetail.price_per_kg_usd} × ${elastanePct}% = $${effectiveYarnPrice}/kg (weighted blend)` : null,
       raw_material: `$${effectiveYarnPrice} × (1 + ${wastePct}% waste) = $${rawMaterialWithWaste}`,
       knitting:     knittingDetail ? knittingDetail.note : `$${knittingFinal}/kg`,

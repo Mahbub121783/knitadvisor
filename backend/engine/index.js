@@ -812,6 +812,9 @@ function calculate(params) {
     costCountNe = parseFloat((5315 / effectiveDenier).toFixed(2)); // denier → Ne equiv for cost calc
   }
   const costResult = calculateCost({
+    // Market quotes when the caller has them, the reference list when not.
+    // Injected rather than required so this module needs no database.
+    live_prices: params.live_prices || null,
     fabric: fabricDef.id,
     gsm,
     count_ne: costCountNe || 30,
