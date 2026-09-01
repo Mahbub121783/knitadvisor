@@ -1074,6 +1074,12 @@ function calculate(params) {
       yarn_surcharges:          costResult.yarn.surcharges,
       yarn_final_price_usd:     costResult.yarn.final_price_usd,
       yarn_price_source:        costResult.yarn.source,
+      // How old the price is, so the page can print it. `yarn_price_source`
+      // above is a sentence; this is the structure behind it, and the date in
+      // it is the whole reason the market feed exists — a price with no date
+      // cannot be judged, which is how the reference list drifted 3-7% without
+      // anything noticing.
+      yarn_price_provenance:    costResult.yarn.price_source,
     } : null,
 
     // Warp knit specific data

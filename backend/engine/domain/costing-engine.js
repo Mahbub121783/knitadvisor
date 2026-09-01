@@ -384,7 +384,11 @@ function resolveYarnPrice(yarnTypeKey, countNe, live) {
     return {
       price: quote.price_usd_kg,
       price_source: {
-        kind: 'market',
+        // A price read BETWEEN two quotes is not a quote and never carries a
+        // quote's badge. The arithmetic is ordinary; presenting the result as
+        // something the market actually printed would not be.
+        kind: quote.interpolated ? 'market_interpolated' : 'market',
+        interpolated_between: quote.interpolated ? quote.interpolated.between : null,
         last_updated: quote.quoted_on,
         age_days: quote.age_days,
         freshness: quote.age_days <= 7 ? 'current'
@@ -546,7 +550,7 @@ function calculateCost(params) {
       why: `nothing prices "${yarnTypeKey}" at ${countNe}Ne`,
     };
     warnings.push(`No reference price found for yarn type "${yarnTypeKey}" at count ${countNe}Ne. Using fallback price $${basePrice}/kg.`);
-  } else if (priceSource.kind === 'market' && priceSource.freshness === 'stale') {
+  } else if (priceSource.kind.startsWith('market') && priceSource.freshness === 'stale') {
     warnings.push(`The market price used here was published on ${priceSource.last_updated}, ` +
       `${priceSource.age_days} days ago.`);
   }
@@ -726,6 +730,10 @@ function calculateCost(params) {
       price_source:      priceSource,
       source:            priceSource.kind === 'market'
         ? `Market quote, last updated ${priceSource.last_updated}`
+        : priceSource.kind === 'market_interpolated'
+          ? `Read between the ${priceSource.interpolated_between[0]}Ne and `
+            + `${priceSource.interpolated_between[1]}Ne market quotes of `
+            + `${priceSource.last_updated}`
         : priceSource.kind === 'reference_list'
           ? `KnitAdvisor reference price list, ${PRICE_LIST_DATE}`
           : priceSource.kind === 'user_supplied'
@@ -796,7 +804,10 @@ function calculateCost(params) {
     formula_trace: {
       yarn_price:   `${priceSource.kind === 'market'
           ? `Market quote[${yarnTypeKey}][${Math.round(countNe)}Ne] as at ${priceSource.last_updated}`
-          : `Reference Matrix[${yarnTypeKey}][${Math.round(countNe)}Ne]`} = $${basePrice}` +
+          : priceSource.kind === 'market_interpolated'
+            ? `Market[${yarnTypeKey}] read between ${priceSource.interpolated_between[0]}Ne and `
+              + `${priceSource.interpolated_between[1]}Ne as at ${priceSource.last_updated}`
+            : `Reference Matrix[${yarnTypeKey}][${Math.round(countNe)}Ne]`} = $${basePrice}` +
         ` + surcharges($${round4(surchargeTotal)}) = $${finalYarnPrice}` +
         (priceSource.reference_gap_pct != null
           ? ` — the reference list would have said $${priceSource.reference_price}, ` +

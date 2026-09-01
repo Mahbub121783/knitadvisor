@@ -863,6 +863,12 @@
         </div>
       </div>
 
+      <!-- How old the yarn price is. The date is the headline because it is the
+           only thing that tells a reader whether to trust the number: the
+           reference list drifted 3-7% over four months and nothing could say so,
+           because a price typed into a file carries no date. -->
+      <div id="cost-price-age" class="hidden" style="margin:-6px 0 14px 0;font-size:10px;line-height:1.6;color:var(--t3);"></div>
+
       <div class="result-section-label">Cost Breakdown (FOB Bangladesh Mill)</div>
       <div class="result-row">
         <span class="result-key">Yarn Raw Material Cost</span>
@@ -1857,6 +1863,9 @@ function renderWarpKnitCard(wk) {
    COSTING RENDER
    ============================================================ */
 function renderCosting(costing) {
+  // Local, because the other escapers in this file are scoped to their own
+  // render functions and none of them reaches here.
+  const esc = (x) => String(x == null ? '' : x).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
   const sec = document.getElementById('sec-costing');
   if (!costing) {
     sec.classList.add('hidden');
@@ -1866,6 +1875,44 @@ function renderCosting(costing) {
 
   document.getElementById('cost-total-val').textContent = `$${fmt(costing.total_per_kg_usd, 2)}`;
   document.getElementById('cost-yarn-val').textContent = `$${fmt(costing.raw_material_per_kg_usd, 2)}`;
+
+  // ── When the yarn price was last updated ──────────────────────────────
+  // Four states, and they must not read the same. A market quote and a figure
+  // read BETWEEN two quotes are different things; both are different from the
+  // built-in list; and all three are different from a guess.
+  const prov = costing.yarn_price_provenance;
+  const ageEl = document.getElementById('cost-price-age');
+  if (prov) {
+    const tone = prov.freshness === 'current' ? '#4ade80'
+               : prov.freshness === 'recent' ? '#fbbf24'
+               : prov.freshness === 'stale' ? '#fb923c' : 'var(--t3)';
+    const age = prov.age_days == null ? ''
+      : prov.age_days === 0 ? ' (today)'
+      : prov.age_days === 1 ? ' (1 day ago)' : ` (${prov.age_days} days ago)`;
+    let line;
+    if (prov.kind === 'market') {
+      line = `Yarn price last updated <strong style="color:${tone}">${esc(prov.last_updated)}</strong>${age}.`;
+    } else if (prov.kind === 'market_interpolated') {
+      line = `Yarn price last updated <strong style="color:${tone}">${esc(prov.last_updated)}</strong>${age} — `
+        + `read between the ${prov.interpolated_between[0]}Ne and ${prov.interpolated_between[1]}Ne `
+        + `market prices, because this count is not quoted directly.`;
+    } else if (prov.kind === 'reference_list') {
+      line = `Yarn price from the built-in reference list of `
+        + `<strong>${esc(prov.last_updated)}</strong> — ${esc(prov.why || 'no market price for this yarn')}.`;
+    } else {
+      line = `Yarn price is <strong style="color:#fb923c">an estimate</strong> — ${esc(prov.why || 'nothing prices this yarn')}.`;
+    }
+    // The gap against the built-in list, where both exist. It is the number
+    // that shows the reference list going stale, and it is worth seeing.
+    if (prov.reference_gap_pct != null && Math.abs(prov.reference_gap_pct) >= 2) {
+      line += ` The built-in list would have said $${fmt(prov.reference_price, 2)}, `
+        + `${prov.reference_gap_pct > 0 ? '+' : ''}${prov.reference_gap_pct}%.`;
+    }
+    ageEl.innerHTML = line;
+    ageEl.classList.remove('hidden');
+  } else {
+    ageEl.classList.add('hidden');
+  }
 
   // Show elastane-blended price if applicable
   const el = costing.fiber_detail;

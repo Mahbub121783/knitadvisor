@@ -124,22 +124,72 @@ function ageDays(quotedOn, now) {
  * the reference list and say so. What the caller DOES need is the age, which
  * comes back with every hit.
  *
- * There is no interpolation here on purpose. The feed prints nine counts and
- * the engine costs fifteen; filling the other six from neighbours would produce
- * a number that is not a quote, wearing a quote's date. The reference list
- * already covers those counts and covering them twice, worse, helps nobody.
+ * INTERPOLATION, AND WHY IT IS ALLOWED HERE BUT WAS NOT AT FIRST.
+ *
+ * The first version refused to interpolate at all, on the reasoning that a
+ * filled-in number wearing a quote's date is worse than no quote. Measured
+ * against realistic fabrics, that left 48% of costings on the reference list —
+ * and the counts it was missing were 28Ne and 32Ne, which are ordinary counts,
+ * falling back to a figure four months old and 3-7% out.
+ *
+ * The objection was to the BADGE, not to the arithmetic. Interpolating between
+ * two real quotes taken on the same day is ordinary engineering; presenting the
+ * result as a quote is not. So it interpolates, under four conditions:
+ *
+ *   - strictly BETWEEN two quotes, never beyond the ends of the range
+ *   - the two must be close enough to interpolate across (8 Ne)
+ *   - the two must carry the same date, or it is mixing two markets in time
+ *   - the result is labelled `interpolated`, and the engine gives it its own
+ *     badge and its own sentence — it never reads as a quote
+ *
+ * Extrapolation stays refused. Below the coarsest and above the finest quote
+ * the price curve is not linear — carded cotton runs 3.15, 3.20, 3.25, 3.45,
+ * 3.80 across 20 to 40Ne, so the last step is seven times the first — and
+ * running that slope off the end of the table produces nonsense quickly.
  */
+const MAX_INTERPOLATION_SPAN_NE = 8;
+
 function lookup(itemKey, countNe, now, market) {
   if (!snapshot.loaded) return null;
   const list = snapshot.by_market[market || COSTING_MARKET];
   if (!list) return null;
   const family = list[itemKey];
   if (!family) return null;
-  const entry = family[Number(countNe)] || (countNe ? null : family[0]);
-  if (!entry) return null;
+
+  const want = Number(countNe);
+  const exact = family[want] || (countNe ? null : family[0]);
+  if (exact) {
+    return { ...exact, exact: true, age_days: ageDays(exact.quoted_on, now) };
+  }
+  if (!want) return null;
+
+  // The nearest quote on each side. Strictly each side: one-sided means the
+  // wanted count is off the end of the table, and that is extrapolation.
+  const counts = Object.keys(family).map(Number).filter(n => n > 0).sort((a, b) => a - b);
+  const below = counts.filter(n => n < want).pop();
+  const above = counts.find(n => n > want);
+  if (below == null || above == null) return null;
+  if (above - below > MAX_INTERPOLATION_SPAN_NE) return null;
+
+  const lo = family[below];
+  const hi = family[above];
+  // Two quotes from different days are two different markets, and averaging
+  // across them hides the movement between them.
+  if (lo.quoted_on !== hi.quoted_on) return null;
+
+  const t = (want - below) / (above - below);
+  const price = lo.price_usd_kg + t * (hi.price_usd_kg - lo.price_usd_kg);
+
   return {
-    ...entry,
-    age_days: ageDays(entry.quoted_on, now),
+    price_usd_kg: Math.round(price * 10000) / 10000,
+    quoted_on: lo.quoted_on,
+    exact: false,
+    interpolated: { between: [below, above], prices: [lo.price_usd_kg, hi.price_usd_kg] },
+    as_published: `between ${lo.as_published} at ${below}Ne and ${hi.as_published} at ${above}Ne`,
+    label: `${want}Ne, read between ${lo.label} and ${hi.label}`,
+    percent_change: null,
+    source: lo.source,
+    age_days: ageDays(lo.quoted_on, now),
   };
 }
 
@@ -178,4 +228,5 @@ function status(now) {
 
 function isLoaded() { return snapshot.loaded; }
 
-module.exports = { load, lookup, status, isLoaded, ageDays, COSTING_MARKET };
+module.exports = { load, lookup, status, isLoaded, ageDays, COSTING_MARKET,
+                   MAX_INTERPOLATION_SPAN_NE };
