@@ -45,7 +45,17 @@ const { resultCache } = require('../db/repositories/cache-repo');
 // construction that now reads KNITTABLE. This is exactly the case the version
 // prefix exists for, and it is easy to forget: changing a CONSTANT the engine
 // reads changes engine output just as surely as changing its code.
-const ENGINE_VERSION = 'v4';
+//
+// AND IT WAS FORGOTTEN. Every chapter of fibre science added after v4 was
+// shipped, deployed and verified on the production machine while the site went
+// on serving answers computed before any of it existed: `node -e` there gave
+// seventeen findings and the same calculation over HTTP gave eight, from
+// byte-identical files. Thirty-day cache, no bump, no symptom.
+//
+// So it is no longer a string anyone has to remember. It is the deployed build,
+// read from tmp/restart.txt, which the deploy writes and nothing else touches —
+// see engine/version.js for what that costs and why it is worth it.
+const { ENGINE_VERSION } = require('../engine/version');
 const logsRepo = require('../db/repositories/logs-repo');
 const { createRateLimiter } = require('../middleware/rate-limiter');
 const { query: dbQuery } = require('../db/client');
