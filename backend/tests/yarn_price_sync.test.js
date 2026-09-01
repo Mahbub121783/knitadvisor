@@ -251,4 +251,78 @@ assert.strictEqual(brokenLookup.yarn.price_source.kind, 'reference_list',
 
 console.log(`  ${published.length} quotes parsed, ${rows.length} costable, ` +
             `${skipped} not costed, ${rejected.length} refused`);
-console.log('\n✓ All yarn price sync tests passed.');
+// ── Reading between two quotes, and refusing to read past them ─────────────
+// The first version refused to interpolate at all. Measured against realistic
+// fabrics that left 48% of costings on a four-month-old reference list, and the
+// counts it was missing — 26Ne, 28Ne — are ordinary ones. The objection was to
+// the BADGE, not to the arithmetic, so it interpolates now and never calls the
+// result a quote.
+{
+  const Module = require('module');
+  const orig = Module._load;
+
+  // Carded cotton as published on 29 August. The last step, 30 to 40Ne, is
+  // seven times the first — which is exactly why the span rule exists.
+  const stub = [];
+  for (const [ne, price] of [[20, 3.15], [24, 3.20], [30, 3.25], [40, 3.80]]) {
+    stub.push({ market: 'lc_usd', item_key: 'carded_regular', count_ne: ne,
+                price_usd_kg: price, currency: 'USD', unit: 'KG', price,
+                raw_label: `${ne}/s Card`, quoted_on: '2026-08-29',
+                percent_change: null, source: 'texbazar', fx_bdt_per_usd: null });
+  }
+
+  // The snapshot is module-private on purpose, so this drives lookup() through
+  // load() with a stubbed client rather than poking at internals.
+  delete require.cache[require.resolve('../db/repositories/yarn-price-repo')];
+  Module._load = function (r, parent, isMain) {
+    if (r === '../client') {
+      return { query: async sql => (/yarn_price_syncs/.test(sql) ? [] : stub) };
+    }
+    return orig(r, parent, isMain);
+  };
+  const repo = require('../db/repositories/yarn-price-repo');
+  Module._load = orig;
+
+  repo.load().then(() => {
+    const NOW = new Date('2026-09-01T00:00:00Z');
+    const at = ne => repo.lookup('carded_regular', ne, NOW);
+
+    // A published count comes back as itself, never as an average of its
+    // neighbours.
+    assert.strictEqual(at(30).price_usd_kg, 3.25);
+    assert.strictEqual(at(30).exact, true);
+    assert.strictEqual(at(30).age_days, 3, 'age is measured from the QUOTE date, not the fetch');
+
+    // 28Ne sits between 24 and 30 — six counts apart, same day. Readable.
+    const mid = at(28);
+    assert(mid && !mid.exact && mid.interpolated,
+      '28Ne sits between two quotes six counts apart and must be readable');
+    assert.deepStrictEqual(mid.interpolated.between, [24, 30]);
+    assert(mid.price_usd_kg > 3.20 && mid.price_usd_kg < 3.25,
+      `an interpolated 28Ne must lie between its neighbours, got ${mid.price_usd_kg}`);
+
+    // 32Ne sits between 30 and 40 — ten apart, across the steepest part of the
+    // curve, where one step is 17%. Refused.
+    assert.strictEqual(at(32), null,
+      '30 and 40 are ten counts apart and the curve bends hardest there');
+
+    // Off either end is extrapolation, and stays refused.
+    assert.strictEqual(at(18), null, 'below the coarsest quote is extrapolation');
+    assert.strictEqual(at(48), null, 'above the finest quote is extrapolation');
+
+    // The engine must not let an interpolated figure wear a quote's badge.
+    const { calculateCost } = require('../engine/domain/costing-engine');
+    const r = calculateCost({ gsm: 180, composition: '100% Cotton', count_ne: 28,
+                              yarn_type: 'carded_regular', order_qty_kg: 1000,
+                              live_prices: (k, ne) => repo.lookup(k, ne, NOW) });
+    assert.strictEqual(r.yarn.price_source.kind, 'market_interpolated',
+      'a figure read between two quotes has its own badge');
+    assert.deepStrictEqual(r.yarn.price_source.interpolated_between, [24, 30]);
+    assert(/read between the 24Ne and 30Ne/i.test(r.yarn.source),
+      `the sentence a reader sees must say so: "${r.yarn.source}"`);
+
+    console.log(`  interpolation: 28Ne reads $${mid.price_usd_kg.toFixed(4)} between $3.20 ` +
+                'and $3.25; 32Ne, 18Ne and 48Ne refused');
+    console.log('\nAll yarn price sync tests passed.');
+  }).catch(e => { console.error(e); process.exit(1); });
+}
