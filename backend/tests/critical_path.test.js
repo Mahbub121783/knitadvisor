@@ -218,6 +218,31 @@ try {
   failedTests++;
 }
 
+// ---------------------------------------------------------------------------
+// Test Case 9 — the "ideal" tightness band shown to the user must be the band
+// anyone actually knits in, not the range in which a loop can exist at all.
+//
+// TIGHTNESS_LIMITS carries both. The Optimal Machine card was handed min/max
+// under the names ideal_min/ideal_max, so it printed "ideal 7-33" for a single
+// jersey and would have called TF 30 "balanced" — advice that ruins a fabric.
+// Same class as the costing breakdown that stopped adding up: the engine's own
+// numbers were right and the SHIPPED shape was wrong, so no test saw it.
+// ---------------------------------------------------------------------------
+try {
+  const { TIGHTNESS_LIMITS } = require('../engine/formulas');
+  const r = calculate({ fabric: 'single_jersey', gsm: 180, composition: '100% Cotton',
+                        dia: 34, gauge: 24, color_shade: 'dark_navy' });
+  const t = r.machine.optimal && r.machine.optimal.tightness;
+  assert(!!t, 'Optimal-machine card carries a tightness verdict');
+  const lim = TIGHTNESS_LIMITS.single_jersey;
+  assert(t.healthy_band === `${lim.ideal_min}–${lim.ideal_max}`,
+    `Ideal band is the working band (${lim.ideal_min}-${lim.ideal_max}), not the absolute ` +
+    `knittable range — card shows "${t.healthy_band}"`);
+} catch (err) {
+  console.error('Test Case 9 failed with error:', err.message);
+  failedTests++;
+}
+
 console.log("\n================================================================");
 console.log(`TEST SUITE COMPLETE: ${passedTests} passed, ${failedTests} failed`);
 console.log("================================================================");

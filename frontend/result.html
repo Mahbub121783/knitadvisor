@@ -780,9 +780,28 @@
         <span id="fa-badge" class="badge" style="margin-left:auto;background:rgba(129,140,248,.12);color:#818cf8;border:1px solid rgba(129,140,248,.3);">—</span>
       </div>
       <div id="fa-headline" style="font-size:12px;line-height:1.65;color:var(--t1);margin-bottom:10px;font-weight:600;"></div>
-      <div id="fa-findings"></div>
-      <div id="fa-deferred"></div>
-      <div id="fa-gaps" style="margin-top:10px;"></div>
+
+      <!-- Always visible: how many of each severity, and how the findings
+           split between this cloth and the blend it is made from. Twenty-five
+           findings is not a number anyone reads; four counts is. -->
+      <div id="fa-summary" style="margin-bottom:10px;"></div>
+
+      <!-- Always visible: the handful worth acting on, one line each. The
+           full text is behind the toggle, so the reader who wants the reasoning
+           can have it and the reader who wants the answer is not made to scroll
+           past twenty-two paragraphs to find out there were only three. -->
+      <div id="fa-key"></div>
+
+      <button type="button" id="fa-toggle" style="width:100%;margin:4px 0 0;padding:7px 10px;
+        background:rgba(129,140,248,.08);border:1px solid rgba(129,140,248,.28);border-radius:7px;
+        color:#818cf8;font-family:inherit;font-size:10px;font-weight:700;letter-spacing:.3px;
+        cursor:pointer;text-align:center;"></button>
+
+      <div id="fa-full" class="hidden" style="margin-top:10px;">
+        <div id="fa-findings"></div>
+        <div id="fa-deferred"></div>
+        <div id="fa-gaps" style="margin-top:10px;"></div>
+      </div>
       <div id="fa-source" style="margin-top:9px;font-size:9px;color:var(--t3);line-height:1.5;"></div>
     </div>
 
@@ -1447,9 +1466,73 @@ function renderFibreAdvisory(a) {
   };
 
   const cov = a.coverage || {};
+  const all = a.findings || [];
   document.getElementById('fa-badge').textContent =
-    `${a.findings.length} finding${a.findings.length === 1 ? '' : 's'} · covers ${cov.measured_pct}%`;
+    `${all.length} finding${all.length === 1 ? '' : 's'} · covers ${cov.measured_pct}%`;
   document.getElementById('fa-headline').textContent = a.headline || '';
+
+  // ── Summary ───────────────────────────────────────────────────────────
+  // Counts, and the split between findings that read THIS fabric's structure
+  // and findings that are properties of the blend whatever it is knitted into.
+  // Both halves are worth having and they are not the same kind of statement;
+  // printing them under one heading is what made the section read as recital.
+  const RANK = { severe: 0, high: 1, moderate: 2, info: 3 };
+  const count = k => all.filter(f => f.severity === k).length;
+  const chip = (k) => {
+    const n = count(k); if (!n) return '';
+    const t = TONE[k];
+    return `<span style="display:inline-flex;align-items:center;gap:5px;background:${t.bg};`
+      + `border:1px solid ${t.b};border-radius:20px;padding:3px 10px;font-size:9px;`
+      + `font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:${t.c};">`
+      + `${n} ${t.label}${n > 1 && k !== 'info' ? '' : n > 1 ? 's' : ''}</span>`;
+  };
+  const onFabric = all.filter(f => f.scope === 'fabric').length;
+  const onBlend = all.length - onFabric;
+  document.getElementById('fa-summary').innerHTML =
+    `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:7px;">`
+    + ['severe', 'high', 'moderate', 'info'].map(chip).join('') + `</div>`
+    + `<div style="font-size:9.5px;color:var(--t3);line-height:1.6;">`
+    + `<strong style="color:var(--t2);">${onFabric}</strong> read this fabric's own structure `
+    + `(tightness factor, stitch length, weight) · `
+    + `<strong style="color:var(--t2);">${onBlend}</strong> are properties of the blend and `
+    + `would read the same on any fabric made from it.</div>`;
+
+  // ── Key points ────────────────────────────────────────────────────────
+  // Worst first, and a finding about this fabric beats a blend constant of the
+  // same severity — it is the one the reader can still do something about.
+  const ranked = all.slice().sort((x, y) =>
+    (RANK[x.severity] ?? 9) - (RANK[y.severity] ?? 9)
+    || (x.scope === 'fabric' ? 0 : 1) - (y.scope === 'fabric' ? 0 : 1));
+  // The headline is already the worst finding's claim, printed larger. Repeating
+  // it as the first key point spends the reader's first two lines saying one
+  // thing twice.
+  const said = (a.headline || '').trim();
+  const rest = ranked.filter(f => f.claim.trim() !== said);
+  const key = rest.filter(f => f.severity !== 'info').slice(0, 3);
+  const keyList = key.length ? key : rest.slice(0, 3);
+  document.getElementById('fa-key').innerHTML = keyList.map(f => {
+    const t = TONE[f.severity] || TONE.info;
+    return `<div style="display:flex;gap:8px;align-items:flex-start;padding:7px 10px;
+        border-left:2px solid ${t.c};background:${t.bg};border-radius:0 6px 6px 0;margin-bottom:5px;">
+      <span style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;
+        color:${t.c};flex-shrink:0;padding-top:1px;min-width:52px;">${t.label}</span>
+      <span style="font-size:10.5px;line-height:1.55;color:var(--t1);">${esc(f.claim)}</span>
+    </div>`;
+  }).join('');
+
+  // ── The toggle ────────────────────────────────────────────────────────
+  const full = document.getElementById('fa-full');
+  const btn = document.getElementById('fa-toggle');
+  const label = () => {
+    btn.textContent = full.classList.contains('hidden')
+      ? `Show all ${all.length} findings, with the reasoning  ▾`
+      : 'Hide the detail  ▴';
+  };
+  // Assigned rather than added, so a re-render (a country change, a
+  // recalculation) cannot stack a second listener on the same button.
+  btn.onclick = () => { full.classList.toggle('hidden'); label(); };
+  full.classList.add('hidden');
+  label();
 
   // The engine sends findings already grouped by the question they answer and
   // ordered worst-first inside each group. Twenty-five of them in one flat list
@@ -1469,6 +1552,13 @@ function renderFibreAdvisory(a) {
         <span style="color:${t.c};">▸</span>
         <span style="font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:${t.c};font-weight:800;">${t.label}</span>
         <span style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.4px;">&nbsp;· ${esc(f.topic)}</span>
+        <span title="${f.scope === 'fabric'
+            ? 'Computed from this fabric&apos;s structure — tightness factor, stitch length, weight'
+            : 'A property of this blend — the same on any fabric made from it'}"
+          style="float:right;font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;
+          padding:2px 6px;border-radius:3px;border:1px solid ${f.scope === 'fabric' ? t.b : 'var(--line2)'};
+          color:${f.scope === 'fabric' ? t.c : 'var(--t3)'};background:var(--bg2);">${
+            f.scope === 'fabric' ? 'this fabric' : 'blend'}</span>
         <div style="margin-top:3px;font-weight:600;line-height:1.55;color:var(--t1);">${esc(f.claim)}</div>
       </summary>
       <div style="padding:2px 10px 9px 10px;font-size:10px;line-height:1.65;color:var(--t2);">
