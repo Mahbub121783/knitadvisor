@@ -1063,7 +1063,10 @@ function calculate(params) {
 
     costing: costResult ? {
       raw_material_per_kg_usd:  costResult.cost_breakdown_usd.raw_material.with_waste_per_kg,
-      knitting_per_kg_usd:      costResult.cost_breakdown_usd.knitting,
+      // .per_kg, like dyeing beside it. Handing the object straight out made
+      // the page print "$—" for knitting while the total stayed right, so the
+      // breakdown silently stopped adding up to the number above it.
+      knitting_per_kg_usd:      costResult.cost_breakdown_usd.knitting.per_kg,
       dyeing_per_kg_usd:        costResult.cost_breakdown_usd.dyeing.per_kg,
       finishing_per_kg_usd:     costResult.cost_breakdown_usd.finishing,
       total_per_kg_usd:         costResult.cost_breakdown_usd.total_per_kg,
@@ -1071,6 +1074,11 @@ function calculate(params) {
       fiber_detail:             costResult.cost_breakdown_usd.raw_material.fiber_detail,
       // Mill yarn pricing detail (SM price list)
       yarn_type_label:          costResult.yarn.type_label,
+      // The count the price was actually fetched at. The costing rounds the
+      // count itself, so the price card must not borrow the yarn section's
+      // figure and assume the two agree.
+      yarn_count_ne:            costResult.yarn.count_ne,
+      yarn_count_display:       costResult.yarn.count_display,
       yarn_base_price_usd:      costResult.yarn.base_price_usd,
       yarn_surcharges:          costResult.yarn.surcharges,
       yarn_final_price_usd:     costResult.yarn.final_price_usd,
