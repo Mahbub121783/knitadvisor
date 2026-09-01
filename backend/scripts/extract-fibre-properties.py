@@ -732,6 +732,60 @@ TABLES = {
         'heat_ageing_check': True,
         'paired_check': False,
     },
+    # ---- Chapter 22, electrical resistance -----------------------------------
+    # Static is not a property of a fibre; it is a race between charge arriving
+    # and charge leaking away, and what decides the leak is resistance. Table
+    # 22.1 gives the resistance directly and, in its last column, the number a
+    # factory can act on: THE HUMIDITY AT WHICH THE FIBRE STOPS BEING A
+    # PROBLEM.
+    #
+    #   cotton, flax, viscose      30% r.h.
+    #   wool                       55%
+    #   silk                       65%
+    #   acetate, nylon, polyester  85%
+    #   purified acrylic, purified polyester  95%
+    #
+    # Thirty per cent is below any working floor, so a cellulosic essentially
+    # never carries static. Eighty-five is above every working floor, so a
+    # synthetic always does. That is the whole of it, and it is why the problem
+    # arrived with the synthetics rather than being solved by them.
+    #
+    # AND THE FINISH IS THE ANSWER, MEASURED. The book prints acrylic and
+    # polyester twice, "as received" and "purified": stripping the spin finish
+    # moves the threshold from 85% to 95%. What carries the charge away on
+    # commercial fibre is not the polymer at all — it is the finish on it, which
+    # is why an antistatic is a finish and why scouring one off creates a
+    # problem that was not there before.
+    '22.1': {
+        'pdf_page': 666, 'y_from': 305, 'y_to': 490,
+        'hierarchical': True,
+        'columns': [('resistance_moisture_slope', None, None),
+                    ('log_resistance_at_10pct_moisture', None, None),
+                    ('log_resistance', '65% r.h.', 65.0),
+                    ('rh_for_static_threshold', 'r.h. at which resistance reaches 1e10 ohm g/m2', None)],
+        'row_map': {
+            'Cotton':                              ('cotton', None),
+            'Washed cotton':                       ('cotton', 'washed'),
+            'Mercerised cotton':                   ('mercerised_cotton', None),
+            'Flax':                                ('flax', None),
+            'Viscose rayon':                       ('viscose', None),
+            'Washed viscose rayon':                ('viscose', 'washed'),
+            'Acetate':                             ('acetate', None),
+            'Silk':                                ('silk', None),
+            'Wool':                                ('wool', None),
+            'Washed wool':                         ('wool', 'washed'),
+            'Nylon':                               ('nylon', None),
+            # The same fibre twice, with and without its spin finish. Filed
+            # under one slug with the treatment in the condition, because the
+            # polymer is identical and the surface is not.
+            'Orlon acrylic fibre (as received)':   ('acrylic', 'as received, spin finish on'),
+            'Purified Orlon acrylic fibre':        ('acrylic', 'purified, spin finish removed'),
+            'Terylene polyester fibre (as received)': ('polyester', 'as received, spin finish on'),
+            'Purified Terylene polyester fibre':   ('polyester', 'purified, spin finish removed'),
+        },
+        'static_check': True,
+        'paired_check': False,
+    },
     '13.7': {
         'pdf_page': 331, 'y_from': 175, 'y_to': 320,
         'rotated': True, 'hierarchical': True, 'label_edge_offset': 24,
@@ -790,7 +844,13 @@ UNITS = {'density': 'g/cm3', 'specific_volume': 'cm3/g',
          # The book prints these as "4 x 10^-4 per degree C". The factor lives
          # in the unit so the stored number is the mantissa the page shows.
          'linear_expansion_axial': '1e-4 per degree C',
-         'melting_point': 'degree C', 'strength_retained_pct': '%'}
+         'melting_point': 'degree C', 'strength_retained_pct': '%',
+         # Specific resistance along a yarn, as its base-ten logarithm, because
+         # it spans eight orders of magnitude across these fibres.
+         'log_resistance': 'log10(ohm g/m2)',
+         'log_resistance_at_10pct_moisture': 'log10(ohm g/m2)',
+         'resistance_moisture_slope': '1',
+         'rh_for_static_threshold': '%'}
 
 # How each printed fibre name is filed. Written out rather than inferred from
 # the name, because the classification is a judgement and belongs in one
@@ -1808,6 +1868,35 @@ def heat_ageing_slip(cells, spec):
     return None
 
 
+def static_slip(cells, spec):
+    """
+    Why this resistance row should not be believed, or None.
+
+    A humidity is a percentage. A logarithm of resistance is a small positive
+    number — the values here run from 6.8 to 14, which is eight orders of
+    magnitude of actual resistance, and that spread is exactly why the book
+    prints logarithms.
+
+    The physical tie is between the two: a fibre that is more resistant at 65%
+    r.h. needs a HIGHER humidity to fall to the threshold, because getting there
+    means picking up more water. So the threshold cannot go down as the
+    resistance goes up, and a row where it does has had the two columns crossed.
+    That comparison is made across the table rather than within a row, so it
+    lives in the gate; what is checked here is that each figure is the kind of
+    number it claims to be.
+    """
+    rh = cells_by_property(cells, spec, 'rh_for_static_threshold')
+    lr = cells_by_property(cells, spec, 'log_resistance')
+    l10 = cells_by_property(cells, spec, 'log_resistance_at_10pct_moisture')
+    if rh is not None and not (0 < rh[0] <= 100):
+        return 'a static threshold of %.4g%% r.h. is not a humidity' % rh[0]
+    for label, v in (('log resistance at 65% r.h.', lr),
+                     ('log resistance at 10% moisture', l10)):
+        if v is not None and not (0 < v[0] <= 25):
+            return '%s is %.4g, which is not a base-ten logarithm of a resistance' % (label, v[0])
+    return None
+
+
 def ratio_slip(cells, spec):
     """
     Why this row of Table 13.7 should not be believed, or None.
@@ -2011,6 +2100,12 @@ def main():
                 by_cond.setdefault(cond, {})[prop] = (lo, hi)
 
             row_ok = True
+            if spec.get('static_check'):
+                why = static_slip(cells, spec)
+                if why:
+                    refused.append({'table': ref, 'name': label, 'why': why})
+                    continue
+                by_cond = {}
             if spec.get('heat_ageing_check'):
                 why = heat_ageing_slip(cells, spec)
                 if why:

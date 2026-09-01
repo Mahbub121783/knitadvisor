@@ -38,6 +38,16 @@ const find = (slug, prop, cond, page) => {
   return r ? span(r) : null;
 };
 
+// The engine's key and the book's slug are not always the same word: the engine
+// calls it `linen` and the extraction files it under `flax`, which is the name
+// printed on the page. The mapping is already in the data — every fibre row
+// carries the engine key it answers to — so it is read from there rather than
+// duplicated here, where it could drift.
+const slugFor = key => {
+  const f = book.fibres.find(x => x.engine_key === key);
+  return f ? f.slug : key;
+};
+
 let checked = 0;
 const cite = (slug, label, engineVal, bookVal) => {
   if (engineVal == null && bookVal == null) return;
@@ -47,7 +57,8 @@ const cite = (slug, label, engineVal, bookVal) => {
     `${JSON.stringify(bookVal)} — one of them has drifted`);
 };
 
-for (const [key, row] of Object.entries(F)) {
+for (const [engineKey, row] of Object.entries(F)) {
+  const key = slugFor(engineKey);
   // ── Chapter 13: tensile ───────────────────────────────────────────────
   if (row.tensile) {
     const t = row.tensile;
@@ -120,6 +131,15 @@ for (const [key, row] of Object.entries(F)) {
     cite(key, 'melting point', row.heat.melting_c, find(key, 'melting_point'));
     cite(key, 'strength retained at 130 C for 80 days', row.heat.retained_130c_80d,
          find(key, 'strength_retained_pct', 'after 80 days at 130 C'));
+  }
+
+  // ── Chapter 22: static ────────────────────────────────────────────────
+  if (row.static) {
+    cite(key, 'static threshold', row.static.rh_threshold,
+         find(key, 'rh_for_static_threshold',
+              'r.h. at which resistance reaches 1e10 ohm g/m2'));
+    cite(key, 'log resistance at 65% r.h.', row.static.log_resistance_65,
+         find(key, 'log_resistance', '65% r.h.'));
   }
 
   // ── Chapter 15: the yield point ───────────────────────────────────────
