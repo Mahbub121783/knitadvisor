@@ -265,7 +265,7 @@ console.log(`  ${published.length} quotes parsed, ${rows.length} costable, ` +
   // seven times the first — which is exactly why the span rule exists.
   const stub = [];
   for (const [ne, price] of [[20, 3.15], [24, 3.20], [30, 3.25], [40, 3.80]]) {
-    stub.push({ market: 'lc_usd', item_key: 'carded_regular', count_ne: ne,
+    stub.push({ country: 'BD', market: 'lc_usd', item_key: 'carded_regular', count_ne: ne,
                 price_usd_kg: price, currency: 'USD', unit: 'KG', price,
                 raw_label: `${ne}/s Card`, quoted_on: '2026-08-29',
                 percent_change: null, source: 'texbazar', fx_bdt_per_usd: null });

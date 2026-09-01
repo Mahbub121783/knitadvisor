@@ -393,13 +393,23 @@ function resolveCountry(code) {
  */
 const LIVE_PRICE_MAX_AGE_DAYS = 60;
 
-function resolveYarnPrice(yarnTypeKey, countNe, live) {
+function resolveYarnPrice(yarnTypeKey, countNe, live, countryCode) {
   const listed = getPriceFromMatrix(yarnTypeKey, countNe);
 
   let quote = null;
   if (typeof live === 'function') {
     try {
-      quote = live(yarnTypeKey, countNe);
+      // Ask for THIS country's own quote first. A merged feed may carry it —
+      // that is the whole reason for having more than one source — and a real
+      // Indian quote beats an Indian price modelled from a Bangladeshi one.
+      quote = live(yarnTypeKey, countNe, countryCode);
+      // Nothing for this country: fall back to the ANCHOR's quote, which the
+      // caller will then scale. A real quote from Bangladesh scaled by a
+      // published tariff ratio is better information than a four-month-old
+      // fixed list, and it is still a market number underneath.
+      if (!quote && countryCode && countryCode !== countryCosts.ANCHOR) {
+        quote = live(yarnTypeKey, countNe, countryCosts.ANCHOR);
+      }
     } catch {
       // A price lookup must never be able to fail a costing. Falling back to
       // the reference list is always available and always says so.
@@ -417,6 +427,10 @@ function resolveYarnPrice(yarnTypeKey, countNe, live) {
         // quote's badge. The arithmetic is ordinary; presenting the result as
         // something the market actually printed would not be.
         kind: quote.interpolated ? 'market_interpolated' : 'market',
+        // Which country's list this quote came off. Without it, an anchor quote
+        // and a same-shaped Indian quote are indistinguishable downstream, and
+        // the chain cannot tell link 1 from link 2.
+        for_country: quote.country || countryCode || null,
         interpolated_between: quote.interpolated ? quote.interpolated.between : null,
         last_updated: quote.quoted_on,
         age_days: quote.age_days,
@@ -572,7 +586,7 @@ function calculateCost(params) {
   }
 
   // ---- 2. GET BASE PRICE: market quote first, reference list second ----
-  const resolved = resolveYarnPrice(yarnTypeKey, countNe, params.live_prices);
+  const resolved = resolveYarnPrice(yarnTypeKey, countNe, params.live_prices, country.code);
   let basePrice = resolved.price;
   let priceSource = resolved.price_source;
 
@@ -592,19 +606,43 @@ function calculateCost(params) {
       `${priceSource.age_days} days ago.`);
   }
 
-  // Away from the anchor, the fibre in the yarn does NOT move — cotton is a
-  // world commodity bought at a world price. Only the spinning conversion moves
-  // with the local power tariff, which is why the yarn ratio is so much milder
-  // than the tariff ratio behind it.
+  // ---- 2b. THE CHAIN, IN ORDER ----
+  //
+  //   1. a live quote for THIS country, from whichever source has the freshest
+  //   2. failing that, this country modelled from the anchor's live quote
+  //   3. failing that, the fixed reference price list
+  //
+  // The third link is what makes the first two safe to attempt: a price feed
+  // that can take a costing down with it is a feed nobody should connect. The
+  // fixed list never goes away and never stops being correct — it stops being
+  // the ANSWER when something better exists, and every result says which was
+  // used.
   const anchorYarnPrice = basePrice;
-  if (!country.is_anchor && basePrice != null) {
-    basePrice = round4(basePrice * cr.yarn_ratio);
-    priceSource = {
-      ...priceSource,
-      kind: 'modelled_country',
-      modelled_from: { country: countryCosts.ANCHOR, price: anchorYarnPrice,
-                       ratio: cr.yarn_ratio, basis: priceSource.kind },
-    };
+  const gotOwnQuote = priceSource.kind.startsWith('market')
+    && priceSource.for_country === country.code;
+
+  if (!country.is_anchor && !gotOwnQuote && basePrice != null) {
+    if (priceSource.kind.startsWith('market')) {
+      // Link 2: a real quote exists, but for the anchor. Scale it, and be
+      // explicit that the scaling happened.
+      basePrice = round4(basePrice * cr.yarn_ratio);
+      priceSource = {
+        ...priceSource,
+        kind: 'modelled_country',
+        modelled_from: { country: countryCosts.ANCHOR, price: anchorYarnPrice,
+                         ratio: cr.yarn_ratio, basis: priceSource.kind },
+      };
+    } else {
+      // Link 3: no live quote anywhere. The fixed list answers, and the country
+      // adjustment is applied to it so the dropdown still means something —
+      // but the label stays `reference_list`, because scaling a four-month-old
+      // number does not make it a market price.
+      basePrice = round4(basePrice * cr.yarn_ratio);
+      priceSource = {
+        ...priceSource,
+        country_adjusted: { from: anchorYarnPrice, ratio: cr.yarn_ratio },
+      };
+    }
   }
 
   // ---- 3. APPLY SURCHARGES ----
@@ -691,14 +729,13 @@ function calculateCost(params) {
     knittingBase = knittingDetail.price_usd_kg;
     knittingFinal = knittingBase;
   }
-  // A knitting floor is the least energy-hungry step in the chain — a circular
-  // machine is a few kilowatts and the bill is mostly labour and depreciation —
-  // so a tariff difference barely moves it. That mildness is the finding, not a
-  // shortcoming: it is why knitting migrates for labour and dyeing for power.
+  // NOT adjusted by country, deliberately. Knitting comes from a factory price
+  // list and stays that list's number wherever the fabric is costed. Only the
+  // YARN follows the country, because yarn is the only line with a real market
+  // quote behind it; scaling a conversion charge by a power tariff was a model
+  // standing in for data, and a model in the middle of a costing is harder to
+  // argue with than a missing number.
   const knittingAnchor = knittingFinal;
-  if (!country.is_anchor && knittingFinal != null && !params.knitting_cost) {
-    knittingFinal = round4(knittingFinal * cr.knitting_ratio);
-  }
 
   // ---- 6. DYEING COST (Official Price List: one-part vs two-part) ----
   const fibers = parsedComp ? (parsedComp.fibers || {}) : { cotton: 100 };
@@ -728,15 +765,9 @@ function calculateCost(params) {
         : `One-part dyeing (${shadeKey}) at ${dyeRow.one_part} USD/kg`,
     };
   }
-  // Dyeing is the step a power tariff actually bites: water heated to 60-130 C,
-  // held there for an hour, then a stenter drying the cloth. Nearly half the
-  // cost is energy, so the same tariff gap that moves yarn 4% moves dyeing 15%.
+  // Also not adjusted by country. Same reason as knitting: it is a price-list
+  // number, and it stays one.
   const dyeingAnchor = dyeingFinal;
-  if (!country.is_anchor && dyeingFinal != null && !params.dyeing_cost) {
-    dyeingFinal = round4(dyeingFinal * cr.dyeing_ratio);
-    dyeingDetail = { ...dyeingDetail, country_adjusted: true,
-                     anchor_price: dyeingAnchor, ratio: cr.dyeing_ratio };
-  }
 
   const dualBath = isTwoPart ? 0 : 0; // already factored in via two_part price
 
@@ -746,11 +777,7 @@ function calculateCost(params) {
     : FINISHING_COST_BY_FABRIC[fabricId] || FINISHING_COST_BY_FABRIC.default;
   const heavySurcharge = gsm > 300 ? 0.10 : gsm > 250 ? 0.05 : 0;
   const finishingAnchor = round4(finishingBase + heavySurcharge);
-  // Finishing is a stenter, which is heat, so it follows the dyeing share
-  // rather than the knitting one.
-  const finishingFinal = (!country.is_anchor && !params.finishing_cost)
-    ? round4(finishingAnchor * cr.dyeing_ratio)
-    : finishingAnchor;
+  const finishingFinal = finishingAnchor;
 
   // ---- 8. TOTAL CMT ----
   const totalCost = round4(rawMaterialWithWaste + knittingFinal + dyeingFinal + finishingFinal);
@@ -912,10 +939,9 @@ function calculateCost(params) {
         : `${country.name} power ${country.tariff.us_cents_kwh} c/kWh against `
           + `${countryCosts.ANCHOR} ${country.vs_anchor.anchor_us_cents_kwh} c/kWh = `
           + `${country.vs_anchor.tariff_ratio}x. Energy is ${ENERGY_SHARE_PCT.spinning}% of `
-          + `spinning conversion, ${ENERGY_SHARE_PCT.knitting}% of knitting and `
-          + `${ENERGY_SHARE_PCT.dyeing}% of dyeing, and the fibre does not move at all — `
-          + `so yarn x${country.vs_anchor.yarn_ratio}, knitting `
-          + `x${country.vs_anchor.knitting_ratio}, dyeing x${country.vs_anchor.dyeing_ratio}`,
+          + `spinning conversion and the fibre does not move at all, so yarn `
+          + `x${country.vs_anchor.yarn_ratio}. Knitting, dyeing and finishing are price-list `
+          + `figures and are NOT adjusted by country`,
       yarn_price:   `${priceSource.kind === 'market'
           ? `Market quote[${yarnTypeKey}][${Math.round(countNe)}Ne] as at ${priceSource.last_updated}`
           : priceSource.kind === 'market_interpolated'

@@ -1952,6 +1952,13 @@ function renderCosting(costing) {
     } else {
       const a = ctry.anchor_prices || {};
       const pct = r => `${r >= 1 ? '+' : ''}${((r - 1) * 100).toFixed(1)}%`;
+      // The three steps that do NOT move. Shown rather than hidden, because a
+      // table listing only yarn would leave a reader wondering whether the
+      // others had been forgotten or deliberately held.
+      const fixedRow = (label, val) => `<tr>`
+        + `<td style="padding:3px 10px 3px 0;color:var(--t2);">${label}</td>`
+        + `<td colspan="2" style="padding:3px 10px 3px 0;color:var(--t3);font-variant-numeric:tabular-nums;">$${fmt(val, 3)} — same everywhere</td>`
+        + `<td style="padding:3px 0;color:var(--t3);">—</td></tr>`;
       const row = (label, ratio, from, to) => `<tr>`
         + `<td style="padding:3px 10px 3px 0;color:var(--t2);">${label}</td>`
         + `<td style="padding:3px 10px 3px 0;color:var(--t3);font-variant-numeric:tabular-nums;">$${fmt(from, 3)}</td>`
@@ -1962,11 +1969,11 @@ function renderCosting(costing) {
         + `<strong style="color:#fbbf24;">Modelled, not quoted.</strong> `
         + `${esc(ctry.name)} industrial power is ${ctry.tariff.us_cents_kwh}\u00A2/kWh against `
         + `${esc(v.anchor)} ${v.anchor_us_cents_kwh}\u00A2/kWh — a factor of ${v.tariff_ratio}. `
-        + `Energy is about ${Math.round(ctry.method.energy_share.spinning * 100)}% of spinning conversion, `
-        + `${Math.round(ctry.method.energy_share.knitting * 100)}% of knitting and `
-        + `${Math.round(ctry.method.energy_share.dyeing * 100)}% of dyeing — and the cotton itself does not `
-        + `move at all, because it is bought at a world price. That is why the yarn barely shifts and the `
-        + `dyeing shifts a lot.</div>`
+        + `Energy is about ${Math.round(ctry.method.energy_share.spinning * 100)}% of spinning `
+        + `conversion, and the cotton itself does not move at all because it is bought at a world `
+        + `price — so the yarn shifts far less than the tariff behind it. `
+        + `<strong>Only the yarn moves.</strong> Knitting, dyeing and finishing come from a factory `
+        + `price list and stay that list's numbers wherever the fabric is costed.</div>`
         + `<table style="font-size:10px;border-collapse:collapse;"><thead><tr>`
         + `<th style="text-align:left;padding:0 10px 4px 0;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);">Step</th>`
         + `<th style="text-align:left;padding:0 10px 4px 0;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);">${esc(v.anchor)}</th>`
@@ -1974,9 +1981,9 @@ function renderCosting(costing) {
         + `<th style="text-align:left;padding:0 0 4px 0;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);">Δ</th>`
         + `</tr></thead><tbody>`
         + row('Yarn', v.yarn_ratio, a.yarn_usd_kg, a.yarn_usd_kg * v.yarn_ratio)
-        + row('Knitting', v.knitting_ratio, a.knitting_usd_kg, a.knitting_usd_kg * v.knitting_ratio)
-        + row('Dyeing', v.dyeing_ratio, a.dyeing_usd_kg, a.dyeing_usd_kg * v.dyeing_ratio)
-        + row('Finishing', v.dyeing_ratio, a.finishing_usd_kg, a.finishing_usd_kg * v.dyeing_ratio)
+        + fixedRow('Knitting', a.knitting_usd_kg)
+        + fixedRow('Dyeing', a.dyeing_usd_kg)
+        + fixedRow('Finishing', a.finishing_usd_kg)
         + `</tbody></table>`
         + `<div style="font-size:9px;color:var(--t3);margin-top:8px;line-height:1.6;">`
         + `Not modelled: ${ctry.method.not_modelled.join(', ')} — no free source prices those per country `

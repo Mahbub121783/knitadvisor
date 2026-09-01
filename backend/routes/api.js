@@ -165,7 +165,8 @@ router.post('/calculate', async (req, res) => {
   // Cache miss — calculate
   // The lookup is handed in rather than reached for inside the engine, so the
   // engine keeps working with no database behind it.
-  engineParams.live_prices = (key, ne) => yarnPrices.lookup(key, ne);
+  engineParams.live_prices = (key, ne, country) =>
+    yarnPrices.lookup(key, ne, undefined, { country });
   const result = calculate(engineParams);
 
   if (result.error) {
@@ -289,7 +290,8 @@ router.post('/cost', (req, res) => {
   try {
     const parsedComp = body.composition ? parseComposition(body.composition) : null;
     const result = calculateCost({ ...body, gsm, parsedComp,
-      live_prices: (key, ne) => yarnPrices.lookup(key, ne) });
+      live_prices: (key, ne, country) =>
+        yarnPrices.lookup(key, ne, undefined, { country }) });
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });

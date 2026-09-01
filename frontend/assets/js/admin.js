@@ -1033,6 +1033,31 @@ async function loadYarnPrices() {
       priceMsg('');
     }
 
+    // ── Sources ─────────────────────────────────────────────────────────
+    const srcEl = document.getElementById('prices-sources');
+    srcEl.innerHTML = (d.sources || []).map(s => {
+      // Three states, not two. "Never connected" is not "broken", and showing
+      // them the same colour is how a source nobody set up gets mistaken for a
+      // source that is down.
+      const live = s.configured && s.quotes > 0;
+      const c = live ? '#4ade80' : s.configured ? '#fb923c' : 'var(--t3)';
+      const state = live ? `${s.quotes} quotes`
+                  : s.configured ? 'connected, no data' : 'not connected';
+      const countries = (s.countries || []).map(x =>
+        `<span style="display:inline-block;background:var(--bg3);border:1px solid var(--line);border-radius:4px;padding:1px 6px;margin:2px 4px 0 0;font-size:9px;">`
+        + `${esc(x.country)} · ${x.quotes} · ${esc(x.newest)}</span>`).join('');
+      return `<div style="border:1px solid ${c}44;background:${c}0d;border-radius:8px;padding:9px 12px;margin-bottom:8px;">
+        <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;">
+          <span style="width:7px;height:7px;border-radius:50%;background:${c};display:inline-block;"></span>
+          <strong style="font-size:11px;color:var(--t1);">${esc(s.label)}</strong>
+          <span style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;">${esc(s.kind)}</span>
+          <span style="margin-left:auto;font-size:10px;color:${c};">${esc(state)}</span>
+        </div>
+        ${countries ? `<div style="margin-top:6px;">${countries}</div>` : ''}
+        ${s.note ? `<div style="font-size:9px;color:var(--t3);margin-top:6px;line-height:1.5;">${esc(s.note)}</div>` : ''}
+      </div>`;
+    }).join('');
+
     const tb = document.getElementById('prices-tbody');
     tb.innerHTML = (d.quotes || []).map(q => {
       const ref = q.reference_price;
