@@ -133,6 +133,25 @@ for (const [engineKey, row] of Object.entries(F)) {
          find(key, 'strength_retained_pct', 'after 80 days at 130 C'));
   }
 
+  // ── Chapters 8, 10 and 19: heat released, water left, bends survived ──
+  if (row.moisture_energy) {
+    const m = row.moisture_energy;
+    cite(key, 'heat of sorption', m.heat_40_70_kj_kg,
+         find(key, 'heat_of_sorption', 'going from 40% to 70% r.h.'));
+    // Wool's retention is measured on loose fibre, so its condition carries a
+    // prefix the others do not have.
+    const spunCond = key === 'wool'
+      ? 'loose fibre, after centrifuging at 1000g for 5 min'
+      : 'after centrifuging at 1000g for 5 min';
+    const suckCond = key === 'wool'
+      ? 'loose fibre, after suction at 30 cm Hg (40 kPa)'
+      : 'after suction at 30 cm Hg (40 kPa)';
+    cite(key, 'water retained, spun', m.retained_spun_pct, find(key, 'water_retained', spunCond));
+    cite(key, 'water retained, sucked', m.retained_sucked_pct, find(key, 'water_retained', suckCond));
+    cite(key, 'flex fatigue life', m.flex_life_cycles,
+         find(key, 'flex_fatigue_life', 'mean, 65% r.h., 20 C'));
+  }
+
   // ── Chapter 22: static ────────────────────────────────────────────────
   if (row.static) {
     cite(key, 'static threshold', row.static.rh_threshold,

@@ -80,7 +80,7 @@ function verify(payload) {
         'every refusal states a reason');
   check(fibres.length >= 73, 'every declared table was read',
         fibres.length + ' fibres');
-  check(properties.length >= 935, 'every column of every table came through',
+  check(properties.length >= 975, 'every column of every table came through',
         properties.length + ' measurements');
 
   // Classification has to satisfy the same constraints the table does, so a bad
@@ -441,7 +441,12 @@ function verify(payload) {
     const r = properties.find(p => p.fibre_slug === slug && p.property === prop);
     return r ? (r.value != null ? r.value : r.value_min) : null;
   };
-  const cvRows = properties.filter(p => p.property.startsWith('cv_'));
+  // Table 14.6's own four coefficients, named rather than matched on a `cv_`
+  // prefix: chapter 19 later added a coefficient of variance for flex fatigue
+  // life, which is a different table measuring a different thing, and a prefix
+  // match silently counted it here.
+  const TABLE_14_6 = ['cv_fineness', 'cv_breaking_load', 'cv_tenacity', 'cv_breaking_extension'];
+  const cvRows = properties.filter(p => TABLE_14_6.includes(p.property));
   check(cvRows.length === 24, 'the variability table came through', cvRows.length + ' of 24');
   check(cvRows.every(p => { const v = p.value != null ? p.value : p.value_min; return v > 0 && v <= 100; }),
         'every coefficient of variation is a percentage above zero');
@@ -868,6 +873,62 @@ function verify(payload) {
   check(withinFibre.length === 0,
         'stripping the finish never makes a fibre EASIER to discharge',
         withinFibre.join('; '));
+
+  // ── Chapter 8: the heat moisture releases ─────────────────────────────
+  const sorb = properties.filter(p => p.property === 'heat_of_sorption');
+  check(sorb.length === 6, 'Table 8.5 came through', sorb.length + ' rows');
+  check(sorb.every(p => p.value > 0), 'absorbing water releases heat, never absorbs it');
+  check(look('wool', 'heat_of_sorption') > 30 * look('polyester', 'heat_of_sorption'),
+        'wool still releases many times the heat polyester does',
+        `wool ${look('wool', 'heat_of_sorption')}, polyester ${look('polyester', 'heat_of_sorption')}`);
+  // Reported because it is surprising, and because a rule that quietly ranked
+  // wool first would be fitting the data to the marketing.
+  check(look('viscose', 'heat_of_sorption') > look('wool', 'heat_of_sorption'),
+        'viscose still out-warms wool on this measure, surprising as that is');
+
+  // ── Chapter 10: the water a machine leaves behind ─────────────────────
+  const wat = properties.filter(p => p.property === 'water_retained');
+  check(wat.length === 14, 'Table 10.1 came through', wat.length + ' rows');
+  const spunDry = (slug, cond) => look(slug, 'water_retained',
+    (cond ? cond + ', ' : '') + 'after centrifuging at 1000g for 5 min');
+  const sucked = (slug, cond) => look(slug, 'water_retained',
+    (cond ? cond + ', ' : '') + 'after suction at 30 cm Hg (40 kPa)');
+  const worse = [];
+  for (const slug of new Set(wat.map(p => p.fibre_slug))) {
+    for (const cond of [null, 'loose fibre', '0.11 dtex per filament', '1.1 dtex per filament']) {
+      const a = sucked(slug, cond), b = spunDry(slug, cond);
+      if (a != null && b != null && b > a) worse.push(`${slug}: spun ${b} > sucked ${a}`);
+    }
+  }
+  check(worse.length === 0,
+        'centrifuging never leaves more water than suction', worse.join('; '));
+  check(spunDry('viscose') > 2 * spunDry('cotton'),
+        'viscose still carries over twice cotton\'s water into the dryer',
+        `viscose ${spunDry('viscose')}%, cotton ${spunDry('cotton')}%`);
+  // Wool's water is between the fibres, not in them, so spinning it out works
+  // where suction does not. That gap is the finding.
+  check(sucked('wool', 'loose fibre') > 2 * spunDry('wool', 'loose fibre'),
+        "wool's held water still yields to force and not to pressure",
+        `suction ${sucked('wool', 'loose fibre')}%, centrifuge ${spunDry('wool', 'loose fibre')}%`);
+
+  // ── Chapter 19: the fold ──────────────────────────────────────────────
+  const flexLife = properties.filter(p => p.property === 'flex_fatigue_life');
+  check(flexLife.length === 6, 'Table 19.4 came through', flexLife.length + ' rows');
+  // The thousands space. Without the join every one of these is under a
+  // thousand, and a two-digit fatigue life looks entirely ordinary beside a
+  // bending strain of 16.1.
+  check(flexLife.every(p => p.value >= 1000),
+        'every fatigue life is a five- or six-figure cycle count, so the thousands space was joined',
+        flexLife.map(p => p.value).join(', '));
+  for (const slug of new Set(flexLife.map(p => p.fibre_slug))) {
+    const mean = look(slug, 'flex_fatigue_life', 'mean, 65% r.h., 20 C');
+    const med = look(slug, 'flex_fatigue_life', 'median, 65% r.h., 20 C');
+    check(mean >= med, `${slug}: the mean fatigue life sits at or above the median, as a skewed distribution requires`,
+          `mean ${mean}, median ${med}`);
+  }
+  check(look('polyester', 'flex_fatigue_life', 'mean, 65% r.h., 20 C') >
+        4 * look('nylon6', 'flex_fatigue_life', 'mean, 65% r.h., 20 C'),
+        'polyester still survives several times the bends nylon 6 does');
 
   const badPage = properties.filter(p => !(p.page >= 1 && p.page <= 746));
   check(badPage.length === 0, 'every citation points inside the book', badPage.length + ' do not');

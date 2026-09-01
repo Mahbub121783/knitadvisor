@@ -57,6 +57,9 @@ CITATION = re.compile(r'^\[[\d,\s–—-]+\]$')
 SIGNED = re.compile(r'^[–—-](\d+(?:\.\d+)?)$')
 DASH = re.compile(r'^[–—-]$')
 TIMES = re.compile(r'^[×x\u00d7]$')
+# A thousands group: one to three digits, then exactly three.
+TIMES_GROUP = re.compile(r'^\d{1,3}$')
+TIMES_GROUP_TAIL = re.compile(r'^\d{3}$')
 
 # Each table: the PDF page it is on, the vertical band its data rows occupy, and
 # what each column of figures means, left to right.
@@ -786,6 +789,93 @@ TABLES = {
         'static_check': True,
         'paired_check': False,
     },
+    # ---- Chapter 8, the heat moisture releases -----------------------------
+    # A fibre taking up water gives out heat. Going from 40% to 70% r.h. — the
+    # swing between a heated room and a damp day — a kilogram of wool releases
+    # 159 kJ and a kilogram of polyester releases 4. Forty times.
+    #
+    # That is the measured basis of a claim usually made by assertion: a wool
+    # garment feels warm when you come in from the cold and damp because it is
+    # actually warming, not because it insulates better at that moment. And
+    # VISCOSE BEATS WOOL at 168 kJ, which is worth reporting precisely because
+    # nobody sells viscose on warmth.
+    '8.5': {
+        'pdf_page': 219, 'y_from': 556, 'y_to': 620,
+        'columns': [('heat_of_sorption', 'going from 40% to 70% r.h.', None)],
+        'row_map': {
+            'Wool': ('wool', None), 'Cotton': ('cotton', None),
+            'Viscose rayon': ('viscose', None), 'Acetate': ('acetate', None),
+            'Nylon': ('nylon', None), 'Terylene': ('polyester', None),
+        },
+        'sorption_heat_check': True,
+        'paired_check': False,
+    },
+
+    # ---- Chapter 10, the water a machine cannot remove ---------------------
+    # Everything else about moisture in this book is vapour. This is liquid
+    # water — what is still in the cloth after the hydro-extractor has done its
+    # work, and therefore what the dryer has to pay for.
+    #
+    # After centrifuging, viscose carries 103% of its own weight in water and
+    # cotton carries 48%. A viscose fabric arrives at the dryer with more than
+    # twice the water, on the same machine, at the same setting. No drying
+    # calculation in this engine has ever known that.
+    #
+    # Wool is the other lesson: 133% left by suction and 45% by centrifuging.
+    # The water wool holds is between the fibres rather than in them, so
+    # mechanical force throws it out and a pressure difference does not.
+    '10.1': {
+        'pdf_page': 250, 'y_from': 500, 'y_to': 582,
+        'columns': [('water_retained', 'after suction at 30 cm Hg (40 kPa)', None),
+                    ('water_retained', 'after centrifuging at 1000g for 5 min', None)],
+        'row_map': {
+            'Cotton yarn':             ('cotton', None),
+            'Viscose rayon yarn':      ('viscose', None),
+            '0.11 dtex per filament':  ('fortisan', '0.11 dtex per filament'),
+            '1.1 dtex per filament':   ('fortisan', '1.1 dtex per filament'),
+            'Acetate yarn':            ('acetate', None),
+            'Loose wool':              ('wool', 'loose fibre'),
+            'Silk yarn':               ('silk', None),
+        },
+        'retention_check': True,
+        'paired_check': False,
+    },
+    # ---- Chapter 19, flex fatigue ------------------------------------------
+    # Abrasion wears a fabric from the outside. Flex fatigue breaks it from the
+    # inside, at a fold, and it is what finishes a collar, a cuff and a knee
+    # long before anything has worn through. Table 19.4 cycles fibres over a
+    # pin and counts how many bends they survive.
+    #
+    #   nylon 6      35,825      nylon 6.6   104,807      polyester   194,616
+    #
+    # Polyester lasts five times as long as nylon 6 under the same bending
+    # strain, which is not the ordering either its tenacity or its abrasion
+    # resistance would predict.
+    #
+    # THE TRAP IN THIS TABLE is the thousands space. The book sets "35 825" as
+    # two words, so a reader that takes tokens as it finds them stores 35, then
+    # 825 — a fatigue life of thirty-five thousand cycles becomes thirty-five,
+    # which sits quite plausibly beside a bending strain of 16.1 and would never
+    # be questioned. The join is declared per table because in most tables two
+    # adjacent short numbers are two measurements.
+    '19.4': {
+        'pdf_page': 553, 'y_from': 118, 'y_to': 152,
+        'thousands_space': True,
+        'columns': [('fibre_linear_density', None, None),
+                    ('flex_bending_strain', None, None),
+                    ('flex_specific_stress', None, None),
+                    ('flex_fatigue_life', 'mean, 65% r.h., 20 C', 65.0),
+                    ('flex_fatigue_life', 'median, 65% r.h., 20 C', 65.0),
+                    ('cv_flex_fatigue_life', '65% r.h., 20 C', 65.0)],
+        'temperature_c': 20.0,
+        'row_map': {
+            'Nylon 6':   ('nylon6', None),
+            'Nylon 6.6': ('nylon', None),
+            'Polyester': ('polyester', None),
+        },
+        'fatigue_check': True,
+        'paired_check': False,
+    },
     '13.7': {
         'pdf_page': 331, 'y_from': 175, 'y_to': 320,
         'rotated': True, 'hierarchical': True, 'label_edge_offset': 24,
@@ -850,7 +940,14 @@ UNITS = {'density': 'g/cm3', 'specific_volume': 'cm3/g',
          'log_resistance': 'log10(ohm g/m2)',
          'log_resistance_at_10pct_moisture': 'log10(ohm g/m2)',
          'resistance_moisture_slope': '1',
-         'rh_for_static_threshold': '%'}
+         'rh_for_static_threshold': '%',
+         'heat_of_sorption': 'kJ/kg',
+         # Retained water as a regain: kilograms of water per hundred kilograms
+         # of dry fibre, which is why it can exceed 100.
+         'water_retained': '%',
+         'fibre_linear_density': 'dtex', 'flex_bending_strain': '%',
+         'flex_specific_stress': 'mN/tex', 'flex_fatigue_life': 'cycles',
+         'cv_flex_fatigue_life': '%'}
 
 # How each printed fibre name is filed. Written out rather than inferred from
 # the name, because the classification is a judgement and belongs in one
@@ -1220,7 +1317,7 @@ def read_all_figures(page, y_from, y_to, rotated, label_edge, row_map):
 def read_rows(page, y_from, y_to, centres, rotated=False,
               label_edge_offset=30, hierarchical=False, multi_value=False,
               keep_citations=False, allow_negative=False,
-              cell_level_refusal=False, x_to=None):
+              cell_level_refusal=False, x_to=None, thousands_space=False):
     """
     Rows of (name, {column index: (low, high)}), split on the column positions.
 
@@ -1270,6 +1367,7 @@ def read_rows(page, y_from, y_to, centres, rotated=False,
         label, cells, ambiguous, qualifiers, lists = [], {}, set(), [], {}
         ranged = set()
         pending_sign = False
+        skip_next = False
         refused_cells = []
         for pos, (x, t) in enumerate(line):
             nxt = line[pos + 1] if pos + 1 < len(line) else None
@@ -1298,6 +1396,20 @@ def read_rows(page, y_from, y_to, centres, rotated=False,
                 # empty cell and the next token is stored as +3, silently
                 # reversing the physics. The pair is joined here instead.
                 pending_sign = True
+                continue
+            if thousands_space and TIMES_GROUP.match(t) and nxt is not None \
+                    and TIMES_GROUP_TAIL.match(nxt[1].strip()) and 0 < nxt[0] - x < 18:
+                # "35 825" set as two words, which is how this book prints a
+                # five-figure number. Read as two tokens the reader stores 35
+                # and then 825, and a fatigue life of thirty-five thousand
+                # cycles becomes thirty-five — a thousandfold error that looks
+                # entirely plausible next to a bending strain of 16.1. Only
+                # tables that declare it are read this way, because in a table
+                # of two-column figures the same pattern is two measurements.
+                t = t + nxt[1].strip()
+                skip_next = True
+            elif skip_next:
+                skip_next = False
                 continue
             if TIMES.match(t):
                 continue
@@ -1897,6 +2009,93 @@ def static_slip(cells, spec):
     return None
 
 
+def sorption_heat_slip(cells, spec):
+    """
+    Why this heat-of-sorption row should not be believed, or None.
+
+    Absorbing water RELEASES heat — the water molecule gives up energy binding
+    to the polymer — so the figure is positive for every fibre. It scales with
+    how much water the fibre takes up, and the most absorbent fibre in the book
+    holds about a fifth of its weight, so a few hundred kilojoules per kilogram
+    is the ceiling. Polyester at 4 kJ is the floor and is real: it absorbs
+    almost nothing, so it releases almost nothing.
+    """
+    h = cells_by_property(cells, spec, 'heat_of_sorption')
+    if h is not None and not (0 < h[0] <= 500):
+        return 'heat of sorption %.4g kJ/kg is not something a fibre releases' % h[0]
+    return None
+
+
+def retention_slip(cells, spec):
+    """
+    Why this water-retention row should not be believed, or None.
+
+    Retention is a regain — water per unit of dry fibre — so it is positive and
+    may exceed 100%: loose wool holds a third more than its own weight after
+    suction. What it cannot do is exceed a few times its own weight, and it
+    cannot be negative.
+
+    And the mechanical comparison holds in every row: centrifuging at 1000g
+    leaves no more water than suction at 40 kPa. That is not obvious in advance
+    — the two act on different water, one on what sits between fibres and one on
+    what a pressure difference can pull — but the table is unanimous, so a row
+    where suction wins has had its two columns crossed.
+    """
+    cols = spec['columns']
+    def at(cond):
+        for idx, (lo, hi) in cells.items():
+            if cols[idx][1] == cond:
+                return lo
+        return None
+    suction = at('after suction at 30 cm Hg (40 kPa)')
+    spun = at('after centrifuging at 1000g for 5 min')
+    for label, v in (('suction', suction), ('centrifuging', spun)):
+        if v is not None and not (0 < v <= 400):
+            return 'water retained after %s is %.4g%%, which is not a regain' % (label, v)
+    if suction is not None and spun is not None and spun > suction:
+        return ('centrifuging leaves more water (%.4g%%) than suction (%.4g%%), which no row '
+                'of this table does' % (spun, suction))
+    return None
+
+
+def fatigue_slip(cells, spec):
+    """
+    Why this flex-fatigue row should not be believed, or None.
+
+    A fatigue lifetime is a count of cycles and these run to six figures, which
+    is the point of the check: if the thousands space has not been joined the
+    figure comes out under a thousand, and a two-digit fatigue life beside a
+    bending strain of 16.1 looks like a perfectly ordinary number.
+
+    Lifetime distributions are strongly right-skewed — a few specimens survive
+    far longer than the rest — so the mean sits at or above the median in every
+    row. A row where the median is higher has had the two columns swapped.
+    """
+    cols = spec['columns']
+    def at(prop, cond=None):
+        for idx, (lo, hi) in cells.items():
+            if cols[idx][0] == prop and (cond is None or cols[idx][1] == cond):
+                return lo
+        return None
+    mean = at('flex_fatigue_life', 'mean, 65% r.h., 20 C')
+    median = at('flex_fatigue_life', 'median, 65% r.h., 20 C')
+    for label, v in (('mean', mean), ('median', median)):
+        if v is None:
+            continue
+        if v < 1000:
+            return ('a %s fatigue life of %g cycles is too small — the thousands space has '
+                    'probably not been joined' % (label, v))
+        if v > 10000000:
+            return 'a %s fatigue life of %g cycles is beyond the test' % (label, v)
+    if mean is not None and median is not None and median > mean:
+        return ('the median lifetime %g exceeds the mean %g, and a fatigue distribution is '
+                'skewed the other way' % (median, mean))
+    strain = at('flex_bending_strain')
+    if strain is not None and not (0 < strain <= 100):
+        return 'a bending strain of %.4g%% is not a strain' % strain
+    return None
+
+
 def ratio_slip(cells, spec):
     """
     Why this row of Table 13.7 should not be believed, or None.
@@ -2033,7 +2232,8 @@ def main():
                          spec.get('keep_citations', False),
                          spec.get('allow_negative', False),
                          spec.get('cell_level_refusal', False),
-                         spec.get('x_to'))
+                         spec.get('x_to'),
+                         spec.get('thousands_space', False))
         if not rows:
             refused.append({'table': ref, 'name': '(whole table)', 'why': 'no rows found in the declared band'})
             continue
@@ -2100,6 +2300,24 @@ def main():
                 by_cond.setdefault(cond, {})[prop] = (lo, hi)
 
             row_ok = True
+            if spec.get('fatigue_check'):
+                why = fatigue_slip(cells, spec)
+                if why:
+                    refused.append({'table': ref, 'name': label, 'why': why})
+                    continue
+                by_cond = {}
+            if spec.get('sorption_heat_check'):
+                why = sorption_heat_slip(cells, spec)
+                if why:
+                    refused.append({'table': ref, 'name': label, 'why': why})
+                    continue
+                by_cond = {}
+            if spec.get('retention_check'):
+                why = retention_slip(cells, spec)
+                if why:
+                    refused.append({'table': ref, 'name': label, 'why': why})
+                    continue
+                by_cond = {}
             if spec.get('static_check'):
                 why = static_slip(cells, spec)
                 if why:

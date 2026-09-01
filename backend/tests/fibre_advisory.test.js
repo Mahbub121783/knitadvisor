@@ -332,6 +332,42 @@ assert(fibreAdvisory({ cotton: 100 }, sj).findings.some(f => f.topic === 'heat a
 assert(!fibreAdvisory({ polyester: 100 }, sj).findings.some(f => f.topic === 'heat ageing'),
   'polyester keeps 75% over the same eighty days and must not be flagged');
 
+// ── The dryer, the fold, and warmth when damp ───────────────────────────
+const { dryingLoad, flexFatigue } = require('../engine/domain/yarn-engine');
+// Liquid water, not vapour: what the hydro-extractor leaves for the dryer to
+// evaporate. Viscose delivers more than twice cotton's water on the same
+// machine at the same setting.
+const dl = dryingLoad({ viscose: 100 });
+assert.strictEqual(dl.water_after_extraction_pct.value, 103);
+assert(dl.vs_cotton > 2, `viscose should carry over twice cotton's water, got ${dl.vs_cotton}`);
+// Wool's water sits between the fibres, not inside them, so force removes it
+// where pressure cannot — and that gap is named rather than averaged away.
+assert(dryingLoad({ wool: 100 }).force_sensitive.some(x => /wool/.test(x)));
+assert.strictEqual(dryingLoad({ cotton: 100 }).force_sensitive.length, 0,
+  "cotton's water is inside the fibre, so suction and spinning agree");
+
+// A fold fails where its weakest fibres fail, so the blend takes the lowest.
+assert.strictEqual(flexFatigue({ nylon6: 100 }), null,
+  'nylon 6 is not an engine fibre, so there is nothing to report');
+assert.strictEqual(flexFatigue({ nylon: 100 }).cycles, 104807);
+assert.strictEqual(flexFatigue({ nylon: 50, polyester: 50 }).governed_by, 'nylon',
+  'the fold is governed by the fibre that fails first, not the average');
+// The thousands space, guarded at the engine as well as the extractor: a
+// fatigue life under a thousand means "35 825" was read as 35.
+for (const [k, row] of Object.entries(FIBER_PROPERTIES)) {
+  const c = (row.moisture_energy || {}).flex_life_cycles;
+  if (c != null) assert(c >= 1000, `${k}: ${c} cycles means the thousands space was lost`);
+}
+
+// Two different things must not share one heading: conduction is not the same
+// as the heat released while taking water up, and printing both under "thermal
+// comfort" made one look like a repeat of the other.
+const woolAdv = fibreAdvisory({ wool: 100 }, sj);
+const topics = woolAdv.findings.map(f => f.topic);
+assert(topics.includes('thermal comfort') && topics.includes('warmth when damp'));
+assert.strictEqual(new Set(topics).size, topics.length,
+  'no two findings on one fabric may share a topic');
+
 console.log(`  ${fibreAdvisory({ cotton: 60, polyester: 40 }, sj).findings.length} findings on a 60/40 CVC single jersey`);
 console.log(`  ${fibreAdvisory({ viscose: 100 }, sj).findings.length} on a viscose single jersey`);
 console.log('\n✓ All fibre advisory tests passed.');

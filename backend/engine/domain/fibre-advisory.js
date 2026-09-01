@@ -46,6 +46,7 @@ const {
   FIBER_PROPERTIES, blendMechanics, blendFriction, blendRecovery,
   fibreVariability, weakLinkSensitivity, moistureEconomics, yieldTension,
   blendDirectional, blendCyclic, blendThermal, heatCeiling, staticRisk,
+  dryingLoad, flexFatigue,
 } = require('./yarn-engine');
 
 const SOURCE = 'Morton & Hearle, Physical Properties of Textile Fibres, 4th edn (2008), '
@@ -293,6 +294,8 @@ function fibreAdvisory(fibers, ctx = {}) {
   // ctx.floor_rh is the humidity the knitting or finishing floor actually
   // runs at. Without it there is a threshold but no verdict.
   const stat = staticRisk(fibers, ctx.floor_rh);
+  const dry = dryingLoad(fibers);
+  const flex = flexFatigue(fibers);
   const yld = ctx.count_ne ? yieldTension(fibers, ctx.count_ne) : null;
   const pill = pillingIndex(fibers);
   const hand = handleIndex(fibers);
@@ -874,6 +877,84 @@ function fibreAdvisory(fibers, ctx = {}) {
     });
   }
 
+  // ── 21. What the dryer has to evaporate ────────────────────────────────
+  // Only where the fabric is actually going to be wet. A dyed fabric always is;
+  // a caller who says otherwise is taken at their word.
+  if (dry && dry.water_after_extraction_pct && ctx.wet_processed !== false) {
+    const W = dry.water_after_extraction_pct;
+    const heavy = dry.vs_cotton != null && dry.vs_cotton >= 1.5;
+    push({
+      topic: 'drying load', severity: heavy ? 'moderate' : 'info',
+      claim: qualify(`After the hydro-extractor this fabric still holds ${W.value}% of its own `
+        + `dry weight in water`
+        + (dry.vs_cotton != null ? ` — ${dry.vs_cotton}x what a cotton fabric holds` : '')
+        + '.', W.from_pct, dry.unmeasured),
+      mechanism: 'Everything else about moisture here is vapour; this is liquid water still in '
+        + 'the cloth when it reaches the dryer, and it is what the dryer has to evaporate. '
+        + 'After centrifuging, viscose carries 103% of its dry weight and cotton 48% — the '
+        + 'same machine at the same setting delivering more than twice the water.'
+        + (dry.force_sensitive.length
+            ? ` And ${dry.force_sensitive.join('; ')}: that water sits BETWEEN the fibres `
+              + 'rather than inside them, so mechanical force removes it where a pressure '
+              + 'difference cannot.'
+            : ''),
+      action: heavy
+        ? 'Size dryer time and gas from this figure, not from a cotton baseline, and check '
+          + 'that the extractor is doing its share before adding heat — the cheapest water to '
+          + 'remove is the water taken out mechanically.'
+        : 'Drying load is unremarkable for this blend; a cotton baseline will hold.',
+      evidence: [{ table: 'Table 10.1', page: 231 }],
+      confidence: 'measured on yarn packages, so a fabric will differ with construction; the '
+        + 'ORDERING between fibres is what carries over',
+    });
+  }
+
+  // ── 22. Warm when damp ─────────────────────────────────────────────────
+  if (dry && dry.heat_released_kj_kg && dry.heat_released_kj_kg.value >= 60) {
+    const H = dry.heat_released_kj_kg;
+    push({
+      // Distinct from 'thermal comfort', which is conduction. This is the
+      // fibre actually releasing energy as it takes water up, and printing both
+      // under one heading made a reader think one of them was a repeat.
+      topic: 'warmth when damp', scope: 'fibre',
+      severity: 'info',
+      claim: qualify(`Moving from a heated room to a damp day, a kilogram of this blend gives `
+        + `out about ${H.value} kJ of heat.`, H.from_pct, dry.unmeasured),
+      mechanism: 'A fibre taking up water releases heat as the water binds to the polymer. '
+        + 'Over the swing from 40% to 70% r.h., wool releases 159 kJ/kg and polyester 4 — '
+        + 'forty times. That is the measured basis of a garment feeling warm when you come in '
+        + 'from the cold and damp: it is actually warming, not merely insulating. Viscose, at '
+        + '168 kJ/kg, does it better than wool, which nobody advertises.',
+      action: 'This is a real comfort property and it is worth claiming, but it is transient — '
+        + 'it lasts while the fibre is taking water up, not afterwards. Do not confuse it with '
+        + 'insulation, which is thickness and trapped air.',
+      evidence: [{ table: 'Table 8.5', page: 200 }],
+      confidence: 'measured',
+    });
+  }
+
+  // ── 23. The fold ───────────────────────────────────────────────────────
+  if (flex) {
+    push({
+      topic: 'flex fatigue', severity: 'info',
+      claim: qualify(`At a fold this fabric survives about `
+        + `${flex.cycles.toLocaleString('en-GB')} bends, set by the ${flex.governed_by} in it.`,
+        flex.from_pct, flex.unmeasured),
+      mechanism: 'Abrasion wears a fabric from the outside; flex fatigue breaks it from the '
+        + 'inside, at a crease, and that is what finishes a collar, a cuff or a knee long '
+        + 'before anything has worn through. Nylon 6 survives 35,825 bends, nylon 6.6 104,807 '
+        + 'and polyester 194,616 — an ordering neither tenacity nor abrasion resistance '
+        + 'predicts. The blend is governed by its weakest component, because a fold fails '
+        + 'where the first fibres in it fail.',
+      action: 'Where a garment has a permanent crease — a collar, a placket, a pleat — judge it '
+        + 'on this rather than on tensile strength, and set a flex or edge-abrasion test '
+        + 'rather than a tensile one.',
+      evidence: [{ table: 'Table 19.4', page: 534 }],
+      confidence: 'measured on single fibres over a pin, so it ranks fibres rather than '
+        + 'predicting a garment',
+    });
+  }
+
   // ── What is NOT known ──────────────────────────────────────────────────
   const gaps = [];
   if (silentOn.length) {
@@ -912,6 +993,8 @@ function fibreAdvisory(fibers, ctx = {}) {
       thermal: therm,
       heat: heat,
       static: stat,
+      drying: dry,
+      flex_fatigue: flex,
       yield_tension: yld,
       pilling: pill,
       handle: hand,

@@ -263,7 +263,8 @@ const FIBER_PROPERTIES = {
                thermal: { expansion_1e4_per_c: 4, conductivity_mw_mk: 71,
                           page: 176, table: 'Tables 6.5 and 6.2' },
                heat: { melting_c: null, retained_130c_80d: 10, page: 479, table: 'Table 18.3' },
-               static: { rh_threshold: 30, log_resistance_65: 6.8, page: 647, table: 'Table 22.1' },},
+               static: { rh_threshold: 30, log_resistance_65: 6.8, page: 647, table: 'Table 22.1' },
+               moisture_energy: { heat_40_70_kj_kg: 84,  retained_spun_pct: 48, retained_sucked_pct: 52,  flex_life_cycles: null, page: 200, table: 'Tables 8.5 and 10.1' },},
   polyester: { density: 1.39, regain: 0.4,  rkm: 1.25,     // was 1.38 — Table 5.1 gives 1.39
                tensile: { tenacity: 0.47, extension: 15.0, modulus: 10.6, work_of_rupture: 53,
                           grade: 'Terylene, medium-tenacity', page: 292, table: 'Table 13.2',
@@ -287,7 +288,8 @@ const FIBER_PROPERTIES = {
                thermal: { expansion_1e4_per_c: -10, conductivity_mw_mk: null,
                           note: 'above 80 C', page: 176, table: 'Table 6.5' },
                heat: { melting_c: 260, retained_130c_80d: 75, page: 463, table: 'Tables 18.1 and 18.3' },
-               static: { rh_threshold: 85, log_resistance_65: 8.0, page: 647, table: 'Table 22.1' },},
+               static: { rh_threshold: 85, log_resistance_65: 8.0, page: 647, table: 'Table 22.1' },
+               moisture_energy: { heat_40_70_kj_kg: 4,   retained_spun_pct: null, retained_sucked_pct: null, flex_life_cycles: 194616, page: 200, table: 'Tables 8.5 and 19.4' },},
   viscose:   { density: 1.49, regain: 13.0, rkm: 0.60,     // was 1.52, which is the DRY figure
                tensile: { tenacity: 0.21, extension: 15.7, modulus: 6.5, work_of_rupture: 18.8,
                           grade: 'Fibro, staple', page: 290, table: 'Table 13.1',
@@ -324,7 +326,8 @@ const FIBER_PROPERTIES = {
                               page: 421, table: 'Table 17.2' },
                cyclic: { growth_10: 1.79, growth_1000: null, page: 369, table: 'Table 16.1' },
                heat: { melting_c: null, retained_130c_80d: 32, page: 479, table: 'Table 18.3' },
-               static: { rh_threshold: 30, log_resistance_65: 7.0, page: 647, table: 'Table 22.1' },},
+               static: { rh_threshold: 30, log_resistance_65: 7.0, page: 647, table: 'Table 22.1' },
+               moisture_energy: { heat_40_70_kj_kg: 168, retained_spun_pct: 103, retained_sucked_pct: 106, flex_life_cycles: null, page: 200, table: 'Tables 8.5 and 10.1' },},
   nylon:     { density: 1.14, regain: 4.2,  rkm: 1.40,     // Table 5.1 p.165
                tensile: { tenacity: 0.48, extension: 20.0, modulus: 3.0, work_of_rupture: 63,
                           grade: 'nylon 6.6, medium-tenacity', page: 292, table: 'Table 13.2',
@@ -355,7 +358,8 @@ const FIBER_PROPERTIES = {
                // The book gives nylon a RANGE here, not a value — 10^9 to
                // 10^12 is three orders of magnitude, which is the honest state
                // of a measurement made across several nylons.
-               static: { rh_threshold: 85, log_resistance_65: [9, 12], page: 647, table: 'Table 22.1' },},
+               static: { rh_threshold: 85, log_resistance_65: [9, 12], page: 647, table: 'Table 22.1' },
+               moisture_energy: { heat_40_70_kj_kg: 42,  retained_spun_pct: null, retained_sucked_pct: null, flex_life_cycles: 104807, page: 200, table: 'Tables 8.5 and 19.4' },},
   wool:      { density: 1.31, regain: 16.0, rkm: 0.50,     // Table 5.1 p.165
                tensile: { tenacity: 0.11, extension: 42.5, modulus: 2.3, work_of_rupture: 30.9,
                           grade: 'Botany 64s (merino)', page: 290, table: 'Table 13.1',
@@ -391,7 +395,8 @@ const FIBER_PROPERTIES = {
                cyclic: { growth_10: 0.48, growth_1000: 1.44, page: 369, table: 'Table 16.1' },
                thermal: { expansion_1e4_per_c: null, conductivity_mw_mk: 54,
                           page: 173, table: 'Table 6.2' },
-               static: { rh_threshold: 55, log_resistance_65: 8.4, page: 647, table: 'Table 22.1' },},
+               static: { rh_threshold: 55, log_resistance_65: 8.4, page: 647, table: 'Table 22.1' },
+               moisture_energy: { heat_40_70_kj_kg: 159, retained_spun_pct: 45, retained_sucked_pct: 133, flex_life_cycles: null, page: 200, table: 'Tables 8.5 and 10.1' },},
   acrylic:   { density: 1.19, regain: 1.5,  rkm: 0.70,     // was 1.17 — Table 5.1 gives 1.19
                tensile: { tenacity: 0.27, extension: 25.0, modulus: 6.2, work_of_rupture: 47,
                           grade: 'Orlon 42, staple', page: 292, table: 'Table 13.2',
@@ -458,7 +463,8 @@ const FIBER_PROPERTIES = {
                thermal: { expansion_1e4_per_c: null, conductivity_mw_mk: 50,
                           page: 173, table: 'Table 6.2' },
                heat: { melting_c: null, retained_130c_80d: null, page: 479, table: 'Table 18.3' },
-               static: { rh_threshold: 65, log_resistance_65: 9.8, page: 647, table: 'Table 22.1' },},
+               static: { rh_threshold: 65, log_resistance_65: 9.8, page: 647, table: 'Table 22.1' },
+               moisture_energy: { heat_40_70_kj_kg: null, retained_spun_pct: 52, retained_sucked_pct: 55,  flex_life_cycles: null, page: 231, table: 'Table 10.1' },},
   // Regain is not in Table 7.3. Polypropylene is a hydrocarbon with no polar
   // group for water to attach to, and the book's own chapter 7 explains regain
   // in exactly those terms, so zero is the physics rather than a placeholder —
@@ -719,6 +725,92 @@ function blendThermal(fibers) {
   };
 }
 
+
+/**
+ * What the dryer has to pay for, and what the fabric gives back as heat.
+ *
+ * Everything else this engine knows about moisture is vapour. Table 10.1 is
+ * liquid water: what is still in the cloth after the hydro-extractor, and
+ * therefore what the dryer has to evaporate. After centrifuging, viscose
+ * carries 103% of its own dry weight and cotton 48% — the same machine at the
+ * same setting delivers more than twice the water to the dryer.
+ *
+ * Wool is the other half of it: 133% left by suction and 45% by centrifuging.
+ * The water wool holds sits BETWEEN the fibres rather than in them, so
+ * mechanical force throws it out where a pressure difference cannot.
+ *
+ * And Table 8.5 is the opposite direction — a fibre taking water back UP
+ * releases heat, 159 kJ/kg for wool against 4 for polyester over the swing from
+ * a heated room to a damp day. That is why a wool garment feels warm coming in
+ * from the cold: it is actually warming.
+ */
+function dryingLoad(fibers) {
+  if (!fibers) return null;
+  const spun = [];
+  const heat = [];
+  const unmeasured = [];
+  for (const [name, pct] of Object.entries(fibers)) {
+    if (!pct) continue;
+    const m = (FIBER_PROPERTIES[name] || {}).moisture_energy;
+    if (!m) { unmeasured.push(name); continue; }
+    if (m.retained_spun_pct != null) spun.push({ name, pct, v: m.retained_spun_pct,
+                                                 sucked: m.retained_sucked_pct });
+    if (m.heat_40_70_kj_kg != null) heat.push({ name, pct, v: m.heat_40_70_kj_kg });
+  }
+  if (!spun.length && !heat.length) return null;
+
+  const mean = rows => {
+    if (!rows.length) return null;
+    const w = rows.reduce((a, x) => a + x.pct, 0);
+    return { value: round3(rows.reduce((a, x) => a + x.v * x.pct, 0) / w), from_pct: round3(w) };
+  };
+  const water = mean(spun);
+  // Cotton is the reference because it is what a dryer is normally set for.
+  const cottonSpun = FIBER_PROPERTIES.cotton.moisture_energy.retained_spun_pct;
+
+  return {
+    water_after_extraction_pct: water,
+    vs_cotton: water ? round3(water.value / cottonSpun) : null,
+    // Where suction and centrifuging disagree sharply, the water is held
+    // between fibres rather than inside them and the extractor matters more
+    // than its setting.
+    force_sensitive: spun.filter(x => x.sucked != null && x.sucked > 2 * x.v)
+                         .map(x => `${x.name} ${x.sucked}% by suction against ${x.v}% spun`),
+    heat_released_kj_kg: mean(heat),
+    unmeasured,
+    source: 'Morton & Hearle, Tables 10.1 (p.231) and 8.5 (p.200).',
+  };
+}
+
+/**
+ * How many bends the fabric survives at a fold.
+ *
+ * Abrasion wears a fabric from the outside; flex fatigue breaks it from the
+ * inside, at a crease, and that is what finishes a collar or a knee long before
+ * anything has worn through. The blend is governed by its WEAKEST component: a
+ * fold fails where the first fibres in it fail.
+ */
+function flexFatigue(fibers) {
+  if (!fibers) return null;
+  const parts = [];
+  const unmeasured = [];
+  for (const [name, pct] of Object.entries(fibers)) {
+    if (!pct) continue;
+    const m = (FIBER_PROPERTIES[name] || {}).moisture_energy;
+    if (!m || m.flex_life_cycles == null) { unmeasured.push(name); continue; }
+    parts.push({ name, pct, v: m.flex_life_cycles });
+  }
+  if (!parts.length) return null;
+  const worst = parts.reduce((a, b) => (b.v < a.v ? b : a));
+  return {
+    governed_by: worst.name,
+    cycles: worst.v,
+    from_pct: round3(parts.reduce((a, x) => a + x.pct, 0)),
+    all: parts.map(x => ({ fibre: x.name, cycles: x.v })),
+    unmeasured,
+    source: 'Morton & Hearle, Table 19.4, p.534.',
+  };
+}
 
 /**
  * Static, at the humidity the floor is actually running at.
@@ -1619,6 +1711,8 @@ module.exports = {
   blendThermal,
   heatCeiling,
   staticRisk,
+  dryingLoad,
+  flexFatigue,
   fibreVariability,
   weakLinkSensitivity,
   analyzeYarn,
