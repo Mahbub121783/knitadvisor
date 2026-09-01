@@ -90,9 +90,35 @@ const FX = {
 // ones (slub, siro, white) come before the plain ones they contain.
 const MAP = [
   // 100% cotton
-  [/^(\d+)\/s\s+combed\s+slub$/i, 'carded_slub', 'combed slub is priced as slub'],
+  // Combed slub and card slub are 25-35 cents a kilo apart at every count, so
+  // they are not one product with a note on it. The first version of this
+  // mapped both to `carded_slub` on the reasoning that slub is slub, and the
+  // identity check below caught it: ten rows claiming five identities, with the
+  // insert silently keeping whichever landed first.
+  //
+  // `combed_slub` has no row in the engine's matrix, so nothing costs from it
+  // yet; it is stored and shown rather than thrown away.
+  [/^(\d+)\/s\s+combed\s+slub$/i, 'combed_slub'],
   [/^(\d+)\/s\s+card\s+slub$/i, 'carded_slub'],
-  [/^(\d+)\/s\s+combed\s*\(bci\)$/i, 'combed_regular', 'BCI combed carries no separate matrix row'],
+  // BCI GETS ITS OWN KEYS, and the first version of this file got it wrong.
+  //
+  // "BCI combed" was mapped onto plain combed on the reasoning that Better
+  // Cotton is a sourcing standard rather than a spinning route, so the yarn is
+  // the same yarn. The page says otherwise: on 29 August 2026, 40/s carded was
+  // $3.80 and 40/s carded BCI $3.70; 40/s combed $4.15 and BCI $3.95. They are
+  // separately traded and separately priced.
+  //
+  // Mapping them together was therefore not a simplification, it was a
+  // collision: two different prices claiming one identity, with the insert's
+  // ON CONFLICT DO NOTHING silently keeping whichever arrived first.
+  //
+  // The costing engine has no BCI product today, so nothing looks these up and
+  // they cost nothing to keep. They are stored and shown on the prices screen
+  // rather than discarded, because throwing away real market data to avoid an
+  // unused key is the worse trade — and the day the engine gains a BCI option
+  // the history is already there.
+  [/^(\d+)\/s\s+combed\s*\(bci\)$/i, 'combed_bci'],
+  [/^(\d+)\/s\s+card\s*\(bci\)$/i, 'carded_bci'],
   [/^(\d+)\/s\s+combed$/i, 'combed_regular'],
   [/^(\d+)\/s\s+card$/i, 'carded_regular'],
   [/^(\d+)\/s\s+carded$/i, 'carded_regular'],
@@ -113,6 +139,7 @@ const NOT_COSTED = [
   /dty|fdy|poy|monofilament/i, // filament is priced by denier, not by Ne
   /spandex|lycra/i,            // ditto
   /rubber/i,
+  /swing thread|sewing thread/i,  // plied, sold by ticket number, not a knitting yarn
 ];
 
 /**
@@ -331,8 +358,13 @@ function gateOneMarket(rows, market) {
 
   // Combed costs more than carded at the same count. It is an extra process
   // removing 15-20% of the fibre; there is no market in which it does not.
-  for (const r of rows.filter(x => x.item_key === 'combed_regular')) {
-    const carded = rows.find(x => x.item_key === 'carded_regular' && x.count_ne === r.count_ne);
+  // Checked within each grade, because BCI combed must be held against BCI
+  // carded — comparing it with the conventional row would be comparing two
+  // separately traded products and the check would mean nothing.
+  for (const [combedKey, cardedKey] of [['combed_regular', 'carded_regular'],
+                                        ['combed_bci', 'carded_bci']])
+  for (const r of rows.filter(x => x.item_key === combedKey)) {
+    const carded = rows.find(x => x.item_key === cardedKey && x.count_ne === r.count_ne);
     if (carded && r.price_usd_kg <= carded.price_usd_kg) {
       problems.push(where(`${r.count_ne}Ne: combed at $${r.price_usd_kg} is not dearer than ` +
         `carded at $${carded.price_usd_kg} — combing removes a fifth of the fibre and cannot ` +
@@ -355,6 +387,22 @@ function gateOneMarket(rows, market) {
   // All quotes on one page should carry one date. A mixed page means the
   // publisher has left stale rows in among fresh ones and they cannot be
   // treated as one list.
+  // Two published rows must never claim one identity. Both times this has been
+  // hit — BCI against plain, combed slub against card slub — every other check
+  // passed: each price was plausible and each series was coherent. The loss
+  // happens silently at the INSERT, where ON CONFLICT DO NOTHING keeps whichever
+  // row arrived first, so it has to be caught before the insert.
+  const claimed = new Map();
+  for (const r of rows) {
+    const id = `${r.item_key}/${r.count_ne}Ne`;
+    const prev = claimed.get(id);
+    if (prev && prev.raw_label !== r.raw_label) {
+      problems.push(where(`"${prev.raw_label}" and "${r.raw_label}" both claim ${id} at ` +
+        `$${prev.price_usd_kg} and $${r.price_usd_kg} — two products cannot share one key`));
+    }
+    claimed.set(id, r);
+  }
+
   const dates = [...new Set(rows.map(r => r.quoted_on))];
   if (dates.length > 2) {
     problems.push(where(`the list carries ${dates.length} different quote dates ` +
