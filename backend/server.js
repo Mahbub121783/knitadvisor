@@ -56,6 +56,15 @@ const referenceReady = reference.load()
   })
   .catch(err => console.error('[Reference] load failed entirely:', err.message));
 
+// Market yarn quotes, loaded the same way and for the same reason: the costing
+// engine is synchronous. Unlike the reference layer this one is ALLOWED to be
+// empty — before the first sync it is, and a costing then falls back to the
+// reference price list and says so. So a failure here is logged and not fatal.
+const yarnPrices = require('./db/repositories/yarn-price-repo');
+yarnPrices.load()
+  .then(r => console.log(`[Prices] ${r.quotes} market quotes over ${r.items} items, newest ${r.newest || 'none'}`))
+  .catch(err => console.warn('[Prices] no market quotes loaded, the reference list will answer:', err.message));
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 

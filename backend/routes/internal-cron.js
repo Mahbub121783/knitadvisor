@@ -61,6 +61,29 @@ const JOBS = {
     return { providers: rows };
   },
 
+  /**
+   * Pull the published yarn price list.
+   *
+   * The costing engine ran for four months on a typed matrix that had drifted
+   * 3-7% without anything being able to say so, because a number in a source
+   * file carries no date. This is what stops that recurring.
+   *
+   * It no-ops inside its own seven-day window, so the cron line can be run
+   * daily without hammering someone else's site — the schedule lives in the
+   * job rather than in the crontab, where it can be reasoned about.
+   *
+   * A successful sync reloads the snapshot the engine reads. Without that the
+   * new quotes would sit in PostgreSQL until the next restart, which is the
+   * same "stored but not shipped" failure in a different costume.
+   */
+  async 'sync-yarn-prices'() {
+    const { syncYarnPrices } = require('../jobs/yarn-price-sync');
+    const yarnPrices = require('../db/repositories/yarn-price-repo');
+    const result = await syncYarnPrices({ trigger: 'schedule' });
+    if (result.ok && !result.skipped) await yarnPrices.load();
+    return result;
+  },
+
   /** Delete expired cache rows and dead sessions. */
   async 'prune-cache'() {
     const [results, viz, sessions] = await Promise.all([

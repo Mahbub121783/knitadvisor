@@ -559,6 +559,7 @@
     <button class="tab-btn" data-tab="tab-logs">Query Logs</button>
     <button class="tab-btn" data-tab="tab-providers">AI Providers</button>
     <button class="tab-btn" data-tab="tab-cache">Cache</button>
+    <button class="tab-btn" data-tab="tab-prices">Yarn Prices</button>
     <button class="tab-btn" data-tab="tab-inquiries">Inquiries</button>
     <button class="tab-btn" data-tab="tab-settings">Settings</button>
   </div>
@@ -772,6 +773,54 @@
         </div>
         <div style="font-size:10px;color:var(--t3);margin-bottom:6px;" id="entry-key-display"></div>
         <pre id="entry-json-display" style="background:var(--bg3);border:1px solid var(--line);border-radius:var(--rad-sm);padding:12px;font-size:10px;color:var(--t1);overflow:auto;max-height:400px;white-space:pre-wrap;word-break:break-word;"></pre>
+      </div>
+    </div>
+
+    <!-- ── YARN PRICES ── -->
+    <div id="tab-prices" class="tab-panel">
+      <div class="row-between mb-20">
+        <div>
+          <div class="section-title">Yarn Prices</div>
+          <div class="section-sub">Costing uses the market list where it has a quote, and the built-in reference list where it does not</div>
+        </div>
+        <div class="row gap-8">
+          <button id="prices-reload-btn" class="btn btn-ghost btn-sm">Reload</button>
+          <button id="prices-update-btn" class="btn btn-sm" style="background:var(--a1);color:#0b0b0f;font-weight:700;">Update Now</button>
+        </div>
+      </div>
+
+      <div class="stat-grid mb-20">
+        <!-- The date the prices carry, which is the number that matters. The
+             fetch time is deliberately NOT the headline: a feed that has stopped
+             updating gives a fresh fetch time forever. -->
+        <div class="stat-card"><div class="stat-val" id="prices-updated">—</div><div class="stat-lbl">Prices last updated</div></div>
+        <div class="stat-card"><div class="stat-val" id="prices-age">—</div><div class="stat-lbl">Age</div></div>
+        <div class="stat-card"><div class="stat-val" id="prices-items">—</div><div class="stat-lbl">Items priced</div></div>
+        <div class="stat-card"><div class="stat-val" id="prices-checked">—</div><div class="stat-lbl">Last checked</div></div>
+      </div>
+
+      <div id="prices-msg" class="hidden mb-16"></div>
+
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr>
+            <th>Item</th><th>Count</th><th>As published</th><th>USD / kg</th>
+            <th>Reference list</th><th>Difference</th><th>Quoted</th>
+          </tr></thead>
+          <tbody id="prices-tbody"></tbody>
+        </table>
+      </div>
+
+      <div class="section-title mt-16" style="font-size:12px;">Update history</div>
+      <div class="section-sub mb-12">Whether it ran is not the same question as whether it worked</div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr>
+            <th>Started</th><th>How</th><th>Result</th><th>Stored</th>
+            <th>Refused</th><th>Newest quote</th>
+          </tr></thead>
+          <tbody id="prices-sync-tbody"></tbody>
+        </table>
       </div>
     </div>
 

@@ -129,6 +129,9 @@ function switchTab(tabId) {
   } else if (tabId === 'tab-inquiries' && !tabState.loaded.inquiries) {
     tabState.loaded.inquiries = true;
     loadInquiries(1, {});
+  } else if (tabId === 'tab-prices' && !tabState.loaded.prices) {
+    tabState.loaded.prices = true;
+    loadYarnPrices();
   } else if (tabId === 'tab-settings') {
     loadSettings();
   }
@@ -968,6 +971,126 @@ async function downloadInquiriesCSV() {
   } catch (e) { toast('CSV download failed', 'error'); }
 }
 
+// ── YARN PRICES ────────────────────────────────────────────
+//
+// The costing engine ran for four months on a matrix typed into a source file
+// and headed "Updated May 2026". By September it was 3% high on cotton and 5-7%
+// high on CVC and PC, and nothing could report that, because a typed constant
+// carries no date.
+//
+// What this screen exists to answer is one question — HOW OLD ARE THESE PRICES
+// — so the quote date is the headline and the fetch time sits beside it as a
+// separate figure. They are not the same question: a feed that has stopped
+// updating goes on giving a fresh fetch time forever, and a screen that showed
+// only that would put a green tick over a year-old price.
+
+const PRICE_AGE_TONE = {
+  current:      { c: '#4ade80', label: 'current' },
+  recent:       { c: '#fbbf24', label: 'recent' },
+  stale:        { c: '#fb923c', label: 'stale' },
+  'out of date': { c: '#ff4d6d', label: 'out of date' },
+  unknown:      { c: 'var(--t3)', label: 'unknown' },
+};
+
+function priceMsg(html, tone) {
+  const el = document.getElementById('prices-msg');
+  if (!html) { el.classList.add('hidden'); el.innerHTML = ''; return; }
+  const c = tone === 'bad' ? '#ff4d6d' : tone === 'warn' ? '#fbbf24' : '#4ade80';
+  el.classList.remove('hidden');
+  el.innerHTML = `<div style="border:1px solid ${c}55;background:${c}12;border-radius:8px;` +
+    `padding:10px 12px;font-size:11px;line-height:1.6;color:var(--t1);">${html}</div>`;
+}
+
+async function loadYarnPrices() {
+  try {
+    const d = await api('/api/yarn-prices');
+    const st = d.status || {};
+    const tone = PRICE_AGE_TONE[st.freshness] || PRICE_AGE_TONE.unknown;
+
+    document.getElementById('prices-updated').textContent = st.last_updated || 'never';
+    const ageEl = document.getElementById('prices-age');
+    ageEl.textContent = st.age_days == null ? '—'
+      : st.age_days === 0 ? 'today'
+      : st.age_days === 1 ? '1 day' : `${st.age_days} days`;
+    ageEl.style.color = tone.c;
+    document.getElementById('prices-items').textContent = st.items || 0;
+
+    const last = st.last_sync;
+    document.getElementById('prices-checked').textContent = last && last.at
+      ? new Date(last.at).toLocaleDateString() : 'never';
+
+    // "It ran" and "it worked" are different, and the failure mode worth
+    // shouting about is a sync that keeps succeeding against a feed that has
+    // stopped moving — the prices then look maintained and are not.
+    if (last && !last.ok) {
+      priceMsg(`The last update <strong>failed</strong>: ${esc(last.error || 'no reason recorded')}. ` +
+        `The prices below are whatever was stored before it.`, 'bad');
+    } else if (st.age_days != null && st.age_days > 21) {
+      priceMsg(`These prices were published <strong>${st.age_days} days ago</strong>. ` +
+        `Costings still use them up to 60 days, and say so; past that the built-in ` +
+        `reference list answers instead.`, 'warn');
+    } else {
+      priceMsg('');
+    }
+
+    const tb = document.getElementById('prices-tbody');
+    tb.innerHTML = (d.quotes || []).map(q => {
+      const ref = q.reference_price;
+      const gap = q.reference_gap_pct;
+      const gapColor = gap == null ? 'var(--t3)' : Math.abs(gap) >= 5 ? '#fb923c' : 'var(--t2)';
+      return `<tr>
+        <td style="font-size:10px;">${esc(q.label)}</td>
+        <td>${q.count_ne || '—'}</td>
+        <td style="font-size:10px;color:var(--t2);">${esc(q.as_published)}</td>
+        <td style="font-variant-numeric:tabular-nums;">$${q.usd_per_kg.toFixed(2)}</td>
+        <td style="font-variant-numeric:tabular-nums;color:var(--t3);">${ref == null ? '—' : '$' + ref.toFixed(2)}</td>
+        <td style="font-variant-numeric:tabular-nums;color:${gapColor};">${gap == null ? '—' : (gap > 0 ? '+' : '') + gap + '%'}</td>
+        <td style="font-size:10px;color:var(--t3);">${esc(q.quoted_on)}</td>
+      </tr>`;
+    }).join('') || '<tr><td colspan="7" style="color:var(--t3);font-size:11px;">No market prices stored yet. Press Update Now.</td></tr>';
+
+    const sb = document.getElementById('prices-sync-tbody');
+    sb.innerHTML = (d.syncs || []).map(x => `<tr>
+      <td style="font-size:10px;">${new Date(x.started_at).toLocaleString()}</td>
+      <td style="font-size:10px;color:var(--t3);">${esc(x.trigger)}</td>
+      <td style="font-size:10px;color:${x.ok ? '#4ade80' : '#ff4d6d'};">${x.ok ? 'ok' : esc((x.error || 'failed').slice(0, 90))}</td>
+      <td>${x.rows_stored}</td>
+      <td>${x.rows_rejected}</td>
+      <td style="font-size:10px;color:var(--t3);">${x.newest_quote ? String(x.newest_quote).slice(0, 10) : '—'}</td>
+    </tr>`).join('') || '<tr><td colspan="6" style="color:var(--t3);font-size:11px;">Never run.</td></tr>';
+  } catch (err) {
+    priceMsg(`Could not load prices: ${esc(err.message)}`, 'bad');
+  }
+}
+
+async function updateYarnPrices() {
+  const btn = document.getElementById('prices-update-btn');
+  const was = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Updating…';
+  priceMsg('Fetching the published list…');
+  try {
+    const r = await api('/api/yarn-prices/refresh', 'POST');
+    if (r.skipped) {
+      priceMsg(`Nothing to do — ${esc(r.reason)}.`, 'warn');
+    } else {
+      priceMsg(`Updated. ${r.stored} new quotes stored from ${r.costable} costable rows; ` +
+        `the newest is dated <strong>${esc(r.newest_quote || 'unknown')}</strong>.` +
+        (r.rejected && r.rejected.length
+          ? ` ${r.rejected.length} rows were refused: ${r.rejected.map(x => esc(x.label)).join(', ')}.`
+          : ''));
+    }
+    await loadYarnPrices();
+  } catch (err) {
+    // A failing gate comes back as 422 with its reasons, and those reasons are
+    // the useful part — this is the feed having changed shape, not a crash.
+    priceMsg(`Update refused: ${esc(err.message)}`, 'bad');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = was;
+  }
+}
+
 // ── SETTINGS ───────────────────────────────────────────────
 async function loadSettings() {
   try {
@@ -1092,6 +1215,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Cache
   document.getElementById('cache-flush-btn').addEventListener('click', flushCache);
+  document.getElementById('prices-reload-btn').addEventListener('click', loadYarnPrices);
+  document.getElementById('prices-update-btn').addEventListener('click', updateYarnPrices);
   document.getElementById('cache-refresh-btn').addEventListener('click', () => { loadCacheStats(); loadCacheEntries(curCachePage); });
   document.getElementById('entry-viewer-close').addEventListener('click', () => document.getElementById('cache-entry-viewer').classList.add('hidden'));
 

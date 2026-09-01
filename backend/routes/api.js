@@ -56,6 +56,7 @@ const { resultCache } = require('../db/repositories/cache-repo');
 // read from tmp/restart.txt, which the deploy writes and nothing else touches —
 // see engine/version.js for what that costs and why it is worth it.
 const { ENGINE_VERSION } = require('../engine/version');
+const yarnPrices = require('../db/repositories/yarn-price-repo');
 const logsRepo = require('../db/repositories/logs-repo');
 const { createRateLimiter } = require('../middleware/rate-limiter');
 const { query: dbQuery } = require('../db/client');
@@ -108,7 +109,14 @@ router.post('/calculate', async (req, res) => {
   const cacheInput = ENGINE_INPUTS
     .map(f => (engineParams[f] == null ? '' : engineParams[f]))
     .join('_');
-  const cacheKey = crypto.createHash('md5').update(ENGINE_VERSION + '|' + cacheInput).digest('hex');
+  // The price list is part of the answer, so it has to be part of the key.
+  // Results are cached for thirty days; without this, a sync that moved cotton
+  // three per cent would leave every cached costing quoting the old figure
+  // until the next deploy — which is precisely the failure that had answers
+  // from a dead engine being served for a month, arriving by a different door.
+  const priceStamp = yarnPrices.status().last_updated || 'none';
+  const cacheKey = crypto.createHash('md5')
+    .update(ENGINE_VERSION + '|' + priceStamp + '|' + cacheInput).digest('hex');
 
   // L1 — memory cache
   const memResult = memCache.get(cacheKey);
@@ -155,6 +163,9 @@ router.post('/calculate', async (req, res) => {
   }
 
   // Cache miss — calculate
+  // The lookup is handed in rather than reached for inside the engine, so the
+  // engine keeps working with no database behind it.
+  engineParams.live_prices = (key, ne) => yarnPrices.lookup(key, ne);
   const result = calculate(engineParams);
 
   if (result.error) {
@@ -277,7 +288,8 @@ router.post('/cost', (req, res) => {
   }
   try {
     const parsedComp = body.composition ? parseComposition(body.composition) : null;
-    const result = calculateCost({ ...body, gsm, parsedComp });
+    const result = calculateCost({ ...body, gsm, parsedComp,
+      live_prices: (key, ne) => yarnPrices.lookup(key, ne) });
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });

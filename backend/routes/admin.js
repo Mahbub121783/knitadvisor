@@ -454,13 +454,107 @@ router.get('/api/inquiries', adminAuth, async (req, res) => {
 // Settings — read/update admin credentials
 // ============================================================
 
+// ============================================================
+// YARN PRICES — the live market list
+// ============================================================
+//
+// The costing engine used to run entirely on a matrix typed into a source file
+// and headed "Updated May 2026". By September it was 3% high on cotton and 5-7%
+// high on CVC and PC, and nothing in the system could report that, because a
+// typed constant has no date. These two endpoints are the whole of the manual
+// control: one to see the state, one to refresh it now.
+
+router.get('/api/yarn-prices', adminAuth, async (req, res) => {
+  try {
+    const yarnPrices = require('../db/repositories/yarn-price-repo');
+    const { REFRESH_DAYS } = require('../jobs/yarn-price-sync');
+    const { getPriceFromMatrix } = require('../engine/domain/costing-engine');
+
+    // The last few attempts, successful or not. A sync that fails quietly is
+    // the dangerous case: the old quotes stay in place and go on looking
+    // current, so "when did it last RUN" and "when did it last WORK" are shown
+    // as separate columns rather than one green tick.
+    const syncs = await dbQuery(
+      `SELECT id, started_at, finished_at, ok, trigger, rows_seen, rows_stored,
+              rows_rejected, newest_quote, error
+         FROM yarn_price_syncs ORDER BY started_at DESC LIMIT 10`);
+
+    const quotes = await dbQuery(
+      `SELECT DISTINCT ON (market, item_key, count_ne)
+              market, item_key, count_ne, raw_label, price, currency, unit,
+              price_usd_kg, quoted_on
+         FROM yarn_price_quotes
+        ORDER BY market, item_key, count_ne, quoted_on DESC`);
+
+    res.json({
+      status: yarnPrices.status(),
+      refresh_days: REFRESH_DAYS,
+      // Each quote beside what the built-in list would have said. This column
+      // is the point of the screen: the drift is invisible until the two
+      // numbers are next to each other, and it was 3-7% before anyone looked.
+      quotes: quotes.filter(q => q.market === yarnPrices.COSTING_MARKET).map(q => {
+        const ne = Number(q.count_ne);
+        const ref = getPriceFromMatrix(q.item_key, ne);
+        const usd = Number(q.price_usd_kg);
+        return {
+          item_key: q.item_key,
+          count_ne: ne,
+          label: q.raw_label,
+          as_published: `${q.currency === 'USD' ? '$' : '৳'}${Number(q.price)} / ${q.unit}`,
+          usd_per_kg: usd,
+          reference_price: ref,
+          reference_gap_pct: ref ? Math.round(((usd - ref) / ref) * 1000) / 10 : null,
+          quoted_on: String(q.quoted_on).slice(0, 10),
+        };
+      }),
+      // The domestic cash list is stored and shown separately, never silently
+      // substituted: on the same product the two are twenty-odd per cent apart.
+      local_market: quotes.filter(q => q.market === 'local_bdt').map(q => ({
+        item_key: q.item_key,
+        count_ne: Number(q.count_ne),
+        label: q.raw_label,
+        as_published: `৳${Number(q.price)} / ${q.unit}`,
+        usd_per_kg: Number(q.price_usd_kg),
+        quoted_on: String(q.quoted_on).slice(0, 10),
+      })),
+      syncs,
+    });
+  } catch (err) {
+    console.error('[Yarn Prices Get Error]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// The button. `force: true` because someone pressing it has a reason, and
+// making them wait out the seven-day window is how a feature gets called
+// broken. The snapshot the engine reads is reloaded on success — without that
+// the new quotes would sit in the database until the next restart, which is
+// "stored but not shipped" wearing a different hat.
+router.post('/api/yarn-prices/refresh', adminAuth, async (req, res) => {
+  try {
+    const { syncYarnPrices } = require('../jobs/yarn-price-sync');
+    const yarnPrices = require('../db/repositories/yarn-price-repo');
+    const result = await syncYarnPrices({ trigger: 'manual', force: true });
+    if (result.ok) await yarnPrices.load();
+    // A failed gate is not a server error — it is the gate doing its job, and
+    // the reasons are the useful part of the reply.
+    res.status(result.ok ? 200 : 422).json({ ...result, status: yarnPrices.status() });
+  } catch (err) {
+    console.error('[Yarn Prices Refresh Error]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/api/settings', adminAuth, async (req, res) => {
   try {
     const rows = await dbQuery('SELECT username FROM admin_users LIMIT 1');
     const username = rows[0]?.username || 'knitadvisor';
     res.json({
       username,
-      yarn_prices_note: 'Yarn prices are defined in backend/engine/costing-engine.js SM_PRICE_MATRIX. Use POST /admin/api/settings/yarn-price to override a single entry in the DB overrides table (future feature).',
+      yarn_prices_note: 'Costing uses the market list where it has a quote and the reference '
+        + 'matrix in backend/engine/domain/costing-engine.js where it does not. See '
+        + 'GET /admin/api/yarn-prices for what is loaded and POST /admin/api/yarn-prices/refresh '
+        + 'to pull the list now.',
     });
   } catch (err) {
     console.error('[Settings Get Error]', err);
