@@ -850,6 +850,23 @@
         <span class="badge badge-green" style="margin-left:auto" id="cost-currency-badge">USD/kg</span>
       </div>
 
+      <!-- Costing country. Every price in this engine is Bangladesh's — the yarn
+           quotes come from a Bangladeshi market list and the knitting and dyeing
+           rates from a Bangladeshi factory price list — and until this control
+           existed that was invisible. Moving it does not look up another
+           country's price list; it applies that country's published industrial
+           power tariff to the energy share of each step, and says so. -->
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 12px 0;">
+        <label for="cost-country" style="font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--t3);font-weight:800;">Costing country</label>
+        <select id="cost-country" style="background:var(--bg3);color:var(--t1);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:12px;font-family:inherit;min-width:160px;"></select>
+        <span id="cost-country-tariff" style="font-size:10px;color:var(--t3);"></span>
+        <span id="cost-country-busy" class="hidden" style="font-size:10px;color:var(--a1);">recalculating…</span>
+      </div>
+
+      <!-- What the country actually changed, step by step. A total that moves
+           when a dropdown moves teaches nothing; the arithmetic does. -->
+      <div id="cost-country-detail" class="hidden" style="margin:0 0 14px 0;"></div>
+
       <div class="range-grid">
         <div class="range-card" style="text-align:center;">
           <div class="range-lbl">Total Estimated Cost</div>
@@ -1154,6 +1171,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   try {
+    costingParams = params;
     const result = await apiCalculate(params);
 
     if (!result || !result.success) {
@@ -1862,6 +1880,34 @@ function renderWarpKnitCard(wk) {
 /* ============================================================
    COSTING RENDER
    ============================================================ */
+// ── COSTING COUNTRY ────────────────────────────────────────────────────────
+// The params that produced what is on screen, kept so a country change can be
+// re-costed without sending the user back to the form.
+let costingParams = null;
+
+async function onCountryChange() {
+  const sel = document.getElementById('cost-country');
+  const busy = document.getElementById('cost-country-busy');
+  if (!costingParams) return;
+  sel.disabled = true;
+  busy.classList.remove('hidden');
+  try {
+    const r = await apiCalculate({ ...costingParams, country: sel.value });
+    if (r && r.success && r.costing) {
+      costingParams = { ...costingParams, country: sel.value };
+      renderCosting(r.costing);
+    }
+  } catch (err) {
+    // A failed re-cost must leave the previous, correct figures on screen
+    // rather than blanking the card or showing a half-updated one.
+    busy.textContent = 'could not recalculate — showing the previous country';
+    setTimeout(() => { busy.textContent = 'recalculating…'; }, 4000);
+  } finally {
+    sel.disabled = false;
+    busy.classList.add('hidden');
+  }
+}
+
 function renderCosting(costing) {
   // Local, because the other escapers in this file are scoped to their own
   // render functions and none of them reaches here.
@@ -1880,6 +1926,67 @@ function renderCosting(costing) {
   // Four states, and they must not read the same. A market quote and a figure
   // read BETWEEN two quotes are different things; both are different from the
   // built-in list; and all three are different from a guess.
+  // ── The country control ───────────────────────────────────────────────
+  const ctry = costing.country;
+  const sel = document.getElementById('cost-country');
+  if (ctry && sel) {
+    // Built once. Rebuilding on every render would reset the user's choice
+    // the moment their choice caused the render.
+    if (!sel.options.length && Array.isArray(costing.countries_available)) {
+      sel.innerHTML = costing.countries_available.map(c =>
+        `<option value="${esc(c.code)}">${esc(c.name)}${c.is_anchor ? '  (quoted)' : ''}</option>`).join('');
+      sel.addEventListener('change', onCountryChange);
+    }
+    sel.value = ctry.code;
+
+    document.getElementById('cost-country-tariff').textContent =
+      `industrial power ${ctry.tariff.us_cents_kwh}\u00A2/kWh (${ctry.tariff.as_of})`;
+
+    const det = document.getElementById('cost-country-detail');
+    const v = ctry.vs_anchor;
+    if (ctry.is_anchor) {
+      det.innerHTML = `<div style="border:1px solid rgba(74,222,128,.28);background:rgba(74,222,128,.07);border-radius:8px;padding:9px 12px;font-size:10px;line-height:1.65;color:var(--t2);">`
+        + `<strong style="color:#4ade80;">Quoted prices.</strong> The yarn figures are dated market quotes and the `
+        + `knitting and dyeing rates come from a factory price list. Every other country on this list is `
+        + `a modelled difference from these.</div>`;
+    } else {
+      const a = ctry.anchor_prices || {};
+      const pct = r => `${r >= 1 ? '+' : ''}${((r - 1) * 100).toFixed(1)}%`;
+      const row = (label, ratio, from, to) => `<tr>`
+        + `<td style="padding:3px 10px 3px 0;color:var(--t2);">${label}</td>`
+        + `<td style="padding:3px 10px 3px 0;color:var(--t3);font-variant-numeric:tabular-nums;">$${fmt(from, 3)}</td>`
+        + `<td style="padding:3px 10px 3px 0;color:var(--t1);font-variant-numeric:tabular-nums;">$${fmt(to, 3)}</td>`
+        + `<td style="padding:3px 0;color:${ratio < 1 ? '#4ade80' : '#fb923c'};font-variant-numeric:tabular-nums;">${pct(ratio)}</td></tr>`;
+      det.innerHTML = `<div style="border:1px solid rgba(251,191,36,.28);background:rgba(251,191,36,.06);border-radius:8px;padding:10px 12px;">`
+        + `<div style="font-size:10px;line-height:1.65;color:var(--t2);margin-bottom:8px;">`
+        + `<strong style="color:#fbbf24;">Modelled, not quoted.</strong> `
+        + `${esc(ctry.name)} industrial power is ${ctry.tariff.us_cents_kwh}\u00A2/kWh against `
+        + `${esc(v.anchor)} ${v.anchor_us_cents_kwh}\u00A2/kWh — a factor of ${v.tariff_ratio}. `
+        + `Energy is about ${Math.round(ctry.method.energy_share.spinning * 100)}% of spinning conversion, `
+        + `${Math.round(ctry.method.energy_share.knitting * 100)}% of knitting and `
+        + `${Math.round(ctry.method.energy_share.dyeing * 100)}% of dyeing — and the cotton itself does not `
+        + `move at all, because it is bought at a world price. That is why the yarn barely shifts and the `
+        + `dyeing shifts a lot.</div>`
+        + `<table style="font-size:10px;border-collapse:collapse;"><thead><tr>`
+        + `<th style="text-align:left;padding:0 10px 4px 0;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);">Step</th>`
+        + `<th style="text-align:left;padding:0 10px 4px 0;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);">${esc(v.anchor)}</th>`
+        + `<th style="text-align:left;padding:0 10px 4px 0;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);">${esc(ctry.name)}</th>`
+        + `<th style="text-align:left;padding:0 0 4px 0;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);">Δ</th>`
+        + `</tr></thead><tbody>`
+        + row('Yarn', v.yarn_ratio, a.yarn_usd_kg, a.yarn_usd_kg * v.yarn_ratio)
+        + row('Knitting', v.knitting_ratio, a.knitting_usd_kg, a.knitting_usd_kg * v.knitting_ratio)
+        + row('Dyeing', v.dyeing_ratio, a.dyeing_usd_kg, a.dyeing_usd_kg * v.dyeing_ratio)
+        + row('Finishing', v.dyeing_ratio, a.finishing_usd_kg, a.finishing_usd_kg * v.dyeing_ratio)
+        + `</tbody></table>`
+        + `<div style="font-size:9px;color:var(--t3);margin-top:8px;line-height:1.6;">`
+        + `Not modelled: ${ctry.method.not_modelled.join(', ')} — no free source prices those per country `
+        + `with a date. Tariff: ${esc(ctry.tariff.source)}.`
+        + (ctry.tariff.caveat ? ` Note on ${esc(v.anchor)}: ${esc(ctry.tariff.caveat)}.` : '')
+        + `</div></div>`;
+    }
+    det.classList.remove('hidden');
+  }
+
   const prov = costing.yarn_price_provenance;
   const ageEl = document.getElementById('cost-price-age');
   if (prov) {
