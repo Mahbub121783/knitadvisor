@@ -8,8 +8,26 @@
  * was 3% high on cotton and 5-7% high on CVC and PC, and nothing in the system
  * could say so, because a number typed into a source file carries no date.
  *
- * This fetches the published daily list, maps it onto the engine's own matrix
- * keys, and stores every quote with the date the publisher put on it.
+ * This runs every configured price source, merges what they return, and stores
+ * every quote with the date its publisher put on it.
+ *
+ * THE CHAIN, AND WHY IT HAS THREE LINKS
+ * ------------------------------------
+ *   1. a live quote from any connected source, freshest first
+ *   2. failing that, the count read between two live quotes
+ *   3. failing that, the fixed reference price list
+ *
+ * The third link is the one that makes the first two safe to attempt. A price
+ * feed that can take the costing down with it is a feed nobody should connect,
+ * so the fixed list is never removed and never stops being correct — it just
+ * stops being the answer when something better is available, and says which it
+ * was either way.
+ *
+ * MERGING TWO SOURCES. Where two sources quote the same item on the same day,
+ * the tie is broken by SOURCE_PRIORITY below rather than by whichever happened
+ * to be inserted first. Where they quote it on different days, the fresher one
+ * wins regardless of priority: a better publisher's stale number is still a
+ * stale number.
  *
  * WHAT THIS DELIBERATELY DOES NOT DO
  * ----------------------------------
@@ -51,6 +69,18 @@
 const { query, queryOne } = require('../db/client');
 
 const SOURCE = 'texbazar';
+
+const emergingTextiles = require('./price-sources/emergingtextiles');
+
+/**
+ * Which source wins a tie on the same day.
+ *
+ * Lower is better. EmergingTextiles is placed first because it is a paid,
+ * documented API covering many countries, against a free page scraped from
+ * another company's markup — but the ordering only ever settles a same-day
+ * tie, so a mistake here costs very little.
+ */
+const SOURCE_PRIORITY = { emergingtextiles: 1, texbazar: 2 };
 const URL = 'https://texbazar.com/daily-price';
 
 // Seven days, as asked. The publisher moves prices most weekdays, so this is
@@ -420,6 +450,94 @@ function gateOneMarket(rows, market) {
  *   force    run even if the last successful sync was inside the window
  *   fetchImpl injected in tests so nothing reaches the network
  */
+/**
+ * Every source, run independently.
+ *
+ * Independently is the point: one publisher changing their markup must not stop
+ * the other from updating. A source that throws is recorded as failed and the
+ * rest still store, because half a price list from a working source beats none.
+ */
+async function collectAll(opts = {}) {
+  const results = [];
+
+  // ── texbazar: a free public page, read from its markup ────────────────
+  const tb = { source: SOURCE, configured: true, rows: [], rejected: [], skipped: 0 };
+  try {
+    const published = parse(await fetchRaw(opts.fetchImpl));
+    tb.seen = published.length;
+    for (const o of published) {
+      const t = translate(o);
+      if (t.skip) { tb.skipped++; continue; }
+      if (t.reject) { tb.rejected.push({ label: t.label, why: t.why }); continue; }
+      // Every texbazar row is a Bangladeshi price; the country is implicit in
+      // the source and is made explicit here so the merge can key on it.
+      tb.rows.push({ ...t.row, country: 'BD' });
+    }
+    const problems = gate(tb.rows);
+    if (problems.length) {
+      tb.ok = false;
+      tb.error = 'GATE FAILED — ' + problems.join(' | ');
+      // A failing gate stores NOTHING from this source. Half a price list is
+      // not a price list, and last week's is better than a broken one.
+      tb.rows = [];
+    } else {
+      tb.ok = true;
+    }
+  } catch (e) {
+    tb.ok = false;
+    tb.error = e.message;
+    tb.rows = [];
+  }
+  results.push(tb);
+
+  // ── emergingtextiles: a paid API, if a key has been configured ────────
+  try {
+    const et = await emergingTextiles.collect(opts);
+    // Not configured is not a failure. A source that has never been connected
+    // must not show as a red error every week, and must not be confused with
+    // one that is connected and returning nothing.
+    et.ok = et.configured ? !et.rejected.length || !!et.rows.length : null;
+    et.seen = et.rows.length + et.rejected.length;
+    results.push(et);
+  } catch (e) {
+    results.push({ source: emergingTextiles.SOURCE, configured: true, ok: false,
+                   rows: [], rejected: [], error: e.message });
+  }
+
+  return results;
+}
+
+/**
+ * Two sources' rows into one list.
+ *
+ * Fresher wins outright. Same day, the priority order settles it. Both are kept
+ * in the database either way — the merge decides what the engine READS, not
+ * what is stored, because a costing quoted last month has to stay explainable
+ * and that needs the losing quote too.
+ */
+function mergeRows(all) {
+  const best = new Map();
+  const overlaps = [];
+  for (const r of all) {
+    const key = [r.country || 'BD', r.market, r.item_key, r.count_ne].join('|');
+    const prev = best.get(key);
+    if (!prev) { best.set(key, r); continue; }
+    const fresher = r.quoted_on > prev.quoted_on;
+    const sameDay = r.quoted_on === prev.quoted_on;
+    const better = sameDay &&
+      (SOURCE_PRIORITY[r.source] || 99) < (SOURCE_PRIORITY[prev.source] || 99);
+    if (fresher || better) {
+      overlaps.push({ key, kept: r.source, over: prev.source,
+                      why: fresher ? 'fresher quote' : 'same day, higher priority source' });
+      best.set(key, r);
+    } else {
+      overlaps.push({ key, kept: prev.source, over: r.source,
+                      why: sameDay ? 'same day, higher priority source' : 'fresher quote' });
+    }
+  }
+  return { rows: [...best.values()], overlaps };
+}
+
 async function syncYarnPrices(opts = {}) {
   const trigger = opts.trigger === 'manual' ? 'manual' : 'schedule';
 
@@ -429,8 +547,8 @@ async function syncYarnPrices(opts = {}) {
   if (!opts.force && trigger === 'schedule') {
     const last = await queryOne(
       `SELECT started_at FROM yarn_price_syncs
-        WHERE ok = true AND source = $1
-        ORDER BY started_at DESC LIMIT 1`, [SOURCE]);
+        WHERE ok = true
+        ORDER BY started_at DESC LIMIT 1`);
     if (last) {
       const days = (Date.now() - new Date(last.started_at).getTime()) / 86400000;
       if (days < REFRESH_DAYS) {
@@ -440,83 +558,105 @@ async function syncYarnPrices(opts = {}) {
     }
   }
 
+  // One row per RUN, not per source. Which sources took part is in the
+  // per-source report the run returns and the dashboard prints.
   const started = await queryOne(
     `INSERT INTO yarn_price_syncs (source, trigger) VALUES ($1, $2) RETURNING id`,
-    [SOURCE, trigger]);
+    ['merged', trigger]);
   const syncId = started.id;
 
-  const fail = async (err) => {
-    await query(
-      `UPDATE yarn_price_syncs SET finished_at = now(), ok = false, error = $2 WHERE id = $1`,
-      [syncId, String(err && err.message ? err.message : err).slice(0, 2000)]);
-    return { ok: false, sync_id: syncId, error: String(err && err.message ? err.message : err) };
-  };
 
-  let published;
-  try {
-    published = parse(await fetchRaw(opts.fetchImpl));
-  } catch (e) {
-    return fail(e);
-  }
+  const collected = await collectAll(opts);
+  const merged = mergeRows(collected.flatMap(c => c.rows));
 
-  const rows = [];
-  const rejections = [];
-  let skipped = 0;
-  for (const o of published) {
-    const t = translate(o);
-    if (t.skip) { skipped++; continue; }
-    if (t.reject) { rejections.push({ label: t.label, why: t.why }); continue; }
-    rows.push(t.row);
-  }
+  // Every row every source returned, stored — not just the merged winners. A
+  // costing quoted last month has to stay explainable, and that needs the
+  // quote that lost the merge as much as the one that won it.
+  const allRows = collected.flatMap(c => c.rows);
 
-  const problems = gate(rows);
-  if (problems.length) {
-    // A failing gate stores NOTHING. Half a price list is not a price list, and
-    // the previous quotes are better than a partial new one.
+  const anyConfigured = collected.filter(c => c.configured);
+  const anyWorked = anyConfigured.some(c => c.ok && c.rows.length);
+
+  if (!anyWorked) {
+    // Nothing usable came back. The previous quotes stay exactly where they
+    // are and the fixed reference list goes on answering for anything they do
+    // not cover — which is why this is recorded as a failed sync rather than
+    // allowed to wipe the table.
+    const why = anyConfigured.map(c => `${c.source}: ${c.error || c.reason || 'no rows'}`)
+      .join(' | ') || 'no source is configured';
     await query(
       `UPDATE yarn_price_syncs
-          SET finished_at = now(), ok = false, rows_seen = $2, rows_rejected = $3,
-              rejections = $4, error = $5
+          SET finished_at = now(), ok = false, rows_seen = $2, rejections = $3,
+              error = $4, sources = $5
         WHERE id = $1`,
-      [syncId, published.length, rejections.length,
-       JSON.stringify(rejections), 'GATE FAILED — ' + problems.join(' | ')]);
-    return { ok: false, sync_id: syncId, gate_failed: problems, stored: 0 };
+      [syncId, collected.reduce((a, c) => a + (c.seen || 0), 0),
+       JSON.stringify(collected.flatMap(c => c.rejected || [])), why.slice(0, 2000),
+       JSON.stringify(sourceReport(collected))]);
+    return { ok: false, sync_id: syncId, sources: sourceReport(collected), error: why, stored: 0 };
   }
 
   let stored = 0;
-  for (const r of rows) {
-    // ON CONFLICT DO NOTHING: re-running on the same day is idempotent, and the
-    // first read of a day's list is the one kept.
+  for (const r of allRows) {
     const res = await query(
       `INSERT INTO yarn_price_quotes
-         (source, market, item_key, count_ne, raw_label, price, currency, unit,
+         (source, country, market, item_key, count_ne, raw_label, price, currency, unit,
           price_usd_kg, fx_bdt_per_usd, fx_source, quoted_on, percent_change)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-       ON CONFLICT (source, market, item_key, count_ne, quoted_on) DO NOTHING
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+       ON CONFLICT (source, country, market, item_key, count_ne, quoted_on) DO NOTHING
        RETURNING id`,
-      [r.source, r.market, r.item_key, r.count_ne, r.raw_label, r.price, r.currency, r.unit,
-       r.price_usd_kg, r.fx_bdt_per_usd, r.fx_source, r.quoted_on, r.percent_change]);
+      [r.source, r.country || 'BD', r.market, r.item_key, r.count_ne, r.raw_label, r.price,
+       r.currency, r.unit, r.price_usd_kg, r.fx_bdt_per_usd, r.fx_source, r.quoted_on,
+       r.percent_change]);
     if (res.length) stored++;
   }
 
-  const newest = rows.map(r => r.quoted_on).sort().pop();
+  const newest = allRows.map(r => r.quoted_on).sort().pop();
+  const rejections = collected.flatMap(c =>
+    (c.rejected || []).map(x => ({ ...x, source: c.source })));
+
   await query(
     `UPDATE yarn_price_syncs
         SET finished_at = now(), ok = true, rows_seen = $2, rows_stored = $3,
-            rows_rejected = $4, newest_quote = $5, rejections = $6
+            rows_rejected = $4, newest_quote = $5, rejections = $6, sources = $8, error = $7
       WHERE id = $1`,
-    [syncId, published.length, stored, rejections.length, newest,
-     JSON.stringify(rejections)]);
+    [syncId, collected.reduce((a, c) => a + (c.seen || 0), 0), stored, rejections.length,
+     newest, JSON.stringify(rejections),
+     // A partial success is not a clean one. If one of two sources failed, the
+     // row says so even though `ok` is true, because "it worked" and "all of it
+     // worked" are different answers.
+     collected.filter(c => c.configured && c.ok === false)
+       .map(c => `${c.source}: ${c.error}`).join(' | ') || null,
+     JSON.stringify(sourceReport(collected))]);
 
   return {
     ok: true, sync_id: syncId, trigger,
-    published: published.length,
-    costable: rows.length,
+    sources: sourceReport(collected),
+    published: collected.reduce((a, c) => a + (c.seen || 0), 0),
+    costable: allRows.length,
+    merged: merged.rows.length,
+    overlaps: merged.overlaps,
     stored,
-    not_costed: skipped,
+    not_costed: collected.reduce((a, c) => a + (c.skipped || 0), 0),
     rejected: rejections,
     newest_quote: newest,
   };
+}
+
+/** What each source did, in the shape the dashboard prints. */
+function sourceReport(collected) {
+  return collected.map(c => ({
+    source: c.source,
+    configured: c.configured,
+    // null means "never connected" and is deliberately not false — a source
+    // nobody has set up is not a source that is broken.
+    ok: c.configured ? !!c.ok : null,
+    rows: c.rows.length,
+    rejected: (c.rejected || []).length,
+    newest_quote: c.rows.length ? c.rows.map(r => r.quoted_on).sort().pop() : null,
+    reason: c.reason || null,
+    error: c.error || null,
+  }));
+
 }
 
 module.exports = {
@@ -524,5 +664,6 @@ module.exports = {
   // Exported for the tests, which must be able to exercise the translation and
   // the gate without a network call.
   parse, translate, gate, gateOneMarket, toUsdKg, readPrice, readUnit,
+  collectAll, mergeRows, sourceReport, SOURCE_PRIORITY,
   SOURCE, URL, REFRESH_DAYS, FX, MAP, NOT_COSTED,
 };

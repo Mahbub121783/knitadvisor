@@ -33,7 +33,7 @@ const COSTING_MARKET = 'lc_usd';
 let snapshot = {
   loaded: false,
   loaded_at: null,
-  by_market: {},     // 'lc_usd' -> { 'carded_regular': { 20: entry, ... } }
+  by_country: {},    // 'BD' -> 'lc_usd' -> 'carded_regular' -> { 20: entry, ... }
   newest_quote: null,
   source: null,
   sync: null,
@@ -49,22 +49,27 @@ let snapshot = {
  * without loading it all into memory.
  */
 async function load() {
+  // Newest quote per (country, market, item, count), whichever source it came
+  // from. The ordering is the merge policy in SQL: freshest date first, then
+  // the source priority the sync job declares.
   const rows = await query(
-    `SELECT DISTINCT ON (market, item_key, count_ne)
-            market, item_key, count_ne, price_usd_kg, currency, unit, price,
+    `SELECT DISTINCT ON (country, market, item_key, count_ne)
+            country, market, item_key, count_ne, price_usd_kg, currency, unit, price,
             raw_label, quoted_on, percent_change, source, fx_bdt_per_usd
        FROM yarn_price_quotes
-      ORDER BY market, item_key, count_ne, quoted_on DESC`);
+      ORDER BY country, market, item_key, count_ne, quoted_on DESC,
+               CASE source WHEN 'emergingtextiles' THEN 1 WHEN 'texbazar' THEN 2 ELSE 9 END`);
 
   const sync = await query(
     `SELECT started_at, finished_at, ok, trigger, rows_stored, newest_quote, error
        FROM yarn_price_syncs
       ORDER BY started_at DESC LIMIT 1`);
 
-  const byMarket = {};
+  const byCountry = {};
   let newest = null;
   for (const r of rows) {
-    const m = (byMarket[r.market] = byMarket[r.market] || {});
+    const ctry = (byCountry[r.country] = byCountry[r.country] || {});
+    const m = (ctry[r.market] = ctry[r.market] || {});
     const key = r.item_key;
     const ne = Number(r.count_ne);
     (m[key] = m[key] || {})[ne] = {
@@ -82,7 +87,7 @@ async function load() {
   snapshot = {
     loaded: true,
     loaded_at: new Date().toISOString(),
-    by_market: byMarket,
+    by_country: byCountry,
     newest_quote: newest,
     source: rows.length ? rows[0].source : null,
     sync: sync.length ? {
@@ -95,8 +100,8 @@ async function load() {
     } : null,
   };
   return {
-    markets: Object.keys(byMarket),
-    items: Object.keys(byMarket[COSTING_MARKET] || {}).length,
+    countries: Object.keys(byCountry),
+    items: Object.keys(((byCountry.BD || {})[COSTING_MARKET]) || {}).length,
     quotes: rows.length,
     newest,
   };
@@ -149,17 +154,21 @@ function ageDays(quotedOn, now) {
  */
 const MAX_INTERPOLATION_SPAN_NE = 8;
 
-function lookup(itemKey, countNe, now, market) {
+function lookup(itemKey, countNe, now, opts = {}) {
   if (!snapshot.loaded) return null;
-  const list = snapshot.by_market[market || COSTING_MARKET];
+  const ctry = snapshot.by_country[(opts.country || 'BD').toUpperCase()];
+  if (!ctry) return null;
+  const list = ctry[opts.market || COSTING_MARKET];
   if (!list) return null;
   const family = list[itemKey];
   if (!family) return null;
 
   const want = Number(countNe);
+  const asked = (opts.country || 'BD').toUpperCase();
   const exact = family[want] || (countNe ? null : family[0]);
   if (exact) {
-    return { ...exact, exact: true, age_days: ageDays(exact.quoted_on, now) };
+    return { ...exact, exact: true, country: asked,
+             age_days: ageDays(exact.quoted_on, now) };
   }
   if (!want) return null;
 
@@ -184,6 +193,7 @@ function lookup(itemKey, countNe, now, market) {
     price_usd_kg: Math.round(price * 10000) / 10000,
     quoted_on: lo.quoted_on,
     exact: false,
+    country: asked,
     interpolated: { between: [below, above], prices: [lo.price_usd_kg, hi.price_usd_kg] },
     as_published: `between ${lo.as_published} at ${below}Ne and ${hi.as_published} at ${above}Ne`,
     label: `${want}Ne, read between ${lo.label} and ${hi.label}`,
@@ -218,8 +228,8 @@ function status(now) {
              : age <= 7 ? 'current'
              : age <= 21 ? 'recent'
              : age <= 60 ? 'stale' : 'out of date',
-    items: Object.keys(snapshot.by_market[COSTING_MARKET] || {}).length,
-    markets: Object.keys(snapshot.by_market),
+    items: Object.keys(((snapshot.by_country.BD || {})[COSTING_MARKET]) || {}).length,
+    countries: Object.keys(snapshot.by_country),
     attribution: snapshot.source,
     last_sync: snapshot.sync,
     loaded_at: snapshot.loaded_at,
@@ -228,5 +238,10 @@ function status(now) {
 
 function isLoaded() { return snapshot.loaded; }
 
-module.exports = { load, lookup, status, isLoaded, ageDays, COSTING_MARKET,
+/** Countries that actually have live quotes right now. */
+function quotedCountries() {
+  return snapshot.loaded ? Object.keys(snapshot.by_country) : [];
+}
+
+module.exports = { load, lookup, status, isLoaded, ageDays, COSTING_MARKET, quotedCountries,
                    MAX_INTERPOLATION_SPAN_NE };

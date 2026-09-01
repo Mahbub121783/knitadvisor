@@ -476,8 +476,32 @@ router.get('/api/yarn-prices', adminAuth, async (req, res) => {
     // as separate columns rather than one green tick.
     const syncs = await dbQuery(
       `SELECT id, started_at, finished_at, ok, trigger, rows_seen, rows_stored,
-              rows_rejected, newest_quote, error
+              rows_rejected, newest_quote, error, sources
          FROM yarn_price_syncs ORDER BY started_at DESC LIMIT 10`);
+
+    // Per source, as it stands right now — not as it stood on the last run.
+    // "The run worked" and "every source worked" are different answers, and a
+    // dashboard that cannot tell them apart will show a green tick over a
+    // source that has been failing for a month.
+    const perSource = await dbQuery(
+      `SELECT source, country, count(*) AS quotes, max(quoted_on) AS newest,
+              max(fetched_at) AS last_seen
+         FROM yarn_price_quotes
+        GROUP BY source, country
+        ORDER BY source, country`);
+
+    // Sources the code knows about, whether or not they have ever returned a
+    // row. A source that has never been connected must appear as "not
+    // connected" rather than being absent, or nobody will remember it exists.
+    const et = require('../jobs/price-sources/emergingtextiles');
+    const known = [
+      { source: 'texbazar', label: 'TexBazar (Bangladesh daily list)',
+        configured: true, kind: 'public page' },
+      { source: et.SOURCE, label: 'EmergingTextiles (multi-country API)',
+        configured: et.isConfigured(), kind: 'subscription API',
+        note: et.isConfigured() ? null
+          : 'no API key configured — set ET_API_KEY and ET_ENDPOINTS to connect' },
+    ];
 
     const quotes = await dbQuery(
       `SELECT DISTINCT ON (market, item_key, count_ne)
@@ -489,6 +513,16 @@ router.get('/api/yarn-prices', adminAuth, async (req, res) => {
     res.json({
       status: yarnPrices.status(),
       refresh_days: REFRESH_DAYS,
+      sources: known.map(k => ({
+        ...k,
+        countries: perSource.filter(r => r.source === k.source)
+          .map(r => ({ country: r.country, quotes: Number(r.quotes),
+                       newest: String(r.newest).slice(0, 10),
+                       last_seen: r.last_seen })),
+        quotes: perSource.filter(r => r.source === k.source)
+          .reduce((a, r) => a + Number(r.quotes), 0),
+      })),
+      quoted_countries: yarnPrices.quotedCountries(),
       // Each quote beside what the built-in list would have said. This column
       // is the point of the screen: the drift is invisible until the two
       // numbers are next to each other, and it was 3-7% before anyone looked.

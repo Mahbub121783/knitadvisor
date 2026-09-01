@@ -801,6 +801,14 @@
 
       <div id="prices-msg" class="hidden mb-16"></div>
 
+      <!-- Each source on its own row. They fail independently — one publisher
+           changing their markup must not be readable as the other one dying —
+           and a source nobody has connected yet is shown as not connected
+           rather than being left off the page. -->
+      <div class="section-title" style="font-size:12px;">Sources</div>
+      <div class="section-sub mb-12">Merged, freshest quote wins; if every source fails the built-in price list answers</div>
+      <div id="prices-sources" class="mb-20"></div>
+
       <div class="tbl-wrap">
         <table class="tbl">
           <thead><tr>

@@ -6,12 +6,15 @@ const engine = require('../engine');
 console.log('--- Running Country Costing Tests ---');
 
 // ============================================================================
-// Every price in this engine is Bangladesh's, and switching country does NOT
-// look up another country's price list — there is no free one worth putting
-// under a costing. It applies that country's published industrial power tariff
-// to the energy share of each step.
+// Switching country moves the YARN price and nothing else. Knitting, dyeing
+// and finishing are price-list figures and stay that list's numbers wherever
+// the fabric is costed.
 //
-// This suite exists to make sure that stays true, and stays labelled.
+// The yarn moves by one of three routes, in order: that country's own live
+// quote if any source carries it; failing that the anchor's live quote scaled
+// by the published power-tariff ratio; failing that the fixed reference list.
+//
+// This suite exists to keep those three distinguishable, and labelled.
 // ============================================================================
 
 const BASE = { gsm: 180, composition: '100% Cotton', count_ne: 30,
@@ -50,8 +53,11 @@ for (const c of cc.listCountries()) {
     `${c.name}: yarn moved ${(yarnMove * 100).toFixed(1)}% on a ${(tariffMove * 100).toFixed(1)}% ` +
     'tariff move — the fibre is a world commodity and must not follow local power');
 
-  // And the order of sensitivity is fixed by the physics of the three steps:
-  // a dyehouse boils water, a knitting machine turns a cylinder.
+  // The knitting and dyeing ratios are still computed and still have to be
+  // internally consistent — a dyehouse boils water, a knitting machine turns a
+  // cylinder — but nothing applies them to a costing any more. They are kept
+  // because they are the reasoning behind the yarn ratio, and because deleting
+  // the arithmetic would make the yarn figure look like an assertion.
   assert(Math.abs(1 - v.dyeing_ratio) > Math.abs(1 - v.knitting_ratio),
     `${c.name}: dyeing must be more tariff-sensitive than knitting — it is heat, not motion`);
   assert(Math.abs(1 - v.dyeing_ratio) > Math.abs(1 - v.yarn_ratio),
@@ -85,17 +91,80 @@ for (const c of cc.listCountries()) {
                      'and it must not relabel the anchor\'s own price as modelled');
 }
 
-// ── A modelled price never wears a quoted badge ────────────────────────────
+// ── The three links, in order ──────────────────────────────────────────────
+// 1. a live quote for that country  2. the anchor's live quote, scaled
+// 3. the fixed reference list. The third is what makes the first two safe to
+// attempt: a price feed that can take a costing down with it is a feed nobody
+// should connect.
 {
-  const vn = calculateCost({ ...BASE, country: 'VN' });
+  const feed = (key, ne, country) => {
+    if (key !== 'carded_regular' || Number(ne) !== 30) return null;
+    if (country === 'BD') {
+      return { price_usd_kg: 3.25, quoted_on: '2026-08-29', age_days: 3,
+               as_published: '$3.25 per KG', label: '30/s Card',
+               source: 'texbazar', country: 'BD' };
+    }
+    if (country === 'IN') {
+      return { price_usd_kg: 3.02, quoted_on: '2026-08-30', age_days: 2,
+               as_published: '$3.02 per KG', label: '30s IN',
+               source: 'emergingtextiles', country: 'IN' };
+    }
+    return null;
+  };
+  const at = (country, live) => calculateCost({ ...BASE, count_ne: 30, yarn_type: 'carded_regular',
+                                                country, live_prices: live });
+
+  // LINK 1 — the country has its own quote, from either source. It is used
+  // as-is and never scaled: a real Indian quote beats an Indian price modelled
+  // from a Bangladeshi one, which is the entire reason for a second source.
+  const inOwn = at('IN', feed);
+  assert.strictEqual(inOwn.yarn.base_price_usd, 3.02);
+  assert.strictEqual(inOwn.yarn.price_source.kind, 'market');
+  assert.strictEqual(inOwn.yarn.price_source.for_country, 'IN');
+
+  // LINK 2 — no Vietnamese quote, so the anchor's live quote is scaled. It must
+  // be modelled from the LIVE 3.25 and not from the four-month-old list.
+  const vn = at('VN', feed);
   assert.strictEqual(vn.yarn.price_source.kind, 'modelled_country',
     'a yarn price scaled to another country is modelled, not quoted');
-  assert(vn.yarn.price_source.modelled_from,
-    'and it must carry what it was modelled FROM, or the arithmetic is unreconstructable');
   assert.strictEqual(vn.yarn.price_source.modelled_from.country, 'BD');
+  assert.strictEqual(vn.yarn.price_source.modelled_from.price, 3.25,
+    'link 2 must scale the LIVE anchor quote, not the reference list');
+  assert(vn.yarn.base_price_usd < 3.25 && vn.yarn.base_price_usd > 3.0);
+
+  // LINK 3 — no feed at all. The fixed list answers and keeps its own label:
+  // scaling a four-month-old number does not turn it into a market price.
+  const noFeed = at('VN', null);
+  assert.strictEqual(noFeed.yarn.price_source.kind, 'reference_list');
+  assert(noFeed.yarn.price_source.country_adjusted,
+    'the dropdown still has to mean something with no feed connected');
+  assert(noFeed.yarn.base_price_usd > vn.yarn.base_price_usd,
+    'and the stale list should read higher than the live quote it replaces');
+
   assert(/modelled/.test(vn.country.method.confidence));
   assert(vn.country.method.not_modelled.includes('labour cost'),
     'the model must name what it does NOT cover — labour is the biggest omission');
+}
+
+// ── Only the yarn follows the country ──────────────────────────────────────
+// Knitting, dyeing and finishing are price-list figures and stay that list's
+// numbers wherever the fabric is costed. An earlier version scaled all three by
+// a power tariff, which was a model standing in for data in the middle of a
+// costing.
+{
+  const bd = calculateCost({ ...BASE, country: 'BD' });
+  for (const c of cc.listCountries()) {
+    const r = calculateCost({ ...BASE, country: c.code });
+    assert.strictEqual(r.cost_breakdown_usd.knitting.per_kg,
+                       bd.cost_breakdown_usd.knitting.per_kg,
+                       `${c.name}: knitting must not move with the country`);
+    assert.strictEqual(r.cost_breakdown_usd.dyeing.per_kg,
+                       bd.cost_breakdown_usd.dyeing.per_kg,
+                       `${c.name}: dyeing must not move with the country`);
+    assert.strictEqual(r.cost_breakdown_usd.finishing,
+                       bd.cost_breakdown_usd.finishing,
+                       `${c.name}: finishing must not move with the country`);
+  }
 }
 
 // ── An unknown country falls back and SAYS so ──────────────────────────────
