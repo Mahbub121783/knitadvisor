@@ -167,6 +167,39 @@ const clone = () => JSON.parse(JSON.stringify(rows.filter(r => r.market === 'lc_
     'a feed that suddenly carries a fraction of its rows must be caught');
 }
 
+// ── Two products may not share one key ─────────────────────────────────────
+// This check found two real bugs in one afternoon, and both had passed every
+// other check: BCI carded mapped onto plain carded, and combed slub mapped onto
+// card slub. In each case the prices were individually plausible and each
+// series rose properly with count — but the page prices them 10-35 cents apart,
+// so they are separately traded products, and the loss happened silently at the
+// INSERT where ON CONFLICT DO NOTHING keeps whichever row arrived first.
+{
+  const collided = [
+    { market: 'lc_usd', item_key: 'carded_regular', count_ne: 40, quoted_on: '2026-08-29',
+      raw_label: '40/s Card', price_usd_kg: 3.80 },
+    { market: 'lc_usd', item_key: 'carded_regular', count_ne: 40, quoted_on: '2026-08-29',
+      raw_label: '40/s Card (BCI)', price_usd_kg: 3.70 },
+  ];
+  assert(gate(collided).some(p => /both claim/.test(p)),
+    'two published rows claiming one key must be caught before the insert');
+
+  // And the real page must not do it. Every mapped key holds exactly one
+  // product per count per list.
+  const claimed = new Map();
+  for (const r of rows) {
+    const id = `${r.market}/${r.item_key}/${r.count_ne}`;
+    assert(!claimed.has(id) || claimed.get(id) === r.raw_label,
+      `${claimed.get(id)} and ${r.raw_label} both map to ${id}`);
+    claimed.set(id, r.raw_label);
+  }
+}
+
+// Nothing on the real page is refused any more: what is left over is skipped
+// on purpose, by name, because the engine has no row for it.
+assert.strictEqual(rejected.length, 0,
+  `the published list should map cleanly: ${rejected.map(r => r.label + ' (' + r.why + ')').join(', ')}`);
+
 // ── The engine reads it, and says which price it used ──────────────────────
 const { calculateCost } = require('../engine/domain/costing-engine');
 
@@ -215,12 +248,6 @@ const brokenLookup = calculateCost({ gsm: 180, composition: '100% Cotton', count
                                      live_prices: () => { throw new Error('database gone'); } });
 assert.strictEqual(brokenLookup.yarn.price_source.kind, 'reference_list',
   'a broken price lookup must fall back, not throw');
-
-// Seven refusals is the publisher carrying products this engine has no row
-// for. Seventy would mean they had renamed everything and the list was quietly
-// losing coverage while every check still passed.
-assert(rejected.length <= 15,
-  `${rejected.length} rows refused: ${rejected.map(r => r.label).join(', ')}`);
 
 console.log(`  ${published.length} quotes parsed, ${rows.length} costable, ` +
             `${skipped} not costed, ${rejected.length} refused`);
