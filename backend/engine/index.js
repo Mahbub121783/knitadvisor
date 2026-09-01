@@ -571,7 +571,16 @@ function calculate(params) {
       tex: tfResult ? tfResult.tex : null,
       tf: tfResult ? tfResult.value : null,
       tfStatus: tfResult ? tfResult.status : null,
-      tfLimits: tfResult ? { ideal_min: tfResult.limits && tfResult.limits.min, ideal_max: tfResult.limits && tfResult.limits.max } : null,
+      // ideal_min/ideal_max, NOT min/max. TIGHTNESS_LIMITS carries both and they
+      // answer different questions: min/max is the range in which a loop can
+      // exist at all (8-32 on a single jersey), ideal_min/ideal_max is the
+      // range anyone actually knits in (14.5-18.5). Mapping the first onto the
+      // second made the Optimal Machine card print "ideal 7-33" and call TF 30
+      // on a single jersey "balanced" — advice that would ruin a fabric.
+      tfLimits: tfResult && tfResult.limits ? {
+        ideal_min: tfResult.limits.ideal_min != null ? tfResult.limits.ideal_min : tfResult.limits.min,
+        ideal_max: tfResult.limits.ideal_max != null ? tfResult.limits.ideal_max : tfResult.limits.max,
+      } : null,
       targetWidthInches: target_width,
     });
     if (optimalMachine && optimalMachine.ok) {
@@ -771,6 +780,18 @@ function calculate(params) {
       elastane_pct: parsedComp ? parsedComp.elastane_pct : null,
       spinning: spinning_system || (yarnExpertise ? yarnExpertise.spinning_system : null),
       count_ne: countResult ? countResult.count_ne : null,
+      // ---- THE CLOTH ITSELF ----
+      // Without these the advisory saw a composition and a category and
+      // nothing else, so a 120 g/m2 40Ne jersey and a 260 g/m2 20Ne fleece in
+      // the same cotton were handed a byte-identical report. Everything that
+      // says "this fabric" now has the fabric's own numbers to say it with.
+      tightness_factor: tfResult ? tfResult.value : null,
+      tf_limits: tfResult ? tfResult.limits : null,
+      stitch_length_mm: llResult && llResult.ll_mm > 0 ? llResult.ll_mm : null,
+      yarn_diameter_mm: yarnExpertise && yarnExpertise.diameter_mm != null
+        ? yarnExpertise.diameter_mm : null,
+      twist_multiplier: twist_multiplier || null,
+      shade: color_shade || null,
       // The wet card is rendered for this calculation, so the advisory hands it
       // the topics they share instead of printing them twice.
       wet_card_present: !!(wetProcessing && wetProcessing.ok),

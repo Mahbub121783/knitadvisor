@@ -56,6 +56,7 @@ const SOURCE = 'Morton & Hearle, Physical Properties of Textile Fibres, 4th edn 
 
 const round1 = v => (v == null ? null : Math.round(v * 10) / 10);
 const round2 = v => (v == null ? null : Math.round(v * 100) / 100);
+const round3 = v => (v == null ? null : Math.round(v * 1000) / 1000);
 
 // Fabric families, by how much they let a stitch move. A single jersey has one
 // yarn path per loop and nothing opposing it; an interlock has two interlocking
@@ -147,10 +148,39 @@ const THEME_OF = (() => {
   return m;
 })();
 
+/**
+ * Which findings are properties of the BLEND, and which are about THIS CLOTH.
+ *
+ * This list is measured, not asserted. Running the advisory over 360 fabrics —
+ * eight compositions x five structures x three weights x three counts — these
+ * topics produced byte-identical text every time: change the structure, the
+ * GSM and the count and the sentence does not move, because nothing in it
+ * depends on them. Polyester melts at 260 C in a jersey and in a fleece.
+ *
+ * That is not a fault. It IS the answer, for those topics. The fault would be
+ * printing them under a heading that says "this fabric" as though the engine
+ * had looked at the fabric to produce them, which is what it did until now:
+ * a reader who calculates two different fabrics and gets the same paragraph
+ * twice is right to stop trusting the page. Labelled, the same sentence
+ * becomes what it always was — reference material about a blend — and the
+ * findings that ARE about the cloth stop being buried among them.
+ *
+ * A test holds this honest in both directions: nothing on this list may vary
+ * with the structure, and nothing off it may fail to.
+ */
+const BLEND_SCOPE_TOPICS = new Set([
+  'blend strength', 'dye uptake', 'energy at break', 'fibre damage sensitivity',
+  'flex fatigue', 'handle', 'heat ageing', 'heat setting', 'joins and knots',
+  'lustre', 'static', 'stretch resistance', 'temperature ceiling',
+  'thermal comfort', 'transverse weakness', 'warmth when damp', 'wear growth',
+  'yarn costing',
+]);
+
 function finding(o) {
   if (!o.claim || !o.mechanism || !o.action || !o.evidence) return null;
   const t = THEME_OF[o.topic] || { name: 'Other', i: THEMES.length };
-  return { scope: 'fabric', ...o, theme: t.name, theme_order: t.i };
+  const scope = o.scope || (BLEND_SCOPE_TOPICS.has(o.topic) ? 'fibre' : 'fabric');
+  return { ...o, scope, theme: t.name, theme_order: t.i };
 }
 
 /**
@@ -195,6 +225,117 @@ function qualify(claim, pct, missing) {
  * does nothing to help. So the governing figure is the TOUGHEST fibre present
  * in meaningful quantity, weighted by how much of it there is.
  */
+// ============================================================
+// WHAT THE CLOTH CONTRIBUTES
+// ============================================================
+/**
+ * The fabric's own numbers, in the form the findings below need them.
+ *
+ * A fibre property is the same in every fabric made from it — polyester melts
+ * at 260 C in a jersey and in a fleece. What is NOT the same is what that
+ * property does once the fibre is in a particular structure at a particular
+ * tightness, and that half was missing: the engine computed a tightness factor
+ * at step 3.6 and never handed it over.
+ *
+ * `known` is false when the caller has no structure to give (the woven engine
+ * calls in with a composition alone). Every use below is guarded on it, so a
+ * caller that cannot answer gets the fibre statement and no invented detail.
+ */
+function clothContext(ctx) {
+  const n = v => (typeof v === 'number' && isFinite(v) ? v : null);
+  const tf = n(ctx.tightness_factor);
+  const lim = ctx.tf_limits && n(ctx.tf_limits.min) != null ? ctx.tf_limits : null;
+
+  // Slack or tight AGAINST THIS FAMILY, not against a single global pair of
+  // numbers: a rib sits at a different tightness from an interlock and calling
+  // both "tight" at 16 would be worse than saying nothing.
+  let band = null, target = null, workingMax = null;
+  if (tf != null && lim) {
+    // ideal_min/ideal_max is the band anyone actually knits in; min/max is only
+    // the range in which a loop can exist at all (8-32 on a single jersey).
+    const lo = n(lim.ideal_min) != null ? lim.ideal_min : lim.min;
+    const hi = n(lim.ideal_max) != null ? lim.ideal_max : lim.max;
+    workingMax = hi;
+    target = round1((lo + hi) / 2);
+    band = tf < lim.min ? 'below the knittable range'
+         : tf > lim.max ? 'above the knittable range'
+         : tf < lo ? 'slack'
+         : tf > hi ? 'tight'
+         : 'in its normal working band';
+  }
+
+  return {
+    known: tf != null,
+    tf, tf_band: band, tf_limits: lim, tf_target: target, tf_working_max: workingMax,
+    sl_mm: n(ctx.stitch_length_mm),
+    gsm: n(ctx.gsm),
+    count_ne: n(ctx.count_ne),
+    yarn_dia_mm: n(ctx.yarn_diameter_mm),
+    twist_multiplier: n(ctx.twist_multiplier),
+  };
+}
+
+/**
+ * What a two-fibre blend actually delivers, at the ratio actually ordered.
+ *
+ * Hamburger's blend model, which is the standard first-order treatment and the
+ * one every textile-physics course teaches. Both fibres are strained together,
+ * so when the lower-extension fibre reaches its break the other one is only
+ * part-way up its own curve and is carrying only part of its tenacity. Two
+ * branches therefore compete:
+ *
+ *   at the weak fibre's break   f_w*T_w + f_s*T_s*(e_w/e_s)
+ *   the strong fibre alone      f_s*T_s          (after the weak has gone)
+ *
+ * The blend delivers the greater of the two, and the mass-weighted average is
+ * an upper bound that neither branch reaches. Where the branches cross is the
+ * WEAKEST possible mix of these two fibres — a number worth knowing before a
+ * ratio is chosen, and one that cannot be stated without the ratio.
+ *
+ * The linear-to-break approximation is the model's known weakness: a real
+ * stress-strain curve is not a straight line, so the middle branch is
+ * optimistic. It is named in the confidence line rather than hidden.
+ */
+function blendStrengthModel(fibers) {
+  const pair = Object.entries(fibers)
+    .filter(([n, p]) => p > 0 && FIBER_PROPERTIES[n] && FIBER_PROPERTIES[n].tensile)
+    .map(([n, p]) => ({ name: n, pct: p, t: FIBER_PROPERTIES[n].tensile }));
+  if (pair.length !== 2) return null;
+
+  const [x, y] = pair;
+  const weak = x.t.extension <= y.t.extension ? x : y;
+  const strong = weak === x ? y : x;
+  if (!(weak.t.extension > 0) || !(strong.t.extension > 0)) return null;
+
+  const k = weak.t.extension / strong.t.extension;   // how far up its curve the survivor is
+  const fw = weak.pct / 100, fs = strong.pct / 100;
+
+  const atWeakBreak = fw * weak.t.tenacity + fs * strong.t.tenacity * k;
+  const strongAlone = fs * strong.t.tenacity;
+  const massAverage = fw * weak.t.tenacity + fs * strong.t.tenacity;
+  const actual = Math.max(atWeakBreak, strongAlone);
+
+  // Where the two branches cross: below this share of the strong fibre the
+  // blend breaks when the weak one does; above it, the strong fibre carries
+  // the fabric on its own. The crossing itself is the weakest mix.
+  const denom = weak.t.tenacity + strong.t.tenacity * (1 - k);
+  const crossover = denom > 0 ? weak.t.tenacity / denom : null;
+
+  return {
+    weak: weak.name, strong: strong.name,
+    weak_pct: weak.pct, strong_pct: strong.pct,
+    weak_extension: weak.t.extension, strong_extension: strong.t.extension,
+    at_weak_break: round3(atWeakBreak),
+    strong_alone: round3(strongAlone),
+    mass_average: round3(massAverage),
+    delivered: round3(actual),
+    shortfall_pct: round1((1 - actual / massAverage) * 100),
+    carried_by: strongAlone > atWeakBreak ? strong.name : 'both fibres together',
+    crossover_strong_pct: crossover == null ? null : round1(crossover * 100),
+    past_crossover: crossover == null ? null : fs > crossover,
+  };
+}
+
 function pillingIndex(fibers) {
   const parts = [];
   const unmeasured = [];
@@ -286,6 +427,11 @@ function fibreAdvisory(fibers, ctx = {}) {
   // "measured" — and then every finding below silently declines to fire and the
   // reader is handed a clean report about a fabric nothing was known about.
   // "No risk found" and "never looked" must not print the same.
+  // The fabric's own numbers. `cloth.known` is false when the caller has no
+  // structure to give, and every use below is guarded on it: a caller that
+  // cannot answer gets the fibre statement and no invented detail.
+  const cloth = clothContext(ctx);
+
   const NEEDED = ['tensile', 'recovery', 'friction', 'swelling', 'variability'];
   const depth = named.map(([n, pct]) => {
     const row = FIBER_PROPERTIES[n] || {};
@@ -461,11 +607,22 @@ function fibreAdvisory(fibers, ctx = {}) {
         + `${FIBER_PROPERTIES.cotton.tensile.work_of_rupture}. The strongest fibre governs, not `
         + `the average: the cotton in a poly-cotton does nothing to release a pill the polyester `
         + `is holding on.`,
-      action: pill.band === 'severe'
-        ? 'Specify a low-hairiness yarn (compact or air-jet), singe or biopolish, and set a '
-          + 'pilling standard (ISO 12945-2) in the tech pack rather than discovering it at '
-          + 'inspection.'
-        : 'Keep yarn hairiness down and confirm against ISO 12945-2 before bulk.',
+      action: (cloth.known && cloth.tf_band
+        ? `This structure is ${cloth.tf_band} at TF ${cloth.tf}: `
+          + (cloth.tf_band === 'slack' || cloth.tf_band === 'below the knittable range'
+              ? 'a slack fabric holds its fibre ends less firmly and gives them room to '
+                + 'migrate, so it is the harder half of the problem. Tightening the structure '
+                + 'is a lever here before any yarn change. '
+              : cloth.tf_band === 'tight' || cloth.tf_band === 'above the knittable range'
+                ? 'a tight structure traps fibre ends and is already working for you, so the '
+                  + 'remaining lever is the yarn, not the knitting. '
+                : 'the structure is neither helping nor hurting, so the lever is the yarn. ')
+        : '')
+        + (pill.band === 'severe'
+          ? 'Specify a low-hairiness yarn (compact or air-jet), singe or biopolish, and set a '
+            + 'pilling standard (ISO 12945-2) in the tech pack rather than discovering it at '
+            + 'inspection.'
+          : 'Keep yarn hairiness down and confirm against ISO 12945-2 before bulk.'),
       evidence: [{ table: pill.evidence.table, page: pill.evidence.page }],
       confidence: pill.unmeasured.length ? `${pill.unmeasured.join(', ')} not measured` : 'measured',
     });
@@ -476,20 +633,53 @@ function fibreAdvisory(fibers, ctx = {}) {
   // blend has no weak partner and the finding would be noise.
   if (mech && mech.breaks_first && mech.blend_average_reliable === false) {
     const first = FIBER_PROPERTIES[mech.breaks_first].tensile;
+    // The ratio actually ordered, not just which fibre is weaker. A 60/40 CVC
+    // and a 35/65 PC used to be handed the identical sentence, and they are
+    // not the same fabric: one breaks when its cotton does, the other is
+    // already being carried by its polyester.
+    const B = blendStrengthModel(fibers);
     push({
-      topic: 'blend strength', severity: 'moderate',
-      claim: `The ${mech.breaks_first} breaks first, at ${first.extension}% extension, and the `
-        + `blend cannot be as strong as its mass average suggests.`,
-      mechanism: `The fibres in this blend reach their breaking extensions at very different `
-        + `points. When the ${mech.breaks_first} has broken, the load it was carrying transfers `
-        + `to what is left, so the blend fails before the stronger fibre has been fully loaded. `
-        + `The mass-weighted figure of ${mech.tenacity_upper_bound_n_tex} N/tex is therefore an `
-        + `UPPER BOUND and not a prediction.`,
-      action: 'Do not quote blend strength from a weighted average. Test the actual yarn, and '
-        + 'where strength is critical move the blend ratio towards the lower-extension fibre '
-        + 'or match the two extensions more closely.',
+      topic: 'blend strength', severity: B && B.shortfall_pct >= 20 ? 'high' : 'moderate',
+      claim: B
+        ? `At ${B.strong_pct}% ${B.strong} this blend delivers about ${B.delivered} N/tex `
+          + `against a mass average of ${B.mass_average} — ${B.shortfall_pct}% short, because `
+          + `the ${B.weak} breaks first at ${B.weak_extension}% extension while the `
+          + `${B.strong} is only ${Math.round(100 * B.weak_extension / B.strong_extension)}% `
+          + `of the way to its own.`
+        : `The ${mech.breaks_first} breaks first, at ${first.extension}% extension, and the `
+          + `blend cannot be as strong as its mass average suggests.`,
+      mechanism: (B
+        ? `Both fibres are strained together, so when the ${B.weak} reaches its break the `
+          + `${B.strong} is carrying only ${Math.round(100 * B.weak_extension / B.strong_extension)}% `
+          + `of what it could. Two things can happen and the blend gets the better of them: it `
+          + `holds ${B.at_weak_break} N/tex up to that point, or, once the ${B.weak} has gone, `
+          + `the surviving ${B.strong} carries ${B.strong_alone} N/tex on its own. `
+          + `Here ${B.carried_by === 'both fibres together'
+              ? `the first is larger, so the fabric fails when the ${B.weak} does`
+              : `the second is larger, so the fabric is already being carried by the ${B.strong} alone`}. `
+          + (B.crossover_strong_pct != null
+              ? `The two are equal at ${B.crossover_strong_pct}% ${B.strong}, and THAT ratio is `
+                + `the weakest mix these two fibres can make — this blend sits `
+                + `${B.past_crossover ? 'above' : 'below'} it.` : '')
+        : `The fibres in this blend reach their breaking extensions at very different points. `
+          + `When the ${mech.breaks_first} has broken, the load it was carrying transfers to `
+          + `what is left, so the blend fails before the stronger fibre has been fully loaded. `
+          + `The mass-weighted figure of ${mech.tenacity_upper_bound_n_tex} N/tex is therefore `
+          + `an UPPER BOUND and not a prediction.`),
+      action: B && B.crossover_strong_pct != null
+        ? `Do not quote blend strength from a weighted average. If strength is the reason for `
+          + `the blend, move away from ${B.crossover_strong_pct}% ${B.strong} in either `
+          + `direction rather than towards it, and test the actual yarn.`
+        : 'Do not quote blend strength from a weighted average. Test the actual yarn, and '
+          + 'where strength is critical move the blend ratio towards the lower-extension fibre '
+          + 'or match the two extensions more closely.',
       evidence: [{ table: 'Tables 13.1 and 13.2', page: first.page }],
-      confidence: 'measured',
+      confidence: B
+        ? 'Hamburger\'s blend model on measured tenacities and breaking extensions. It takes '
+          + 'each fibre as loading linearly to break, which a real stress-strain curve does not '
+          + 'quite do, so the figure is slightly optimistic and the ORDER of the two branches '
+          + 'is the part to rely on'
+        : 'measured',
     });
   }
 
@@ -757,12 +947,26 @@ function fibreAdvisory(fibers, ctx = {}) {
         + `twisting. This blend measures ${dir.torsional_rigidity.value} mN mm2/tex2 against `
         + `cotton's 0.16 and nylon's 0.041 — which is why cotton jersey spirality is a standing `
         + `complaint and nylon's is not.`,
-      action: dir.spirality_band === 'low'
-        ? 'Torque is not the limiting factor here; if the fabric still spirals, look at yarn '
-          + 'twist direction and feeder balance rather than at the fibre.'
-        : 'Balance twist direction across feeders (alternate S and Z), consider a low-torque '
-          + 'yarn — air-jet or compact — and put the spirality limit in the tech pack rather '
-          + 'than discovering it after wash testing.',
+      action: (cloth.known && cloth.tf_band
+        ? `At TF ${cloth.tf} this fabric is ${cloth.tf_band} for its family`
+          + (cloth.tf_band === 'slack' || cloth.tf_band === 'below the knittable range'
+              ? ', and a slack single jersey gives the stored torque the most room to act — '
+                + 'the loops can rotate. Tightening towards '
+                + (cloth.tf_target ? `TF ${cloth.tf_target}` : 'mid-range')
+                + ' is the single most effective change, and it costs nothing but stitch length. '
+              : cloth.tf_band === 'tight' || cloth.tf_band === 'above the knittable range'
+                ? ', and a tight structure resists the rotation, so the remaining angle is the '
+                  + 'yarn\'s to fix rather than the knitter\'s. '
+                : ', so the structure is neither making this worse nor holding it back. ')
+        : '')
+        + (dir.spirality_band === 'low'
+          ? 'Torque is not the limiting factor here; if the fabric still spirals, look at yarn '
+            + 'twist direction and feeder balance rather than at the fibre.'
+          : 'Balance twist direction across feeders (alternate S and Z), consider a low-torque '
+            + 'yarn — air-jet or compact — and put the spirality limit in the tech pack rather '
+            + 'than discovering it after wash testing.')
+        + ' The Critical Path card puts a predicted angle on it; this is why that angle is what '
+        + 'it is.',
       evidence: [{ table: 'Table 17.2', page: 421 }],
       confidence: 'the fibre half of the quantity; yarn twist is the other half and this book '
         + 'does not measure it',
@@ -782,7 +986,19 @@ function fibreAdvisory(fibers, ctx = {}) {
         + `gives up as much as its most loop-sensitive component, ${L.governed_by}, because `
         + `that is where it breaks. Every tenacity figure quoted anywhere else in this report `
         + `is a straight-pull figure.`,
-      action: 'Do not size knitting tension or seam strength from straight-pull yarn data for '
+      action: (cloth.known && cloth.tf_band
+        ? `This fabric is ${cloth.tf_band} at TF ${cloth.tf}`
+          + (cloth.sl_mm ? `, ${cloth.sl_mm} mm of yarn per loop` : '')
+          + (cloth.tf_band === 'tight' || cloth.tf_band === 'above the knittable range'
+              ? ' — the tighter the structure the smaller the radius the yarn is bent round, so '
+                + 'this fabric sits at the severe end of that measured loss rather than the mild '
+                + 'end. '
+              : cloth.tf_band === 'slack' || cloth.tf_band === 'below the knittable range'
+                ? ' — a slack structure bends the yarn round a larger radius, so the real loss '
+                  + 'here should sit under the tabulated figure rather than over it. '
+                : '. ')
+        : '')
+        + 'Do not size knitting tension or seam strength from straight-pull yarn data for '
         + 'this blend. Where strength matters, test the yarn in a loop (ASTM D2256 loop '
         + 'method) rather than deriving it.',
       evidence: [{ table: 'Table 17.3', page: 425 }],
@@ -949,9 +1165,18 @@ function fibreAdvisory(fibers, ctx = {}) {
     const heavy = dry.vs_cotton != null && dry.vs_cotton >= 1.5;
     push({
       topic: 'drying load', severity: heavy ? 'moderate' : 'info',
+      // A percentage is not a dyehouse quantity. At a known GSM it becomes
+      // grams per square metre and kilograms per batch, which is what the
+      // dryer is actually sized against.
       claim: qualify(`After the hydro-extractor this fabric still holds ${W.value}% of its own `
         + `dry weight in water`
-        + (dry.vs_cotton != null ? ` — ${dry.vs_cotton}x what a cotton fabric holds` : '')
+        + (dry.vs_cotton != null && Math.abs(dry.vs_cotton - 1) >= 0.1
+            ? ` — ${dry.vs_cotton}x what a cotton fabric holds` : '')
+        + (cloth.gsm
+            ? `. At ${cloth.gsm} g/m² that is about ${Math.round(cloth.gsm * W.value / 100)} g of `
+              + `water per square metre, and ${round1(W.value)} kg of it in every 100 kg of `
+              + `dry cloth the dryer takes`
+            : '')
         + '.', W.from_pct, dry.unmeasured),
       mechanism: 'Everything else about moisture here is vapour; this is liquid water still in '
         + 'the cloth when it reaches the dryer, and it is what the dryer has to evaporate. '
@@ -1288,8 +1513,27 @@ function fibreAdvisory(fibers, ctx = {}) {
         ? 'Set the loom cover factor with the WET figure in mind, not the dry one, and expect the '
           + 'shrinkage to appear in the warp direction. If the wet cover factor crosses the '
           + 'jamming point, pre-shrink before cutting rather than after.'
-        : 'A knitted structure has the slack to absorb this, so it shows as relaxation shrinkage '
-          + 'rather than jamming. Take the dimensions after a wet relax, never off the machine.',
+        // The woven branch got a cover factor and the knitted branch got a
+        // shrug. A knit has the same arithmetic: tightness factor stands in for
+        // yarn diameter over loop length, so a yarn that gains d% on diameter
+        // leaves the fabric behaving as though it were TF x (1 + d) tight.
+        : (cloth.known && cloth.tf
+            ? `This fabric is TF ${cloth.tf}`
+              + (cloth.tf_band ? ` (${cloth.tf_band} for its family)` : '')
+              + `, and a ${jam.diameter_gain_pct}% gain on yarn diameter leaves it behaving wet `
+              + `like a TF ${round1(cloth.tf * (1 + jam.diameter_gain_pct / 100))} fabric`
+              + (cloth.tf_working_max
+                  ? ` against a working ceiling of ${cloth.tf_working_max} for this family — `
+                    + `so wet it is `
+                    + `${cloth.tf * (1 + jam.diameter_gain_pct / 100) > cloth.tf_working_max
+                        ? 'past the top of the band this family is knitted in, so the loops '
+                          + 'run out of room and the width has to come out of the length'
+                        : 'still inside the range and free to relax rather than jam'}`
+                  : '')
+              + '. Take the dimensions after a wet relax, never off the machine.'
+            : 'A knitted structure has the slack to absorb this, so it shows as relaxation '
+              + 'shrinkage rather than jamming. Take the dimensions after a wet relax, never '
+              + 'off the machine.'),
       evidence: [{ table: 'Table 11.1', page: 240 }],
       confidence: 'measured on fibres immersed in water; a yarn swells by roughly the same '
         + 'fraction because the packing does not change, but the fabric depends on construction',
