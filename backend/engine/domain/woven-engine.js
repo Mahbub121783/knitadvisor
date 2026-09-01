@@ -192,6 +192,11 @@ function calculateWoven(params = {}) {
         count_ne: warp.resultant_ne || null,
         has_elastane: !!parsedComp.has_elastane,
         elastane_pct: parsedComp.elastane_pct || null,
+        // Swelling has to be judged against THIS cloth's jamming point, not a
+        // plain-weave constant: the ceiling here is already widened for the
+        // weave's float, so a satin is correctly allowed to sit closer.
+        cover_factor: cover ? cover.cloth_cover : null,
+        cover_ceiling: cover ? cover.practical_ceiling : null,
       })
     : null;
 

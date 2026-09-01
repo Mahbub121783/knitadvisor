@@ -46,7 +46,8 @@ const {
   FIBER_PROPERTIES, blendMechanics, blendFriction, blendRecovery,
   fibreVariability, weakLinkSensitivity, moistureEconomics, yieldTension,
   blendDirectional, blendCyclic, blendThermal, heatCeiling, staticRisk,
-  dryingLoad, flexFatigue,
+  dryingLoad, flexFatigue, fibreAnisotropy, curveShape, molecularOrientation,
+  jointStrength, stretchResistance, humidityLeverage, wetJamming, wetToughness, mercerisingGain,
 } = require('./yarn-engine');
 
 const SOURCE = 'Morton & Hearle, Physical Properties of Textile Fibres, 4th edn (2008), '
@@ -99,9 +100,57 @@ const article = name => {
  * The distinction is real and worth keeping: over-qualifying is its own way of
  * being unhelpful, and a report where every sentence hedges is one nobody reads.
  */
+/**
+ * Where each finding belongs on the page.
+ *
+ * This module used to emit eight findings and a flat list sorted by severity
+ * was the right shape for it. It now emits up to twenty-five, and at that
+ * length a flat list stops being a report and becomes a wall: a reader who
+ * wants to know whether the fabric will dye evenly has to read the mechanics
+ * to find out.
+ *
+ * The grouping is by the QUESTION being answered, not by the chapter the
+ * measurement came from — a merchandiser thinks in "will it hold its shape",
+ * not in "chapter 17". Severity still orders within a group, so the worst
+ * thing in each area is the first thing read there.
+ *
+ * A topic missing from this map is not an error; it falls to the end under
+ * "Other", and the test below names any that land there so a new finding
+ * cannot quietly go homeless.
+ */
+const THEMES = [
+  ['Strength and how it fails', [
+    'blend strength', 'knit strength', 'energy at break', 'transverse weakness',
+    'fibre damage sensitivity', 'joins and knots', 'flex fatigue', 'pilling',
+  ]],
+  ['Shape, stretch and handle', [
+    'shape retention', 'wear growth', 'stretch resistance', 'handle',
+    'spirality', 'twist liveliness',
+  ]],
+  ['Water, dye and colour', [
+    'wet processing', 'wet strength', 'wet toughness', 'wet jamming', 'dye uptake',
+    'lustre', 'felting',
+  ]],
+  ['Heat and moisture', [
+    'heat setting', 'heat ageing', 'temperature ceiling', 'thermal comfort',
+    'warmth when damp', 'drying load',
+  ]],
+  ['On the floor', [
+    'knitting tension', 'yarn tension', 'static', 'humidification',
+    'yarn evenness', 'yarn costing', 'GSM measurement',
+  ]],
+];
+
+const THEME_OF = (() => {
+  const m = {};
+  THEMES.forEach(([name, topics], i) => topics.forEach(t => { m[t] = { name, i }; }));
+  return m;
+})();
+
 function finding(o) {
   if (!o.claim || !o.mechanism || !o.action || !o.evidence) return null;
-  return { scope: 'fabric', ...o };
+  const t = THEME_OF[o.topic] || { name: 'Other', i: THEMES.length };
+  return { scope: 'fabric', ...o, theme: t.name, theme_order: t.i };
 }
 
 /**
@@ -296,6 +345,15 @@ function fibreAdvisory(fibers, ctx = {}) {
   const stat = staticRisk(fibers, ctx.floor_rh);
   const dry = dryingLoad(fibers);
   const flex = flexFatigue(fibers);
+  const aniso = fibreAnisotropy(fibers);
+  const shape = curveShape(fibers);
+  const orient = molecularOrientation(fibers);
+  const joint = jointStrength(fibers);
+  const stretch = stretchResistance(fibers);
+  const humid = humidityLeverage(fibers);
+  const jam = wetJamming(fibers, ctx);
+  const tough = wetToughness(fibers);
+  const merc = mercerisingGain(fibers);
   const yld = ctx.count_ne ? yieldTension(fibers, ctx.count_ne) : null;
   const pill = pillingIndex(fibers);
   const hand = handleIndex(fibers);
@@ -321,7 +379,8 @@ function fibreAdvisory(fibers, ctx = {}) {
   // recorded so nothing disappears without trace. When there is no wet card —
   // a woven quality, or a calculation with no dyeing route — the advisory
   // carries them itself.
-  const DEFER_TO_WET_CARD = ['wet processing', 'felting'];
+  const DEFER_TO_WET_CARD = ['wet processing', 'wet strength', 'wet toughness',
+                             'felting'];
   const deferred = [];
   const push = f => {
     const v = finding(f);
@@ -455,7 +514,7 @@ function fibreAdvisory(fibers, ctx = {}) {
     }
     if (mech.wet.tenacity != null && mech.wet.tenacity >= 1.02) {
       push({
-        topic: 'wet processing', severity: 'info',
+        topic: 'wet strength', severity: 'info',
         claim: qualify(`This fabric is ${Math.round((mech.wet.tenacity - 1) * 100)}% STRONGER `
           + `wet than dry.`,
           mech.measured_pct, [...(mech.unmeasured || []), ...(mech.no_wet_data || [])]),
@@ -555,15 +614,20 @@ function fibreAdvisory(fibers, ctx = {}) {
   // Only where it is still an open choice. Repeating it on a fabric already
   // specified as mercerised is recitation, and recitation is the failure mode
   // this module exists to avoid.
-  if ((fibers.cotton || 0) >= 50 && ctx.mercerised !== true) {
+  if ((fibers.cotton || 0) >= 50 && ctx.mercerised !== true && merc) {
     push({
       topic: 'lustre', severity: 'info', scope: 'fibre',
-      claim: 'Mercerising under tension would raise this fabric\'s lustre by roughly two and a '
-        + 'half times.',
-      mechanism: 'Cotton lustre tracks one thing — how flat the fibre\'s cross-section is. '
-        + 'Adderley measured lustre 5.7 at an axis ratio of 3.07 and 13.9 at 1.47, and found no '
-        + 'correlation at all with fibre length, linear density or diameter. Caustic removes the '
-        + 'convolutions and rounds the section, and the lustre follows.',
+      claim: `Mercerising under tension would raise this fabric's lustre by about `
+        + `${round1(merc.multiple)} times.`,
+      mechanism: `Cotton lustre tracks one thing — how flat the fibre's cross-section is. `
+        + `Adderley measured lustre ${merc.lustre_flat} at an axis ratio of ${merc.from_ratio} `
+        + `and ${merc.lustre_round} at ${merc.to_ratio}, which is where the `
+        + `${round1(merc.multiple)} comes from, and found no correlation at all with fibre `
+        + 'length, linear density or diameter — so the premium paid for staple length buys '
+        + 'something other than shine. Caustic removes the convolutions and rounds the section: '
+        + `the same table has the three mercerised samples at ${merc.mercerised_ratio[0]}–`
+        + `${merc.mercerised_ratio[1]} against ${merc.raw_ratio[0]}–${merc.raw_ratio[1]} raw, `
+        + 'and the lustre follows the section.',
       action: 'Mercerise under maintained clip or chain tension. Without tension the fibre swells '
         + 'and relaxes back to a flat section, the caustic is spent and no lustre arrives — which '
         + 'is the usual cause of "mercerised but no shine".',
@@ -948,14 +1012,335 @@ function fibreAdvisory(fibers, ctx = {}) {
         + 'where the first fibres in it fail.',
       action: 'Where a garment has a permanent crease — a collar, a placket, a pleat — judge it '
         + 'on this rather than on tensile strength, and set a flex or edge-abrasion test '
-        + 'rather than a tensile one.',
+        + 'rather than a tensile one.'
+        + (flex.cv_pct != null
+            ? ` Design to about ${flex.design_cycles.toLocaleString('en-GB')} rather than the `
+              + `mean: the scatter is ${flex.cv_pct}% and the distribution is skewed, so the `
+              + `median is already lower at ${flex.median_cycles.toLocaleString('en-GB')} and a `
+              + 'useful fraction of fibres fail below that again.'
+            : ''),
       evidence: [{ table: 'Table 19.4', page: 534 }],
       confidence: 'measured on single fibres over a pin, so it ranks fibres rather than '
         + 'predicting a garment',
     });
   }
 
-  // ── What is NOT known ──────────────────────────────────────────────────
+  // -- 24. Torque the yarn is holding -------------------------------------
+  // Only where twist is actually stored. A woven fabric is stabilised by its
+  // own interlacing and a heavy interlock by its two needle beds; a light
+  // single jersey has nothing opposing the yarn and it will turn.
+  if (aniso && aniso.measured && aniso.worst_ratio >= 6) {
+    const free = structureFreedom(ctx);
+    const loose = free.value >= 0.75;
+    push({
+      topic: 'twist liveliness',
+      severity: loose && ctx.category !== 'woven' ? 'moderate' : 'info',
+      claim: qualify(`The ${aniso.governed_by} in this yarn resists a pull about `
+        + `${round1(aniso.worst_ratio)} times harder than it resists a twist, so the twist put `
+        + `in at spinning is stored as torque rather than absorbed.`, aniso.from_pct,
+        aniso.unmeasured.concat(aniso.no_shear_modulus)),
+      mechanism: 'Table 17.2 measures the same fibre twice: E, the stiffness in tension, and G, '
+        + 'the stiffness in shear. In a material with no grain those are locked together at '
+        + 'E/G = 2(1+v), about 2.6 — so everything above 2.6 is a direct measure of molecules '
+        + `lying along the fibre axis. This blend runs at ${round1(aniso.worst_ratio)}, `
+        + `${round1(aniso.excess)} times isotropic. Polypropylene sits at 3.2 and is barely `
+        + 'anisotropic; nylon reaches 11, and one nylon in the table has a shear modulus of '
+        + '0.033 kN/mm² — twenty-five times below wool. A fibre that resists being pulled and '
+        + 'not being twisted gives the twist back the moment the yarn is slack.'
+        + (aniso.worst_ratio_span
+            ? ` The table prints a range for ${aniso.governed_by}, and across it the ratio runs `
+              + `${aniso.worst_ratio_span[0]} to ${aniso.worst_ratio_span[1]} — those are `
+              + 'different fibres sold under one name, and the supply matters.'
+            : ''),
+      action: loose && ctx.category !== 'woven'
+        ? 'Expect snarling at the creel and liveliness in the loop. Steam-set or vacuum-set the '
+          + 'yarn before knitting rather than relying on relaxation afterwards, and treat this '
+          + 'as a separate cause of spirality from twist multiplier alone — the twist level can '
+          + 'be right and the fibre still lively.'
+        : 'The structure holds the torque here, so it will not show as spirality — but it is '
+          + 'still there, and it will show if the same yarn goes into a lighter single jersey.',
+      evidence: [{ table: 'Table 17.2', page: 421 }],
+      confidence: 'measured on single fibres; the yarn-level torque also depends on twist '
+        + 'multiplier and setting, which this does not know',
+    });
+  }
+
+  // -- 25. Weak across, strong along -------------------------------------
+  // The first version of this claimed FIBRILLATION and fired on polyester,
+  // which does not fibrillate. Both numerical conditions were satisfied and the
+  // conclusion was still wrong: whether transverse weakness comes out as
+  // lengthwise splitting depends on whether the fibre is built from
+  // microfibrils, and Table 17.2 does not measure that. So the finding claims
+  // the weakness, which is measured, and names the limit rather than crossing it.
+  if (aniso && aniso.measured && aniso.skin_core.length && aniso.worst_ratio >= 6) {
+    push({
+      topic: 'transverse weakness',
+      severity: 'info',
+      claim: `${aniso.skin_core.join(' and ')} here ${aniso.skin_core.length > 1 ? 'are' : 'is'} `
+        + `about ${round1(aniso.worst_ratio)} times weaker across the axis than along it, with a `
+        + 'skin stiffer than the core — so rubbing damage starts as a lengthwise split at the '
+        + 'surface rather than as material worn away.',
+      mechanism: 'Two measurements in Table 17.2 line up. E/G says the chains run along the axis '
+        + 'and are held across it only by weak secondary forces. The bending modulus against the '
+        + 'tensile modulus says where the stiffness sits: bending is carried by the OUTSIDE of '
+        + 'the fibre, so a bending modulus above the tensile one means a skin stiffer than the '
+        + 'core — viscose reads 10 GPa in bending against 8.7 in tension. A split starts at that '
+        + 'skin and runs down the axis, and wet is worse because water has already loosened what '
+        + 'holds the fibre across. WHERE THIS STOPS: whether the split becomes visible '
+        + 'fibrillation depends on the fibre being built from microfibrils, which is a '
+        + 'morphology this table does not measure. The cellulosics do it; melt-spun polyester '
+        + 'and nylon satisfy the same two numbers and craze instead. Do not read this as a '
+        + 'fibrillation prediction — read it as the reason abrasion here is a surface-splitting '
+        + 'failure and not a surface-wearing one.',
+      action: 'Test wet rub and wet abrasion rather than dry, and keep mechanical action in wet '
+        + 'processing low — long soft-flow cycles at high liquor movement are where it shows. On '
+        + 'a cellulosic, expect frosting on the crown of the yarn; on a melt-spun fibre, expect '
+        + 'gloss loss instead of splitting.',
+      evidence: [{ table: 'Table 17.2', page: 421 }],
+      confidence: 'the transverse weakness is measured; which visible failure it becomes is not '
+        + 'in this table and is stated as a limit rather than a prediction',
+    });
+  }
+
+  // -- 26. The shape of the curve, not its end ----------------------------
+  if (shape) {
+    const tough = shape.work_factor >= 0.6;
+    const brittle = shape.work_factor < 0.48;
+    push({
+      topic: 'energy at break', severity: 'info',
+      claim: qualify(`This blend's stress-strain curve has a work factor of `
+        + `${shape.work_factor} against 0.5 for a straight line, so it ${shape.band}.`,
+        shape.from_pct, shape.unmeasured),
+      mechanism: 'Tenacity says where the curve stops and extension says how far along it got; '
+        + 'neither says what the fabric does in between, and that is what a wearer feels. Table '
+        + '13.1 prints work of rupture divided by (breaking load x breaking extension), which is '
+        + 'exactly 0.5 for a straight line to break. Cotton reads 0.46 and wool 0.64 — and those '
+        + 'are the same two fibres whose yield points this engine already knows, cotton at 1% '
+        + 'strain and wool at 4%, wool then carrying load for another forty per cent. The work '
+        + 'factor and the yield point are one fact measured twice, which is why they agree.',
+      action: tough
+        ? 'This fabric absorbs a snatch load rather than transmitting it: seams and trims will '
+          + 'take the shock before the ground fabric does, so specify seam strength against the '
+          + 'fabric rather than assuming the fabric is the weak point.'
+        : brittle
+          ? 'Most of the work is done close to break, so the fabric gives little warning: it '
+            + 'feels firm right up to failure. Do not read a firm handle as a strong fabric, and '
+            + 'test bursting strength rather than inferring it from stiffness.'
+          : 'The curve is close to linear, so stiffness and strength scale together here and a '
+            + 'handle judgement is a fair proxy for strength.',
+      evidence: [{ table: 'Table 13.1', page: 290 }],
+      confidence: 'measured on single fibres; a yarn adds twist and a fabric adds structure, '
+        + 'both of which flatten the curve further',
+    });
+  }
+
+  // -- 27. How a dye gets in ----------------------------------------------
+  if (orient) {
+    const hi = orient.most_oriented;
+    push({
+      topic: 'dye uptake',
+      severity: orient.dye_rate_split ? 'moderate' : 'info',
+      claim: qualify(orient.dye_rate_split
+        ? `The fibres here differ in molecular orientation by ${orient.spread} in birefringence `
+          + `(${hi.fibre} ${hi.birefringence} against ${orient.least_oriented.fibre} `
+          + `${orient.least_oriented.birefringence}), so they will not take up dye at the same `
+          + 'rate and one bath will give two shades.'
+        : `This blend's molecular orientation is ${hi.band} at ${orient.blend_birefringence} `
+          + 'birefringence, which sets how hard a dye has to work to get in.',
+        orient.from_pct, orient.unmeasured),
+      mechanism: 'Table 24.3 measures the refractive index twice — light polarised along the '
+        + 'fibre and across it — and the difference is a direct measure of how far the molecules '
+        + 'lie along the axis. Orientation is the same thing as a tight ordered structure, and a '
+        + 'dye molecule has to push into one. The single column explains the whole dyeing '
+        + 'hierarchy without a dyeing table: acrylic reads 0.000 and wool 0.010, and both take '
+        + 'dye at the boil; cotton reads 0.046 and needs alkali and time; polyester reads 0.188, '
+        + 'three times anything else, and takes no water-soluble dye at all. The cellulose pair '
+        + 'is the practical one — viscose is 0.020 against cotton 0.046, less than half as '
+        + 'oriented, so it takes the same reactive dye faster and darker in the same bath.',
+      action: orient.dye_rate_split
+        ? 'Do not expect a solid shade from one bath. Either dye to a deliberate two-tone, or '
+          + 'compensate: a slower dye, a longer migration hold, or separate dye classes chosen '
+          + 'so the less-oriented fibre is not the one carrying the depth. Check the shade on '
+          + 'BOTH fibres in the lab dip, not on the blend average.'
+        : hi.birefringence >= 0.10
+          ? 'Disperse dye at 130 C or with a carrier — nothing water-soluble will enter this '
+            + 'structure. Budget the energy for it rather than the cotton cycle.'
+          : 'The structure is open enough for ordinary exhaust dyeing; orientation is not the '
+            + 'constraint on shade depth here.',
+      evidence: [{ table: 'Table 24.3', page: 702 }],
+      confidence: 'birefringence measures orientation, and orientation is one of the things that '
+        + 'sets dye rate — fibre fineness and finish also matter and are not in this figure',
+    });
+  }
+
+  // -- 28. Two kinds of failure at a join ---------------------------------
+  if (joint && joint.bend_sensitive.length) {
+    const b = joint.bend_sensitive[0];
+    push({
+      topic: 'joins and knots', severity: 'info',
+      claim: `${b.fibre} keeps ${b.knot}% of its strength in a knot but only ${b.loop}% in a `
+        + 'loop, so what it cannot take is being bent round a small radius, not being gripped.',
+      mechanism: 'Table 17.3 tests the same fibre two ways and the pair says more than either '
+        + 'alone. A loop is a sharp bend plus tension; a knot is a bend plus tension plus '
+        + `transverse pressure — strictly the harder test. Where the knot nevertheless holds `
+        + `better, as it does here by ${b.gap} points, the fibre is failing on bend radius. `
+        + 'Those two failures look identical in a broken package and have opposite fixes.',
+      action: 'If yarn is breaking at the knotter or the splicer, open the bend radius rather '
+        + 'than dropping tension — dropping tension will not help. The same reasoning applies at '
+        + 'the needle: a small loop radius is the same test.',
+      evidence: [{ table: 'Table 17.3', page: 425 }],
+      confidence: 'measured on single fibres by Berry and by Bohringer and Schieber; the '
+        + 'workers do not always agree, and the book prints both',
+    });
+  }
+
+  // -- 29. How hard the fabric fights being stretched ---------------------
+  if (stretch) {
+    const hard = stretch.work_hardening.filter(h => h.rise_pct >= 20);
+    push({
+      topic: 'stretch resistance', severity: 'info',
+      claim: qualify(`Holding this fabric at 2% extension takes about `
+        + `${stretch.stress_for_2pct_mn_tex} mN/tex — ${stretch.band}.`,
+        stretch.from_pct, stretch.unmeasured),
+      mechanism: 'The growth figures this report already gives are the permanent set left after '
+        + 'cycling, and on their own they are unreadable, because growth is measured at whatever '
+        + 'stress the fibre needed to reach 2% in the first place. Table 16.1 prints that stress '
+        + 'and it spans a factor of ten: wool 25 mN/tex, viscose and nylon 51, cotton 68, silk '
+        + '108, flax 263. The pair that settles it is viscose and nylon — identical at 51 mN/tex, '
+        + 'and they grow 1.79% and 0.28%. Equal stiffness, six times the permanent set, so how a '
+        + 'fabric feels and how it recovers are independent and a handle judgement cannot stand '
+        + 'in for a recovery test.'
+        + (hard.length
+            ? ` And the stress needed CLIMBS with cycling — ${hard.map(h => h.fibre + ' by '
+              + round1(h.rise_pct) + '% between cycle 10 and cycle 1000').join(', ')} — so the `
+              + 'fabric is being work-hardened as it is worn.'
+            : ''),
+      action: 'Use this as the take-down tension the fabric will fight on the machine, and for a '
+        + 'stretch garment as the recovery power the wearer feels. Where it is low, the fabric '
+        + 'moves easily and will also sag easily; where it is high, expect it to resist being '
+        + 'laid flat and to hold a crease from the roll.',
+      evidence: [{ table: 'Table 16.1', page: 369 }],
+      confidence: 'measured on single fibres at 2% imposed extension; a knitted loop reaches far '
+        + 'higher local strains than that',
+    });
+  }
+
+  // -- 30. What humidifying actually buys ---------------------------------
+  // Only where there IS a static problem to spend money on. The threshold
+  // finding answers whether there is one; this answers what fixing it costs,
+  // and printing the cost of a problem nobody has is noise.
+  if (humid && stat && stat.at_risk === true) {
+    push({
+      topic: 'humidification', severity: 'moderate',
+      claim: qualify(`On this blend one percentage point of extra regain takes the resistance `
+        + `down about ${humid.fold_per_point}-fold, so ${humid.band}.`,
+        humid.from_pct, humid.unmeasured),
+      mechanism: 'Resistance against moisture is a straight line on log-log axes, and Table 22.1 '
+        + 'prints its SLOPE — which is not the same for every fibre, and that is the whole reason '
+        + 'the column exists. Flax runs 10.6 and silk 17.6, so the same humidifier buys nearly '
+        + 'twice as much on a protein fibre as on a bast one. The other column separates two '
+        + 'things that are otherwise confounded: at a FIXED 10% moisture, cotton reads 5.3 and '
+        + 'wool 10.4 — five decades apart at the same water content. Wool is not merely wetter '
+        + 'than cotton, it conducts far worse at equal wetness, and no amount of humidifying '
+        + 'closes that gap.'
+        + (humid.intrinsic.length
+            ? ' Here: ' + humid.intrinsic.map(i => i.fibre + ' ' +
+                i.log_resistance_at_10pct_moisture + ' log ohm').join(', ') + '.'
+            : ''),
+      action: humid.slope >= 15
+        ? 'Humidification is the right lever on this blend — raising the floor is cheaper than '
+          + 'topical antistat and it does not wash out. Size it from this slope rather than from '
+          + 'a rule of thumb.'
+        : 'Humidification alone will move this less than expected. Plan on a spin finish or '
+          + 'topical antistat as well, and put the humidity budget where the slope is steepest.',
+      evidence: [{ table: 'Table 22.1', page: 647 }],
+      confidence: 'the fit is over a wide moisture range and the slope is taken as constant '
+        + 'near 8% regain, which is where it is being used',
+    });
+  }
+
+  // -- 31. Nowhere left to swell ------------------------------------------
+  if (jam && jam.diameter_gain_pct >= 10) {
+    const woven = ctx.category === 'woven';
+    push({
+      topic: 'wet jamming',
+      severity: woven && jam.jams_when_wet === true ? 'moderate' : 'info',
+      claim: qualify(`In water the fibres here gain about ${jam.diameter_gain_pct}% on their `
+        + `DIAMETER (${jam.worst.fibre} up to ${Array.isArray(jam.worst.span) ? jam.worst.span[1] : jam.worst.span}%)`
+        + (jam.cover_factor_wet != null
+            ? `, which takes the cover factor from ${jam.cover_factor_dry} to about `
+              + `${jam.cover_factor_wet} against a jamming point of ${jam.cover_ceiling} for `
+              + `this weave — so wet it ${jam.jams_when_wet ? 'jams' : 'still has room'}`
+            : '')
+        + '.', jam.from_pct, jam.unmeasured),
+      mechanism: 'Area swelling is the right figure for how much water a fibre takes into '
+        + 'itself; diameter swelling is the figure for what happens to everything packed around '
+        + 'it, and Table 11.1 prints both. Nylon gains 2% on diameter and viscose up to 52%. In '
+        + 'a slack knitted structure that simply pushes the loops apart and the fabric relaxes. '
+        + 'In a woven at a high cover factor there is nowhere for it to go — the yarns jam '
+        + 'against each other, the cloth cannot take up any more in width, and the strain goes '
+        + 'into crimp and out as length. That is the mechanism of wet shrinkage: not the fibre '
+        + 'getting shorter, which it barely does, but the fabric running out of room sideways. '
+        + 'The jamming point belongs to the cloth, not to a constant: a satin intersects less '
+        + 'than a plain weave and can be set closer before it runs out of room, so the same '
+        + 'swelling is a problem in one construction and not in the other.',
+      action: woven
+        ? 'Set the loom cover factor with the WET figure in mind, not the dry one, and expect the '
+          + 'shrinkage to appear in the warp direction. If the wet cover factor crosses the '
+          + 'jamming point, pre-shrink before cutting rather than after.'
+        : 'A knitted structure has the slack to absorb this, so it shows as relaxation shrinkage '
+          + 'rather than jamming. Take the dimensions after a wet relax, never off the machine.',
+      evidence: [{ table: 'Table 11.1', page: 240 }],
+      confidence: 'measured on fibres immersed in water; a yarn swells by roughly the same '
+        + 'fraction because the packing does not change, but the fabric depends on construction',
+    });
+  }
+
+  // -- 32. What water does to the energy, not the strength ----------------
+  // The wet card reports the process side of Table 13.7, so where it is on the
+  // page this is handed over rather than printed twice.
+  const disagrees = tough && tough.strength_disagrees.length ? tough.strength_disagrees : [];
+  if (tough && ctx.wet_processed !== false &&
+      (tough.wet_ratio <= 0.9 || tough.reverses.length || disagrees.length)) {
+    const drop = Math.round((1 - tough.wet_ratio) * 100);
+    push({
+      topic: 'wet toughness',
+      severity: tough.wet_ratio <= 0.7 ? 'high'
+              : (tough.wet_ratio <= 0.9 || tough.reverses.length) ? 'moderate' : 'info',
+      claim: qualify(tough.wet_ratio <= 0.9
+        ? `Wet, this fabric absorbs about ${drop}% less energy before it breaks than it does dry.`
+        : disagrees.length
+          ? `This report also says this fabric is STRONGER wet, and both are true: `
+            + `${disagrees.map(d => d.fibre + ' gains '
+                + Math.round((d.strength - 1) * 100) + '% in strength and still loses '
+                + Math.round((1 - d.toughness) * 100) + '% of its toughness').join('; ')}.`
+          : `Wet at 20 C this fabric toughens, and then loses it again in a hot bath.`,
+        tough.from_pct, tough.unmeasured)
+        + (tough.reverses.length
+            ? ` ${tough.reverses.map(r => r.fibre + ' reverses outright — ' + r.at_20c
+                + ' of its dry toughness wet at 20 C, ' + r.at_95c + ' at 95 C').join('; ')}.`
+            : ''),
+      mechanism: 'Three columns of Table 13.7 were already driving the wet advice here: what '
+        + 'water does to strength, to extension and to stiffness. The fourth is the one that '
+        + 'decides whether a wet fabric survives being handled, because a fabric fails when it '
+        + 'runs out of ENERGY to absorb, not when it runs out of any one of those. Cotton is the '
+        + 'case that proves the column is needed: cotton gets 11% STRONGER wet and still loses 8% '
+        + 'of its toughness, because its stiffness collapses to a third at the same moment. Read '
+        + 'the strength column alone and a wet cotton fabric looks tougher than a dry one. Wool '
+        + 'loses a third and viscose 31%. Silk is the trap — 31% tougher wet at 20 C and a third '
+        + 'LESS tough once the bath reaches 95 C, so a route judged at room temperature gets silk '
+        + 'exactly backwards.',
+      action: 'Set the mechanical severity of the wet route from this rather than from wet '
+        + 'strength: it is the number that says how much a batch, a winch or a squeeze roller can '
+        + 'do to the cloth before it damages it. Where the fabric reverses between 20 C and 95 C, '
+        + 'judge the hot stage on its own figure and not on a cold trial.',
+      evidence: [{ table: 'Table 13.7', page: 312 }],
+      confidence: 'measured on single fibres; a fabric also has its structure to absorb energy, '
+        + 'so the RATIO carries over better than the absolute level',
+    });
+  }
+
+  // -- What is NOT known --------------------------------------------------
   const gaps = [];
   if (silentOn.length) {
     gaps.push(`${silentOn.join(', ')} — the book carries no measurements for `
@@ -975,7 +1360,10 @@ function fibreAdvisory(fibers, ctx = {}) {
   }
 
   const order = { severe: 0, high: 1, moderate: 2, info: 3 };
-  findings.sort((a, b) => (order[a.severity] ?? 9) - (order[b.severity] ?? 9));
+  // Theme first, then severity within it: the worst thing in each area is the
+  // first thing read there.
+  findings.sort((a, b) => (a.theme_order - b.theme_order) ||
+    ((order[a.severity] ?? 9) - (order[b.severity] ?? 9)));
 
   return {
     ok: true,
@@ -995,6 +1383,14 @@ function fibreAdvisory(fibers, ctx = {}) {
       static: stat,
       drying: dry,
       flex_fatigue: flex,
+      anisotropy: aniso,
+      curve_shape: shape,
+      orientation: orient,
+      joints: joint,
+      stretch_resistance: stretch,
+      humidity_leverage: humid,
+      wet_jamming: jam,
+      wet_toughness: tough,
       yield_tension: yld,
       pilling: pill,
       handle: hand,

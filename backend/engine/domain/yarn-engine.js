@@ -229,10 +229,10 @@ const FIBER_PROPERTIES = {
                           // share the load, and the fibre gains 11%. It is why
                           // cotton survives rope dyeing at tensions that would
                           // damage a rayon.
-                          wet: { ten: 1.11, ext: 1.11, mod: 0.33 },
-                          hot_wet: { ten: 1.00, ext: 1.00, mod: 1.00 } },
+                          wet: { ten: 1.11, ext: 1.11, mod: 0.33 , wor: 0.92 },
+                          hot_wet: { ten: 1.00, ext: 1.00, mod: 1.00 , wor: 1.0 } },
                swelling: { area: [21, 42], axial: null, volume: null,
-                           page: 240, table: 'Table 11.1' },
+                           page: 240, table: 'Table 11.1' , diameter: [7, 23]},
                // The fibres of one cotton sample differ from each other more
                // than any other property in this file differs between fibres.
                variability: { fineness: 24, breaking_load: 46, tenacity: 43,
@@ -259,20 +259,53 @@ const FIBER_PROPERTIES = {
                directional: { flexural: 0.53, torsional: 0.16,
                               loop_strength_pct: 91,
                               page: 421, table: 'Table 17.2' },
-               cyclic: { growth_10: 1.98, growth_1000: null, page: 369, table: 'Table 16.1' },
+               cyclic: { growth_10: 1.98, growth_1000: null, page: 369, table: 'Table 16.1' , stress_10: 68, stress_1000: null},
                thermal: { expansion_1e4_per_c: 4, conductivity_mw_mk: 71,
                           page: 176, table: 'Tables 6.5 and 6.2' },
-               heat: { melting_c: null, retained_130c_80d: 10, page: 479, table: 'Table 18.3' },
-               static: { rh_threshold: 30, log_resistance_65: 6.8, page: 647, table: 'Table 22.1' },
-               moisture_energy: { heat_40_70_kj_kg: 84,  retained_spun_pct: 48, retained_sucked_pct: 52,  flex_life_cycles: null, page: 200, table: 'Tables 8.5 and 10.1' },},
+               heat: { melting_c: null, retained_130c_80d: 10, page: 479, table: 'Table 18.3' , retained_100c_80d: 68},
+               static: { rh_threshold: 30, log_resistance_65: 6.8, page: 647, table: 'Table 22.1' , log_at_10pct: 5.3, moisture_slope: 11.4},
+               moisture_energy: { heat_40_70_kj_kg: 84,  retained_spun_pct: 48, retained_sucked_pct: 52,  flex_life_cycles: null, page: 200, table: 'Tables 8.5 and 10.1' },
+               // Table 17.2 p.421. E is the axial stiffness, G the resistance to TWIST.
+               // Their ratio is the fibre's anisotropy: an isotropic solid has
+               // E/G = 2(1+v), about 2.6, and everything above that is molecules
+               // lying along the axis. No shear modulus is printed for cotton, so
+               // no ratio is computed for it - the absence is the honest answer.
+               moduli: { tensile_gpa: 7.7, shear_gpa: null, bending_gpa: null, page: 421, table: 'Table 17.2' },
+               // Table 13.1 p.290. Work factor = work of rupture / (breaking load x
+               // breaking extension). Exactly 0.5 is a straight stress-strain line.
+               // Below it the curve is concave - the load builds late, so the fabric
+               // feels firm and gives almost no warning before it goes.
+               curve: { work_factor: 0.46, grade: 'Uppers', page: 290, table: 'Table 13.1' },
+               // Table 24.3 p.702. Birefringence = n_parallel - n_perpendicular, and it
+               // measures how far the molecules lie along the fibre axis. It is NOT
+               // lustre (see fabric-physics.js) - it is orientation, and orientation
+               // is what decides how easily a dye can get in.
+               optical: { n_parallel: 1.578, n_perpendicular: 1.532, birefringence: 0.046, page: 702, table: 'Table 24.3' },
+               // Table 24.5 p.706, Adderley. Twelve cottons and three mercerised ones,
+               // measured for how FLAT the fibre is (the axis ratio of the ellipse),
+               // how often it twists (convolutions), and how much it shines.
+               //
+               // Adderley's finding is the negative one: lustre correlates with the
+               // axis ratio and with NOTHING else — not length, not linear density,
+               // not diameter. So a long fine cotton is not a lustrous one, and the
+               // premium paid for staple length buys something other than shine.
+               //
+               // Mercerising is visible in the same table: the three mercerised
+               // samples run 1.47 to 1.64 against 1.91 to 3.07 raw. Caustic rounds
+               // the section, and the lustre follows it.
+               cross_section: { ellipticity: [1.91, 3.07], ellipticity_mercerised: [1.47, 1.64],
+                                convolutions_per_cm: [21.1, 32.6],
+                                lustre_at_max_flat: { ratio: 3.07, lustre: 5.7 },
+                                lustre_at_min_flat: { ratio: 1.47, lustre: 13.9 },
+                                page: 706, table: 'Table 24.5' },},
   polyester: { density: 1.39, regain: 0.4,  rkm: 1.25,     // was 1.38 — Table 5.1 gives 1.39
                tensile: { tenacity: 0.47, extension: 15.0, modulus: 10.6, work_of_rupture: 53,
                           grade: 'Terylene, medium-tenacity', page: 292, table: 'Table 13.2',
                           // Water does nothing to it. Heat does: at 95 C wet it
                           // keeps 42% of its modulus and stretches 40% further,
                           // which is the whole reason polyester is heat-set.
-                          wet: { ten: 1.00, ext: 1.00, mod: 1.00 },
-                          hot_wet: { ten: 0.72, ext: 1.40, mod: 0.42 } },
+                          wet: { ten: 1.00, ext: 1.00, mod: 1.00 , wor: 1.0 },
+                          hot_wet: { ten: 0.72, ext: 1.40, mod: 0.42 , wor: 0.85 } },
                // The highest parallel-fibre friction in Table 25.6(a). Good
                // cohesion in a spun yarn; also the reason a polyester-rich
                // blend resists drafting and pills once a fibre end works free.
@@ -287,9 +320,14 @@ const FIBER_PROPERTIES = {
                // NEGATIVE, and above 80 C. Heated, polyester gets shorter.
                thermal: { expansion_1e4_per_c: -10, conductivity_mw_mk: null,
                           note: 'above 80 C', page: 176, table: 'Table 6.5' },
-               heat: { melting_c: 260, retained_130c_80d: 75, page: 463, table: 'Tables 18.1 and 18.3' },
+               heat: { melting_c: 260, retained_130c_80d: 75, page: 463, table: 'Tables 18.1 and 18.3' , retained_100c_80d: 96},
                static: { rh_threshold: 85, log_resistance_65: 8.0, page: 647, table: 'Table 22.1' },
-               moisture_energy: { heat_40_70_kj_kg: 4,   retained_spun_pct: null, retained_sucked_pct: null, flex_life_cycles: 194616, page: 200, table: 'Tables 8.5 and 19.4' },},
+               moisture_energy: { heat_40_70_kj_kg: 4,   retained_spun_pct: null, retained_sucked_pct: null, flex_life_cycles: 194616, page: 200, table: 'Tables 8.5 and 19.4' , flex_median_cycles: 187825, flex_cv_pct: 44, flex_strain_pct: 12.4, flex_stress_mn_tex: 75, flex_dtex: 13.3, flex_page: 534},
+               moduli: { tensile_gpa: 6.2, shear_gpa: 0.85, bending_gpa: 7.7, page: 421, table: 'Table 17.2' },
+               // The highest birefringence in the book by a factor of three. Melt-spun
+               // and drawn hard, so the chains are locked along the axis - which is
+               // the whole reason polyester takes no water-soluble dye at all.
+               optical: { n_parallel: 1.725, n_perpendicular: 1.537, birefringence: 0.188, page: 702, table: 'Table 24.3' },},
   viscose:   { density: 1.49, regain: 13.0, rkm: 0.60,     // was 1.52, which is the DRY figure
                tensile: { tenacity: 0.21, extension: 15.7, modulus: 6.5, work_of_rupture: 18.8,
                           grade: 'Fibro, staple', page: 290, table: 'Table 13.1',
@@ -299,13 +337,13 @@ const FIBER_PROPERTIES = {
                           // different fibre in the dyehouse from the one that
                           // was knitted. Under any tension at all it extends,
                           // and it sets in whatever shape it dried in.
-                          wet: { ten: 0.50, ext: 1.58, mod: 0.03 },
-                          hot_wet: { ten: 0.90, ext: 1.03, mod: 0.80 } },
+                          wet: { ten: 0.50, ext: 1.58, mod: 0.03 , wor: 0.69 },
+                          hot_wet: { ten: 0.90, ext: 1.03, mod: 0.80 , wor: 0.89 } },
                // It roughly doubles in cross-section. Against 3.7-4.8% along
                // its length: the anisotropy is what a knit shows as width
                // movement while the length broadly holds.
                swelling: { area: [50, 114], axial: [3.7, 4.8], volume: [74, 127],
-                           page: 240, table: 'Table 11.1' },
+                           page: 240, table: 'Table 11.1' , diameter: [25, 52]},
                // The highest guide friction of any yarn in Table 25.6(b), on
                // top of the lowest wet modulus in Table 13.7. Viscose is the
                // fibre that is hardest to run at steady tension and least able
@@ -323,18 +361,28 @@ const FIBER_PROPERTIES = {
                yield_point: { stress_mn_tex: 39,  strain_pct: 1, page: 344, table: 'Table 15.1' },
                directional: { flexural: 0.35, torsional: [0.058, 0.083],
                               loop_strength_pct: 58,
-                              page: 421, table: 'Table 17.2' },
-               cyclic: { growth_10: 1.79, growth_1000: null, page: 369, table: 'Table 16.1' },
-               heat: { melting_c: null, retained_130c_80d: 32, page: 479, table: 'Table 18.3' },
-               static: { rh_threshold: 30, log_resistance_65: 7.0, page: 647, table: 'Table 22.1' },
-               moisture_energy: { heat_40_70_kj_kg: 168, retained_spun_pct: 103, retained_sucked_pct: 106, flex_life_cycles: null, page: 200, table: 'Tables 8.5 and 10.1' },},
+                              page: 421, table: 'Table 17.2' , knot_strength_pct: 90, knot_page: 425, shape_factor: 0.74, shape_page: 416},
+               cyclic: { growth_10: 1.79, growth_1000: null, page: 369, table: 'Table 16.1' , stress_10: 51, stress_1000: 80},
+               heat: { melting_c: null, retained_130c_80d: 32, page: 479, table: 'Table 18.3' , retained_100c_80d: 62},
+               static: { rh_threshold: 30, log_resistance_65: 7.0, page: 647, table: 'Table 22.1' , log_at_10pct: 8.0, moisture_slope: 11.6},
+               moisture_energy: { heat_40_70_kj_kg: 168, retained_spun_pct: 103, retained_sucked_pct: 106, flex_life_cycles: null, page: 200, table: 'Tables 8.5 and 10.1' },
+               // Bending modulus 10 GPa against a tensile modulus of 8.7: the skin is
+               // stiffer than the core, because bending is carried by the outside.
+               // That skin-core structure is where a regenerated cellulose splits.
+               moduli: { tensile_gpa: 8.7, shear_gpa: [0.84, 1.2], bending_gpa: 10, page: 421, table: 'Table 17.2' },
+               curve: { work_factor: 0.59, grade: 'Fibro, staple', page: 290, table: 'Table 13.1' },
+               // Lower orientation than cotton (0.020 against 0.046) even though both
+               // are cellulose. Regenerating it loses the orientation the plant
+               // built, and that is why viscose dyes faster and deeper than cotton
+               // in the same bath.
+               optical: { n_parallel: 1.539, n_perpendicular: 1.519, birefringence: 0.020, page: 702, table: 'Table 24.3' },},
   nylon:     { density: 1.14, regain: 4.2,  rkm: 1.40,     // Table 5.1 p.165
                tensile: { tenacity: 0.48, extension: 20.0, modulus: 3.0, work_of_rupture: 63,
                           grade: 'nylon 6.6, medium-tenacity', page: 292, table: 'Table 13.2',
-                          wet: { ten: 0.80, ext: 1.05, mod: 0.82 },
-                          hot_wet: { ten: 0.79, ext: 1.76, mod: 0.21 } },
+                          wet: { ten: 0.80, ext: 1.05, mod: 0.82 , wor: 0.87 },
+                          hot_wet: { ten: 0.79, ext: 1.76, mod: 0.21 , wor: 1.19 } },
                swelling: { area: [1.6, 3.2], axial: [2.7, 2.9], volume: [8.1, 11.0],
-                           page: 240, table: 'Table 11.1' },
+                           page: 240, table: 'Table 11.1' , diameter: [1.9, 2.6]},
                variability: { fineness: 9, breaking_load: 8, tenacity: 7,
                               extension: 18, page: 335, table: 'Table 14.6' },
                weak_link: { cm1: 0.47, mm1: 0.50, mm01: 0.54,
@@ -350,23 +398,29 @@ const FIBER_PROPERTIES = {
                yield_point: { stress_mn_tex: 127, strain_pct: 8, page: 344, table: 'Table 15.1' },
                directional: { flexural: [0.15, 0.22], torsional: [0.041, 0.060],
                               loop_strength_pct: 82.5,
-                              page: 421, table: 'Table 17.2' },
-               cyclic: { growth_10: 0.28, growth_1000: 1.03, page: 369, table: 'Table 16.1' },
+                              page: 421, table: 'Table 17.2' , knot_strength_pct: [88, 98], knot_page: 425, shape_factor: 0.91, shape_page: 416},
+               cyclic: { growth_10: 0.28, growth_1000: 1.03, page: 369, table: 'Table 16.1' , stress_10: 51, stress_1000: 63},
                thermal: { expansion_1e4_per_c: -3, conductivity_mw_mk: null,
                           page: 176, table: 'Table 6.5' },
-               heat: { melting_c: 260, retained_130c_80d: 13, page: 463, table: 'Tables 18.1 and 18.3' },
+               heat: { melting_c: 260, retained_130c_80d: 13, page: 463, table: 'Tables 18.1 and 18.3' , retained_100c_80d: 43},
                // The book gives nylon a RANGE here, not a value — 10^9 to
                // 10^12 is three orders of magnitude, which is the honest state
                // of a measurement made across several nylons.
                static: { rh_threshold: 85, log_resistance_65: [9, 12], page: 647, table: 'Table 22.1' },
-               moisture_energy: { heat_40_70_kj_kg: 42,  retained_spun_pct: null, retained_sucked_pct: null, flex_life_cycles: 104807, page: 200, table: 'Tables 8.5 and 19.4' },},
+               moisture_energy: { heat_40_70_kj_kg: 42,  retained_spun_pct: null, retained_sucked_pct: null, flex_life_cycles: 104807, page: 200, table: 'Tables 8.5 and 19.4' , flex_median_cycles: 98050, flex_cv_pct: 34, flex_strain_pct: 13.5, flex_stress_mn_tex: 73, flex_dtex: 13.6, flex_page: 534},
+               // The lowest shear modulus in the book - one type is 0.033 kN/mm2,
+               // twenty-five times below wool. Nylon resists being pulled and
+               // barely resists being twisted, which is why a nylon yarn snarls.
+               moduli: { tensile_gpa: [1.9, 3.8], shear_gpa: [0.033, 0.48], bending_gpa: [2.5, 3.6], page: 421, table: 'Table 17.2' },
+               curve: { work_factor: 0.61, grade: 'nylon, 1945 survey', page: 290, table: 'Table 13.1' },
+               optical: { n_parallel: 1.582, n_perpendicular: 1.519, birefringence: 0.063, page: 702, table: 'Table 24.3' },},
   wool:      { density: 1.31, regain: 16.0, rkm: 0.50,     // Table 5.1 p.165
                tensile: { tenacity: 0.11, extension: 42.5, modulus: 2.3, work_of_rupture: 30.9,
                           grade: 'Botany 64s (merino)', page: 290, table: 'Table 13.1',
-                          wet: { ten: 0.69, ext: 1.33, mod: 0.40 },
-                          hot_wet: { ten: 0.55, ext: 1.37, mod: 0.50 } },
+                          wet: { ten: 0.69, ext: 1.33, mod: 0.40 , wor: 0.65 },
+                          hot_wet: { ten: 0.55, ext: 1.37, mod: 0.50 , wor: 0.82 } },
                swelling: { area: [25, 26], axial: null, volume: [36, 41],
-                           page: 240, table: 'Table 11.1' },
+                           page: 240, table: 'Table 11.1' , diameter: [8, 17]},
                variability: { fineness: 21, breaking_load: 34, tenacity: 28,
                               extension: 32, page: 335, table: 'Table 14.6' },
                // The only directional friction in the book, and the whole
@@ -383,7 +437,7 @@ const FIBER_PROPERTIES = {
                                                static: 0.13, kinetic: 0.11 },
                              against_scales: { crossed: [0.38, 0.49], parallel: 0.14,
                                                static: 0.61, kinetic: 0.38 },
-                           },
+                            shape_factor: 0.80, shape_page: 416},
                            page: 723, table: 'Tables 25.3 and 25.6' } ,
                recovery: { rh60: { e1: 99, e5: 69, e10: 51 },
                            rh90: { e1: 94, e5: 82, e10: 56 },
@@ -392,11 +446,19 @@ const FIBER_PROPERTIES = {
                directional: { flexural: 0.24, torsional: 0.12,
                               loop_strength_pct: 85,
                               page: 421, table: 'Table 17.2' },
-               cyclic: { growth_10: 0.48, growth_1000: 1.44, page: 369, table: 'Table 16.1' },
+               cyclic: { growth_10: 0.48, growth_1000: 1.44, page: 369, table: 'Table 16.1' , stress_10: 25, stress_1000: 29},
                thermal: { expansion_1e4_per_c: null, conductivity_mw_mk: 54,
                           page: 173, table: 'Table 6.2' },
-               static: { rh_threshold: 55, log_resistance_65: 8.4, page: 647, table: 'Table 22.1' },
-               moisture_energy: { heat_40_70_kj_kg: 159, retained_spun_pct: 45, retained_sucked_pct: 133, flex_life_cycles: null, page: 200, table: 'Tables 8.5 and 10.1' },},
+               static: { rh_threshold: 55, log_resistance_65: 8.4, page: 647, table: 'Table 22.1' , log_at_10pct: 10.4, moisture_slope: 15.8},
+               moisture_energy: { heat_40_70_kj_kg: 159, retained_spun_pct: 45, retained_sucked_pct: 133, flex_life_cycles: null, page: 200, table: 'Tables 8.5 and 10.1' },
+               moduli: { tensile_gpa: 5.2, shear_gpa: 1.3, bending_gpa: 3.9, page: 421, table: 'Table 17.2' },
+               // 0.64: well above 0.5, so the curve stands above the straight line.
+               // Wool yields at 4% strain and then holds load for another forty,
+               // which is what absorbing a shock actually looks like.
+               curve: { work_factor: 0.64, grade: 'Botany 64s (merino)', page: 290, table: 'Table 13.1' },
+               // Almost none. 0.010 - the keratin helix is not an axial chain, so wool
+               // has little axial orientation, and a dye walks in at the boil.
+               optical: { n_parallel: 1.553, n_perpendicular: 1.542, birefringence: 0.010, page: 702, table: 'Table 24.3' },},
   acrylic:   { density: 1.19, regain: 1.5,  rkm: 0.70,     // was 1.17 — Table 5.1 gives 1.19
                tensile: { tenacity: 0.27, extension: 25.0, modulus: 6.2, work_of_rupture: 47,
                           grade: 'Orlon 42, staple', page: 292, table: 'Table 13.2',
@@ -405,8 +467,8 @@ const FIBER_PROPERTIES = {
                           // and stretches more than four times as far. Acrylic
                           // is dyed near the boil, and this is why it comes out
                           // of the machine to whatever length it was held at.
-                          wet: { ten: 0.84, ext: 1.08, mod: 1.00 },
-                          hot_wet: { ten: 0.35, ext: 4.26, mod: 0.02 } } ,
+                          wet: { ten: 0.84, ext: 1.08, mod: 1.00 , wor: 0.98 },
+                          hot_wet: { ten: 0.35, ext: 4.26, mod: 0.02 , wor: 1.04 } } ,
                recovery: { rh60: { e1: 92, e5: 50, e10: 43 },
                            rh90: { e1: 90, e5: 48, e10: 39 },
                            page: 344, table: 'Table 15.2' },
@@ -416,8 +478,12 @@ const FIBER_PROPERTIES = {
                               page: 421, table: 'Table 17.2' },
                thermal: { expansion_1e4_per_c: 10, conductivity_mw_mk: null,
                           page: 176, table: 'Table 6.5' },
-               heat: { melting_c: null, retained_130c_80d: 55, page: 479, table: 'Table 18.3' },
-               static: { rh_threshold: 85, log_resistance_65: 8.7, page: 647, table: 'Table 22.1' },},
+               heat: { melting_c: null, retained_130c_80d: 55, page: 479, table: 'Table 18.3' , retained_100c_80d: 100},
+               static: { rh_threshold: 85, log_resistance_65: 8.7, page: 647, table: 'Table 22.1' },
+               moduli: { tensile_gpa: [4.9, 7], shear_gpa: [1, 1.6], bending_gpa: [6, 8.1], page: 421, table: 'Table 17.2' },
+               // Zero, to three decimals: n is 1.500 in both directions. Acrylic is
+               // wet-spun from solution and never drawn into order.
+               optical: { n_parallel: 1.500, n_perpendicular: 1.500, birefringence: 0.000, page: 702, table: 'Table 24.3' },},
 
   // UNSOURCED. Table 5.1 has no row for any of these four, and the closest
   // rows are not substitutes: modal is a high-wet-modulus viscose and lyocell
@@ -443,10 +509,10 @@ const FIBER_PROPERTIES = {
   silk:      { density: 1.34, regain: 10.0,                // Table 5.1 p.165, Table 7.3 p.188
                tensile: { tenacity: 0.38, extension: 23.4, modulus: 7.3, work_of_rupture: 59.7,
                           grade: 'silk', page: 290, table: 'Table 13.1',
-                          wet: { ten: 0.92, ext: 1.63, mod: 0.25 },
-                          hot_wet: { ten: 0.71, ext: 0.96, mod: 0.67 } },
+                          wet: { ten: 0.92, ext: 1.63, mod: 0.25 , wor: 1.31 },
+                          hot_wet: { ten: 0.71, ext: 0.96, mod: 0.67 , wor: 0.67 } },
                swelling: { area: [19, 19], axial: [1.3, 1.6], volume: [30, 32],
-                           page: 240, table: 'Table 11.1' },
+                           page: 240, table: 'Table 11.1' , diameter: [16.3, 18.7]},
                variability: { fineness: 17, breaking_load: 19, tenacity: 20,
                               extension: 15, page: 335, table: 'Table 14.6' },
                friction: { crossed: 0.26, parallel: 0.52,
@@ -458,13 +524,18 @@ const FIBER_PROPERTIES = {
                yield_point: { stress_mn_tex: 98,  strain_pct: 4, page: 344, table: 'Table 15.1' },
                directional: { flexural: 0.60, torsional: 0.16,
                               loop_strength_pct: 88,
-                              page: 421, table: 'Table 17.2' },
-               cyclic: { growth_10: 0.36, growth_1000: 1.92, page: 369, table: 'Table 16.1' },
+                              page: 421, table: 'Table 17.2' , shape_factor: 0.59, shape_page: 416},
+               cyclic: { growth_10: 0.36, growth_1000: 1.92, page: 369, table: 'Table 16.1' , stress_10: 108, stress_1000: 144},
                thermal: { expansion_1e4_per_c: null, conductivity_mw_mk: 50,
                           page: 173, table: 'Table 6.2' },
-               heat: { melting_c: null, retained_130c_80d: null, page: 479, table: 'Table 18.3' },
-               static: { rh_threshold: 65, log_resistance_65: 9.8, page: 647, table: 'Table 22.1' },
-               moisture_energy: { heat_40_70_kj_kg: null, retained_spun_pct: 52, retained_sucked_pct: 55,  flex_life_cycles: null, page: 231, table: 'Table 10.1' },},
+               heat: { melting_c: null, retained_130c_80d: null, page: 479, table: 'Table 18.3' , retained_100c_80d: 39},
+               static: { rh_threshold: 65, log_resistance_65: 9.8, page: 647, table: 'Table 22.1' , log_at_10pct: 9.0, moisture_slope: 17.6},
+               moisture_energy: { heat_40_70_kj_kg: null, retained_spun_pct: 52, retained_sucked_pct: 55,  flex_life_cycles: null, page: 231, table: 'Table 10.1' },
+               // 14 GPa, the stiffest natural fibre in the table, and no shear modulus
+               // printed - so silk gets a modulus but no anisotropy ratio.
+               moduli: { tensile_gpa: 14, shear_gpa: null, bending_gpa: null, page: 421, table: 'Table 17.2' },
+               curve: { work_factor: 0.66, grade: 'silk', page: 290, table: 'Table 13.1' },
+               optical: { n_parallel: 1.591, n_perpendicular: 1.538, birefringence: 0.053, page: 702, table: 'Table 24.3' },},
   // Regain is not in Table 7.3. Polypropylene is a hydrocarbon with no polar
   // group for water to attach to, and the book's own chapter 7 explains regain
   // in exactly those terms, so zero is the physics rather than a placeholder —
@@ -476,19 +547,23 @@ const FIBER_PROPERTIES = {
                           // 1.00 — but at 95 C it keeps a fifth of its modulus
                           // and stretches 2.5 times as far, which is why
                           // polypropylene is finished cool.
-                          wet: { ten: 1.00, ext: 1.00, mod: 1.00 },
-                          hot_wet: { ten: 0.45, ext: 2.47, mod: 0.21 } } ,
+                          wet: { ten: 1.00, ext: 1.00, mod: 1.00 , wor: 1.0 },
+                          hot_wet: { ten: 0.45, ext: 2.47, mod: 0.21 , wor: 1.13 } } ,
                directional: { flexural: 0.51, torsional: 0.14,
                               loop_strength_pct: null,
                               page: 421, table: 'Table 17.2' },
-               heat: { melting_c: 170, retained_130c_80d: null, page: 463, table: 'Table 18.1' },},
+               heat: { melting_c: 170, retained_130c_80d: null, page: 463, table: 'Table 18.1' },
+               // E/G is 3.2 - near the 2.6 of an isotropic solid, and the least
+               // anisotropic fibre in Table 17.2.
+               moduli: { tensile_gpa: 2.4, shear_gpa: 0.75, bending_gpa: 5.2, page: 421, table: 'Table 17.2' },},
   polyethylene: { density: 0.95, regain: 0.0, regain_assumed: true,   // Table 5.1 p.165
                tensile: { tenacity: 0.34, extension: 10.0, modulus: 4.4, work_of_rupture: 19,
                           grade: 'Courlene X3, high density', page: 292, table: 'Table 13.2',
                           wet: null, hot_wet: null } ,
                thermal: { expansion_1e4_per_c: 2, conductivity_mw_mk: null,
                           page: 176, table: 'Table 6.5' },
-               heat: { melting_c: 135, retained_130c_80d: null, page: 463, table: 'Table 18.1' },},
+               heat: { melting_c: 135, retained_130c_80d: null, page: 463, table: 'Table 18.1' },
+               optical: { n_parallel: 1.556, n_perpendicular: 1.512, birefringence: 0.044, page: 702, table: 'Table 24.3' },},
   //
   // NOT ADDED, and worth naming so nobody looks for them twice: flax (linen),
   // jute, hemp and ramie. The book gives all four a regain and a full set of
@@ -531,12 +606,17 @@ const FIBER_PROPERTIES = {
     tensile: { tenacity: 0.54, extension: 3.0, modulus: 18.0, work_of_rupture: 8.0,
                grade: 'flax', page: 290, table: 'Table 13.1' },
     swelling: { area: 47, axial: [0.1, 0.2], page: 240, table: 'Table 11.1' },
-    cyclic: { growth_10: null, growth_1000: null, page: 369, table: 'Table 16.1' },
-    heat: { melting_c: null, retained_130c_80d: 12, page: 479, table: 'Table 18.3' },
-    static: { rh_threshold: 30, log_resistance_65: 6.9, page: 647, table: 'Table 22.1' },
+    cyclic: { growth_10: null, growth_1000: null, page: 369, table: 'Table 16.1' , stress_10: 263, stress_1000: null},
+    heat: { melting_c: null, retained_130c_80d: 12, page: 479, table: 'Table 18.3' , retained_100c_80d: 41},
+    static: { rh_threshold: 30, log_resistance_65: 6.9, page: 647, table: 'Table 22.1' , log_at_10pct: 6.8, moisture_slope: 10.6},
     friction: { guide: { steel: 0.27, porcelain: 0.29, pulley: 0.19, ceramic: null },
                 page: 723, table: 'Table 25.6' },
-  },
+  
+               curve: { work_factor: 0.50, grade: 'flax', page: 290, table: 'Table 13.1' },
+               // The most oriented natural fibre here, 0.068. Flax is a bast fibre and
+               // the cellulose in it runs nearly straight down the axis, which is
+               // both why linen is strong and why it dyes slowly.
+               optical: { n_parallel: 1.596, n_perpendicular: 1.528, birefringence: 0.068, page: 702, table: 'Table 24.3' },},
 
   elastane:  { density: 1.20, regain: 1.0,  rkm: 0.80,
                tensile: { tenacity: 0.0309, extension: 540.0, modulus: 0.0071, work_of_rupture: 65,
@@ -802,13 +882,451 @@ function flexFatigue(fibers) {
   }
   if (!parts.length) return null;
   const worst = parts.reduce((a, b) => (b.v < a.v ? b : a));
+  const wm = (FIBER_PROPERTIES[worst.name] || {}).moisture_energy || {};
+  // Lifetime distributions are strongly right-skewed, so the mean sits above
+  // the median and a design figure taken from the mean is optimistic twice
+  // over. With the CV printed, a rough lower design bound is available:
+  // mean x (1 - CV), which is the point one standard deviation below it.
+  const cv = wm.flex_cv_pct == null ? null : wm.flex_cv_pct;
   return {
     governed_by: worst.name,
     cycles: worst.v,
+    median_cycles: wm.flex_median_cycles == null ? null : wm.flex_median_cycles,
+    cv_pct: cv,
+    design_cycles: cv == null ? null : Math.round(worst.v * (1 - cv / 100)),
+    tested_at: wm.flex_strain_pct == null ? null : {
+      bending_strain_pct: wm.flex_strain_pct,
+      specific_stress_mn_tex: wm.flex_stress_mn_tex,
+      fibre_dtex: wm.flex_dtex,
+    },
     from_pct: round3(parts.reduce((a, x) => a + x.pct, 0)),
     all: parts.map(x => ({ fibre: x.name, cycles: x.v })),
     unmeasured,
     source: 'Morton & Hearle, Table 19.4, p.534.',
+  };
+}
+
+/**
+ * How far from isotropic the fibre is, and what that costs.
+ *
+ * Table 17.2 prints two moduli for the same fibre: E, the resistance to being
+ * PULLED, and G, the resistance to being TWISTED. For a solid with no preferred
+ * direction those are locked together — E/G = 2(1+v), about 2.6 for v = 0.3 —
+ * so anything above that is a direct measure of how far the molecules have been
+ * lined up along the axis.
+ *
+ *   polypropylene   2.4 / 0.75      3.2    barely anisotropic
+ *   wool            5.2 / 1.3       4.0
+ *   acrylic         6.0 / 1.3       4.6
+ *   polyester       6.2 / 0.85      7.3
+ *   viscose         8.7 / 1.0       8.5
+ *   nylon           2.9 / 0.26     11      and one type reaches 115
+ *
+ * Two consequences, and they are the reason this is worth computing rather than
+ * storing. A high ratio means the fibre resists a pull and does NOT resist a
+ * twist, so a twisted yarn stores torque it can release — snarling, and the
+ * spirality that follows it into a single jersey. And a fibre held together
+ * along its axis by covalent chains but ACROSS it only by van der Waals forces
+ * splits lengthways under rubbing: that is fibrillation.
+ *
+ * The bending modulus is the third column and it says where the stiffness sits.
+ * Bending is carried by the outside of the fibre, so a bending modulus above the
+ * tensile modulus means a skin stiffer than the core — viscose, 10 against 8.7 —
+ * and a skin-core fibre is one that splits at the skin.
+ */
+function fibreAnisotropy(fibers) {
+  if (!fibers) return null;
+  const parts = [];
+  const unmeasured = [];
+  const noShear = [];
+  for (const [name, pct] of Object.entries(fibers)) {
+    if (!pct) continue;
+    const m = (FIBER_PROPERTIES[name] || {}).moduli;
+    if (!m) { unmeasured.push(name); continue; }
+    if (m.shear_gpa == null || m.tensile_gpa == null) { noShear.push(name); continue; }
+    const E = mid(m.tensile_gpa);
+    const G = mid(m.shear_gpa);
+    parts.push({
+      name, pct, E: round3(E), G: round3(G), ratio: round3(E / G),
+      // The widest ratio the printed range allows. Nylon's spans 4 to 115, and
+      // a single mid-point figure would hide that the table is describing three
+      // different fibres under one name.
+      ratio_span: (Array.isArray(m.tensile_gpa) || Array.isArray(m.shear_gpa))
+        ? [round3(lo(m.tensile_gpa) / hi(m.shear_gpa)),
+           round3(hi(m.tensile_gpa) / lo(m.shear_gpa))]
+        : null,
+      bending: m.bending_gpa == null ? null : round3(mid(m.bending_gpa)),
+      skin_stiffer: m.bending_gpa == null ? null : mid(m.bending_gpa) > E,
+      page: m.page,
+    });
+  }
+  if (!parts.length) {
+    return noShear.length
+      ? { measured: false, no_shear_modulus: noShear, unmeasured,
+          source: 'Morton & Hearle, Table 17.2, p.421.' }
+      : null;
+  }
+  const w = parts.reduce((a, x) => a + x.pct, 0);
+  // The BLEND twists as its most compliant component allows: torque released by
+  // one fibre is not held back by another sitting beside it in the same yarn.
+  const liveliest = parts.reduce((a, b) => (b.ratio > a.ratio ? b : a));
+  return {
+    measured: true,
+    blend_ratio: round3(parts.reduce((a, x) => a + x.ratio * x.pct, 0) / w),
+    governed_by: liveliest.name,
+    worst_ratio: liveliest.ratio,
+    worst_ratio_span: liveliest.ratio_span,
+    // 2(1+v) with v = 0.3. Below about 3 the fibre is behaving like a solid
+    // with no grain; the excess over it IS the grain.
+    isotropic_reference: 2.6,
+    excess: round3(liveliest.ratio / 2.6),
+    skin_core: parts.filter(x => x.skin_stiffer).map(x => x.name),
+    all: parts.map(x => ({ fibre: x.name, E_gpa: x.E, G_gpa: x.G, ratio: x.ratio })),
+    no_shear_modulus: noShear,
+    from_pct: round3(w),
+    unmeasured,
+    source: 'Morton & Hearle, Table 17.2, p.421.',
+  };
+}
+
+/**
+ * The SHAPE of the stress-strain curve, not its end point.
+ *
+ * Tenacity says where the curve stops and extension says how far along; neither
+ * says what it does in between, and that is what a wearer feels. Table 13.1
+ * prints the work factor for exactly that:
+ *
+ *     work factor = work of rupture / (breaking load x breaking extension)
+ *
+ * A straight line to break gives exactly 0.5. Above it the curve stands ABOVE
+ * the line — the fibre yields early and then carries load for a long way, which
+ * is what absorbing a shock looks like. Below it the curve is concave, the load
+ * builds late, and the fabric feels firm and then goes with no warning.
+ *
+ *   cotton 0.46   flax 0.50   viscose 0.59   nylon 0.61   wool 0.64   silk 0.66
+ *
+ * Cotton and wool are the two ends of it, and they are also the two fibres whose
+ * yield points this engine already knows: cotton yields at 1% strain and wool at
+ * 4%, then wool holds load for another forty per cent. The work factor and the
+ * yield point are the same fact measured twice, which is why they agree.
+ */
+function curveShape(fibers) {
+  if (!fibers) return null;
+  const parts = [];
+  const unmeasured = [];
+  for (const [name, pct] of Object.entries(fibers)) {
+    if (!pct) continue;
+    const c = (FIBER_PROPERTIES[name] || {}).curve;
+    if (!c || c.work_factor == null) { unmeasured.push(name); continue; }
+    parts.push({ name, pct, wf: c.work_factor, grade: c.grade, page: c.page });
+  }
+  if (!parts.length) return null;
+  const w = parts.reduce((a, x) => a + x.pct, 0);
+  const wf = parts.reduce((a, x) => a + x.wf * x.pct, 0) / w;
+  return {
+    work_factor: round3(wf),
+    // 0.5 is the straight line, and the bands are set close to it because the
+    // whole table spans 0.46 to 0.78. A tenth either side of 0.5 is a lot here.
+    // Phrased to read after "so it", because that is where it is printed.
+    band: wf >= 0.6 ? 'yields early and then carries load for a long way'
+        : wf >= 0.52 ? 'holds a little more energy than a straight line would'
+        : wf >= 0.48 ? 'sits close to a straight line'
+        : 'stiffens late and then goes without warning',
+    linear_reference: 0.5,
+    all: parts.map(x => ({ fibre: x.name, work_factor: x.wf, grade: x.grade })),
+    from_pct: round3(w),
+    unmeasured,
+    source: 'Morton & Hearle, Table 13.1, p.290.',
+  };
+}
+
+/**
+ * How far the molecules lie along the axis — and therefore how a dye gets in.
+ *
+ * Table 24.3 measures the refractive index twice, with the light polarised along
+ * the fibre and across it. The difference is the birefringence, and it is a
+ * direct measure of molecular orientation. It is NOT lustre: fabric-physics.js
+ * works through why the arithmetic for that collapses.
+ *
+ *   acrylic     0.000    n is 1.500 both ways; wet-spun, never drawn
+ *   wool        0.010    a helix, not an axial chain
+ *   viscose     0.020    regenerated: the plant's orientation was dissolved out
+ *   cotton      0.046    native cellulose, laid down in an oriented wall
+ *   silk        0.053
+ *   nylon       0.063
+ *   flax        0.068    the most oriented natural fibre in the table
+ *   polyester   0.188    three times anything else
+ *
+ * Orientation is the same thing as a tight, ordered structure, and a dye
+ * molecule has to push its way into one. That single column explains the whole
+ * dyeing hierarchy without a dyeing table: acrylic and wool take dye at the
+ * boil; cotton needs alkali and time; polyester takes no water-soluble dye at
+ * all and has to be dyed with disperse dye at 130 C or with a carrier.
+ *
+ * The pair cotton/viscose is the useful one in practice. Both are cellulose and
+ * both take the same reactive dye, but viscose is less than half as oriented,
+ * so it takes the dye faster and darker in the same bath — which is exactly why
+ * a cotton-viscose blend dyes two shades in one bath unless it is compensated.
+ */
+function molecularOrientation(fibers) {
+  if (!fibers) return null;
+  const parts = [];
+  const unmeasured = [];
+  for (const [name, pct] of Object.entries(fibers)) {
+    if (!pct) continue;
+    const o = (FIBER_PROPERTIES[name] || {}).optical;
+    if (!o || o.birefringence == null) { unmeasured.push(name); continue; }
+    parts.push({ name, pct, bi: o.birefringence,
+                 n_par: o.n_parallel, n_perp: o.n_perpendicular, page: o.page });
+  }
+  if (!parts.length) return null;
+  const w = parts.reduce((a, x) => a + x.pct, 0);
+  const band = b => (b >= 0.10 ? 'very high' : b >= 0.05 ? 'high'
+                   : b >= 0.02 ? 'moderate' : 'low');
+  const most = parts.reduce((a, b) => (b.bi > a.bi ? b : a));
+  const least = parts.reduce((a, b) => (b.bi < a.bi ? b : a));
+  // Where two fibres in the same blend sit far apart on this scale they will
+  // not take up the same dye at the same rate, and the shade splits.
+  const spread = round3(most.bi - least.bi);
+  return {
+    blend_birefringence: round3(parts.reduce((a, x) => a + x.bi * x.pct, 0) / w),
+    most_oriented: { fibre: most.name, birefringence: most.bi, band: band(most.bi) },
+    least_oriented: { fibre: least.name, birefringence: least.bi, band: band(least.bi) },
+    spread,
+    // Two fibres more than 0.02 apart differ in orientation by as much as
+    // cotton differs from viscose, and that pair is the textbook case of a
+    // blend dyeing two shades in one bath.
+    dye_rate_split: parts.length > 1 && spread >= 0.02,
+    all: parts.map(x => ({ fibre: x.name, birefringence: x.bi,
+                           n_parallel: x.n_par, n_perpendicular: x.n_perp })),
+    from_pct: round3(w),
+    unmeasured,
+    source: 'Morton & Hearle, Table 24.3, p.702.',
+  };
+}
+
+/**
+ * What a yarn keeps at a join, and which KIND of join it is.
+ *
+ * Table 17.3 tests the same fibre two ways, and the pair is more informative
+ * than either alone. In a loop the fibre is bent sharply and pulled; in a knot
+ * it is bent, pulled AND squeezed sideways.
+ *
+ *   viscose    loop 58%    knot 90%
+ *   nylon      loop 86%    knot 88-98%
+ *   polyester  loop 73%    knot not printed
+ *   cotton     loop 91%    knot not printed
+ *
+ * Viscose is the case that matters. It loses over forty per cent of its strength
+ * in a loop and only ten in a knot, so what viscose cannot take is being bent
+ * round a small radius — not being gripped. That distinguishes two failures
+ * which look identical in a broken package: a yarn breaking at the knotter is
+ * being bent too tightly, not held too hard, and slackening the tension will do
+ * nothing while a larger splice radius will fix it.
+ */
+function jointStrength(fibers) {
+  if (!fibers) return null;
+  const parts = [];
+  const unmeasured = [];
+  for (const [name, pct] of Object.entries(fibers)) {
+    if (!pct) continue;
+    const d = (FIBER_PROPERTIES[name] || {}).directional;
+    if (!d || (d.loop_strength_pct == null && d.knot_strength_pct == null)) {
+      unmeasured.push(name); continue;
+    }
+    parts.push({ name, pct,
+                 loop: d.loop_strength_pct == null ? null : mid(d.loop_strength_pct),
+                 knot: d.knot_strength_pct == null ? null : mid(d.knot_strength_pct) });
+  }
+  if (!parts.length) return null;
+  const withLoop = parts.filter(x => x.loop != null);
+  const both = parts.filter(x => x.loop != null && x.knot != null);
+  // The join fails at its weakest fibre, not at the average of them.
+  const weakest = withLoop.length
+    ? withLoop.reduce((a, b) => (b.loop < a.loop ? b : a)) : null;
+  return {
+    governed_by: weakest ? weakest.name : null,
+    loop_retained_pct: weakest ? weakest.loop : null,
+    // Positive means the knot holds better than the loop: the fibre's problem
+    // is the bend radius, not the transverse pressure.
+    bend_sensitive: both
+      .filter(x => x.knot - x.loop >= 15)
+      .map(x => ({ fibre: x.name, loop: x.loop, knot: x.knot,
+                   gap: round3(x.knot - x.loop) })),
+    all: parts.map(x => ({ fibre: x.name, loop_pct: x.loop, knot_pct: x.knot })),
+    from_pct: round3(parts.reduce((a, x) => a + x.pct, 0)),
+    unmeasured,
+    source: 'Morton & Hearle, Table 17.3, p.425.',
+  };
+}
+
+/**
+ * How hard the fabric fights being stretched 2%, and what that costs by cycle
+ * one thousand.
+ *
+ * The engine already carried the GROWTH column of Table 16.1 — how much of an
+ * imposed 2% extension never comes back. On its own that figure is unreadable,
+ * because growth is measured at whatever stress the fibre needs to reach 2%, and
+ * that stress is the other half of the table:
+ *
+ *   wool       25 mN/tex to hold 2%      grows 0.48% by cycle 10
+ *   viscose    51                        grows 1.79%
+ *   nylon      51                        grows 0.28%
+ *   cotton     68                        grows 1.98% — the imposed 2% almost entirely
+ *   silk      108                        grows 0.36%
+ *   flax      263                        the stiffest small-strain fibre in the book
+ *
+ * A tenfold range in the force needed to move a fabric 2%, which is a real
+ * number for a knitter: it is the take-down tension the fabric will fight, and
+ * for a stretch garment it is the recovery power the wearer feels.
+ *
+ * Viscose and nylon need the SAME 51 mN/tex and grow 1.79% against 0.28%. Equal
+ * stiffness, six times the permanent set — so stiffness and recovery are
+ * independent properties and a fabric cannot be judged on feel alone.
+ */
+function stretchResistance(fibers) {
+  if (!fibers) return null;
+  const parts = [];
+  const unmeasured = [];
+  for (const [name, pct] of Object.entries(fibers)) {
+    if (!pct) continue;
+    const c = (FIBER_PROPERTIES[name] || {}).cyclic;
+    if (!c || c.stress_10 == null) { unmeasured.push(name); continue; }
+    parts.push({ name, pct, stress: c.stress_10, stress_1000: c.stress_1000,
+                 growth: c.growth_10, growth_1000: c.growth_1000 });
+  }
+  if (!parts.length) return null;
+  const w = parts.reduce((a, x) => a + x.pct, 0);
+  const stress = parts.reduce((a, x) => a + x.stress * x.pct, 0) / w;
+  // The stress needed CLIMBS with cycling for every fibre that has both
+  // columns: the fibre is being work-hardened as it is set.
+  const hardening = parts.filter(x => x.stress_1000 != null)
+    .map(x => ({ fibre: x.name, at_10: x.stress, at_1000: x.stress_1000,
+                 rise_pct: round3(100 * (x.stress_1000 - x.stress) / x.stress) }));
+  return {
+    stress_for_2pct_mn_tex: round3(stress),
+    band: stress >= 150 ? 'very stiff at small strain'
+        : stress >= 90 ? 'stiff' : stress >= 45 ? 'moderate' : 'yielding',
+    work_hardening: hardening,
+    all: parts.map(x => ({ fibre: x.name, stress_mn_tex: x.stress, growth_pct: x.growth })),
+    from_pct: round3(w),
+    unmeasured,
+    source: 'Morton & Hearle, Table 16.1, p.369, at 2% imposed extension.',
+  };
+}
+
+/**
+ * What raising the floor humidity actually buys.
+ *
+ * The engine already knew each fibre's static threshold. The threshold answers
+ * "is there a problem"; this answers "how much will fixing it cost", and they
+ * are different questions with different answers.
+ *
+ * Table 22.1 fits resistance against moisture as a straight line on log-log
+ * axes, and prints the SLOPE — decades of resistance lost per decade of
+ * moisture. It is not the same for every fibre, which is the whole reason the
+ * column exists:
+ *
+ *   flax        10.6      cotton    11.4     viscose   11.6
+ *   wool        15.8      silk      17.6
+ *
+ * On silk, a 10% rise in moisture content takes resistance down by a factor of
+ * about five; on flax, by about three. So humidification is a stronger lever on
+ * a protein fibre than on a bast one, and a floor fighting static in linen will
+ * get less for the same humidifier than the same floor running silk.
+ *
+ * The other column, resistance at a FIXED 10% moisture, separates the two things
+ * that are otherwise confounded. Cotton reads 5.3 and wool 10.4 — five decades
+ * apart at the same water content — so wool is not merely wetter than cotton, it
+ * conducts far worse at equal wetness, and no amount of humidifying closes that.
+ */
+function humidityLeverage(fibers) {
+  if (!fibers) return null;
+  const parts = [];
+  const unmeasured = [];
+  for (const [name, pct] of Object.entries(fibers)) {
+    if (!pct) continue;
+    const st = (FIBER_PROPERTIES[name] || {}).static;
+    if (!st || st.moisture_slope == null) { unmeasured.push(name); continue; }
+    parts.push({ name, pct, slope: st.moisture_slope, at10: st.log_at_10pct });
+  }
+  if (!parts.length) return null;
+  const w = parts.reduce((a, x) => a + x.pct, 0);
+  const slope = parts.reduce((a, x) => a + x.slope * x.pct, 0) / w;
+  // The fit is log10(R) against log10(moisture), so one percentage point of
+  // moisture added at a nominal 8% costs slope*log10(9/8) decades.
+  const perPoint = slope * Math.log10(9 / 8);
+  return {
+    slope: round3(slope),
+    // Decades of resistance removed by one percentage point of regain, near 8%.
+    decades_per_point: round3(perPoint),
+    // What that is as a plain multiplier, which is the form a floor manager
+    // can act on.
+    fold_per_point: round3(Math.pow(10, perPoint)),
+    band: slope >= 15 ? 'humidity is a strong lever here'
+        : slope >= 12 ? 'humidity is a fair lever' : 'humidity is a weak lever',
+    intrinsic: parts.filter(x => x.at10 != null)
+      .map(x => ({ fibre: x.name, log_resistance_at_10pct_moisture: x.at10 })),
+    all: parts.map(x => ({ fibre: x.name, slope: x.slope })),
+    from_pct: round3(w),
+    unmeasured,
+    source: 'Morton & Hearle, Table 22.1, p.647.',
+  };
+}
+
+/**
+ * How much wider the fibre gets in water, and what it does to a tight structure.
+ *
+ * The engine already had AREA swelling, which is the right figure for how much
+ * water a fibre takes into itself. Diameter swelling is the figure for what
+ * happens to everything packed around it, and Table 11.1 prints both:
+ *
+ *   nylon      1.9-2.6%          viscose   25-52%
+ *   cotton     7-23%             silk      16-19%
+ *   wool       8-17%
+ *
+ * In a slack knitted structure a fibre that grows 50% on its diameter simply
+ * pushes the loops apart and the fabric relaxes. In a woven at a high cover
+ * factor there is nowhere for it to go: the yarns jam against each other, the
+ * cloth cannot shrink further in width, and the strain goes into crimp and into
+ * length instead. That is the mechanism of wet shrinkage — not the fibre getting
+ * shorter, which it barely does, but the fabric having no room left sideways.
+ */
+function wetJamming(fibers, ctx = {}) {
+  if (!fibers) return null;
+  const parts = [];
+  const unmeasured = [];
+  for (const [name, pct] of Object.entries(fibers)) {
+    if (!pct) continue;
+    const sw = (FIBER_PROPERTIES[name] || {}).swelling;
+    if (!sw || sw.diameter == null) { unmeasured.push(name); continue; }
+    parts.push({ name, pct, d: mid(sw.diameter), span: sw.diameter });
+  }
+  if (!parts.length) return null;
+  const w = parts.reduce((a, x) => a + x.pct, 0);
+  const d = parts.reduce((a, x) => a + x.d * x.pct, 0) / w;
+  // A yarn diameter follows the fibre diameter directly: the packing fraction
+  // does not change when every fibre in the bundle grows by the same fraction.
+  const worst = parts.reduce((a, b) => (b.d > a.d ? b : a));
+  const cf = ctx.cover_factor == null ? null : Number(ctx.cover_factor);
+  const ceiling = ctx.cover_ceiling == null ? 28 : Number(ctx.cover_ceiling);
+  return {
+    diameter_gain_pct: round1(d),
+    worst: { fibre: worst.name, gain_pct: round1(worst.d), span: worst.span },
+    // Cover factor scales with yarn diameter, so a fibre gaining d% on diameter
+    // drives the wet cover factor up by the same fraction.
+    cover_factor_dry: cf,
+    cover_factor_wet: cf == null ? null : round1(cf * (1 + d / 100)),
+    // The jamming point belongs to the cloth, not to a constant: a satin
+    // intersects less and can be set closer before it jams, and the woven
+    // engine already widens the ceiling by the square root of the average
+    // float. Where no ceiling is supplied, 28 is the plain-weave figure.
+    cover_ceiling: ceiling,
+    jams_when_wet: cf == null ? null : cf * (1 + d / 100) >= ceiling,
+    all: parts.map(x => ({ fibre: x.name, diameter_gain_pct: x.span })),
+    from_pct: round3(w),
+    unmeasured,
+    source: 'Morton & Hearle, Table 11.1, p.240, fibres immersed in water.',
   };
 }
 
@@ -982,6 +1500,112 @@ function yieldTension(fibers, countNe) {
  * reads systematically heavier than the same cloth conditioned from dry, which
  * is a real and repeatable disagreement between two labs both doing it right.
  */
+/**
+ * What water does to the ENERGY the fabric can absorb.
+ *
+ * The engine already carried three of Table 13.7's columns — what water does to
+ * strength, to extension and to stiffness. The fourth is the one that decides
+ * whether a wet fabric survives being handled, because a fabric fails when it
+ * runs out of energy to absorb, not when it runs out of any one of those:
+ *
+ *   silk       1.31 wet   toughens; and then 0.67 again at 95 C
+ *   polyester  1.00       water does nothing
+ *   acrylic    0.98
+ *   cotton     0.92       loses a little, despite getting STRONGER wet
+ *   nylon      0.87
+ *   viscose    0.69
+ *   wool       0.65       loses a third
+ *
+ * Cotton is the case that shows why the column is needed. Cotton gains 11% in
+ * tenacity wet — the engine has said so for months — and still loses 8% of its
+ * toughness, because its stiffness collapses to a third at the same time. Read
+ * the strength column alone and a wet cotton fabric looks tougher than a dry
+ * one. It is not.
+ *
+ * And silk reverses between the two conditions: it is 31% tougher wet at 20 C
+ * and 33% LESS tough once the bath reaches 95 C. A wet-processing route judged
+ * at room temperature would get silk exactly backwards.
+ */
+
+/**
+ * What mercerising is worth on this cotton, computed rather than asserted.
+ *
+ * The lustre advice used to carry "roughly two and a half times" as a typed
+ * phrase. The figure is right, but it was a number in a sentence: nothing
+ * checked it against the table it cites, and nothing would have noticed if the
+ * table had been re-read differently.
+ *
+ * Adderley's measurement is the ratio itself — lustre 5.7 at an axis ratio of
+ * 3.07, and 13.9 at 1.47 — so the multiple is 13.9/5.7, and it comes out of the
+ * stored numbers or it is not claimed.
+ */
+function mercerisingGain(fibers) {
+  const pct = (fibers || {}).cotton || 0;
+  if (!pct) return null;
+  const x = (FIBER_PROPERTIES.cotton || {}).cross_section;
+  if (!x || !x.lustre_at_min_flat || !x.lustre_at_max_flat) return null;
+  return {
+    multiple: round3(x.lustre_at_min_flat.lustre / x.lustre_at_max_flat.lustre),
+    lustre_flat: x.lustre_at_max_flat.lustre,
+    lustre_round: x.lustre_at_min_flat.lustre,
+    from_ratio: x.lustre_at_max_flat.ratio,
+    to_ratio: x.lustre_at_min_flat.ratio,
+    // What mercerising actually moves the section to, in the same table.
+    mercerised_ratio: x.ellipticity_mercerised,
+    raw_ratio: x.ellipticity,
+    cotton_pct: pct,
+    page: x.page,
+    source: 'Morton & Hearle, Table 24.5, p.706 (Adderley).',
+  };
+}
+
+function wetToughness(fibers) {
+  if (!fibers) return null;
+  const parts = [];
+  const unmeasured = [];
+  for (const [name, pct] of Object.entries(fibers)) {
+    if (!pct) continue;
+    const t = (FIBER_PROPERTIES[name] || {}).tensile;
+    if (!t || !t.wet || t.wet.wor == null) { unmeasured.push(name); continue; }
+    parts.push({ name, pct, wet: t.wet.wor,
+                 hot: t.hot_wet ? t.hot_wet.wor : null, page: 312 });
+  }
+  if (!parts.length) return null;
+  const w = parts.reduce((a, x) => a + x.pct, 0);
+  const wet = parts.reduce((a, x) => a + x.wet * x.pct, 0) / w;
+  const withHot = parts.filter(x => x.hot != null);
+  // Wet at 20 C and wet at 95 C are different conditions and a fibre can move
+  // opposite ways in them. Compounding gives the toughness in the bath.
+  const hotWet = withHot.length
+    ? withHot.reduce((a, x) => a + x.wet * x.hot * x.pct, 0) /
+      withHot.reduce((a, x) => a + x.pct, 0)
+    : null;
+  return {
+    wet_ratio: round3(wet),
+    hot_wet_ratio: hotWet == null ? null : round3(hotWet),
+    // The fibres that genuinely TOUGHEN in cold water and then lose it in a hot
+    // bath — the finding a room-temperature trial would miss. A ratio of
+    // exactly 1.00 is water doing nothing, not a gain, so polyester must not
+    // land here: crossing 1.00 downward is not the same as reversing.
+    reverses: withHot.filter(x => x.wet >= 1.02 && x.wet * x.hot < 0.95)
+      .map(x => ({ fibre: x.name, at_20c: round3(x.wet), at_95c: round3(x.wet * x.hot) })),
+    // Where the strength column and the energy column disagree. Cotton gains
+    // 11% in tenacity wet and still loses toughness, because its stiffness
+    // collapses at the same time — and the engine prints that strength gain as
+    // good news elsewhere on the same page.
+    strength_disagrees: parts.filter(x => {
+      const t = (FIBER_PROPERTIES[x.name] || {}).tensile;
+      return t && t.wet && t.wet.ten != null && t.wet.ten >= 1 && x.wet < 0.98;
+    }).map(x => ({ fibre: x.name,
+                   strength: (FIBER_PROPERTIES[x.name].tensile.wet.ten),
+                   toughness: x.wet })),
+    all: parts.map(x => ({ fibre: x.name, wet: x.wet, hot_wet: x.hot })),
+    from_pct: round3(w),
+    unmeasured,
+    source: 'Morton & Hearle, Table 13.7, p.312.',
+  };
+}
+
 function moistureEconomics(fibers) {
   if (!fibers) return null;
   const parts = [];
@@ -1442,6 +2066,7 @@ function blendMechanics(fibers) {
 }
 
 function round3(n) { return n == null ? null : parseFloat(n.toFixed(3)); }
+function round1(n) { return n == null ? null : parseFloat(n.toFixed(1)); }
 
 /** Blend-weighted density & regain from a fibers{} map (percentages). */
 function blendPhysical(fibers) {
@@ -1713,6 +2338,15 @@ module.exports = {
   staticRisk,
   dryingLoad,
   flexFatigue,
+  fibreAnisotropy,
+  curveShape,
+  molecularOrientation,
+  jointStrength,
+  stretchResistance,
+  humidityLeverage,
+  wetJamming,
+  wetToughness,
+  mercerisingGain,
   fibreVariability,
   weakLinkSensitivity,
   analyzeYarn,

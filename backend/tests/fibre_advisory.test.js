@@ -144,11 +144,20 @@ assert.strictEqual(bagOf(fibreAdvisory({ cotton: 100 }, sj)).severity, 'high');
 assert(['info', 'moderate'].includes(bagOf(fibreAdvisory({ nylon: 100 }, sj)).severity),
   'nylon recovers 89% from a 10% pull and must not be flagged');
 
-// ── Findings are ordered worst-first ────────────────────────────────────
+// ── Findings are ordered worst-first WITHIN each theme ──────────────────
+// The ordering was severity alone while this emitted eight findings. At
+// twenty-five a flat list stopped being readable, so findings are grouped by
+// the question they answer and severity orders inside the group — the worst
+// thing in each area is still the first thing read there.
 for (const fibers of [{ viscose: 100 }, { cotton: 60, polyester: 40 }, { wool: 100 }]) {
   const order = { severe: 0, high: 1, moderate: 2, info: 3 };
-  const sev = fibreAdvisory(fibers, sj).findings.map(f => order[f.severity]);
-  for (let i = 1; i < sev.length; i++) assert(sev[i] >= sev[i - 1], 'findings must be worst-first');
+  const fs = fibreAdvisory(fibers, sj).findings;
+  for (let i = 1; i < fs.length; i++) {
+    assert(fs[i].theme_order >= fs[i - 1].theme_order, 'themes must stay in order');
+    if (fs[i].theme_order !== fs[i - 1].theme_order) continue;
+    assert(order[fs[i].severity] >= order[fs[i - 1].severity],
+      `${fs[i].theme}: findings must be worst-first within a theme`);
+  }
 }
 
 // ── It reaches the caller ───────────────────────────────────────────────
@@ -367,6 +376,215 @@ const topics = woolAdv.findings.map(f => f.topic);
 assert(topics.includes('thermal comfort') && topics.includes('warmth when damp'));
 assert.strictEqual(new Set(topics).size, topics.length,
   'no two findings on one fabric may share a topic');
+
+// ============================================================================
+// The eight findings that came out of the columns that had been stored and
+// never shipped.
+// ============================================================================
+
+const {
+  fibreAnisotropy, curveShape, molecularOrientation, jointStrength,
+  stretchResistance, humidityLeverage, wetJamming,
+} = require('../engine/domain/yarn-engine');
+
+// ── Anisotropy: the ratio, not the two moduli ──────────────────────────────
+{
+  const a = fibreAnisotropy({ polypropylene: 100 });
+  assert(a.worst_ratio > 2.6 && a.worst_ratio < 4,
+    `polypropylene should sit just above isotropic, got ${a.worst_ratio}`);
+  const n = fibreAnisotropy({ nylon: 100 });
+  assert(n.worst_ratio > a.worst_ratio,
+    'nylon has the lowest shear modulus in the book and must come out more anisotropic ' +
+    'than polypropylene');
+  // The printed RANGE matters more than the mid-point here: Table 17.2 gives
+  // nylon three types, and across them the ratio spans a factor of twenty-five.
+  // Reporting only the mid-point would hide that these are different fibres
+  // sold under one name.
+  assert(n.worst_ratio_span && n.worst_ratio_span[1] / n.worst_ratio_span[0] > 10,
+    'the nylon ratio span should be wide enough to be worth printing');
+
+  // Cotton has no shear modulus in the book. It must be NAMED as uncomputable
+  // rather than dropped, or a poly-cotton reads as if cotton had been included.
+  const pc = fibreAnisotropy({ cotton: 60, polyester: 40 });
+  assert(pc.no_shear_modulus.includes('cotton'),
+    'cotton has no shear modulus printed and the absence must be reported');
+  assert.strictEqual(pc.from_pct, 40,
+    'the ratio is computed over the polyester only, and must say so');
+}
+
+// ── The claim that had to be narrowed ──────────────────────────────────────
+// The first version of the transverse-weakness finding claimed FIBRILLATION,
+// and polyester satisfied both numerical conditions — E/G of 7.3 and a bending
+// modulus above its tensile modulus. Polyester does not fibrillate. The numbers
+// were right and the conclusion drawn from them was wrong, which is exactly the
+// failure this module exists to prevent, so the finding must not predict
+// fibrillation from moduli alone.
+{
+  const f = fibreAdvisory({ polyester: 100 }, sj).findings
+    .find(x => x.topic === 'transverse weakness');
+  assert(f, 'polyester should still get the transverse-weakness finding');
+  assert(!/fibrillat/i.test(f.claim),
+    'the CLAIM must not say fibrillation — the moduli do not establish it');
+  assert(/fibrillation/i.test(f.mechanism) && /does not measure/i.test(f.mechanism),
+    'the mechanism must name fibrillation only to say where the measurement stops');
+}
+
+// ── Work factor: the shape of the curve, checked against the yield point ───
+{
+  const cotton = curveShape({ cotton: 100 });
+  const wool = curveShape({ wool: 100 });
+  assert(cotton.work_factor < 0.5 && wool.work_factor > 0.6,
+    'cotton stiffens late and wool yields early — the two ends of Table 13.1');
+  // The work factor and the yield point are the same fact measured twice, so
+  // they must agree: the fibre that yields earlier is the one with the higher
+  // work factor. If they ever disagree, one of them has been typed wrong.
+  const yp = k => FIBER_PROPERTIES[k].yield_point.strain_pct;
+  assert((wool.work_factor > cotton.work_factor) === (yp('wool') > yp('cotton')),
+    'work factor and yield strain must rank the same two fibres the same way');
+}
+
+// ── Orientation: the pair that splits a shade ──────────────────────────────
+{
+  const o = molecularOrientation({ cotton: 50, viscose: 50 });
+  assert(o.dye_rate_split,
+    'cotton at 0.046 and viscose at 0.020 are the textbook two-shade blend');
+  assert.strictEqual(o.least_oriented.fibre, 'viscose',
+    'regenerated cellulose is LESS oriented than native, which is why it dyes deeper');
+  // Polyester is three times anything else and that is what forces disperse
+  // dyeing; a finding that did not reach that conclusion would be reciting.
+  const pes = fibreAdvisory({ polyester: 100 }, sj).findings.find(x => x.topic === 'dye uptake');
+  assert(/130 C|carrier/.test(pes.action),
+    'the polyester dye finding must reach disperse dyeing, not just report a number');
+}
+
+// ── The join: two failures that look identical in a broken package ─────────
+{
+  const j = jointStrength({ viscose: 100 });
+  assert(j.bend_sensitive.length === 1 && j.bend_sensitive[0].fibre === 'viscose',
+    'viscose keeps 90% in a knot and 58% in a loop — bend radius, not grip');
+  // Nylon is close on both, so it must NOT be flagged; a rule that fired for
+  // every fibre with both numbers would be reciting the table.
+  assert(jointStrength({ nylon: 100 }).bend_sensitive.length === 0,
+    'nylon loses little either way and must not be flagged');
+}
+
+// ── Stretch resistance: stiffness and recovery are independent ─────────────
+{
+  const v = stretchResistance({ viscose: 100 });
+  const n = stretchResistance({ nylon: 100 });
+  assert.strictEqual(v.stress_for_2pct_mn_tex, n.stress_for_2pct_mn_tex,
+    'viscose and nylon need the SAME 51 mN/tex to hold 2%');
+  assert(FIBER_PROPERTIES.viscose.cyclic.growth_10 >
+         FIBER_PROPERTIES.nylon.cyclic.growth_10 * 5,
+    'and viscose still grows several times as much — equal stiffness, unequal recovery');
+  // Every fibre with both columns work-hardens. A fibre that got easier to
+  // stretch with cycling would mean the columns had been crossed.
+  for (const h of stretchResistance({ wool: 100 }).work_hardening) {
+    assert(h.rise_pct > 0, `${h.fibre} must need MORE stress by cycle 1000, not less`);
+  }
+}
+
+// ── Humidification: only where there is a static problem to spend on ───────
+{
+  // Wool's threshold is 55% r.h.; on a floor at 40% it is at risk, so the
+  // question "what will humidifying buy" is live.
+  const atRisk = fibreAdvisory({ wool: 100 }, { ...sj, floor_rh: 40 }).findings
+    .map(f => f.topic);
+  assert(atRisk.includes('humidification'), 'a floor below the threshold should get the lever');
+  // At 70% there is no problem, and costing a fix for a problem nobody has is
+  // noise dressed as rigour.
+  const safe = fibreAdvisory({ wool: 100 }, { ...sj, floor_rh: 70 }).findings
+    .map(f => f.topic);
+  assert(!safe.includes('humidification'),
+    'with the floor above the threshold there is nothing to buy');
+  const h = humidityLeverage({ silk: 100 });
+  assert(h.slope > humidityLeverage({ linen: 100 }).slope,
+    'humidity is a stronger lever on silk (17.6) than on flax (10.6)');
+}
+
+// ── Wet jamming: the same swelling, two constructions ──────────────────────
+{
+  const plain = wetJamming({ viscose: 100 }, { cover_factor: 25, cover_ceiling: 28 });
+  const satin = wetJamming({ viscose: 100 }, { cover_factor: 25, cover_ceiling: 48 });
+  assert.strictEqual(plain.cover_factor_wet, satin.cover_factor_wet,
+    'the fibre swells by the same amount in both');
+  assert(plain.jams_when_wet && !satin.jams_when_wet,
+    'and only the plain weave runs out of room — the ceiling belongs to the cloth');
+  // Nylon gains 2% on diameter. Firing this finding on nylon would be reciting.
+  assert(!fibreAdvisory({ nylon: 100 }, sj).findings.some(f => f.topic === 'wet jamming'),
+    'nylon gains 2% on diameter and must not get a swelling warning');
+}
+
+// ── The scatter that a mean lifetime hides ─────────────────────────────────
+{
+  const f = fibreAdvisory({ polyester: 100 }, sj).findings.find(x => x.topic === 'flex fatigue');
+  assert(/Design to/.test(f.action) && /44%/.test(f.action),
+    'a mean fatigue life must not be printed without its scatter');
+}
+
+// ── No two findings may share a heading, on ANY fabric ─────────────────────
+// The first version of this checked wool alone, and wool fires neither wet
+// branch — so a cotton-elastane rib printed two different findings under "wet
+// processing" for as long as that card has existed.
+for (const [name, fib, ctx] of [
+  ['60/40 poly-cotton single jersey', { cotton: 60, polyester: 40 }, sj],
+  ['95/5 cotton-elastane rib', { cotton: 95, elastane: 5 },
+   { category: 'rib', gsm: 220, has_elastane: true, elastane_pct: 5 }],
+  ['100% viscose woven', { viscose: 100 },
+   { category: 'woven', gsm: 140, cover_factor: 25, cover_ceiling: 28, floor_rh: 40 }],
+  ['100% wool interlock', { wool: 100 }, { category: 'interlock', gsm: 280, floor_rh: 40 }],
+  ['50/50 cotton-modal single jersey', { cotton: 50, modal: 50 }, sj],
+]) {
+  const t = fibreAdvisory(fib, ctx).findings.map(f => f.topic);
+  assert.strictEqual(new Set(t).size, t.length,
+    `${name}: two findings share a heading — ${t.filter((x, i) => t.indexOf(x) !== i)}`);
+}
+
+// ── Wet toughness: the column that resolves a contradiction ────────────────
+{
+  const { wetToughness } = require('../engine/domain/yarn-engine');
+  // Polyester's wet ratio is exactly 1.00 — water does nothing. Crossing 1.00
+  // downward in the hot bath is not the same as toughening and then losing it,
+  // and the first draft of this called polyester a reversal.
+  assert.strictEqual(wetToughness({ polyester: 100 }).reverses.length, 0,
+    'a ratio of exactly 1.00 is water doing nothing, not a gain to be lost');
+  const silk = wetToughness({ silk: 100 });
+  assert(silk.reverses.length === 1 && silk.reverses[0].at_20c > 1 &&
+         silk.reverses[0].at_95c < 1,
+    'silk toughens 31% wet at 20 C and loses it again at 95 C — the real reversal');
+
+  // Cotton is the case that makes the column necessary: the engine has printed
+  // "11% STRONGER wet" for months, and on its own that reads as good news.
+  const c = fibreAdvisory({ cotton: 100 }, sj).findings;
+  const wt = c.find(f => f.topic === 'wet toughness');
+  const ws = c.find(f => f.topic === 'wet strength');
+  assert(wt && ws, 'cotton must get both, because both are true');
+  assert(/STRONGER wet, and both are true/.test(wt.claim),
+    'and the toughness finding must reconcile them rather than contradict the other card');
+  assert(wetToughness({ wool: 100 }).wet_ratio < wetToughness({ cotton: 100 }).wet_ratio,
+    'wool loses a third of its toughness wet and cotton loses 8%');
+}
+
+// ── Every finding must have a home on the page ─────────────────────────────
+// A new finding whose topic is missing from the theme map falls to "Other" and
+// prints at the bottom under a heading that says nothing. That is easy to miss
+// in review and hard to notice on the page, so it fails here instead.
+{
+  const homeless = new Set();
+  for (const [fib, ctx] of [
+    [{ cotton: 60, polyester: 40 }, sj],
+    [{ cotton: 95, elastane: 5 }, { category: 'rib', gsm: 220, has_elastane: true, elastane_pct: 5 }],
+    [{ viscose: 100 }, { category: 'woven', gsm: 140, cover_factor: 25, cover_ceiling: 28, floor_rh: 40 }],
+    [{ wool: 100 }, { category: 'interlock', gsm: 280, floor_rh: 40 }],
+    [{ silk: 100 }, sj], [{ nylon: 100 }, sj], [{ acrylic: 100 }, sj], [{ linen: 100 }, sj],
+  ]) {
+    for (const f of fibreAdvisory(fib, ctx).findings) {
+      if (f.theme === 'Other') homeless.add(f.topic);
+    }
+  }
+  assert.strictEqual(homeless.size, 0,
+    `these topics have no theme and would print under "Other": ${[...homeless].join(', ')}`);
+}
 
 console.log(`  ${fibreAdvisory({ cotton: 60, polyester: 40 }, sj).findings.length} findings on a 60/40 CVC single jersey`);
 console.log(`  ${fibreAdvisory({ viscose: 100 }, sj).findings.length} on a viscose single jersey`);
