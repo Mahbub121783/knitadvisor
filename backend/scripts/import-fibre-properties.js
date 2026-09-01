@@ -930,6 +930,56 @@ function verify(payload) {
         4 * look('nylon6', 'flex_fatigue_life', 'mean, 65% r.h., 20 C'),
         'polyester still survives several times the bends nylon 6 does');
 
+  // ── A column that is not new information, and is therefore a check ────
+  //
+  // The standard deviation of tenacity is its coefficient of variation times
+  // its mean, so it tells a reader nothing the CV column does not — which is
+  // why it gets no finding: inventing advice out of a restatement is padding.
+  // What it is good for is catching a misread, because a reader that took a
+  // value from the wrong row breaks the identity while leaving a
+  // plausible-looking number behind.
+  //
+  // (Specific volume against density and birefringence against its two indices
+  // are the same kind of check and are already made further up this gate.)
+  const sdMismatch = [];
+  for (const sd of properties.filter(x => x.property === 'tenacity_sd')) {
+    const cv = properties.find(x => x.fibre_slug === sd.fibre_slug &&
+      x.property === 'cv_tenacity');
+    const ten = properties.find(x => x.fibre_slug === sd.fibre_slug &&
+      x.property === 'tenacity' && x.page === sd.page);
+    if (!cv || !ten || cv.value == null || ten.value == null || sd.value == null) continue;
+    const implied = 100 * sd.value / ten.value;
+    // The CV is printed as a whole number, so five points of slack. The check
+    // is for a column swap, not for the last digit.
+    if (Math.abs(implied - cv.value) > 5) {
+      sdMismatch.push(`${sd.fibre_slug}: sd ${sd.value} on tenacity ${ten.value} implies ` +
+        `${implied.toFixed(0)}% but the book prints CV ${cv.value}%`);
+    }
+  }
+  check(sdMismatch.length === 0,
+        'the printed tenacity standard deviation still agrees with the printed CV',
+        sdMismatch.join('; '));
+
+  // ── Table 17.2: the two moduli must not have been crossed ─────────────
+  // E and G sit in adjacent columns in the same units, so a reader that took
+  // them in the wrong order produces two plausible numbers. The physics
+  // forbids it: no real fibre resists twisting better relative to stretching
+  // than an unoriented solid, whose E/G is 2(1+v), about 2.6.
+  const crossed = [];
+  for (const e of properties.filter(x => x.property === 'tensile_modulus_gpa')) {
+    const g = properties.find(x => x.fibre_slug === e.fibre_slug &&
+      x.property === 'shear_modulus' && x.page === e.page);
+    if (!g) continue;
+    const half = r => (r.value != null ? r.value : (r.value_min + r.value_max) / 2);
+    if (half(e) / half(g) < 2.6) {
+      crossed.push(`${e.fibre_slug}: E/G = ${(half(e) / half(g)).toFixed(2)}`);
+    }
+  }
+  check(crossed.length === 0,
+        'every fibre still resists a pull at least as hard as an isotropic solid would relative ' +
+        'to a twist, so E and G are not crossed',
+        crossed.join('; '));
+
   const badPage = properties.filter(p => !(p.page >= 1 && p.page <= 746));
   check(badPage.length === 0, 'every citation points inside the book', badPage.length + ' do not');
 

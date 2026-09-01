@@ -1190,10 +1190,19 @@ function renderFibreAdvisory(a) {
     `${a.findings.length} finding${a.findings.length === 1 ? '' : 's'} · covers ${cov.measured_pct}%`;
   document.getElementById('fa-headline').textContent = a.headline || '';
 
+  // The engine sends findings already grouped by the question they answer and
+  // ordered worst-first inside each group. Twenty-five of them in one flat list
+  // is a wall; the heading is what lets a reader jump to the one area they came
+  // for. The grouping is the engine's, not the page's, so the API and any
+  // export read the same way.
+  let lastTheme = null;
   document.getElementById('fa-findings').innerHTML = (a.findings || []).map(f => {
     const t = TONE[f.severity] || TONE.info;
     const ev = (f.evidence || []).map(e => `${esc(e.table)}, p.${e.page}`).join('; ');
-    return `
+    const head = f.theme && f.theme !== lastTheme ? `
+    <div style="font-size:9px;text-transform:uppercase;letter-spacing:.7px;color:var(--t3);font-weight:800;margin:10px 0 5px 2px;">${esc(f.theme)}</div>` : '';
+    lastTheme = f.theme || lastTheme;
+    return head + `
     <details style="margin-bottom:6px;border:1px solid ${t.b};border-radius:7px;overflow:hidden;background:${t.bg};">
       <summary style="cursor:pointer;padding:8px 10px;font-size:11px;font-weight:700;color:var(--t1);list-style:none;">
         <span style="color:${t.c};">▸</span>
