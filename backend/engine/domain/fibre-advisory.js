@@ -45,7 +45,7 @@
 const {
   FIBER_PROPERTIES, blendMechanics, blendFriction, blendRecovery,
   fibreVariability, weakLinkSensitivity, moistureEconomics, yieldTension,
-  blendDirectional, blendCyclic, blendThermal,
+  blendDirectional, blendCyclic, blendThermal, heatCeiling,
 } = require('./yarn-engine');
 
 const SOURCE = 'Morton & Hearle, Physical Properties of Textile Fibres, 4th edn (2008), '
@@ -289,6 +289,7 @@ function fibreAdvisory(fibers, ctx = {}) {
   const dir = blendDirectional(fibers);
   const cyc = blendCyclic(fibers);
   const therm = blendThermal(fibers);
+  const heat = heatCeiling(fibers);
   const yld = ctx.count_ne ? yieldTension(fibers, ctx.count_ne) : null;
   const pill = pillingIndex(fibers);
   const hand = handleIndex(fibers);
@@ -779,6 +780,61 @@ function fibreAdvisory(fibers, ctx = {}) {
     });
   }
 
+  // ── 18. The temperature ceiling, and who pays for it ───────────────────
+  if (heat && heat.lowest_melting) {
+    const L = heat.lowest_melting;
+    const endured = heat.non_melting.length;
+    push({
+      topic: 'temperature ceiling',
+      severity: L.celsius <= 180 ? 'high' : 'moderate',
+      claim: qualify(`Nothing in this fabric can be set or dried above about `
+        + `${heat.working_ceiling_c} °C — ${L.fibre} melts at ${L.celsius} °C.`,
+        // An unmeasured fibre could melt LOWER than anything here, which would
+        // make this ceiling too high — the dangerous direction — so the caveat
+        // is not optional on this one.
+        100 - heat.unmeasured.reduce((a, n) => a + (fibers[n] || 0), 0), heat.unmeasured),
+      mechanism: `A blend is limited by its LOWEST melting point, not its average or its `
+        + `majority. The ceiling above leaves a working margin below the melt because a fibre `
+        + `softens and loses its set long before it flows`
+        + (endured
+            ? `. And ${heat.non_melting.join(', ')} ${endured > 1 ? 'do' : 'does'} not melt at `
+              + `all — cellulosic and protein fibres decompose instead — so the temperature `
+              + `chosen for the synthetic is ENDURED by ${endured > 1 ? 'them' : 'it'}, never `
+              + `shared`
+            : '')
+        + '.',
+      action: `Set the stenter below ${heat.working_ceiling_c} °C and confirm on a swatch. `
+        + 'Generic fibre names are not settings: nylon 6 melts at 215 °C and nylon 6.6 at 260, '
+        + 'so the yarn specification has to say which.',
+      evidence: [{ table: 'Table 18.1', page: 463 }],
+      // The margin is a mill convention, not a measurement, and says so.
+      confidence: 'the melting point is measured; the 40 °C working margin is a convention',
+    });
+  }
+
+  // ── 19. What the heat costs the fibre that cannot melt ─────────────────
+  if (heat && heat.most_heat_damaged && heat.most_heat_damaged.retained_130c_80d <= 60) {
+    const W = heat.most_heat_damaged;
+    push({
+      topic: 'heat ageing', severity: W.retained_130c_80d <= 20 ? 'high' : 'moderate',
+      scope: 'fibre',
+      claim: `Held at 130 °C, the ${W.fibre} in this fabric keeps only `
+        + `${W.retained_130c_80d}% of its strength after eighty days.`,
+      mechanism: 'Melting is the ceiling; this is the slow damage well below it, and it is the '
+        + 'more useful question because a fabric is never held at its melting point but is '
+        + 'held for hours at 100 to 130 °C in drying, setting and storage. The ordering here '
+        + 'is not the melting-point ordering: polyester keeps 75% over the same eighty days '
+        + 'and glass keeps everything.',
+      action: 'Keep drying and setting dwell times short rather than only keeping the '
+        + 'temperature down — the damage is cumulative in both. Where a hot route is '
+        + 'unavoidable, test tensile strength on the finished cloth rather than assuming the '
+        + 'yarn figure survived it.',
+      evidence: [{ table: 'Table 18.3', page: 479 }],
+      confidence: 'measured at 80 days, which is far longer than any finishing dwell — read it '
+        + 'as an ordering between fibres rather than as a prediction for one pass',
+    });
+  }
+
   // ── What is NOT known ──────────────────────────────────────────────────
   const gaps = [];
   if (silentOn.length) {
@@ -815,6 +871,7 @@ function fibreAdvisory(fibers, ctx = {}) {
       directional: dir,
       cyclic: cyc,
       thermal: therm,
+      heat: heat,
       yield_tension: yld,
       pilling: pill,
       handle: hand,

@@ -261,7 +261,8 @@ const FIBER_PROPERTIES = {
                               page: 421, table: 'Table 17.2' },
                cyclic: { growth_10: 1.98, growth_1000: null, page: 369, table: 'Table 16.1' },
                thermal: { expansion_1e4_per_c: 4, conductivity_mw_mk: 71,
-                          page: 176, table: 'Tables 6.5 and 6.2' },},
+                          page: 176, table: 'Tables 6.5 and 6.2' },
+               heat: { melting_c: null, retained_130c_80d: 10, page: 479, table: 'Table 18.3' },},
   polyester: { density: 1.39, regain: 0.4,  rkm: 1.25,     // was 1.38 — Table 5.1 gives 1.39
                tensile: { tenacity: 0.47, extension: 15.0, modulus: 10.6, work_of_rupture: 53,
                           grade: 'Terylene, medium-tenacity', page: 292, table: 'Table 13.2',
@@ -283,7 +284,8 @@ const FIBER_PROPERTIES = {
                cyclic: { growth_10: null, growth_1000: null, page: 369, table: 'Table 16.1' },
                // NEGATIVE, and above 80 C. Heated, polyester gets shorter.
                thermal: { expansion_1e4_per_c: -10, conductivity_mw_mk: null,
-                          note: 'above 80 C', page: 176, table: 'Table 6.5' },},
+                          note: 'above 80 C', page: 176, table: 'Table 6.5' },
+               heat: { melting_c: 260, retained_130c_80d: 75, page: 463, table: 'Tables 18.1 and 18.3' },},
   viscose:   { density: 1.49, regain: 13.0, rkm: 0.60,     // was 1.52, which is the DRY figure
                tensile: { tenacity: 0.21, extension: 15.7, modulus: 6.5, work_of_rupture: 18.8,
                           grade: 'Fibro, staple', page: 290, table: 'Table 13.1',
@@ -318,7 +320,8 @@ const FIBER_PROPERTIES = {
                directional: { flexural: 0.35, torsional: [0.058, 0.083],
                               loop_strength_pct: 58,
                               page: 421, table: 'Table 17.2' },
-               cyclic: { growth_10: 1.79, growth_1000: null, page: 369, table: 'Table 16.1' },},
+               cyclic: { growth_10: 1.79, growth_1000: null, page: 369, table: 'Table 16.1' },
+               heat: { melting_c: null, retained_130c_80d: 32, page: 479, table: 'Table 18.3' },},
   nylon:     { density: 1.14, regain: 4.2,  rkm: 1.40,     // Table 5.1 p.165
                tensile: { tenacity: 0.48, extension: 20.0, modulus: 3.0, work_of_rupture: 63,
                           grade: 'nylon 6.6, medium-tenacity', page: 292, table: 'Table 13.2',
@@ -344,7 +347,8 @@ const FIBER_PROPERTIES = {
                               page: 421, table: 'Table 17.2' },
                cyclic: { growth_10: 0.28, growth_1000: 1.03, page: 369, table: 'Table 16.1' },
                thermal: { expansion_1e4_per_c: -3, conductivity_mw_mk: null,
-                          page: 176, table: 'Table 6.5' },},
+                          page: 176, table: 'Table 6.5' },
+               heat: { melting_c: 260, retained_130c_80d: 13, page: 463, table: 'Tables 18.1 and 18.3' },},
   wool:      { density: 1.31, regain: 16.0, rkm: 0.50,     // Table 5.1 p.165
                tensile: { tenacity: 0.11, extension: 42.5, modulus: 2.3, work_of_rupture: 30.9,
                           grade: 'Botany 64s (merino)', page: 290, table: 'Table 13.1',
@@ -398,7 +402,8 @@ const FIBER_PROPERTIES = {
                               loop_strength_pct: 80.9,
                               page: 421, table: 'Table 17.2' },
                thermal: { expansion_1e4_per_c: 10, conductivity_mw_mk: null,
-                          page: 176, table: 'Table 6.5' },},
+                          page: 176, table: 'Table 6.5' },
+               heat: { melting_c: null, retained_130c_80d: 55, page: 479, table: 'Table 18.3' },},
 
   // UNSOURCED. Table 5.1 has no row for any of these four, and the closest
   // rows are not substitutes: modal is a high-wet-modulus viscose and lyocell
@@ -442,7 +447,8 @@ const FIBER_PROPERTIES = {
                               page: 421, table: 'Table 17.2' },
                cyclic: { growth_10: 0.36, growth_1000: 1.92, page: 369, table: 'Table 16.1' },
                thermal: { expansion_1e4_per_c: null, conductivity_mw_mk: 50,
-                          page: 173, table: 'Table 6.2' },},
+                          page: 173, table: 'Table 6.2' },
+               heat: { melting_c: null, retained_130c_80d: null, page: 479, table: 'Table 18.3' },},
   // Regain is not in Table 7.3. Polypropylene is a hydrocarbon with no polar
   // group for water to attach to, and the book's own chapter 7 explains regain
   // in exactly those terms, so zero is the physics rather than a placeholder —
@@ -458,13 +464,15 @@ const FIBER_PROPERTIES = {
                           hot_wet: { ten: 0.45, ext: 2.47, mod: 0.21 } } ,
                directional: { flexural: 0.51, torsional: 0.14,
                               loop_strength_pct: null,
-                              page: 421, table: 'Table 17.2' },},
+                              page: 421, table: 'Table 17.2' },
+               heat: { melting_c: 170, retained_130c_80d: null, page: 463, table: 'Table 18.1' },},
   polyethylene: { density: 0.95, regain: 0.0, regain_assumed: true,   // Table 5.1 p.165
                tensile: { tenacity: 0.34, extension: 10.0, modulus: 4.4, work_of_rupture: 19,
                           grade: 'Courlene X3, high density', page: 292, table: 'Table 13.2',
                           wet: null, hot_wet: null } ,
                thermal: { expansion_1e4_per_c: 2, conductivity_mw_mk: null,
-                          page: 176, table: 'Table 6.5' },},
+                          page: 176, table: 'Table 6.5' },
+               heat: { melting_c: 135, retained_130c_80d: null, page: 463, table: 'Table 18.1' },},
   //
   // NOT ADDED, and worth naming so nobody looks for them twice: flax (linen),
   // jute, hemp and ramie. The book gives all four a regain and a full set of
@@ -676,6 +684,54 @@ function blendThermal(fibers) {
     still_air_mw_mk: 25,
     unmeasured,
     source: 'Morton & Hearle, Tables 6.5 (p.176) and 6.2 (p.173).',
+  };
+}
+
+
+/**
+ * The temperature ceiling for a blend, and who pays for it.
+ *
+ * A blend cannot be set, dried or stored above the LOWEST melting point in it —
+ * polypropylene at 170 C stops a fabric being set at the 190 C its polyester
+ * would want. And most fibres have no melting point at all: cellulosics and
+ * proteins decompose rather than melt, so the setting temperature chosen for
+ * the synthetic in a blend is ENDURED by the natural fibre, never shared with
+ * it. Table 18.3 is what that endurance costs — cotton keeps 10% of its
+ * strength after eighty days at 130 C and polyester keeps 75%.
+ *
+ * The ceiling is reported with a working margin below the melt, because nothing
+ * is processed at its melting point; the margin is a convention and is labelled
+ * as one rather than being presented as measured.
+ */
+function heatCeiling(fibers) {
+  if (!fibers) return null;
+  const melts = [];
+  const endures = [];
+  const unmeasured = [];
+  for (const [name, pct] of Object.entries(fibers)) {
+    if (!pct) continue;
+    const h = (FIBER_PROPERTIES[name] || {}).heat;
+    if (!h) { unmeasured.push(name); continue; }
+    if (h.melting_c != null) melts.push({ name, pct, c: h.melting_c });
+    else endures.push({ name, pct, retained: h.retained_130c_80d });
+  }
+  if (!melts.length && !endures.length) return null;
+
+  const lowest = melts.length ? melts.reduce((a, b) => (b.c < a.c ? b : a)) : null;
+  const weakest = endures.filter(x => x.retained != null);
+  const worst = weakest.length
+    ? weakest.reduce((a, b) => (b.retained < a.retained ? b : a)) : null;
+
+  return {
+    lowest_melting: lowest && { fibre: lowest.name, celsius: lowest.c },
+    // A working margin, not a measurement. Mills set well below the melt
+    // because the fibre softens long before it flows.
+    working_ceiling_c: lowest ? lowest.c - 40 : null,
+    working_ceiling_is_convention: true,
+    non_melting: endures.map(x => x.name),
+    most_heat_damaged: worst && { fibre: worst.name, retained_130c_80d: worst.retained },
+    unmeasured,
+    source: 'Morton & Hearle, Tables 18.1 (p.463) and 18.3 (p.479).',
   };
 }
 
@@ -1476,6 +1532,7 @@ module.exports = {
   blendDirectional,
   blendCyclic,
   blendThermal,
+  heatCeiling,
   fibreVariability,
   weakLinkSensitivity,
   analyzeYarn,
