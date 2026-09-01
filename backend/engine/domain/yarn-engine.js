@@ -253,7 +253,15 @@ const FIBER_PROPERTIES = {
                            rh90: { e1: 83, e5: 59, e10: null },
                            page: 344, table: 'Table 15.2' },
                regain_detail: { commercial: 8.5, measured: [7, 8], hysteresis: 0.9, page: 188, table: 'Table 7.3' },
-               yield_point: { stress_mn_tex: 9,   strain_pct: 1, page: 344, table: 'Table 15.1' },},
+               yield_point: { stress_mn_tex: 9,   strain_pct: 1, page: 344, table: 'Table 15.1' },
+               // Table 17.2 p.421 (bending, twisting), 17.3 p.425 (the loop),
+               // 16.1 p.369 (repeated loading), 6.5 p.176 and 6.2 p.173 (heat).
+               directional: { flexural: 0.53, torsional: 0.16,
+                              loop_strength_pct: 91,
+                              page: 421, table: 'Table 17.2' },
+               cyclic: { growth_10: 1.98, growth_1000: null, page: 369, table: 'Table 16.1' },
+               thermal: { expansion_1e4_per_c: 4, conductivity_mw_mk: 71,
+                          page: 176, table: 'Tables 6.5 and 6.2' },},
   polyester: { density: 1.39, regain: 0.4,  rkm: 1.25,     // was 1.38 — Table 5.1 gives 1.39
                tensile: { tenacity: 0.47, extension: 15.0, modulus: 10.6, work_of_rupture: 53,
                           grade: 'Terylene, medium-tenacity', page: 292, table: 'Table 13.2',
@@ -268,7 +276,14 @@ const FIBER_PROPERTIES = {
                friction: { parallel: 0.58, page: 723, table: 'Table 25.6' } ,
                recovery: { rh60: { e1: 98, e5: 65, e10: 51 },
                            rh90: { e1: 92, e5: 60, e10: 47 },
-                           page: 344, table: 'Table 15.2' },},
+                           page: 344, table: 'Table 15.2' },
+               directional: { flexural: 0.30, torsional: 0.067,
+                              loop_strength_pct: 72.8,
+                              page: 421, table: 'Table 17.2' },
+               cyclic: { growth_10: null, growth_1000: null, page: 369, table: 'Table 16.1' },
+               // NEGATIVE, and above 80 C. Heated, polyester gets shorter.
+               thermal: { expansion_1e4_per_c: -10, conductivity_mw_mk: null,
+                          note: 'above 80 C', page: 176, table: 'Table 6.5' },},
   viscose:   { density: 1.49, regain: 13.0, rkm: 0.60,     // was 1.52, which is the DRY figure
                tensile: { tenacity: 0.21, extension: 15.7, modulus: 6.5, work_of_rupture: 18.8,
                           grade: 'Fibro, staple', page: 290, table: 'Table 13.1',
@@ -299,7 +314,11 @@ const FIBER_PROPERTIES = {
                            rh90: { e1: 60, e5: 28, e10: 27 },
                            page: 344, table: 'Table 15.2' },
                regain_detail: { commercial: 13, measured: [12, 14], hysteresis: 1.8, page: 188, table: 'Table 7.3' },
-               yield_point: { stress_mn_tex: 39,  strain_pct: 1, page: 344, table: 'Table 15.1' },},
+               yield_point: { stress_mn_tex: 39,  strain_pct: 1, page: 344, table: 'Table 15.1' },
+               directional: { flexural: 0.35, torsional: [0.058, 0.083],
+                              loop_strength_pct: 58,
+                              page: 421, table: 'Table 17.2' },
+               cyclic: { growth_10: 1.79, growth_1000: null, page: 369, table: 'Table 16.1' },},
   nylon:     { density: 1.14, regain: 4.2,  rkm: 1.40,     // Table 5.1 p.165
                tensile: { tenacity: 0.48, extension: 20.0, modulus: 3.0, work_of_rupture: 63,
                           grade: 'nylon 6.6, medium-tenacity', page: 292, table: 'Table 13.2',
@@ -319,7 +338,13 @@ const FIBER_PROPERTIES = {
                recovery: { rh60: { e1: 90, e5: 89, e10: 89 },
                            rh90: { e1: 92, e5: 90, e10: null },
                            page: 344, table: 'Table 15.2' },
-               yield_point: { stress_mn_tex: 127, strain_pct: 8, page: 344, table: 'Table 15.1' },},
+               yield_point: { stress_mn_tex: 127, strain_pct: 8, page: 344, table: 'Table 15.1' },
+               directional: { flexural: [0.15, 0.22], torsional: [0.041, 0.060],
+                              loop_strength_pct: 82.5,
+                              page: 421, table: 'Table 17.2' },
+               cyclic: { growth_10: 0.28, growth_1000: 1.03, page: 369, table: 'Table 16.1' },
+               thermal: { expansion_1e4_per_c: -3, conductivity_mw_mk: null,
+                          page: 176, table: 'Table 6.5' },},
   wool:      { density: 1.31, regain: 16.0, rkm: 0.50,     // Table 5.1 p.165
                tensile: { tenacity: 0.11, extension: 42.5, modulus: 2.3, work_of_rupture: 30.9,
                           grade: 'Botany 64s (merino)', page: 290, table: 'Table 13.1',
@@ -348,7 +373,13 @@ const FIBER_PROPERTIES = {
                recovery: { rh60: { e1: 99, e5: 69, e10: 51 },
                            rh90: { e1: 94, e5: 82, e10: 56 },
                            page: 344, table: 'Table 15.2' },
-               yield_point: { stress_mn_tex: 39,  strain_pct: 4, page: 344, table: 'Table 15.1' },},
+               yield_point: { stress_mn_tex: 39,  strain_pct: 4, page: 344, table: 'Table 15.1' },
+               directional: { flexural: 0.24, torsional: 0.12,
+                              loop_strength_pct: 85,
+                              page: 421, table: 'Table 17.2' },
+               cyclic: { growth_10: 0.48, growth_1000: 1.44, page: 369, table: 'Table 16.1' },
+               thermal: { expansion_1e4_per_c: null, conductivity_mw_mk: 54,
+                          page: 173, table: 'Table 6.2' },},
   acrylic:   { density: 1.19, regain: 1.5,  rkm: 0.70,     // was 1.17 — Table 5.1 gives 1.19
                tensile: { tenacity: 0.27, extension: 25.0, modulus: 6.2, work_of_rupture: 47,
                           grade: 'Orlon 42, staple', page: 292, table: 'Table 13.2',
@@ -362,7 +393,12 @@ const FIBER_PROPERTIES = {
                recovery: { rh60: { e1: 92, e5: 50, e10: 43 },
                            rh90: { e1: 90, e5: 48, e10: 39 },
                            page: 344, table: 'Table 15.2' },
-               regain_detail: { commercial: null, measured: [1, 2], hysteresis: null, page: 188, table: 'Table 7.3' },},
+               regain_detail: { commercial: null, measured: [1, 2], hysteresis: null, page: 188, table: 'Table 7.3' },
+               directional: { flexural: [0.33, 0.48], torsional: [0.12, 0.18],
+                              loop_strength_pct: 80.9,
+                              page: 421, table: 'Table 17.2' },
+               thermal: { expansion_1e4_per_c: 10, conductivity_mw_mk: null,
+                          page: 176, table: 'Table 6.5' },},
 
   // UNSOURCED. Table 5.1 has no row for any of these four, and the closest
   // rows are not substitutes: modal is a high-wet-modulus viscose and lyocell
@@ -400,7 +436,13 @@ const FIBER_PROPERTIES = {
                            rh90: { e1: 78, e5: 58, e10: 45 },
                            page: 344, table: 'Table 15.2' },
                regain_detail: { commercial: 11, measured: 10, hysteresis: 1.2, page: 188, table: 'Table 7.3' },
-               yield_point: { stress_mn_tex: 98,  strain_pct: 4, page: 344, table: 'Table 15.1' },},
+               yield_point: { stress_mn_tex: 98,  strain_pct: 4, page: 344, table: 'Table 15.1' },
+               directional: { flexural: 0.60, torsional: 0.16,
+                              loop_strength_pct: 88,
+                              page: 421, table: 'Table 17.2' },
+               cyclic: { growth_10: 0.36, growth_1000: 1.92, page: 369, table: 'Table 16.1' },
+               thermal: { expansion_1e4_per_c: null, conductivity_mw_mk: 50,
+                          page: 173, table: 'Table 6.2' },},
   // Regain is not in Table 7.3. Polypropylene is a hydrocarbon with no polar
   // group for water to attach to, and the book's own chapter 7 explains regain
   // in exactly those terms, so zero is the physics rather than a placeholder —
@@ -413,11 +455,16 @@ const FIBER_PROPERTIES = {
                           // and stretches 2.5 times as far, which is why
                           // polypropylene is finished cool.
                           wet: { ten: 1.00, ext: 1.00, mod: 1.00 },
-                          hot_wet: { ten: 0.45, ext: 2.47, mod: 0.21 } } },
+                          hot_wet: { ten: 0.45, ext: 2.47, mod: 0.21 } } ,
+               directional: { flexural: 0.51, torsional: 0.14,
+                              loop_strength_pct: null,
+                              page: 421, table: 'Table 17.2' },},
   polyethylene: { density: 0.95, regain: 0.0, regain_assumed: true,   // Table 5.1 p.165
                tensile: { tenacity: 0.34, extension: 10.0, modulus: 4.4, work_of_rupture: 19,
                           grade: 'Courlene X3, high density', page: 292, table: 'Table 13.2',
-                          wet: null, hot_wet: null } },
+                          wet: null, hot_wet: null } ,
+               thermal: { expansion_1e4_per_c: 2, conductivity_mw_mk: null,
+                          page: 176, table: 'Table 6.5' },},
   //
   // NOT ADDED, and worth naming so nobody looks for them twice: flax (linen),
   // jute, hemp and ramie. The book gives all four a regain and a full set of
@@ -465,6 +512,171 @@ function yarnDiameterMm(ne, blendDensity) {
   const d_in_cotton = 1 / (28 * Math.sqrt(ne));
   const densityScale = Math.sqrt(1.52 / (blendDensity || 1.52)); // lighter fibre → bulkier → larger d
   return parseFloat((d_in_cotton * 25.4 * densityScale).toFixed(4));
+}
+
+
+const lo = v => (Array.isArray(v) ? v[0] : v);
+const hi = v => (Array.isArray(v) ? v[1] : v);
+const mid = v => (Array.isArray(v) ? (v[0] + v[1]) / 2 : v);
+
+/**
+ * Spirality, drape, and what a loop costs — the three things chapter 17 answers
+ * that this engine has been answering from constants with no source.
+ *
+ * SPIRALITY. A single jersey spirals because the yarn's residual torque is
+ * never fully taken out, and how much torque a yarn holds depends on how stiff
+ * its fibres are in torsion. Cotton at 0.16 mN mm2/tex2 is four times as stiff
+ * as nylon at 0.041, which is why cotton jersey spirality is a standing
+ * complaint and nylon's is not. `SPINNING_SYSTEMS.torque_idx` is a
+ * per-spinning-system guess with no source; this is the fibre half of the same
+ * quantity, measured, and the two are reported side by side rather than
+ * multiplied together, because nothing in the book licenses that product.
+ *
+ * DRAPE. Flexural rigidity is the resistance to bending and it is what a hand
+ * reads as drape. Both quantities are SPECIFIC — per tex squared — which is the
+ * only form in which fibres can be compared: rigidity goes as the square of
+ * linear density, so a coarse wool and a microfibre of the same polymer differ
+ * by orders of magnitude for reasons that have nothing to do with the polymer.
+ *
+ * THE LOOP. A yarn in a knitted fabric is bent round a needle and pulled, and
+ * the outside of that bend carries far more than its share. Table 17.3 measures
+ * the strength of a looped yarn against the same yarn pulled straight, and it
+ * is not a small correction: viscose keeps 58%.
+ */
+function blendDirectional(fibers) {
+  if (!fibers) return null;
+  const parts = [];
+  const unmeasured = [];
+  for (const [name, pct] of Object.entries(fibers)) {
+    if (!pct) continue;
+    const d = (FIBER_PROPERTIES[name] || {}).directional;
+    if (!d) { unmeasured.push(name); continue; }
+    parts.push({ name, pct, d });
+  }
+  if (!parts.length) return null;
+
+  const meanOf = pick => {
+    const have = parts.filter(x => pick(x.d) != null);
+    if (!have.length) return null;
+    const w = have.reduce((a, x) => a + x.pct, 0);
+    return { value: round3(have.reduce((a, x) => a + mid(pick(x.d)) * x.pct, 0) / w),
+             from_pct: round3(w) };
+  };
+
+  const tors = meanOf(d => d.torsional);
+  const flex = meanOf(d => d.flexural);
+
+  // Cotton is the reference on both, being the fibre everyone has handled.
+  const cottonT = FIBER_PROPERTIES.cotton.directional.torsional;
+  const cottonF = FIBER_PROPERTIES.cotton.directional.flexural;
+
+  // The weakest link again: a blend gives up as much of its strength to the
+  // loop as its most loop-sensitive component, because that is where it breaks.
+  const looped = parts.filter(x => x.d.loop_strength_pct != null);
+  const worstLoop = looped.length
+    ? looped.reduce((a, b) => (b.d.loop_strength_pct < a.d.loop_strength_pct ? b : a))
+    : null;
+
+  return {
+    torsional_rigidity: tors,
+    torsional_vs_cotton: tors ? round3(tors.value / mid(cottonT)) : null,
+    spirality_band: tors == null ? null
+      : tors.value >= 0.14 ? 'high' : tors.value >= 0.09 ? 'moderate' : 'low',
+    flexural_rigidity: flex,
+    flexural_vs_cotton: flex ? round3(flex.value / mid(cottonF)) : null,
+    drape_band: flex == null ? null
+      : flex.value >= 0.45 ? 'stiff' : flex.value >= 0.28 ? 'medium' : 'fluid',
+    loop_strength: worstLoop && {
+      governed_by: worstLoop.name,
+      pct_of_straight: worstLoop.d.loop_strength_pct,
+      lost_pct: round3(100 - worstLoop.d.loop_strength_pct),
+      from_pct: round3(looped.reduce((a, x) => a + x.pct, 0)),
+    },
+    unmeasured,
+    source: 'Morton & Hearle, Tables 17.2 (p.421) and 17.3 (p.425).',
+  };
+}
+
+/**
+ * What repeated wear leaves behind, as distinct from a single stretch.
+ *
+ * Elastic recovery (Table 15.2) answers what happens when a fabric is pulled
+ * once. A garment is not pulled once — it is pulled a few per cent, thousands
+ * of times. Table 16.1 cycles fibres to 2% extension and measures how much
+ * extension has accumulated by cycle 10 and by cycle 1000, and the separation
+ * is not the strength ordering: nylon has grown 0.28% by cycle 10 and cotton
+ * 1.98%, seven times, from identical treatment.
+ */
+function blendCyclic(fibers) {
+  if (!fibers) return null;
+  const parts = [];
+  const unmeasured = [];
+  for (const [name, pct] of Object.entries(fibers)) {
+    if (!pct) continue;
+    const c = (FIBER_PROPERTIES[name] || {}).cyclic;
+    if (!c || c.growth_10 == null) { unmeasured.push(name); continue; }
+    parts.push({ name, pct, c });
+  }
+  if (!parts.length) return null;
+  const w = parts.reduce((a, x) => a + x.pct, 0);
+  const g10 = parts.reduce((a, x) => a + x.c.growth_10 * x.pct, 0) / w;
+  const withK = parts.filter(x => x.c.growth_1000 != null);
+  const wk = withK.reduce((a, x) => a + x.pct, 0);
+  const g1k = withK.length
+    ? withK.reduce((a, x) => a + x.c.growth_1000 * x.pct, 0) / wk : null;
+
+  return {
+    growth_by_cycle_10_pct: round3(g10),
+    growth_by_cycle_1000_pct: g1k == null ? null : round3(g1k),
+    from_pct: round3(w),
+    thousand_cycle_from_pct: withK.length ? round3(wk) : null,
+    vs_cotton: round3(g10 / FIBER_PROPERTIES.cotton.cyclic.growth_10),
+    band: g10 >= 1.5 ? 'high' : g10 >= 0.8 ? 'moderate' : 'low',
+    unmeasured,
+    source: 'Morton & Hearle, Table 16.1, p.369.',
+  };
+}
+
+/**
+ * Heat: whether the fibre gets longer or SHORTER, and how warm the cloth is.
+ *
+ * Nylon and polyester have a negative coefficient of linear expansion. Heated,
+ * they contract while every other fibre here lengthens, and that is the whole
+ * basis of heat setting — and of a polyester fabric leaving the stenter
+ * narrower than it arrived.
+ */
+function blendThermal(fibers) {
+  if (!fibers) return null;
+  const exp = [];
+  const cond = [];
+  const unmeasured = [];
+  for (const [name, pct] of Object.entries(fibers)) {
+    if (!pct) continue;
+    const t = (FIBER_PROPERTIES[name] || {}).thermal;
+    if (!t) { unmeasured.push(name); continue; }
+    if (t.expansion_1e4_per_c != null) exp.push({ name, pct, v: t.expansion_1e4_per_c, note: t.note });
+    if (t.conductivity_mw_mk != null) cond.push({ name, pct, v: t.conductivity_mw_mk });
+  }
+  if (!exp.length && !cond.length) return null;
+
+  const mean = rows => {
+    if (!rows.length) return null;
+    const w = rows.reduce((a, x) => a + x.pct, 0);
+    return { value: round3(rows.reduce((a, x) => a + x.v * x.pct, 0) / w), from_pct: round3(w) };
+  };
+  const contracting = exp.filter(x => x.v < 0);
+
+  return {
+    expansion_1e4_per_c: mean(exp),
+    contracting_fibres: contracting.map(x => `${x.name} ${x.v}`),
+    conductivity_mw_mk: mean(cond),
+    // The book's own note under Table 6.2: still air conducts 25 mW/(m K), so
+    // every fibre here is within a factor of three of doing nothing and most of
+    // a fabric's warmth is the air it holds, not the fibre it is made of.
+    still_air_mw_mk: 25,
+    unmeasured,
+    source: 'Morton & Hearle, Tables 6.5 (p.176) and 6.2 (p.173).',
+  };
 }
 
 /**
@@ -1261,6 +1473,9 @@ module.exports = {
   blendRecovery,
   moistureEconomics,
   yieldTension,
+  blendDirectional,
+  blendCyclic,
+  blendThermal,
   fibreVariability,
   weakLinkSensitivity,
   analyzeYarn,
