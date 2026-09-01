@@ -115,6 +115,13 @@ for (const [key, row] of Object.entries(F)) {
     cite(key, 'hysteresis', rd.hysteresis, find(key, 'regain_hysteresis', '65% r.h.'));
   }
 
+  // ── Chapter 18: heat ──────────────────────────────────────────────────
+  if (row.heat) {
+    cite(key, 'melting point', row.heat.melting_c, find(key, 'melting_point'));
+    cite(key, 'strength retained at 130 C for 80 days', row.heat.retained_130c_80d,
+         find(key, 'strength_retained_pct', 'after 80 days at 130 C'));
+  }
+
   // ── Chapter 15: the yield point ───────────────────────────────────────
   if (row.yield_point) {
     cite(key, 'yield stress', row.yield_point.stress_mn_tex,

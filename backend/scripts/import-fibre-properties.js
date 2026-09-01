@@ -80,7 +80,7 @@ function verify(payload) {
         'every refusal states a reason');
   check(fibres.length >= 73, 'every declared table was read',
         fibres.length + ' fibres');
-  check(properties.length >= 845, 'every column of every table came through',
+  check(properties.length >= 883, 'every column of every table came through',
         properties.length + ' measurements');
 
   // Classification has to satisfy the same constraints the table does, so a bad
@@ -759,6 +759,54 @@ function verify(payload) {
         cond.map(p => `${p.fibre_slug} ${p.value}`).join(', '));
   check(look('wool', 'thermal_conductivity') < look('cotton', 'thermal_conductivity'),
         'wool still conducts less than cotton at equal packing, so it is warmer at equal weight');
+
+  // ── Chapter 18: heat ──────────────────────────────────────────────────
+  const melt = properties.filter(p => p.property === 'melting_point');
+  check(melt.length === 8, 'every melting point in Table 18.1 came through', melt.length + '');
+  // The same generic name, forty-five degrees apart. If these ever collapse to
+  // one figure, a stenter setting has been made out of a fibre family.
+  check(look('nylon6', 'melting_point') === 215 && look('nylon', 'melting_point') === 260,
+        'nylon 6 and nylon 6.6 keep their separate melting points',
+        `${look('nylon6', 'melting_point')} and ${look('nylon', 'melting_point')}`);
+  // Polypropylene melts below where polyester is set, which is why they cannot
+  // share a frame.
+  check(look('polypropylene', 'melting_point') < look('polyester', 'melting_point') - 50,
+        'polypropylene still melts far below polyester');
+  // Cellulosics and proteins decompose rather than melt, so they must NOT have
+  // acquired a melting point from anywhere.
+  const shouldNotMelt = ['cotton', 'wool', 'silk', 'viscose', 'flax', 'jute'];
+  const wrongly = shouldNotMelt.filter(f => look(f, 'melting_point') != null);
+  check(wrongly.length === 0,
+        'no cellulosic or protein fibre has been given a melting point — they char',
+        wrongly.join(', '));
+
+  const heat = properties.filter(p => p.property === 'strength_retained_pct');
+  check(heat.length === 30, 'Table 18.3 came through', heat.length + ' rows');
+  check(heat.every(p => p.value >= 0 && p.value <= 100),
+        'no fibre gains strength from eighty days of heat');
+  // Damage accumulates: longer is never kinder, and hotter is never kinder.
+  const kinder = [];
+  for (const slug of new Set(heat.map(p => p.fibre_slug))) {
+    const g = (d, t) => look(slug, 'strength_retained_pct', `after ${d} days at ${t} C`);
+    for (const t of [100, 130]) {
+      if (g(20, t) != null && g(80, t) != null && g(80, t) > g(20, t)) {
+        kinder.push(`${slug} at ${t}C: 20d ${g(20, t)} → 80d ${g(80, t)}`);
+      }
+    }
+    for (const d of [20, 80]) {
+      if (g(d, 100) != null && g(d, 130) != null && g(d, 130) > g(d, 100)) {
+        kinder.push(`${slug} at ${d}d: 100C ${g(d, 100)} → 130C ${g(d, 130)}`);
+      }
+    }
+  }
+  check(kinder.length === 0,
+        'longer and hotter are never kinder, in any row', kinder.join('; '));
+  // The finding a finisher acts on.
+  check(look('cotton', 'strength_retained_pct', 'after 80 days at 130 C') < 20 &&
+        look('polyester', 'strength_retained_pct', 'after 80 days at 130 C') > 60,
+        'cotton still loses almost everything to prolonged 130 C and polyester does not',
+        `cotton ${look('cotton', 'strength_retained_pct', 'after 80 days at 130 C')}%, ` +
+        `polyester ${look('polyester', 'strength_retained_pct', 'after 80 days at 130 C')}%`);
 
   const badPage = properties.filter(p => !(p.page >= 1 && p.page <= 746));
   check(badPage.length === 0, 'every citation points inside the book', badPage.length + ' do not');

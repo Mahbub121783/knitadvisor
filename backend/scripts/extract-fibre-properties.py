@@ -676,6 +676,62 @@ TABLES = {
         'thermal_check': True,
         'paired_check': False,
     },
+    # ---- Chapter 18, what heat does ----------------------------------------
+    # THE CEILING ON EVERY DRYING AND SETTING TEMPERATURE. Nylon 6 melts at
+    # 215 C and nylon 6.6 at 260 — the same generic fibre, 45 degrees apart, so
+    # "nylon" is not a stenter setting. Polypropylene melts at 170, which is
+    # below where polyester is normally set, so the two cannot share a frame.
+    #
+    # The caption underneath is as important as the table: "Cellulosic and
+    # protein fibres decompose before melting". Cotton, wool and silk have no
+    # melting point at all — they char — which is why a poly-cotton is set for
+    # the polyester and the cotton simply endures it. That fact is carried into
+    # the note on every row rather than being left to the reader to remember.
+    '18.1': {
+        'pdf_page': 482, 'y_from': 525, 'y_to': 608,
+        'value_before': '°C',
+        'property': 'melting_point',
+        'note': 'The book adds under this table that cellulosic and protein fibres decompose '
+                'before melting, so cotton, wool, silk and the rayons have no melting point at '
+                'all — they char. A setting temperature chosen for a synthetic in a blend is '
+                'endured by the natural fibre, not shared with it.',
+        'row_map': {
+            'Polyethylene – low density': ('polyethylene_ld', None),
+            '– high density':             ('polyethylene', None),
+            'Polypropylene':              ('polypropylene', None),
+            'Secondary acetate':          ('acetate', None),
+            'Cellulose triacetate':       ('triacetate', None),
+            'Nylon 6':                    ('nylon6', None),
+            'Nylon 6.6':                  ('nylon', None),
+            'Polyester fibre':            ('polyester', None),
+        },
+    },
+
+    # SLOW HEAT IS A DIFFERENT QUESTION FROM MELTING, and a more useful one: a
+    # fabric is not held at its melting point, it is held for hours at 100 to
+    # 130 C in drying, setting and storage. After 80 days at 130 C cotton keeps
+    # 10% of its strength and polyester keeps 75%. Glass keeps everything. That
+    # ordering — and it is not the melting-point ordering — is what decides
+    # whether a blend survives a hot finishing route.
+    '18.3': {
+        'pdf_page': 498, 'y_from': 450, 'y_to': 532,
+        'columns': [('strength_retained_pct', 'after 20 days at 100 C', None),
+                    ('strength_retained_pct', 'after 20 days at 130 C', None),
+                    ('strength_retained_pct', 'after 80 days at 100 C', None),
+                    ('strength_retained_pct', 'after 80 days at 130 C', None)],
+        'row_map': {
+            'Viscose rayon':       ('viscose', None),
+            'Cotton':              ('cotton', None),
+            'Linen':               ('flax', None),
+            'Glass':               ('glass', None),
+            'Silk':                ('silk', None),
+            'Nylon':               ('nylon', None),
+            'Polyester, Terylene': ('polyester', None),
+            'Acrylic, Orlon':      ('acrylic', None),
+        },
+        'heat_ageing_check': True,
+        'paired_check': False,
+    },
     '13.7': {
         'pdf_page': 331, 'y_from': 175, 'y_to': 320,
         'rotated': True, 'hierarchical': True, 'label_edge_offset': 24,
@@ -733,7 +789,8 @@ UNITS = {'density': 'g/cm3', 'specific_volume': 'cm3/g',
          'thermal_conductivity': 'mW/(m K)',
          # The book prints these as "4 x 10^-4 per degree C". The factor lives
          # in the unit so the stored number is the mantissa the page shows.
-         'linear_expansion_axial': '1e-4 per degree C'}
+         'linear_expansion_axial': '1e-4 per degree C',
+         'melting_point': 'degree C', 'strength_retained_pct': '%'}
 
 # How each printed fibre name is filed. Written out rather than inferred from
 # the name, because the classification is a judgement and belongs in one
@@ -1017,6 +1074,40 @@ def figure_columns(lines, expected, multi_value=False, cluster_gap=25, x_to=None
     if kept[-1][0] == 0:
         return None
     return sorted(c for _, c in kept)
+
+
+def read_before_unit(page, y_from, y_to, rotated, unit_token, row_map):
+    """
+    Rows of (name, value) for a table that has no column to align on.
+
+    Table 18.1 is a list, not a grid: the melting point is set immediately after
+    the fibre's name, so the figure starts at x = 115 for "Nylon 6" and x = 189
+    for "Polyethylene - low density". There is no column, and a reader that
+    looks for one finds nothing or invents one.
+
+    But the layout states itself perfectly well without a column: every value is
+    the number immediately before the unit. That is unambiguous — the label
+    "Nylon 6.6" contains numbers and neither of them precedes a degree sign —
+    and it needs no coordinate at all, so a reflow cannot break it.
+    """
+    rows = []
+    for line in read_lines(page, y_from, y_to, rotated):
+        value, label = None, []
+        for pos, (x, t) in enumerate(line):
+            t = t.strip()
+            if t == unit_token and pos > 0:
+                m = CELL.match(line[pos - 1][1].strip())
+                if m:
+                    value = float(m.group(1))
+                break
+            label.append(t)
+        # Drop the figure itself off the end of the label.
+        if value is not None and label and CELL.match(label[-1]):
+            label.pop()
+        name = ' '.join(label).strip()
+        if name and value is not None and name in row_map:
+            rows.append((name, value))
+    return rows
 
 
 def read_all_figures(page, y_from, y_to, rotated, label_edge, row_map):
@@ -1678,6 +1769,45 @@ def thermal_slip(cells, spec):
     return None
 
 
+def heat_ageing_slip(cells, spec):
+    """
+    Why this heat-ageing row should not be believed, or None.
+
+    These are percentages of the fibre's original strength, so they lie between
+    0 and 100 — heat does not make a fibre stronger over eighty days.
+
+    And damage accumulates. A fibre that has kept 92% after twenty days at a
+    temperature cannot have kept more than that after eighty days at the same
+    temperature, and one that has kept 92% at 100 C cannot keep more at 130 C.
+    Both orderings hold in every row of the table, so a row that breaks either
+    has had its columns read out of order — which is the standing risk in a
+    table whose four columns are the same quantity at four conditions.
+    """
+    cols = spec['columns']
+    def at(cond):
+        for idx, (lo, hi) in cells.items():
+            if cols[idx][1] == cond:
+                return lo
+        return None
+    d20_100 = at('after 20 days at 100 C')
+    d20_130 = at('after 20 days at 130 C')
+    d80_100 = at('after 80 days at 100 C')
+    d80_130 = at('after 80 days at 130 C')
+    for v in (d20_100, d20_130, d80_100, d80_130):
+        if v is not None and not (0 <= v <= 100):
+            return 'strength retained %.4g%% is not a percentage of the original' % v
+    if d20_100 is not None and d80_100 is not None and d80_100 > d20_100:
+        return ('more strength is retained after 80 days at 100 C (%.4g%%) than after 20 '
+                '(%.4g%%), and heat damage does not undo itself' % (d80_100, d20_100))
+    if d20_130 is not None and d80_130 is not None and d80_130 > d20_130:
+        return ('more strength is retained after 80 days at 130 C (%.4g%%) than after 20 '
+                '(%.4g%%)' % (d80_130, d20_130))
+    if d20_100 is not None and d20_130 is not None and d20_130 > d20_100:
+        return ('more strength survives 130 C than 100 C over the same 20 days '
+                '(%.4g%% against %.4g%%)' % (d20_130, d20_100))
+    return None
+
+
 def ratio_slip(cells, spec):
     """
     Why this row of Table 13.7 should not be believed, or None.
@@ -1721,6 +1851,38 @@ def main():
         page = doc[spec['pdf_page'] - 1]
         printed_page = spec['pdf_page'] - BODY_OFFSET
         rotated = spec.get('rotated', False)
+
+        if spec.get('value_before'):
+            got = read_before_unit(page, spec['y_from'], spec['y_to'], rotated,
+                                   spec['value_before'], spec['row_map'])
+            missing = [n for n in spec['row_map'] if not any(r[0] == n for r in got)]
+            if missing:
+                refused.append({'table': ref, 'name': '(whole table)',
+                                'why': 'declared rows not found: ' + ', '.join(missing)})
+                continue
+            for name_printed, value in got:
+                slug, row_condition = spec['row_map'][name_printed]
+                meta = FIBRES.get(FIBRE_BY_SLUG.get(slug, ''))
+                if not meta:
+                    refused.append({'table': ref, 'name': name_printed,
+                                    'why': 'row maps to slug "%s", which no fibre defines' % slug})
+                    continue
+                name, gclass, origin, polymer, engine = meta[1:]
+                fibres.setdefault(slug, {'slug': slug, 'name': name, 'generic_class': gclass,
+                                         'origin': origin, 'polymer': polymer,
+                                         'engine_key': engine,
+                                         'page': printed_page, 'printed_name': name_printed})
+                properties.append({
+                    'fibre_slug': slug, 'property': spec['property'],
+                    'value': value, 'value_min': None, 'value_max': None,
+                    'unit': UNITS.get(spec['property'], '1'),
+                    'condition': row_condition, 'rh_pct': None,
+                    'temperature_c': None, 'method': None,
+                    'source_key': SOURCE_KEY, 'page': printed_page,
+                    'table_ref': 'Table ' + ref, 'book_refs': None,
+                    'quality': 'BOOK_TABLE', 'note': spec.get('note'),
+                })
+            continue
 
         if spec.get('collect_all'):
             got = read_all_figures(page, spec['y_from'], spec['y_to'], rotated,
@@ -1849,6 +2011,12 @@ def main():
                 by_cond.setdefault(cond, {})[prop] = (lo, hi)
 
             row_ok = True
+            if spec.get('heat_ageing_check'):
+                why = heat_ageing_slip(cells, spec)
+                if why:
+                    refused.append({'table': ref, 'name': label, 'why': why})
+                    continue
+                by_cond = {}
             if spec.get('cyclic_check'):
                 why = cyclic_slip(cells, spec)
                 if why:

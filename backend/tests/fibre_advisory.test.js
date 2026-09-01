@@ -299,6 +299,39 @@ assert(!fibreAdvisory({ nylon: 100 }, sj)
 assert.strictEqual(fibreAdvisory({ cotton: 60, polyester: 40 }, sj)
   .indices.weak_link.governed_by, 'cotton');
 
+// ── Heat: the ceiling belongs to the LOWEST melting fibre ───────────────
+const { heatCeiling } = require('../engine/domain/yarn-engine');
+// A blend cannot be set above its lowest melting point, whatever the majority
+// fibre would tolerate. Polypropylene at 170 stops a fabric being set where its
+// polyester would want to be.
+const pp = heatCeiling({ polyester: 60, polypropylene: 40 });
+assert.strictEqual(pp.lowest_melting.fibre, 'polypropylene');
+assert(pp.working_ceiling_c < heatCeiling({ polyester: 100 }).working_ceiling_c - 50,
+  'the minority fibre lowers the ceiling for the whole blend');
+// The margin below the melt is a mill convention, and the output says so rather
+// than presenting it as measured.
+assert.strictEqual(pp.working_ceiling_is_convention, true);
+const heatF = fibreAdvisory({ polyester: 60, polypropylene: 40 }, sj)
+  .findings.find(f => f.topic === 'temperature ceiling');
+assert(/convention/.test(heatF.confidence),
+  'the working margin must be labelled a convention, not a measurement');
+
+// Cellulosics and proteins decompose rather than melt, so they must not have
+// acquired a melting point — and the blend must say they ENDURE the setting
+// temperature rather than sharing it.
+const cvc = heatCeiling({ cotton: 60, polyester: 40 });
+assert(cvc.non_melting.includes('cotton'));
+assert.strictEqual(FIBER_PROPERTIES.cotton.heat.melting_c, null);
+assert(/ENDURED/.test(fibreAdvisory({ cotton: 60, polyester: 40 }, sj)
+  .findings.find(f => f.topic === 'temperature ceiling').mechanism));
+
+// And the slow damage below the ceiling, which is the more useful question.
+assert.strictEqual(cvc.most_heat_damaged.fibre, 'cotton');
+assert.strictEqual(cvc.most_heat_damaged.retained_130c_80d, 10);
+assert(fibreAdvisory({ cotton: 100 }, sj).findings.some(f => f.topic === 'heat ageing'));
+assert(!fibreAdvisory({ polyester: 100 }, sj).findings.some(f => f.topic === 'heat ageing'),
+  'polyester keeps 75% over the same eighty days and must not be flagged');
+
 console.log(`  ${fibreAdvisory({ cotton: 60, polyester: 40 }, sj).findings.length} findings on a 60/40 CVC single jersey`);
 console.log(`  ${fibreAdvisory({ viscose: 100 }, sj).findings.length} on a viscose single jersey`);
 console.log('\n✓ All fibre advisory tests passed.');
