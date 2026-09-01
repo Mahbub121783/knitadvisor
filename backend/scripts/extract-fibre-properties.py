@@ -56,6 +56,7 @@ CITATION = re.compile(r'^\[[\d,\s–—-]+\]$')
 # would turn every blank into a figure.
 SIGNED = re.compile(r'^[–—-](\d+(?:\.\d+)?)$')
 DASH = re.compile(r'^[–—-]$')
+TIMES = re.compile(r'^[×x\u00d7]$')
 
 # Each table: the PDF page it is on, the vertical band its data rows occupy, and
 # what each column of figures means, left to right.
@@ -495,6 +496,186 @@ TABLES = {
     # remains an unsourced per-spinning-system constant, and the pilling
     # advisory is derived from work of rupture (Tables 13.1/13.2) instead, which
     # is measured and needs no normalisation.
+    # ---- Chapter 17, directional effects ------------------------------------
+    # Three questions this engine has been answering from unsourced constants.
+    #
+    # HOW STIFF WILL THE CLOTH FEEL, AND HOW WILL IT HANG. Flexural rigidity is
+    # the resistance to bending, and it is what a hand reads as drape. Reported
+    # SPECIFIC — per tex squared — so it is a property of the material and not of
+    # how fine the fibre happens to be, which is the only form in which fibres
+    # can be compared at all: rigidity goes as the square of linear density, so
+    # a coarse wool and a microfibre of the same polymer differ by orders of
+    # magnitude and neither number says anything about the wool.
+    #
+    # HOW MUCH WILL IT SPIRAL. Torsional rigidity is the resistance to twisting,
+    # and a single jersey spirals because the residual torque in the yarn is
+    # never fully taken out. Cotton at 0.16 is four times as stiff in torsion as
+    # nylon at 0.041, which is why cotton jersey spirality is a standing problem
+    # and nylon's is not. `torque_idx` in yarn-engine has always been a
+    # per-spinning-system guess with no source; this is the measured quantity
+    # underneath it.
+    #
+    # Every row satisfies torsional < flexural, which is not a coincidence but
+    # the physics — a solid resists bending more than twisting because the shear
+    # modulus is always below the tensile one — so the reader holds every row to
+    # it.
+    #
+    # 17.1 and 17.2 BOTH give flexural rigidity and they DISAGREE: Finlayson
+    # puts silk at 0.19 and the later work at 0.60, three times apart. Both are
+    # stored under their own pages rather than one being preferred, because the
+    # disagreement is the honest state of the measurement.
+    '17.1': {
+        'pdf_page': 435, 'y_from': 556, 'y_to': 618,
+        'columns': [('fibre_shape_factor', 'Finlayson', None),
+                    ('specific_flexural_rigidity', 'Finlayson', None)],
+        'row_map': {
+            'Viscose': ('viscose', None), 'Acetate': ('acetate', None),
+            'Wool': ('wool', None), 'Silk': ('silk', None),
+            'Nylon': ('nylon', None), 'Glass': ('glass', None),
+        },
+        'bending_check': True,
+        'paired_check': False,
+    },
+    '17.2': {
+        'pdf_page': 440, 'y_from': 112, 'y_to': 265,
+        'rotated': True, 'hierarchical': True,
+        'columns': [('specific_flexural_rigidity', '65% r.h., 20 C', 65.0),
+                    ('bending_modulus', '65% r.h., 20 C', 65.0),
+                    ('tensile_modulus_gpa', '65% r.h., 20 C', 65.0),
+                    ('specific_torsional_rigidity', '65% r.h., 20 C', 65.0),
+                    ('shear_modulus', '65% r.h., 20 C', 65.0)],
+        'temperature_c': 20.0,
+        'row_map': {
+            'Cotton':                            ('cotton', None),
+            'Viscose rayon Fibro (staple)':      ('viscose', None),
+            'Viscose rayon Vincel (high wet modulus)': ('polynosic', 'Vincel'),
+            'Secondary acetate':                 ('acetate', None),
+            'Triacetate':                        ('triacetate', None),
+            'Wool':                              ('wool', None),
+            'Silk':                              ('silk', None),
+            'Casein Fibrolane':                  ('casein', None),
+            'Nylon 6.6 (3 types)':               ('nylon', 'across 3 types'),
+            'Polyester fibre Terylene':          ('polyester', None),
+            'Acrylic fibre (3 types)':           ('acrylic', 'across 3 types'),
+            'Polypropylene':                     ('polypropylene', None),
+        },
+        'bending_check': True,
+        'paired_check': False,
+    },
+    # WHAT A LOOP COSTS. A yarn in a knitted fabric is not straight — it is bent
+    # round a needle and pulled, and the outside of that bend carries far more
+    # than its share. Table 17.3 measures exactly that: the strength of a looped
+    # yarn as a percentage of the same yarn pulled straight. Cotton keeps 91%.
+    # Viscose keeps 58%, so a viscose knit gives up over a third of its yarn
+    # strength to the geometry alone, before anything else happens to it. No
+    # calculation here has ever accounted for that, and every strength figure the
+    # engine quotes is a straight-pull figure.
+    '17.3': {
+        'pdf_page': 444, 'y_from': 305, 'y_to': 415,
+        'multi_value': True,
+        'columns': [('loop_strength_pct', 'loop strength as % of straight tensile (Coplan)', None),
+                    ('loop_strength_pct', 'loop strength as % of straight tensile (Bohringer and Schieber)', None),
+                    ('knot_strength_pct', 'knot strength as % of straight tensile (Berry)', None)],
+        'row_map': {
+            'Cotton':                  ('cotton', None),
+            'Viscose rayon':           ('viscose', None),
+            'High-tenacity viscose':   ('viscose_ht', None),
+            'Acetate':                 ('acetate', None),
+            'Wool':                    ('wool', None),
+            'Silk':                    ('silk', None),
+            'Nylon':                   ('nylon', None),
+            'Orlon acrylic fibre':     ('acrylic', None),
+            'Dacron polyester fibre':  ('polyester', None),
+            'Fibreglas':               ('glass', None),
+        },
+        'loop_check': True,
+        'paired_check': False,
+    },
+    # ---- Chapter 16, what repeated loading does ----------------------------
+    # Elastic recovery (Table 15.2) answers what happens when a fabric is
+    # stretched ONCE. A garment is not stretched once. Table 16.1 cycles fibres
+    # to 2% extension over and over and measures how much extension has
+    # accumulated by cycle 10 and by cycle 1000, which is the difference between
+    # "it fits in the shop" and "it fits after a fortnight".
+    #
+    # The separation is severe and it is not the strength ordering: nylon has
+    # accumulated 0.28% by cycle 10 and cotton 1.98%, seven times as much, from
+    # the identical treatment.
+    #
+    # This is the first table read with cell-level refusal. Every row has one
+    # unreadable cell out of four — a footnote mark on linen (its extension was
+    # imposed at 1.5%, not 2%, so the figure is genuinely not comparable), the
+    # book's own typo "10..8" on viscose — and refusing whole rows would throw
+    # away three sound measurements to guard against one bad one. The refused
+    # cell is named on the row instead.
+    #
+    # `x_to` stops the reader before the censored cycles-to-break column, whose
+    # cells hold ">5000" and "breaks". Those are real results and they are not
+    # numbers; a reader that quietly turned ">5000" into 5000 would be inventing
+    # an upper bound the book explicitly declines to give.
+    '16.1': {
+        'pdf_page': 388, 'y_from': 150, 'y_to': 250,
+        'hierarchical': True, 'cell_level_refusal': True, 'x_to': 260,
+        'columns': [('cyclic_extension_growth_pct', 'by cycle 10, at 2% imposed extension', None),
+                    ('cyclic_extension_growth_pct', 'by cycle 1000, at 2% imposed extension', None),
+                    ('cyclic_stress_mn_tex', 'at cycle 10, 2% imposed extension', None),
+                    ('cyclic_stress_mn_tex', 'at cycle 1000, 2% imposed extension', None)],
+        'row_map': {
+            'Cotton':   ('cotton', None),
+            'Linen':    ('flax', None),
+            'Viscose':  ('viscose', None),
+            'Durafil†': ('durafil', None),
+            'Acetate':  ('acetate', None),
+            'Silk':     ('silk', None),
+            'Nylon':    ('nylon', None),
+            'Wool':     ('wool', None),
+            'Casein':   ('casein', None),
+        },
+        'cyclic_check': True,
+        'paired_check': False,
+    },
+
+    # ---- Chapter 6, thermal ------------------------------------------------
+    # 6.2 is three fibres and it settles an argument. Packed to the same bulk
+    # density, cotton conducts 71 mW/(m K), wool 54 and silk 50 — so wool really
+    # is warmer than cotton at equal weight and packing, and not only because it
+    # traps more air. The note under the table is the other half: still air is
+    # 25, so every one of these is within a factor of three of doing nothing,
+    # and most of a fabric's warmth is the air in it rather than the fibre.
+    '6.2': {
+        'pdf_page': 192, 'y_from': 248, 'y_to': 280,
+        'columns': [('thermal_conductivity', 'pad at 0.5 g/cm3 bulk density', None)],
+        'row_map': {'Cotton': ('cotton', None), 'Wool': ('wool', None),
+                    'Silk': ('silk', None)},
+        'thermal_check': True,
+        'paired_check': False,
+    },
+
+    # 6.5 is the one that matters on a stenter. NYLON AND POLYESTER HAVE A
+    # NEGATIVE COEFFICIENT OF LINEAR EXPANSION: heated, they get SHORTER. Every
+    # other fibre here lengthens. That is why a polyester fabric has to be heat
+    # set and why it comes off the frame narrower than it went on, and the
+    # engine has never had the figure.
+    #
+    # The book sets each value as "4 x 10^-4" with the exponent on the following
+    # line, and the minus as a separate word — "- 3". Read naively the minus is
+    # an empty cell and nylon is stored as +3, reversing the physics in silence.
+    # The unit carries the factor of 10^-4 so only the mantissa is stored.
+    '6.5': {
+        'pdf_page': 195, 'y_from': 105, 'y_to': 168,
+        'allow_negative': True, 'x_to': 225,
+        'columns': [('linear_expansion_axial', 'per degree C', None)],
+        'row_map': {
+            'Cotton': ('cotton', None),
+            'Cellulose acetate': ('acetate', None),
+            'Nylon fibre': ('nylon', None),
+            'Polyester (PET)': ('polyester', 'above 80 C'),
+            'Polyethylene': ('polyethylene', None),
+            'Polyacryonitrile (PAN)': ('acrylic', None),
+        },
+        'thermal_check': True,
+        'paired_check': False,
+    },
     '13.7': {
         'pdf_page': 331, 'y_from': 175, 'y_to': 320,
         'rotated': True, 'hierarchical': True, 'label_edge_offset': 24,
@@ -539,7 +720,20 @@ UNITS = {'density': 'g/cm3', 'specific_volume': 'cm3/g',
          # is stored because the SERIES is the finding, not any one value.
          'lustre': 'arbitrary', 'convolutions_per_cm': '1/cm',
          'elastic_recovery': '%',
-         'abrasion_resistance_index': '1'}
+         'abrasion_resistance_index': '1',
+         # Rigidity per tex squared, which is how a fibre's bending and twisting
+         # stiffness are compared independently of its fineness.
+         'specific_flexural_rigidity': 'mN mm2/tex2',
+         'specific_torsional_rigidity': 'mN mm2/tex2',
+         'fibre_shape_factor': '1',
+         'bending_modulus': 'GPa', 'tensile_modulus_gpa': 'GPa',
+         'shear_modulus': 'kN/mm2',
+         'loop_strength_pct': '%', 'knot_strength_pct': '%',
+         'cyclic_extension_growth_pct': '%', 'cyclic_stress_mn_tex': 'mN/tex',
+         'thermal_conductivity': 'mW/(m K)',
+         # The book prints these as "4 x 10^-4 per degree C". The factor lives
+         # in the unit so the stored number is the mantissa the page shows.
+         'linear_expansion_axial': '1e-4 per degree C'}
 
 # How each printed fibre name is filed. Written out rather than inferred from
 # the name, because the classification is a judgement and belongs in one
@@ -716,6 +910,7 @@ FIBRES = {
     # the book and separate fibres here.
     'Acetate, dull':                    ('acetate_dull', 'Acetate (dull, delustred)', 'cellulose', 'regenerated', 'cellulose ethanoate', None),
 
+    'Durafil†':                         ('durafil', 'Durafil (Lilienfeld rayon, 1948)', 'cellulose', 'regenerated', 'cellulose', None),
     'Vicara (zein)':                    ('vicara', 'Vicara (zein protein)', 'protein', 'regenerated', 'zein', None),
     'Acrilan acrylic fibre':            ('acrylic_acrilan', 'Acrylic (Acrilan)', 'vinyl', 'synthetic', 'polyacrylonitrile', None),
 }
@@ -777,7 +972,7 @@ def read_lines(page, y_from, y_to, rotated=False):
     return [sorted(lines[y]) for y in sorted(lines)]
 
 
-def figure_columns(lines, expected, multi_value=False, cluster_gap=25):
+def figure_columns(lines, expected, multi_value=False, cluster_gap=25, x_to=None):
     """
     Where the columns of figures sit, found from the data rather than declared.
 
@@ -797,7 +992,8 @@ def figure_columns(lines, expected, multi_value=False, cluster_gap=25):
     table is refused.
     """
     pattern = LIST_CELL if multi_value else CELL
-    xs = sorted({round(x) for line in lines for x, t in line if pattern.match(t)})
+    xs = sorted({round(x) for line in lines for x, t in line
+                 if pattern.match(t) and (x_to is None or x <= x_to)})
     clusters = []
     for x in xs:
         if clusters and x - clusters[-1][-1] <= cluster_gap:
@@ -872,7 +1068,8 @@ def read_all_figures(page, y_from, y_to, rotated, label_edge, row_map):
 
 def read_rows(page, y_from, y_to, centres, rotated=False,
               label_edge_offset=30, hierarchical=False, multi_value=False,
-              keep_citations=False, allow_negative=False):
+              keep_citations=False, allow_negative=False,
+              cell_level_refusal=False, x_to=None):
     """
     Rows of (name, {column index: (low, high)}), split on the column positions.
 
@@ -897,6 +1094,12 @@ def read_rows(page, y_from, y_to, centres, rotated=False,
     # been chosen. Widening the offset to 45 does cut the name, and the gate
     # catches it, which is the evidence that this line is load-bearing.
     label_edge = min(centres) - label_edge_offset if centres else 1e9
+    # Some tables carry columns this reader has no business in. Table 16.1 puts
+    # a censored cycles-to-break count and two energy-normalised columns to the
+    # right of the four that matter, and every one of them is full of words.
+    # Declaring where the wanted region ends is honest and keeps the column
+    # ranking from picking the loudest columns rather than the right ones.
+    right_edge = x_to if x_to is not None else 1e9
 
     lines = read_lines(page, y_from, y_to, rotated)
 
@@ -915,9 +1118,14 @@ def read_rows(page, y_from, y_to, centres, rotated=False,
     for line in lines:
         label, cells, ambiguous, qualifiers, lists = [], {}, set(), [], {}
         ranged = set()
-        for x, t in line:
+        pending_sign = False
+        refused_cells = []
+        for pos, (x, t) in enumerate(line):
+            nxt = line[pos + 1] if pos + 1 < len(line) else None
             t = t.strip()
             if not t:
+                continue
+            if x > right_edge:
                 continue
             if x < label_edge:
                 # "[13]" after a fibre name is the book's own citation, not part
@@ -929,6 +1137,18 @@ def read_rows(page, y_from, y_to, centres, rotated=False,
                 # disappears without trace.
                 if keep_citations or not CITATION.match(t):
                     label.append(t)
+                continue
+            if (allow_negative and DASH.match(t) and nxt is not None
+                    and CELL.match(nxt[1]) and 0 < nxt[0] - x < 14):
+                # "– 3" set as two words. Table 6.5 prints the coefficient of
+                # thermal expansion this way, and nylon's and polyester's are
+                # NEGATIVE — they contract on heating, which is the whole basis
+                # of heat setting. Read as a dash the minus is skipped as an
+                # empty cell and the next token is stored as +3, silently
+                # reversing the physics. The pair is joined here instead.
+                pending_sign = True
+                continue
+            if TIMES.match(t):
                 continue
             if CITATION.match(t):
                 # The book's reference column sits to the right of the figures
@@ -977,6 +1197,16 @@ def read_rows(page, y_from, y_to, centres, rotated=False,
                 # modulus 7 to high modulus 1.2" is two fibres in one row. The
                 # number alone would misrepresent all three, so the row is
                 # refused rather than stripped of its qualifier.
+                #
+                # Except where a table declares otherwise. Table 16.1 has one
+                # unreadable cell per row out of four — a footnote mark, a
+                # censored ">5000", the book's own "10..8" — and refusing the
+                # whole row throws away three good measurements to protect
+                # against one bad one. Where a table says so, the CELL is
+                # refused and named and the rest of the row is kept.
+                if cell_level_refusal:
+                    refused_cells.append(t)
+                    continue
                 qualifiers.append(t)
                 continue
             idx = min(range(len(centres)), key=lambda i: abs(centres[i] - x)) if centres else None
@@ -989,8 +1219,10 @@ def read_rows(page, y_from, y_to, centres, rotated=False,
                     # last one, which is what a plain assignment does, would
                     # silently store 3 for a fibre the book gives as 1.5 or 3.
                     ambiguous.add(idx)
-                cells[idx] = (float(m.group(1)),
-                              float(m.group(2)) if m.group(2) else None)
+                sign = -1.0 if pending_sign else 1.0
+                pending_sign = False
+                cells[idx] = (sign * float(m.group(1)),
+                              (sign * float(m.group(2))) if m.group(2) else None)
             else:
                 qualifiers.append(t)
         name = ' '.join(label).strip()
@@ -999,16 +1231,17 @@ def read_rows(page, y_from, y_to, centres, rotated=False,
             for idx, vals in lists.items():
                 rows[-1][4].setdefault(idx, []).extend(vals)
             rows[-1][5].update(ranged)
+            rows[-1][6].extend(refused_cells)
             continue
 
         if multi_value:
             if name and (lists or qualifiers):
-                rows.append((name, cells, sorted(ambiguous), qualifiers, lists, set(ranged)))
+                rows.append((name, cells, sorted(ambiguous), qualifiers, lists, set(ranged), refused_cells))
             continue
 
         if not hierarchical:
             if name and (cells or qualifiers):
-                rows.append((name, cells, sorted(ambiguous), qualifiers, {}, set()))
+                rows.append((name, cells, sorted(ambiguous), qualifiers, {}, set(), refused_cells))
             continue
 
         # Three kinds of line, told apart by indent and by whether they carry
@@ -1033,7 +1266,7 @@ def read_rows(page, y_from, y_to, centres, rotated=False,
             # for "Viscose rayon" itself and then indents Fibro and Tenasco
             # under it — so the parent is set, not cleared.
             parent = name
-        rows.append((full, cells, sorted(ambiguous), qualifiers, {}, set()))
+        rows.append((full, cells, sorted(ambiguous), qualifiers, {}, set(), refused_cells))
         last = len(rows) - 1
     return rows
 
@@ -1337,6 +1570,114 @@ def yield_slip(cells, spec):
     return None
 
 
+def bending_slip(cells, spec):
+    """
+    Why this bending/torsion row should not be believed, or None.
+
+    A solid resists bending more than it resists twisting, always, because the
+    shear modulus of a material is below its tensile modulus — for an isotropic
+    solid by a factor of about 2.6, and for a drawn fibre with its chains along
+    the axis by very much more. So specific torsional rigidity cannot exceed
+    specific flexural rigidity, and every row in Table 17.2 obeys it. A row where
+    it does not has had its two rigidity columns read the wrong way round, which
+    is the one mistake this table invites: they are the same units, printed in
+    the same format, three columns apart.
+
+    The shape factor is how far the material sits from the fibre's own centre,
+    measured against a solid circle. Glass is 1.0 by definition of being round;
+    silk's triangular section is 0.59. It cannot be negative and nothing solid
+    exceeds a circle by much.
+    """
+    flex = cells_by_property(cells, spec, 'specific_flexural_rigidity')
+    tors = cells_by_property(cells, spec, 'specific_torsional_rigidity')
+    shape = cells_by_property(cells, spec, 'fibre_shape_factor')
+
+    if shape is not None and not (0 < shape[0] <= 1.5):
+        return 'shape factor %.4g is not a ratio to a circular section' % shape[0]
+    for label, v in (('flexural rigidity', flex), ('torsional rigidity', tors)):
+        if v is not None and not (0 < v[0] <= 10):
+            return '%s %.4g is outside anything a textile fibre measures' % (label, v[0])
+    if flex is not None and tors is not None:
+        # Compare like with like: the low end of one against the low end of the
+        # other, since a range is a range of the same fibre.
+        if tors[0] > flex[0]:
+            return ('torsional rigidity %.4g exceeds flexural rigidity %.4g, which no solid '
+                    'does — the two columns have been read the wrong way round'
+                    % (tors[0], flex[0]))
+    return None
+
+
+def loop_slip(lists, spec):
+    """
+    Why this loop/knot strength row should not be believed, or None.
+
+    These are percentages of the same yarn's straight tensile strength, so they
+    lie between 0 and 100: bending a yarn round a needle or tying it in a knot
+    cannot make it stronger than pulling it straight. Glass at 8.4% is the floor
+    and it is real — a brittle fibre loses almost everything to a bend.
+    """
+    for idx, vals in lists.items():
+        for v in vals:
+            if not (0 < v <= 100):
+                return ('%s is %g, and a looped yarn cannot be stronger than the same yarn '
+                        'pulled straight' % (spec['columns'][idx][0], v))
+    return None
+
+
+def cyclic_slip(cells, spec):
+    """
+    Why this cyclic-loading row should not be believed, or None.
+
+    Extension accumulates; it does not un-accumulate. A fibre that has grown
+    0.28% by its tenth cycle cannot have grown less than that by its
+    thousandth, because the growth already happened. So the 1000-cycle figure
+    must be at least the 10-cycle one, and a row where it is not has had the two
+    columns read in the wrong order.
+
+    The stress needed to reach the same 2% extension falls as the fibre
+    softens under repeated loading, so it goes the other way — but the book has
+    rows where it rises slightly, so that is reported and not enforced.
+    """
+    cols = spec['columns']
+    def at(prop, cond):
+        for idx, (lo, hi) in cells.items():
+            if cols[idx][0] == prop and cols[idx][1] == cond:
+                return lo
+        return None
+    e10 = at('cyclic_extension_growth_pct', 'by cycle 10, at 2% imposed extension')
+    e1k = at('cyclic_extension_growth_pct', 'by cycle 1000, at 2% imposed extension')
+    for v in (e10, e1k):
+        if v is not None and not (0 <= v <= 50):
+            return 'accumulated extension %.4g%% is not something a 2%% cycle produces' % v
+    if e10 is not None and e1k is not None and e1k < e10 - 1e-9:
+        return ('extension accumulated by cycle 1000 (%.4g%%) is below that by cycle 10 '
+                '(%.4g%%), and growth does not undo itself' % (e1k, e10))
+    return None
+
+
+def thermal_slip(cells, spec):
+    """
+    Why this thermal row should not be believed, or None.
+
+    Thermal conductivity is positive and, for a fibre pad, of the order of still
+    air: the book's own note gives air as 25 mW/(m K) and no fibre in Table 6.2
+    reaches three times it.
+
+    Linear expansion is the one property here that is genuinely SIGNED. Nylon
+    and polyester contract on heating and everything else lengthens, so the
+    check cannot demand a positive value — it can only demand that the figure is
+    of a plausible size. A fibre whose length changed by more than a per cent
+    per degree would not survive being ironed.
+    """
+    cond = cells_by_property(cells, spec, 'thermal_conductivity')
+    exp = cells_by_property(cells, spec, 'linear_expansion_axial')
+    if cond is not None and not (0 < cond[0] <= 500):
+        return 'thermal conductivity %.4g mW/(m K) is not a textile fibre' % cond[0]
+    if exp is not None and not (-100 <= exp[0] <= 100):
+        return 'linear expansion %.4g is outside anything a fibre does' % exp[0]
+    return None
+
+
 def ratio_slip(cells, spec):
     """
     Why this row of Table 13.7 should not be believed, or None.
@@ -1429,7 +1770,7 @@ def main():
 
         lines = read_lines(page, spec['y_from'], spec['y_to'], rotated)
         centres = figure_columns(lines, len(spec['columns']), spec.get('multi_value', False),
-                                 spec.get('cluster_gap', 25))
+                                 spec.get('cluster_gap', 25), spec.get('x_to'))
         if centres is None:
             refused.append({'table': ref, 'name': '(whole table)',
                             'why': 'the figures do not form %d columns' % len(spec['columns'])})
@@ -1439,7 +1780,9 @@ def main():
                          spec.get('hierarchical', False),
                          spec.get('multi_value', False),
                          spec.get('keep_citations', False),
-                         spec.get('allow_negative', False))
+                         spec.get('allow_negative', False),
+                         spec.get('cell_level_refusal', False),
+                         spec.get('x_to'))
         if not rows:
             refused.append({'table': ref, 'name': '(whole table)', 'why': 'no rows found in the declared band'})
             continue
@@ -1452,7 +1795,7 @@ def main():
         m = re.search(r'Table\s+' + re.escape(ref) + r'[^\n]*?\[([^\]]+)\]', caption)
         book_refs = m.group(1) if m else None
 
-        for label, cells, ambiguous, qualifiers, lists, ranged in rows:
+        for label, cells, ambiguous, qualifiers, lists, ranged, refused_cells in rows:
             if qualifiers:
                 refused.append({'table': ref, 'name': label,
                                 'why': 'the figures are qualified in words ("%s"), so a bare number would misstate them'
@@ -1506,6 +1849,24 @@ def main():
                 by_cond.setdefault(cond, {})[prop] = (lo, hi)
 
             row_ok = True
+            if spec.get('cyclic_check'):
+                why = cyclic_slip(cells, spec)
+                if why:
+                    refused.append({'table': ref, 'name': label, 'why': why})
+                    continue
+                by_cond = {}
+            if spec.get('thermal_check'):
+                why = thermal_slip(cells, spec)
+                if why:
+                    refused.append({'table': ref, 'name': label, 'why': why})
+                    continue
+                by_cond = {}
+            if spec.get('bending_check'):
+                why = bending_slip(cells, spec)
+                if why:
+                    refused.append({'table': ref, 'name': label, 'why': why})
+                    continue
+                by_cond = {}
             if spec.get('recovery_check'):
                 why = recovery_slip(cells, spec)
                 if why:
@@ -1552,6 +1913,7 @@ def main():
                 as_cells = {i: (min(v), max(v)) for i, v in lists.items()}
                 why = (swelling_slip(lists, spec) if spec.get('swelling_check')
                        else friction_slip(as_cells, spec) if spec.get('friction_check')
+                       else loop_slip(lists, spec) if spec.get('loop_check')
                        else None)
                 if why:
                     refused.append({'table': ref, 'name': label, 'why': why})

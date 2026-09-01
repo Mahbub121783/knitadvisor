@@ -45,6 +45,7 @@
 const {
   FIBER_PROPERTIES, blendMechanics, blendFriction, blendRecovery,
   fibreVariability, weakLinkSensitivity, moistureEconomics, yieldTension,
+  blendDirectional, blendCyclic, blendThermal,
 } = require('./yarn-engine');
 
 const SOURCE = 'Morton & Hearle, Physical Properties of Textile Fibres, 4th edn (2008), '
@@ -285,6 +286,9 @@ function fibreAdvisory(fibers, ctx = {}) {
           fibers[n] > 0 && !weakEach.some(x => x.name === n)) }
     : null;
   const moist = moistureEconomics(fibers);
+  const dir = blendDirectional(fibers);
+  const cyc = blendCyclic(fibers);
+  const therm = blendThermal(fibers);
   const yld = ctx.count_ne ? yieldTension(fibers, ctx.count_ne) : null;
   const pill = pillingIndex(fibers);
   const hand = handleIndex(fibers);
@@ -662,6 +666,119 @@ function fibreAdvisory(fibers, ctx = {}) {
     });
   }
 
+  // ── 13. Spirality, on a single jersey where it actually shows ──────────
+  // A rib or an interlock is balanced by its own second bed, so residual torque
+  // has far less to work on. Issuing this on every fabric would be reciting.
+  if (dir && dir.torsional_rigidity && struct.value >= 0.85) {
+    push({
+      topic: 'spirality',
+      severity: dir.spirality_band === 'high' ? 'high'
+              : dir.spirality_band === 'moderate' ? 'moderate' : 'info',
+      // Stated in the measured quantity rather than as a ratio to cotton: on an
+      // all-cotton fabric the ratio is 1 and "1x as stiff as cotton" is a
+      // sentence that says nothing. The comparison belongs in the mechanism,
+      // where the anchors are given both ways.
+      claim: qualify(`Torsional rigidity ${dir.torsional_rigidity.value} mN mm2/tex2 — `
+        + `${dir.spirality_band}-risk for spirality in this structure.`,
+        dir.torsional_rigidity.from_pct, dir.unmeasured),
+      mechanism: `A single jersey spirals because the yarn's residual torque is never fully `
+        + `taken out, and how much torque a yarn holds depends on how stiff its fibres are in `
+        + `twisting. This blend measures ${dir.torsional_rigidity.value} mN mm2/tex2 against `
+        + `cotton's 0.16 and nylon's 0.041 — which is why cotton jersey spirality is a standing `
+        + `complaint and nylon's is not.`,
+      action: dir.spirality_band === 'low'
+        ? 'Torque is not the limiting factor here; if the fabric still spirals, look at yarn '
+          + 'twist direction and feeder balance rather than at the fibre.'
+        : 'Balance twist direction across feeders (alternate S and Z), consider a low-torque '
+          + 'yarn — air-jet or compact — and put the spirality limit in the tech pack rather '
+          + 'than discovering it after wash testing.',
+      evidence: [{ table: 'Table 17.2', page: 421 }],
+      confidence: 'the fibre half of the quantity; yarn twist is the other half and this book '
+        + 'does not measure it',
+    });
+  }
+
+  // ── 14. What the loop itself costs ─────────────────────────────────────
+  if (dir && dir.loop_strength && dir.loop_strength.lost_pct >= 12 && struct.value >= 0.5) {
+    const L = dir.loop_strength;
+    push({
+      topic: 'knit strength', severity: L.lost_pct >= 30 ? 'high' : 'moderate',
+      claim: qualify(`In a loop this yarn holds only ${L.pct_of_straight}% of the strength it `
+        + `shows pulled straight — ${L.lost_pct}% is lost to the geometry alone.`,
+        L.from_pct, dir.unmeasured),
+      mechanism: `A yarn in a knitted fabric is not straight: it is bent round a needle and `
+        + `pulled, and the outside of that bend carries far more than its share. The blend `
+        + `gives up as much as its most loop-sensitive component, ${L.governed_by}, because `
+        + `that is where it breaks. Every tenacity figure quoted anywhere else in this report `
+        + `is a straight-pull figure.`,
+      action: 'Do not size knitting tension or seam strength from straight-pull yarn data for '
+        + 'this blend. Where strength matters, test the yarn in a loop (ASTM D2256 loop '
+        + 'method) rather than deriving it.',
+      evidence: [{ table: 'Table 17.3', page: 425 }],
+      confidence: 'measured',
+    });
+  }
+
+  // ── 15. Bagging after a fortnight, not after one pull ──────────────────
+  if (cyc && cyc.band !== 'low') {
+    push({
+      topic: 'wear growth', severity: cyc.band === 'high' ? 'moderate' : 'info',
+      claim: qualify(`Under repeated 2% stretching this blend has grown `
+        + `${cyc.growth_by_cycle_10_pct}% by the tenth cycle`
+        + `${cyc.growth_by_cycle_1000_pct != null
+            ? ` and ${cyc.growth_by_cycle_1000_pct}% by the thousandth` : ''}.`,
+        cyc.from_pct, cyc.unmeasured),
+      mechanism: `Elastic recovery describes one pull. A garment is pulled a few per cent `
+        + `thousands of times, and what accumulates is a different quantity: nylon grows 0.28% `
+        + `by cycle 10 and cotton 1.98%, seven times, from identical treatment. This blend `
+        + `sits at ${cyc.vs_cotton}x cotton.`,
+      action: 'Judge shape retention over repeated wear rather than from a single '
+        + 'stretch-and-release test. Where the buyer specifies growth after wash and wear, '
+        + 'this is the quantity that governs it.',
+      evidence: [{ table: 'Table 16.1', page: 369 }],
+      confidence: 'measured',
+    });
+  }
+
+  // ── 16. Heat setting, where the fibre contracts ────────────────────────
+  if (therm && therm.contracting_fibres.length) {
+    const many = therm.contracting_fibres.length > 1;
+    push({
+      topic: 'heat setting', severity: 'moderate', scope: 'fibre',
+      claim: `${therm.contracting_fibres.join(' and ')} — heated, `
+        + `${many ? 'these fibres get' : 'this fibre gets'} SHORTER, not longer.`,
+      mechanism: 'Nylon and polyester have a negative coefficient of linear expansion, unlike '
+        + 'every natural fibre here, which lengthen. That contraction is the whole basis of '
+        + 'heat setting: the cloth is stabilised at temperature in the dimensions it is held '
+        + 'in. It is also why a polyester fabric leaves the stenter narrower than it arrived '
+        + 'if the width is not held.',
+      action: 'Set the stenter width from a heat-relaxed sample, hold that width through the '
+        + 'setting zone, and set before dyeing rather than after so the shade is not disturbed '
+        + 'by the shrinkage.',
+      evidence: [{ table: 'Table 6.5', page: 176 }],
+      confidence: 'measured',
+    });
+  }
+
+  // ── 17. Warmth, and the honest size of the fibre's contribution ────────
+  if (therm && therm.conductivity_mw_mk) {
+    const c = therm.conductivity_mw_mk;
+    push({
+      topic: 'thermal comfort', severity: 'info',
+      claim: qualify(`Packed solid, these fibres conduct ${c.value} mW/(m K) against still `
+        + `air's ${therm.still_air_mw_mk}.`, c.from_pct, therm.unmeasured),
+      mechanism: 'Wool conducts 54 and cotton 71 at the same packing, so wool is genuinely '
+        + 'warmer at equal weight and not only because it traps more air. But every fibre here '
+        + 'is within three times still air, which is the more important half: most of a '
+        + "fabric's warmth is the air held in it, so construction and thickness move warmth "
+        + 'far more than the choice of fibre does.',
+      action: 'Specify warmth through thickness, bulk and structure — a raised or fleeced back '
+        + 'holds more air — and treat the fibre as the secondary lever it is.',
+      evidence: [{ table: 'Table 6.2', page: 173 }],
+      confidence: 'measured',
+    });
+  }
+
   // ── What is NOT known ──────────────────────────────────────────────────
   const gaps = [];
   if (silentOn.length) {
@@ -695,6 +812,9 @@ function fibreAdvisory(fibers, ctx = {}) {
     },
     indices: {
       moisture: moist,
+      directional: dir,
+      cyclic: cyc,
+      thermal: therm,
       yield_tension: yld,
       pilling: pill,
       handle: hand,

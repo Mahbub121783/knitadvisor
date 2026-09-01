@@ -78,9 +78,9 @@ function verify(payload) {
         recovered.length ? 'these now parse — check they parse CORRECTLY: ' + recovered.join(', ') : '');
   check(refused.every(r => r.why && r.why.length > 10),
         'every refusal states a reason');
-  check(fibres.length >= 72, 'every declared table was read',
+  check(fibres.length >= 73, 'every declared table was read',
         fibres.length + ' fibres');
-  check(properties.length >= 735, 'every column of every table came through',
+  check(properties.length >= 845, 'every column of every table came through',
         properties.length + ' measurements');
 
   // Classification has to satisfy the same constraints the table does, so a bad
@@ -656,6 +656,109 @@ function verify(payload) {
   check(ySS.length >= 7 && yieldOff.length === 0,
         'the stress-strain yield still runs above the recovery yield, as the book says',
         yieldOff.map(x => x.fibre_slug).join(', '));
+
+  // ── Chapter 17: bending, twisting, and the loop ───────────────────────
+  const look = (slug, prop, cond) => {
+    const r = properties.find(x => x.fibre_slug === slug && x.property === prop &&
+      (cond === undefined || x.condition === cond));
+    return r ? (r.value != null ? r.value : r.value_min) : null;
+  };
+  const flex = properties.filter(p => p.property === 'specific_flexural_rigidity');
+  const tors = properties.filter(p => p.property === 'specific_torsional_rigidity');
+  check(flex.length >= 18 && tors.length >= 12,
+        'the bending and torsion tables came through',
+        `${flex.length} flexural, ${tors.length} torsional`);
+
+  // A solid resists bending more than twisting, always — the shear modulus is
+  // below the tensile one. The two columns are the same units in the same
+  // format three apart, which is exactly how they get swapped.
+  const swapped = [];
+  for (const t of tors) {
+    const f = properties.find(x => x.fibre_slug === t.fibre_slug &&
+      x.property === 'specific_flexural_rigidity' && x.page === t.page);
+    if (!f) { swapped.push(`${t.fibre_slug}: torsion with no flexure on p.${t.page}`); continue; }
+    const tv = t.value != null ? t.value : t.value_min;
+    const fv = f.value != null ? f.value : f.value_min;
+    if (tv > fv) swapped.push(`${t.fibre_slug}: torsion ${tv} above flexure ${fv}`);
+  }
+  check(swapped.length === 0,
+        'torsional rigidity stays below flexural in every row, as it must',
+        swapped.join('; '));
+
+  // Cotton is several times stiffer in torsion than nylon, which is why cotton
+  // jersey spirals and nylon does not. If this ever inverts, the engine's
+  // spirality advice inverts with it.
+  const ctors = look('cotton', 'specific_torsional_rigidity');
+  const ntors = look('nylon', 'specific_torsional_rigidity');
+  check(ctors > 3 * ntors,
+        'cotton is still far stiffer in torsion than nylon',
+        `cotton ${ctors}, nylon ${ntors}`);
+
+  // Two workers, two flexural rigidities for silk, three times apart. Both are
+  // kept: preferring one silently would hide how uncertain the quantity is.
+  const silkFlex = flex.filter(p => p.fibre_slug === 'silk').map(p => p.value).sort();
+  check(silkFlex.length === 2 && silkFlex[1] > 2.5 * silkFlex[0],
+        "both workers' figures for silk's flexural rigidity survive, disagreement intact",
+        silkFlex.join(' and '));
+
+  const loops = properties.filter(p => p.property === 'loop_strength_pct');
+  check(loops.length >= 9 && loops.every(p => {
+    const v = p.value != null ? p.value : p.value_max;
+    return v > 0 && v <= 100;
+  }), 'no looped yarn is stronger than the same yarn pulled straight');
+  // The finding a knitter needs: viscose loses over a third of its strength to
+  // the geometry of a stitch alone, before anything else happens to it.
+  const viscoseLoop = look('viscose', 'loop_strength_pct');
+  const cottonLoop = look('cotton', 'loop_strength_pct');
+  check(viscoseLoop < 65 && cottonLoop > 85,
+        'viscose still gives up a third of its strength to being looped, and cotton does not',
+        `viscose ${viscoseLoop}%, cotton ${cottonLoop}%`);
+
+  // ── Chapter 16: repeated loading ──────────────────────────────────────
+  const cyc = properties.filter(p => p.property === 'cyclic_extension_growth_pct');
+  // Thirteen, not fourteen: linen's cell was refused because the book imposed
+  // 1.5% extension on it rather than 2%, so its figure is not comparable with
+  // the rest of the column. The rest of linen's row survived.
+  check(cyc.length >= 13, 'Table 16.1 came through', cyc.length + ' rows');
+  // Extension accumulates; it does not un-accumulate.
+  const shrinking = [];
+  for (const slug of new Set(cyc.map(p => p.fibre_slug))) {
+    const e10 = at(slug, 'cyclic_extension_growth_pct', 'by cycle 10, at 2% imposed extension');
+    const e1k = at(slug, 'cyclic_extension_growth_pct', 'by cycle 1000, at 2% imposed extension');
+    if (e10 != null && e1k != null && e1k < e10) shrinking.push(`${slug}: ${e10} → ${e1k}`);
+  }
+  check(shrinking.length === 0,
+        'accumulated extension never falls between cycle 10 and cycle 1000', shrinking.join('; '));
+  check(look('cotton', 'cyclic_extension_growth_pct', 'by cycle 10, at 2% imposed extension') >
+        5 * look('nylon', 'cyclic_extension_growth_pct', 'by cycle 10, at 2% imposed extension'),
+        'cotton still accumulates several times the extension nylon does under the same cycling');
+
+  // Cell-level refusal: linen's footnoted figure is genuinely not comparable —
+  // its extension was imposed at 1.5%, not 2% — but the rest of its row is
+  // sound and must survive.
+  check(look('flax', 'cyclic_stress_mn_tex', 'at cycle 10, 2% imposed extension') != null,
+        "linen keeps the sound cells of a row whose footnoted cell was refused");
+  check(look('flax', 'cyclic_extension_growth_pct', 'by cycle 10, at 2% imposed extension') == null,
+        'and the footnoted cell itself is not stored');
+
+  // ── Chapter 6: heat ───────────────────────────────────────────────────
+  // The finding, and the one a sign error would destroy: nylon and polyester
+  // CONTRACT on heating. The book sets the minus as a separate word, so read
+  // naively they come out positive and the basis of heat setting is reversed.
+  const nylonExp = look('nylon', 'linear_expansion_axial');
+  const polyExp = look('polyester', 'linear_expansion_axial');
+  check(nylonExp < 0 && polyExp < 0,
+        'nylon and polyester still contract on heating',
+        `nylon ${nylonExp}, polyester ${polyExp}`);
+  check(look('cotton', 'linear_expansion_axial') > 0 && look('acrylic', 'linear_expansion_axial') > 0,
+        'and cotton and acrylic still expand, so the sign is read and not assumed');
+
+  const cond = properties.filter(p => p.property === 'thermal_conductivity');
+  check(cond.length === 3 && cond.every(p => p.value > 25 && p.value < 100),
+        'every fibre pad conducts more than still air (25) and less than four times it',
+        cond.map(p => `${p.fibre_slug} ${p.value}`).join(', '));
+  check(look('wool', 'thermal_conductivity') < look('cotton', 'thermal_conductivity'),
+        'wool still conducts less than cotton at equal packing, so it is warmer at equal weight');
 
   const badPage = properties.filter(p => !(p.page >= 1 && p.page <= 746));
   check(badPage.length === 0, 'every citation points inside the book', badPage.length + ' do not');
