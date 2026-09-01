@@ -106,13 +106,160 @@
     }
 
     /* Yarn highlights */
+    /* Three cards now — yarn price, count, industry count — and two when
+       there is no costing to price against, so the track is auto-fit rather
+       than a fixed column count. */
     .yarn-main {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
       gap: 10px;
-      margin-bottom: 14px;
+      margin-bottom: 12px;
     }
-    @media (max-width: 400px) { .yarn-main { grid-template-columns: 1fr; } }
+
+    /* The fabric price: the one number most people open this page for, so it
+       is the only thing at the top of the section and it is the largest type
+       on it. The country control sits beside it because moving the country is
+       the only thing on the page that changes it. */
+    .cost-headline {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      flex-wrap: wrap;
+      background: var(--bg3);
+      border: 1px solid rgba(0,255,178,.28);
+      border-radius: var(--radius-sm);
+      padding: 14px 16px;
+      margin-bottom: 12px;
+    }
+    .ch-lbl { font-size: 9px; text-transform: uppercase; letter-spacing: .7px; color: var(--t3); font-weight: 800; }
+    .ch-val {
+      font-family: var(--head);
+      font-size: 34px;
+      font-weight: 800;
+      color: var(--a1);
+      line-height: 1.1;
+      margin-top: 2px;
+      font-variant-numeric: tabular-nums;
+    }
+    .ch-sub { font-size: 10px; color: var(--t3); margin-top: 4px; line-height: 1.5; }
+    .ch-country {
+      margin-left: auto;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 4px;
+      text-align: right;
+    }
+    .ch-country label { font-size: 9px; text-transform: uppercase; letter-spacing: .6px; color: var(--t3); font-weight: 800; }
+    .ch-country select {
+      background: var(--bg2);
+      color: var(--t1);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-family: inherit;
+      min-width: 172px;
+    }
+    #cost-country-tariff { font-size: 9.5px; color: var(--t3); }
+    #cost-country-busy { font-size: 9.5px; color: var(--a1); }
+    @media (max-width: 520px) {
+      .ch-country { margin-left: 0; align-items: flex-start; text-align: left; }
+      .ch-val { font-size: 28px; }
+    }
+
+    /* ---- THE SIX STAGES -------------------------------------------
+       Yarn is spun, then knitted, then dyed, then finished. The page now
+       follows that order, and the numbers say so — they are process order,
+       not decoration, which is the only reason to number anything. */
+    .stage { margin-bottom: 26px; scroll-margin-top: 56px; }
+    .stage.hidden { display: none; }
+
+    .stage-head {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 0 10px;
+      margin-bottom: 12px;
+      border-bottom: 2px solid var(--t1);
+    }
+    .stage-num {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--bg);
+      background: var(--t1);
+      border-radius: var(--radius-sm);
+      padding: 5px 8px;
+      letter-spacing: .5px;
+      flex-shrink: 0;
+    }
+    .stage-name {
+      font-family: var(--head);
+      font-size: 16px;
+      font-weight: 800;
+      color: var(--t1);
+      letter-spacing: -.2px;
+      line-height: 1.2;
+    }
+    .stage-note { font-size: 10px; color: var(--t3); margin-top: 2px; line-height: 1.4; }
+
+    /* Jump bar. It stays put because the page is long and the stage you
+       want is rarely the one you are looking at. */
+    .stage-nav {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      padding: 9px 0;
+      margin-bottom: 16px;
+      background: var(--bg);
+      border-bottom: 1px solid var(--line);
+      scrollbar-width: none;
+    }
+    .stage-nav::-webkit-scrollbar { display: none; }
+    .stage-nav a {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: baseline;
+      gap: 6px;
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--t3);
+      text-decoration: none;
+      padding: 6px 11px;
+      border: 1px solid var(--line2);
+      border-radius: 20px;
+      background: var(--bg2);
+      white-space: nowrap;
+      transition: color var(--t-fast), border-color var(--t-fast), background var(--t-fast);
+    }
+    .stage-nav a span {
+      font-family: var(--head);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--t1);
+      text-transform: uppercase;
+      letter-spacing: .4px;
+    }
+    .stage-nav a:hover {
+      background: var(--t1);
+      border-color: var(--t1);
+      color: var(--bg3);
+      text-decoration: none;
+    }
+    .stage-nav a:hover span { color: var(--bg); }
+    /* Dimmed, not deleted: a stage that has nothing to say for THIS fabric
+       still tells the reader it was looked at. */
+    .stage-nav a.empty { opacity: .3; pointer-events: none; }
+
+    @media print {
+      .stage-nav { display: none; }
+      .stage-head { break-after: avoid; }
+    }
 
     .yarn-card {
       background: var(--bg3);
@@ -293,6 +440,83 @@
       </div>
     </div>
 
+    <!-- Six stages, and a way to jump to any of them. A stage with
+         nothing to show is dimmed rather than removed, so the shape of
+         the page does not change between one fabric and the next. -->
+    <nav class="stage-nav" id="stage-nav">
+      <a href="#stage-overview">01 <span>Overview</span></a>
+      <a href="#stage-yarn">02 <span>Yarn</span></a>
+      <a href="#stage-knitting">03 <span>Knitting</span></a>
+      <a href="#stage-dyeing">04 <span>Dyeing</span></a>
+      <a href="#stage-finishing">05 <span>Finishing</span></a>
+      <a href="#stage-other">06 <span>Other</span></a>
+    </nav>
+
+    <!-- ===================== OVERVIEW ===================== -->
+    <section class="stage" id="stage-overview">
+      <div class="stage-head">
+        <span class="stage-num">01</span>
+        <div>
+          <div class="stage-name">Overview</div>
+          <div class="stage-note">what the fabric costs, and what the floor actually delivered</div>
+        </div>
+      </div>
+
+    <!-- ===== FABRIC PRICE ==========================================
+         First on the page, because it is what the page is opened for. The
+         country control lives with it: moving that control is the only thing
+         here that changes this number, and it does not look up another
+         country's price list — it applies that country's published industrial
+         power tariff to the energy share of spinning, and says so below. -->
+    <div class="result-section anim-in hidden" id="sec-costing">
+      <div class="result-section-title">
+        <div class="rst-icon green">&#128181;</div>
+        <div class="rst-title-text">Fabric Price</div>
+      </div>
+
+      <div class="cost-headline">
+        <div>
+          <div class="ch-lbl">Total, per kg of finished fabric</div>
+          <div class="ch-val" id="cost-total-val">&#8212;</div>
+          <div class="ch-sub">USD &middot; ex-mill &middot; yarn, knitting, dyeing and finishing included</div>
+        </div>
+        <div class="ch-country">
+          <label for="cost-country">Costing country</label>
+          <select id="cost-country"></select>
+          <div id="cost-country-tariff"></div>
+          <div id="cost-country-busy" class="hidden">recalculating&#8230;</div>
+        </div>
+      </div>
+
+      <!-- What the country actually changed, step by step. A total that moves
+           when a dropdown moves teaches nothing; the arithmetic does. -->
+      <div id="cost-country-detail" class="hidden" style="margin:0 0 14px 0;"></div>
+
+      <!-- These four add up to the headline. The first is NOT the yarn price
+           shown in the yarn section below: it is that price carried into a
+           kilo of fabric, with knitting waste and winding loss on top. Two
+           numbers that differ by 4-6% and mean different things must not
+           share a label. -->
+      <div class="result-section-label" style="margin-top:0;">Cost breakdown
+        <span style="font-weight:400;color:var(--t3);">&#8212; per kg of finished fabric</span></div>
+      <div class="result-row">
+        <span class="result-key">Yarn <span class="text-dim">incl. waste &amp; winding</span></span>
+        <span class="result-val white" id="cost-breakdown-yarn">&#8212;</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Knitting CMT</span>
+        <span class="result-val white" id="cost-breakdown-knitting">&#8212;</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Dyeing CMT</span>
+        <span class="result-val white" id="cost-breakdown-dyeing">&#8212;</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Finishing</span>
+        <span class="result-val white" id="cost-breakdown-finishing">&#8212;</span>
+      </div>
+    </div>
+
     <!-- ===== FACTORY R&D DATA MATCH (real measured records) ===== -->
     <div class="result-section anim-in hidden" id="sec-factory" style="border:1px solid rgba(0,255,178,.4); background:rgba(0,255,178,.06);">
       <div class="result-section-title">
@@ -355,183 +579,6 @@
       </div>
     </div>
 
-    <!-- ===== COLOR SHADE SECTION (shown whenever shade is selected) ===== -->
-    <div class="result-section anim-in hidden" id="sec-shade" style="border-color: rgba(168,85,247,0.3); background: rgba(168,85,247,0.04);">
-      <div class="result-section-title">
-        <div class="rst-icon" style="color:#a855f7;">🎨</div>
-        <div class="rst-title-text" style="color:#a855f7;">Color Shade Impact</div>
-        <span id="shade-badge" class="badge" style="margin-left:auto; background:rgba(168,85,247,0.15); color:#a855f7; border:1px solid rgba(168,85,247,0.3);">—</span>
-      </div>
-
-      <!-- GSM Targets — most important info -->
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px;">
-        <div style="background:rgba(251,146,60,0.08); border:1px solid rgba(251,146,60,0.2); border-radius:8px; padding:10px 12px; text-align:center;">
-          <div style="font-size:9px; text-transform:uppercase; letter-spacing:.6px; color:var(--t3); margin-bottom:4px;">Grey GSM — Knit At</div>
-          <div style="font-size:20px; font-weight:800; color:#fb923c; font-family:var(--head);" id="c-grey-gsm-val">—</div>
-          <div style="font-size:9px; color:var(--t3);">g/m² (before dyeing)</div>
-        </div>
-        <div style="background:rgba(0,255,178,0.06); border:1px solid rgba(0,255,178,0.15); border-radius:8px; padding:10px 12px; text-align:center;">
-          <div style="font-size:9px; text-transform:uppercase; letter-spacing:.6px; color:var(--t3); margin-bottom:4px;">Finish GSM — After Dye</div>
-          <div style="font-size:20px; font-weight:800; color:var(--a1); font-family:var(--head);" id="c-finish-gsm-val">—</div>
-          <div style="font-size:9px; color:var(--t3);">g/m² (target delivered)</div>
-        </div>
-      </div>
-
-      <div class="result-row">
-        <span class="result-key">Dye Mass Uptake</span>
-        <span class="result-val" id="c-dye-uptake">—</span>
-      </div>
-      <div class="result-row">
-        <span class="result-key">Grey GSM Factor</span>
-        <span class="result-val amber" id="c-grey-gsm-factor">—</span>
-      </div>
-      <div class="result-row">
-        <span class="result-key">SL Correction Applied</span>
-        <span class="result-val" id="c-sl-direction">—</span>
-      </div>
-      <div class="result-row">
-        <span class="result-key">Combined SL Factor</span>
-        <span class="result-val amber" id="c-combined-sl">—</span>
-      </div>
-      <div id="c-shade-note" class="mt-6" style="font-size:10px;color:var(--t3);line-height:1.6;padding:8px 10px;background:rgba(255,255,255,.03);border-radius:6px;border-left:2px solid rgba(168,85,247,0.4)"></div>
-    </div>
-
-    <!-- ===== STITCH LENGTH BY SHADE (explicit dark / medium / light) ===== -->
-    <div class="result-section anim-in hidden" id="sec-sl-shade" style="border:1px solid rgba(0,209,255,.3); background:rgba(0,209,255,.04);">
-      <div class="result-section-title">
-        <div class="rst-icon" style="color:#00d1ff;">📏</div>
-        <div class="rst-title-text" style="color:#00d1ff;">Stitch Length by Color Shade</div>
-        <span class="badge" style="margin-left:auto;background:rgba(0,209,255,.12);color:#00d1ff;border:1px solid rgba(0,209,255,.3);">SET ON MACHINE</span>
-      </div>
-      <div style="font-size:10px;color:var(--t3);margin-bottom:8px;">The single most-asked number on the floor — what SL to set the machine to for each shade. All three deliver the <b>same finished GSM</b>.</div>
-      <table style="width:100%;border-collapse:collapse;font-size:11px;">
-        <thead>
-          <tr style="color:var(--t3);text-transform:uppercase;font-size:9px;letter-spacing:.5px;">
-            <th style="text-align:left;padding:6px 4px;">Shade</th>
-            <th style="text-align:right;padding:6px 4px;">SL (mm)</th>
-            <th style="text-align:right;padding:6px 4px;">SL (cm)</th>
-            <th style="text-align:right;padding:6px 4px;">Grey GSM</th>
-            <th style="text-align:right;padding:6px 4px;">Dye Gain</th>
-          </tr>
-        </thead>
-        <tbody id="sl-shade-rows"></tbody>
-      </table>
-      <div id="sl-shade-note" class="mt-6" style="font-size:10px;color:var(--t3);line-height:1.6;padding:8px 10px;background:rgba(255,255,255,.03);border-radius:6px;border-left:2px solid rgba(0,209,255,.4)"></div>
-    </div>
-
-    <!-- ===== WET-PROCESSING CRITICAL PATH (greige GSM + machine-wise) ===== -->
-    <!-- Fibre science, reasoning about this fabric -->
-    <div class="result-section anim-in hidden" id="sec-fibre-advisory" style="border:1px solid rgba(129,140,248,.3); background:rgba(129,140,248,.04);">
-      <div class="result-section-title">
-        <div class="rst-icon" style="color:#818cf8;">🧪</div>
-        <div class="rst-title-text" style="color:#818cf8;">Fibre Science — what the measurements say about this fabric</div>
-        <span id="fa-badge" class="badge" style="margin-left:auto;background:rgba(129,140,248,.12);color:#818cf8;border:1px solid rgba(129,140,248,.3);">—</span>
-      </div>
-      <div id="fa-headline" style="font-size:12px;line-height:1.65;color:var(--t1);margin-bottom:10px;font-weight:600;"></div>
-      <div id="fa-findings"></div>
-      <div id="fa-deferred"></div>
-      <div id="fa-gaps" style="margin-top:10px;"></div>
-      <div id="fa-source" style="margin-top:9px;font-size:9px;color:var(--t3);line-height:1.5;"></div>
-    </div>
-
-    <div class="result-section anim-in hidden" id="sec-wet" style="border:1px solid rgba(251,146,60,.3); background:rgba(251,146,60,.04);">
-      <div class="result-section-title">
-        <div class="rst-icon" style="color:#fb923c;">🏭</div>
-        <div class="rst-title-text" style="color:#fb923c;">Wet-Processing Critical Path</div>
-        <span id="wet-badge" class="badge" style="margin-left:auto;background:rgba(251,146,60,.12);color:#fb923c;border:1px solid rgba(251,146,60,.3);">—</span>
-      </div>
-
-      <!-- Greige GSM headline -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
-        <div style="background:rgba(251,146,60,.08);border:1px solid rgba(251,146,60,.2);border-radius:8px;padding:10px 12px;text-align:center;">
-          <div style="font-size:9px;text-transform:uppercase;letter-spacing:.6px;color:var(--t3);margin-bottom:4px;">Knit Grey GSM</div>
-          <div style="font-size:22px;font-weight:800;color:#fb923c;font-family:var(--head);" id="wet-grey-gsm">—</div>
-          <div style="font-size:9px;color:var(--t3);" id="wet-grey-range">before dyeing</div>
-        </div>
-        <div style="background:rgba(0,255,178,.06);border:1px solid rgba(0,255,178,.15);border-radius:8px;padding:10px 12px;text-align:center;">
-          <div style="font-size:9px;text-transform:uppercase;letter-spacing:.6px;color:var(--t3);margin-bottom:4px;">Delivers Finish GSM</div>
-          <div style="font-size:22px;font-weight:800;color:var(--a1);font-family:var(--head);" id="wet-finish-gsm">—</div>
-          <div style="font-size:9px;color:var(--t3);" id="wet-loss">after dye + finish</div>
-        </div>
-      </div>
-      <div id="wet-formula" style="font-size:10px;color:var(--t3);font-family:var(--mono,monospace);padding:6px 10px;background:rgba(255,255,255,.03);border-radius:6px;border-left:2px solid rgba(251,146,60,.4);margin-bottom:10px;"></div>
-
-      <!-- Grey GSM for every shade lives in the Stitch Length by Color Shade table
-           above (#sec-sl-shade) — same underlying formula, shown once. -->
-      <div style="font-size:10px;color:var(--t3);margin-bottom:10px;">Grey GSM for every shade at this finish target is in <a href="#sec-sl-shade" style="color:#00d1ff;">Stitch Length by Color Shade</a> above.</div>
-
-      <!-- Process route -->
-      <div class="result-section-label">Process Route</div>
-      <div id="wet-route" style="font-size:10px;line-height:1.9;margin-bottom:10px;"></div>
-
-      <!-- Machine-wise critical path -->
-      <div class="result-section-label">Machine-Wise Critical Path (problem → cause → solution → remedy)</div>
-      <div id="wet-machines" style="margin-bottom:10px;"></div>
-
-      <!-- Measured fibre mechanics: what the fibre does once it is wet.
-           Everything above this point is mill convention; this block is the
-           only part of the card that cites a measurement. -->
-      <div id="wet-mech-wrap" class="hidden">
-        <div class="result-section-label">Fibre Mechanics in Water — measured</div>
-        <div id="wet-mech" style="margin-bottom:10px;"></div>
-      </div>
-
-      <!-- Structure + colour issues -->
-      <div class="result-section-label">Fabric-Structure Issues</div>
-      <div id="wet-struct" style="margin-bottom:10px;"></div>
-      <div class="result-section-label">Colour / Chemical Issues (this shade)</div>
-      <div id="wet-colour"></div>
-    </div>
-
-    <!-- ===== COMPOSITION SECTION (shown only when non-pure blend) ===== -->
-    <div class="result-section anim-in hidden" id="sec-composition">
-      <div class="result-section-title">
-        <div class="rst-icon amber">🧪</div>
-        <div class="rst-title-text">Composition Analysis</div>
-      </div>
-      <div class="result-row">
-        <span class="result-key">Parsed Composition</span>
-        <span class="result-val white" id="c-parsed">—</span>
-      </div>
-      <div class="result-row">
-        <span class="result-key">Dominant Fiber</span>
-        <span class="result-val" id="c-dominant" style="text-transform: capitalize;">—</span>
-      </div>
-
-      <div class="result-section-label" style="margin-top:10px;">Calculated Modifiers</div>
-      <div class="result-row">
-        <span class="result-key">Count Adjustment</span>
-        <span class="result-val blue" id="c-mod-count">—</span>
-      </div>
-      <div class="result-row">
-        <span class="result-key">SL Factor (composition)</span>
-        <span class="result-val amber" id="c-mod-sl">—</span>
-      </div>
-      <div class="result-row">
-        <span class="result-key">GSM Offset</span>
-        <span class="result-val" id="c-mod-gsm">—</span>
-      </div>
-
-      <div id="c-notes-container" class="mt-12 text-sm text-dim">
-      </div>
-    </div>
-
-    <!-- ===== PHYSICAL CONSTRAINTS ===== -->
-    <div class="result-section anim-in hidden" id="sec-constraints">
-      <div class="result-section-title">
-        <div class="rst-icon red" id="pc-icon">⚖️</div>
-        <div class="rst-title-text" id="pc-title">Physical Constraints</div>
-      </div>
-      <div class="result-row">
-        <span class="result-key">Tightness Factor (TF)</span>
-        <span class="result-val" id="pc-tf">—</span>
-      </div>
-      <div class="result-row">
-        <span class="result-key">Structure Status</span>
-        <span class="result-val" id="pc-status">—</span>
-      </div>
-    </div>
-
     <!-- ===== EXPERT ANALYSIS (CRITICAL PATH) ===== -->
     <div class="result-section anim-in hidden" id="sec-expert" style="border:1px solid var(--a4); background:rgba(255,184,48,0.05);">
       <div class="result-section-title">
@@ -547,203 +594,53 @@
       </ul>
     </div>
 
-    <!-- ===== PRODUCTION CRITICAL PATH ANALYSIS (CPA) ===== -->
-    <div class="result-section anim-in hidden" id="sec-cpa">
-      <div class="result-section-title">
-        <div class="rst-icon green">🧭</div>
-        <div class="rst-title-text" style="color:var(--a1);">Production Critical Path Analysis (CPA)</div>
-        <span class="badge badge-green" style="margin-left:auto;">Factory-Ready</span>
-      </div>
+    </section>
 
-      <!-- Basis banner (shows when analysis uses recommended machine) -->
-      <div id="cpa-basis" class="hidden" style="font-size:10px; line-height:1.5; padding:8px 10px; margin-bottom:10px; background:rgba(0,255,178,.05); border:1px solid rgba(0,255,178,.18); border-radius:6px; color:var(--t2);"></div>
-
-      <!-- Clearance Sub-section -->
-      <div class="result-section-label" style="color:var(--a2); margin-top:8px;">1. Yarn-to-Needle Slot Clearance</div>
-      <div class="result-row">
-        <span class="result-key">Yarn Dia vs. Slot Width</span>
-        <span class="result-val white" id="cpa-clearance-space">—</span>
-      </div>
-      <div class="result-row">
-        <span class="result-key">Collision Index</span>
-        <span class="result-val" id="cpa-collision-idx">—</span>
-      </div>
-      <div class="info-box text-xs" id="cpa-clearance-desc">—</div>
-
-      <!-- Spirality Sub-section -->
-      <div class="result-section-label" style="color:var(--a3); margin-top:12px;">2. Torque & Spirality Skewness</div>
-      <div class="result-row">
-        <span class="result-key">Estimated Skewness Angle</span>
-        <span class="result-val white" id="cpa-spirality-angle">—</span>
-      </div>
-      <div class="result-row">
-        <span class="result-key">Spirality Risk Level</span>
-        <span class="result-val" id="cpa-spirality-risk">—</span>
-      </div>
-      <div class="info-box text-xs" id="cpa-spirality-desc">—</div>
-
-      <!-- Setup Sub-section -->
-      <div class="result-section-label" style="color:var(--a2); margin-top:12px;">3. Recommended Machine Setup</div>
-      <div class="result-row">
-        <span class="result-key">Recommended Cam Timing</span>
-        <span class="result-val white" id="cpa-cam-timing">—</span>
-      </div>
-      <div class="result-row">
-        <span class="result-key">Gating Configuration</span>
-        <span class="result-val white" id="cpa-gating">—</span>
-      </div>
-      <div class="result-row">
-        <span class="result-key">Sinker Setting</span>
-        <span class="result-val white" id="cpa-sinker">—</span>
-      </div>
-      <div class="info-box text-xs" id="cpa-timing-adv" style="margin-top: 8px;">—</div>
-
-      <!-- Take-down Sub-section -->
-      <div class="result-section-label" style="color:var(--a3); margin-top:12px;">4. Take-down Tension Requirements</div>
-      <div class="result-row">
-        <span class="result-key">Load per Needle</span>
-        <span class="result-val white" id="cpa-tension-needle">—</span>
-      </div>
-      <div class="result-row">
-        <span class="result-key">Total Take-down Load</span>
-        <span class="result-val white" id="cpa-total-load">—</span>
-      </div>
-
-      <!-- Speed Sub-section -->
-      <div class="result-section-label" style="color:var(--a4); margin-top:12px;">5. Mechanical Speed Limit</div>
-      <div class="result-row">
-        <span class="result-key">Safe Running Speed Limit</span>
-        <span class="result-val white" id="cpa-max-rpm">—</span>
-      </div>
-      <div class="result-row">
-        <span class="result-key">Mechanical Speed Status</span>
-        <span class="result-val" id="cpa-rpm-status">—</span>
-      </div>
-      <div class="info-box text-xs" id="cpa-rpm-desc">—</div>
-
-      <!-- Yarn-quality knitting performance (Uster-driven) — raw Uster stats (CVm,
-           IPI, Hairiness, USP) live once in Yarn Specification below; this block keeps
-           only the two fields specific to knitting-performance interpretation. -->
-      <div id="cpa-knit-block" class="hidden">
-        <div class="result-section-label" style="color:var(--a1); margin-top:12px;">6. Yarn-Quality Knitting Performance <span style="font-size:9px; color:var(--t3); font-weight:400;">(Uster)</span></div>
-        <div class="result-row">
-          <span class="result-key">Expected Knitting Efficiency</span>
-          <span class="result-val" id="cpa-knit-eff">—</span>
-        </div>
-        <div class="result-row">
-          <span class="result-key">Knitting Rating</span>
-          <span class="result-val" id="cpa-knit-rating">—</span>
-        </div>
-        <div class="info-box text-xs" id="cpa-knit-note" style="margin-top:8px;">—</div>
-        <div style="font-size:9px;color:var(--t3);margin-top:6px;">Raw Uster CVm / IPI / Hairiness / USP — see <a href="#sec-yarn" style="color:var(--a1);">Yarn Specification → Uster Statistics</a> below.</div>
-      </div>
-    </div>
-
-    <!-- ===== QUALITY & SHRINKAGE PREDICTION ===== -->
-    <div class="result-section anim-in hidden" id="sec-quality">
-      <div class="result-section-title">
-        <div class="rst-icon purple">🛡️</div>
-        <div class="rst-title-text">Fabric Quality & Shrinkage Prediction</div>
-        <span class="badge badge-purple" id="quality-model-badge" style="margin-left:auto">Predictive Model</span>
-      </div>
-
-      <div class="range-grid">
-        <div class="range-card">
-          <div class="range-lbl">Lengthwise Shrinkage</div>
-          <div class="range-val" id="quality-shrink-length">—</div>
-          <div class="range-sub" id="quality-shrink-length-band">expected wash loss</div>
-        </div>
-        <div class="range-card">
-          <div class="range-lbl">Widthwise Shrinkage</div>
-          <div class="range-val" id="quality-shrink-width">—</div>
-          <div class="range-sub" id="quality-shrink-width-band">expected wash loss</div>
+    <!-- ===================== YARN ===================== -->
+    <section class="stage" id="stage-yarn">
+      <div class="stage-head">
+        <span class="stage-num">02</span>
+        <div>
+          <div class="stage-name">Yarn</div>
+          <div class="stage-note">the count, its price, and what the fibre will do</div>
         </div>
       </div>
 
-      <div class="result-row">
-        <span class="result-key">Spirality (Torque)</span>
-        <span class="result-val" id="quality-spirality">—</span>
-      </div>
-      <div class="result-row" id="row-spiral-driver">
-        <span class="result-key">↳ Spirality driver</span>
-        <span class="result-val" id="quality-spiral-driver" style="font-size:11px; text-align:right; white-space:normal; line-height:1.4;">—</span>
-      </div>
-      <div class="result-row" id="row-finish-route">
-        <span class="result-key">↳ Finishing route</span>
-        <span class="result-val" id="quality-finish-route" style="font-size:11px; text-align:right; white-space:normal; line-height:1.4;">—</span>
-      </div>
-      <div class="result-row">
-        <span class="result-key">Pilling Resistance</span>
-        <span class="result-val" id="quality-pilling">—</span>
-      </div>
-      <div class="result-row">
-        <span class="result-key">Bursting Strength</span>
-        <span class="result-val" id="quality-bursting">—</span>
-      </div>
-      <div class="result-row">
-        <span class="result-key">Dimensional Stability</span>
-        <span class="result-val" id="quality-dim-class">—</span>
-      </div>
-      <div class="result-row">
-        <span class="result-key">Wash Color Fastness</span>
-        <span class="result-val" id="quality-fastness">—</span>
-      </div>
-
-      <!-- Accuracy / test-standard footnote -->
-      <div id="quality-accuracy-note" class="mt-6" style="font-size:9.5px;color:var(--t3);line-height:1.6;padding:8px 10px;background:rgba(192,132,252,.05);border-radius:6px;border-left:2px solid var(--purple, #c084fc)"></div>
-
-      <div class="result-section-label" style="color:var(--a3);">Recommended Finishing Process</div>
-      <ul id="quality-finishing-recs" style="padding-left:16px; margin-top:8px; font-size:12px; color:var(--t2); line-height:1.6; display:flex; flex-direction:column; gap:6px;">
-      </ul>
-
-      <!-- Real matched production job (risk-assessment dataset) — only shown
-           for a genuinely close match; see risk-assessment.js confidence gate -->
-      <div id="risk-match-block" class="hidden" style="margin-top:14px; border-top:1px solid var(--line3); padding-top:12px;">
-        <div class="result-section-label" style="color:#fb923c; margin-top:0;">Known Risk Factors <span style="font-size:9px; color:var(--t3); font-weight:400;">— from a matching real production job</span></div>
-        <div style="font-size:10px; color:var(--t3); margin-bottom:8px;" id="risk-match-name">—</div>
-        <div id="risk-match-tags" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;"></div>
-
-        <div class="result-section-label" style="margin-top:8px;">Special Instructions</div>
-        <ul id="risk-match-instructions" style="padding-left:16px; margin-top:6px; font-size:11.5px; color:var(--t2); line-height:1.6; display:flex; flex-direction:column; gap:4px;"></ul>
-
-        <div class="result-section-label" style="margin-top:8px;">Real Process Route</div>
-        <div id="risk-match-route" style="font-size:10px; line-height:1.9; margin-top:4px;"></div>
-
-        <div class="result-section-label" style="margin-top:8px;">Remarks &amp; Quality Notes</div>
-        <ul id="risk-match-remarks" style="padding-left:16px; margin-top:6px; font-size:11.5px; color:var(--t2); line-height:1.6; display:flex; flex-direction:column; gap:4px;"></ul>
-      </div>
-    </div>
-
-    <!-- ===== WARP KNIT SPECIFICATION ===== -->
-    <div class="result-section anim-in hidden" id="sec-warp-knit">
-      <div class="result-section-title">
-        <div class="rst-icon amber">⫸</div>
-        <div class="rst-title-text">Warp Knit Specification</div>
-      </div>
-      <div id="warp-knit-body"></div>
-    </div>
-
-    <!-- ===== YARN SECTION ===== -->
+    <!-- ===== YARN SPECIFICATION =====================================
+         The yarn's own price sits here rather than with the fabric price,
+         beside the count it was quoted at — the count is what fixes it. -->
     <div class="result-section anim-in" id="sec-yarn">
       <div class="result-section-title">
-        <div class="rst-icon green">🧵</div>
+        <div class="rst-icon green">&#129525;</div>
         <div class="rst-title-text">Yarn Specification</div>
-        <div class="osy-badge hide-mobile" id="osy-badge" style="margin-left:auto;">— oz/yd²</div>
+        <div class="osy-badge hide-mobile" id="osy-badge" style="margin-left:auto;">&#8212; oz/yd&#178;</div>
       </div>
 
-      <!-- Primary yarn count cards -->
+      <!-- The price card hides on its own when there is no costing, because
+           the two count cards are engine output and must survive that. -->
       <div class="yarn-main" id="yarn-main">
-        <div class="yarn-card">
+        <div class="yarn-card hidden" id="y-card-price">
+          <div class="yarn-label">Yarn price</div>
+          <div class="yarn-val" id="cost-yarn-val" style="color:var(--a2);">&#8212;</div>
+          <div class="yarn-sub" id="y-price-sub">per kg of yarn</div>
+        </div>
+        <div class="yarn-card" id="y-card-ne">
           <div class="yarn-label">Count (Ne)</div>
-          <div class="yarn-val" id="y-count-ne">—</div>
+          <div class="yarn-val" id="y-count-ne">&#8212;</div>
           <div class="yarn-sub">exact calculated</div>
         </div>
-        <div class="yarn-card">
+        <div class="yarn-card" id="y-card-ind">
           <div class="yarn-label">Count (Industry)</div>
-          <div class="yarn-val" id="y-count-disp">—</div>
-          <div class="yarn-sub" id="y-count-src">—</div>
+          <div class="yarn-val" id="y-count-disp">&#8212;</div>
+          <div class="yarn-sub" id="y-count-src">&#8212;</div>
         </div>
       </div>
+
+      <!-- How old the yarn price is. The date is the headline because it is
+           the only thing that tells a reader whether to trust the number: the
+           reference list drifted 3-7% over four months and nothing could say
+           so, because a price typed into a file carries no date. -->
+      <div id="cost-price-age" class="hidden" style="margin:-4px 0 12px 0;font-size:10px;line-height:1.6;color:var(--t3);"></div>
 
       <!-- Multi-yarn breakdown (shown if terry/fleece) -->
       <div id="multi-yarn-section" class="hidden">
@@ -842,113 +739,64 @@
       </div>
     </div>
 
-    <!-- ===== COSTING ESTIMATION ===== -->
-    <div class="result-section anim-in hidden" id="sec-costing">
+    <!-- ===== COMPOSITION SECTION (shown only when non-pure blend) ===== -->
+    <div class="result-section anim-in hidden" id="sec-composition">
       <div class="result-section-title">
-        <div class="rst-icon green">💵</div>
-        <div class="rst-title-text">Fabric Costing Estimation</div>
-        <span class="badge badge-green" style="margin-left:auto" id="cost-currency-badge">USD/kg</span>
-      </div>
-
-      <!-- Costing country. Every price in this engine is Bangladesh's — the yarn
-           quotes come from a Bangladeshi market list and the knitting and dyeing
-           rates from a Bangladeshi factory price list — and until this control
-           existed that was invisible. Moving it does not look up another
-           country's price list; it applies that country's published industrial
-           power tariff to the energy share of each step, and says so. -->
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 12px 0;">
-        <label for="cost-country" style="font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--t3);font-weight:800;">Costing country</label>
-        <select id="cost-country" style="background:var(--bg3);color:var(--t1);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:12px;font-family:inherit;min-width:160px;"></select>
-        <span id="cost-country-tariff" style="font-size:10px;color:var(--t3);"></span>
-        <span id="cost-country-busy" class="hidden" style="font-size:10px;color:var(--a1);">recalculating…</span>
-      </div>
-
-      <!-- What the country actually changed, step by step. A total that moves
-           when a dropdown moves teaches nothing; the arithmetic does. -->
-      <div id="cost-country-detail" class="hidden" style="margin:0 0 14px 0;"></div>
-
-      <div class="range-grid">
-        <div class="range-card" style="text-align:center;">
-          <div class="range-lbl">Total Estimated Cost</div>
-          <div class="range-val" id="cost-total-val" style="font-size: 24px; color: var(--a1);">—</div>
-          <div class="range-sub">per kg fabric</div>
-        </div>
-        <div class="range-card" style="text-align:center;">
-          <div class="range-lbl">Yarn Cost (with waste)</div>
-          <div class="range-val" id="cost-yarn-val" style="font-size: 24px; color: var(--a2);">—</div>
-          <div class="range-sub" id="cost-waste-lbl">incl. waste & winding</div>
-        </div>
-      </div>
-
-      <!-- How old the yarn price is. The date is the headline because it is the
-           only thing that tells a reader whether to trust the number: the
-           reference list drifted 3-7% over four months and nothing could say so,
-           because a price typed into a file carries no date. -->
-      <div id="cost-price-age" class="hidden" style="margin:-6px 0 14px 0;font-size:10px;line-height:1.6;color:var(--t3);"></div>
-
-      <div class="result-section-label">Cost Breakdown (FOB Bangladesh Mill)</div>
-      <div class="result-row">
-        <span class="result-key">Yarn Raw Material Cost</span>
-        <span class="result-val white" id="cost-breakdown-yarn">—</span>
+        <div class="rst-icon amber">🧪</div>
+        <div class="rst-title-text">Composition Analysis</div>
       </div>
       <div class="result-row">
-        <span class="result-key">Knitting CMT Cost</span>
-        <span class="result-val white" id="cost-breakdown-knitting">—</span>
+        <span class="result-key">Parsed Composition</span>
+        <span class="result-val white" id="c-parsed">—</span>
       </div>
       <div class="result-row">
-        <span class="result-key">Dyeing CMT Cost</span>
-        <span class="result-val white" id="cost-breakdown-dyeing">—</span>
+        <span class="result-key">Dominant Fiber</span>
+        <span class="result-val" id="c-dominant" style="text-transform: capitalize;">—</span>
+      </div>
+
+      <div class="result-section-label" style="margin-top:10px;">Calculated Modifiers</div>
+      <div class="result-row">
+        <span class="result-key">Count Adjustment</span>
+        <span class="result-val blue" id="c-mod-count">—</span>
       </div>
       <div class="result-row">
-        <span class="result-key">Finishing Cost</span>
-        <span class="result-val white" id="cost-breakdown-finishing">—</span>
+        <span class="result-key">SL Factor (composition)</span>
+        <span class="result-val amber" id="c-mod-sl">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">GSM Offset</span>
+        <span class="result-val" id="c-mod-gsm">—</span>
+      </div>
+
+      <div id="c-notes-container" class="mt-12 text-sm text-dim">
       </div>
     </div>
 
-    <!-- ===== OPTIMAL SINGLE MACHINE SETUP (expert request) ===== -->
-    <div class="result-section anim-in hidden" id="sec-optimal" style="border:1px solid rgba(0,255,178,.35); background:rgba(0,255,178,.05);">
+    <!-- Fibre science, reasoning about this fabric -->
+    <div class="result-section anim-in hidden" id="sec-fibre-advisory" style="border:1px solid rgba(129,140,248,.3); background:rgba(129,140,248,.04);">
       <div class="result-section-title">
-        <div class="rst-icon green">🎯</div>
-        <div class="rst-title-text" style="color:var(--a1);">Optimal Machine Setup</div>
-        <span class="badge badge-green" style="margin-left:auto" id="opt-confidence">Best Single Pick</span>
+        <div class="rst-icon" style="color:#818cf8;">🧪</div>
+        <div class="rst-title-text" style="color:#818cf8;">Fibre Science — what the measurements say about this fabric</div>
+        <span id="fa-badge" class="badge" style="margin-left:auto;background:rgba(129,140,248,.12);color:#818cf8;border:1px solid rgba(129,140,248,.3);">—</span>
       </div>
-
-      <!-- Headline: single Dia × single Gauge -->
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px;">
-        <div style="background:rgba(0,255,178,.08); border:1px solid rgba(0,255,178,.25); border-radius:10px; padding:14px 12px; text-align:center;">
-          <div style="font-size:9px; text-transform:uppercase; letter-spacing:.7px; color:var(--t3); margin-bottom:4px;">Optimal Dia</div>
-          <div style="font-size:30px; font-weight:800; color:var(--a1); font-family:var(--head); line-height:1;" id="opt-dia">—</div>
-          <div style="font-size:10px; color:var(--t3); margin-top:3px;">inch</div>
-        </div>
-        <div style="background:rgba(0,255,178,.08); border:1px solid rgba(0,255,178,.25); border-radius:10px; padding:14px 12px; text-align:center;">
-          <div style="font-size:9px; text-transform:uppercase; letter-spacing:.7px; color:var(--t3); margin-bottom:4px;">Optimal Gauge</div>
-          <div style="font-size:30px; font-weight:800; color:var(--a1); font-family:var(--head); line-height:1;" id="opt-gauge">—</div>
-          <div style="font-size:10px; color:var(--t3); margin-top:3px;">needles / inch (GG)</div>
-        </div>
-      </div>
-
-      <div class="info-box" id="opt-summary" style="font-size:11px; line-height:1.6; margin-bottom:10px; border-left:2px solid var(--a1);">—</div>
-
-      <div class="mini-stats" id="opt-stats" style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:10px;">
-        <div class="mini-stat"><div class="ms-val" id="opt-needles">—</div><div class="ms-lbl">Total Needles</div></div>
-        <div class="mini-stat"><div class="ms-val" id="opt-feeders">—</div><div class="ms-lbl">Feeders</div></div>
-        <div class="mini-stat"><div class="ms-val" id="opt-width">—</div><div class="ms-lbl">Open Width</div></div>
-      </div>
-
-      <div class="result-row">
-        <span class="result-key">Gauge basis</span>
-        <span class="result-val white" id="opt-gauge-formula" style="font-size:10px; text-align:right; white-space:normal; line-height:1.4;">—</span>
-      </div>
-      <div class="result-row">
-        <span class="result-key">Dia basis</span>
-        <span class="result-val" id="opt-dia-mode">—</span>
-      </div>
-      <div class="result-row">
-        <span class="result-key">Knittability (Tightness)</span>
-        <span class="result-val" id="opt-tightness">—</span>
-      </div>
-      <div id="opt-note" class="mt-6" style="font-size:10px;color:var(--t3);line-height:1.6;padding:8px 10px;background:rgba(255,255,255,.03);border-radius:6px;border-left:2px solid var(--a1)"></div>
+      <div id="fa-headline" style="font-size:12px;line-height:1.65;color:var(--t1);margin-bottom:10px;font-weight:600;"></div>
+      <div id="fa-findings"></div>
+      <div id="fa-deferred"></div>
+      <div id="fa-gaps" style="margin-top:10px;"></div>
+      <div id="fa-source" style="margin-top:9px;font-size:9px;color:var(--t3);line-height:1.5;"></div>
     </div>
+
+    </section>
+
+    <!-- ===================== KNITTING ===================== -->
+    <section class="stage" id="stage-knitting">
+      <div class="stage-head">
+        <span class="stage-num">03</span>
+        <div>
+          <div class="stage-name">Knitting</div>
+          <div class="stage-note">machine, setup, structure and output</div>
+        </div>
+      </div>
 
     <!-- ===== MACHINE RECOMMENDED ===== -->
     <div class="result-section anim-in" id="sec-machine">
@@ -1002,6 +850,171 @@
       </div>
     </div>
 
+    <!-- ===== OPTIMAL SINGLE MACHINE SETUP (expert request) ===== -->
+    <div class="result-section anim-in hidden" id="sec-optimal" style="border:1px solid rgba(0,255,178,.35); background:rgba(0,255,178,.05);">
+      <div class="result-section-title">
+        <div class="rst-icon green">🎯</div>
+        <div class="rst-title-text" style="color:var(--a1);">Optimal Machine Setup</div>
+        <span class="badge badge-green" style="margin-left:auto" id="opt-confidence">Best Single Pick</span>
+      </div>
+
+      <!-- Headline: single Dia × single Gauge -->
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px;">
+        <div style="background:rgba(0,255,178,.08); border:1px solid rgba(0,255,178,.25); border-radius:10px; padding:14px 12px; text-align:center;">
+          <div style="font-size:9px; text-transform:uppercase; letter-spacing:.7px; color:var(--t3); margin-bottom:4px;">Optimal Dia</div>
+          <div style="font-size:30px; font-weight:800; color:var(--a1); font-family:var(--head); line-height:1;" id="opt-dia">—</div>
+          <div style="font-size:10px; color:var(--t3); margin-top:3px;">inch</div>
+        </div>
+        <div style="background:rgba(0,255,178,.08); border:1px solid rgba(0,255,178,.25); border-radius:10px; padding:14px 12px; text-align:center;">
+          <div style="font-size:9px; text-transform:uppercase; letter-spacing:.7px; color:var(--t3); margin-bottom:4px;">Optimal Gauge</div>
+          <div style="font-size:30px; font-weight:800; color:var(--a1); font-family:var(--head); line-height:1;" id="opt-gauge">—</div>
+          <div style="font-size:10px; color:var(--t3); margin-top:3px;">needles / inch (GG)</div>
+        </div>
+      </div>
+
+      <div class="info-box" id="opt-summary" style="font-size:11px; line-height:1.6; margin-bottom:10px; border-left:2px solid var(--a1);">—</div>
+
+      <div class="mini-stats" id="opt-stats" style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:10px;">
+        <div class="mini-stat"><div class="ms-val" id="opt-needles">—</div><div class="ms-lbl">Total Needles</div></div>
+        <div class="mini-stat"><div class="ms-val" id="opt-feeders">—</div><div class="ms-lbl">Feeders</div></div>
+        <div class="mini-stat"><div class="ms-val" id="opt-width">—</div><div class="ms-lbl">Open Width</div></div>
+      </div>
+
+      <div class="result-row">
+        <span class="result-key">Gauge basis</span>
+        <span class="result-val white" id="opt-gauge-formula" style="font-size:10px; text-align:right; white-space:normal; line-height:1.4;">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Dia basis</span>
+        <span class="result-val" id="opt-dia-mode">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Knittability (Tightness)</span>
+        <span class="result-val" id="opt-tightness">—</span>
+      </div>
+      <div id="opt-note" class="mt-6" style="font-size:10px;color:var(--t3);line-height:1.6;padding:8px 10px;background:rgba(255,255,255,.03);border-radius:6px;border-left:2px solid var(--a1)"></div>
+    </div>
+
+    <!-- ===== PRODUCTION CRITICAL PATH ANALYSIS (CPA) ===== -->
+    <div class="result-section anim-in hidden" id="sec-cpa">
+      <div class="result-section-title">
+        <div class="rst-icon green">🧭</div>
+        <div class="rst-title-text" style="color:var(--a1);">Production Critical Path Analysis (CPA)</div>
+        <span class="badge badge-green" style="margin-left:auto;">Factory-Ready</span>
+      </div>
+
+      <!-- Basis banner (shows when analysis uses recommended machine) -->
+      <div id="cpa-basis" class="hidden" style="font-size:10px; line-height:1.5; padding:8px 10px; margin-bottom:10px; background:rgba(0,255,178,.05); border:1px solid rgba(0,255,178,.18); border-radius:6px; color:var(--t2);"></div>
+
+      <!-- Clearance Sub-section -->
+      <div class="result-section-label" style="color:var(--a2); margin-top:8px;">1. Yarn-to-Needle Slot Clearance</div>
+      <div class="result-row">
+        <span class="result-key">Yarn Dia vs. Slot Width</span>
+        <span class="result-val white" id="cpa-clearance-space">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Collision Index</span>
+        <span class="result-val" id="cpa-collision-idx">—</span>
+      </div>
+      <div class="info-box text-xs" id="cpa-clearance-desc">—</div>
+
+      <!-- Spirality Sub-section -->
+      <div class="result-section-label" style="color:var(--a3); margin-top:12px;">2. Torque & Spirality Skewness</div>
+      <div class="result-row">
+        <span class="result-key">Estimated Skewness Angle</span>
+        <span class="result-val white" id="cpa-spirality-angle">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Spirality Risk Level</span>
+        <span class="result-val" id="cpa-spirality-risk">—</span>
+      </div>
+      <div class="info-box text-xs" id="cpa-spirality-desc">—</div>
+
+      <!-- Setup Sub-section -->
+      <div class="result-section-label" style="color:var(--a2); margin-top:12px;">3. Recommended Machine Setup</div>
+      <div class="result-row">
+        <span class="result-key">Recommended Cam Timing</span>
+        <span class="result-val white" id="cpa-cam-timing">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Gating Configuration</span>
+        <span class="result-val white" id="cpa-gating">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Sinker Setting</span>
+        <span class="result-val white" id="cpa-sinker">—</span>
+      </div>
+      <div class="info-box text-xs" id="cpa-timing-adv" style="margin-top: 8px;">—</div>
+
+      <!-- Take-down Sub-section -->
+      <div class="result-section-label" style="color:var(--a3); margin-top:12px;">4. Take-down Tension Requirements</div>
+      <div class="result-row">
+        <span class="result-key">Load per Needle</span>
+        <span class="result-val white" id="cpa-tension-needle">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Total Take-down Load</span>
+        <span class="result-val white" id="cpa-total-load">—</span>
+      </div>
+
+      <!-- Speed Sub-section -->
+      <div class="result-section-label" style="color:var(--a4); margin-top:12px;">5. Mechanical Speed Limit</div>
+      <div class="result-row">
+        <span class="result-key">Safe Running Speed Limit</span>
+        <span class="result-val white" id="cpa-max-rpm">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Mechanical Speed Status</span>
+        <span class="result-val" id="cpa-rpm-status">—</span>
+      </div>
+      <div class="info-box text-xs" id="cpa-rpm-desc">—</div>
+
+      <!-- Yarn-quality knitting performance (Uster-driven) — raw Uster stats (CVm,
+           IPI, Hairiness, USP) live once in Yarn Specification below; this block keeps
+           only the two fields specific to knitting-performance interpretation. -->
+      <div id="cpa-knit-block" class="hidden">
+        <div class="result-section-label" style="color:var(--a1); margin-top:12px;">6. Yarn-Quality Knitting Performance <span style="font-size:9px; color:var(--t3); font-weight:400;">(Uster)</span></div>
+        <div class="result-row">
+          <span class="result-key">Expected Knitting Efficiency</span>
+          <span class="result-val" id="cpa-knit-eff">—</span>
+        </div>
+        <div class="result-row">
+          <span class="result-key">Knitting Rating</span>
+          <span class="result-val" id="cpa-knit-rating">—</span>
+        </div>
+        <div class="info-box text-xs" id="cpa-knit-note" style="margin-top:8px;">—</div>
+        <div style="font-size:9px;color:var(--t3);margin-top:6px;">Raw Uster CVm / IPI / Hairiness / USP — see <a href="#sec-yarn" style="color:var(--a1);">Yarn → Uster Statistics</a>, above.</div>
+      </div>
+    </div>
+
+    <!-- ===== PHYSICAL CONSTRAINTS ===== -->
+    <div class="result-section anim-in hidden" id="sec-constraints">
+      <div class="result-section-title">
+        <div class="rst-icon red" id="pc-icon">⚖️</div>
+        <div class="rst-title-text" id="pc-title">Physical Constraints</div>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Tightness Factor (TF)</span>
+        <span class="result-val" id="pc-tf">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Structure Status</span>
+        <span class="result-val" id="pc-status">—</span>
+      </div>
+    </div>
+
+    <!-- ===== K/T/M PATTERN ===== -->
+    <div class="result-section anim-in" id="sec-pattern">
+      <div class="result-section-title">
+        <div class="rst-icon purple">⊞</div>
+        <div class="rst-title-text">K/T/M Stitch Pattern</div>
+      </div>
+      <div id="pattern-container">
+        <div class="skeleton skel-line w90"></div>
+        <div class="skeleton skel-line w70"></div>
+      </div>
+    </div>
+
     <!-- ===== PRODUCTION (conditional) ===== -->
     <div class="prod-section anim-in hidden" id="sec-production">
       <div class="result-section-title">
@@ -1035,29 +1048,13 @@
       </div>
     </div>
 
-    <!-- ===== K/T/M PATTERN ===== -->
-    <div class="result-section anim-in" id="sec-pattern">
+    <!-- ===== WARP KNIT SPECIFICATION ===== -->
+    <div class="result-section anim-in hidden" id="sec-warp-knit">
       <div class="result-section-title">
-        <div class="rst-icon purple">⊞</div>
-        <div class="rst-title-text">K/T/M Stitch Pattern</div>
+        <div class="rst-icon amber">⫸</div>
+        <div class="rst-title-text">Warp Knit Specification</div>
       </div>
-      <div id="pattern-container">
-        <div class="skeleton skel-line w90"></div>
-        <div class="skeleton skel-line w70"></div>
-      </div>
-    </div>
-
-    <!-- ===== FABRIC VISUALIZATION ===== -->
-    <div class="result-section anim-in" id="sec-viz">
-      <div class="result-section-title">
-        <div class="rst-icon" style="background:rgba(37,99,235,.1); color:#2563EB;">&#129516;</div>
-        <div class="rst-title-text">Fabric Visualization</div>
-        <span class="badge" style="margin-left:auto; background:rgba(37,99,235,.1); color:#2563EB; border:1px solid rgba(37,99,235,.25); font-size:10px; padding:2px 8px;">Interactive</span>
-      </div>
-      <div id="viz-section-body">
-        <div class="skeleton skel-line w90"></div>
-        <div class="skeleton skel-line w70" style="margin-top:8px;"></div>
-      </div>
+      <div id="warp-knit-body"></div>
     </div>
 
     <!-- ===== GRAMMAGE ===== -->
@@ -1080,6 +1077,243 @@
       </div>
     </div>
 
+    </section>
+
+    <!-- ===================== DYEING ===================== -->
+    <section class="stage" id="stage-dyeing">
+      <div class="stage-head">
+        <span class="stage-num">04</span>
+        <div>
+          <div class="stage-name">Dyeing</div>
+          <div class="stage-note">shade, the greige it needs, and the wet-processing route</div>
+        </div>
+      </div>
+
+    <!-- ===== COLOR SHADE SECTION (shown whenever shade is selected) ===== -->
+    <div class="result-section anim-in hidden" id="sec-shade" style="border-color: rgba(168,85,247,0.3); background: rgba(168,85,247,0.04);">
+      <div class="result-section-title">
+        <div class="rst-icon" style="color:#a855f7;">🎨</div>
+        <div class="rst-title-text" style="color:#a855f7;">Color Shade Impact</div>
+        <span id="shade-badge" class="badge" style="margin-left:auto; background:rgba(168,85,247,0.15); color:#a855f7; border:1px solid rgba(168,85,247,0.3);">—</span>
+      </div>
+
+      <!-- GSM Targets — most important info -->
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px;">
+        <div style="background:rgba(251,146,60,0.08); border:1px solid rgba(251,146,60,0.2); border-radius:8px; padding:10px 12px; text-align:center;">
+          <div style="font-size:9px; text-transform:uppercase; letter-spacing:.6px; color:var(--t3); margin-bottom:4px;">Grey GSM — Knit At</div>
+          <div style="font-size:20px; font-weight:800; color:#fb923c; font-family:var(--head);" id="c-grey-gsm-val">—</div>
+          <div style="font-size:9px; color:var(--t3);">g/m² (before dyeing)</div>
+        </div>
+        <div style="background:rgba(0,255,178,0.06); border:1px solid rgba(0,255,178,0.15); border-radius:8px; padding:10px 12px; text-align:center;">
+          <div style="font-size:9px; text-transform:uppercase; letter-spacing:.6px; color:var(--t3); margin-bottom:4px;">Finish GSM — After Dye</div>
+          <div style="font-size:20px; font-weight:800; color:var(--a1); font-family:var(--head);" id="c-finish-gsm-val">—</div>
+          <div style="font-size:9px; color:var(--t3);">g/m² (target delivered)</div>
+        </div>
+      </div>
+
+      <div class="result-row">
+        <span class="result-key">Dye Mass Uptake</span>
+        <span class="result-val" id="c-dye-uptake">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Grey GSM Factor</span>
+        <span class="result-val amber" id="c-grey-gsm-factor">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">SL Correction Applied</span>
+        <span class="result-val" id="c-sl-direction">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Combined SL Factor</span>
+        <span class="result-val amber" id="c-combined-sl">—</span>
+      </div>
+      <div id="c-shade-note" class="mt-6" style="font-size:10px;color:var(--t3);line-height:1.6;padding:8px 10px;background:rgba(255,255,255,.03);border-radius:6px;border-left:2px solid rgba(168,85,247,0.4)"></div>
+    </div>
+
+    <!-- ===== STITCH LENGTH BY SHADE (explicit dark / medium / light) ===== -->
+    <div class="result-section anim-in hidden" id="sec-sl-shade" style="border:1px solid rgba(0,209,255,.3); background:rgba(0,209,255,.04);">
+      <div class="result-section-title">
+        <div class="rst-icon" style="color:#00d1ff;">📏</div>
+        <div class="rst-title-text" style="color:#00d1ff;">Stitch Length by Color Shade</div>
+        <span class="badge" style="margin-left:auto;background:rgba(0,209,255,.12);color:#00d1ff;border:1px solid rgba(0,209,255,.3);">SET ON MACHINE</span>
+      </div>
+      <div style="font-size:10px;color:var(--t3);margin-bottom:8px;">The single most-asked number on the floor — what SL to set the machine to for each shade. All three deliver the <b>same finished GSM</b>.</div>
+      <table style="width:100%;border-collapse:collapse;font-size:11px;">
+        <thead>
+          <tr style="color:var(--t3);text-transform:uppercase;font-size:9px;letter-spacing:.5px;">
+            <th style="text-align:left;padding:6px 4px;">Shade</th>
+            <th style="text-align:right;padding:6px 4px;">SL (mm)</th>
+            <th style="text-align:right;padding:6px 4px;">SL (cm)</th>
+            <th style="text-align:right;padding:6px 4px;">Grey GSM</th>
+            <th style="text-align:right;padding:6px 4px;">Dye Gain</th>
+          </tr>
+        </thead>
+        <tbody id="sl-shade-rows"></tbody>
+      </table>
+      <div id="sl-shade-note" class="mt-6" style="font-size:10px;color:var(--t3);line-height:1.6;padding:8px 10px;background:rgba(255,255,255,.03);border-radius:6px;border-left:2px solid rgba(0,209,255,.4)"></div>
+    </div>
+
+    <div class="result-section anim-in hidden" id="sec-wet" style="border:1px solid rgba(251,146,60,.3); background:rgba(251,146,60,.04);">
+      <div class="result-section-title">
+        <div class="rst-icon" style="color:#fb923c;">🏭</div>
+        <div class="rst-title-text" style="color:#fb923c;">Wet-Processing Critical Path</div>
+        <span id="wet-badge" class="badge" style="margin-left:auto;background:rgba(251,146,60,.12);color:#fb923c;border:1px solid rgba(251,146,60,.3);">—</span>
+      </div>
+
+      <!-- Greige GSM headline -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+        <div style="background:rgba(251,146,60,.08);border:1px solid rgba(251,146,60,.2);border-radius:8px;padding:10px 12px;text-align:center;">
+          <div style="font-size:9px;text-transform:uppercase;letter-spacing:.6px;color:var(--t3);margin-bottom:4px;">Knit Grey GSM</div>
+          <div style="font-size:22px;font-weight:800;color:#fb923c;font-family:var(--head);" id="wet-grey-gsm">—</div>
+          <div style="font-size:9px;color:var(--t3);" id="wet-grey-range">before dyeing</div>
+        </div>
+        <div style="background:rgba(0,255,178,.06);border:1px solid rgba(0,255,178,.15);border-radius:8px;padding:10px 12px;text-align:center;">
+          <div style="font-size:9px;text-transform:uppercase;letter-spacing:.6px;color:var(--t3);margin-bottom:4px;">Delivers Finish GSM</div>
+          <div style="font-size:22px;font-weight:800;color:var(--a1);font-family:var(--head);" id="wet-finish-gsm">—</div>
+          <div style="font-size:9px;color:var(--t3);" id="wet-loss">after dye + finish</div>
+        </div>
+      </div>
+      <div id="wet-formula" style="font-size:10px;color:var(--t3);font-family:var(--mono,monospace);padding:6px 10px;background:rgba(255,255,255,.03);border-radius:6px;border-left:2px solid rgba(251,146,60,.4);margin-bottom:10px;"></div>
+
+      <!-- Grey GSM for every shade lives in the Stitch Length by Color Shade table
+           above (#sec-sl-shade) — same underlying formula, shown once. -->
+      <div style="font-size:10px;color:var(--t3);margin-bottom:10px;">Grey GSM for every shade at this finish target is in <a href="#sec-sl-shade" style="color:#00d1ff;">Stitch Length by Color Shade</a> above.</div>
+
+      <!-- Process route -->
+      <div class="result-section-label">Process Route</div>
+      <div id="wet-route" style="font-size:10px;line-height:1.9;margin-bottom:10px;"></div>
+
+      <!-- Machine-wise critical path -->
+      <div class="result-section-label">Machine-Wise Critical Path (problem → cause → solution → remedy)</div>
+      <div id="wet-machines" style="margin-bottom:10px;"></div>
+
+      <!-- Measured fibre mechanics: what the fibre does once it is wet.
+           Everything above this point is mill convention; this block is the
+           only part of the card that cites a measurement. -->
+      <div id="wet-mech-wrap" class="hidden">
+        <div class="result-section-label">Fibre Mechanics in Water — measured</div>
+        <div id="wet-mech" style="margin-bottom:10px;"></div>
+      </div>
+
+      <!-- Structure + colour issues -->
+      <div class="result-section-label">Fabric-Structure Issues</div>
+      <div id="wet-struct" style="margin-bottom:10px;"></div>
+      <div class="result-section-label">Colour / Chemical Issues (this shade)</div>
+      <div id="wet-colour"></div>
+    </div>
+
+    </section>
+
+    <!-- ===================== FINISHING ===================== -->
+    <section class="stage" id="stage-finishing">
+      <div class="stage-head">
+        <span class="stage-num">05</span>
+        <div>
+          <div class="stage-name">Finishing</div>
+          <div class="stage-note">shrinkage, spirality and how the finished fabric will behave</div>
+        </div>
+      </div>
+
+    <!-- ===== QUALITY & SHRINKAGE PREDICTION ===== -->
+    <div class="result-section anim-in hidden" id="sec-quality">
+      <div class="result-section-title">
+        <div class="rst-icon purple">🛡️</div>
+        <div class="rst-title-text">Fabric Quality & Shrinkage Prediction</div>
+        <span class="badge badge-purple" id="quality-model-badge" style="margin-left:auto">Predictive Model</span>
+      </div>
+
+      <div class="range-grid">
+        <div class="range-card">
+          <div class="range-lbl">Lengthwise Shrinkage</div>
+          <div class="range-val" id="quality-shrink-length">—</div>
+          <div class="range-sub" id="quality-shrink-length-band">expected wash loss</div>
+        </div>
+        <div class="range-card">
+          <div class="range-lbl">Widthwise Shrinkage</div>
+          <div class="range-val" id="quality-shrink-width">—</div>
+          <div class="range-sub" id="quality-shrink-width-band">expected wash loss</div>
+        </div>
+      </div>
+
+      <div class="result-row">
+        <span class="result-key">Spirality (Torque)</span>
+        <span class="result-val" id="quality-spirality">—</span>
+      </div>
+      <div class="result-row" id="row-spiral-driver">
+        <span class="result-key">↳ Spirality driver</span>
+        <span class="result-val" id="quality-spiral-driver" style="font-size:11px; text-align:right; white-space:normal; line-height:1.4;">—</span>
+      </div>
+      <div class="result-row" id="row-finish-route">
+        <span class="result-key">↳ Finishing route</span>
+        <span class="result-val" id="quality-finish-route" style="font-size:11px; text-align:right; white-space:normal; line-height:1.4;">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Pilling Resistance</span>
+        <span class="result-val" id="quality-pilling">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Bursting Strength</span>
+        <span class="result-val" id="quality-bursting">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Dimensional Stability</span>
+        <span class="result-val" id="quality-dim-class">—</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Wash Color Fastness</span>
+        <span class="result-val" id="quality-fastness">—</span>
+      </div>
+
+      <!-- Accuracy / test-standard footnote -->
+      <div id="quality-accuracy-note" class="mt-6" style="font-size:9.5px;color:var(--t3);line-height:1.6;padding:8px 10px;background:rgba(192,132,252,.05);border-radius:6px;border-left:2px solid var(--purple, #c084fc)"></div>
+
+      <div class="result-section-label" style="color:var(--a3);">Recommended Finishing Process</div>
+      <ul id="quality-finishing-recs" style="padding-left:16px; margin-top:8px; font-size:12px; color:var(--t2); line-height:1.6; display:flex; flex-direction:column; gap:6px;">
+      </ul>
+
+      <!-- Real matched production job (risk-assessment dataset) — only shown
+           for a genuinely close match; see risk-assessment.js confidence gate -->
+      <div id="risk-match-block" class="hidden" style="margin-top:14px; border-top:1px solid var(--line3); padding-top:12px;">
+        <div class="result-section-label" style="color:#fb923c; margin-top:0;">Known Risk Factors <span style="font-size:9px; color:var(--t3); font-weight:400;">— from a matching real production job</span></div>
+        <div style="font-size:10px; color:var(--t3); margin-bottom:8px;" id="risk-match-name">—</div>
+        <div id="risk-match-tags" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;"></div>
+
+        <div class="result-section-label" style="margin-top:8px;">Special Instructions</div>
+        <ul id="risk-match-instructions" style="padding-left:16px; margin-top:6px; font-size:11.5px; color:var(--t2); line-height:1.6; display:flex; flex-direction:column; gap:4px;"></ul>
+
+        <div class="result-section-label" style="margin-top:8px;">Real Process Route</div>
+        <div id="risk-match-route" style="font-size:10px; line-height:1.9; margin-top:4px;"></div>
+
+        <div class="result-section-label" style="margin-top:8px;">Remarks &amp; Quality Notes</div>
+        <ul id="risk-match-remarks" style="padding-left:16px; margin-top:6px; font-size:11.5px; color:var(--t2); line-height:1.6; display:flex; flex-direction:column; gap:4px;"></ul>
+      </div>
+    </div>
+
+    </section>
+
+    <!-- ===================== OTHER ===================== -->
+    <section class="stage" id="stage-other">
+      <div class="stage-head">
+        <span class="stage-num">06</span>
+        <div>
+          <div class="stage-name">Other</div>
+          <div class="stage-note">the fabric drawn, and every formula the answer came through</div>
+        </div>
+      </div>
+
+    <!-- ===== FABRIC VISUALIZATION ===== -->
+    <div class="result-section anim-in" id="sec-viz">
+      <div class="result-section-title">
+        <div class="rst-icon" style="background:rgba(37,99,235,.1); color:#2563EB;">&#129516;</div>
+        <div class="rst-title-text">Fabric Visualization</div>
+        <span class="badge" style="margin-left:auto; background:rgba(37,99,235,.1); color:#2563EB; border:1px solid rgba(37,99,235,.25); font-size:10px; padding:2px 8px;">Interactive</span>
+      </div>
+      <div id="viz-section-body">
+        <div class="skeleton skel-line w90"></div>
+        <div class="skeleton skel-line w70" style="margin-top:8px;"></div>
+      </div>
+    </div>
+
     <!-- ===== FORMULA TRACE (collapsible) ===== -->
     <div class="result-section anim-in" id="sec-trace">
       <button class="collapsible-trigger" onclick="toggleTrace(this)" style="border-top:none;padding-top:0;">
@@ -1096,6 +1330,9 @@
         </div>
       </div>
     </div>
+
+    </section>
+
 
     <!-- ===== NAVIGATE MORE ===== -->
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
@@ -1674,6 +1911,11 @@ function renderResult(r, params) {
   // — Formula trace —
   renderTrace(r.formula_trace || []);
 
+  // — Stages last: every section above has decided whether it has anything
+  //   to show, and only now can an empty stage be told apart from one that
+  //   has simply not rendered yet. —
+  syncStages();
+
   // — Footer —
   document.getElementById('res-footer-time').textContent =
     `KnitAdvisor · response ${r.response_ms}ms`;
@@ -1912,15 +2154,42 @@ function renderCosting(costing) {
   // Local, because the other escapers in this file are scoped to their own
   // render functions and none of them reaches here.
   const esc = (x) => String(x == null ? '' : x).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  // The costing now lives inside the yarn section in three pieces — the
+  // headline price, the yarn-price card sitting between the two count cards,
+  // and the detail below them. They appear and disappear together; the count
+  // cards between them are engine output and stay either way.
+  // Two places now, in two different stages: the fabric price section at the
+  // top of the page, and the yarn-price card beside the count it was quoted
+  // at. The count cards between them are engine output and stay either way.
   const sec = document.getElementById('sec-costing');
+  const priceCard = document.getElementById('y-card-price');
+  const show = (on) => [sec, priceCard]
+    .forEach(el => el && el.classList.toggle('hidden', !on));
   if (!costing) {
-    sec.classList.add('hidden');
+    show(false);
+    syncStages();
     return;
   }
-  sec.classList.remove('hidden');
+  show(true);
 
   document.getElementById('cost-total-val').textContent = `$${fmt(costing.total_per_kg_usd, 2)}`;
-  document.getElementById('cost-yarn-val').textContent = `$${fmt(costing.raw_material_per_kg_usd, 2)}`;
+
+  // What a kilo of THIS YARN costs, at the count the costing actually asked
+  // for — not the waste-inclusive figure, which is a different number and is
+  // in the breakdown below. The count comes from the costing rather than from
+  // the card next to it, because the costing rounds the count itself and the
+  // two are not guaranteed to agree.
+  document.getElementById('cost-yarn-val').textContent =
+    `$${fmt(costing.yarn_final_price_usd, 2)}`;
+  const escSub = (x) => String(x == null ? '' : x).replace(/[&<>]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]));
+  const unit = costing.yarn_count_display
+    ? `per kg of yarn \u00B7 ${escSub(costing.yarn_count_display)}` : 'per kg of yarn';
+  // The yarn type gets its own line: at this card width that is the difference
+  // between a two-line caption and a four-line one, and it is the part a
+  // reader checks second.
+  document.getElementById('y-price-sub').innerHTML = costing.yarn_type_label
+    ? `${unit}<div style="opacity:.75;margin-top:1px;">${escSub(costing.yarn_type_label)}</div>`
+    : unit;
 
   // ── When the yarn price was last updated ──────────────────────────────
   // Four states, and they must not read the same. A market quote and a figure
@@ -2045,10 +2314,39 @@ function renderCosting(costing) {
   } else {
     yarnRowEl.textContent = `$${fmt(costing.raw_material_per_kg_usd, 2)} / kg`;
   }
+  // Kept plain beside the rendered row: on a blend the row above becomes a
+  // fibre table, and copyResults would otherwise paste the whole thing.
+  yarnRowEl.dataset.plain = `$${fmt(costing.raw_material_per_kg_usd, 2)} / kg`;
 
   document.getElementById('cost-breakdown-knitting').textContent = `$${fmt(costing.knitting_per_kg_usd, 2)} / kg`;
   document.getElementById('cost-breakdown-dyeing').textContent = `$${fmt(costing.dyeing_per_kg_usd, 2)} / kg`;
   document.getElementById('cost-breakdown-finishing').textContent = `$${fmt(costing.finishing_per_kg_usd, 2)} / kg`;
+
+  syncStages();
+}
+
+/* ============================================================
+   STAGES
+   ============================================================ */
+/**
+ * A stage with nothing in it must not print its heading.
+ *
+ * Most sections on this page hide themselves when the engine has nothing for
+ * them — no warp knit, no shade, no factory match. Grouping them under fixed
+ * headings would otherwise leave a reader looking at "Dyeing" with nothing
+ * underneath it, which reads as a bug rather than as an absence.
+ *
+ * The jump link is dimmed instead of removed, because a stage that had
+ * nothing to say for THIS fabric still tells the reader it was looked at.
+ */
+function syncStages() {
+  document.querySelectorAll('.stage').forEach(stage => {
+    const live = stage.querySelectorAll(
+      '.result-section:not(.hidden), .prod-section:not(.hidden)').length;
+    stage.classList.toggle('hidden', live === 0);
+    const link = document.querySelector(`.stage-nav a[href="#${stage.id}"]`);
+    if (link) link.classList.toggle('empty', live === 0);
+  });
 }
 
 /* ============================================================
@@ -2312,15 +2610,18 @@ function renderYarn(yarn) {
     document.getElementById('y-count-src').textContent = 'Denier system — warp knit does not use Ne count';
 
     // Override the yarn card labels
-    const cards = document.querySelectorAll('#yarn-main .yarn-card');
-    if (cards[0]) {
-      cards[0].querySelector('.yarn-label').textContent = 'Yarn Denier';
-      cards[0].querySelector('.yarn-sub').textContent = denierLabel;
+    // By id, not by position: a yarn-price card now sits in front of these
+    // two, so :first-child and cards[0] no longer mean the count card.
+    const neCardW = document.getElementById('y-card-ne');
+    const indCardW = document.getElementById('y-card-ind');
+    if (neCardW) {
+      neCardW.querySelector('.yarn-label').textContent = 'Yarn Denier';
+      neCardW.querySelector('.yarn-sub').textContent = denierLabel;
     }
-    if (cards[1]) {
-      cards[1].querySelector('.yarn-label').textContent = 'Filament Count';
-      cards[1].querySelector('.yarn-val').textContent = (yarn.filaments_input || 34) + 'f';
-      cards[1].querySelector('.yarn-sub').textContent = 'filaments per yarn';
+    if (indCardW) {
+      indCardW.querySelector('.yarn-label').textContent = 'Filament Count';
+      indCardW.querySelector('.yarn-val').textContent = (yarn.filaments_input || 34) + 'f';
+      indCardW.querySelector('.yarn-sub').textContent = 'filaments per yarn';
     }
 
     // Hide Ne conversion sections that don't apply
@@ -2335,7 +2636,7 @@ function renderYarn(yarn) {
     countInt != null ? `${countInt} Ne` : (yarn.count_display || '—');
 
   // Count sub-label: show exact calculated value for transparency
-  const neCard = document.querySelector('#yarn-main .yarn-card:first-child');
+  const neCard = document.getElementById('y-card-ne');
   if (neCard) {
     const subEl = neCard.querySelector('.yarn-sub');
     if (subEl && countExact != null && countExact !== countInt) {
@@ -2350,7 +2651,7 @@ function renderYarn(yarn) {
   document.getElementById('y-count-src').textContent = yarn.source || '';
 
   // Elastane separate declaration card
-  const indCard = document.querySelector('#yarn-main .yarn-card:last-child');
+  const indCard = document.getElementById('y-card-ind');
   if (indCard && yarn.elastane_denier_declared) {
     const feedType = (yarn.elastane_pct || 0) <= 5 ? 'Half-feed' : 'Full-feed';
     indCard.querySelector('.yarn-label').textContent = 'Count (Industry)';
@@ -2795,12 +3096,18 @@ Speed Ceiling: ${maxRpm} (Status: ${rpmStatus})`;
   const secCosting = document.getElementById('sec-costing');
   if (secCosting && !secCosting.classList.contains('hidden')) {
     const totalCost = document.getElementById('cost-total-val').textContent;
-    const yarnCost = document.getElementById('cost-yarn-val').textContent;
+    const yarnPrice = document.getElementById('cost-yarn-val').textContent;
+    const yarnRow = document.getElementById('cost-breakdown-yarn');
+    const yarnCost = yarnRow.dataset.plain || yarnRow.textContent;
     const knitCost = document.getElementById('cost-breakdown-knitting').textContent;
     const dyeCost = document.getElementById('cost-breakdown-dyeing').textContent;
     const finCost = document.getElementById('cost-breakdown-finishing').textContent;
-    text += `\n---\nFabric Costing (USD/kg):
+    const country = document.getElementById('cost-country');
+    const countryName = country && country.selectedOptions[0]
+      ? country.selectedOptions[0].textContent.trim() : '';
+    text += `\n---\nFabric Costing (USD/kg${countryName ? ', ' + countryName : ''}):
 Total Cost: ${totalCost}
+Yarn Price: ${yarnPrice} per kg of yarn
 - Yarn (with waste): ${yarnCost}
 - Knitting: ${knitCost}
 - Dyeing: ${dyeCost}

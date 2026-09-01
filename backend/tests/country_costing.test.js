@@ -218,5 +218,34 @@ for (const c of cc.listCountries()) {
               `${(gap * 100).toFixed(1)}% — mostly dyeing, barely the yarn`);
 }
 
+// -- The breakdown the page prints must add up to the total it prints ------
+// Against the fields the API actually ships, not the engine's internals.
+// `knitting_per_kg_usd` handed out the whole knitting object for as long as it
+// existed, so the page printed "$--" on that line beside a total that was
+// still correct -- and no test noticed, because every test read the engine
+// result rather than the shipped one.
+{
+  const c = engine.calculate({ fabric: 'single_jersey', gsm: 180, composition: '100% Cotton',
+                               dia: 34, gauge: 24, color_shade: 'dark_navy' }).costing;
+  for (const k of ['raw_material_per_kg_usd', 'knitting_per_kg_usd', 'dyeing_per_kg_usd',
+                   'finishing_per_kg_usd', 'total_per_kg_usd', 'yarn_final_price_usd']) {
+    assert.strictEqual(typeof c[k], 'number',
+      `costing.${k} must be a number the page can print, not ${JSON.stringify(c[k])}`);
+  }
+  const sum = c.raw_material_per_kg_usd + c.knitting_per_kg_usd
+            + c.dyeing_per_kg_usd + c.finishing_per_kg_usd;
+  assert(Math.abs(sum - c.total_per_kg_usd) < 0.005,
+    `the four printed lines come to $${sum.toFixed(4)} against a printed total of ` +
+    `$${c.total_per_kg_usd} -- a breakdown that does not add up is worse than none`);
+
+  // The yarn price card and the yarn breakdown row are different numbers on
+  // purpose: one is a kilo of yarn, the other is that yarn inside a kilo of
+  // fabric with waste on top. If they ever come out equal, one of them is
+  // reading the wrong field.
+  assert(c.raw_material_per_kg_usd > c.yarn_final_price_usd,
+    'the with-waste figure must exceed the yarn price it is built from');
+  assert(c.yarn_count_display, 'the price card names the count the price was fetched at');
+}
+
 console.log(`  ${cc.listCountries().length} countries, each with a sourced and dated tariff`);
 console.log('\nAll country costing tests passed.');
