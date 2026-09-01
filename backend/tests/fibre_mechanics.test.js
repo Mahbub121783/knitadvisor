@@ -55,14 +55,29 @@ assert(cvc.tenacity_upper_bound_n_tex > 0.32 && cvc.tenacity_upper_bound_n_tex <
   'the mass-weighted bound sits between the components');
 
 // A fibre with no measured mechanics must be NAMED, not silently dropped and
-// not silently treated as cotton. Linen is the live case: the book gives flax a
-// regain and a full tensile row but chapter 5 never weighed it, so the engine
-// carries nothing for it.
-const withLinen = blendMechanics({ cotton: 70, linen: 30 });
-assert.deepStrictEqual(withLinen.unmeasured, ['linen'], 'linen is reported, not dropped');
-assert.strictEqual(withLinen.measured_pct, 70, 'the figures cover 70% of the blend');
-assert.strictEqual(blendMechanics({ linen: 100 }), null,
+// not silently treated as cotton.
+//
+// Linen used to be the live case here: parseable, and with no row in the engine
+// at all. It has one now — the book measures flax thoroughly and simply never
+// weighs it — so the example moved to modal, which really does have nothing.
+const withModal = blendMechanics({ cotton: 70, modal: 30 });
+assert.deepStrictEqual(withModal.unmeasured, ['modal'], 'modal is reported, not dropped');
+assert.strictEqual(withModal.measured_pct, 70, 'the figures cover 70% of the blend');
+assert.strictEqual(blendMechanics({ modal: 100 }), null,
   'a blend with nothing measured returns null rather than cotton by default');
+
+// And linen now carries what the book actually measured for flax.
+assert(blendMechanics({ linen: 100 }), 'linen has mechanics now');
+assert.strictEqual(FIBER_PROPERTIES.linen.tensile.tenacity, 0.54);
+// But NOT a density: chapter 5 never weighed flax, and cotton's is not
+// borrowed. A null density must be skipped and named rather than multiplied
+// through the mass balance, where it would turn the blend's density into NaN
+// and surface as a blank GSM instead of a reason.
+assert.strictEqual(FIBER_PROPERTIES.linen.density, null);
+const linenBlend = blendPhysical({ cotton: 70, linen: 30 });
+assert(Number.isFinite(linenBlend.density), 'a null density must not poison the mass balance');
+assert(linenBlend.unweighed.includes('linen'));
+assert.strictEqual(linenBlend.weighed_pct, 70);
 
 // Elastane has tensile figures and no wet ones — Table 13.7 lists no elastomer.
 // It must not be counted as 1.00, which would say water leaves it alone.
@@ -114,7 +129,7 @@ assert(/Wet dimensional risk severe/.test(report.summary),
 // claims it can.
 const noData = analyzeWetProcessing({
   fabric: 'single_jersey', category: 'single_jersey', finish_gsm: 180,
-  shade: 'medium', dyeing_method: 'reactive', fibers: { linen: 100 },
+  shade: 'medium', dyeing_method: 'reactive', fibers: { modal: 100 },
 });
 assert.strictEqual(noData.wet_mechanics, null, 'no measured fibre, no wet verdict');
 

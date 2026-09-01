@@ -45,7 +45,7 @@
 const {
   FIBER_PROPERTIES, blendMechanics, blendFriction, blendRecovery,
   fibreVariability, weakLinkSensitivity, moistureEconomics, yieldTension,
-  blendDirectional, blendCyclic, blendThermal, heatCeiling,
+  blendDirectional, blendCyclic, blendThermal, heatCeiling, staticRisk,
 } = require('./yarn-engine');
 
 const SOURCE = 'Morton & Hearle, Physical Properties of Textile Fibres, 4th edn (2008), '
@@ -290,6 +290,9 @@ function fibreAdvisory(fibers, ctx = {}) {
   const cyc = blendCyclic(fibers);
   const therm = blendThermal(fibers);
   const heat = heatCeiling(fibers);
+  // ctx.floor_rh is the humidity the knitting or finishing floor actually
+  // runs at. Without it there is a threshold but no verdict.
+  const stat = staticRisk(fibers, ctx.floor_rh);
   const yld = ctx.count_ne ? yieldTension(fibers, ctx.count_ne) : null;
   const pill = pillingIndex(fibers);
   const hand = handleIndex(fibers);
@@ -835,6 +838,42 @@ function fibreAdvisory(fibers, ctx = {}) {
     });
   }
 
+  // ── 20. Static, which is a race and not a property ─────────────────────
+  if (stat) {
+    const S = stat;
+    const known = S.floor_rh_pct != null;
+    push({
+      topic: 'static', scope: 'fibre',
+      severity: !known ? 'info' : S.at_risk ? (S.margin_pct <= -30 ? 'high' : 'moderate') : 'info',
+      claim: known
+        ? (S.at_risk
+            ? `At ${S.floor_rh_pct}% r.h. this fabric will hold a charge — the `
+              + `${S.governed_by} in it needs ${S.threshold_rh_pct}% before it leaks away.`
+            : `At ${S.floor_rh_pct}% r.h. charge leaks away faster than it builds; `
+              + `${S.governed_by} needs only ${S.threshold_rh_pct}%.`)
+        : `Charge only leaks away from this fabric above ${S.threshold_rh_pct}% r.h., set by `
+          + `the ${S.governed_by} in it.`,
+      mechanism: 'Static is not something a fibre has — it is a race between charge arriving '
+        + 'and charge leaking away, and the leak is electrical resistance, which in a textile '
+        + 'is almost entirely a question of how much water the fibre is holding. Cellulosics '
+        + 'reach the threshold at 30% r.h., which is below any working floor, and synthetics '
+        + 'at 85%, which is above every one. The blend is governed by its WORST fibre: the '
+        + 'charge sits on whatever will not let it go, and a conductive fibre beside an '
+        + 'insulating one does not drain it.',
+      action: known && S.at_risk
+        ? `Raise the floor humidity toward ${S.threshold_rh_pct}% where the process allows, or `
+          + 'rely on the finish — the book measures stripping the spin finish off acrylic and '
+          + 'polyester moving the threshold from 85% to 95% r.h., so the finish and not the '
+          + 'polymer is what carries the charge away. Do not scour an antistatic off and then '
+          + 'wonder where the problem came from.'
+        : 'No humidity control is needed on this account; if static still appears, look at the '
+          + 'machine parts and the finish rather than the fibre.',
+      evidence: [{ table: 'Table 22.1', page: 647 }],
+      confidence: known ? 'measured'
+        : 'no floor humidity was given, so the threshold is reported and the verdict withheld',
+    });
+  }
+
   // ── What is NOT known ──────────────────────────────────────────────────
   const gaps = [];
   if (silentOn.length) {
@@ -872,6 +911,7 @@ function fibreAdvisory(fibers, ctx = {}) {
       cyclic: cyc,
       thermal: therm,
       heat: heat,
+      static: stat,
       yield_tension: yld,
       pilling: pill,
       handle: hand,

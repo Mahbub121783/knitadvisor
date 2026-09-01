@@ -80,7 +80,7 @@ function verify(payload) {
         'every refusal states a reason');
   check(fibres.length >= 73, 'every declared table was read',
         fibres.length + ' fibres');
-  check(properties.length >= 883, 'every column of every table came through',
+  check(properties.length >= 935, 'every column of every table came through',
         properties.length + ' measurements');
 
   // Classification has to satisfy the same constraints the table does, so a bad
@@ -807,6 +807,67 @@ function verify(payload) {
         'cotton still loses almost everything to prolonged 130 C and polyester does not',
         `cotton ${look('cotton', 'strength_retained_pct', 'after 80 days at 130 C')}%, ` +
         `polyester ${look('polyester', 'strength_retained_pct', 'after 80 days at 130 C')}%`);
+
+  // ── Chapter 22: static ────────────────────────────────────────────────
+  const stat = properties.filter(p => p.property === 'rh_for_static_threshold');
+  check(stat.length === 15, 'Table 22.1 came through', stat.length + ' rows');
+  check(stat.every(p => p.value > 0 && p.value <= 100), 'every threshold is a humidity');
+
+  // The finding, and the reason the problem arrived with the synthetics: a
+  // cellulosic is safe below any working floor and a synthetic is not safe
+  // above one.
+  const cellulosic = ['cotton', 'flax', 'viscose', 'mercerised_cotton'];
+  const synthetic = ['acetate', 'nylon', 'acrylic', 'polyester'];
+  const cellMax = Math.max(...stat.filter(p => cellulosic.includes(p.fibre_slug)).map(p => p.value));
+  const synMin = Math.min(...stat.filter(p => synthetic.includes(p.fibre_slug)).map(p => p.value));
+  check(cellMax <= 40 && synMin >= 80,
+        'cellulosics still leak charge below any working floor and synthetics still do not',
+        `cellulosic worst ${cellMax}%, synthetic best ${synMin}%`);
+
+  // Stripping the spin finish makes it worse, which is the measured proof that
+  // the finish and not the polymer is what carries the charge away.
+  for (const f of ['acrylic', 'polyester']) {
+    const asRec = look(f, 'rh_for_static_threshold', 'as received, spin finish on, r.h. at which resistance reaches 1e10 ohm g/m2');
+    const pure = look(f, 'rh_for_static_threshold', 'purified, spin finish removed, r.h. at which resistance reaches 1e10 ohm g/m2');
+    check(asRec != null && pure != null && pure > asRec,
+          `${f} still gets worse when its spin finish is removed`,
+          `as received ${asRec}%, purified ${pure}%`);
+  }
+
+  // WHAT THIS TABLE DOES NOT SAY, recorded because the first version of this
+  // check asserted it and was wrong.
+  //
+  // It is tempting to require that a fibre more resistant at 65% r.h. needs a
+  // higher humidity to fall to the threshold. It does not hold, and polyester
+  // is the counter-example the table itself supplies: 10^8.0 at 65% r.h., which
+  // is already a hundred times BELOW the threshold, and yet a threshold
+  // humidity of 85%. Read as one curve per fibre that is a contradiction.
+  //
+  // It is not one curve. The first column of this table is the SLOPE of
+  // resistance against moisture, and it runs from 10.5 for mercerised cotton to
+  // 17.6 for silk — the fibres cross the threshold from quite different
+  // directions at quite different rates, and two points on two different curves
+  // cannot be ordered against each other. The book prints that slope column
+  // precisely because the relation needs it.
+  //
+  // So the comparison is made only WITHIN a fibre, where the curve is the same
+  // one and the only thing that changed is the surface. Stripping the finish
+  // must raise both the resistance and the threshold, and it does in every
+  // pair the book prints.
+  const withinFibre = [];
+  for (const t of stat) {
+    const bare = (t.condition || '').replace(/,? ?r\.h\. at which.*$/, '');
+    if (!/washed|purified/.test(bare)) continue;
+    const plainRh = look(t.fibre_slug, 'rh_for_static_threshold',
+                         'r.h. at which resistance reaches 1e10 ohm g/m2');
+    if (plainRh == null) continue;
+    if (t.value < plainRh) {
+      withinFibre.push(`${t.fibre_slug} ${bare}: ${t.value}% against ${plainRh}% untreated`);
+    }
+  }
+  check(withinFibre.length === 0,
+        'stripping the finish never makes a fibre EASIER to discharge',
+        withinFibre.join('; '));
 
   const badPage = properties.filter(p => !(p.page >= 1 && p.page <= 746));
   check(badPage.length === 0, 'every citation points inside the book', badPage.length + ' do not');

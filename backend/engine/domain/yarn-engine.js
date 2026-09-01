@@ -262,7 +262,8 @@ const FIBER_PROPERTIES = {
                cyclic: { growth_10: 1.98, growth_1000: null, page: 369, table: 'Table 16.1' },
                thermal: { expansion_1e4_per_c: 4, conductivity_mw_mk: 71,
                           page: 176, table: 'Tables 6.5 and 6.2' },
-               heat: { melting_c: null, retained_130c_80d: 10, page: 479, table: 'Table 18.3' },},
+               heat: { melting_c: null, retained_130c_80d: 10, page: 479, table: 'Table 18.3' },
+               static: { rh_threshold: 30, log_resistance_65: 6.8, page: 647, table: 'Table 22.1' },},
   polyester: { density: 1.39, regain: 0.4,  rkm: 1.25,     // was 1.38 — Table 5.1 gives 1.39
                tensile: { tenacity: 0.47, extension: 15.0, modulus: 10.6, work_of_rupture: 53,
                           grade: 'Terylene, medium-tenacity', page: 292, table: 'Table 13.2',
@@ -285,7 +286,8 @@ const FIBER_PROPERTIES = {
                // NEGATIVE, and above 80 C. Heated, polyester gets shorter.
                thermal: { expansion_1e4_per_c: -10, conductivity_mw_mk: null,
                           note: 'above 80 C', page: 176, table: 'Table 6.5' },
-               heat: { melting_c: 260, retained_130c_80d: 75, page: 463, table: 'Tables 18.1 and 18.3' },},
+               heat: { melting_c: 260, retained_130c_80d: 75, page: 463, table: 'Tables 18.1 and 18.3' },
+               static: { rh_threshold: 85, log_resistance_65: 8.0, page: 647, table: 'Table 22.1' },},
   viscose:   { density: 1.49, regain: 13.0, rkm: 0.60,     // was 1.52, which is the DRY figure
                tensile: { tenacity: 0.21, extension: 15.7, modulus: 6.5, work_of_rupture: 18.8,
                           grade: 'Fibro, staple', page: 290, table: 'Table 13.1',
@@ -321,7 +323,8 @@ const FIBER_PROPERTIES = {
                               loop_strength_pct: 58,
                               page: 421, table: 'Table 17.2' },
                cyclic: { growth_10: 1.79, growth_1000: null, page: 369, table: 'Table 16.1' },
-               heat: { melting_c: null, retained_130c_80d: 32, page: 479, table: 'Table 18.3' },},
+               heat: { melting_c: null, retained_130c_80d: 32, page: 479, table: 'Table 18.3' },
+               static: { rh_threshold: 30, log_resistance_65: 7.0, page: 647, table: 'Table 22.1' },},
   nylon:     { density: 1.14, regain: 4.2,  rkm: 1.40,     // Table 5.1 p.165
                tensile: { tenacity: 0.48, extension: 20.0, modulus: 3.0, work_of_rupture: 63,
                           grade: 'nylon 6.6, medium-tenacity', page: 292, table: 'Table 13.2',
@@ -348,7 +351,11 @@ const FIBER_PROPERTIES = {
                cyclic: { growth_10: 0.28, growth_1000: 1.03, page: 369, table: 'Table 16.1' },
                thermal: { expansion_1e4_per_c: -3, conductivity_mw_mk: null,
                           page: 176, table: 'Table 6.5' },
-               heat: { melting_c: 260, retained_130c_80d: 13, page: 463, table: 'Tables 18.1 and 18.3' },},
+               heat: { melting_c: 260, retained_130c_80d: 13, page: 463, table: 'Tables 18.1 and 18.3' },
+               // The book gives nylon a RANGE here, not a value — 10^9 to
+               // 10^12 is three orders of magnitude, which is the honest state
+               // of a measurement made across several nylons.
+               static: { rh_threshold: 85, log_resistance_65: [9, 12], page: 647, table: 'Table 22.1' },},
   wool:      { density: 1.31, regain: 16.0, rkm: 0.50,     // Table 5.1 p.165
                tensile: { tenacity: 0.11, extension: 42.5, modulus: 2.3, work_of_rupture: 30.9,
                           grade: 'Botany 64s (merino)', page: 290, table: 'Table 13.1',
@@ -383,7 +390,8 @@ const FIBER_PROPERTIES = {
                               page: 421, table: 'Table 17.2' },
                cyclic: { growth_10: 0.48, growth_1000: 1.44, page: 369, table: 'Table 16.1' },
                thermal: { expansion_1e4_per_c: null, conductivity_mw_mk: 54,
-                          page: 173, table: 'Table 6.2' },},
+                          page: 173, table: 'Table 6.2' },
+               static: { rh_threshold: 55, log_resistance_65: 8.4, page: 647, table: 'Table 22.1' },},
   acrylic:   { density: 1.19, regain: 1.5,  rkm: 0.70,     // was 1.17 — Table 5.1 gives 1.19
                tensile: { tenacity: 0.27, extension: 25.0, modulus: 6.2, work_of_rupture: 47,
                           grade: 'Orlon 42, staple', page: 292, table: 'Table 13.2',
@@ -403,7 +411,8 @@ const FIBER_PROPERTIES = {
                               page: 421, table: 'Table 17.2' },
                thermal: { expansion_1e4_per_c: 10, conductivity_mw_mk: null,
                           page: 176, table: 'Table 6.5' },
-               heat: { melting_c: null, retained_130c_80d: 55, page: 479, table: 'Table 18.3' },},
+               heat: { melting_c: null, retained_130c_80d: 55, page: 479, table: 'Table 18.3' },
+               static: { rh_threshold: 85, log_resistance_65: 8.7, page: 647, table: 'Table 22.1' },},
 
   // UNSOURCED. Table 5.1 has no row for any of these four, and the closest
   // rows are not substitutes: modal is a high-wet-modulus viscose and lyocell
@@ -448,7 +457,8 @@ const FIBER_PROPERTIES = {
                cyclic: { growth_10: 0.36, growth_1000: 1.92, page: 369, table: 'Table 16.1' },
                thermal: { expansion_1e4_per_c: null, conductivity_mw_mk: 50,
                           page: 173, table: 'Table 6.2' },
-               heat: { melting_c: null, retained_130c_80d: null, page: 479, table: 'Table 18.3' },},
+               heat: { melting_c: null, retained_130c_80d: null, page: 479, table: 'Table 18.3' },
+               static: { rh_threshold: 65, log_resistance_65: 9.8, page: 647, table: 'Table 22.1' },},
   // Regain is not in Table 7.3. Polypropylene is a hydrocarbon with no polar
   // group for water to attach to, and the book's own chapter 7 explains regain
   // in exactly those terms, so zero is the physics rather than a placeholder —
@@ -500,6 +510,28 @@ const FIBER_PROPERTIES = {
   modal:     { density: 1.52, regain: 12.5, rkm: 0.85 },
   tencel:    { density: 1.50, regain: 11.5, rkm: 1.05 },
   bamboo:    { density: 1.50, regain: 13.0, rkm: 0.55 },
+  // LINEN, which the book measures thoroughly and never weighs.
+  //
+  // Chapter 5's density tables have no row for flax, so there is no `density`
+  // here and none is borrowed from cotton — a flax fibre is not a cotton fibre
+  // and the whole point of a mass balance is that the masses are right. Every
+  // other block below is measured, so a linen fabric now gets tensile, wet,
+  // swelling, heat and static advice where before it got none at all: it had
+  // no row here, so it was reported as unmeasured in its entirety while
+  // twenty-four of its measurements sat unused in the reference layer.
+  linen: {
+    density: null, regain: 7.0, rkm: null,
+    regain_source: { table: 'Table 7.3', page: 188 },
+    tensile: { tenacity: 0.54, extension: 3.0, modulus: 18.0, work_of_rupture: 8.0,
+               grade: 'flax', page: 290, table: 'Table 13.1' },
+    swelling: { area: 47, axial: [0.1, 0.2], page: 240, table: 'Table 11.1' },
+    cyclic: { growth_10: null, growth_1000: null, page: 369, table: 'Table 16.1' },
+    heat: { melting_c: null, retained_130c_80d: 12, page: 479, table: 'Table 18.3' },
+    static: { rh_threshold: 30, log_resistance_65: 6.9, page: 647, table: 'Table 22.1' },
+    friction: { guide: { steel: 0.27, porcelain: 0.29, pulley: 0.19, ceramic: null },
+                page: 723, table: 'Table 25.6' },
+  },
+
   elastane:  { density: 1.20, regain: 1.0,  rkm: 0.80,
                tensile: { tenacity: 0.0309, extension: 540.0, modulus: 0.0071, work_of_rupture: 65,
                           grade: 'polyurethane elastomer', page: 292, table: 'Table 13.2',
@@ -687,6 +719,51 @@ function blendThermal(fibers) {
   };
 }
 
+
+/**
+ * Static, at the humidity the floor is actually running at.
+ *
+ * Static is not a property a fibre has; it is a race between charge arriving
+ * and charge leaking away, and the leak is resistance, which in a textile is
+ * almost entirely a question of held water. Table 22.1 gives the humidity at
+ * which each fibre stops carrying a charge: 30% for the cellulosics, 85% for
+ * the synthetics. Thirty is below any working floor and eighty-five is above
+ * every one, which is the whole reason static arrived with the synthetics.
+ *
+ * The blend is governed by its WORST fibre, not its average: the charge sits on
+ * whatever will not let it go, and a conductive fibre beside an insulating one
+ * does not drain it.
+ *
+ * @param {number} rh  the floor's actual relative humidity. Without it there is
+ *                     no question to answer, so this returns the thresholds and
+ *                     withholds the verdict.
+ */
+function staticRisk(fibers, rh) {
+  if (!fibers) return null;
+  const parts = [];
+  const unmeasured = [];
+  for (const [name, pct] of Object.entries(fibers)) {
+    if (!pct) continue;
+    const st = (FIBER_PROPERTIES[name] || {}).static;
+    if (!st) { unmeasured.push(name); continue; }
+    parts.push({ name, pct, st });
+  }
+  if (!parts.length) return null;
+  const worst = parts.reduce((a, b) => (b.st.rh_threshold > a.st.rh_threshold ? b : a));
+
+  return {
+    governed_by: worst.name,
+    threshold_rh_pct: worst.st.rh_threshold,
+    floor_rh_pct: rh == null ? null : rh,
+    // Only a verdict where there is a humidity to compare against. A threshold
+    // on its own is a fact about the fibre, not a risk to the factory.
+    at_risk: rh == null ? null : rh < worst.st.rh_threshold,
+    margin_pct: rh == null ? null : round3(rh - worst.st.rh_threshold),
+    all_thresholds: parts.map(x => ({ fibre: x.name, rh: x.st.rh_threshold })),
+    unmeasured,
+    source: 'Morton & Hearle, Table 22.1, p.647.',
+  };
+}
 
 /**
  * The temperature ceiling for a blend, and who pays for it.
@@ -1288,6 +1365,14 @@ function blendPhysical(fibers) {
     const p = FIBER_PROPERTIES[f];
     if (!pct) continue;
     if (!p) { unweighed.push(f); continue; }
+    // A fibre may have a whole chapter of measurements and no DENSITY. Chapter
+    // 5 never weighed flax, so linen has a tenacity, a regain, a swelling, a
+    // friction and a static threshold and nothing to put in a mass balance.
+    // Multiplying a null through the sum turns the blend's density into NaN,
+    // which propagates into GSM and yarn diameter and surfaces as a blank
+    // rather than as a reason. It is skipped and named, exactly as the strength
+    // index already is.
+    if (typeof p.density !== 'number') { unweighed.push(f); continue; }
     wsum += pct; dsum += p.density * pct; rsum += p.regain * pct;
     // The strength index is a property of spun yarn and is not in the book, so
     // a fibre may have a sourced density and no index at all. Averaging it as
@@ -1533,6 +1618,7 @@ module.exports = {
   blendCyclic,
   blendThermal,
   heatCeiling,
+  staticRisk,
   fibreVariability,
   weakLinkSensitivity,
   analyzeYarn,
