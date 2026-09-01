@@ -815,6 +815,7 @@ function calculate(params) {
     // Market quotes when the caller has them, the reference list when not.
     // Injected rather than required so this module needs no database.
     live_prices: params.live_prices || null,
+    country: params.country || null,
     fabric: fabricDef.id,
     gsm,
     count_ne: costCountNe || 30,
@@ -1080,6 +1081,13 @@ function calculate(params) {
       // cannot be judged, which is how the reference list drifted 3-7% without
       // anything noticing.
       yarn_price_provenance:    costResult.yarn.price_source,
+      // Which country this was costed for, with the tariff behind it and the
+      // anchor's own figures beside it, so the page can show the arithmetic
+      // rather than just a total that changed.
+      country:                  costResult.country,
+      // The dropdown builds itself from this, so adding a country to the
+      // reference table puts it on the page with no frontend change.
+      countries_available:      costResult.countries_available,
     } : null,
 
     // Warp knit specific data
@@ -1150,6 +1158,10 @@ const ENGINE_INPUTS = Object.freeze([
   // costing
   'yarn_price_type', 'yarn_white', 'yarn_organic', 'yarn_organic_type',
   'yarn_ecovero', 'yarn_at_sight', 'feeder_type',
+  // Which country's cost base to price against. Part of the cache key by
+  // construction, which matters: without it, switching country would return
+  // whichever country was calculated first for those inputs.
+  'country',
   // warp knit
   'denier', 'filaments', 'elastane_denier', 'elastane_pct',
 ]);
