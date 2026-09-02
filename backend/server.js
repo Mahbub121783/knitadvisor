@@ -143,7 +143,11 @@ const adminSecurity = helmet({
   crossOriginEmbedderPolicy: false,
 });
 
-const ADMIN_SURFACE = /^\/(admin\.html|api\/admin)(\/|$)/;
+// Which requests get the strict policy. Lives in its own module so a test can
+// hold it to the routes that actually exist — the previous pattern named
+// /admin.html and /api/admin, the second of which has never been a path here,
+// so it matched NEITHER and the strict policy was applied to nothing at all.
+const { ADMIN_SURFACE } = require('./middleware/admin-surface');
 app.use((req, res, next) =>
   (ADMIN_SURFACE.test(req.path) ? adminSecurity : publicSecurity)(req, res, next));
 
