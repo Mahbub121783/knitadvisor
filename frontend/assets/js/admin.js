@@ -361,7 +361,7 @@ function buildProviderCard(p) {
   const cooldownHtml = isCooldown
     ? `<div style="display:flex;align-items:center;gap:6px;padding:7px 10px;background:rgba(255,68,68,.08);border:1px solid rgba(255,68,68,.2);border-radius:var(--rad-sm);">
          <span style="color:var(--a3);font-size:10px;">⏱ Cooldown until ${new Date(p.cooldown_until).toLocaleTimeString()}</span>
-         <button class="btn btn-xs" style="border:none;background:transparent;color:var(--a2);cursor:pointer;padding:0;" onclick="clearCooldown(${p.id})">Clear</button>
+         <button class="btn btn-xs prov-clear-cooldown" style="border:none;background:transparent;color:var(--a2);cursor:pointer;padding:0;">Clear</button>
        </div>` : '';
 
   const lastFailHtml = p.last_failure_at
@@ -706,6 +706,18 @@ function buildProviderCard(p) {
       toast('Remove failed: ' + err.message, 'error');
     }
   });
+
+  // Clear cooldown — present only while the provider is actually in cooldown.
+  // Wired here rather than as an inline onclick so the admin panel can run
+  // under a CSP with script-src-attr 'none', which is the whole point of
+  // having a separate policy for it.
+  const clearBtn = card.querySelector('.prov-clear-cooldown');
+  if (clearBtn) {
+    clearBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      clearCooldown(p.id);
+    });
+  }
 
   return card;
 }
