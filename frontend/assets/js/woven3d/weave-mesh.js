@@ -23,15 +23,23 @@ const mod = (n, m) => ((n % m) + m) % m;
  *   repeatEnds, repeatPicks
  *   ends, picks          how many threads to actually build (tiled repeat)
  *   pitch                { end, pick } — scene units (mm) between thread centres
- *   amplitude            how far a thread rises/dips at a crossing (mm) —
- *                        driven by the real yarn diameter, not a fixed constant
+ *   ampWarp, ampWeft     how far EACH yarn family rises/dips at a crossing (mm).
+ *                        Deliberately independent, not one shared amplitude:
+ *                        in a real interchange (Peirce's crimp-balance), the
+ *                        yarn under more tension straightens out while the
+ *                        other does most of the bending — a warp-faced denim
+ *                        (measured warp crimp 4.9% vs weft 4.2%) really does
+ *                        look different from a balanced plain weave, and a
+ *                        single amplitude for both threads was flattening
+ *                        every one of the 24 qualities into the same look.
  * @returns {{ warpPaths, weftPaths }} — each {points: THREE.Vector3[]}[],
  *   ready for knit3d/fabric-mesh.js's buildFabricMesh (generic tube builder,
  *   not knit-specific — reused as-is rather than duplicated).
  */
 export function buildWeavePaths(opts) {
-  const { grid, repeatEnds, repeatPicks, ends, picks, pitch, amplitude } = opts;
-  const amp = amplitude != null ? amplitude : 0.16;
+  const { grid, repeatEnds, repeatPicks, ends, picks, pitch } = opts;
+  const aWarp = opts.ampWarp != null ? opts.ampWarp : 0.16;
+  const aWeft = opts.ampWeft != null ? opts.ampWeft : 0.16;
   const warpUp = (pick, end) => !!(grid[mod(pick, repeatPicks)] || [])[mod(end, repeatEnds)];
 
   // One control point PER CROSSING along each thread, alternating +amp/-amp
@@ -43,7 +51,7 @@ export function buildWeavePaths(opts) {
     const x = e * pitch.end;
     const pts = [];
     for (let p = 0; p < picks; p++) {
-      pts.push(new THREE.Vector3(x, (p + 0.5) * pitch.pick, warpUp(p, e) ? amp : -amp));
+      pts.push(new THREE.Vector3(x, (p + 0.5) * pitch.pick, warpUp(p, e) ? aWarp : -aWarp));
     }
     if (!pts.length) continue;
     // pad a selvedge point at each end so the tube doesn't stop mid-cell
@@ -58,7 +66,7 @@ export function buildWeavePaths(opts) {
     const pts = [];
     for (let e = 0; e < ends; e++) {
       // the weft occupies the OPPOSITE plane of the warp at the same crossing
-      pts.push(new THREE.Vector3((e + 0.5) * pitch.end, y, warpUp(p, e) ? -amp : amp));
+      pts.push(new THREE.Vector3((e + 0.5) * pitch.end, y, warpUp(p, e) ? -aWeft : aWeft));
     }
     if (!pts.length) continue;
     pts.unshift(new THREE.Vector3(pts[0].x - pitch.end * 0.5, y, pts[0].z));
