@@ -20,6 +20,14 @@ function renderPatternGrid(container, patternData, yarnInfo) {
   // wales to draw, so it gets the four loom plans instead of a K/T/M grid.
   if (patternData?.fabric_type === 'woven') {
     container.innerHTML = renderWovenPattern(patternData);
+    // Realistic 2D + 3D preview — woven-visualizer.js, loaded independently
+    // (both index.html's live calculator and patterns.html's library include
+    // it). Guarded so a page that hasn't loaded it still gets the loom plans
+    // above with no error, just without this section.
+    const mount = container.querySelector('#woven-viz-mount');
+    if (mount && typeof window !== 'undefined' && window.WovenVisualizer) {
+      new window.WovenVisualizer(patternData, mount).init().catch(() => {});
+    }
     return;
   }
 
@@ -1014,6 +1022,14 @@ function renderWovenPattern(data) {
       + '<div style="overflow-x:auto;">' + buildClothPreviewSVG(s) + '</div>'
       + '<div class="text-xs text-dim mt-4">Each crossing shows the thread actually on top, so what you see is the '
       + 'interlacement rather than a drawing of it.</div></div>';
+
+    // Realistic 2D + 3D preview, built from this SAME grid, sett and yarn
+    // count — see woven-visualizer.js. Left empty by that script if the page
+    // hasn't loaded it, so nothing breaks on a page that doesn't include it.
+    html += '<div class="mb-16">'
+      + '<div class="label mb-8">Realistic Preview <span class="text-dim" style="font-weight:400">'
+      + '— what the cloth actually looks like, from this same weave</span></div>'
+      + '<div id="woven-viz-mount"></div></div>';
 
     const f = s.floats || {};
     html += '<div class="label mb-8">Structure Geometry</div>' + wovStatGrid([
