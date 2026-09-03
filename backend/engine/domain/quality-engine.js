@@ -296,6 +296,7 @@ function predictPilling(fabricId, parsedComp, gsm, countNe) {
   const cottonPct = fibers.cotton || 0;
   const polyPct = fibers.polyester || 0;
   const viscocePct = fibers.viscose || 0;
+  const modalPct = fibers.modal || 0;
   const elastanePct = fibers.elastane || 0;
 
   // Pilling score (0–5, 5 = best resistance)
@@ -310,6 +311,14 @@ function predictPilling(fabricId, parsedComp, gsm, countNe) {
   if (gsm > 250) score -= 0.3;
   // Viscose pills quickly
   if (viscocePct > 30) score -= 0.5;
+  // Modal (HWM rayon) is the same family but stretched harder during
+  // coagulation for higher wet modulus — a real, measured toughness gap:
+  // the engine's Polynosic-sourced work of rupture for modal is 11.0 mN/tex
+  // against plain viscose's 18.8 (yarn-engine.js FIBER_PROPERTIES), close to
+  // cotton's own 10.7 — so the anchoring fibre lets a pill break away sooner.
+  // Smaller penalty than viscose's, not zero: still a soft regenerated
+  // cellulosic, not cotton.
+  if (modalPct > 30) score -= 0.3;
   // Elastane helps by holding structure
   if (elastanePct > 3) score += 0.3;
   // Interlock / double jersey resists pilling
@@ -430,6 +439,7 @@ function predictQuality(params) {
   const cotton  = fibers.cotton  || 0;
   const poly    = fibers.polyester || 0;
   const viscose = fibers.viscose || 0;
+  const modal   = fibers.modal || 0;
   const elastane= fibers.elastane || 0;
 
   let compKey = 'cotton';
@@ -447,7 +457,15 @@ function predictQuality(params) {
 
   // --- BASE SHRINKAGE ---
   const fabricShrinkage = SHRINKAGE_BASE[fabricId] || SHRINKAGE_BASE[family] || SHRINKAGE_BASE.single_jersey;
-  const base = fabricShrinkage[compKey] || fabricShrinkage.cotton || { length: 6.0, width: 3.0 };
+  // Modal has its own real entry only on single_jersey (line ~57 above); every
+  // other structure's table was built before modal reached this function at
+  // all (composition-engine.js routed it through 'viscose'). Rather than
+  // falling straight to cotton's numbers — the wrong fibre family entirely —
+  // an unlisted 'modal' falls back to that same structure's 'viscose' entry
+  // first, the nearest real relative, before cotton.
+  const base = fabricShrinkage[compKey] ||
+    (compKey === 'modal' ? fabricShrinkage.viscose : null) ||
+    fabricShrinkage.cotton || { length: 6.0, width: 3.0 };
 
   // --- MODIFIERS ---
   const slMod       = SL_SHRINKAGE_MODIFIER(sl_mm);
@@ -475,7 +493,13 @@ function predictQuality(params) {
 
   // --- SPIRALITY (v2.0 — yarn torque is the primary driver) ---
   const fabricSpirality = SPIRALITY_BASE[fabricId] || SPIRALITY_BASE[family] || SPIRALITY_BASE.single_jersey;
-  const spiralBase      = fabricSpirality[compKey] || fabricSpirality.cotton || { base_pct: 5.0, tf_sensitivity: 0.3, gsm_sensitivity: -0.008 };
+  // Same fallback reasoning as SHRINKAGE_BASE above: no table here has ever
+  // carried a 'modal' row, so an unlisted modal borrows viscose's torque
+  // profile — a soft, low-torque regenerated cellulosic — rather than
+  // cotton's higher-liveliness one.
+  const spiralBase = fabricSpirality[compKey] ||
+    (compKey === 'modal' ? fabricSpirality.viscose : null) ||
+    fabricSpirality.cotton || { base_pct: 5.0, tf_sensitivity: 0.3, gsm_sensitivity: -0.008 };
 
   // Structure/TF/GSM component (the v1 regression)
   const structuralSpiral = spiralBase.base_pct
@@ -521,6 +545,8 @@ function predictQuality(params) {
     ? { rating: 'Excellent', note: 'Polyester-dominant blends have excellent color fastness to washing.' }
     : viscose > 30
     ? { rating: 'Poor', note: 'Viscose/Rayon has low dye-bond affinity. Expect color loss after 3–5 washes.' }
+    : modal > 30
+    ? { rating: 'Moderate', note: 'Modal (HWM rayon) swells less in water than plain viscose, which reduces dye bleed-out — but it is still a regenerated cellulosic, not cotton-grade wash fastness.' }
     : { rating: 'Good', note: 'Blend composition provides reasonable color fastness.' };
 
   // --- WARNINGS ---

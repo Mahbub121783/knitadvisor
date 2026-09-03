@@ -122,8 +122,15 @@ function getCompositionReference(fabricId, parsedComp) {
   // same bucket a real record with that blend would have.
   const f = parsedComp.fibers;
   const cotton = f.cotton || 0, poly = f.polyester || 0, viscose = f.viscose || 0;
+  const modal = f.modal || 0;
   let key = '100_cotton';
-  if (viscose >= 15) key = 'cotton_viscose';
+  // Matches build-factory-dataset.js's mapComposition() priority exactly: any
+  // modal content classifies the whole record as 'modal' BEFORE the viscose
+  // check runs, same as the raw-text /modal/ test does at build time. Modal
+  // used to be unreachable here (composition-engine.js folded it into
+  // fibers.viscose), so this branch was dead code until that alias was split.
+  if (modal > 0) key = 'modal';
+  else if (viscose >= 15) key = 'cotton_viscose';
   else if (poly > 0 && poly >= cotton) key = 'poly_cotton';
   else if (poly > 0) key = 'cotton_polyester';
 

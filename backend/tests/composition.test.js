@@ -23,7 +23,7 @@ const CODE_CASES = [
   ['95% CO 5% EL', { cotton: 95, elastane: 5 }],
   ['92% PES 8% EL', { polyester: 92, elastane: 8 }],
   ['70% CO 30% LI', { cotton: 70, linen: 30 }],
-  ['48% CMD 52% CO', { viscose: 48, cotton: 52 }],
+  ['48% CMD 52% CO', { modal: 48, cotton: 52 }],
 ];
 
 for (const [input, want] of CODE_CASES) {

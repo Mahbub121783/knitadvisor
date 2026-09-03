@@ -499,7 +499,13 @@ const FABRIC_ALIAS = {
 function detectVariant(fabricId, parsedComp, yarnForm, count_ne, feederType) {
   const slub = yarnForm === 'slub' || (fabricId || '').includes('slub');
   const fibers = (parsedComp && parsedComp.fibers) || {};
-  const viscose = (fibers.viscose || 0) >= 30;
+  // Modal used to reach this function as fibers.viscose (composition-engine.js
+  // folded it in before its own engine key existed) and so already triggered
+  // the '_viscose' knitting-rate variant below — the correct one, since the
+  // official price list has no separate modal row and modal knits on the same
+  // settings as viscose. Now that modal has its own key, it must still hit
+  // this branch or a modal fabric would silently price as plain cotton.
+  const viscose = (fibers.viscose || 0) >= 30 || (fibers.modal || 0) >= 30;
   const elastane = (fibers.elastane || fibers.spandex || fibers.lycra || 0) > 0;
 
   if (viscose) {

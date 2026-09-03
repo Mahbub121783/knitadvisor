@@ -522,6 +522,14 @@ function autoDetectYarnType(parsedComp, countNe, options = {}) {
   if (visc > 30 && cotton > 30) return { key: 'cotton_viscose_50_50', label: SM_PRICE_MATRIX.cotton_viscose_50_50.label };
   // Pure Viscose
   if (visc >= 90) return { key: 'viscose_regular', label: SM_PRICE_MATRIX.viscose_regular.label };
+  // Pure Modal — there is no dedicated market quote for 100% Modal yarn in
+  // this catalog, and letting it fall through to the Pure Cotton branch below
+  // would price a regenerated-cellulosic fabric as if it were a completely
+  // different fibre family. Modal tracks the viscose/rayon staple-yarn market
+  // closely enough (same spinning-cost bracket) that this borrows viscose's
+  // price row rather than inventing one — labelled honestly rather than
+  // silently, the same principle as the country-costing "modelled" label.
+  if (modal >= 90) return { key: 'viscose_regular', label: 'Modal — priced as Viscose/Rayon (no dedicated market quote)' };
   // Pure Cotton
   if (cotton >= 90) {
     if (countNe >= 20) {
