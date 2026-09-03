@@ -43,7 +43,18 @@ const find = (slug, prop, cond, page) => {
 // printed on the page. The mapping is already in the data — every fibre row
 // carries the engine key it answers to — so it is read from there rather than
 // duplicated here, where it could drift.
+//
+// A second case, not the same as the first: bamboo has no book slug at all —
+// commercial "bamboo fibre" is bamboo pulp run through the ordinary viscose
+// process, so its FIBER_PROPERTIES row is viscose's own cited figures, not a
+// bamboo entry the book prints under another name. That is declared on the
+// engine row itself as `cites_as`, and read from there rather than hardcoded
+// here as a bamboo-shaped special case — the same "the mapping lives in the
+// data" reasoning as the linen/flax lookup above, just pointed at the engine
+// file instead of the extraction one, because this is the engine's claim
+// about itself, not a fact about the book.
 const slugFor = key => {
+  if (F[key] && F[key].cites_as) return F[key].cites_as;
   const f = book.fibres.find(x => x.engine_key === key);
   return f ? f.slug : key;
 };
