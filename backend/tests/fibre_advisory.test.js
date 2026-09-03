@@ -54,20 +54,31 @@ assert(!merc.findings.some(f => f.topic === 'lustre'),
   'a fabric already specified as mercerised should not be advised to mercerise');
 
 // ── Silence must be distinguishable from safety ─────────────────────────
-// Modal has a density and a regain, so a fibre-level coverage check calls it
-// "measured" and then every rule quietly declines to fire — handing back an
-// empty, clean-looking report about a fabric nothing is known about. That is
-// the most dangerous output this module could produce.
-const modal = fibreAdvisory({ modal: 100 }, sj);
-assert(modal.ok);
-assert.strictEqual(modal.coverage.measured_pct, 0);
-assert.strictEqual(modal.findings.length, 0);
-assert(modal.not_known.length, 'a fabric with no measurements must say so');
-assert(/no measured fibre properties/i.test(modal.headline),
+// Modal used to be the live case here (a density and a regain only, so a
+// fibre-level coverage check called it "measured" and every rule quietly
+// declined to fire). It carries real tensile/directional data now — see
+// yarn-engine.js FIBER_PROPERTIES.modal, sourced from the book's Polynosic
+// rows — so the example moves to tencel, which genuinely still has nothing:
+// checked against the extraction and the lesson store under both
+// "tencel"/"lyocell" and neither appears at all.
+const tencel = fibreAdvisory({ tencel: 100 }, sj);
+assert(tencel.ok);
+assert.strictEqual(tencel.coverage.measured_pct, 0);
+assert.strictEqual(tencel.findings.length, 0);
+assert(tencel.not_known.length, 'a fabric with no measurements must say so');
+assert(/no measured fibre properties/i.test(tencel.headline),
   'the headline itself must carry the ignorance, not just a footnote');
 
+// Modal itself must now be the OPPOSITE case: real findings, not silence.
+const modalKnown = fibreAdvisory({ modal: 100 }, sj);
+assert(modalKnown.ok);
+assert(modalKnown.coverage.measured_pct === 100,
+  'modal now carries tensile data (Polynosic-sourced) and must count as measured');
+assert(modalKnown.findings.length > 0,
+  'a fully-measured 100% modal fabric must produce real findings, not an empty report');
+
 // ── A half-known number must never be stated flatly ─────────────────────
-const half = fibreAdvisory({ cotton: 50, modal: 50 }, sj);
+const half = fibreAdvisory({ cotton: 50, tencel: 50 }, sj);
 assert.strictEqual(half.coverage.measured_pct, 50);
 for (const f of half.findings) {
   // A fibre-scoped claim names its own fibre — "cotton's strength is set by its

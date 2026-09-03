@@ -581,14 +581,48 @@ const FIBER_PROPERTIES = {
   // 10.6, four orders of magnitude apart — which is the arithmetic behind
   // every elastane rule of thumb on a knitting floor.
   //
-  // The other three stay unsourced. The nearest measured relative to modal is
-  // polynosic (0.26 N/tex, 7% extension, 13.2 N/tex modulus, p.292), and it is
-  // deliberately NOT copied here: polynosic is one class of high-wet-modulus
-  // rayon and modal is the generic name for the family, so they are relatives,
-  // not the same fibre, and borrowing the figures would turn a resemblance
-  // into a citation. It is recorded in the reference layer under its own name
-  // for anyone who wants to reason from it explicitly.
-  modal:     { density: 1.52, regain: 12.5, rkm: 0.85 },
+  // MODAL (2026-09-03, wired in after being deliberately withheld). The book
+  // has no row printed as "Modal", but Table 13.2 (p.292) and Table 17.2
+  // (p.421) both carry one for Polynosic — Vincel, a high-wet-modulus (HWM)
+  // viscose rayon — and Polynosic is the same manufacturing family Modal
+  // belongs to: both are regenerated cellulose stretched harder during
+  // coagulation than ordinary viscose to raise crystallinity and wet modulus.
+  // This is NOT the bamboo situation, where the engine fibre and the book
+  // fibre are the same substance by definition. Polynosic (Vincel) ran toward
+  // the HIGH end of the HWM-rayon family; BISFA's current Modal standard (wet
+  // modulus >= 12 cN/tex at 5% extension) sets a lower bar than Vincel meets.
+  // So this is the nearest MEASURED relative in the book, not an identity —
+  // declared with `cites_as: 'polynosic'` (same mechanism as bamboo's) so
+  // tests/fibre_citations.test.js checks these figures against the book's own
+  // Polynosic rows, and the `grade` string below names Polynosic/Vincel
+  // explicitly so anything that prints it to a reader carries the same
+  // caveat, not a bare "Modal" citation.
+  //
+  // density/regain/rkm are UNCHANGED — Table 5.1 has no Polynosic density row
+  // either (its density is one of the figures this book never measured for
+  // any HWM rayon), so nothing here improves them. They stay the pre-existing
+  // engine values, still unsourced, not invented to look more complete.
+  modal:     { density: 1.52, regain: 12.5, rkm: 0.85,
+               cites_as: 'polynosic',
+               tensile: { tenacity: 0.26, extension: 7.0, modulus: 13.2, work_of_rupture: 11.0,
+                          grade: 'Polynosic (Vincel), high-wet-modulus rayon — staple; nearest measured relative to Modal, not identical',
+                          page: 292, table: 'Table 13.2',
+                          // Table 13.7 p.312. Wet modulus at 8% of dry is still
+                          // a near-total collapse — a fraction of ordinary
+                          // viscose's already-low 3% is not implied and is not
+                          // claimed — but the HWM process visibly helps: wet
+                          // TENACITY only falls to 70% here against viscose's
+                          // 50%, and the hot-wet columns barely move (95-100%
+                          // of the cold-wet figure) where viscose's tenacity
+                          // and modulus both drift further from dry.
+                          wet: { ten: 0.70, ext: 1.21, mod: 0.08, wor: 0.62 },
+                          hot_wet: { ten: 0.95, ext: 1.06, mod: 0.83, wor: 1.00 } },
+               // Table 17.2 p.421. No tensile (Young's) modulus in GPa is
+               // printed for Polynosic — only bending and shear — so moduli
+               // stops there rather than inventing the third figure or the
+               // E/G anisotropy ratio it would imply.
+               directional: { flexural: 0.69, torsional: 0.097, page: 421, table: 'Table 17.2' },
+               moduli: { shear_gpa: 1.4, bending_gpa: 20.0, page: 421, table: 'Table 17.2' } },
   // LYOCELL (Tencel). Genuinely absent from this book — checked the full
   // extraction (data/fibre-properties.json) and the lesson store for
   // "lyocell"/"tencel" and neither appears under any name. This is not the

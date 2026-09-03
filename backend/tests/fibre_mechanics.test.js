@@ -19,6 +19,7 @@ const PRINTED = [
   ['acrylic',   0.27,  25.0,  6.2],      // Table 13.2 p.292, Orlon 42 staple
   ['elastane',  0.0309, 540.0, 0.0071],  // Table 13.2 p.292, polyurethane elastomer
   ['silk',      0.38,  23.4,  7.3],      // Table 13.1 p.290
+  ['modal',     0.26,   7.0, 13.2],      // Table 13.2 p.292, Polynosic (Vincel) — cites_as
 ];
 for (const [key, ten, ext, mod] of PRINTED) {
   const t = FIBER_PROPERTIES[key].tensile;
@@ -58,13 +59,24 @@ assert(cvc.tenacity_upper_bound_n_tex > 0.32 && cvc.tenacity_upper_bound_n_tex <
 // not silently treated as cotton.
 //
 // Linen used to be the live case here: parseable, and with no row in the engine
-// at all. It has one now — the book measures flax thoroughly and simply never
-// weighs it — so the example moved to modal, which really does have nothing.
-const withModal = blendMechanics({ cotton: 70, modal: 30 });
-assert.deepStrictEqual(withModal.unmeasured, ['modal'], 'modal is reported, not dropped');
-assert.strictEqual(withModal.measured_pct, 70, 'the figures cover 70% of the blend');
-assert.strictEqual(blendMechanics({ modal: 100 }), null,
+// at all. It got one, and the example moved to modal — which then got one too
+// (Polynosic-sourced, 2026-09-03). It moves a second time, to tencel, which
+// genuinely still has nothing under any name.
+const withTencel = blendMechanics({ cotton: 70, tencel: 30 });
+assert.deepStrictEqual(withTencel.unmeasured, ['tencel'], 'tencel is reported, not dropped');
+assert.strictEqual(withTencel.measured_pct, 70, 'the figures cover 70% of the blend');
+assert.strictEqual(blendMechanics({ tencel: 100 }), null,
   'a blend with nothing measured returns null rather than cotton by default');
+
+// And modal now carries real mechanics — it must NOT still be dropped as
+// unmeasured, and its numbers must actually be Polynosic's, not invented.
+const withModal = blendMechanics({ cotton: 70, modal: 30 });
+assert.deepStrictEqual(withModal.unmeasured, [], 'modal is measured now, not reported as a gap');
+assert.strictEqual(withModal.measured_pct, 100);
+const pureModal = blendMechanics({ modal: 100 });
+assert(pureModal, 'modal has mechanics now');
+assert.strictEqual(pureModal.modulus_n_tex, 13.2);
+assert.strictEqual(pureModal.wet.modulus, 0.08, 'modal keeps 8% of its modulus wet — better than viscose\'s 3%, not the same collapse');
 
 // And linen now carries what the book actually measured for flax.
 assert(blendMechanics({ linen: 100 }), 'linen has mechanics now');
@@ -126,10 +138,12 @@ assert(/Wet dimensional risk severe/.test(report.summary),
   'a severe risk reaches the one-line summary, not just the detail');
 
 // A blend the book cannot describe must not silently produce a summary that
-// claims it can.
+// claims it can. Modal used to be this example; it carries real wet-ratio
+// data now (Table 13.7, via the Polynosic citation), so tencel takes its
+// place — genuinely absent from the book under any name.
 const noData = analyzeWetProcessing({
   fabric: 'single_jersey', category: 'single_jersey', finish_gsm: 180,
-  shade: 'medium', dyeing_method: 'reactive', fibers: { modal: 100 },
+  shade: 'medium', dyeing_method: 'reactive', fibers: { tencel: 100 },
 });
 assert.strictEqual(noData.wet_mechanics, null, 'no measured fibre, no wet verdict');
 

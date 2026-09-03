@@ -58,12 +58,14 @@ const FIBER_ALIASES = {
   // The manufactured-fibre codes below are Morton & Hearle, Appendix II
   // (printed p.740-742), where they are given as the ISO generic names.
   'cv':               'viscose',      // viscose, cellulose xanthate route
-  'cmd':              'viscose',      // modal — high-wet-modulus viscose. Kept
-                                      // on 'viscose' because that is where the
-                                      // parser has always put modal; the engine
-                                      // does carry separate modal constants and
-                                      // never reaches them, which is a question
-                                      // for whoever changes this deliberately.
+  'cmd':              'modal',        // modal — high-wet-modulus viscose. Used
+                                      // to be routed onto 'viscose' because
+                                      // that is where the parser had always
+                                      // put it, leaving the engine's own modal
+                                      // constants (yarn-engine.js) permanently
+                                      // unreachable. Modal now gets its own
+                                      // engine key — see 'modal' below and the
+                                      // FIBER_PROPERTIES.modal block.
   'cup':              'viscose',      // cupro, cuprammonium route
   'cly':              'tencel',       // lyocell, organic solvent route
   'pes':              'polyester',
@@ -107,12 +109,16 @@ const FIBER_ALIASES = {
   'polypropylene':    'polypropylene',
   'polyethylene':     'polyethylene',
 
-  // Viscose / Modal → 'viscose'
+  // Viscose → 'viscose'
   'viscose':          'viscose',
   'visocse':          'viscose',
   'viscoss':          'viscose',
-  'modal':            'viscose',
-  
+  // Modal → its own key. Chemically a high-wet-modulus viscose, but distinct
+  // enough (BISFA wet-modulus standard, lower shrinkage, different hand) that
+  // yarn-engine.js carries its own cited FIBER_PROPERTIES.modal block rather
+  // than reusing viscose's numbers outright — see the comment there.
+  'modal':            'modal',
+
   // Tencel / Bamboo
   'tencel':           'tencel',
   'lyocell':          'tencel',
@@ -147,6 +153,7 @@ const SHORTHAND_COMPOSITIONS = {
   '100% cotton':    { cotton: 100 },
   '100% polyester': { polyester: 100 },
   '100% viscose':   { viscose: 100 },
+  '100% modal':     { modal: 100 },
   '100% tencel':    { tencel: 100 },
   '100% lyocell':   { tencel: 100 },
   '100% bamboo':    { bamboo: 100 },
@@ -461,7 +468,7 @@ function getCompositionModifiers(parsed, fabricId) {
     }
   }
 
-  // --- Viscose / Modal Effect ---
+  // --- Viscose Effect ---
   if (fibers.viscose && fibers.viscose > 0) {
     const visPct = fibers.viscose;
     if (visPct >= 50) {
@@ -472,6 +479,28 @@ function getCompositionModifiers(parsed, fabricId) {
     } else {
       count_factor *= 1.02;
       notes.push(`Viscose blend (${visPct}%) — softer hand feel`);
+    }
+  }
+
+  // --- Modal Effect ---
+  // No factory has calibrated this floor-correction for modal specifically —
+  // these count/SL/GSM multipliers are production knowledge (mill feedback),
+  // not a book citation, and modal's fibre-science block in yarn-engine.js is
+  // sourced separately. On the knitting/finishing floor modal runs close
+  // enough to viscose (same smooth, low-friction, drapey handle) that the
+  // same modifier is used here — kept as its own block, not a shared branch,
+  // so the day someone brings real modal-specific floor data it can diverge
+  // without touching viscose's numbers.
+  if (fibers.modal && fibers.modal > 0) {
+    const modalPct = fibers.modal;
+    if (modalPct >= 50) {
+      count_factor *= 1.05;
+      sl_factor *= 0.98;
+      gsm_offset += 0.02;
+      notes.push(`Modal dominant (${modalPct}%) — heavier drape, slightly higher count`);
+    } else {
+      count_factor *= 1.02;
+      notes.push(`Modal blend (${modalPct}%) — softer hand feel`);
     }
   }
 
