@@ -50,6 +50,13 @@ function applySlub(geo, curve, tubular, radial, phase) {
  * open — i.e. loose vs dense fabrics actually look different. Falls back to a
  * count-only estimate (same canonical formula, render-space units) when
  * density is absent.
+ *
+ * The 0.907/√Ne constant is Ashenhurst's, derived for COTTON packing. A
+ * fabric of any other fibre is scaled by `density.fibreDensityScale`
+ * (√(1.52/blendDensity), from fabric-visualizer.js `_stitchDensity`) — the
+ * same correction the backend applies in yarn-engine.js `yarnDiameterMm`. A
+ * wool loop at the same count as cotton is a real 8% fatter yarn; without
+ * this every fibre rendered as if it were cotton.
  */
 export function yarnDiameterMm(ne) {
   return 0.907 / Math.sqrt(ne || 30);
@@ -59,14 +66,22 @@ export function yarnRadius(countNe, tf, density) {
   const ne = countNe || 30;
   const t = typeof tf === 'number' ? tf : 14;
   const tex = (density && density.tex) || (590.5 / ne);
-  const diaMm = 0.03733 * Math.sqrt(tex);          // physical yarn diameter — see doc §1.1 above
+  // 0.03733·√tex assumes cotton's packing density (1.52 g/cm3). Every other
+  // fibre is a different bulk at the same tex — wool comes out 8% fatter,
+  // nylon 15% — and the engine already computes that correction
+  // (yarn-engine.js yarnDiameterMm, exposed as yarn.expertise.blend_physical
+  // .density) for exactly this reason. `fibreDensityScale` carries it here so
+  // a wool loop actually renders fatter than a cotton loop at the same count,
+  // instead of every fabric being drawn as if it were cotton.
+  const fibreScale = (density && density.fibreDensityScale) || 1;
+  const diaMm = 0.03733 * Math.sqrt(tex) * fibreScale;   // physical yarn diameter — see doc §1.1 above
   const tfGain = 1 + (t - 14) * 0.012;             // tighter → fuller coverage
   let r;
   if (density && density.wpc > 0) {
     const waleSpacingMm = 10 / density.wpc;        // real wale pitch
     r = 0.5 * (diaMm / waleSpacingMm) * 1.0 /* PITCH_X */ * 1.30 * tfGain;
   } else {
-    r = (0.165 + (30 - ne) * 0.0020) * tfGain;     // count-only fallback
+    r = (0.165 + (30 - ne) * 0.0020) * fibreScale * tfGain;   // count-only fallback
   }
   return Math.max(0.10, Math.min(r, 0.30));
 }
