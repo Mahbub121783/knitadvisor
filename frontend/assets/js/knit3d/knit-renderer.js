@@ -15,7 +15,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { buildYarnPaths } from './topology-builder.js?v=20260608g';
 import { createYarnMaterial, setYarnColorHex } from './yarn-material.js?v=20260608g';
 import { buildFabricMesh, yarnRadius } from './fabric-mesh.js?v=20260608g';
-import { addStudioLighting, configureShadowCamera } from './lighting.js?v=20260608g';
+import { addStudioLighting, configureShadowCamera, applyLightPreset, DEFAULT_LIGHT_PRESET } from './lighting.js?v=20260608g';
 import { buildPile } from './pile.js?v=20260608g';
 import { applyDrape } from './drape.js?v=20260608g';
 import { BACKING, PITCH_Y, RIB_PITCH_SCALE } from './constants.js?v=20260608g';
@@ -58,6 +58,8 @@ export class Knit3D {
     this._key = lights.key;
     this._fill = lights.fill;
     this._rim = lights.rim;
+    this._hemi = lights.hemi;
+    this._lightPreset = DEFAULT_LIGHT_PRESET;
     // authored ("front") Z positions — setView('back') mirrors these across
     // the fabric so whichever side faces the camera gets the strong key light
     // instead of the rim's leftover intensity aimed the wrong way.
@@ -390,6 +392,33 @@ export class Knit3D {
     }
   }
 
+  // Lightbox / metamerism preview — re-tint the rig to a named illuminant
+  // (see lighting.js LIGHT_PRESETS) without touching geometry or dye colour,
+  // so the SAME rendered swatch can be compared under D65 / TL84 / A the way
+  // a real AATCC/ISO lightbox compares a shade.
+  setLightPreset(name) {
+    this._lightPreset = name;
+    applyLightPreset({ key: this._key, fill: this._fill, rim: this._rim, hemi: this._hemi }, name);
+  }
+
+  // Shrinkage preview: t=0 as-knit, t=1 fully finished (opts.shrinkage, the
+  // engine's own quality_prediction.shrinkage %, anisotropic). Unlike the 2D
+  // view — which re-derives wales/courses-per-cm and repaints, genuinely
+  // denser — this scales the WHOLE loop group rather than rebuilding tube
+  // geometry every frame (thousands of Catmull-Rom tubes is too costly to
+  // regenerate 60×/sec). That's a real simplification: stitch COUNT stays
+  // fixed and the swatch visibly shrinks toward the frame centre by the
+  // correct anisotropic %, rather than the loops themselves repacking —
+  // proportionally accurate, not a re-simulation of loop relaxation.
+  previewShrink(t) {
+    if (!this.group) return;
+    const shr = this.opts && this.opts.shrinkage;
+    if (!shr) return;
+    const sx = 1 - (shr.width_pct / 100) * t;
+    const sy = 1 - (shr.length_pct / 100) * t;
+    this.group.scale.set(sx, sy, 1);
+  }
+
   setView(which) {
     if (!this.camera || !this.controls) return;
     const d = this._fitDist || 30;
@@ -427,6 +456,20 @@ export class Knit3D {
     if (this._backing && this._backing.mesh) this._backing.mesh.visible = !on;
     if (this._pile && this._pile.mesh) this._pile.mesh.visible = !on;
     return on;
+  }
+
+  // High-resolution capture for tech-pack / sharing use — renders one frame at
+  // `scale`× the on-screen drawing-buffer resolution (CSS size untouched, via
+  // THREE's setSize(w,h,false)) and hands back a PNG data URL, then restores
+  // the live view via the same resize() path used on every window resize.
+  captureHiRes(scale = 3) {
+    if (!this.renderer || !this.camera || !this.container) return null;
+    const W = this.container.clientWidth || 460, H = VIEW_HEIGHT;
+    this.renderer.setSize(W * scale, H * scale, false);
+    this.renderer.render(this.scene, this.camera);
+    const url = this.renderer.domElement.toDataURL('image/png');
+    this.resize();   // back to normal on-screen resolution + aspect
+    return url;
   }
 
   resize() {
