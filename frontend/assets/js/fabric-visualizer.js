@@ -1164,6 +1164,17 @@ class FabricVisualizer {
     const pc = r.physical_constraints || {};
     const llMm = (r.loop_length || {}).value_mm || null;
     const tex = pc.tex || (590.5 / (yarn.count_ne || 30));
+    // The canonical diameter formula (0.907/√Ne, shared with knit3d and the
+    // pattern renderer) assumes cotton's packing density, 1.52 g/cm3. A wool
+    // fabric at the same Ne is a measurably fatter yarn — 8% on diameter — and
+    // nylon is 15% fatter; that difference comes from the ENGINE'S OWN number
+    // at yarn.expertise.blend_physical.density, computed for this exact
+    // purpose (yarn-engine.js yarnDiameterMm) and then never read here. Every
+    // fabric was rendered as if it were cotton. scale > 1 for anything lighter
+    // than cotton, exactly matching the backend's own correction.
+    const blendDensity = yarn.expertise && yarn.expertise.blend_physical
+      && yarn.expertise.blend_physical.density;
+    const fibreDensityScale = blendDensity ? Math.sqrt(1.52 / blendDensity) : 1;
     const gauge = (r.machine || {}).gauge_optimal || (r.machine || {}).gauge_recommended
       || (r.input || {}).gauge || 24;                 // needles/inch
     const gsm = (r.input || {}).gsm || (r.grammage || {}).gsm || 180;
@@ -1185,7 +1196,7 @@ class FabricVisualizer {
     let scalar = Math.sqrt(clamp(cpc / refCpc, 0.5, 2.6));
     scalar *= clamp(gsm / (dbl ? 260 : 190), 0.85, 1.18);   // GSM nudge
     scalar = clamp(scalar, 0.7, 1.7);
-    return { cpc, wpc, aspect, scalar, llMm: llMm || (llCm ? llCm * 10 : null), tex };
+    return { cpc, wpc, aspect, scalar, llMm: llMm || (llCm ? llCm * 10 : null), tex, fibreDensityScale };
   }
 
   // The real K/T/M needle action matrix (pattern_cylinder) drives tuck/miss
