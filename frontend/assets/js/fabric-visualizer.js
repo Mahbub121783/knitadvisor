@@ -30,6 +30,9 @@ class FabricVisualizer {
     // 3D view interaction state
     this._three = { rotX: -14, rotY: 0, zoom: 1, brush: false, dragging: false, lastX: 0, lastY: 0, painted: false };
     this._faceCache = { front: null, back: null, brushBack: null };
+    // Shrinkage preview: 0 = as-knit (greige), 1 = fully finished — animated
+    // between the two by the loupe bar's toggle, see _gridGeom.
+    this._shrinkT = 0;
   }
 
   // ─────────────────────────────────────────────────────────
@@ -74,11 +77,49 @@ class FabricVisualizer {
   }
 
   exportPng() {
+    // The real WebGL 3D view never registers a plain <canvas> in this.canvases
+    // (only the CSS-cube fallback does) — exportPng() on the 3D tab used to
+    // silently fall through to whatever the Realistic 2D canvas last painted,
+    // downloading a file NAMED "-threed.png" that was actually the 2D render.
+    if (this.activeTab === 'threed' && this._fabric3d && this._fabric3d.renderer) {
+      this._download(this._fabric3d.renderer.domElement.toDataURL('image/png'), 'threed');
+      return;
+    }
     const canvas = this.canvases[this.activeTab] || this.canvases.realistic || this.canvases.stitch;
     if (!canvas) return;
+    this._download(canvas.toDataURL('image/png'), this.activeTab);
+  }
+
+  /** High-resolution export for the two photoreal views (Realistic 2D / 3D) —
+   *  a tech-pack or factory share needs more than screen resolution. Other
+   *  tabs are technical diagrams already legible at their native size (and
+   *  Cross-Section has its own SVG export, which scales losslessly anyway),
+   *  so they fall back to the normal export rather than a pointless upscale. */
+  exportPngHD() {
+    const SCALE = 3;
+    if (this.activeTab === 'threed' && this._fabric3d && typeof this._fabric3d.captureHiRes === 'function') {
+      const url = this._fabric3d.captureHiRes(SCALE);
+      if (url) { this._download(url, 'threed-hd'); return; }
+    }
+    if (this.activeTab === 'realistic') {
+      const W = 560, H = 380;
+      const off = document.createElement('canvas');
+      off.width = W * SCALE; off.height = H * SCALE;
+      const octx = off.getContext('2d');
+      octx.setTransform(SCALE, 0, 0, SCALE, 0, 0);
+      const opts = this._faceOpts();
+      const l = this._loupe || { zoom: 1, fu: 0.5, fv: 0.5, side: 'front' };
+      this._paintFabricFace(octx, W, H, l.side || 'front', opts, l);
+      this._download(off.toDataURL('image/png'), 'realistic-hd');
+      return;
+    }
+    this.exportPng();
+  }
+
+  _download(dataUrl, label) {
     const link = document.createElement('a');
-    link.download = `knitadvisor-${(this.result.fabric || {}).id || 'fabric'}-${this.activeTab}.png`;
-    link.href = canvas.toDataURL('image/png');
+    link.download = `knitadvisor-${(this.result.fabric || {}).id || 'fabric'}-${label}.png`;
+    link.href = dataUrl;
     link.click();
   }
 
@@ -1015,6 +1056,7 @@ class FabricVisualizer {
         <span class="ka-loupe-zoom" id="ka-loupe-zoom">1.0×</span>
         <button class="ka-loupe-btn" data-act="in">+</button>
         <button class="ka-loupe-btn" data-act="reset" title="Fit">Fit</button>
+        ${opts.shrinkage ? `<button class="ka-loupe-btn" id="ka-shrink-btn" data-act="shrink" title="Animate to the computed finished-fabric shrinkage">Show: As-Knit</button>` : ''}
         <span class="ka-loupe-tip">Click to zoom into a point · scroll to magnify · drag to pan</span>
       </div>
       <div class="ka-loupe-stage"></div>`;
@@ -1024,6 +1066,16 @@ class FabricVisualizer {
     const sideBtns = holder.querySelectorAll('.ka-loupe-side');
     const syncSideBtns = () => sideBtns.forEach(b => b.classList.toggle('active', b.getAttribute('data-act') === this._loupe.side));
     syncSideBtns();
+
+    // Reflect whatever shrink state the user left the OTHER view in (2D and
+    // 3D share this._shrinkT) rather than resetting the label to "As-Knit"
+    // every time this panel is rebuilt.
+    const shrinkBtn0 = holder.querySelector('#ka-shrink-btn');
+    if (shrinkBtn0) {
+      const finished = this._shrinkT >= 0.5;
+      shrinkBtn0.textContent = finished ? 'Show: Finished' : 'Show: As-Knit';
+      shrinkBtn0.classList.toggle('active', finished);
+    }
 
     const stageEl = holder.querySelector('.ka-loupe-stage');
     const canvas = document.createElement('canvas');
@@ -1096,12 +1148,34 @@ class FabricVisualizer {
       zoomAt(p.x, p.y, e.deltaY < 0 ? 1.18 : 0.85);
     }, { passive: false });
 
+    // Animate _shrinkT toward `target` (0 = as-knit, 1 = finished), repainting
+    // every frame — reuses the same this.animFrame slot switchTab()/destroy()
+    // already cancel on tab-away, so leaving this tab mid-animation can't leak.
+    const animateShrink = (target) => {
+      if (this.animFrame) cancelAnimationFrame(this.animFrame);
+      const start = this._shrinkT, t0 = performance.now(), DUR = 700;
+      const tick = (now) => {
+        const p = Math.min(1, (now - t0) / DUR);
+        const eased = p < 0.5 ? 2 * p * p : 1 - ((-2 * p + 2) ** 2) / 2;
+        this._shrinkT = start + (target - start) * eased;
+        paint();
+        this.animFrame = p < 1 ? requestAnimationFrame(tick) : null;
+      };
+      this.animFrame = requestAnimationFrame(tick);
+    };
+
     holder.querySelector('.ka-loupe-bar').addEventListener('click', (e) => {
       const act = e.target.getAttribute('data-act'); if (!act) return;
       if (act === 'front' || act === 'back') { this._loupe.side = act; syncSideBtns(); paint(); }
       else if (act === 'in') zoomAt(W / 2, H / 2, 1.4);
       else if (act === 'out') zoomAt(W / 2, H / 2, 0.7);
-      else { this._loupe = { zoom: 1, fu: 0.5, fv: 0.5, side: this._loupe.side }; paint(); }
+      else if (act === 'shrink') {
+        const goingFinished = this._shrinkT < 0.5;
+        animateShrink(goingFinished ? 1 : 0);
+        e.target.textContent = goingFinished ? 'Show: Finished' : 'Show: As-Knit';
+        e.target.classList.toggle('active', goingFinished);
+      }
+      else if (act === 'reset') { this._loupe = { zoom: 1, fu: 0.5, fv: 0.5, side: this._loupe.side }; paint(); }
     });
 
     paint();
@@ -1153,7 +1227,18 @@ class FabricVisualizer {
       // real stitch density (cpc/wpc/aspect/scalar/tex) so GSM·gauge·loop-length
       // actually drive loop size, count and yarn thickness in the 3D.
       density:   this._stitchDensity(construction),
+      // Real computed shrinkage (quality_prediction.shrinkage) — drives the
+      // Realistic view's "As-Knit / Finished" preview toggle. null when the
+      // result carries no shrinkage prediction, which hides the toggle
+      // rather than animating against a number that was never computed.
+      shrinkage: this._getShrinkage(),
     };
+  }
+
+  _getShrinkage() {
+    const s = (this.result.quality_prediction || {}).shrinkage;
+    if (!s || typeof s.lengthwise_pct !== 'number' || typeof s.widthwise_pct !== 'number') return null;
+    return { length_pct: s.lengthwise_pct, width_pct: s.widthwise_pct };
   }
 
   // Stitch-density model from the engine result (Munden K/LL relations). Drives
@@ -1237,8 +1322,15 @@ class FabricVisualizer {
       ? `${resolved.name}${resolved.tcx_code ? ' (' + resolved.tcx_code + ')' : ''}`
       : ((result.input || {}).color_shade || (result.color || {}).shade || 'medium shade');
     const tf = opts.tf;
+    // Real stitch pitch in mm (10/wales-per-cm, 10/courses-per-cm) — the same
+    // wpc/cpc the Munden-relation density model (_stitchDensity) already
+    // computes for loop spacing and yarn diameter, just read back out as a
+    // number a viewer can act on (the 2D view also draws it as a scale bar).
+    const d = opts.density;
+    const pitch = d && d.wpc && d.cpc
+      ? ` · ${(10 / d.wpc).toFixed(2)}×${(10 / d.cpc).toFixed(2)}mm/stitch` : '';
     info.textContent =
-      `Finished ${opts.construction.label} · ${opts.gsm} GSM · ${opts.countNe} Ne ${opts.fiberType} · TF ${typeof tf === 'number' ? tf.toFixed(1) : tf} · ${colorName}`;
+      `Finished ${opts.construction.label} · ${opts.gsm} GSM · ${opts.countNe} Ne ${opts.fiberType} · TF ${typeof tf === 'number' ? tf.toFixed(1) : tf}${pitch} · ${colorName}`;
   }
 
   // ─────────────────────────────────────────────────────────
@@ -1346,6 +1438,50 @@ class FabricVisualizer {
     // and pattern pieces. Runs along +y (constants.js's own "the grain / wale
     // direction" axis), so cutters know which way is straight-of-grain.
     this._drawGrainlineIndicator(ctx, W, H);
+    this._drawScaleBar(ctx, W, H, opts, view);
+  }
+
+  /** Real-world scale bar (mm), derived from the SAME wales/cm density the
+   *  Munden-relation stitch-density model computes (_stitchDensity → opts.
+   *  density.wpc) — not a stylised guess. The render's on-screen wale spacing
+   *  (_gridGeom's cellW) is an artistic choice (denser fabrics show more
+   *  stitches on screen, they aren't drawn at one fixed px-per-wale), but
+   *  that doesn't make the bar wrong: like a scale bar on a micrograph, it
+   *  answers "how much real fabric does THIS view span", whatever the zoom. */
+  _drawScaleBar(ctx, W, H, opts, view) {
+    const wpc = opts.density && opts.density.wpc;
+    if (!wpc) return;
+    const g = this._gridGeom(W, H, opts, view);
+    const pxPerMm = g.cellW * wpc / 10;
+    if (!isFinite(pxPerMm) || pxPerMm <= 0) return;
+
+    // Largest "nice" round length that still draws under ~140px at this zoom.
+    const NICE = [0.5, 1, 2, 5, 10, 20, 50, 100];
+    let mm = NICE[0];
+    for (const n of NICE) { if (n * pxPerMm <= 140) mm = n; else break; }
+    const barW = mm * pxPerMm;
+    if (barW < 14) return;   // too small to read at all — say nothing rather than a speck
+
+    const x0 = 14, y0 = H - 15;
+    ctx.save();
+    ctx.lineCap = 'round';
+    // white halo so the bar reads on any dye colour, then the dark line on top
+    for (const [stroke, lw] of [['rgba(255,255,255,0.9)', 3.6], ['rgba(20,20,24,0.88)', 1.6]]) {
+      ctx.strokeStyle = stroke; ctx.lineWidth = lw;
+      ctx.beginPath();
+      ctx.moveTo(x0, y0); ctx.lineTo(x0 + barW, y0);
+      ctx.moveTo(x0, y0 - 4); ctx.lineTo(x0, y0 + 4);
+      ctx.moveTo(x0 + barW, y0 - 4); ctx.lineTo(x0 + barW, y0 + 4);
+      ctx.stroke();
+    }
+    const label = `${mm} mm`;
+    ctx.font = "600 10px 'JetBrains Mono', monospace";
+    ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+    ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+    ctx.strokeText(label, x0, y0 - 7);
+    ctx.fillStyle = 'rgba(20,20,24,0.9)';
+    ctx.fillText(label, x0, y0 - 7);
+    ctx.restore();
   }
 
   /** Double-headed arrow + "GRAIN" label along the lengthwise (wale/course)
@@ -1401,13 +1537,28 @@ class FabricVisualizer {
     if (con.type === 'interlock') walesZ1 *= 1.25;
     else if (con.type === 'rib')  walesZ1 *= 0.8;
     else if (con.type === 'pique') walesZ1 *= 0.85;
-    const cellW = (W / walesZ1) * view.zoom;
+    let cellW = (W / walesZ1) * view.zoom;
     // loop elongation from tightness — a slacker fabric (low TF / long stitch
     // length) has taller, more open loops; a tight fabric has short dense loops.
     const tf = typeof opts.tf === 'number' ? opts.tf : 14;
     const elong = Math.max(0.72, Math.min(1.0 + (14 - tf) * 0.028, 1.18));
     const aspect = (con.type === 'rib' ? 0.98 : con.type === 'pique' ? 1.0 : 0.82) * elong;
-    const cellH = cellW * aspect;
+    let cellH = cellW * aspect;
+    // Shrinkage preview (see the loupe bar's "As-Knit / Finished" toggle): a
+    // finished, relaxed fabric packs MORE stitches into the same physical
+    // area than it did on the machine — real wales/courses-per-cm both RISE
+    // by the engine's own computed shrinkage % (quality_prediction.shrinkage,
+    // anisotropic — length and width move by different amounts). Shrinking
+    // the on-screen cell size by that same ratio, live per animation frame
+    // via _shrinkT (0 = as-knit, 1 = fully finished), is the direct visual
+    // of that: the loops visibly pack tighter as the swatch "relaxes".
+    // _drawScaleBar reads cellW straight from this function, so the mm ruler
+    // tracks the animation with no extra code.
+    const shr = opts.shrinkage;
+    if (shr && this._shrinkT > 0) {
+      cellW *= (1 - (shr.width_pct / 100) * this._shrinkT);
+      cellH *= (1 - (shr.length_pct / 100) * this._shrinkT);
+    }
     const visW = W / cellW, visC = H / cellH;
     const leftWaleF = view.fu * this._TOTAL_W - visW / 2;
     const botCourseF = view.fv * this._TOTAL_C - visC / 2;
@@ -2025,6 +2176,8 @@ class FabricVisualizer {
         <button class="ka3d-btn" data-act="back">Back</button>
         <button class="ka3d-btn" data-act="reset" title="Reset view">⟳</button>
         <button class="ka3d-btn" data-act="wire" title="Show loop paths">Loops</button>
+        <button class="ka3d-btn" data-act="light" title="Preview under a different lightbox illuminant">Light: D65</button>
+        ${opts.shrinkage ? `<button class="ka3d-btn" data-act="shrink" title="Animate to the computed finished-fabric shrinkage">Show: As-Knit</button>` : ''}
         <span class="ka3d-hint" style="margin-left:6px">Drag to orbit · scroll to zoom · real 3-D yarn loops</span>
       </div>
       <div class="ka3dgl-mount"></div>
@@ -2044,20 +2197,60 @@ class FabricVisualizer {
       loopNe: opts.loopNe, tieNe: opts.tieNe,
       tf: opts.tf, fiberType: opts.fiberType, sheen: opts.sheen, sample, sampleBack,
       physics: opts.physics, density: opts.density, twist: this._yarnTwist(),
+      shrinkage: opts.shrinkage,
     };
 
-    import('/assets/js/knit3d/index.js?v=20260608g').then(({ Knit3D }) => {
+    import('/assets/js/knit3d/index.js?v=20260608g').then(({ Knit3D, LIGHT_PRESETS, LIGHT_PRESET_ORDER }) => {
       if (this._destroyed || this.activeTab !== 'threed') return;
       if (this._fabric3d) { try { this._fabric3d.dispose(); } catch (_) {} }
       this._fabric3d = new Knit3D();
       this._fabric3d.mount(mount, glOpts);
       loading.remove();
+      // Same shared this._shrinkT as the 2D view — sync the mesh AND the
+      // button label to whatever state the user left it in, rather than
+      // silently reverting to as-knit every time this tab is rebuilt.
+      const shrinkBtn0 = stage.querySelector('[data-act="shrink"]');
+      if (shrinkBtn0) {
+        this._fabric3d.previewShrink(this._shrinkT);
+        const finished = this._shrinkT >= 0.5;
+        shrinkBtn0.textContent = finished ? 'Show: Finished' : 'Show: As-Knit';
+        shrinkBtn0.classList.toggle('active', finished);
+      }
+      const lightBtn = stage.querySelector('[data-act="light"]');
+      let lightIdx = 0;
+      // 3D shrinkage preview is a cheap whole-group scale (not a per-loop
+      // topology rebuild — see Knit3D.previewShrink), so it can animate every
+      // frame at no extra rebuild cost. Reuses this.animFrame, same as the 2D
+      // view's toggle, so switchTab()/destroy() cancel it uniformly.
+      const animateShrink3d = (target) => {
+        if (this.animFrame) cancelAnimationFrame(this.animFrame);
+        const start = this._shrinkT, t0 = performance.now(), DUR = 700;
+        const tick = (now) => {
+          const p = Math.min(1, (now - t0) / DUR);
+          const eased = p < 0.5 ? 2 * p * p : 1 - ((-2 * p + 2) ** 2) / 2;
+          this._shrinkT = start + (target - start) * eased;
+          this._fabric3d.previewShrink(this._shrinkT);
+          this.animFrame = p < 1 ? requestAnimationFrame(tick) : null;
+        };
+        this.animFrame = requestAnimationFrame(tick);
+      };
       stage.querySelector('.ka3d-controls').addEventListener('click', (e) => {
         const act = e.target.getAttribute('data-act'); if (!act) return;
         if (act === 'front') this._fabric3d.setView('front');
         else if (act === 'back') this._fabric3d.setView('back');
         else if (act === 'reset') this._fabric3d.resetView();
         else if (act === 'wire') e.target.classList.toggle('active', this._fabric3d.toggleWire());
+        else if (act === 'light') {
+          lightIdx = (lightIdx + 1) % LIGHT_PRESET_ORDER.length;
+          const key = LIGHT_PRESET_ORDER[lightIdx];
+          this._fabric3d.setLightPreset(key);
+          if (lightBtn) lightBtn.textContent = `Light: ${LIGHT_PRESETS[key].label.split(' ')[0]}`;
+        } else if (act === 'shrink') {
+          const goingFinished = this._shrinkT < 0.5;
+          animateShrink3d(goingFinished ? 1 : 0);
+          e.target.textContent = goingFinished ? 'Show: Finished' : 'Show: As-Knit';
+          e.target.classList.toggle('active', goingFinished);
+        }
       });
       this._updateInfoLine(opts);
     }).catch((err) => {
@@ -2606,6 +2799,7 @@ class FabricVisualizer {
         </label>
         <span class="viz-info" id="viz-info-text">Rendering…</span>
         <button class="viz-btn" id="viz-export-png">Export PNG</button>
+        <button class="viz-btn" id="viz-export-hd" title="3× resolution — Realistic/3D views only">Export HD</button>
         <button class="viz-btn" id="viz-export-svg">Export SVG</button>
       </div>
     `;
@@ -2632,6 +2826,7 @@ class FabricVisualizer {
 
     // Export buttons
     this.container.querySelector('#viz-export-png').addEventListener('click', () => this.exportPng());
+    this.container.querySelector('#viz-export-hd').addEventListener('click', () => this.exportPngHD());
     this.container.querySelector('#viz-export-svg').addEventListener('click', () => this.exportSvg());
   }
 

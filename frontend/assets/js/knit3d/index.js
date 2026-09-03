@@ -7,3 +7,4 @@
 // Lazy-imported by fabric-visualizer.js when the 3D tab is opened.
 
 export { Knit3D } from './knit-renderer.js?v=20260608g';
+export { LIGHT_PRESETS, LIGHT_PRESET_ORDER } from './lighting.js?v=20260608g';
