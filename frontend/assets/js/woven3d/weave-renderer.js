@@ -17,7 +17,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-import { buildWeavePaths } from './weave-mesh.js?v=20260903a';
+import { buildWeavePaths } from './weave-mesh.js?v=20260903b';
 import { createYarnMaterial } from '../knit3d/yarn-material.js?v=20260608g';
 import { buildFabricMesh, yarnDiameterMm } from '../knit3d/fabric-mesh.js?v=20260608g';
 import { addStudioLighting, configureShadowCamera, applyLightPreset, DEFAULT_LIGHT_PRESET } from '../knit3d/lighting.js?v=20260608g';
@@ -116,9 +116,41 @@ export class Woven3D {
     const pitchPickMm = 25.4 / ppi;
     const warpDiaMm = yarnDiameterMm(warpNe) * (o.warpFibreScale || 1);
     const weftDiaMm = yarnDiameterMm(weftNe) * (o.weftFibreScale || 1);
-    // How far a thread rises/dips at a crossing: half the combined diameter,
-    // the geometric minimum for the two threads to actually clear each other.
-    const amp = (warpDiaMm + weftDiaMm) * 0.30;
+    // Geometric floor: the combined diameter (0.30 each side, so 0.60 total),
+    // the reference rise/dip when no crimp asymmetry is known.
+    const geomMinAmp = (warpDiaMm + weftDiaMm) * 0.30;
+
+    // Real per-family amplitude from measured crimp%, not one shared constant.
+    // weight.warp_crimp_pct / weft_crimp_pct are already computed per fabric
+    // (denim: 4.9% warp vs 4.2% weft) but were never reaching the geometry —
+    // every quality rendered with the identical undulation, when in a real
+    // interchange (Peirce) the more-tensioned yarn straightens out while the
+    // other does most of the bending. For small deflections, crimp (excess
+    // thread length over cloth length) is approximately proportional to
+    // (amplitude / pitch)^2 — a standard small-deflection wave relation — so
+    // amplitude scales with sqrt(crimp). CRIMP_REF (7%) is Gokarneshan's own
+    // plain-weave warp baseline, the same constant weight.crimp_basis says the
+    // engine used to derive crimp from float length in the first place —
+    // reusing it here, not inventing a new one.
+    const CRIMP_REF = 7;
+    const rawAmp = (crimpPct) => {
+      if (crimpPct == null || !isFinite(crimpPct) || crimpPct <= 0) return geomMinAmp;
+      return geomMinAmp * Math.sqrt(crimpPct / CRIMP_REF);
+    };
+    let ampWarp = rawAmp(o.warpCrimpPct);
+    let ampWeft = rawAmp(o.weftCrimpPct);
+    // What actually has to stay clear at a crossing is the SUM of the two
+    // rises (warp up + weft down away from the mid-plane), not each side on
+    // its own — a nearly-straight low-crimp yarn is fine as long as its
+    // partner bends enough to still separate the two tube surfaces. Scale
+    // both up together (preserving the crimp ratio between them) only if the
+    // combined rise would let the tubes clip through each other.
+    const minSum = (warpDiaMm / 2 + weftDiaMm / 2) * 1.2;
+    const sum = ampWarp + ampWeft;
+    if (sum < minSum && sum > 0) {
+      const k = minSum / sum;
+      ampWarp *= k; ampWeft *= k;
+    }
 
     const lod = this._lodScale();
     const snap = (target, repeat) => Math.max(repeat, Math.round(target / repeat) * repeat);
@@ -134,13 +166,20 @@ export class Woven3D {
     const { warpPaths, weftPaths } = buildWeavePaths({
       grid: o.grid, repeatEnds, repeatPicks, ends, picks,
       pitch: { end: pitchEndMm, pick: pitchPickMm },
-      amplitude: amp,
+      ampWarp, ampWeft,
     });
 
     // Analytic drape (knit3d/drape.js — generic over any {points} array, not
     // knit-specific): both yarn families deform together so the cloth reads
     // as one continuous surface, not two independently-bulging grids.
-    const drapeAmount = 0.4;
+    // Heavier / more jammed cloth drapes less, same principle as knit-renderer
+    // .js's density-driven drapeAmount — here driven by the fabric's own
+    // measured GSM (a 348 gsm denim should NOT fall as softly as a light
+    // shirting; both rendered identically before this). 150 gsm is used as the
+    // light/medium reference point; the ±/500 slope is a hand-tuned visual
+    // heuristic, same status as knit-renderer's own tuning constants.
+    const gsm = o.gsm || 150;
+    const drapeAmount = Math.max(0.2, Math.min(0.65 - (gsm - 150) / 500, 0.75));
     applyDrape(warpPaths, { amount: drapeAmount });
     applyDrape(weftPaths, { amount: drapeAmount });
 

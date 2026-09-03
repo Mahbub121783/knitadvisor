@@ -125,7 +125,7 @@ class WovenVisualizer {
       grid: s.grid, repeatEnds: s.repeat_ends || 1, repeatPicks: s.repeat_picks || 1,
       endsPerInch: c.ends_per_inch || 60, picksPerInch: c.picks_per_inch || 50,
       warpNe: c.warp_resultant_ne || 20, weftNe: c.weft_resultant_ne || 20,
-      warpCrimpPct: w.warp_crimp_pct, weftCrimpPct: w.weft_crimp_pct,
+      warpCrimpPct: w.warp_crimp_pct, weftCrimpPct: w.weft_crimp_pct, gsm: w.gsm,
       warpColor: colors.warp, weftColor: colors.weft, natural: colors.natural,
       warpFiberType: fiberType, weftFiberType: fiberType, fiberType,
     };
@@ -339,7 +339,7 @@ class WovenVisualizer {
     const mount = stage.querySelector('.ka3dgl-mount');
     const loading = stage.querySelector('.ka3dgl-loading');
 
-    import('/assets/js/woven3d/index.js?v=20260903a').then(({ Woven3D, LIGHT_PRESETS, LIGHT_PRESET_ORDER }) => {
+    import('/assets/js/woven3d/index.js?v=20260903b').then(({ Woven3D, LIGHT_PRESETS, LIGHT_PRESET_ORDER }) => {
       if (this._destroyed || this.activeTab !== 'threed') return;
       if (this._fabric3d) { try { this._fabric3d.dispose(); } catch (_) {} }
       this._fabric3d = new Woven3D();
