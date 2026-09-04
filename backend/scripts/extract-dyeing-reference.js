@@ -32,17 +32,35 @@
  *                             — enzymes, OBA, and the reactive/disperse dyes
  *                             (their dosing is stored as a plain fraction,
  *                             e.g. 0.004 for "0.400%", NOT grams per litre).
- *              'broken_ref'   ONE cell only (White (chori bonmax) H32,
- *                             softener row): formula is `H2*H3*E32/1000`,
- *                             and H2 does not exist in this workbook — a
- *                             genuine typo in the source (should reference
- *                             H3*H4 like its siblings), which is WHY that
- *                             row's own Required-Qty/Price sits at 0.00 in
- *                             the source file itself. Transcribed exactly as
- *                             the source computes it — not "corrected" —
- *                             matching this project's standing rule to
- *                             faithfully reproduce a source's own arithmetic,
- *                             warts included, rather than silently fixing it.
+ *              'broken_ref'   ONE cell (White (chori bonmax) H32, softener
+ *                             row): formula was `H2*H3*E32/1000`. H2 is BLANK
+ *                             in this workbook — not a header this template
+ *                             ever defines (H3=fabric_qty, H4=ml_ratio,
+ *                             H5=water) — so the row's own Required-Qty/Price
+ *                             sat at 0.00 in the source file itself, silently
+ *                             dropping a real chemical's cost. This is now
+ *                             CORRECTED at extraction time, not transcribed
+ *                             blindly, on the strength of three independent
+ *                             pieces of evidence, not a guess:
+ *                               1. every OTHER liquor_gpl row in this exact
+ *                                  sheet uses H3*H4*E../1000 (rows 10,11,13,
+ *                                  18,19,20) — H2 is a one-off, off-by-one
+ *                                  mistype of H4.
+ *                               2. the SAME chemical (MH Soft / Formosoft
+ *                                  NNC), SAME dosing value (1), SAME unit
+ *                                  price (256 Tk/kg) appears in the sibling
+ *                                  "Other White" sheet with a working
+ *                                  H3*H4*E../1000 formula.
+ *                               3. applying that formula here reproduces
+ *                                  EXACTLY that sibling row's numbers —
+ *                                  required_qty=1.785kg, price=456.96 Tk —
+ *                                  not a new invented figure.
+ *                             classifyDosingBasis() below detects this exact
+ *                             broken formula shape and reclassifies it as
+ *                             'liquor_gpl'; extractSheet() then recomputes
+ *                             required_qty_kg/price_tk from the formula
+ *                             instead of trusting the source's own (broken)
+ *                             cached cell value — see the comment there.
  *            The basis is read directly from each cell's own formula string
  *            (`cell.f`), never assumed, and stored per step as `dosing_basis`
  *            so verify-dyeing-rules.js checks each row against the formula
@@ -123,7 +141,12 @@ function classifyDosingBasis(hCell) {
   // written (caught by the scale-invariance check, not by inspection).
   if (/^(H3\*H4|H4\*H3)\*E\d+\/1000$/.test(f) || /^H5\*E\d+\/1000$/.test(f)) return 'liquor_gpl';
   if (/^H3\*E\d+$/.test(f)) return 'percent_owf';
-  return 'other'; // includes the one known broken_ref cell (H2*H3*.../1000) — transcribed as-is, not re-derived
+  // The one known broken cell (White (chori bonmax) H32): H2*H3*E../1000,
+  // where H2 is blank. Corrected to liquor_gpl — see the file header comment
+  // for the three-part evidence (sheet's own formula pattern + identical
+  // sibling row in "Other White" + reproduces that sibling's exact numbers).
+  if (/^H2\*H3\*E\d+\/1000$/.test(f)) return 'liquor_gpl';
+  return 'other';
 }
 
 function extractSheet(wb, meta) {
@@ -142,7 +165,6 @@ function extractSheet(wb, meta) {
   const fabricQtyKg = num(ws['H3']);
   const mlRatio = num(ws['H4']);
   const waterL = num(ws['H5']);
-  const costPerKgTk = num(ws['D6']);
   const compositionTag = str(ws['D5']);
 
   // A recipe "includes" dye cost only if at least one step whose Functional
@@ -169,9 +191,26 @@ function extractSheet(wb, meta) {
     const commercialName = str(ws['C' + row]);
     const dosingRaw = num(ws['E' + row]);
     const unitPriceTk = num(ws['F' + row]);
-    const priceTk = num(ws['G' + row]);
-    const requiredQtyKg = num(ws['H' + row]);
     const dosingBasis = classifyDosingBasis(ws['H' + row]);
+
+    // For liquor_gpl/percent_owf rows, recompute required_qty/price from the
+    // formula's own inputs rather than trusting the source cell's cached
+    // value — the two are mathematically identical for every correctly-
+    // working row, and this is what makes the one broken_ref correction above
+    // take effect (its cached H/G values are the stale, pre-correction 0s).
+    // 'other'/null rows have no formula to recompute from, so their cached
+    // values are kept as the source's own arithmetic, transcribed as-is.
+    let requiredQtyKg, priceTk;
+    if (dosingBasis === 'liquor_gpl') {
+      requiredQtyKg = fabricQtyKg * mlRatio * dosingRaw / 1000;
+      priceTk = requiredQtyKg * unitPriceTk;
+    } else if (dosingBasis === 'percent_owf') {
+      requiredQtyKg = fabricQtyKg * dosingRaw;
+      priceTk = requiredQtyKg * unitPriceTk;
+    } else {
+      requiredQtyKg = num(ws['H' + row]);
+      priceTk = num(ws['G' + row]);
+    }
 
     if (/^reactive dyes$/i.test(functionalName || '')) {
       dyeRowsSeen++;
@@ -206,6 +245,22 @@ function extractSheet(wb, meta) {
   const totalTimeMin = num(ws['J' + (row + 1)]);
 
   const dyeCostIncluded = dyeRowsSeen === 0 ? true : dyeRowsCosted > 0;
+
+  // cost_per_kg_tk = SUM(step price_tk) / fabric_qty_kg — computed from the
+  // (possibly corrected) step data, not read from the sheet's own D6 cell.
+  // D6 is itself just SUM(source G column)/H3 in Excel, so it inherits any
+  // broken cell's stale price — cross-checked below instead of trusted, which
+  // is exactly how the white_chori_bonmax softener correction gets surfaced
+  // in the total rather than staying invisible in an unused D6 read.
+  const costPerKgTk = steps.reduce((sum, s) => sum + s.price_tk, 0) / fabricQtyKg;
+  const sourceD6 = num(ws['D6']);
+  if (Math.abs(costPerKgTk - sourceD6) > 1e-3 * Math.max(1, costPerKgTk)) {
+    console.warn(
+      `  [${meta.id}] computed cost_per_kg_tk (${costPerKgTk.toFixed(4)}) differs from the source ` +
+      `sheet's own D6 total (${sourceD6.toFixed(4)}) — expected only for a row-level correction ` +
+      `documented in this script's header; if unexpected, investigate before importing.`
+    );
+  }
 
   return {
     id: meta.id,
