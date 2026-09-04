@@ -1018,7 +1018,7 @@ function priceMsg(html, tone) {
 
 async function loadYarnPrices() {
   try {
-    const d = await api('/api/yarn-prices');
+    const d = await api('/admin/api/yarn-prices');
     const st = d.status || {};
     const tone = PRICE_AGE_TONE[st.freshness] || PRICE_AGE_TONE.unknown;
 
@@ -1110,7 +1110,7 @@ async function updateYarnPrices() {
   btn.textContent = 'Updating…';
   priceMsg('Fetching the published list…');
   try {
-    const r = await api('/api/yarn-prices/refresh', 'POST');
+    const r = await api('/admin/api/yarn-prices/refresh', 'POST');
     if (r.skipped) {
       priceMsg(`Nothing to do — ${esc(r.reason)}.`, 'warn');
     } else {
