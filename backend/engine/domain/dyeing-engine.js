@@ -3,29 +3,66 @@
  * ============================
  *
  * Matches a resolved shade tier (from color-engine.js) to a REAL, cost-
- * verified dyeing recipe extracted from an actual factory's recipe cards
- * (backend/data/dyeing-reference.json — see extract-dyeing-reference.js for
- * how it was built and verify-dyeing-rules.js for how it is checked), and
+ * verified dyeing recipe extracted from real factory recipe cards, and
  * re-derives that recipe's cost for a requested fabric quantity.
  *
+ * TWO SOURCES, merged into one in-memory list at module load:
+ *   - backend/data/dyeing-reference.json — Alim Knit (BD) Ltd's cards, 6
+ *     recipes (extract-dyeing-reference.js / verify-dyeing-rules.js).
+ *   - backend/data/master-recipe-reference.json — a second, unattributed
+ *     factory's cards, 34 recipes, a genuinely different sheet layout
+ *     (extract-master-recipe-reference.js / verify-master-recipe-rules.js).
+ * Field differences between them are normalized once here (composition_tag
+ * vs fabrication_tag; dye_cost_included vs cost_complete/cost_gaps) so every
+ * other function in this file, and every caller, sees one consistent shape.
+ *
  * Pattern B, same as woven-derivatives.js / composition-reference.json: a
- * synchronous require() of a static JSON snapshot, no database, no network,
+ * synchronous require() of static JSON snapshots, no database, no network,
  * no await — calculateCost() (costing-engine.js) is a hard synchronous
  * invariant of this codebase and this module must stay safe to call from it.
- * The dyeing_recipes / dyeing_recipe_chemicals PostgreSQL tables (migration
- * 021) exist purely as a citation/audit surface; nothing here reads them.
+ * The dyeing_recipes / dyeing_recipe_chemicals PostgreSQL tables (migrations
+ * 021/023) exist purely as a citation/audit surface; nothing here reads them.
  *
- * SCOPE — read this before trusting a "no match": only 6 real recipes exist
- * (2 White, 4 Navy/Black jersey or CVC-jersey), all from one factory. Every
- * shade/composition NOT covered by one of these 6 correctly returns null
- * from matchDyeingRecipe() — that is the honest, permanent behaviour for an
+ * SCOPE — read this before trusting a "no match": 40 real recipes total,
+ * from two factories, covering black/dark_navy/light_medium/white_melange/
+ * fluorescent (not melange, not turquoise, not shade-depth-percentage bands
+ * — see the two extractors' own headers for exactly what was left out and
+ * why). Every shade/composition NOT covered correctly returns null from
+ * matchDyeingRecipe() — that is the honest, permanent behaviour for an
  * uncovered shade, not a placeholder to later fill with a guess. The caller
  * (costing-engine.js) falls through to the existing price-list estimate.
  */
 'use strict';
 
-const REF = require('../../data/dyeing-reference.json');
+const dyeingRef = require('../../data/dyeing-reference.json');
+const masterRef = require('../../data/master-recipe-reference.json');
 const priceBook = require('./dyeing-price-book');
+
+const ALL_RECIPES = [
+  ...dyeingRef.recipes.map(r => ({
+    ...r,
+    source_key: dyeingRef.source.key,
+    cost_complete: r.dye_cost_included,
+    cost_gaps: [],
+  })),
+  ...masterRef.recipes.map(r => ({
+    ...r,
+    source_key: masterRef.source.key,
+    composition_tag: r.fabrication_tag,
+    dye_cost_included: r.cost_complete,
+  })),
+];
+
+// Recipe ids are only unique WITHIN a source file today (each extractor
+// checks its own). Checked again here across both, since a silent collision
+// would make getDyeingRecipe()/matchDyeingRecipe() return the wrong recipe.
+{
+  const seen = new Set();
+  for (const r of ALL_RECIPES) {
+    if (seen.has(r.id)) throw new Error(`dyeing-engine: duplicate recipe id "${r.id}" across the two reference sources`);
+    seen.add(r.id);
+  }
+}
 
 /**
  * @param {object} p
@@ -41,7 +78,7 @@ const priceBook = require('./dyeing-price-book');
  */
 function matchDyeingRecipe({ shade_tier, is_two_part } = {}) {
   if (!shade_tier) return null;
-  const candidates = REF.recipes.filter(r => r.shade_tiers.includes(shade_tier));
+  const candidates = ALL_RECIPES.filter(r => r.shade_tiers.includes(shade_tier));
   if (!candidates.length) return null;
 
   // Graceful fallback, not a strict filter: prefer a recipe whose bath-count
@@ -107,13 +144,16 @@ function calculateDyeingCost({ recipe, fabric_qty_kg = 1, bdt_per_usd }) {
     // frozen price when a human has confirmed one for this exact chemical
     // name — see that module's header for why 5 known chemical names never
     // get an override (they price differently in different real recipes, so
-    // there is no single number to substitute).
+    // there is no single number to substitute). Only applies to the main
+    // dosing — the master-recipe source's "topping" component (currently 0
+    // on every real row) is not currently re-derivable from an override.
     const override = priceBook.get(s.commercial_name);
     const unitPriceTk = override ? override.unit_price_tk : s.unit_price_tk;
-    const priceTk = requiredQtyKg * unitPriceTk;
+    const toppingTk = s.topping_tk || 0;
+    const priceTk = requiredQtyKg * unitPriceTk + toppingTk;
     return {
       stage: s.stage,
-      functional_name: s.functional_name,
+      functional_name: s.functional_name || null,
       commercial_name: s.commercial_name,
       dosing: s.dosing,
       dosing_basis: s.dosing_basis,
@@ -121,8 +161,9 @@ function calculateDyeingCost({ recipe, fabric_qty_kg = 1, bdt_per_usd }) {
       price_date: override ? override.updated_at : null,
       required_qty_kg: requiredQtyKg,
       price_tk: priceTk,
-      remarks: s.remarks,
-      time_min: s.time_min,
+      topping_tk: toppingTk,
+      remarks: s.remarks || null,
+      time_min: s.time_min || 0,
     };
   });
 
@@ -133,20 +174,23 @@ function calculateDyeingCost({ recipe, fabric_qty_kg = 1, bdt_per_usd }) {
     fabric_qty_kg,
     cost_per_kg_tk: costPerKgTk,
     cost_per_kg_usd: costPerKgUsd,
+    cost_gaps: recipe.cost_gaps || [],
     chemicals,
   };
 }
 
 /** Flat list for a recipe picker (e.g. an admin browser). */
 function listDyeingRecipes() {
-  return REF.recipes.map(r => ({
+  return ALL_RECIPES.map(r => ({
     id: r.id,
+    source_key: r.source_key,
     sheet_name: r.sheet_name,
     color_label: r.color_label,
     shade_tiers: r.shade_tiers,
     composition_tag: r.composition_tag,
     cost_per_kg_tk: r.cost_per_kg_tk,
     dye_cost_included: r.dye_cost_included,
+    cost_complete: r.cost_complete,
     total_time_min: r.total_time_min,
     total_bath_count: r.total_bath_count,
   }));
@@ -158,7 +202,7 @@ function listDyeingRecipes() {
  * matching. Returns null for an unknown id, never a guess.
  */
 function getDyeingRecipe(id) {
-  return REF.recipes.find(r => r.id === id) || null;
+  return ALL_RECIPES.find(r => r.id === id) || null;
 }
 
 module.exports = { matchDyeingRecipe, calculateDyeingCost, listDyeingRecipes, getDyeingRecipe };
