@@ -16,6 +16,7 @@ const { FAULTS_DATABASE, diagnoseFaults } = require('../engine/domain/faults-eng
 const providerManager = require('../ai/provider-manager-v2');
 const { getPattern } = require('../engine/domain/pattern-engine');
 const { calculateWoven, listWovenFabrics } = require('../engine/domain/woven-engine');
+const { listDyeingRecipes } = require('../engine/domain/dyeing-engine');
 const { isWovenId } = require('../engine/catalog/woven-derivatives');
 const { calculateStriper, validateStriperInput } = require('../engine/domain/striper-engine');
 const { predictQuality } = require('../engine/domain/quality-engine');
@@ -478,6 +479,14 @@ router.post('/woven/calculate', (req, res) => {
 // GET /api/woven/fabrics
 // ============================================================
 router.get('/woven/fabrics', (req, res) => res.json(listWovenFabrics()));
+
+// ============================================================
+// GET /api/dyeing/recipes — the real, cost-verified recipes dyeing-engine.js
+// can match against a shade tier. costing-engine.js already surfaces a match
+// automatically inside /api/calculate's cost_breakdown_usd.dyeing; this is
+// for a standalone browser/picker, not part of the main calculate flow.
+// ============================================================
+router.get('/dyeing/recipes', (req, res) => res.json(listDyeingRecipes()));
 
 // ============================================================
 // GET /api/pattern/:slug

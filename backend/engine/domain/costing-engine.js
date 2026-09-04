@@ -237,6 +237,7 @@ const YARN_TYPE_CATALOG = {
 // ============================================================
 const { getKnittingPrice } = require('../catalog/knitting-price-table');
 const countryCosts = require('../catalog/country-costs');
+const { matchDyeingRecipe, calculateDyeingCost } = require('./dyeing-engine');
 const ENERGY_SHARE_PCT = Object.fromEntries(
   Object.entries(countryCosts.ENERGY_SHARE).map(([k, v]) => [k, Math.round(v * 100)]));
 
@@ -757,21 +758,48 @@ function calculateCost(params) {
     dyeingDetail = { source: 'user_override', one_part: dyeingBase, two_part: dyeingBase, is_two_part: false };
   } else {
     const shadeKey = colorShade || 'light_medium';
-    const dyeRow   = DYEING_COST[shadeKey] || DYEING_COST_FALLBACK;
-    const basePrice = isTwoPart
-      ? (dyeRow.two_part > 0 ? dyeRow.two_part : dyeRow.one_part)  // fall back to one-part if 0
-      : dyeRow.one_part;
-    dyeingBase  = basePrice;
-    dyeingFinal = round4(basePrice);
-    dyeingDetail = {
-      source: 'Official Dyeing Price List',
-      shade_key: shadeKey, is_two_part: isTwoPart,
-      one_part_price: dyeRow.one_part, two_part_price: dyeRow.two_part,
-      applied_price: dyeingFinal,
-      note: isTwoPart
-        ? `Two-part dyeing (CVC/PC blend) at ${dyeRow.two_part > 0 ? dyeRow.two_part : dyeRow.one_part} USD/kg`
-        : `One-part dyeing (${shadeKey}) at ${dyeRow.one_part} USD/kg`,
-    };
+    // Real recipe first: a genuine, cost-verified factory card (see
+    // dyeing-engine.js / data/dyeing-reference.json) beats the flat
+    // price-list estimate whenever one actually covers this shade. Only 6
+    // real recipes exist (2 white, 4 navy/black) — matchDyeingRecipe()
+    // returns null for everything else, and that falls straight through to
+    // today's unchanged behaviour below. Never fabricated for an uncovered shade.
+    const matched = matchDyeingRecipe({ shade_tier: shadeKey, is_two_part: isTwoPart });
+    if (matched) {
+      const real = calculateDyeingCost({ recipe: matched, fabric_qty_kg: 1, bdt_per_usd: exchangeRates.BDT });
+      dyeingBase  = real.cost_per_kg_usd;
+      dyeingFinal = round4(real.cost_per_kg_usd);
+      dyeingDetail = {
+        source: 'REAL_RECIPE',
+        shade_key: shadeKey, is_two_part: isTwoPart,
+        recipe_id: matched.id, recipe_name: matched.sheet_name, color_label: matched.color_label,
+        match_quality: matched.match_quality,
+        dye_cost_included: matched.dye_cost_included,
+        cost_per_kg_tk: real.cost_per_kg_tk,
+        applied_price: dyeingFinal,
+        chemicals: real.chemicals,
+        note: matched.dye_cost_included
+          ? `Real recipe (${matched.sheet_name}) — ${real.cost_per_kg_tk.toFixed(2)} Tk/kg`
+          : `Real recipe (${matched.sheet_name}) — ${real.cost_per_kg_tk.toFixed(2)} Tk/kg, ` +
+            `PRETREATMENT/AUXILIARY CHEMICALS ONLY — the reactive dye itself is job-specific and not costed here`,
+      };
+    } else {
+      const dyeRow   = DYEING_COST[shadeKey] || DYEING_COST_FALLBACK;
+      const basePrice = isTwoPart
+        ? (dyeRow.two_part > 0 ? dyeRow.two_part : dyeRow.one_part)  // fall back to one-part if 0
+        : dyeRow.one_part;
+      dyeingBase  = basePrice;
+      dyeingFinal = round4(basePrice);
+      dyeingDetail = {
+        source: 'Official Dyeing Price List',
+        shade_key: shadeKey, is_two_part: isTwoPart,
+        one_part_price: dyeRow.one_part, two_part_price: dyeRow.two_part,
+        applied_price: dyeingFinal,
+        note: isTwoPart
+          ? `Two-part dyeing (CVC/PC blend) at ${dyeRow.two_part > 0 ? dyeRow.two_part : dyeRow.one_part} USD/kg`
+          : `One-part dyeing (${shadeKey}) at ${dyeRow.one_part} USD/kg`,
+      };
+    }
   }
   // Also not adjusted by country. Same reason as knitting: it is a price-list
   // number, and it stays one.
@@ -921,6 +949,18 @@ function calculateCost(params) {
         two_part_price:    dyeingDetail ? dyeingDetail.two_part_price : null,
         source:            dyeingDetail ? dyeingDetail.source : null,
         note:              dyeingDetail ? dyeingDetail.note : null,
+        // Present only when source === 'REAL_RECIPE' — a real, cost-verified
+        // factory recipe matched this shade (see dyeing-engine.js). The
+        // frontend's Dyeing-stage recipe section renders these, or stays
+        // hidden when they're absent (an estimate-only shade, unchanged
+        // behaviour, nothing fabricated to show).
+        recipe_id:         dyeingDetail && dyeingDetail.source === 'REAL_RECIPE' ? dyeingDetail.recipe_id : null,
+        recipe_name:       dyeingDetail && dyeingDetail.source === 'REAL_RECIPE' ? dyeingDetail.recipe_name : null,
+        color_label:       dyeingDetail && dyeingDetail.source === 'REAL_RECIPE' ? dyeingDetail.color_label : null,
+        match_quality:     dyeingDetail && dyeingDetail.source === 'REAL_RECIPE' ? dyeingDetail.match_quality : null,
+        dye_cost_included: dyeingDetail && dyeingDetail.source === 'REAL_RECIPE' ? dyeingDetail.dye_cost_included : null,
+        cost_per_kg_tk:    dyeingDetail && dyeingDetail.source === 'REAL_RECIPE' ? dyeingDetail.cost_per_kg_tk : null,
+        chemicals:         dyeingDetail && dyeingDetail.source === 'REAL_RECIPE' ? dyeingDetail.chemicals : null,
       },
       finishing:             finishingFinal,
       total_per_kg:          totalCost,
