@@ -1146,36 +1146,49 @@ async function loadDyeingPrices() {
     const d = await api('/admin/api/dyeing-prices');
 
     const tb = document.getElementById('dyeing-prices-tbody');
-    tb.innerHTML = (d.prices || []).map(p => {
-      const rowId = `dp-${p.chemical_name.replace(/[^a-zA-Z0-9]/g, '_')}`;
+    tb.innerHTML = '';
+    if (!(d.prices || []).length) {
+      tb.innerHTML = '<tr><td colspan="4" style="color:var(--t3);font-size:11px;">No prices yet — run the dyeing reference import first.</td></tr>';
+    }
+    for (const p of d.prices || []) {
       const dated = p.updated_at
         ? new Date(p.updated_at).toLocaleDateString()
         : '<span style="color:var(--t3);">original extracted value</span>';
-      return `<tr>
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
         <td style="font-size:11px;">${esc(p.chemical_name)}</td>
-        <td><input type="number" step="0.01" min="0" id="${rowId}-input" class="form-input" style="width:100px;" value="${p.unit_price_tk}"></td>
+        <td><input type="number" step="0.01" min="0" class="form-input dp-input" style="width:100px;" value="${p.unit_price_tk}"></td>
         <td style="font-size:10px;">${dated}</td>
-        <td><button class="btn btn-ghost btn-xs" onclick="saveDyeingPrice('${esc(p.chemical_name)}', '${rowId}-input')">Save</button></td>
-      </tr>`;
-    }).join('') || '<tr><td colspan="4" style="color:var(--t3);font-size:11px;">No prices yet — run the dyeing reference import first.</td></tr>';
+        <td><button class="btn btn-ghost btn-xs dp-save">Save</button></td>
+      `;
+      tr.querySelector('.dp-save').addEventListener('click', () =>
+        saveDyeingPrice(p.chemical_name, tr.querySelector('.dp-input')));
+      tb.appendChild(tr);
+    }
 
     const ub = document.getElementById('dyeing-prices-unresolved-tbody');
-    ub.innerHTML = (d.unresolved || []).map(p => {
-      const rowId = `dpu-${p.chemical_name.replace(/[^a-zA-Z0-9]/g, '_')}`;
-      return `<tr>
+    ub.innerHTML = '';
+    if (!(d.unresolved || []).length) {
+      ub.innerHTML = '<tr><td colspan="4" style="color:var(--t3);font-size:11px;">None — every priced chemical currently has one consistent value.</td></tr>';
+    }
+    for (const p of d.unresolved || []) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
         <td style="font-size:11px;">${esc(p.chemical_name)}</td>
         <td style="font-size:10px;color:var(--t3);">${p.prices_seen.join(' / ')}</td>
-        <td><input type="number" step="0.01" min="0" id="${rowId}-input" class="form-input" style="width:100px;" placeholder="unify at…"></td>
-        <td><button class="btn btn-ghost btn-xs" onclick="saveDyeingPrice('${esc(p.chemical_name)}', '${rowId}-input')">Set</button></td>
-      </tr>`;
-    }).join('') || '<tr><td colspan="4" style="color:var(--t3);font-size:11px;">None — every priced chemical currently has one consistent value.</td></tr>';
+        <td><input type="number" step="0.01" min="0" class="form-input dpu-input" style="width:100px;" placeholder="unify at…"></td>
+        <td><button class="btn btn-ghost btn-xs dpu-save">Set</button></td>
+      `;
+      tr.querySelector('.dpu-save').addEventListener('click', () =>
+        saveDyeingPrice(p.chemical_name, tr.querySelector('.dpu-input')));
+      ub.appendChild(tr);
+    }
   } catch (err) {
     dyeingPriceMsg(`Could not load dyeing prices: ${esc(err.message)}`, 'bad');
   }
 }
 
-async function saveDyeingPrice(chemicalName, inputId) {
-  const input = document.getElementById(inputId);
+async function saveDyeingPrice(chemicalName, input) {
   const value = parseFloat(input.value);
   if (!(value > 0)) {
     dyeingPriceMsg('Enter a positive price first.', 'warn');
