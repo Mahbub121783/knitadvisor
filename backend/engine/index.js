@@ -1089,6 +1089,13 @@ function calculate(params) {
       // breakdown silently stopped adding up to the number above it.
       knitting_per_kg_usd:      costResult.cost_breakdown_usd.knitting.per_kg,
       dyeing_per_kg_usd:        costResult.cost_breakdown_usd.dyeing.per_kg,
+      // The full dyeing object — source/note plus, when a real recipe
+      // matched (source === 'REAL_RECIPE'), the chemical-by-chemical
+      // breakdown. Forwarded whole rather than picked apart field-by-field
+      // like the others above, since the result page's new recipe section
+      // needs the whole shape, not just the one number the rest of the page
+      // already prints.
+      dyeing_detail:            costResult.cost_breakdown_usd.dyeing,
       finishing_per_kg_usd:     costResult.cost_breakdown_usd.finishing,
       total_per_kg_usd:         costResult.cost_breakdown_usd.total_per_kg,
       margin_scenarios:         costResult.margin_scenarios,

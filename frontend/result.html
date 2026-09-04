@@ -1149,6 +1149,43 @@
       <div id="c-shade-note" class="mt-6" style="font-size:10px;color:var(--t3);line-height:1.6;padding:8px 10px;background:rgba(255,255,255,.03);border-radius:6px;border-left:2px solid rgba(168,85,247,0.4)"></div>
     </div>
 
+    <!-- ===== REAL DYEING RECIPE (only when a real, cost-verified factory
+         recipe matched this shade — costing.dyeing_detail.source ===
+         'REAL_RECIPE'. Every other shade still uses the price-list estimate
+         shown in Fabric Price above; this section simply stays hidden then,
+         not filled with a guess. ===== -->
+    <div class="result-section anim-in hidden" id="sec-dye-recipe" style="border:1px solid rgba(16,185,129,.3); background:rgba(16,185,129,.04);">
+      <div class="result-section-title">
+        <div class="rst-icon" style="color:#10b981;">🧪</div>
+        <div class="rst-title-text" style="color:#10b981;">Real Dyeing Recipe</div>
+        <span id="dye-recipe-badge" class="badge" style="margin-left:auto;background:rgba(16,185,129,.12);color:#10b981;border:1px solid rgba(16,185,129,.3);">—</span>
+      </div>
+      <div class="cost-headline" style="margin-bottom:12px;">
+        <div>
+          <div class="ch-lbl">Recipe cost, per kg of fabric</div>
+          <div class="ch-val" id="dye-recipe-cost-tk" style="font-size:22px;">&#8212;</div>
+          <div class="ch-sub" id="dye-recipe-sub">&#8212;</div>
+        </div>
+      </div>
+      <div id="dye-recipe-dye-note" class="hidden mt-6" style="font-size:10px;color:#f59e0b;line-height:1.6;padding:8px 10px;background:rgba(245,158,11,.06);border-radius:6px;border-left:2px solid rgba(245,158,11,.4);margin-bottom:10px;"></div>
+      <div class="result-section-label" style="margin-top:0;">Chemical breakdown
+        <span style="font-weight:400;color:var(--t3);">&#8212; from the real recipe card</span></div>
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:11px;min-width:480px;">
+          <thead>
+            <tr style="color:var(--t3);text-transform:uppercase;font-size:9px;letter-spacing:.5px;">
+              <th style="text-align:left;padding:6px 4px;">Chemical</th>
+              <th style="text-align:left;padding:6px 4px;">Function</th>
+              <th style="text-align:right;padding:6px 4px;">Dosing</th>
+              <th style="text-align:right;padding:6px 4px;">Req. Qty (kg)</th>
+              <th style="text-align:right;padding:6px 4px;">Price (Tk)</th>
+            </tr>
+          </thead>
+          <tbody id="dye-recipe-rows"></tbody>
+        </table>
+      </div>
+    </div>
+
     <!-- ===== STITCH LENGTH BY SHADE (explicit dark / medium / light) ===== -->
     <div class="result-section anim-in hidden" id="sec-sl-shade" style="border:1px solid rgba(0,209,255,.3); background:rgba(0,209,255,.04);">
       <div class="result-section-title">
@@ -1980,6 +2017,7 @@ function renderResult(r, params) {
 
   // — Costing —
   renderCosting(r.costing);
+  renderDyeingRecipe(r.costing);
 
   // — Production Critical Path Analysis (CPA) —
   renderCPA(r.critical_path);
@@ -2228,6 +2266,7 @@ async function onCountryChange() {
     if (r && r.success && r.costing) {
       costingParams = { ...costingParams, country: sel.value };
       renderCosting(r.costing);
+      renderDyeingRecipe(r.costing);
     }
   } catch (err) {
     // A failed re-cost must leave the previous, correct figures on screen
@@ -2411,6 +2450,61 @@ function renderCosting(costing) {
   document.getElementById('cost-breakdown-knitting').textContent = `$${fmt(costing.knitting_per_kg_usd, 2)} / kg`;
   document.getElementById('cost-breakdown-dyeing').textContent = `$${fmt(costing.dyeing_per_kg_usd, 2)} / kg`;
   document.getElementById('cost-breakdown-finishing').textContent = `$${fmt(costing.finishing_per_kg_usd, 2)} / kg`;
+
+  syncStages();
+}
+
+/* ============================================================
+   REAL DYEING RECIPE
+   ============================================================
+   Shown ONLY when costing.dyeing_detail.source === 'REAL_RECIPE' — a real,
+   cost-verified factory recipe (dyeing-engine.js / data/dyeing-reference
+   .json) matched this shade. Every other shade keeps using the price-list
+   estimate already shown in Fabric Price above, and this section simply
+   stays hidden — never filled with a guessed recipe.
+   ============================================================ */
+function renderDyeingRecipe(costing) {
+  const sec = document.getElementById('sec-dye-recipe');
+  const d = costing && costing.dyeing_detail;
+  if (!d || d.source !== 'REAL_RECIPE') {
+    sec.classList.add('hidden');
+    syncStages();
+    return;
+  }
+  sec.classList.remove('hidden');
+
+  const esc = (x) => String(x == null ? '' : x).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+  document.getElementById('dye-recipe-badge').textContent = d.match_quality === 'exact_composition'
+    ? 'MATCHED — SHADE + FIBRE' : 'MATCHED — SHADE ONLY';
+  document.getElementById('dye-recipe-cost-tk').textContent = `${fmt(d.cost_per_kg_tk, 2)} Tk`;
+  document.getElementById('dye-recipe-sub').textContent =
+    `= $${fmt(d.per_kg, 4)} USD · ${esc(d.recipe_name)} · ${esc(d.color_label)}`;
+
+  const dyeNote = document.getElementById('dye-recipe-dye-note');
+  if (d.dye_cost_included === false) {
+    dyeNote.classList.remove('hidden');
+    dyeNote.textContent = 'This recipe covers pretreatment, neutralisation and auxiliary chemicals only — ' +
+      'the reactive dye itself is job-specific (depends on the exact shade %) and is not costed here.';
+  } else {
+    dyeNote.classList.add('hidden');
+  }
+
+  const rows = (d.chemicals || []).filter(c => c.commercial_name || c.required_qty_kg > 0);
+  document.getElementById('dye-recipe-rows').innerHTML = rows.map(c => {
+    const dosingLabel = c.dosing_basis === 'percent_owf'
+      ? `${fmt(c.dosing * 100, 3)}% owf`
+      : c.dosing_basis === 'liquor_gpl'
+        ? `${fmt(c.dosing, 3)} g/L`
+        : '—';
+    return `<tr style="border-top:1px solid rgba(255,255,255,.06);">
+      <td style="padding:5px 4px;">${esc(c.commercial_name) || '—'}</td>
+      <td style="padding:5px 4px;color:var(--t3);">${esc(c.functional_name) || '—'}</td>
+      <td style="padding:5px 4px;text-align:right;">${dosingLabel}</td>
+      <td style="padding:5px 4px;text-align:right;">${fmt(c.required_qty_kg, 3)}</td>
+      <td style="padding:5px 4px;text-align:right;">${fmt(c.price_tk, 2)}</td>
+    </tr>`;
+  }).join('');
 
   syncStages();
 }
