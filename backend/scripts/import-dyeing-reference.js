@@ -128,18 +128,29 @@ async function run() {
     counts.dyeing_recipe_chemicals = chemicalCount;
 
     // ---- freshness stamps ------------------------------------------------
-    const stamps = {
-      dyeing_recipes: REF.recipes,
-      dyeing_recipe_chemicals: REF.recipes.flatMap(r => r.steps),
-    };
-    for (const [table, data] of Object.entries(stamps)) {
+    // dyeing_recipes/dyeing_recipe_chemicals are shared with a second source
+    // (023_master_recipe_reference.sql) — the stamp must reflect the FULL
+    // current table content, not just this importer's own rows, or the two
+    // importers would silently overwrite each other's stamp with a partial
+    // truth every time either one re-runs.
+    const recipes = await q(`
+      SELECT id, recipe_key, source_key, sheet_name, buyer, color_label, shade_tiers,
+             composition_tag, fabric_qty_kg, ml_ratio, water_l, cost_per_kg_tk,
+             total_bath_count, total_time_min, dye_cost_included, cost_gaps
+        FROM dyeing_recipes ORDER BY id`);
+    const chemicals = await q(`
+      SELECT id, recipe_id, step_order, stage, functional_name, commercial_name,
+             dosing, dosing_basis, unit_price_tk, required_qty_kg, price_tk,
+             remarks, time_min, topping_tk
+        FROM dyeing_recipe_chemicals ORDER BY id`);
+    for (const [table, rows] of Object.entries({ dyeing_recipes: recipes, dyeing_recipe_chemicals: chemicals })) {
       await q(
         `INSERT INTO reference_versions (table_name, row_count, checksum, source)
          VALUES ($1,$2,$3,$4)
          ON CONFLICT (table_name) DO UPDATE SET
            row_count=EXCLUDED.row_count, checksum=EXCLUDED.checksum,
            source=EXCLUDED.source, imported_at=now()`,
-        [table, counts[table], sha(data), src.key]
+        [table, rows.length, sha(rows), 'multiple (dyeing_recipes.source_key)']
       );
     }
   });

@@ -308,6 +308,7 @@ function renderRecipe(recipe, cost) {
        the reactive dye itself is job-specific (depends on the exact shade %) and is not costed here.</div>`
     : '';
 
+  const gapNames = new Set((cost.cost_gaps || []).map(g => g.commercial_name));
   let hasCostGap = false;
   const rows = cost.chemicals.map(c => {
     const stageRow = c.stage ? `<tr class="stage-row"><td colspan="6">${esc(c.stage)}</td></tr>` : '';
@@ -315,11 +316,14 @@ function renderRecipe(recipe, cost) {
       // Pure process-instruction row (e.g. "Direct Drain") — show as a note line, not a fake chemical row.
       return `${stageRow}<tr><td colspan="6" style="color:var(--t3);font-size:10.5px;padding-top:4px;">${esc(c.functional_name)}${c.time_min ? ` &mdash; ${fmt(c.time_min,0)} min` : ''}</td></tr>`;
     }
-    // The source factory's own Excel formula for this exact line referenced an
-    // undefined cell, so it always evaluated to a zero quantity/price despite a
-    // real unit price being listed. Preserved as-is (never guessed a fix) —
-    // but it must not read as "this chemical is free," so flag it visibly.
-    const isCostGap = c.dosing_basis === 'other' && c.unit_price_tk > 0 && !(c.required_qty_kg > 0);
+    // Two distinct kinds of "priced at 0, but not really free" row:
+    //  - a broken source formula (Mozammel's White (chori bonmax) softener) —
+    //    dosing_basis 'other' with a real unit price but no computed quantity.
+    //  - a chemical this recipe doses but has no resolvable price anywhere in
+    //    the source's own catalog (the 2nd factory source) — listed in
+    //    cost.cost_gaps by name.
+    const isBrokenFormula = c.dosing_basis === 'other' && c.unit_price_tk > 0 && !(c.required_qty_kg > 0);
+    const isCostGap = isBrokenFormula || gapNames.has(c.commercial_name);
     if (isCostGap) hasCostGap = true;
     const dosingLabel = c.dosing_basis === 'percent_owf' ? `${fmt(c.dosing * 100, 3)}% owf`
       : c.dosing_basis === 'liquor_gpl' ? `${fmt(c.dosing, 3)} g/L` : '&#8212;';
@@ -334,8 +338,8 @@ function renderRecipe(recipe, cost) {
       <td>${esc(c.commercial_name) || '&#8212;'}</td>
       <td style="color:var(--t3);">${esc(c.functional_name) || '&#8212;'}</td>
       <td class="num">${dosingLabel}</td>
-      <td class="num">${isCostGap ? '?' : fmt(c.required_qty_kg, 3)}</td>
-      <td class="num">${isCostGap ? `<span title="Unit price ${fmt(c.unit_price_tk,0)} Tk/kg is known, but the source card's own formula never computed a quantity for this line — not included in the total.">0*</span>` : fmt(c.price_tk, 2)}${dateBadge}</td>
+      <td class="num">${isBrokenFormula ? '?' : fmt(c.required_qty_kg, 3)}</td>
+      <td class="num">${isCostGap ? `<span title="No resolvable unit price for this chemical — not included in the total.">0*</span>` : fmt(c.price_tk, 2)}${dateBadge}</td>
       <td class="remarks">${esc(c.remarks) || ''}</td>
     </tr>`;
   }).join('');
@@ -343,7 +347,20 @@ function renderRecipe(recipe, cost) {
     ? `<div class="dye-note">* One line in this card (marked above) has a known unit price but the source factory's own spreadsheet never computed a quantity for it &mdash; carried through as-is rather than guessed, so the total below excludes that chemical's real cost.</div>`
     : '';
 
-  const hrs = Math.floor(recipe.total_time_min / 60), mins = Math.round(recipe.total_time_min % 60);
+  // The 2nd factory source (master-recipe-reference.json) has its own
+  // chemicals with no resolvable price anywhere in that workbook's own
+  // catalog — a real gap disclosed per recipe, generic across any source,
+  // distinct from the Mozammel-specific dyeNote above.
+  const gapNote = (cost.cost_gaps && cost.cost_gaps.length)
+    ? `<div class="dye-note">This card doses ${cost.cost_gaps.map(g => esc(g.commercial_name)).join(', ')}
+       but no price for ${cost.cost_gaps.length > 1 ? 'them' : 'it'} could be found anywhere in the source
+       workbook's own price catalog &mdash; priced at 0 Tk/kg below rather than guessed, so the total
+       <strong>excludes</strong> ${cost.cost_gaps.length > 1 ? 'these chemicals' : 'this chemical'}.</div>`
+    : '';
+
+  const hasTime = recipe.total_time_min != null;
+  const hrs = hasTime ? Math.floor(recipe.total_time_min / 60) : null;
+  const mins = hasTime ? Math.round(recipe.total_time_min % 60) : null;
 
   panel.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:start;flex-wrap:wrap;gap:8px;">
@@ -357,6 +374,7 @@ function renderRecipe(recipe, cost) {
       </span>
     </div>
     ${dyeNote}
+    ${gapNote}
     ${costGapNote}
     <div class="cost-headline-row">
       <div class="ch-box">
@@ -371,7 +389,7 @@ function renderRecipe(recipe, cost) {
       </div>
       <div class="ch-box">
         <div class="ch-box-lbl">Process time</div>
-        <div class="ch-box-val" style="font-size:16px;">${hrs}h ${mins}m</div>
+        <div class="ch-box-val" style="font-size:16px;">${hasTime ? `${hrs}h ${mins}m` : '<span style="color:var(--t3);font-size:12px;">not tracked</span>'}</div>
         <div class="ch-box-sub">${recipe.total_bath_count || '&#8212;'} baths &middot; ${fmt(recipe.water_l,0)} L water @ 1:${fmt(recipe.ml_ratio,0)}</div>
       </div>
     </div>
@@ -394,7 +412,7 @@ function renderBrowseGrid() {
       <div class="recipe-card-name">${esc(r.sheet_name)}</div>
       <div class="recipe-card-tag">${esc(r.color_label)}${r.composition_tag ? ' &middot; ' + esc(r.composition_tag) : ''}</div>
       <div class="recipe-card-cost">${fmt(r.cost_per_kg_tk, 2)} Tk/kg</div>
-      <div class="recipe-card-meta">${r.dye_cost_included ? 'complete cost' : 'excludes dye chemical'} &middot; ${r.total_bath_count || '&#8212;'} baths</div>
+      <div class="recipe-card-meta">${r.cost_complete ? 'complete cost' : 'some chemicals unpriced'} &middot; ${r.total_bath_count || '&#8212;'} baths</div>
     </div>
   `).join('');
 }
