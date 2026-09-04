@@ -149,6 +149,7 @@
     <div class="page-header">
       <h1 class="h1 page-title text-head">Dyeing Recipe Library</h1>
       <div class="page-sub">Real factory recipe cards — pretreatment through softening, with real chemical dosing and cost per kg. Not a generic estimate: this is a specific recipe, from a specific factory, matched to your shade.</div>
+      <div class="page-sub" style="font-size:10.5px;margin-top:4px;">Chemical unit prices are this one factory's own recorded costs, not a live market feed &mdash; the source file carries no date, so treat cost/kg as a real but time-stamped-unknown snapshot, and re-check current supplier prices before quoting a buyer.</div>
     </div>
 
     <div class="dye-container">
@@ -307,23 +308,33 @@ function renderRecipe(recipe, cost) {
        the reactive dye itself is job-specific (depends on the exact shade %) and is not costed here.</div>`
     : '';
 
+  let hasCostGap = false;
   const rows = cost.chemicals.map(c => {
     const stageRow = c.stage ? `<tr class="stage-row"><td colspan="6">${esc(c.stage)}</td></tr>` : '';
     if (!c.commercial_name && !(c.required_qty_kg > 0)) {
       // Pure process-instruction row (e.g. "Direct Drain") — show as a note line, not a fake chemical row.
       return `${stageRow}<tr><td colspan="6" style="color:var(--t3);font-size:10.5px;padding-top:4px;">${esc(c.functional_name)}${c.time_min ? ` &mdash; ${fmt(c.time_min,0)} min` : ''}</td></tr>`;
     }
+    // The source factory's own Excel formula for this exact line referenced an
+    // undefined cell, so it always evaluated to a zero quantity/price despite a
+    // real unit price being listed. Preserved as-is (never guessed a fix) —
+    // but it must not read as "this chemical is free," so flag it visibly.
+    const isCostGap = c.dosing_basis === 'other' && c.unit_price_tk > 0 && !(c.required_qty_kg > 0);
+    if (isCostGap) hasCostGap = true;
     const dosingLabel = c.dosing_basis === 'percent_owf' ? `${fmt(c.dosing * 100, 3)}% owf`
       : c.dosing_basis === 'liquor_gpl' ? `${fmt(c.dosing, 3)} g/L` : '&#8212;';
-    return `${stageRow}<tr>
+    return `${stageRow}<tr${isCostGap ? ' style="background:color-mix(in srgb, var(--warn, #b45309) 8%, transparent);"' : ''}>
       <td>${esc(c.commercial_name) || '&#8212;'}</td>
       <td style="color:var(--t3);">${esc(c.functional_name) || '&#8212;'}</td>
       <td class="num">${dosingLabel}</td>
-      <td class="num">${fmt(c.required_qty_kg, 3)}</td>
-      <td class="num">${fmt(c.price_tk, 2)}</td>
+      <td class="num">${isCostGap ? '?' : fmt(c.required_qty_kg, 3)}</td>
+      <td class="num">${isCostGap ? `<span title="Unit price ${fmt(c.unit_price_tk,0)} Tk/kg is known, but the source card's own formula never computed a quantity for this line — not included in the total.">0*</span>` : fmt(c.price_tk, 2)}</td>
       <td class="remarks">${esc(c.remarks) || ''}</td>
     </tr>`;
   }).join('');
+  const costGapNote = hasCostGap
+    ? `<div class="dye-note">* One line in this card (marked above) has a known unit price but the source factory's own spreadsheet never computed a quantity for it &mdash; carried through as-is rather than guessed, so the total below excludes that chemical's real cost.</div>`
+    : '';
 
   const hrs = Math.floor(recipe.total_time_min / 60), mins = Math.round(recipe.total_time_min % 60);
 
@@ -339,6 +350,7 @@ function renderRecipe(recipe, cost) {
       </span>
     </div>
     ${dyeNote}
+    ${costGapNote}
     <div class="cost-headline-row">
       <div class="ch-box">
         <div class="ch-box-lbl">Cost, per kg</div>
