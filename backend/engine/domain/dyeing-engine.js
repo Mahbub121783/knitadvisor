@@ -25,6 +25,7 @@
 'use strict';
 
 const REF = require('../../data/dyeing-reference.json');
+const priceBook = require('./dyeing-price-book');
 
 /**
  * @param {object} p
@@ -101,14 +102,23 @@ function calculateDyeingCost({ recipe, fabric_qty_kg = 1, bdt_per_usd }) {
       requiredQtyKg = fabric_qty_kg * s.dosing;
     }
     // 'other' / null: not scaled, carried forward as-is (see header comment).
-    const priceTk = requiredQtyKg * s.unit_price_tk;
+
+    // A price book override (dyeing-price-book.js) wins over the recipe's own
+    // frozen price when a human has confirmed one for this exact chemical
+    // name — see that module's header for why 5 known chemical names never
+    // get an override (they price differently in different real recipes, so
+    // there is no single number to substitute).
+    const override = priceBook.get(s.commercial_name);
+    const unitPriceTk = override ? override.unit_price_tk : s.unit_price_tk;
+    const priceTk = requiredQtyKg * unitPriceTk;
     return {
       stage: s.stage,
       functional_name: s.functional_name,
       commercial_name: s.commercial_name,
       dosing: s.dosing,
       dosing_basis: s.dosing_basis,
-      unit_price_tk: s.unit_price_tk,
+      unit_price_tk: unitPriceTk,
+      price_date: override ? override.updated_at : null,
       required_qty_kg: requiredQtyKg,
       price_tk: priceTk,
       remarks: s.remarks,

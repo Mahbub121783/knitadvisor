@@ -65,6 +65,15 @@ yarnPrices.load()
   .then(r => console.log(`[Prices] ${r.quotes} market quotes over ${r.items} items, newest ${r.newest || 'none'}`))
   .catch(err => console.warn('[Prices] no market quotes loaded, the reference list will answer:', err.message));
 
+// Dyeing chemical price overrides — same synchronous-snapshot reasoning as
+// above. Empty is a normal, permanent state for any chemical name an admin
+// hasn't priced yet; calculateDyeingCost() falls back to each recipe's own
+// extracted price for those, so a failure here is logged and not fatal.
+const dyeingPriceBook = require('./engine/domain/dyeing-price-book');
+const dyeingPricesReady = dyeingPriceBook.load()
+  .then(() => console.log(`[DyeingPrices] ${dyeingPriceBook.status().overrides} chemical price overrides loaded`))
+  .catch(err => console.warn('[DyeingPrices] no overrides loaded, recipes will use their own extracted prices:', err.message));
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -347,6 +356,7 @@ async function start() {
   }
 
   await referenceReady;
+  await dyeingPricesReady;
 
   app.listen(PORT, () => {
     console.log(`[Server] Running on port ${PORT}`);
