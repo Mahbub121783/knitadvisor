@@ -1,0 +1,324 @@
+{
+  "sources": [
+    {
+      "key": "textilelearner_fabric_faults",
+      "title": "List of Fabric Faults Created During Dyeing and Their Remedies",
+      "publisher": "Textile Learner",
+      "url": "https://textilelearner.net/list-of-fabric-faults-created-during-dyeing-and-their-remedies/",
+      "accessed": "2026-09-05"
+    },
+    {
+      "key": "textilelearner_shade_variation",
+      "title": "Preventive Measurement of Fabric Shade Variation in Dyeing",
+      "publisher": "Textile Learner",
+      "url": "https://textilelearner.net/fabric-shade-variation-in-dyeing/",
+      "accessed": "2026-09-05"
+    },
+    {
+      "key": "textilelearner_checking_control_points",
+      "title": "List of Checking and Control Points of Dyeing Process",
+      "publisher": "Textile Learner",
+      "url": "https://textilelearner.net/checking-and-control-points-of-dyeing/",
+      "accessed": "2026-09-05"
+    },
+    {
+      "key": "textilelearner_salt_comparison",
+      "title": "Comparative Study of Cotton Fabric Quality Using Different Salts in Reactive Dyeing Process",
+      "publisher": "Textile Learner",
+      "url": "https://textilelearner.net/cotton-fabric-in-reactive-dyeing/",
+      "accessed": "2026-09-05"
+    }
+  ],
+
+  "_note": "Facts and figures below are summarised in our own words from the four Textile Learner articles cited above, not copied verbatim — every entry carries a source_key back to its article. This is a curated subset (rope/jet dyeing faults, one QC framework, one salt trial), not a full mirror of the site's ~400-post dyeing category; see dyeing-engine.js's own header for why the recipe/costing layer stays separate from this advisory layer.",
+
+  "faults": [
+    {
+      "id": "uneven_dyeing_rope",
+      "name": "Uneven Dyeing in Rope (Rope Dyeing Machines)",
+      "causes": [
+        "Dyes and chemicals dosed too quickly into the bath",
+        "Inconsistent pretreatment (scouring, bleaching, de-sizing) across the same lot",
+        "Loose control of machine speed, temperature, dosing time, pump/reel speed, or liquor ratio"
+      ],
+      "remedies": [
+        "Dose dyes and chemicals at a steadily increasing rate rather than all at once",
+        "Standardise pretreatment across the whole lot before dyeing starts",
+        "Lock down machine speed, temperature, dosing time and M:L ratio as a fixed SOP",
+        "Recheck rope length and chamber loading calculations before starting"
+      ],
+      "source_key": "textilelearner_fabric_faults"
+    },
+    {
+      "id": "rope_to_rope_shade",
+      "name": "Rope-to-Rope Uneven Shade",
+      "causes": [
+        "Rope length differs from chamber to chamber",
+        "Fabric flow speed differs across nozzles"
+      ],
+      "remedies": [
+        "Keep rope length identical in every chamber of the machine",
+        "Equalise fabric flow speed at all nozzles"
+      ],
+      "source_key": "textilelearner_fabric_faults"
+    },
+    {
+      "id": "dye_spots",
+      "name": "Dye Spots",
+      "causes": [
+        "Dyestuff not fully dissolved/mixed before addition to the bath",
+        "High bath water hardness",
+        "Insufficient bath agitation"
+      ],
+      "remedies": [
+        "Filter dissolved dye through a fine mesh before adding it to the bath",
+        "Use a sequestering agent to bring down bath hardness",
+        "Ensure adequate agitation throughout the run"
+      ],
+      "source_key": "textilelearner_fabric_faults"
+    },
+    {
+      "id": "shade_variation_batch",
+      "name": "Shade Variation — Within and Between Batches",
+      "causes": [
+        "Oversized pad / batching size on the jigger",
+        "Batching held too long before the next step",
+        "Salt added incorrectly (rate or timing)",
+        "Uneven dye liquor level or padder pressure across roller width",
+        "Worn squeeze rollers",
+        "Fabric-to-fabric variation in dye affinity within the same lot",
+        "Liquor ratio changed between batches instead of held constant",
+        "Different dyeing procedures used batch to batch (timing, temperature, chemical sequence)",
+        "Poor or inconsistent water quality (pH, hardness, sodium carbonate content)"
+      ],
+      "remedies": [
+        "Verify dye-affinity uniformity of the fabric lot before batching",
+        "Hold liquor ratio constant, scaled strictly by material weight",
+        "Keep nozzle-pass count identical across the batch",
+        "Standardise the procedure: same chemical timing, same temperature profile, every batch",
+        "Use the same dye/auxiliary combination for a given shade, not substitutes",
+        "Test incoming water quality daily rather than assuming it is constant"
+      ],
+      "source_key": "textilelearner_fabric_faults"
+    },
+    {
+      "id": "cockling",
+      "name": "Cockling",
+      "causes": ["Nozzle diameter too small", "Liquor ratio too low", "Fabric running too fast through the nozzle"],
+      "remedies": ["Increase nozzle diameter", "Raise the liquor ratio", "Reduce fabric speed"],
+      "source_key": "textilelearner_fabric_faults"
+    },
+    {
+      "id": "crack_rope_running_marks",
+      "name": "Crack, Rope and Running Marks",
+      "causes": [
+        "Machine overloaded beyond its rated capacity",
+        "Nozzle pressure too low",
+        "Fabric run too slowly, or bath drained while still too hot"
+      ],
+      "remedies": [
+        "Reduce machine loading and raise nozzle pressure",
+        "Pre-set/pre-relax the fabric before dyeing",
+        "Raise fabric speed; slow the rinsing and cooling rate; watch drain temperature"
+      ],
+      "source_key": "textilelearner_fabric_faults"
+    },
+    {
+      "id": "crows_feet_wrinkling",
+      "name": "Crow's Feet / Wrinkling",
+      "causes": ["Rope speed too low", "Liquor ratio too low"],
+      "remedies": ["Pre-set/pre-relax the fabric before dyeing", "Raise rope speed and liquor ratio"],
+      "source_key": "textilelearner_fabric_faults"
+    },
+    {
+      "id": "crush_marks",
+      "name": "Crush Marks",
+      "causes": ["Fabric speed too low", "Liquor ratio too low", "Cooling rate too fast"],
+      "remedies": ["Raise fabric speed", "Raise liquor ratio", "Slow the cooling rate"],
+      "source_key": "textilelearner_fabric_faults"
+    },
+    {
+      "id": "elephant_skin",
+      "name": "Elephant Skin / Orange Peel Effect",
+      "causes": [
+        "Liquor ratio too low",
+        "Fabric overfed into the machine",
+        "Bath dropped at too high a temperature and refilled with cold water"
+      ],
+      "remedies": [
+        "Confirm the machine is not overloaded and has adequate liquor",
+        "Run a lab-scale trial before the bulk batch"
+      ],
+      "source_key": "textilelearner_fabric_faults"
+    },
+    {
+      "id": "crease_mark",
+      "name": "Crease Mark",
+      "causes": [
+        "Cycle time too long",
+        "Faulty plaiting device",
+        "Uneven selvedge tension",
+        "Bow expander mis-set",
+        "Uneven heating/cooling rate or poor fabric movement"
+      ],
+      "remedies": ["Apply an anti-creasing agent"],
+      "source_key": "textilelearner_fabric_faults"
+    },
+    {
+      "id": "patchy_dyeing",
+      "name": "Patchy Dyeing",
+      "causes": [
+        "Uneven heating across the jigger",
+        "Poor impregnation in the pad trough",
+        "Dye migration during an intermediate drying/dyeing step"
+      ],
+      "remedies": [
+        "Ensure the steam pipe runs the full machine width",
+        "Check the padding mangle is correctly configured"
+      ],
+      "source_key": "textilelearner_fabric_faults"
+    },
+    {
+      "id": "specky_dyeing",
+      "name": "Specky Dyeing",
+      "causes": [
+        "Excess foam in the pad trough",
+        "Water droplets falling onto the fabric",
+        "Insufficient after-treatment"
+      ],
+      "remedies": [
+        "Use an antifoaming agent",
+        "Prevent droplet contact and condense water on the ager before it can drip",
+        "Keep guide rollers free of dye deposits",
+        "Give the fabric sufficient after-treatment"
+      ],
+      "source_key": "textilelearner_fabric_faults"
+    },
+    {
+      "id": "dark_light_selvedge",
+      "name": "Dark and Light Selvedges",
+      "causes": ["Uneven batching on the jigger", "Batching held too long during vat dyeing"],
+      "remedies": [
+        "Correct the jigger's batch configuration",
+        "Adjust batch length for vat dyeing",
+        "Calibrate the expander roller before padding"
+      ],
+      "source_key": "textilelearner_fabric_faults"
+    }
+  ],
+
+  "qc_framework": {
+    "title": "Five-Stage Shade-Variation Prevention Checklist",
+    "summary": "A batch-to-batch shade-consistency checklist spanning preparatory, dyeing, finishing, soaping and machinery stages — the concrete numeric targets are what turn 'be more careful' into something checkable on the floor.",
+    "stages": [
+      {
+        "stage": "Preparatory",
+        "checks": [
+          "Batch weights match precisely across the lot",
+          "Fabric GSM recorded before and after scouring/bleaching",
+          "Water quality monitored: hardness, TDS, pH",
+          "RFD fabric checked for whiteness and absorbency",
+          "Residual alkali and peroxide levels checked",
+          "Scouring/bleaching weight loss tracked — should not vary by more than 2-3% batch to batch"
+        ]
+      },
+      {
+        "stage": "Dyeing",
+        "checks": [
+          "Dye/chemical quality inspected before use",
+          "Salt run time standardised (e.g. a fixed 30 minutes every batch, not 'about half an hour')",
+          "Soda dosing duration held constant",
+          "Temperature rise timed the same way every batch",
+          "Bath pH logged every 30 minutes; held at 11-11.2 after soda addition",
+          "Water level in the bath kept consistent"
+        ]
+      },
+      {
+        "stage": "Finishing",
+        "checks": [
+          "Cold/hot wash timing and temperature standardised",
+          "Acetic acid dosed precisely, pH monitored",
+          "Softener quality held consistent batch to batch"
+        ]
+      },
+      {
+        "stage": "Soaping",
+        "checks": [
+          "Soaping agent quality checked",
+          "TDS kept below 100 ppm",
+          "Temperature, timing and dosage held uniform",
+          "Drying temperature kept consistent"
+        ]
+      },
+      {
+        "stage": "Machinery",
+        "checks": [
+          "Rope length uniform across batches",
+          "Nozzle-pass count consistent",
+          "Program/SOP standardised machine to machine",
+          "Filter kept clean; nozzle diameter fixed, not drifting with wear"
+        ]
+      }
+    ],
+    "source_key": "textilelearner_shade_variation"
+  },
+
+  "process_checkpoints": {
+    "title": "Dyeing Floor Checking & Control Points",
+    "summary": "A shift-level checklist for what a dyeing floor should verify before, during and after a batch, grouped by what's being checked.",
+    "groups": [
+      { "group": "Material", "points": ["Fabric receipt matches the production plan", "Quantity verified in both metres and kilograms"] },
+      { "group": "Machine", "points": ["Machine condition assessed before loading", "Valves and controls functional", "Spray nozzles checked"] },
+      { "group": "Setting", "points": ["Machine speed configured for the batch", "Number of ends/runs set correctly", "Recipe prepared and verified before starting"] },
+      { "group": "Performance", "points": ["Shade uniformity checked across the fabric", "Shade compared against the approved standard", "Fastness properties evaluated"] },
+      { "group": "Documentation", "points": ["Design number and shade recorded", "Quantity dyed logged"] },
+      { "group": "Work practice", "points": ["Machine cleaned before loading", "Batch correctly aligned during loading", "Door closed for vat/reactive dyeing", "Nozzles cleaned", "Water fully drained and refreshed between wash steps"] },
+      { "group": "Logbook", "points": ["Machine operational status recorded", "Batch start time logged", "Completed vs pending activity tracked"] },
+      { "group": "MIS", "points": ["Machine ID, design number, metres, kilograms, colour and chemicals used all logged"] },
+      { "group": "General", "points": ["PPE worn (gloves, boots)", "Completed batches removed and transferred promptly"] }
+    ],
+    "control_points": [
+      "Raw material quality selection",
+      "Process parameter decisions",
+      "Water quality standards",
+      "Operator qualification",
+      "Dyeing capacity planning",
+      "Dye recipe preparation",
+      "Chemical procurement decisions",
+      "Consumption norms",
+      "Acceptance criteria for fastness and rubbing/friction values",
+      "Post-treatment choice, decided by dye type and shade depth"
+    ],
+    "source_key": "textilelearner_checking_control_points"
+  },
+
+  "salt_comparison": {
+    "title": "Electrolyte (Salt) Choice in Reactive Dyeing — Common Salt vs Glauber Salt vs Vacuum Salt",
+    "summary": "A trial dyeing cotton at liquor ratio 1:10 with three electrolytes at 40/50/60 g/l each, comparing fabric handle, shade strength, and the wastewater burden each one leaves behind.",
+    "liquor_ratio": "1:10",
+    "dosages_gpl_tested": [40, 50, 60],
+    "salts": [
+      {
+        "name": "Common Salt (NaCl)",
+        "handle": "Rougher fabric handle than Glauber salt",
+        "hardness_added_ppm": "275-520 across the tested dosages",
+        "tds_reduction_vs_baseline": null
+      },
+      {
+        "name": "Glauber Salt (Na2SO4.10H2O)",
+        "handle": "Smoother fabric handle; consistently higher shade strength than common salt at the same dosage",
+        "hardness_added_ppm": "~10 (essentially flat across all three dosages)",
+        "tds_reduction_vs_baseline": "Roughly 15-20% lower bath TDS than common/vacuum salt, easing the effluent-treatment load"
+      },
+      {
+        "name": "Vacuum Salt",
+        "handle": "Similar hardness impact to common salt",
+        "hardness_added_ppm": "275-520 across the tested dosages",
+        "tds_reduction_vs_baseline": null
+      }
+    ],
+    "rubbing_fastness_note": "All three salts landed at roughly the same rubbing fastness (dry 4-4/5, wet 3/4-4) — salt choice barely moved this parameter, so the real trade-off is handle, shade strength and effluent load, not fastness.",
+    "takeaway": "Where wastewater hardness/TDS is a real constraint (ETP capacity, discharge limits), Glauber salt is the better electrolyte at an equivalent dosage — same fastness, better handle, far less hardness added.",
+    "source_key": "textilelearner_salt_comparison"
+  }
+}

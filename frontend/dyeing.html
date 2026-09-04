@@ -126,6 +126,45 @@
     .recipe-card-meta { font-size: 9.5px; color: var(--t3); margin-top: 4px; }
 
     .main-content { padding: 0 0 40px; }
+
+    /* Faults & QC knowledge section */
+    .knowledge-section { margin-top: 32px; }
+    .kn-tabs { display: flex; gap: 6px; margin: 12px 0 16px; flex-wrap: wrap; }
+    .kn-tab {
+      padding: 8px 14px; border-radius: 8px; font-size: 11px; font-weight: 600;
+      background: var(--bg3); border: 1.5px solid var(--line); color: var(--t3); cursor: pointer;
+    }
+    .kn-tab.active { border-color: #10b981; background: rgba(16,185,129,.08); color: #10b981; }
+    .kn-pane { display: none; }
+    .kn-pane.active { display: block; }
+
+    .fault-search { display: flex; gap: 8px; margin-bottom: 14px; }
+    .fault-search input { flex: 1; }
+
+    .fault-card {
+      background: var(--bg2); border: 1px solid var(--line); border-radius: var(--radius);
+      padding: 14px 16px; margin-bottom: 10px;
+    }
+    .fault-card-name { font-size: 13px; font-weight: 700; color: var(--t1); display:flex; justify-content:space-between; align-items:center; gap:8px; }
+    .fault-conf { font-size: 10px; font-weight: 700; color: #10b981; background: rgba(16,185,129,.1); padding: 2px 8px; border-radius: 10px; white-space:nowrap; }
+    .fault-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px; }
+    @media (max-width: 700px) { .fault-cols { grid-template-columns: 1fr; } }
+    .fault-cols h5 { font-size: 9.5px; text-transform: uppercase; letter-spacing: .5px; color: var(--t3); margin: 0 0 4px; }
+    .fault-cols ul { margin: 0; padding-left: 16px; font-size: 11px; color: var(--t2); line-height: 1.6; }
+    .fault-source { font-size: 9.5px; color: var(--t3); margin-top: 8px; }
+    .fault-source a { color: var(--a1); }
+
+    .qc-stage { margin-bottom: 14px; }
+    .qc-stage-title { font-size: 11.5px; font-weight: 700; color: var(--a1); margin-bottom: 6px; }
+    .qc-stage ul { margin: 0; padding-left: 18px; font-size: 11.5px; color: var(--t2); line-height: 1.7; }
+
+    .cp-group { margin-bottom: 10px; }
+    .cp-group-title { font-size: 10.5px; font-weight: 700; color: var(--t1); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 3px; }
+    .cp-group ul { margin: 0; padding-left: 18px; font-size: 11.5px; color: var(--t2); line-height: 1.6; }
+
+    table.salt-table { width: 100%; border-collapse: collapse; font-size: 11.5px; margin-top: 8px; }
+    table.salt-table th { text-align: left; color: var(--t3); text-transform: uppercase; font-size: 9px; letter-spacing: .4px; padding: 6px; border-bottom: 1px solid var(--line); }
+    table.salt-table td { padding: 8px 6px; border-top: 1px solid var(--line); vertical-align: top; }
   </style>
 </head>
 <body>
@@ -189,8 +228,33 @@
     <!-- BROWSE ALL REAL RECIPES DIRECTLY -->
     <div class="browse-section">
       <div class="form-section-title" style="border:none;">&#128203; Or Browse Every Real Recipe Directly</div>
-      <div style="font-size:11px;color:var(--t2);margin-bottom:4px;">All 6 real recipe cards, regardless of shade match — open one directly to see its full card.</div>
+      <div style="font-size:11px;color:var(--t2);margin-bottom:4px;">All 40 real recipe cards from two factories, regardless of shade match — open one directly to see its full card.</div>
       <div class="browse-grid" id="browse-grid"></div>
+    </div>
+
+    <!-- DYEING FLOOR FAULTS & QC KNOWLEDGE -->
+    <div class="knowledge-section">
+      <div class="form-section-title" style="border:none;">&#128269; Dyeing Floor Faults &amp; QC Knowledge</div>
+      <div style="font-size:11px;color:var(--t2);margin-bottom:4px;">Diagnostic and quality-control reference distinct from the recipe cards above &mdash; wet-processing faults, a shade-consistency checklist, and an electrolyte comparison. Curated in our own words from cited Textile Learner articles (see each source link), not a live feed.</div>
+
+      <div class="kn-tabs">
+        <button class="kn-tab active" data-pane="kn-faults" onclick="setKnTab('kn-faults', this)">Faults</button>
+        <button class="kn-tab" data-pane="kn-qc" onclick="setKnTab('kn-qc', this)">Shade QC Checklist</button>
+        <button class="kn-tab" data-pane="kn-checkpoints" onclick="setKnTab('kn-checkpoints', this)">Floor Checkpoints</button>
+        <button class="kn-tab" data-pane="kn-salt" onclick="setKnTab('kn-salt', this)">Salt Comparison</button>
+      </div>
+
+      <div class="kn-pane active" id="kn-faults">
+        <div class="fault-search">
+          <input type="text" class="form-input" id="fault-search-input" placeholder="Describe the problem, e.g. shade variation, patchy, crease mark&hellip;">
+          <button class="btn btn-secondary" onclick="diagnoseFault()">Diagnose</button>
+        </div>
+        <div id="fault-list"></div>
+      </div>
+
+      <div class="kn-pane" id="kn-qc"><div id="qc-content" class="empty-hint">Loading&#8230;</div></div>
+      <div class="kn-pane" id="kn-checkpoints"><div id="checkpoints-content" class="empty-hint">Loading&#8230;</div></div>
+      <div class="kn-pane" id="kn-salt"><div id="salt-content" class="empty-hint">Loading&#8230;</div></div>
     </div>
 
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:24px;">
@@ -433,7 +497,113 @@ async function openRecipeDirect(id) {
   }
 }
 
+// ---- Faults & QC knowledge -------------------------------------------
+
+let knowledge = null;
+
+function setKnTab(paneId, btn) {
+  document.querySelectorAll('.kn-tab').forEach(b => b.classList.toggle('active', b === btn));
+  document.querySelectorAll('.kn-pane').forEach(p => p.classList.toggle('active', p.id === paneId));
+}
+
+function renderFaultCard(f) {
+  return `<div class="fault-card">
+    <div class="fault-card-name">
+      <span>${esc(f.name)}</span>
+      ${f.confidence != null ? `<span class="fault-conf">${f.confidence}% match</span>` : ''}
+    </div>
+    <div class="fault-cols">
+      <div><h5>Causes</h5><ul>${f.causes.map(c => `<li>${esc(c)}</li>`).join('')}</ul></div>
+      <div><h5>Remedies</h5><ul>${f.remedies.map(r => `<li>${esc(r)}</li>`).join('')}</ul></div>
+    </div>
+    ${f.source ? `<div class="fault-source">Source: <a href="${esc(f.source.url)}" target="_blank" rel="noopener">${esc(f.source.title)}</a> &middot; ${esc(f.source.publisher)}</div>` : ''}
+  </div>`;
+}
+
+function renderFaultList(faults) {
+  document.getElementById('fault-list').innerHTML = faults.length
+    ? faults.map(renderFaultCard).join('')
+    : '<div class="empty-hint">No matching fault &mdash; try a different word, or browse the full list below by clearing the search.</div>';
+}
+
+async function diagnoseFault() {
+  const q = document.getElementById('fault-search-input').value.trim();
+  if (!q) { renderFaultList(knowledge ? knowledge.faults : []); return; }
+  document.getElementById('fault-list').innerHTML = '<div class="empty-hint">Diagnosing&#8230;</div>';
+  try {
+    const terms = q.split(',').map(s => s.trim()).filter(Boolean);
+    const r = await apiDyeingFaultsDiagnose(terms.length > 1 ? terms : [q]);
+    renderFaultList(r.diagnosed);
+  } catch (e) {
+    document.getElementById('fault-list').innerHTML = `<div class="empty-hint">Could not diagnose: ${esc(e.message)}</div>`;
+  }
+}
+document.addEventListener('DOMContentLoaded', () => {
+  const input = document.getElementById('fault-search-input');
+  if (input) input.addEventListener('keydown', e => { if (e.key === 'Enter') diagnoseFault(); });
+});
+
+function renderQcChecklist(qc) {
+  document.getElementById('qc-content').innerHTML = `
+    <div style="font-size:11px;color:var(--t2);margin-bottom:10px;">${esc(qc.summary)}</div>
+    ${qc.stages.map(s => `<div class="qc-stage">
+      <div class="qc-stage-title">${esc(s.stage)}</div>
+      <ul>${s.checks.map(c => `<li>${esc(c)}</li>`).join('')}</ul>
+    </div>`).join('')}
+    ${qc.source ? `<div class="fault-source">Source: <a href="${esc(qc.source.url)}" target="_blank" rel="noopener">${esc(qc.source.title)}</a></div>` : ''}
+  `;
+}
+
+function renderCheckpoints(cp) {
+  document.getElementById('checkpoints-content').innerHTML = `
+    <div style="font-size:11px;color:var(--t2);margin-bottom:10px;">${esc(cp.summary)}</div>
+    ${cp.groups.map(g => `<div class="cp-group">
+      <div class="cp-group-title">${esc(g.group)}</div>
+      <ul>${g.points.map(p => `<li>${esc(p)}</li>`).join('')}</ul>
+    </div>`).join('')}
+    <div class="cp-group">
+      <div class="cp-group-title">Control Points</div>
+      <ul>${cp.control_points.map(p => `<li>${esc(p)}</li>`).join('')}</ul>
+    </div>
+    ${cp.source ? `<div class="fault-source">Source: <a href="${esc(cp.source.url)}" target="_blank" rel="noopener">${esc(cp.source.title)}</a></div>` : ''}
+  `;
+}
+
+function renderSaltComparison(sc) {
+  const rows = sc.salts.map(s => `<tr>
+    <td style="font-weight:600;">${esc(s.name)}</td>
+    <td>${esc(s.handle)}</td>
+    <td>${esc(s.hardness_added_ppm)}</td>
+    <td>${esc(s.tds_reduction_vs_baseline || '&#8212;')}</td>
+  </tr>`).join('');
+  document.getElementById('salt-content').innerHTML = `
+    <div style="font-size:11px;color:var(--t2);margin-bottom:10px;">${esc(sc.summary)} Liquor ratio 1:${esc(sc.liquor_ratio.split(':')[1])}, dosages tested: ${sc.dosages_gpl_tested.join(', ')} g/L.</div>
+    <div style="overflow-x:auto;">
+      <table class="salt-table">
+        <thead><tr><th>Salt</th><th>Fabric handle</th><th>Hardness added (ppm)</th><th>TDS reduction</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <div class="dye-note" style="margin-top:12px;">${esc(sc.rubbing_fastness_note)}</div>
+    <div class="dye-note" style="border-left-color:rgba(16,185,129,.4);color:#10b981;background:rgba(16,185,129,.06);">${esc(sc.takeaway)}</div>
+    ${sc.source ? `<div class="fault-source">Source: <a href="${esc(sc.source.url)}" target="_blank" rel="noopener">${esc(sc.source.title)}</a></div>` : ''}
+  `;
+}
+
+async function loadKnowledge() {
+  try {
+    knowledge = await apiDyeingKnowledge();
+    renderFaultList(knowledge.faults);
+    renderQcChecklist(knowledge.qc_framework);
+    renderCheckpoints(knowledge.process_checkpoints);
+    renderSaltComparison(knowledge.salt_comparison);
+  } catch (e) {
+    document.getElementById('fault-list').innerHTML = `<div class="empty-hint">Could not load knowledge base: ${esc(e.message)}</div>`;
+  }
+}
+
 init();
+loadKnowledge();
 </script>
 </body>
 </html>

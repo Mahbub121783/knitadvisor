@@ -82,6 +82,18 @@ async function apiDyeingCalculate(params) {
     body: params,
   });
 }
+async function apiDyeingFaults() {
+  return apiFetch('/api/dyeing/faults');
+}
+async function apiDyeingFaultsDiagnose(symptoms) {
+  return apiFetch('/api/dyeing/faults/diagnose', {
+    method: 'POST',
+    body: { symptoms },
+  });
+}
+async function apiDyeingKnowledge() {
+  return apiFetch('/api/dyeing/knowledge');
+}
 
 // ============================================================
 // POST /api/convert

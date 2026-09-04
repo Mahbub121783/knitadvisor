@@ -17,6 +17,7 @@ const providerManager = require('../ai/provider-manager-v2');
 const { getPattern } = require('../engine/domain/pattern-engine');
 const { calculateWoven, listWovenFabrics } = require('../engine/domain/woven-engine');
 const { listDyeingRecipes, getDyeingRecipe, matchDyeingRecipe, calculateDyeingCost } = require('../engine/domain/dyeing-engine');
+const { diagnoseDyeingFaults, listDyeingFaults, getDyeingKnowledge } = require('../engine/domain/dyeing-faults-engine');
 const { DEFAULT_EXCHANGE_RATES } = require('../engine/domain/costing-engine');
 const { isWovenId } = require('../engine/catalog/woven-derivatives');
 const { calculateStriper, validateStriperInput } = require('../engine/domain/striper-engine');
@@ -542,6 +543,34 @@ router.post('/dyeing/calculate', (req, res) => {
     console.error('[Dyeing] calculate failed:', err);
     res.status(500).json({ success: false, error: 'DYEING_CALCULATION_FAILED', message: err.message });
   }
+});
+
+// ============================================================
+// GET /api/dyeing/faults — the dyeing-floor fault knowledge base (wet
+// processing/rope-dyeing faults), separate from the knitting FAULTS_DATABASE
+// above. See dyeing-faults-engine.js's header for its source and scope.
+// ============================================================
+router.get('/dyeing/faults', (req, res) => {
+  res.json({ success: true, faults: listDyeingFaults() });
+});
+
+// POST /api/dyeing/faults/diagnose — { symptoms: string[] } free-text terms
+// matched against fault name/causes/remedies, same scoring shape as
+// /api/faults/diagnose.
+router.post('/dyeing/faults/diagnose', (req, res) => {
+  try {
+    const { symptoms } = req.body || {};
+    res.json({ success: true, diagnosed: diagnoseDyeingFaults(symptoms || []) });
+  } catch (err) {
+    console.error('[Dyeing Faults Diagnose] failed:', err);
+    res.status(500).json({ success: false, error: 'DIAGNOSIS_FAILED', message: err.message });
+  }
+});
+
+// GET /api/dyeing/knowledge — the QC checklist, floor checkpoints, and salt
+// comparison reference, each carrying its own source citation.
+router.get('/dyeing/knowledge', (req, res) => {
+  res.json({ success: true, ...getDyeingKnowledge() });
 });
 
 // ============================================================
