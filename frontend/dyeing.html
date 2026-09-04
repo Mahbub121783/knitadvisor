@@ -323,12 +323,19 @@ function renderRecipe(recipe, cost) {
     if (isCostGap) hasCostGap = true;
     const dosingLabel = c.dosing_basis === 'percent_owf' ? `${fmt(c.dosing * 100, 3)}% owf`
       : c.dosing_basis === 'liquor_gpl' ? `${fmt(c.dosing, 3)} g/L` : '&#8212;';
+    // price_date is only set when an admin has explicitly confirmed/edited
+    // this exact chemical's price (dyeing-price-book.js) — everything else
+    // is still the dateless original extracted value, covered by the
+    // page-level note above instead of a per-row claim.
+    const dateBadge = c.price_date
+      ? `<div style="font-size:8.5px;color:var(--t3);margin-top:1px;">as of ${esc(new Date(c.price_date).toLocaleDateString())}</div>`
+      : '';
     return `${stageRow}<tr${isCostGap ? ' style="background:color-mix(in srgb, var(--warn, #b45309) 8%, transparent);"' : ''}>
       <td>${esc(c.commercial_name) || '&#8212;'}</td>
       <td style="color:var(--t3);">${esc(c.functional_name) || '&#8212;'}</td>
       <td class="num">${dosingLabel}</td>
       <td class="num">${isCostGap ? '?' : fmt(c.required_qty_kg, 3)}</td>
-      <td class="num">${isCostGap ? `<span title="Unit price ${fmt(c.unit_price_tk,0)} Tk/kg is known, but the source card's own formula never computed a quantity for this line — not included in the total.">0*</span>` : fmt(c.price_tk, 2)}</td>
+      <td class="num">${isCostGap ? `<span title="Unit price ${fmt(c.unit_price_tk,0)} Tk/kg is known, but the source card's own formula never computed a quantity for this line — not included in the total.">0*</span>` : fmt(c.price_tk, 2)}${dateBadge}</td>
       <td class="remarks">${esc(c.remarks) || ''}</td>
     </tr>`;
   }).join('');

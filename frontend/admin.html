@@ -560,6 +560,7 @@
     <button class="tab-btn" data-tab="tab-providers">AI Providers</button>
     <button class="tab-btn" data-tab="tab-cache">Cache</button>
     <button class="tab-btn" data-tab="tab-prices">Yarn Prices</button>
+    <button class="tab-btn" data-tab="tab-dyeing-prices">Dyeing Prices</button>
     <button class="tab-btn" data-tab="tab-inquiries">Inquiries</button>
     <button class="tab-btn" data-tab="tab-settings">Settings</button>
   </div>
@@ -828,6 +829,39 @@
             <th>Refused</th><th>Newest quote</th>
           </tr></thead>
           <tbody id="prices-sync-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── DYEING PRICES ── -->
+    <div id="tab-dyeing-prices" class="tab-panel">
+      <div class="row-between mb-20">
+        <div>
+          <div class="section-title">Dyeing Chemical Prices</div>
+          <div class="section-sub">Overrides a recipe card's own extracted price — leave blank to keep using the card's original number</div>
+        </div>
+        <button id="dyeing-prices-reload-btn" class="btn btn-ghost btn-sm">Reload</button>
+      </div>
+
+      <div id="dyeing-prices-msg" class="hidden mb-16"></div>
+
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr>
+            <th>Chemical</th><th>Price (Tk/kg)</th><th>Last updated</th><th></th>
+          </tr></thead>
+          <tbody id="dyeing-prices-tbody"></tbody>
+        </table>
+      </div>
+
+      <div class="section-title mt-16" style="font-size:12px;">No single price on record</div>
+      <div class="section-sub mb-12">These appear at genuinely different Tk/kg across different recipe cards — no value is assumed. Set one here only if you want to unify them going forward.</div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr>
+            <th>Chemical</th><th>Prices seen in recipe cards (Tk/kg)</th><th>Set unified price</th><th></th>
+          </tr></thead>
+          <tbody id="dyeing-prices-unresolved-tbody"></tbody>
         </table>
       </div>
     </div>

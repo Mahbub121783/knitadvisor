@@ -579,6 +579,74 @@ router.post('/api/yarn-prices/refresh', adminAuth, async (req, res) => {
   }
 });
 
+// Dyeing chemical prices — the editable, dated override layer on top of the
+// frozen recipe cards (022_dyeing_chemical_prices.sql / dyeing-price-book.js).
+// A recipe's own extracted price is used until an admin sets one here; the
+// `PATCH` below writes the row and reloads the in-memory snapshot in the same
+// request, exactly like the yarn-price refresh above — no restart needed.
+router.get('/api/dyeing-prices', adminAuth, async (req, res) => {
+  try {
+    const rows = await dbQuery(
+      `SELECT chemical_name, unit_price_tk, updated_at
+         FROM dyeing_chemical_prices
+        ORDER BY chemical_name`);
+
+    // Chemicals that exist in real recipe cards but have no row above — every
+    // one of these priced at more than one Tk/kg across different recipes
+    // (migration 022 deliberately skipped backfilling them; see its header).
+    // Surfaced separately so an admin can SEE them and choose to set a
+    // unifying price, rather than them being invisible because they simply
+    // have no row to list.
+    const unresolved = await dbQuery(
+      `SELECT commercial_name AS chemical_name,
+              array_agg(DISTINCT unit_price_tk ORDER BY unit_price_tk) AS prices_seen
+         FROM dyeing_recipe_chemicals
+        WHERE commercial_name IS NOT NULL AND unit_price_tk > 0
+          AND commercial_name NOT IN (SELECT chemical_name FROM dyeing_chemical_prices)
+        GROUP BY commercial_name
+        ORDER BY commercial_name`);
+
+    res.json({
+      prices: rows.map(r => ({
+        chemical_name: r.chemical_name,
+        unit_price_tk: Number(r.unit_price_tk),
+        updated_at: r.updated_at,
+      })),
+      unresolved: unresolved.map(r => ({
+        chemical_name: r.chemical_name,
+        prices_seen: r.prices_seen.map(Number),
+      })),
+    });
+  } catch (err) {
+    console.error('[Dyeing Prices Get Error]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.patch('/api/dyeing-prices/:name', adminAuth, async (req, res) => {
+  try {
+    const name = req.params.name;
+    const { unit_price_tk } = req.body;
+    if (!(unit_price_tk > 0)) {
+      return res.status(400).json({ error: 'unit_price_tk must be a positive number' });
+    }
+
+    await dbQuery(
+      `INSERT INTO dyeing_chemical_prices (chemical_name, unit_price_tk, updated_at)
+       VALUES ($1, $2, now())
+       ON CONFLICT (chemical_name) DO UPDATE SET unit_price_tk = $2, updated_at = now()`,
+      [name, unit_price_tk]
+    );
+
+    const dyeingPriceBook = require('../engine/domain/dyeing-price-book');
+    await dyeingPriceBook.reload();
+    res.json({ ok: true, status: dyeingPriceBook.status() });
+  } catch (err) {
+    console.error('[Dyeing Price Update Error]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/api/settings', adminAuth, async (req, res) => {
   try {
     const rows = await dbQuery('SELECT username FROM admin_users LIMIT 1');

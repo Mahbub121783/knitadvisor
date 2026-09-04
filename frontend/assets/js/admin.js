@@ -132,6 +132,9 @@ function switchTab(tabId) {
   } else if (tabId === 'tab-prices' && !tabState.loaded.prices) {
     tabState.loaded.prices = true;
     loadYarnPrices();
+  } else if (tabId === 'tab-dyeing-prices' && !tabState.loaded.dyeingPrices) {
+    tabState.loaded.dyeingPrices = true;
+    loadDyeingPrices();
   } else if (tabId === 'tab-settings') {
     loadSettings();
   }
@@ -1128,6 +1131,65 @@ async function updateYarnPrices() {
   }
 }
 
+// ── DYEING PRICES ──────────────────────────────────────────
+function dyeingPriceMsg(html, tone) {
+  const el = document.getElementById('dyeing-prices-msg');
+  if (!html) { el.classList.add('hidden'); el.innerHTML = ''; return; }
+  const c = tone === 'bad' ? '#ff4d6d' : tone === 'warn' ? '#fbbf24' : '#4ade80';
+  el.classList.remove('hidden');
+  el.innerHTML = `<div style="border:1px solid ${c}55;background:${c}12;border-radius:8px;` +
+    `padding:10px 12px;font-size:11px;line-height:1.6;color:var(--t1);">${html}</div>`;
+}
+
+async function loadDyeingPrices() {
+  try {
+    const d = await api('/admin/api/dyeing-prices');
+
+    const tb = document.getElementById('dyeing-prices-tbody');
+    tb.innerHTML = (d.prices || []).map(p => {
+      const rowId = `dp-${p.chemical_name.replace(/[^a-zA-Z0-9]/g, '_')}`;
+      const dated = p.updated_at
+        ? new Date(p.updated_at).toLocaleDateString()
+        : '<span style="color:var(--t3);">original extracted value</span>';
+      return `<tr>
+        <td style="font-size:11px;">${esc(p.chemical_name)}</td>
+        <td><input type="number" step="0.01" min="0" id="${rowId}-input" class="form-input" style="width:100px;" value="${p.unit_price_tk}"></td>
+        <td style="font-size:10px;">${dated}</td>
+        <td><button class="btn btn-ghost btn-xs" onclick="saveDyeingPrice('${esc(p.chemical_name)}', '${rowId}-input')">Save</button></td>
+      </tr>`;
+    }).join('') || '<tr><td colspan="4" style="color:var(--t3);font-size:11px;">No prices yet — run the dyeing reference import first.</td></tr>';
+
+    const ub = document.getElementById('dyeing-prices-unresolved-tbody');
+    ub.innerHTML = (d.unresolved || []).map(p => {
+      const rowId = `dpu-${p.chemical_name.replace(/[^a-zA-Z0-9]/g, '_')}`;
+      return `<tr>
+        <td style="font-size:11px;">${esc(p.chemical_name)}</td>
+        <td style="font-size:10px;color:var(--t3);">${p.prices_seen.join(' / ')}</td>
+        <td><input type="number" step="0.01" min="0" id="${rowId}-input" class="form-input" style="width:100px;" placeholder="unify at…"></td>
+        <td><button class="btn btn-ghost btn-xs" onclick="saveDyeingPrice('${esc(p.chemical_name)}', '${rowId}-input')">Set</button></td>
+      </tr>`;
+    }).join('') || '<tr><td colspan="4" style="color:var(--t3);font-size:11px;">None — every priced chemical currently has one consistent value.</td></tr>';
+  } catch (err) {
+    dyeingPriceMsg(`Could not load dyeing prices: ${esc(err.message)}`, 'bad');
+  }
+}
+
+async function saveDyeingPrice(chemicalName, inputId) {
+  const input = document.getElementById(inputId);
+  const value = parseFloat(input.value);
+  if (!(value > 0)) {
+    dyeingPriceMsg('Enter a positive price first.', 'warn');
+    return;
+  }
+  try {
+    await api(`/admin/api/dyeing-prices/${encodeURIComponent(chemicalName)}`, 'PATCH', { unit_price_tk: value });
+    dyeingPriceMsg(`Saved — <strong>${esc(chemicalName)}</strong> is now ${value} Tk/kg, live immediately, no restart needed.`);
+    await loadDyeingPrices();
+  } catch (err) {
+    dyeingPriceMsg(`Save failed: ${esc(err.message)}`, 'bad');
+  }
+}
+
 // ── SETTINGS ───────────────────────────────────────────────
 async function loadSettings() {
   try {
@@ -1254,6 +1316,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('cache-flush-btn').addEventListener('click', flushCache);
   document.getElementById('prices-reload-btn').addEventListener('click', loadYarnPrices);
   document.getElementById('prices-update-btn').addEventListener('click', updateYarnPrices);
+  document.getElementById('dyeing-prices-reload-btn').addEventListener('click', loadDyeingPrices);
   document.getElementById('cache-refresh-btn').addEventListener('click', () => { loadCacheStats(); loadCacheEntries(curCachePage); });
   document.getElementById('entry-viewer-close').addEventListener('click', () => document.getElementById('cache-entry-viewer').classList.add('hidden'));
 
