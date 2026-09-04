@@ -65,6 +65,25 @@ async function apiWovenCalculate(params) {
 }
 
 // ============================================================
+// GET /api/dyeing/recipes, GET /api/dyeing/recipes/:id, POST /api/dyeing/calculate
+// A separate endpoint from /api/calculate, same reasoning as woven above:
+// this browses/costs a real factory dyeing recipe directly, independent of
+// running a full fabric spec through the knit engine.
+// ============================================================
+async function apiDyeingRecipes() {
+  return apiFetch('/api/dyeing/recipes');
+}
+async function apiDyeingRecipe(id) {
+  return apiFetch(`/api/dyeing/recipes/${encodeURIComponent(id)}`);
+}
+async function apiDyeingCalculate(params) {
+  return apiFetch('/api/dyeing/calculate', {
+    method: 'POST',
+    body: params,
+  });
+}
+
+// ============================================================
 // POST /api/convert
 // params: { value, from, to, category? }
 // ============================================================

@@ -1028,4 +1028,5 @@ module.exports = {
   SM_SURCHARGES,
   getPriceFromMatrix,
   autoDetectYarnType,
+  DEFAULT_EXCHANGE_RATES,
 };

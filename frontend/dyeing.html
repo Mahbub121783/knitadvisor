@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dyeing Recipe Library — KnitAdvisor</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <meta name="description" content="Real, cost-verified factory dyeing recipes — full pretreatment-to-softening process cards with real chemical dosing and cost per kg.">
+  <meta name="theme-color" content="#FFFFFF">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css">
+
+  <style>
+    .page-header { padding: 28px 0 20px; }
+    .page-title { margin-bottom: 4px; }
+    .page-sub { font-size: 12px; color: var(--t2); }
+
+    .dye-container {
+      display: grid;
+      grid-template-columns: 1fr 1.6fr;
+      gap: 16px;
+      margin-bottom: 24px;
+      align-items: start;
+    }
+    @media (max-width: 860px) {
+      .dye-container { grid-template-columns: 1fr; }
+    }
+
+    .form-section {
+      background: var(--bg2);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 18px;
+      position: sticky;
+      top: 16px;
+    }
+    .form-section-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .8px;
+      color: var(--a1);
+      font-weight: 600;
+      margin-bottom: 14px;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 6px;
+    }
+
+    /* Shade tier picker — own classes, since only these 6 tiers exist and 2
+       of them (fluorescent, plain melange) have no real recipe yet. */
+    .tier-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px; }
+    .tier-btn {
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+      padding: 10px 6px; border-radius: 8px; font-size: 11px; font-weight: 600;
+      background: var(--bg3); border: 1.5px solid var(--line); color: var(--t3);
+      cursor: pointer; transition: all .15s; line-height: 1.3; position: relative;
+    }
+    .tier-swatch { width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--line); }
+    .tier-btn:hover { border-color: rgba(16,185,129,.4); color: var(--t1); }
+    .tier-btn.active { border-color: #10b981; background: rgba(16,185,129,.08); color: #10b981; }
+    .tier-btn.no-data { opacity: .45; }
+    .tier-btn .tier-flag {
+      position: absolute; top: 3px; right: 5px; font-size: 8px; color: var(--t3);
+      text-transform: uppercase; letter-spacing: .3px;
+    }
+
+    .comp-toggle { display: flex; gap: 8px; margin-top: 4px; }
+    .comp-toggle button {
+      flex: 1; padding: 9px 6px; border-radius: 8px; font-size: 11px; font-weight: 600;
+      background: var(--bg3); border: 1.5px solid var(--line); color: var(--t3); cursor: pointer;
+    }
+    .comp-toggle button.active { border-color: #10b981; background: rgba(16,185,129,.08); color: #10b981; }
+
+    .result-panel {
+      background: var(--bg2); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px;
+      min-height: 200px;
+    }
+    .empty-hint { color: var(--t3); font-size: 12px; padding: 30px 10px; text-align: center; }
+
+    .recipe-badge {
+      display: inline-block; font-size: 10px; font-weight: 700; padding: 4px 10px; border-radius: 20px;
+      background: rgba(16,185,129,.12); color: #10b981; border: 1px solid rgba(16,185,129,.3);
+      text-transform: uppercase; letter-spacing: .4px;
+    }
+    .recipe-badge.warn { background: rgba(245,158,11,.12); color: #f59e0b; border-color: rgba(245,158,11,.3); }
+
+    .cost-headline-row { display: flex; gap: 16px; flex-wrap: wrap; margin: 14px 0; }
+    .ch-box { flex: 1; min-width: 140px; background: var(--bg3); border: 1px solid var(--line2); border-radius: 10px; padding: 12px 14px; }
+    .ch-box-lbl { font-size: 9px; text-transform: uppercase; letter-spacing: .6px; color: var(--t3); margin-bottom: 4px; }
+    .ch-box-val { font-size: 20px; font-weight: 800; color: #10b981; font-family: var(--head); }
+    .ch-box-sub { font-size: 9.5px; color: var(--t3); margin-top: 2px; }
+
+    .dye-note {
+      font-size: 10.5px; color: #f59e0b; line-height: 1.6; padding: 9px 12px;
+      background: rgba(245,158,11,.06); border-radius: 6px; border-left: 2px solid rgba(245,158,11,.4);
+      margin: 10px 0;
+    }
+
+    .qty-row { display: flex; align-items: center; gap: 8px; margin: 10px 0 4px; }
+    .qty-row label { font-size: 11px; color: var(--t2); white-space: nowrap; }
+    .qty-row input { width: 110px; }
+
+    table.recipe-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 10px; }
+    table.recipe-table thead th {
+      text-align: left; color: var(--t3); text-transform: uppercase; font-size: 9px; letter-spacing: .5px;
+      padding: 6px 5px; border-bottom: 1px solid var(--line);
+    }
+    table.recipe-table thead th.num { text-align: right; }
+    table.recipe-table td { padding: 6px 5px; border-top: 1px solid var(--line); vertical-align: top; }
+    table.recipe-table td.num { text-align: right; font-family: var(--mono); }
+    table.recipe-table tr.stage-row td { padding-top: 12px; font-weight: 700; color: var(--a1); border-top: none; font-size: 10px; text-transform: uppercase; letter-spacing: .4px; }
+    table.recipe-table td.remarks { color: var(--t3); font-size: 10px; max-width: 260px; }
+
+    .browse-section { margin-top: 8px; }
+    .browse-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin-top: 12px; }
+    .recipe-card {
+      background: var(--bg2); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px;
+      cursor: pointer; transition: all .15s;
+    }
+    .recipe-card:hover { border-color: rgba(16,185,129,.4); }
+    .recipe-card-name { font-size: 12px; font-weight: 700; color: var(--t1); margin-bottom: 4px; }
+    .recipe-card-tag { font-size: 10px; color: var(--t3); margin-bottom: 8px; }
+    .recipe-card-cost { font-size: 16px; font-weight: 800; color: #10b981; }
+    .recipe-card-meta { font-size: 9.5px; color: var(--t3); margin-top: 4px; }
+
+    .main-content { padding: 0 0 40px; }
+  </style>
+</head>
+<body>
+<div class="page-wrap">
+
+  <header class="hdr">
+    <a href="/" class="logo">Knit<span>Advisor</span></a>
+    <div class="hdr-badge">BETA</div>
+    <div class="hdr-right">
+      <a href="/" class="btn btn-ghost hide-mobile">&larr; Calculator</a>
+      <a href="converter.html" class="btn btn-ghost hide-mobile">&#8644; Converter</a>
+      <a href="patterns.html" class="btn btn-ghost hide-mobile">&#8862; Patterns</a>
+      <a href="diagnostics.html" class="btn btn-ghost hide-mobile">&#128269; Diagnostics</a>
+      <a href="weft-calc.html" class="btn btn-ghost hide-mobile">&#9881;&#65039; Weft Calc</a>
+      <a href="academy.html" class="btn btn-ghost hide-mobile">&#127891; Academy</a>
+    </div>
+  </header>
+
+  <main class="container main-content">
+
+    <div class="page-header">
+      <h1 class="h1 page-title text-head">Dyeing Recipe Library</h1>
+      <div class="page-sub">Real factory recipe cards — pretreatment through softening, with real chemical dosing and cost per kg. Not a generic estimate: this is a specific recipe, from a specific factory, matched to your shade.</div>
+    </div>
+
+    <div class="dye-container">
+
+      <!-- COLUMN 1: PICKER -->
+      <div class="form-section">
+        <div class="form-section-title">&#127925; Match a Recipe</div>
+
+        <div class="form-group mb-16">
+          <label class="form-label">Shade tier</label>
+          <div class="tier-grid" id="tier-grid"></div>
+          <div style="font-size:9.5px;color:var(--t3);margin-top:6px;">Dimmed tiers have no real recipe yet — matching them will say so honestly, not guess one.</div>
+        </div>
+
+        <div class="form-group mb-16">
+          <label class="form-label">Fabric composition</label>
+          <div class="comp-toggle" id="comp-toggle">
+            <button data-two-part="false" class="active" onclick="setTwoPart(false, this)">100% Cotton / single-fibre</button>
+            <button data-two-part="true" onclick="setTwoPart(true, this)">CVC / PC blend (poly+cotton)</button>
+          </div>
+        </div>
+
+        <div class="form-group mb-8">
+          <label class="form-label" for="fabric-qty">Fabric quantity (kg)</label>
+          <input type="number" class="form-input" id="fabric-qty" value="255" min="1" step="1" oninput="runMatch()">
+          <div style="font-size:9.5px;color:var(--t3);margin-top:4px;">Chemical quantities below scale to this — 255 kg is the batch size the source recipe cards themselves used.</div>
+        </div>
+      </div>
+
+      <!-- COLUMN 2: RESULT -->
+      <div class="result-panel" id="result-panel">
+        <div class="empty-hint">Pick a shade tier to match a real recipe.</div>
+      </div>
+
+    </div>
+
+    <!-- BROWSE ALL REAL RECIPES DIRECTLY -->
+    <div class="browse-section">
+      <div class="form-section-title" style="border:none;">&#128203; Or Browse Every Real Recipe Directly</div>
+      <div style="font-size:11px;color:var(--t2);margin-bottom:4px;">All 6 real recipe cards, regardless of shade match — open one directly to see its full card.</div>
+      <div class="browse-grid" id="browse-grid"></div>
+    </div>
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:24px;">
+      <a href="/" class="btn btn-secondary" style="flex:1">&larr; Main Calculator</a>
+    </div>
+
+  </main>
+
+  <footer class="footer">
+    <div class="footer-nav container">
+      <div class="footer-brand">
+        <span class="footer-brand-name">KnitAdvisor</span>
+        <span class="footer-brand-sub">Advanced Calculations &middot; Arithmetic Engine</span>
+      </div>
+      <nav class="footer-links">
+        <a href="/">Calculator</a>
+        <a href="converter.html">Converter</a>
+        <a href="patterns.html">Patterns</a>
+        <a href="diagnostics.html">Diagnostics</a>
+        <a href="weft-calc.html">Weft Calc</a>
+        <a href="academy.html">Knitting Academy</a>
+      </nav>
+    </div>
+    <div class="footer-bottom container">
+      <div class="footer-platform">
+        <span class="footer-platform-label">Part of</span>
+        <a href="https://www.onlinetextileschool.com" target="_blank" rel="noopener" class="footer-platform-link">www.onlinetextileschool.com</a>
+      </div>
+      <div class="footer-sponsor">
+        <span class="footer-sponsor-label">Proud Sponsor</span>
+        <a href="https://www.asutex.com" target="_blank" rel="noopener" class="footer-sponsor-link">
+          <span class="footer-sponsor-dot"></span>
+          Asutex
+        </a>
+      </div>
+    </div>
+  </footer>
+
+</div>
+
+<script src="assets/js/api.js"></script>
+<script src="assets/js/ui.js"></script>
+<script>
+const TIERS = [
+  { key: 'black',         label: 'Black',        swatch: '#111' },
+  { key: 'dark_navy',     label: 'Dark / Navy',  swatch: '#1a2a5e' },
+  { key: 'light_medium',  label: 'Light / Medium', swatch: '#4a8fcc' },
+  { key: 'fluorescent',   label: 'Fluorescent',  swatch: '#b0ff00' },
+  { key: 'white_melange', label: 'White',        swatch: '#f5f5f0' },
+  { key: 'melange',       label: 'Melange',      swatch: 'linear-gradient(135deg,#888 50%,#ddd 50%)' },
+];
+
+let state = { shadeTier: null, isTwoPart: false, recipes: [] };
+
+function esc(x) { return String(x == null ? '' : x).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
+
+async function init() {
+  try {
+    state.recipes = await apiDyeingRecipes();
+  } catch (e) {
+    state.recipes = [];
+  }
+  renderTierGrid();
+  renderBrowseGrid();
+}
+
+function renderTierGrid() {
+  const covered = new Set(state.recipes.flatMap(r => r.shade_tiers));
+  const grid = document.getElementById('tier-grid');
+  grid.innerHTML = TIERS.map(t => {
+    const hasData = covered.has(t.key);
+    return `<button class="tier-btn${hasData ? '' : ' no-data'}" data-tier="${t.key}" onclick="setTier('${t.key}', this)">
+      ${hasData ? '' : '<span class="tier-flag">no data</span>'}
+      <div class="tier-swatch" style="background:${t.swatch};"></div>
+      ${esc(t.label)}
+    </button>`;
+  }).join('');
+}
+
+function setTier(key, btn) {
+  state.shadeTier = key;
+  document.querySelectorAll('#tier-grid .tier-btn').forEach(b => b.classList.toggle('active', b === btn));
+  runMatch();
+}
+
+function setTwoPart(val, btn) {
+  state.isTwoPart = val;
+  document.querySelectorAll('#comp-toggle button').forEach(b => b.classList.toggle('active', b === btn));
+  runMatch();
+}
+
+async function runMatch() {
+  if (!state.shadeTier) return;
+  const panel = document.getElementById('result-panel');
+  panel.innerHTML = '<div class="empty-hint">Matching&#8230;</div>';
+  const qty = parseFloat(document.getElementById('fabric-qty').value) || 255;
+  try {
+    const r = await apiDyeingCalculate({ shade_tier: state.shadeTier, is_two_part: state.isTwoPart, fabric_qty_kg: qty });
+    if (!r.matched) {
+      panel.innerHTML = `<div class="empty-hint">No real recipe covers <b>${esc(state.shadeTier)}</b> yet.<br>
+        This is honest, not a bug — only 6 real recipes exist so far (2 white, 4 navy/black).<br>
+        The main calculator still gives you a price-list estimate for this shade.</div>`;
+      return;
+    }
+    renderRecipe(r.recipe, r.cost);
+  } catch (e) {
+    panel.innerHTML = `<div class="empty-hint">Could not reach the dyeing engine: ${esc(e.message)}</div>`;
+  }
+}
+
+function renderRecipe(recipe, cost) {
+  const panel = document.getElementById('result-panel');
+  const dyeNote = recipe.dye_cost_included === false
+    ? `<div class="dye-note">This recipe covers pretreatment, neutralisation and auxiliary chemicals only &mdash;
+       the reactive dye itself is job-specific (depends on the exact shade %) and is not costed here.</div>`
+    : '';
+
+  const rows = cost.chemicals.map(c => {
+    const stageRow = c.stage ? `<tr class="stage-row"><td colspan="6">${esc(c.stage)}</td></tr>` : '';
+    if (!c.commercial_name && !(c.required_qty_kg > 0)) {
+      // Pure process-instruction row (e.g. "Direct Drain") — show as a note line, not a fake chemical row.
+      return `${stageRow}<tr><td colspan="6" style="color:var(--t3);font-size:10.5px;padding-top:4px;">${esc(c.functional_name)}${c.time_min ? ` &mdash; ${fmt(c.time_min,0)} min` : ''}</td></tr>`;
+    }
+    const dosingLabel = c.dosing_basis === 'percent_owf' ? `${fmt(c.dosing * 100, 3)}% owf`
+      : c.dosing_basis === 'liquor_gpl' ? `${fmt(c.dosing, 3)} g/L` : '&#8212;';
+    return `${stageRow}<tr>
+      <td>${esc(c.commercial_name) || '&#8212;'}</td>
+      <td style="color:var(--t3);">${esc(c.functional_name) || '&#8212;'}</td>
+      <td class="num">${dosingLabel}</td>
+      <td class="num">${fmt(c.required_qty_kg, 3)}</td>
+      <td class="num">${fmt(c.price_tk, 2)}</td>
+      <td class="remarks">${esc(c.remarks) || ''}</td>
+    </tr>`;
+  }).join('');
+
+  const hrs = Math.floor(recipe.total_time_min / 60), mins = Math.round(recipe.total_time_min % 60);
+
+  panel.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:start;flex-wrap:wrap;gap:8px;">
+      <div>
+        <div style="font-size:15px;font-weight:800;color:var(--t1);">${esc(recipe.sheet_name)}</div>
+        <div style="font-size:11px;color:var(--t3);">${esc(recipe.color_label)}${recipe.composition_tag ? ' &middot; ' + esc(recipe.composition_tag) : ''}</div>
+      </div>
+      <span class="recipe-badge${recipe.match_quality === 'shade_only' ? ' warn' : ''}">
+        ${recipe.match_quality === 'direct' ? 'Viewing directly'
+          : recipe.match_quality === 'exact_composition' ? 'Matched &mdash; shade + fibre' : 'Matched &mdash; shade only'}
+      </span>
+    </div>
+    ${dyeNote}
+    <div class="cost-headline-row">
+      <div class="ch-box">
+        <div class="ch-box-lbl">Cost, per kg</div>
+        <div class="ch-box-val">${fmt(cost.cost_per_kg_tk, 2)} Tk</div>
+        <div class="ch-box-sub">= $${fmt(cost.cost_per_kg_usd, 4)} USD/kg</div>
+      </div>
+      <div class="ch-box">
+        <div class="ch-box-lbl">Total for ${fmt(cost.fabric_qty_kg, 0)} kg batch</div>
+        <div class="ch-box-val">${fmt(cost.cost_per_kg_tk * cost.fabric_qty_kg, 0)} Tk</div>
+        <div class="ch-box-sub">= $${fmt(cost.cost_per_kg_usd * cost.fabric_qty_kg, 2)} USD</div>
+      </div>
+      <div class="ch-box">
+        <div class="ch-box-lbl">Process time</div>
+        <div class="ch-box-val" style="font-size:16px;">${hrs}h ${mins}m</div>
+        <div class="ch-box-sub">${recipe.total_bath_count || '&#8212;'} baths &middot; ${fmt(recipe.water_l,0)} L water @ 1:${fmt(recipe.ml_ratio,0)}</div>
+      </div>
+    </div>
+    <div style="overflow-x:auto;">
+      <table class="recipe-table">
+        <thead><tr>
+          <th>Chemical</th><th>Function</th><th class="num">Dosing</th>
+          <th class="num">Req. Qty (kg)</th><th class="num">Price (Tk)</th><th>Remarks</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderBrowseGrid() {
+  const grid = document.getElementById('browse-grid');
+  grid.innerHTML = state.recipes.map(r => `
+    <div class="recipe-card" onclick="openRecipeDirect('${esc(r.id)}')">
+      <div class="recipe-card-name">${esc(r.sheet_name)}</div>
+      <div class="recipe-card-tag">${esc(r.color_label)}${r.composition_tag ? ' &middot; ' + esc(r.composition_tag) : ''}</div>
+      <div class="recipe-card-cost">${fmt(r.cost_per_kg_tk, 2)} Tk/kg</div>
+      <div class="recipe-card-meta">${r.dye_cost_included ? 'complete cost' : 'excludes dye chemical'} &middot; ${r.total_bath_count || '&#8212;'} baths</div>
+    </div>
+  `).join('');
+}
+
+// Browsing a specific card by id — the server costs that exact recipe
+// directly (recipe_id skips shade matching entirely), so this page never
+// re-implements the costing formula or hardcodes the exchange rate itself.
+async function openRecipeDirect(id) {
+  const panel = document.getElementById('result-panel');
+  panel.innerHTML = '<div class="empty-hint">Loading&#8230;</div>';
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  try {
+    const qty = parseFloat(document.getElementById('fabric-qty').value) || 255;
+    const r = await apiDyeingCalculate({ recipe_id: id, fabric_qty_kg: qty });
+    renderRecipe(r.recipe, r.cost);
+  } catch (e) {
+    panel.innerHTML = `<div class="empty-hint">Could not load recipe: ${esc(e.message)}</div>`;
+  }
+}
+
+init();
+</script>
+</body>
+</html>
