@@ -16,7 +16,8 @@ const { FAULTS_DATABASE, diagnoseFaults } = require('../engine/domain/faults-eng
 const providerManager = require('../ai/provider-manager-v2');
 const { getPattern } = require('../engine/domain/pattern-engine');
 const { calculateWoven, listWovenFabrics } = require('../engine/domain/woven-engine');
-const { listDyeingRecipes } = require('../engine/domain/dyeing-engine');
+const { listDyeingRecipes, getDyeingRecipe, matchDyeingRecipe, calculateDyeingCost } = require('../engine/domain/dyeing-engine');
+const { DEFAULT_EXCHANGE_RATES } = require('../engine/domain/costing-engine');
 const { isWovenId } = require('../engine/catalog/woven-derivatives');
 const { calculateStriper, validateStriperInput } = require('../engine/domain/striper-engine');
 const { predictQuality } = require('../engine/domain/quality-engine');
@@ -483,10 +484,65 @@ router.get('/woven/fabrics', (req, res) => res.json(listWovenFabrics()));
 // ============================================================
 // GET /api/dyeing/recipes — the real, cost-verified recipes dyeing-engine.js
 // can match against a shade tier. costing-engine.js already surfaces a match
-// automatically inside /api/calculate's cost_breakdown_usd.dyeing; this is
-// for a standalone browser/picker, not part of the main calculate flow.
+// automatically inside /api/calculate's cost_breakdown_usd.dyeing; these
+// standalone endpoints are for a dedicated recipe browser (dyeing.html), not
+// part of the main calculate flow.
 // ============================================================
 router.get('/dyeing/recipes', (req, res) => res.json(listDyeingRecipes()));
+
+// GET /api/dyeing/recipes/:id — one full recipe card, every step, by its own
+// id (not shade-matched) — for viewing a specific recipe directly.
+router.get('/dyeing/recipes/:id', (req, res) => {
+  const recipe = getDyeingRecipe(req.params.id);
+  if (!recipe) return res.status(404).json({ success: false, error: 'UNKNOWN_RECIPE' });
+  res.json({ success: true, recipe });
+});
+
+// POST /api/dyeing/calculate — either:
+//   { recipe_id, fabric_qty_kg? }  cost ONE SPECIFIC recipe directly, no
+//                                  shade matching — for "browse this exact
+//                                  card" in the recipe library, so the
+//                                  frontend never re-implements the costing
+//                                  formula (or its exchange rate) itself.
+//   { shade_tier | color_input, is_two_part?, fabric_qty_kg? }  match a
+//                                  shade (given directly, or resolved from a
+//                                  color_input via the same color engine
+//                                  /api/calculate uses) to a real recipe.
+// Returns matched:false (never a guess) when no recipe covers the request.
+router.post('/dyeing/calculate', (req, res) => {
+  try {
+    const { recipe_id, shade_tier, color_input, is_two_part, fabric_qty_kg } = req.body || {};
+    const qty = fabric_qty_kg && fabric_qty_kg > 0 ? Number(fabric_qty_kg) : 1;
+
+    if (recipe_id) {
+      const recipe = getDyeingRecipe(recipe_id);
+      if (!recipe) return res.status(404).json({ success: false, error: 'UNKNOWN_RECIPE' });
+      const cost = calculateDyeingCost({ recipe, fabric_qty_kg: qty, bdt_per_usd: DEFAULT_EXCHANGE_RATES.BDT });
+      return res.json({ success: true, matched: true, recipe: { ...recipe, match_quality: 'direct' }, cost });
+    }
+
+    let resolvedShade = shade_tier || null;
+    let colorPreview = null;
+    if (!resolvedShade && color_input) {
+      colorPreview = colorEngine.getColorPreview(color_input);
+      resolvedShade = colorPreview && colorPreview.shade_tier;
+    }
+    if (!resolvedShade) {
+      return res.status(400).json({ success: false, error: 'SHADE_REQUIRED', message: 'Provide recipe_id, shade_tier, or a resolvable color_input.' });
+    }
+
+    const matched = matchDyeingRecipe({ shade_tier: resolvedShade, is_two_part: !!is_two_part });
+    if (!matched) {
+      return res.json({ success: true, matched: false, shade_tier: resolvedShade, color_preview: colorPreview, recipe: null });
+    }
+
+    const cost = calculateDyeingCost({ recipe: matched, fabric_qty_kg: qty, bdt_per_usd: DEFAULT_EXCHANGE_RATES.BDT });
+    res.json({ success: true, matched: true, shade_tier: resolvedShade, color_preview: colorPreview, recipe: matched, cost });
+  } catch (err) {
+    console.error('[Dyeing] calculate failed:', err);
+    res.status(500).json({ success: false, error: 'DYEING_CALCULATION_FAILED', message: err.message });
+  }
+});
 
 // ============================================================
 // GET /api/pattern/:slug

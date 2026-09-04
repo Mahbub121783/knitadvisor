@@ -142,4 +142,13 @@ function listDyeingRecipes() {
   }));
 }
 
-module.exports = { matchDyeingRecipe, calculateDyeingCost, listDyeingRecipes };
+/**
+ * Full recipe by its own id — for a browser that wants the whole card
+ * (every step, not just the shade-matched one), regardless of shade
+ * matching. Returns null for an unknown id, never a guess.
+ */
+function getDyeingRecipe(id) {
+  return REF.recipes.find(r => r.id === id) || null;
+}
+
+module.exports = { matchDyeingRecipe, calculateDyeingCost, listDyeingRecipes, getDyeingRecipe };
