@@ -232,19 +232,28 @@
       <div class="browse-grid" id="browse-grid"></div>
     </div>
 
-    <!-- DYEING FLOOR FAULTS & QC KNOWLEDGE -->
+    <!-- DYEING THEORY, FAULTS & QC KNOWLEDGE -->
     <div class="knowledge-section">
-      <div class="form-section-title" style="border:none;">&#128269; Dyeing Floor Faults &amp; QC Knowledge</div>
-      <div style="font-size:11px;color:var(--t2);margin-bottom:4px;">Diagnostic and quality-control reference distinct from the recipe cards above &mdash; wet-processing faults, a shade-consistency checklist, and an electrolyte comparison. Curated in our own words from cited Textile Learner articles (see each source link), not a live feed.</div>
+      <div class="form-section-title" style="border:none;">&#128269; Dyeing Theory, Faults &amp; QC Knowledge</div>
+      <div style="font-size:11px;color:var(--t2);margin-bottom:4px;">The full picture behind the recipe cards above &mdash; dye-class chemistry, machine theory, complete process flows, fastness testing, wet-processing faults, a shade-consistency checklist, and an electrolyte comparison. Curated in our own words, not a live feed.</div>
 
       <div class="kn-tabs">
-        <button class="kn-tab active" data-pane="kn-faults" onclick="setKnTab('kn-faults', this)">Faults</button>
+        <button class="kn-tab active" data-pane="kn-dyeclasses" onclick="setKnTab('kn-dyeclasses', this)">Dye Classes</button>
+        <button class="kn-tab" data-pane="kn-machines" onclick="setKnTab('kn-machines', this)">Machines</button>
+        <button class="kn-tab" data-pane="kn-flows" onclick="setKnTab('kn-flows', this)">Process Flows</button>
+        <button class="kn-tab" data-pane="kn-fastness" onclick="setKnTab('kn-fastness', this)">Fastness</button>
+        <button class="kn-tab" data-pane="kn-faults" onclick="setKnTab('kn-faults', this)">Faults</button>
         <button class="kn-tab" data-pane="kn-qc" onclick="setKnTab('kn-qc', this)">Shade QC Checklist</button>
         <button class="kn-tab" data-pane="kn-checkpoints" onclick="setKnTab('kn-checkpoints', this)">Floor Checkpoints</button>
         <button class="kn-tab" data-pane="kn-salt" onclick="setKnTab('kn-salt', this)">Salt Comparison</button>
       </div>
 
-      <div class="kn-pane active" id="kn-faults">
+      <div class="kn-pane active" id="kn-dyeclasses"><div id="dyeclasses-content" class="empty-hint">Loading&#8230;</div></div>
+      <div class="kn-pane" id="kn-machines"><div id="machines-content" class="empty-hint">Loading&#8230;</div></div>
+      <div class="kn-pane" id="kn-flows"><div id="flows-content" class="empty-hint">Loading&#8230;</div></div>
+      <div class="kn-pane" id="kn-fastness"><div id="fastness-content" class="empty-hint">Loading&#8230;</div></div>
+
+      <div class="kn-pane" id="kn-faults">
         <div class="fault-search">
           <input type="text" class="form-input" id="fault-search-input" placeholder="Describe the problem, e.g. shade variation, patchy, crease mark&hellip;">
           <button class="btn btn-secondary" onclick="diagnoseFault()">Diagnose</button>
@@ -354,8 +363,8 @@ async function runMatch() {
   try {
     const r = await apiDyeingCalculate({ shade_tier: state.shadeTier, is_two_part: state.isTwoPart, fabric_qty_kg: qty });
     if (!r.matched) {
-      panel.innerHTML = `<div class="empty-hint">No real recipe covers <b>${esc(state.shadeTier)}</b> yet.<br>
-        This is honest, not a bug — only 6 real recipes exist so far (2 white, 4 navy/black).<br>
+      panel.innerHTML = `<div class="empty-hint">No real recipe covers <b>${esc(state.shadeTier)}</b> for this composition yet.<br>
+        This is honest, not a bug — only 40 real recipes exist so far, from two factories.<br>
         The main calculator still gives you a price-list estimate for this shade.</div>`;
       return;
     }
@@ -516,7 +525,6 @@ function renderFaultCard(f) {
       <div><h5>Causes</h5><ul>${f.causes.map(c => `<li>${esc(c)}</li>`).join('')}</ul></div>
       <div><h5>Remedies</h5><ul>${f.remedies.map(r => `<li>${esc(r)}</li>`).join('')}</ul></div>
     </div>
-    ${f.source ? `<div class="fault-source">Source: <a href="${esc(f.source.url)}" target="_blank" rel="noopener">${esc(f.source.title)}</a> &middot; ${esc(f.source.publisher)}</div>` : ''}
   </div>`;
 }
 
@@ -550,7 +558,6 @@ function renderQcChecklist(qc) {
       <div class="qc-stage-title">${esc(s.stage)}</div>
       <ul>${s.checks.map(c => `<li>${esc(c)}</li>`).join('')}</ul>
     </div>`).join('')}
-    ${qc.source ? `<div class="fault-source">Source: <a href="${esc(qc.source.url)}" target="_blank" rel="noopener">${esc(qc.source.title)}</a></div>` : ''}
   `;
 }
 
@@ -565,7 +572,6 @@ function renderCheckpoints(cp) {
       <div class="cp-group-title">Control Points</div>
       <ul>${cp.control_points.map(p => `<li>${esc(p)}</li>`).join('')}</ul>
     </div>
-    ${cp.source ? `<div class="fault-source">Source: <a href="${esc(cp.source.url)}" target="_blank" rel="noopener">${esc(cp.source.title)}</a></div>` : ''}
   `;
 }
 
@@ -586,7 +592,6 @@ function renderSaltComparison(sc) {
     </div>
     <div class="dye-note" style="margin-top:12px;">${esc(sc.rubbing_fastness_note)}</div>
     <div class="dye-note" style="border-left-color:rgba(16,185,129,.4);color:#10b981;background:rgba(16,185,129,.06);">${esc(sc.takeaway)}</div>
-    ${sc.source ? `<div class="fault-source">Source: <a href="${esc(sc.source.url)}" target="_blank" rel="noopener">${esc(sc.source.title)}</a></div>` : ''}
   `;
 }
 
@@ -602,7 +607,95 @@ async function loadKnowledge() {
   }
 }
 
+// ---- Dyeing theory (dye classes / machines / process flows / fastness) ----
+
+function renderTagList(title, items) {
+  return `<h5>${esc(title)}</h5><ul>${items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>`;
+}
+
+function renderDyeClasses(classes) {
+  document.getElementById('dyeclasses-content').innerHTML = classes.map(d => `
+    <div class="fault-card">
+      <div class="fault-card-name"><span>${esc(d.name)}</span></div>
+      <div style="font-size:10.5px;color:var(--t3);margin:2px 0 8px;">Fibres: ${d.applicable_fibers.map(esc).join(', ')}</div>
+      <div style="font-size:11.5px;color:var(--t2);line-height:1.6;margin-bottom:8px;">${esc(d.mechanism)}</div>
+      <div style="font-size:10.5px;color:var(--t3);margin-bottom:8px;">
+        Temp: ${esc(d.typical_conditions.temp_c)}&deg;C &middot; pH: ${esc(d.typical_conditions.ph)} &middot; Time: ${esc(d.typical_conditions.time_min)} min
+      </div>
+      <div class="fault-cols">
+        <div>${renderTagList('Advantages', d.advantages)}</div>
+        <div>${renderTagList('Limitations', d.limitations)}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderMachines(machines) {
+  document.getElementById('machines-content').innerHTML = machines.map(m => `
+    <div class="fault-card">
+      <div class="fault-card-name"><span>${esc(m.name)}</span></div>
+      <div style="font-size:10.5px;color:var(--t3);margin:2px 0 8px;">${esc(m.form)} &middot; Liquor ratio ${esc(m.liquor_ratio_range)}</div>
+      <div style="font-size:11.5px;color:var(--t2);line-height:1.6;margin-bottom:8px;"><b>Typical use:</b> ${esc(m.typical_use)}</div>
+      <div class="fault-cols">
+        <div>${renderTagList('Advantages', m.advantages)}</div>
+        <div>${renderTagList('Limitations', m.limitations)}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderProcessFlows(flows) {
+  document.getElementById('flows-content').innerHTML = flows.map(f => `
+    <div class="fault-card">
+      <div class="fault-card-name"><span>${esc(f.name)}</span></div>
+      <div style="font-size:10.5px;color:var(--t3);margin:2px 0 10px;">Dye class: ${esc(f.dye_class)} &middot; Fabric: ${esc(f.fabric_type)}</div>
+      <ol style="margin:0 0 10px;padding-left:18px;font-size:11.5px;color:var(--t2);line-height:1.7;">
+        ${f.steps.map(s => `<li><b>${esc(s.name)}</b> &mdash; ${esc(s.detail)}</li>`).join('')}
+      </ol>
+      ${f.notes && f.notes.length ? f.notes.map(n => `<div class="dye-note">${esc(n)}</div>`).join('') : ''}
+    </div>
+  `).join('');
+}
+
+function renderFastness(fastness) {
+  document.getElementById('fastness-content').innerHTML = `
+    <div style="font-size:11px;color:var(--t2);margin-bottom:14px;">${esc(fastness.summary)}</div>
+    <div class="fault-cols" style="margin-bottom:14px;">
+      <div class="fault-card">
+        <div class="fault-card-name"><span>Grey Scale &mdash; Colour Change</span></div>
+        <div style="font-size:11.5px;color:var(--t2);line-height:1.6;margin:6px 0;">${esc(fastness.grey_scale_change.purpose)}</div>
+        <div style="font-size:10.5px;color:var(--t3);">Scale: ${esc(fastness.grey_scale_change.scale)}</div>
+        <div style="font-size:10.5px;color:var(--t3);margin-top:4px;">Typical pass bar: ${esc(fastness.grey_scale_change.typical_pass_bar)}</div>
+      </div>
+      <div class="fault-card">
+        <div class="fault-card-name"><span>Grey Scale &mdash; Staining</span></div>
+        <div style="font-size:11.5px;color:var(--t2);line-height:1.6;margin:6px 0;">${esc(fastness.grey_scale_staining.purpose)}</div>
+        <div style="font-size:10.5px;color:var(--t3);">Scale: ${esc(fastness.grey_scale_staining.scale)}</div>
+        <div style="font-size:10.5px;color:var(--t3);margin-top:4px;">Typical pass bar: ${esc(fastness.grey_scale_staining.typical_pass_bar)}</div>
+      </div>
+    </div>
+    <div class="cp-group-title" style="margin-bottom:8px;">Test Types</div>
+    ${fastness.test_types.map(t => `<div class="fault-card">
+      <div class="fault-card-name"><span>${esc(t.name)}</span></div>
+      <div style="font-size:11.5px;color:var(--t2);line-height:1.6;margin-top:6px;">${esc(t.purpose)}</div>
+    </div>`).join('')}
+  `;
+}
+
+async function loadTheory() {
+  try {
+    const theory = await apiDyeingTheory();
+    renderDyeClasses(theory.dye_classes);
+    renderMachines(theory.machines);
+    renderProcessFlows(theory.process_flows);
+    renderFastness(theory.fastness);
+  } catch (e) {
+    document.getElementById('dyeclasses-content').innerHTML = `<div class="empty-hint">Could not load theory: ${esc(e.message)}</div>`;
+  }
+}
+
 init();
+loadTheory();
 loadKnowledge();
 </script>
 </body>

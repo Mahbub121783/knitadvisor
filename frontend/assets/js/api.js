@@ -94,6 +94,9 @@ async function apiDyeingFaultsDiagnose(symptoms) {
 async function apiDyeingKnowledge() {
   return apiFetch('/api/dyeing/knowledge');
 }
+async function apiDyeingTheory() {
+  return apiFetch('/api/dyeing/theory');
+}
 
 // ============================================================
 // POST /api/convert
