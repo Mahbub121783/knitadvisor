@@ -1,0 +1,229 @@
+{
+  "_note": "Standard textile wet-processing curriculum knowledge (dye chemistry, machine theory, fastness testing) — the same status as academy-engine.js's knitting theory: general engineering knowledge, not tied to a single external source, and never carrying an outbound citation (see knitadvisor-no-source-links). Complements dyeing-engine.js's real recipe cards and dyeing-faults-engine.js's fault/QC layer with the 'why', not just the 'what'.",
+
+  "dye_classes": [
+    {
+      "key": "reactive",
+      "name": "Reactive Dyes",
+      "applicable_fibers": ["Cotton", "Viscose/Rayon", "Linen", "Other cellulosics"],
+      "mechanism": "The dye molecule carries a reactive group (e.g. a chlorotriazine or vinyl sulphone) that forms a genuine covalent bond with the -OH groups of cellulose under alkaline conditions — the dye becomes chemically part of the fibre, not just physically trapped in it. This is why reactive dyeing gives the best wash fastness of any water-soluble dye class on cotton.",
+      "typical_conditions": { "temp_c": "30-80 (cold-brand dyes ~30-60C, hot-brand/exhaust dyes ~60-80C)", "ph": "10.5-11.5 (alkaline, via soda ash/caustic)", "time_min": "45-90" },
+      "key_chemicals": ["Common salt or Glauber's salt (exhausting electrolyte)", "Soda ash / caustic soda (fixing alkali)", "Sequestering agent", "Wetting/leveling agent"],
+      "advantages": ["Excellent wash and rub fastness once fixed", "Bright, wide shade range", "Works at moderate temperature (no pressure vessel needed)"],
+      "limitations": ["Dye hydrolysis in the alkaline bath is unavoidable — typically 20-30% of the dye reacts with water instead of the fibre and is wasted, never fixing", "Hydrolysed dye must be washed off with heavy soaping/rinsing, which is exactly why unfinished soaping causes rubbing-fastness failures", "High-salt effluent is a real wastewater burden (see the salt-comparison data in dyeing-faults-engine.js)", "No affinity for polyester — a poly/cotton blend always needs a second dye class"]
+    },
+    {
+      "key": "disperse",
+      "name": "Disperse Dyes",
+      "applicable_fibers": ["Polyester", "Acetate", "Nylon (lighter shades)"],
+      "mechanism": "These dyes are barely water-soluble — they're applied as a fine aqueous dispersion (hence the name) and dye hydrophobic synthetic fibres by dissolving INTO the fibre polymer itself as the fibre softens under heat, rather than by any chemical bond. This is why high temperature (or a carrier chemical) is essential: below the fibre's glass transition point, the dye simply cannot diffuse in.",
+      "typical_conditions": { "temp_c": "125-135 (HTHP/pressure method) or ~100 with a carrier chemical at atmospheric pressure", "ph": "4.5-5.5 (mildly acidic, via acetic acid)", "time_min": "30-60 at temperature" },
+      "key_chemicals": ["Dispersing agent (keeps the dye particles suspended)", "Acetic acid (pH control)", "Levelling agent", "Carrier chemical (atmospheric method only) or reduction-clearing agent (caustic soda + sodium hydrosulphite) post-dyeing"],
+      "advantages": ["Only practical class for polyester", "Good to excellent light and sublimation fastness when properly cleared", "HTHP method needs no carrier chemical (avoids carrier odour/toxicity concerns)"],
+      "limitations": ["HTHP needs a pressure-rated jet machine — real capital cost", "Unfixed surface dye must be reduction-cleared or it crocks/rubs off and bleeds on later heat-setting", "The carrier (atmospheric) method's carrier chemicals are often odorous and some are restricted for effluent/health reasons", "No affinity for cellulose — useless alone on 100% cotton"]
+    },
+    {
+      "key": "vat",
+      "name": "Vat Dyes",
+      "applicable_fibers": ["Cotton", "Other cellulosics"],
+      "mechanism": "The dye is insoluble in water in its normal form. It is first chemically reduced (with sodium hydrosulphite/hydros + caustic soda) into a soluble, substantive 'leuco' form that has affinity for cellulose and penetrates the fibre. Exposing it to air or a mild oxidiser (oxidation step) converts it back to its original, large, completely insoluble pigment form — now locked physically inside the fibre. Indigo (denim) works on exactly this vat-dye chemistry.",
+      "typical_conditions": { "temp_c": "50-60 (vatting/reduction), ambient-40 (oxidation)", "ph": "highly alkaline during vatting (from caustic soda)", "time_min": "20-40 per vatting cycle, often repeated (denim ring-dyeing uses multiple dip-oxidation cycles)" },
+      "key_chemicals": ["Sodium hydrosulphite (hydros) — the reducing agent", "Caustic soda", "An oxidising agent or simply atmospheric oxygen", "Soaping agent (final boil to develop full, true shade)"],
+      "advantages": ["The best overall wash AND light fastness of any dye class on cellulose — this is why vat dyes, not reactives, are used where fastness cannot be compromised", "The controlled, incomplete penetration used deliberately in denim gives the classic indigo 'ring-dyed' fade effect"],
+      "limitations": ["The most expensive and chemically complex process of the cellulosic dye classes", "Hydrosulphite handling carries real odour and effluent-oxygen-demand concerns", "Colour range is narrower and duller than reactive dyes for many shades", "Multiple vatting/oxidation cycles for full shade depth cost real production time"]
+    },
+    {
+      "key": "direct",
+      "name": "Direct Dyes",
+      "applicable_fibers": ["Cotton", "Viscose", "Other cellulosics", "Occasionally protein fibres"],
+      "mechanism": "Long, linear dye molecules with natural substantivity for cellulose — they align along and hydrogen-bond to the cellulose chain directly from a near-boiling salt bath, no fixing chemical required. This is the simplest of all the cellulose dye classes, which is exactly its weakness: the bond is physical (hydrogen bonding + van der Waals), not chemical, so it is inherently reversible.",
+      "typical_conditions": { "temp_c": "85-100 (near or at boil)", "ph": "neutral to mildly alkaline", "time_min": "45-60" },
+      "key_chemicals": ["Common salt (exhausting agent)", "A cationic fixing agent after dyeing, if wet fastness must be improved"],
+      "advantages": ["Cheapest and simplest cellulose dyeing process — low energy, no pressure vessel, minimal chemistry", "Wide, economical shade range for low-durability-requirement goods"],
+      "limitations": ["Poor wet/wash fastness without an after-fixing treatment — the dye is not chemically bonded and will bleed", "Not suitable for garments needing repeated laundering unless fixed", "Generally duller shades than reactive or vat for the same colour"]
+    },
+    {
+      "key": "acid",
+      "name": "Acid Dyes",
+      "applicable_fibers": ["Wool", "Silk", "Nylon (polyamide)"],
+      "mechanism": "Applied from an acidic bath (acetic or formic acid) onto protein/polyamide fibres, where the dye's anionic (acid) groups form an ionic bond with the fibre's cationic amino (-NH3+) groups. The strength of this bond, and therefore the fastness achieved, depends heavily on matching dye type (levelling / milling / super-milling acid dyes) to the fastness needed.",
+      "typical_conditions": { "temp_c": "80-100 for wool/nylon, cooler for silk to protect the fibre's handle", "ph": "3-6 (acidic, via acetic/formic acid)", "time_min": "45-60" },
+      "key_chemicals": ["Acetic or formic acid (pH/bath control)", "Levelling/retarding agent (prevents patchy, uneven strike)", "Ammonium sulphate (buffers pH rise during dyeing)"],
+      "advantages": ["Bright, clear shades on protein and polyamide fibres", "Good to very good fastness available (milling/super-milling grades) when the right sub-class is chosen"],
+      "limitations": ["No affinity whatsoever for cellulosic fibres — irrelevant to 100% cotton", "Fast-striking acid dyes need real leveling-agent control or they dye unevenly, patchy exactly like the fabric faults this codebase already tracks", "Wool needs careful temperature control to avoid felting/fibre damage during dyeing"]
+    },
+    {
+      "key": "basic_cationic",
+      "name": "Basic (Cationic) Dyes",
+      "applicable_fibers": ["Acrylic", "Modified/cationic-dyeable polyester"],
+      "mechanism": "Cationic (positively charged) dye molecules bond ionically to the anionic acid-group sites built into acrylic fibre during its manufacture. The affinity is so strong and fast that, without control, the dye 'strikes' (exhausts) almost instantly and unevenly.",
+      "typical_conditions": { "temp_c": "85-100 (often with a slow, controlled temperature ramp)", "ph": "acidic, via acetic acid", "time_min": "45-60" },
+      "key_chemicals": ["Acetic acid", "A cationic retarder — essential, not optional, to slow the initial strike rate"],
+      "advantages": ["Extremely bright, vivid, high-strength shades — brighter than almost any other dye class on the fibres it fits"],
+      "limitations": ["Only works on acrylic and specially modified fibres — no use on standard polyester, cotton, or wool", "Without a retarder, the fast strike rate produces exactly the kind of unlevel/patchy dyeing this codebase's fault database already documents for other causes", "Historically weaker lightfastness than other classes, though modern basic dyes for acrylic have narrowed this gap considerably"]
+    },
+    {
+      "key": "sulphur",
+      "name": "Sulphur Dyes",
+      "applicable_fibers": ["Cotton", "Other cellulosics"],
+      "mechanism": "Like vat dyes, sulphur dyes are insoluble pigments made soluble by reduction (traditionally with sodium sulphide) into a form with affinity for cellulose, then re-oxidised back to the insoluble pigment inside the fibre after dyeing. Chemically related to vat dyeing but cheaper and chemically cruder.",
+      "typical_conditions": { "temp_c": "80-95 (reduction/dyeing)", "ph": "alkaline", "time_min": "45-60" },
+      "key_chemicals": ["Sodium sulphide (traditional reducing agent) or a lower-sulphide alternative", "An oxidising after-treatment", "A thorough acid/oxidation wash to remove residual sulphur compounds"],
+      "advantages": ["The cheapest route to deep, wash-fast blacks, navies and khakis on cotton", "Good wash fastness for the cost"],
+      "limitations": ["Residual sulphur left in the fabric from incomplete after-treatment causes 'sulphur tendering' — slow acid-catalysed fibre damage and strength loss over storage/shelf life if the neutralisation step is skipped or rushed", "Duller shades than reactive or vat dyes — not suitable where a bright, saturated colour is required", "Traditional sodium sulphide reduction carries real effluent/odour concerns, pushing many mills toward lower-sulphide reducing systems"]
+    }
+  ],
+
+  "machines": [
+    {
+      "key": "jet",
+      "name": "Jet Dyeing Machine",
+      "form": "Rope form — fabric circulates as a rope, driven by a high-velocity jet of dye liquor rather than a reel alone",
+      "liquor_ratio_range": "1:4 to 1:10 (some modern low-liquor-ratio jets go tighter still)",
+      "typical_use": "Knit fabric (jersey, interlock, rib) — the dominant machine for HTHP disperse dyeing of polyester knits and reactive dyeing of cotton knits",
+      "advantages": ["Low liquor ratio saves water, energy, and chemical cost per kg dyed", "Sealed, pressurisable vessel makes 130C HTHP disperse dyeing possible", "Good liquor circulation gives level dyeing at speed"],
+      "limitations": ["Rope form and jet impact can cause crease/rope marks and crow's-feet on delicate or loosely-constructed knits if speed/pressure aren't matched to the fabric — exactly the fault mechanism in this codebase's crack/rope-mark and crow's-feet entries", "Not suitable for open-width-sensitive wovens that must never be creased"]
+    },
+    {
+      "key": "winch_soft_flow",
+      "name": "Winch / Soft-Flow Machine",
+      "form": "Rope form, atmospheric pressure, fabric driven mainly by a reel (winch) with liquor assist in soft-flow variants",
+      "liquor_ratio_range": "1:8 to 1:15 — notably higher than a modern jet",
+      "typical_use": "Delicate or lightweight fabrics that a full jet's mechanical action would damage; atmospheric-only processes (can't do HTHP disperse dyeing without a pressure vessel)",
+      "advantages": ["Gentler mechanical action than a jet — better for delicate knits/wovens", "Simpler, lower-cost machine than a pressurised jet"],
+      "limitations": ["Higher liquor ratio than a jet means more water, energy and chemical per kg", "Atmospheric-only, so it cannot run true HTHP disperse dyeing on polyester without a carrier chemical"]
+    },
+    {
+      "key": "jigger",
+      "name": "Jigger",
+      "form": "Open-width (not rope) — fabric runs back and forth between two rollers through a stationary dye bath",
+      "liquor_ratio_range": "1:3 to 1:5 — one of the lowest liquor ratios of any batch machine, because the fabric itself displaces most of the liquor volume",
+      "typical_use": "Open-width-sensitive woven fabrics (denim, twill) that must never be creased or rope-marked",
+      "advantages": ["Very low liquor ratio", "No rope-form crease risk at all — the fabric never bunches"],
+      "limitations": ["Batch-to-batch shade variation is a real, well-documented jigger risk if batching time/heating uniformity isn't controlled tightly (see the fault database's dark/light-selvedge and batch-variation entries)", "Not usable for knit fabrics, which distort badly under open-width tension"]
+    },
+    {
+      "key": "pad_batch",
+      "name": "Cold Pad-Batch",
+      "form": "Continuous, open-width — fabric is padded (impregnated under nip rollers) with dye+alkali, then rolled onto a beam and rotated slowly at ambient temperature for hours",
+      "liquor_ratio_range": "Effectively ~1:1 (a pad, not a bath) — the lowest of any dyeing method",
+      "typical_use": "High-volume woven cotton reactive dyeing where energy cost matters most",
+      "advantages": ["By far the lowest water and energy use of any reactive dyeing route — no heating at all during fixation", "High production speed for the padding step itself"],
+      "limitations": ["Fixation happens over 4-24 hours of slow batch rotation — the batch roll MUST rotate evenly or the dye migrates/pools, producing exactly the tailing and end-to-end shade variation this process is notorious for", "Padding uniformity across the full fabric width has to be precise; the fault database's roller/padder-related shade-variation causes apply directly here", "Needs floor space and time for the batching step that an exhaust machine doesn't"]
+    },
+    {
+      "key": "pad_steam",
+      "name": "Pad-Steam (Continuous)",
+      "form": "Continuous, open-width — padding immediately followed by a steamer for fixation, rather than a long cold batch",
+      "liquor_ratio_range": "Effectively ~1:1 at the pad, same as pad-batch",
+      "typical_use": "High-volume continuous dyeing where pad-batch's multi-hour batching time is a production bottleneck",
+      "advantages": ["Continuous, fast — no multi-hour batching wait", "Low liquor ratio like pad-batch"],
+      "limitations": ["Steamer temperature/humidity/dwell-time uniformity across the full width is critical — an uneven steamer reproduces the same shade-variation risk pad-batch has from uneven batching", "Higher energy cost than pad-batch, since the steaming step actively heats the fabric instead of relying on ambient-temperature time"]
+    },
+    {
+      "key": "beam",
+      "name": "Beam Dyeing Machine",
+      "form": "Fabric (or yarn) wound onto a perforated beam; liquor is pumped radially through the wound layers rather than the fabric moving through the liquor",
+      "liquor_ratio_range": "1:8 to 1:12",
+      "typical_use": "Fabrics too delicate or crease-sensitive for any rope or reel action at all",
+      "advantages": ["Zero rope/reel mechanical stress on the fabric — the fabric itself never moves"],
+      "limitations": ["Even liquor flow through every wound layer is essential — a channelled or uneven wind produces severe layer-to-layer shade variation with no rope action to average it out", "Winding the beam evenly is itself a real skill/setup cost"]
+    }
+  ],
+
+  "process_flows": [
+    {
+      "key": "cotton_knit_reactive",
+      "name": "Cotton Knit — Reactive Exhaust Dyeing (Jet/Soft-Flow)",
+      "dye_class": "reactive",
+      "fabric_type": "100% cotton knit (jersey, rib, interlock)",
+      "steps": [
+        { "step": 1, "name": "Pretreatment", "detail": "Scouring (removes natural waxes/impurities) and bleaching (removes natural colour/seed-coat fragments) in the same or separate bath, so the fibre is uniformly absorbent before any dye goes in." },
+        { "step": 2, "name": "Dye addition", "detail": "Dissolved, filtered dye added at a steadily increasing rate (a rapid dump is a documented cause of uneven dyeing) at moderate temperature." },
+        { "step": 3, "name": "Salt addition", "detail": "Electrolyte (common or Glauber's salt) added in stages to exhaust the dye from the bath onto the fibre, without yet fixing it chemically." },
+        { "step": 4, "name": "Alkali addition / fixation", "detail": "Soda ash (or caustic for some dye types) raised to pH ~11 to trigger the actual covalent fixation reaction onto cellulose; held at this pH/temperature for the fixation time." },
+        { "step": 5, "name": "Rinsing", "detail": "Hot then cold rinses to remove the bulk of unfixed, hydrolysed dye and salt before soaping." },
+        { "step": 6, "name": "Neutralisation", "detail": "Acetic acid brings the bath back to neutral/mildly acidic pH." },
+        { "step": 7, "name": "Soaping", "detail": "A near-boil wash with a soaping agent — this is the step that removes the hydrolysed dye a reactive bath inevitably produces; skipping or shortening it is a direct cause of poor rub/wash fastness." },
+        { "step": 8, "name": "Softening & drying", "detail": "Softener applied, then dried to final moisture content." }
+      ],
+      "notes": ["This is the flow the shade-variation QC checklist in dyeing-faults-engine.js is built around — its five stages (preparatory/dyeing/finishing/soaping/machinery) map directly onto steps 1, 2-4, 6, 7 and the machine itself."]
+    },
+    {
+      "key": "polyester_hthp_disperse",
+      "name": "Polyester — HTHP Disperse Dyeing (Jet)",
+      "dye_class": "disperse",
+      "fabric_type": "100% polyester woven or knit",
+      "steps": [
+        { "step": 1, "name": "Pretreatment", "detail": "Scouring and, for many polyester fabrics, heat-setting before dyeing to stabilise dimensions so the dyeing heat itself doesn't cause further shrinkage/distortion." },
+        { "step": 2, "name": "Dye addition", "detail": "Dispersed dye, dispersing agent and levelling agent added at moderate starting temperature (~50-60C), pH adjusted to ~4.5-5 with acetic acid." },
+        { "step": 3, "name": "Controlled heating to HTHP", "detail": "Temperature raised gradually (a fast ramp risks unlevel dyeing) to 125-135C under pressure, held for 30-60 minutes — this is the step that actually diffuses dye into the polyester polymer." },
+        { "step": 4, "name": "Cooling & reduction clearing", "detail": "After cooling, a caustic soda + sodium hydrosulphite wash strips unfixed dye sitting on the fibre surface — without this step, surface dye crocks/rubs off and can migrate/stain during later heat-setting." },
+        { "step": 5, "name": "Neutralisation & soaping", "detail": "Neutralise the caustic, then a soaping/rinse sequence." },
+        { "step": 6, "name": "Drying & heat-set finishing", "detail": "Final dry and, often, a finishing heat-set pass." }
+      ],
+      "notes": ["The reduction-clearing step (4) is the single most common thing skipped or shortened under time pressure, and it is the direct cause of most disperse-dyed crocking/rubbing-fastness complaints."]
+    },
+    {
+      "key": "poly_cotton_two_part",
+      "name": "Poly/Cotton Blend — Two-Part (Disperse + Reactive)",
+      "dye_class": "disperse + reactive",
+      "fabric_type": "CVC / PC blended knit or woven",
+      "steps": [
+        { "step": 1, "name": "Pretreatment", "detail": "Scouring/bleaching as for 100% cotton, since the cotton component still needs to be absorbent." },
+        { "step": 2, "name": "Disperse dyeing (polyester component)", "detail": "Run the HTHP disperse process above first — the polyester component is dyed while the cotton component is largely unaffected by disperse dye at this stage." },
+        { "step": 3, "name": "Reduction clearing", "detail": "Essential here even more than on 100% polyester — surface disperse dye left on the COTTON portion (which has no affinity for it) will stain badly if not cleared before the reactive step." },
+        { "step": 4, "name": "Reactive dyeing (cotton component)", "detail": "Run the standard reactive exhaust process (salt, then alkali fixation) to dye the cotton component to match or complement the polyester shade." },
+        { "step": 5, "name": "Final soaping, neutralisation, softening, drying", "detail": "As in the single-fibre flows, but now clearing residues from BOTH dye classes." }
+      ],
+      "notes": ["This is exactly why dyeing-engine.js's matchDyeingRecipe() treats is_two_part as decisive when choosing between candidate recipes — a two-part fabric genuinely runs two dyeing processes end to end, at real extra chemical and time cost versus a single-fibre fabric of the same shade."]
+    },
+    {
+      "key": "cold_pad_batch_reactive",
+      "name": "Woven Cotton — Cold Pad-Batch Reactive Dyeing",
+      "dye_class": "reactive",
+      "fabric_type": "100% cotton woven (shirting, bottom-weight)",
+      "steps": [
+        { "step": 1, "name": "Pretreatment", "detail": "Scouring/bleaching in open-width, as the fabric will run open-width through the entire process." },
+        { "step": 2, "name": "Padding", "detail": "Fabric impregnated with dye + alkali together (unlike exhaust dyeing, both go on at once) under nip rollers at ambient temperature — nip pressure evenness across the full width is critical." },
+        { "step": 3, "name": "Batching", "detail": "The padded fabric is rolled onto a beam wrapped to prevent drying out, then rotated slowly at ambient temperature for 4-24 hours while the alkali fixes the dye onto the cellulose." },
+        { "step": 4, "name": "Washing-off", "detail": "Cold then hot rinse and soap to remove unfixed dye and alkali, same purpose as exhaust dyeing's soaping step." },
+        { "step": 5, "name": "Drying & finishing", "detail": "Standard drying/finishing." }
+      ],
+      "notes": ["No heating step exists anywhere in this flow except the wash-off — the entire energy saving versus exhaust dyeing comes from fixation happening at ambient temperature over time instead of at high temperature quickly.", "Batch rotation must never stop during the batching stage: a stalled roll lets liquor migrate downward under gravity, which is the direct cause of top-to-bottom shade variation on a pad-batch roll."]
+    },
+    {
+      "key": "denim_indigo_rope",
+      "name": "Denim — Indigo Rope (Vat-Class) Dyeing",
+      "dye_class": "vat",
+      "fabric_type": "Cotton warp yarn, rope form",
+      "steps": [
+        { "step": 1, "name": "Vatting (reduction)", "detail": "Indigo, insoluble as a pigment, is reduced with sodium hydrosulphite + caustic soda into its soluble, yellow-green leuco form in the dye vat." },
+        { "step": 2, "name": "Dip", "detail": "The warp rope is dipped into the leuco vat, where the soluble leuco-indigo penetrates the outer layers of the yarn." },
+        { "step": 3, "name": "Oxidation (air exposure)", "detail": "On exposure to air, the leuco form re-oxidises back to insoluble indigo pigment, trapped physically where it penetrated — this is the step that actually develops the blue colour, not the dip itself." },
+        { "step": 4, "name": "Repeat dip-oxidise cycles", "detail": "Steps 2-3 are repeated multiple times (commonly 6-8+ passes) to build up shade depth, since each single dip only deposits a thin layer." }
+      ],
+      "notes": ["Indigo deliberately does NOT fully penetrate the yarn core — this incomplete, surface-concentrated dyeing (\"ring dyeing\") is not a defect here, it's the entire reason denim can be abraded/washed to reveal the undyed core for fade effects. Judging indigo dyeing by full-penetration standards used for other vat-dyed cellulosics would be a real misapplication of that QC criterion."]
+    }
+  ],
+
+  "fastness": {
+    "summary": "Fastness testing measures how well a dyeing survives real-world stresses (washing, rubbing, light, sweat) — it is the pass/fail gate a recipe/process choice is ultimately judged against, independent of how good the shade looks fresh off the machine.",
+    "grey_scale_change": {
+      "purpose": "Grades how much the DYED fabric itself has changed (faded/altered) after a fastness test, by visual comparison against a standard set of grey-toned reference pairs.",
+      "scale": "1 (severe change) to 5 (no perceptible change), with half-grades (e.g. 4-5) commonly used",
+      "typical_pass_bar": "4 or better for wash fastness on garments expected to withstand repeated laundering; lower grades are acceptable for single-wear or non-garment textiles"
+    },
+    "grey_scale_staining": {
+      "purpose": "Grades how much dye has bled from the dyed fabric onto an adjacent piece of undyed fabric during the same test — a separate scale from colour CHANGE, because a fabric can hold its own shade well while still staining its neighbour badly.",
+      "scale": "1 (severe staining) to 5 (no staining)",
+      "typical_pass_bar": "4 or better, especially for garments packed/stored against light-coloured linings or other garments"
+    },
+    "test_types": [
+      { "name": "Wash fastness", "purpose": "Simulates repeated home/industrial laundering — the single most commonly specified test for garment fabric, and the test reactive-dye soaping (see the cotton-knit-reactive flow) exists specifically to pass." },
+      { "name": "Rubbing / crocking fastness", "purpose": "Measures dye transfer from simple dry or wet rubbing against another surface — tested separately dry and wet because wet crocking is almost always worse, and is the test directly referenced in this codebase's salt-comparison data." },
+      { "name": "Light fastness", "purpose": "Measures fading under prolonged light (sunlight or a xenon-arc lamp simulating it) exposure — vat dyes' well-known light-fastness advantage over reactive dyes on cotton is measured by exactly this test." },
+      { "name": "Perspiration fastness", "purpose": "Measures colour change/staining after exposure to simulated acidic and alkaline sweat — particularly relevant to garments worn against skin." }
+    ]
+  }
+}

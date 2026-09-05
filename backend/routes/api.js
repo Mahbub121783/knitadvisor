@@ -18,6 +18,7 @@ const { getPattern } = require('../engine/domain/pattern-engine');
 const { calculateWoven, listWovenFabrics } = require('../engine/domain/woven-engine');
 const { listDyeingRecipes, getDyeingRecipe, matchDyeingRecipe, calculateDyeingCost } = require('../engine/domain/dyeing-engine');
 const { diagnoseDyeingFaults, listDyeingFaults, getDyeingKnowledge } = require('../engine/domain/dyeing-faults-engine');
+const { getDyeingTheory, getDyeClass, getMachine, getProcessFlow } = require('../engine/domain/dyeing-theory-engine');
 const { DEFAULT_EXCHANGE_RATES } = require('../engine/domain/costing-engine');
 const { isWovenId } = require('../engine/catalog/woven-derivatives');
 const { calculateStriper, validateStriperInput } = require('../engine/domain/striper-engine');
@@ -568,9 +569,36 @@ router.post('/dyeing/faults/diagnose', (req, res) => {
 });
 
 // GET /api/dyeing/knowledge — the QC checklist, floor checkpoints, and salt
-// comparison reference, each carrying its own source citation.
+// comparison reference.
 router.get('/dyeing/knowledge', (req, res) => {
   res.json({ success: true, ...getDyeingKnowledge() });
+});
+
+// ============================================================
+// GET /api/dyeing/theory — dye-class chemistry, machine theory, full
+// process-flow charts and fastness-testing theory. See dyeing-theory-
+// engine.js's header for scope/status.
+// ============================================================
+router.get('/dyeing/theory', (req, res) => {
+  res.json({ success: true, ...getDyeingTheory() });
+});
+
+router.get('/dyeing/theory/dye-class/:key', (req, res) => {
+  const dyeClass = getDyeClass(req.params.key);
+  if (!dyeClass) return res.status(404).json({ success: false, error: 'UNKNOWN_DYE_CLASS' });
+  res.json({ success: true, dye_class: dyeClass });
+});
+
+router.get('/dyeing/theory/machine/:key', (req, res) => {
+  const machine = getMachine(req.params.key);
+  if (!machine) return res.status(404).json({ success: false, error: 'UNKNOWN_MACHINE' });
+  res.json({ success: true, machine });
+});
+
+router.get('/dyeing/theory/process-flow/:key', (req, res) => {
+  const flow = getProcessFlow(req.params.key);
+  if (!flow) return res.status(404).json({ success: false, error: 'UNKNOWN_PROCESS_FLOW' });
+  res.json({ success: true, process_flow: flow });
 });
 
 // ============================================================

@@ -8,11 +8,11 @@
  * don't fit the fault-diagnosis shape but come from the same source set.
  *
  * SOURCE: backend/data/dyeing-knowledge.json — a curated, own-words summary
- * of four Textile Learner (textilelearner.net) articles, each entry carrying
- * its own source_key back to the article. This is deliberately NOT a mirror
- * of the site (it runs to ~400 dyeing posts across 27 pages) — see that
- * file's own "_note" for why the scope stops here. It is also independent of
- * dyeing-engine.js's recipe/costing layer: this module is diagnostic/advisory
+ * of researched industry articles, each entry carrying its own internal-only
+ * source_key. Every function here strips that key before returning (see
+ * dropSourceKey below and knitadvisor-no-source-links) — no external site
+ * name or URL is ever part of this module's output. Independent of dyeing-
+ * engine.js's recipe/costing layer: this module is diagnostic/advisory
  * knowledge, not a cost input, and calculateDyeingCost() never reads it.
  */
 'use strict';
@@ -21,11 +21,16 @@ const knowledge = require('../../data/dyeing-knowledge.json');
 
 const DYEING_FAULTS_DATABASE = knowledge.faults;
 
-const SOURCES_BY_KEY = Object.fromEntries(knowledge.sources.map(s => [s.key, s]));
-
-/** Attach the full source record (title/url/publisher) to any object carrying a source_key. */
-function withSource(entry) {
-  return { ...entry, source: SOURCES_BY_KEY[entry.source_key] || null };
+// dyeing-knowledge.json keeps research provenance (title/url/publisher) for
+// OUR OWN internal audit trail only — see knitadvisor-no-source-links: no
+// external site name, article title, or URL may ever reach an API response
+// or a rendered page. `dropSourceKey` strips the internal-only `source_key`
+// field and returns nothing in its place — not even a link-free "Textile
+// Learner" attribution — so nothing about where an entry was researched is
+// visible outside this file.
+function dropSourceKey(entry) {
+  const { source_key, ...rest } = entry;
+  return rest;
 }
 
 /**
@@ -59,36 +64,35 @@ function diagnoseDyeingFaults(selectedSymptoms = []) {
     }
     if (score > 0) {
       const confidence = Math.min(100, Math.round((score / (terms.length * 3)) * 100));
-      results.push({ ...withSource(fault), confidence, matches });
+      results.push({ ...dropSourceKey(fault), confidence, matches });
     }
   }
   return results.sort((a, b) => b.confidence - a.confidence);
 }
 
-/** Full fault list, each with its source attached — for a browser UI. */
+/** Full fault list — for a browser UI. */
 function listDyeingFaults() {
-  return DYEING_FAULTS_DATABASE.map(withSource);
+  return DYEING_FAULTS_DATABASE.map(dropSourceKey);
 }
 
-/** The five-stage shade-variation prevention checklist (with numeric QC targets), sourced. */
+/** The five-stage shade-variation prevention checklist (with numeric QC targets). */
 function getShadeVariationChecklist() {
-  return withSource(knowledge.qc_framework);
+  return dropSourceKey(knowledge.qc_framework);
 }
 
-/** The floor-level checking/control-points checklist, sourced. */
+/** The floor-level checking/control-points checklist. */
 function getProcessCheckpoints() {
-  return withSource(knowledge.process_checkpoints);
+  return dropSourceKey(knowledge.process_checkpoints);
 }
 
-/** The common-salt vs Glauber-salt vs vacuum-salt electrolyte comparison, sourced. */
+/** The common-salt vs Glauber-salt vs vacuum-salt electrolyte comparison. */
 function getSaltComparison() {
-  return withSource(knowledge.salt_comparison);
+  return dropSourceKey(knowledge.salt_comparison);
 }
 
 /** Everything at once, for a single "knowledge" endpoint/page. */
 function getDyeingKnowledge() {
   return {
-    sources: knowledge.sources,
     faults: listDyeingFaults(),
     qc_framework: getShadeVariationChecklist(),
     process_checkpoints: getProcessCheckpoints(),
