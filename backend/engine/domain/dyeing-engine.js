@@ -24,13 +24,24 @@
  * 021/023) exist purely as a citation/audit surface; nothing here reads them.
  *
  * SCOPE — read this before trusting a "no match": 40 real recipes total,
- * from two factories, covering black/dark_navy/light_medium/white_melange/
- * fluorescent (not melange, not turquoise, not shade-depth-percentage bands
- * — see the two extractors' own headers for exactly what was left out and
- * why). Every shade/composition NOT covered correctly returns null from
- * matchDyeingRecipe() — that is the honest, permanent behaviour for an
- * uncovered shade, not a placeholder to later fill with a guess. The caller
- * (costing-engine.js) falls through to the existing price-list estimate.
+ * from two factories, covering all 6 of color-engine.js's shade tiers
+ * (black/dark_navy/light_medium/white_melange/fluorescent/melange — not
+ * turquoise, not shade-depth-percentage bands — see the two extractors' own
+ * headers for exactly what was left out and why). Every shade NOT covered
+ * still correctly returns null from matchDyeingRecipe() — that is the
+ * honest, permanent behaviour for an uncovered case, not a placeholder to
+ * later fill with a guess. The caller (costing-engine.js) falls through to
+ * the existing price-list estimate.
+ *
+ * KNIT ONLY — every one of the 40 source cards is a knit construction
+ * (jersey/S-J, rib, pique, fleece; see each extractor's fabrication/
+ * composition tags). None is a woven card, and rope/jet dyeing (what these
+ * recipes actually describe) is not the same process as a woven fabric's
+ * jigger/pad-batch route — a shade match alone would silently imply the
+ * wrong machine and process. matchDyeingRecipe() therefore takes `is_woven`
+ * and returns null unconditionally when it's true, regardless of shade —
+ * costing-engine.js is responsible for telling it correctly (see isWovenId
+ * in engine/catalog/woven-derivatives.js).
  */
 'use strict';
 
@@ -73,11 +84,22 @@ const ALL_RECIPES = [
  *                                   the right recipe (see impliesTwoPart
  *                                   below, matched against each candidate's
  *                                   own composition_tag)
+ * @param {boolean} [p.is_woven]     true when the fabric being costed is a
+ *                                   WOVEN construction. Every one of the 40
+ *                                   source cards is a knit recipe (see this
+ *                                   file's header) — a shade match for a
+ *                                   woven fabric would silently carry over a
+ *                                   rope/jet-dyeing chemistry that a woven
+ *                                   fabric's real jigger/pad-batch route
+ *                                   doesn't actually use. So this short-
+ *                                   circuits to null before the shade filter
+ *                                   even runs, regardless of shade coverage.
  * @returns {object|null} the matched recipe plus `match_quality`, or null if
- *   no recipe covers this shade tier at all — never fabricated.
+ *   no recipe covers this shade tier (or fabric construction) at all —
+ *   never fabricated.
  */
-function matchDyeingRecipe({ shade_tier, is_two_part } = {}) {
-  if (!shade_tier) return null;
+function matchDyeingRecipe({ shade_tier, is_two_part, is_woven } = {}) {
+  if (!shade_tier || is_woven) return null;
   const candidates = ALL_RECIPES.filter(r => r.shade_tiers.includes(shade_tier));
   if (!candidates.length) return null;
 

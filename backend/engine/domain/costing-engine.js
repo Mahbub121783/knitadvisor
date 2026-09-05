@@ -238,6 +238,7 @@ const YARN_TYPE_CATALOG = {
 const { getKnittingPrice } = require('../catalog/knitting-price-table');
 const countryCosts = require('../catalog/country-costs');
 const { matchDyeingRecipe, calculateDyeingCost } = require('./dyeing-engine');
+const { isWovenId } = require('../catalog/woven-derivatives');
 const ENERGY_SHARE_PCT = Object.fromEntries(
   Object.entries(countryCosts.ENERGY_SHARE).map(([k, v]) => [k, Math.round(v * 100)]));
 
@@ -760,11 +761,16 @@ function calculateCost(params) {
     const shadeKey = colorShade || 'light_medium';
     // Real recipe first: a genuine, cost-verified factory card (see
     // dyeing-engine.js / data/dyeing-reference.json) beats the flat
-    // price-list estimate whenever one actually covers this shade. Only 6
-    // real recipes exist (2 white, 4 navy/black) — matchDyeingRecipe()
-    // returns null for everything else, and that falls straight through to
-    // today's unchanged behaviour below. Never fabricated for an uncovered shade.
-    const matched = matchDyeingRecipe({ shade_tier: shadeKey, is_two_part: isTwoPart });
+    // price-list estimate whenever one actually covers this shade. 40 real
+    // recipes exist across two factories, all six shade tiers, but every one
+    // of them is a KNIT construction card — is_woven tells matchDyeingRecipe
+    // to refuse a match outright for a woven fabricId rather than silently
+    // handing it a rope/jet-dyeing recipe its real jigger/pad-batch process
+    // never actually runs. matchDyeingRecipe() returns null for every other
+    // uncovered case too, and that falls straight through to today's
+    // unchanged price-list behaviour below. Never fabricated for an
+    // uncovered shade or construction.
+    const matched = matchDyeingRecipe({ shade_tier: shadeKey, is_two_part: isTwoPart, is_woven: isWovenId(fabricId) });
     if (matched) {
       const real = calculateDyeingCost({ recipe: matched, fabric_qty_kg: 1, bdt_per_usd: exchangeRates.BDT });
       dyeingBase  = real.cost_per_kg_usd;
