@@ -153,20 +153,31 @@ assert(fastness.test_types.length >= 4);
 const allTheory = getDyeingTheory();
 assert(allTheory.dye_classes.length === 7 && allTheory.machines.length === 6 && allTheory.process_flows.length === 5 && allTheory.fastness);
 
-// ---- costing-engine.js integration: a woven fabric must never get a knit
-// recipe's cost, even at a shade every knit recipe covers ---------------
+// ---- costing-engine.js integration: dyeing is KNIT-only, full stop ----
+// (per the user's explicit direction — woven fabrics never need a dyeing
+// cost in this tool, not a real recipe and not even a price-list estimate)
 
-// Test 17: black on a KNIT fabric matches a real recipe.
+// Test 17: black on a KNIT fabric matches a real recipe, cost > 0.
 const knitResult = calculateCost({ gsm: 180, fabric: 'single_jersey', color_shade: 'black', order_qty_kg: 1000 });
 console.log("Knit black dyeing source (expected REAL_RECIPE):", knitResult.cost_breakdown_usd.dyeing.source);
 assert.strictEqual(knitResult.cost_breakdown_usd.dyeing.source, 'REAL_RECIPE');
+assert(knitResult.cost_breakdown_usd.dyeing.per_kg > 0);
 
-// Test 18: the SAME shade on a WOVEN fabric must fall through to the
-// price-list estimate — none of the 40 real recipes is a woven card, so a
-// match here would silently hand a rope/jet-dyeing recipe to a fabric that
-// really runs a jigger/pad-batch process (see dyeing-engine.js's header).
+// Test 18: the SAME shade on a WOVEN fabric gets NO dyeing cost at all —
+// source NOT_APPLICABLE, per_kg exactly 0. Not a real recipe (none of the 40
+// cards is woven construction) and not even the price-list estimate: dyeing
+// is out of scope for a woven fabric in this tool, not an uncovered case.
 const wovenResult = calculateCost({ gsm: 180, fabric: 'woven_plain_shirting', color_shade: 'black', order_qty_kg: 1000 });
-console.log("Woven black dyeing source (expected NOT REAL_RECIPE):", wovenResult.cost_breakdown_usd.dyeing.source);
-assert.notStrictEqual(wovenResult.cost_breakdown_usd.dyeing.source, 'REAL_RECIPE');
+console.log("Woven black dyeing source (expected NOT_APPLICABLE, per_kg=0):",
+  wovenResult.cost_breakdown_usd.dyeing.source, wovenResult.cost_breakdown_usd.dyeing.per_kg);
+assert.strictEqual(wovenResult.cost_breakdown_usd.dyeing.source, 'NOT_APPLICABLE');
+assert.strictEqual(wovenResult.cost_breakdown_usd.dyeing.per_kg, 0);
+
+// Test 19: an explicit user-supplied dyeing_cost still applies even to a
+// woven fabric — that's the caller's own stated number, not this engine
+// assuming a woven fabric needs one.
+const wovenOverride = calculateCost({ gsm: 180, fabric: 'woven_plain_shirting', color_shade: 'black', dyeing_cost: 0.5, order_qty_kg: 1000 });
+assert.strictEqual(wovenOverride.cost_breakdown_usd.dyeing.source, 'user_override');
+assert.strictEqual(wovenOverride.cost_breakdown_usd.dyeing.per_kg, 0.5);
 
 console.log("All Dyeing Engine Tests Passed!");

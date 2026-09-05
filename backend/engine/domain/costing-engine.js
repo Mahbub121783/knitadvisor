@@ -748,29 +748,42 @@ function calculateCost(params) {
   const knittingAnchor = knittingFinal;
 
   // ---- 6. DYEING COST (Official Price List: one-part vs two-part) ----
+  // KNIT ONLY. This entire tool is a knit-fabric advisor (KnitAdvisor) — its
+  // dyeing layer (recipes, price list, theory, faults) exists to cost and
+  // explain KNIT wet-processing, full stop. A woven fabric never gets a
+  // dyeing line here, not a real recipe and not even the price-list
+  // estimate: it is out of scope for this tool, not an uncovered case to
+  // estimate around. (A caller who explicitly passes dyeing_cost still gets
+  // it applied — that is their own stated number, not this engine assuming
+  // a woven fabric needs one.)
   const fibers = parsedComp ? (parsedComp.fibers || {}) : { cotton: 100 };
   // Two-part = blend with both cotton + polyester (CVC / PC)
   const isTwoPart = (fibers.polyester || 0) >= 10 && ((fibers.cotton || 0) >= 30 || (fibers.viscose || 0) >= 30);
+  const isWovenFabric = isWovenId(fabricId);
 
   let dyeingFinal, dyeingBase, dyeingDetail;
   if (params.dyeing_cost) {
     dyeingBase  = parseFloat(params.dyeing_cost);
     dyeingFinal = dyeingBase;
     dyeingDetail = { source: 'user_override', one_part: dyeingBase, two_part: dyeingBase, is_two_part: false };
+  } else if (isWovenFabric) {
+    dyeingBase  = 0;
+    dyeingFinal = 0;
+    dyeingDetail = {
+      source: 'NOT_APPLICABLE',
+      note: 'Dyeing is not costed for woven fabrics in this tool — KnitAdvisor\'s dyeing layer (real recipes, price list, theory, faults) covers knit wet-processing only. Pass dyeing_cost explicitly if a woven quote needs one.',
+    };
   } else {
     const shadeKey = colorShade || 'light_medium';
     // Real recipe first: a genuine, cost-verified factory card (see
     // dyeing-engine.js / data/dyeing-reference.json) beats the flat
     // price-list estimate whenever one actually covers this shade. 40 real
-    // recipes exist across two factories, all six shade tiers, but every one
-    // of them is a KNIT construction card — is_woven tells matchDyeingRecipe
-    // to refuse a match outright for a woven fabricId rather than silently
-    // handing it a rope/jet-dyeing recipe its real jigger/pad-batch process
-    // never actually runs. matchDyeingRecipe() returns null for every other
-    // uncovered case too, and that falls straight through to today's
-    // unchanged price-list behaviour below. Never fabricated for an
-    // uncovered shade or construction.
-    const matched = matchDyeingRecipe({ shade_tier: shadeKey, is_two_part: isTwoPart, is_woven: isWovenId(fabricId) });
+    // recipes exist across two factories, all six shade tiers — all of them
+    // KNIT construction cards, which is moot here since isWovenFabric already
+    // routed woven fabrics out above; matchDyeingRecipe()'s own is_woven
+    // guard stays as defence in depth for any other caller that reaches it
+    // directly. Never fabricated for an uncovered shade.
+    const matched = matchDyeingRecipe({ shade_tier: shadeKey, is_two_part: isTwoPart, is_woven: isWovenFabric });
     if (matched) {
       const real = calculateDyeingCost({ recipe: matched, fabric_qty_kg: 1, bdt_per_usd: exchangeRates.BDT });
       dyeingBase  = real.cost_per_kg_usd;
