@@ -5,6 +5,7 @@ const {
   listDyeingRecipes,
   getDyeingRecipe,
 } = require('../engine/domain/dyeing-engine');
+const { calculateCost } = require('../engine/domain/costing-engine');
 const {
   DYEING_FAULTS_DATABASE,
   diagnoseDyeingFaults,
@@ -40,6 +41,13 @@ assert.strictEqual(new Set(recipes.map(r => r.id)).size, recipes.length);
 const noMatch = matchDyeingRecipe({ shade_tier: 'not_a_real_shade_tier' });
 assert.strictEqual(noMatch, null);
 assert.strictEqual(matchDyeingRecipe({}), null);
+
+// Test 2b: is_woven refuses a match outright, even for a shade every knit
+// recipe covers — all 40 source cards are knit constructions (see this
+// engine's header), so a woven fabric must fall through to the price-list
+// estimate rather than silently inherit a rope/jet-dyeing recipe.
+assert(matchDyeingRecipe({ shade_tier: 'black' }), 'sanity: black must be covered when not woven');
+assert.strictEqual(matchDyeingRecipe({ shade_tier: 'black', is_woven: true }), null);
 
 // Test 3: matchDyeingRecipe returns a real recipe for a covered shade tier
 const blackMatch = matchDyeingRecipe({ shade_tier: 'black' });
@@ -144,5 +152,21 @@ assert(fastness.test_types.length >= 4);
 // Test 16: the combined theory endpoint returns all four sections
 const allTheory = getDyeingTheory();
 assert(allTheory.dye_classes.length === 7 && allTheory.machines.length === 6 && allTheory.process_flows.length === 5 && allTheory.fastness);
+
+// ---- costing-engine.js integration: a woven fabric must never get a knit
+// recipe's cost, even at a shade every knit recipe covers ---------------
+
+// Test 17: black on a KNIT fabric matches a real recipe.
+const knitResult = calculateCost({ gsm: 180, fabric: 'single_jersey', color_shade: 'black', order_qty_kg: 1000 });
+console.log("Knit black dyeing source (expected REAL_RECIPE):", knitResult.cost_breakdown_usd.dyeing.source);
+assert.strictEqual(knitResult.cost_breakdown_usd.dyeing.source, 'REAL_RECIPE');
+
+// Test 18: the SAME shade on a WOVEN fabric must fall through to the
+// price-list estimate — none of the 40 real recipes is a woven card, so a
+// match here would silently hand a rope/jet-dyeing recipe to a fabric that
+// really runs a jigger/pad-batch process (see dyeing-engine.js's header).
+const wovenResult = calculateCost({ gsm: 180, fabric: 'woven_plain_shirting', color_shade: 'black', order_qty_kg: 1000 });
+console.log("Woven black dyeing source (expected NOT REAL_RECIPE):", wovenResult.cost_breakdown_usd.dyeing.source);
+assert.notStrictEqual(wovenResult.cost_breakdown_usd.dyeing.source, 'REAL_RECIPE');
 
 console.log("All Dyeing Engine Tests Passed!");
