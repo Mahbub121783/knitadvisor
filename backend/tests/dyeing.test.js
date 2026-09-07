@@ -163,6 +163,20 @@ console.log("Knit black dyeing source (expected REAL_RECIPE):", knitResult.cost_
 assert.strictEqual(knitResult.cost_breakdown_usd.dyeing.source, 'REAL_RECIPE');
 assert(knitResult.cost_breakdown_usd.dyeing.per_kg > 0);
 
+// Test 17b: a REAL_RECIPE match is a HYBRID (price-list conversion cost +
+// real chemical cost), never the bare chemical cost on its own — a real
+// factory card only ever prices chemicals, and machine/labour/utilities/
+// overhead still have to come from somewhere. per_kg must reconstruct
+// exactly from its own disclosed parts, and must sit close to (not 10-20x
+// under) the price-list rate it partially replaces.
+const dd = knitResult.cost_breakdown_usd.dyeing;
+assert.strictEqual(dd.costing_model, 'price_list_conversion_plus_real_chemicals');
+assert(dd.price_list_base_usd > 0, 'expected a price-list base to blend with');
+assert.strictEqual(dd.assumed_chemical_share_pct, 17);
+const reconstructed = dd.price_list_base_usd - (dd.price_list_base_usd * dd.assumed_chemical_share_pct / 100) + dd.real_chemical_cost_usd;
+assert(Math.abs(reconstructed - dd.per_kg) < 0.0005, `per_kg (${dd.per_kg}) must equal price_list_base - assumed_chemical + real_chemical (${reconstructed})`);
+assert(dd.per_kg > dd.real_chemical_cost_usd * 5, 'hybrid must not collapse to the bare chemical cost');
+
 // Test 18: the SAME shade on a WOVEN fabric gets NO dyeing cost at all —
 // source NOT_APPLICABLE, per_kg exactly 0. Not a real recipe (none of the 40
 // cards is woven construction) and not even the price-list estimate: dyeing

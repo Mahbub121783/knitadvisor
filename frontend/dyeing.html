@@ -452,14 +452,14 @@ function renderRecipe(recipe, cost) {
     ${costGapNote}
     <div class="cost-headline-row">
       <div class="ch-box">
-        <div class="ch-box-lbl">Cost, per kg</div>
-        <div class="ch-box-val">${fmt(cost.cost_per_kg_tk, 2)} Tk</div>
-        <div class="ch-box-sub">= $${fmt(cost.cost_per_kg_usd, 4)} USD/kg</div>
+        <div class="ch-box-lbl">Chemical cost, per kg</div>
+        <div class="ch-box-val">$${fmt(cost.cost_per_kg_usd, 4)}</div>
+        <div class="ch-box-sub">= ${fmt(cost.cost_per_kg_tk, 2)} Tk/kg &middot; chemicals only, no machine/labour/utility cost</div>
       </div>
       <div class="ch-box">
-        <div class="ch-box-lbl">Total for ${fmt(cost.fabric_qty_kg, 0)} kg batch</div>
-        <div class="ch-box-val">${fmt(cost.cost_per_kg_tk * cost.fabric_qty_kg, 0)} Tk</div>
-        <div class="ch-box-sub">= $${fmt(cost.cost_per_kg_usd * cost.fabric_qty_kg, 2)} USD</div>
+        <div class="ch-box-lbl">Chemical total for ${fmt(cost.fabric_qty_kg, 0)} kg batch</div>
+        <div class="ch-box-val">$${fmt(cost.cost_per_kg_usd * cost.fabric_qty_kg, 2)}</div>
+        <div class="ch-box-sub">= ${fmt(cost.cost_per_kg_tk * cost.fabric_qty_kg, 0)} Tk</div>
       </div>
       <div class="ch-box">
         <div class="ch-box-lbl">Process time</div>

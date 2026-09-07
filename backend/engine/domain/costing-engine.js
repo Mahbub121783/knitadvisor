@@ -297,6 +297,34 @@ DYEING_COST.light  = DYEING_COST.white_melange;
 // Fallback for unknown shades
 const DYEING_COST_FALLBACK = { one_part: 1.30, two_part: 1.75, is_wash_only: false, process_label: 'Reactive Dyeing' };
 
+/**
+ * What fraction of a dyehouse's per-kg CONVERSION charge (the DYEING_COST
+ * figures above — machine time, labour, utilities, overhead, all bundled)
+ * is chemicals. Needed because dyeing-engine.js's REAL_RECIPE match only
+ * ever prices CHEMICALS off a real factory card — see this engine's own
+ * "6. DYEING COST" section below for why that number cannot simply replace
+ * DYEING_COST wholesale (it would silently drop machine/labour/overhead)
+ * nor be added on top of it (chemicals would then be counted twice, since
+ * DYEING_COST already bundles them in).
+ *
+ * Source: Uddin et al., "Water and chemical consumption in the textile
+ * processing industry of Bangladesh", PLOS Sustainability and Transformation
+ * (2023) — a factory survey giving total processing cost as raw materials
+ * 49-65%, workforce 4-20%, energy 5-10%, chemicals/dyes 4-11%, water 0.3%,
+ * other 9-35%. Re-based here to CONVERSION cost only (i.e. excluding the
+ * paper's "raw materials" share, since that is yarn — already this engine's
+ * own separate raw_material line): midpoint chemicals 7.5% ÷ midpoint
+ * non-raw-material 43% (100% − midpoint raw-material 57%) ≈ 17%.
+ *
+ * This is a MODEL, not a measurement of any specific recipe — stated as a
+ * value, not buried in a formula, so it can be argued with (same reasoning
+ * as ENERGY_SHARE in engine/catalog/country-costs.js). Every dyeing.per_kg
+ * built from it carries this share and its source in dyeing_detail so nothing
+ * is hidden inside the total.
+ */
+const DYEING_CHEMICAL_SHARE_OF_CONVERSION = 0.17;
+const DYEING_CHEMICAL_SHARE_SOURCE = 'Uddin et al. 2023, PLOS Sustainability and Transformation — Bangladesh textile wet-processing cost survey';
+
 // ============================================================
 // SECTION 7: INVISIBLE WASTE FACTORS (%)
 // ============================================================
@@ -775,38 +803,59 @@ function calculateCost(params) {
     };
   } else {
     const shadeKey = colorShade || 'light_medium';
-    // Real recipe first: a genuine, cost-verified factory card (see
-    // dyeing-engine.js / data/dyeing-reference.json) beats the flat
-    // price-list estimate whenever one actually covers this shade. 40 real
-    // recipes exist across two factories, all six shade tiers — all of them
-    // KNIT construction cards, which is moot here since isWovenFabric already
-    // routed woven fabrics out above; matchDyeingRecipe()'s own is_woven
-    // guard stays as defence in depth for any other caller that reaches it
-    // directly. Never fabricated for an uncovered shade.
+    // The all-in conversion rate ALWAYS comes from the official price list —
+    // it is the only figure in this engine that bundles machine, labour,
+    // utilities and overhead. Computed first so both branches below share it.
+    const dyeRow   = DYEING_COST[shadeKey] || DYEING_COST_FALLBACK;
+    const basePrice = isTwoPart
+      ? (dyeRow.two_part > 0 ? dyeRow.two_part : dyeRow.one_part)  // fall back to one-part if 0
+      : dyeRow.one_part;
+
+    // A genuine, cost-verified factory card (see dyeing-engine.js / data/
+    // dyeing-reference.json) exists for this shade whenever one of the 40
+    // real recipes covers it — matchDyeingRecipe()'s own is_woven guard
+    // stays as defence in depth for any other caller that reaches it
+    // directly, moot here since isWovenFabric already routed woven out above.
     const matched = matchDyeingRecipe({ shade_tier: shadeKey, is_two_part: isTwoPart, is_woven: isWovenFabric });
     if (matched) {
+      // The real card only ever prices CHEMICALS (see dyeing-engine.js's own
+      // header) — it is not a substitute for the price list's all-in rate,
+      // and cannot simply be added on top of it either, or chemicals would
+      // be counted twice (the price list already bundles them in). Instead:
+      // swap out the price list's OWN assumed chemical share for this real,
+      // measured one — machine/labour/overhead still come from the price
+      // list, chemicals come from an actual factory recipe.
       const real = calculateDyeingCost({ recipe: matched, fabric_qty_kg: 1, bdt_per_usd: exchangeRates.BDT });
-      dyeingBase  = real.cost_per_kg_usd;
-      dyeingFinal = round4(real.cost_per_kg_usd);
+      const realChemicalUsd     = real.cost_per_kg_usd;
+      const assumedChemicalUsd  = basePrice * DYEING_CHEMICAL_SHARE_OF_CONVERSION;
+      const hybridUsd           = basePrice - assumedChemicalUsd + realChemicalUsd;
+      dyeingBase  = hybridUsd;
+      dyeingFinal = round4(hybridUsd);
       dyeingDetail = {
         source: 'REAL_RECIPE',
+        costing_model: 'price_list_conversion_plus_real_chemicals',
         shade_key: shadeKey, is_two_part: isTwoPart,
         recipe_id: matched.id, recipe_name: matched.sheet_name, color_label: matched.color_label,
         match_quality: matched.match_quality,
         dye_cost_included: matched.dye_cost_included,
+        price_list_base_usd: basePrice,
+        assumed_chemical_share_pct: round4(DYEING_CHEMICAL_SHARE_OF_CONVERSION * 100),
+        assumed_chemical_share_source: DYEING_CHEMICAL_SHARE_SOURCE,
+        assumed_chemical_portion_usd: round4(assumedChemicalUsd),
+        real_chemical_cost_usd: round4(realChemicalUsd),
+        real_chemical_cost_tk: real.cost_per_kg_tk,
         cost_per_kg_tk: real.cost_per_kg_tk,
         applied_price: dyeingFinal,
         chemicals: real.chemicals,
-        note: matched.dye_cost_included
-          ? `Real recipe (${matched.sheet_name}) — ${real.cost_per_kg_tk.toFixed(2)} Tk/kg`
-          : `Real recipe (${matched.sheet_name}) — ${real.cost_per_kg_tk.toFixed(2)} Tk/kg, ` +
-            `PRETREATMENT/AUXILIARY CHEMICALS ONLY — the reactive dye itself is job-specific and not costed here`,
+        note: `Hybrid: $${basePrice.toFixed(4)} official price-list rate (machine, labour, utilities, `
+          + `overhead) − $${assumedChemicalUsd.toFixed(4)} assumed chemical share `
+          + `(~${(DYEING_CHEMICAL_SHARE_OF_CONVERSION * 100).toFixed(0)}% of conversion cost, ${DYEING_CHEMICAL_SHARE_SOURCE}) `
+          + `+ $${realChemicalUsd.toFixed(4)} real chemical cost from an actual factory recipe (${matched.sheet_name}) `
+          + `= $${dyeingFinal}/kg.`
+          + (matched.dye_cost_included ? '' : ' That real figure covers pretreatment/auxiliary chemicals only — '
+            + 'the reactive dye itself is job-specific and not included, so it is a floor, not the full chemical cost.'),
       };
     } else {
-      const dyeRow   = DYEING_COST[shadeKey] || DYEING_COST_FALLBACK;
-      const basePrice = isTwoPart
-        ? (dyeRow.two_part > 0 ? dyeRow.two_part : dyeRow.one_part)  // fall back to one-part if 0
-        : dyeRow.one_part;
       dyeingBase  = basePrice;
       dyeingFinal = round4(basePrice);
       dyeingDetail = {
@@ -978,6 +1027,15 @@ function calculateCost(params) {
         color_label:       dyeingDetail && dyeingDetail.source === 'REAL_RECIPE' ? dyeingDetail.color_label : null,
         match_quality:     dyeingDetail && dyeingDetail.source === 'REAL_RECIPE' ? dyeingDetail.match_quality : null,
         dye_cost_included: dyeingDetail && dyeingDetail.source === 'REAL_RECIPE' ? dyeingDetail.dye_cost_included : null,
+        // Chemical cost detail only — NOT the full dyeing cost. per_kg above
+        // (the hybrid) is the number to use for a quote; these exist so the
+        // hybrid's chemical component is auditable back to the real recipe
+        // card instead of a bare number. See costing_model/note for the math.
+        costing_model:               dyeingDetail && dyeingDetail.source === 'REAL_RECIPE' ? dyeingDetail.costing_model : null,
+        price_list_base_usd:         dyeingDetail && dyeingDetail.source === 'REAL_RECIPE' ? dyeingDetail.price_list_base_usd : null,
+        assumed_chemical_share_pct:  dyeingDetail && dyeingDetail.source === 'REAL_RECIPE' ? dyeingDetail.assumed_chemical_share_pct : null,
+        assumed_chemical_share_source: dyeingDetail && dyeingDetail.source === 'REAL_RECIPE' ? dyeingDetail.assumed_chemical_share_source : null,
+        real_chemical_cost_usd:      dyeingDetail && dyeingDetail.source === 'REAL_RECIPE' ? dyeingDetail.real_chemical_cost_usd : null,
         cost_per_kg_tk:    dyeingDetail && dyeingDetail.source === 'REAL_RECIPE' ? dyeingDetail.cost_per_kg_tk : null,
         chemicals:         dyeingDetail && dyeingDetail.source === 'REAL_RECIPE' ? dyeingDetail.chemicals : null,
       },

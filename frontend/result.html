@@ -1163,14 +1163,15 @@
       </div>
       <div class="cost-headline" style="margin-bottom:12px;">
         <div>
-          <div class="ch-lbl">Recipe cost, per kg of fabric</div>
-          <div class="ch-val" id="dye-recipe-cost-tk" style="font-size:22px;">&#8212;</div>
+          <div class="ch-lbl">Dyeing cost, per kg of fabric</div>
+          <div class="ch-val" id="dye-recipe-cost-usd" style="font-size:22px;">&#8212;</div>
           <div class="ch-sub" id="dye-recipe-sub">&#8212;</div>
         </div>
       </div>
+      <div id="dye-recipe-hybrid-note" class="mt-6" style="font-size:10px;color:var(--t3);line-height:1.6;padding:8px 10px;background:rgba(255,255,255,.03);border-radius:6px;border-left:2px solid rgba(16,185,129,.4);margin-bottom:10px;"></div>
       <div id="dye-recipe-dye-note" class="hidden mt-6" style="font-size:10px;color:#f59e0b;line-height:1.6;padding:8px 10px;background:rgba(245,158,11,.06);border-radius:6px;border-left:2px solid rgba(245,158,11,.4);margin-bottom:10px;"></div>
-      <div class="result-section-label" style="margin-top:0;">Chemical breakdown
-        <span style="font-weight:400;color:var(--t3);">&#8212; from the real recipe card</span></div>
+      <div class="result-section-label" style="margin-top:0;">Chemical cost detail
+        <span style="font-weight:400;color:var(--t3);">&#8212; the real component of the hybrid above, from an actual factory recipe card</span></div>
       <div style="overflow-x:auto;">
         <table style="width:100%;border-collapse:collapse;font-size:11px;min-width:480px;">
           <thead>
@@ -2505,9 +2506,21 @@ function renderDyeingRecipe(costing) {
 
   document.getElementById('dye-recipe-badge').textContent = d.match_quality === 'exact_composition'
     ? 'MATCHED — SHADE + FIBRE' : 'MATCHED — SHADE ONLY';
-  document.getElementById('dye-recipe-cost-tk').textContent = `${fmt(d.cost_per_kg_tk, 2)} Tk`;
+  document.getElementById('dye-recipe-cost-usd').textContent = `$${fmt(d.per_kg, 4)}`;
   document.getElementById('dye-recipe-sub').textContent =
-    `= $${fmt(d.per_kg, 4)} USD · ${esc(d.recipe_name)} · ${esc(d.color_label)}`;
+    `${esc(d.recipe_name)} · ${esc(d.color_label)}`;
+
+  const hybridNote = document.getElementById('dye-recipe-hybrid-note');
+  if (d.price_list_base_usd != null) {
+    hybridNote.innerHTML = `<strong style="color:#10b981;">Hybrid figure, not a raw chemical price.</strong> `
+      + `$${fmt(d.price_list_base_usd, 4)} official price-list rate (machine, labour, utilities, overhead) `
+      + `&minus; $${fmt(d.price_list_base_usd * (d.assumed_chemical_share_pct / 100), 4)} assumed chemical share `
+      + `(~${fmt(d.assumed_chemical_share_pct, 0)}% of conversion cost, ${esc(d.assumed_chemical_share_source)}) `
+      + `+ $${fmt(d.real_chemical_cost_usd, 4)} real chemical cost from this factory recipe `
+      + `= <strong>$${fmt(d.per_kg, 4)}/kg</strong>.`;
+  } else {
+    hybridNote.textContent = '';
+  }
 
   const dyeNote = document.getElementById('dye-recipe-dye-note');
   if (d.dye_cost_included === false) {
