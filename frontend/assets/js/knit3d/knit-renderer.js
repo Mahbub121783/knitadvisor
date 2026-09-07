@@ -60,9 +60,10 @@ export class Knit3D {
     this._rim = lights.rim;
     this._hemi = lights.hemi;
     this._lightPreset = DEFAULT_LIGHT_PRESET;
-    // authored ("front") Z positions — setView('back') mirrors these across
-    // the fabric so whichever side faces the camera gets the strong key light
-    // instead of the rim's leftover intensity aimed the wrong way.
+    // authored ("front") Z positions — _setLightSide mirrors these across the
+    // fabric when a free orbit carries the CAMERA past the edge, so whichever
+    // side faces it gets the strong key light instead of the rim's leftover
+    // intensity aimed the wrong way.
     this._lightBaseZ = { key: this._key.position.z, fill: this._fill.position.z, rim: this._rim.position.z };
     this._showingBack = false;
 
@@ -128,7 +129,21 @@ export class Knit3D {
     // Real stitch density (GSM·gauge·loop-length) drives loop height + how many
     // stitches to show, so a tight 350gsm reads denser than a loose 150gsm.
     const con = this.opts.construction || {};
-    const density = this.opts.density || { aspect: 1.22, scalar: 1, wpc: 9, tex: 20 };
+    const DENSITY_DEFAULTS = { aspect: 1.22, scalar: 1, wpc: 9, tex: 20 };
+    // A denier-based warp-knit fabric (tricot/spacer/...) has no real
+    // wales/courses-per-cm to report, so the caller's density.aspect/scalar
+    // arrive NaN rather than absent — `this.opts.density || DEFAULTS` only
+    // catches a missing object, not NaN fields inside a present one, and an
+    // unguarded NaN here poisons pitchY/courses/wales below (every warp path
+    // built from a NaN pitchY gets a NaN Y coordinate, which crashes
+    // TubeGeometry's Frenet-frame computation and silently falls back to the
+    // flat cube renderer — see fabric-visualizer.js's mount().catch()).
+    const rawDensity = this.opts.density || DENSITY_DEFAULTS;
+    const density = {
+      ...rawDensity,
+      aspect: Number.isFinite(rawDensity.aspect) ? rawDensity.aspect : DENSITY_DEFAULTS.aspect,
+      scalar: Number.isFinite(rawDensity.scalar) ? rawDensity.scalar : DENSITY_DEFAULTS.scalar,
+    };
     const aspect = this.camera.aspect || 1.8;
     const lod = this._lodScale();
     const beds = con.type === 'interlock' ? 2 : 1;
@@ -193,10 +208,24 @@ export class Knit3D {
     this._addPile(group, box, pileParams);
     this._addGrainline(group, box, size);
 
-    this.scene.add(group);
-
     // centre on the loops + fit so the fabric COVERS the frame (fills edge-to-edge)
     group.position.sub(center);
+
+    // setView('back') needs to spin the fabric 180° around its own visual
+    // centre — but `group`'s own local origin is nowhere near that centre
+    // (its children's authored coordinates run ~0..wales·PITCH_X, and the
+    // centring above works by offsetting `group`'s POSITION, not by moving
+    // its children to straddle zero). Object3D.rotation always turns around
+    // the LOCAL origin, so rotating `group` directly span the patch around
+    // one edge, flinging most of it off-frame. A pivot wrapper fixes this:
+    // `group` sits inside it already centred (offset by -center, same as
+    // before), so the PIVOT's own local origin — the thing rotation.y
+    // actually turns around — now coincides with the fabric's visual centre.
+    const pivot = new THREE.Group();
+    pivot.add(group);
+    this._pivot = pivot;
+    this.scene.add(pivot);
+
     this._size = size;
     this._fitDist = this._coverDistance(size);
   }
@@ -256,6 +285,14 @@ export class Knit3D {
     if (this._shadows) plane.receiveShadow = true;   // loops drop contact shadows here
     group.add(plane);
     this._backing = { geo, mat, mesh: plane, baseShade: s };
+    // setView('back') spins the WHOLE group 180° so the loop mesh (and any
+    // pile, which is real fabric structure and should turn with it) shows
+    // its other face — but this backing plane is a pure rendering
+    // convenience, not fabric structure, and needs to stay on the world-far
+    // side in BOTH states. Remembered here so setView can re-mirror just
+    // this one child and cancel the group rotation's effect on it alone.
+    this._backingFrontX = center.x;
+    this._backingFrontZ = backZ;
   }
 
   // Pile sizing shared by _addBacking (needs the reach, to clear the backing
@@ -419,19 +456,36 @@ export class Knit3D {
     this.group.scale.set(sx, sy, 1);
   }
 
+  // ROTATE THE FABRIC, not the camera. The camera moving to -z used to look
+  // "through" the object from behind, but the opaque backing plane (added in
+  // _addBacking, always offset toward -z so it sits behind the FRONT-facing
+  // loops) is then the nearest surface to that camera — it occludes the loop
+  // mesh entirely, so "Back" showed nothing but a flat colour panel for
+  // every construction. Spinning the group 180° instead keeps the camera (and
+  // the fixed studio lights) exactly where they were: whichever face rotates
+  // to meet them is correctly in front of the backing and correctly lit, no
+  // light-mirroring needed for this path (see _setLightSide's own doc — that
+  // stays for the free-orbit case, where the CAMERA does move).
   setView(which) {
-    if (!this.camera || !this.controls) return;
-    const d = this._fitDist || 30;
+    if (!this._pivot) return;
     const back = which === 'back';
-    this.camera.position.set(0, 0, back ? -d : d);
-    this.camera.lookAt(0, 0, 0);
-    this.controls.update();
-    this._setLightSide(back);
+    this._pivot.rotation.y = back ? Math.PI : 0;
+    // Cancel the rotation for the backing plane alone (see _addBacking) —
+    // negate the SAME two axes the rotation negates (x and z), so it lands
+    // back on the world-far side instead of flipping to the world-NEAR side
+    // and blowing out the view with a close-up of its own face.
+    if (this._backing && this._backing.mesh) {
+      this._backing.mesh.position.x = back ? -this._backingFrontX : this._backingFrontX;
+      this._backing.mesh.position.z = back ? -this._backingFrontZ : this._backingFrontZ;
+    }
   }
 
-  // Mirror the whole 3-point rig across the fabric when the swatch is
-  // flipped, so the side actually facing the camera always gets the key
-  // light (not whatever happened to be aimed at it from the OTHER side).
+  // Mirror the whole 3-point rig when the CAMERA ends up on the far side
+  // (free orbit past the edge — see the controls 'change' listener in mount()),
+  // so the side actually facing the camera always gets the key light. The
+  // Front/Back buttons no longer move the camera (setView rotates the fabric
+  // instead) and so no longer need this — the fixed lights already face
+  // whichever side rotates toward them.
   _setLightSide(back) {
     if (this._showingBack === back) return;
     this._showingBack = back;
@@ -445,6 +499,7 @@ export class Knit3D {
 
   resetView() {
     if (this.controls) this.controls.reset();
+    this.setView('front');
     this._setLightSide(false);   // reset() always returns to the saved FRONT state
   }
 
