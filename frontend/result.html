@@ -637,6 +637,18 @@
         </div>
       </div>
 
+      <!-- Plain-English confidence for the count above. The raw engine tag
+           (ESTIMATED / FACTORY_INTERPOLATED / ...) used to print here as-is —
+           accurate but meaningless to a reader with no reason to know what it
+           means. Same visual language as #rnd-validation-box below. -->
+      <div id="y-src-conf-box" class="hidden" style="margin-top:12px; padding:10px; border-radius:var(--radius-sm); border:1px solid rgba(0,0,0,0.1); display:flex; align-items:center; gap:8px;">
+        <div id="y-src-conf-icon" style="font-size:16px;">&#8505;&#65039;</div>
+        <div>
+          <div id="y-src-conf-title" style="font-weight:600; font-size:11px;">&#8212;</div>
+          <div id="y-src-conf-desc" style="font-size:10px; color:var(--t3); margin-top:2px;">&#8212;</div>
+        </div>
+      </div>
+
       <!-- How old the yarn price is. The date is the headline because it is
            the only thing that tells a reader whether to trust the number: the
            reference list drifted 3-7% over four months and nothing could say
@@ -2960,7 +2972,37 @@ function renderYarn(yarn) {
 
   // Industry declaration: base yarn + separate elastane if applicable
   document.getElementById('y-count-disp').textContent = yarn.count_display || '—';
-  document.getElementById('y-count-src').textContent = yarn.source || '';
+
+  // Confidence for the count above. The raw engine tag (ESTIMATED,
+  // FACTORY_INTERPOLATED, ...) is accurate but meaningless without context —
+  // this turns it into a short label + plain-English note, colour-coded by
+  // how much real data actually backs the number.
+  const srcConf = yarn.source_confidence || null;
+  const srcEl = document.getElementById('y-count-src');
+  srcEl.textContent = srcConf ? srcConf.label : (yarn.source || '');
+  srcEl.title = srcConf ? srcConf.note : '';
+
+  const confBox = document.getElementById('y-src-conf-box');
+  if (srcConf) {
+    confBox.classList.remove('hidden');
+    const STYLE = {
+      verified: { icon: '✅', bg: 'rgba(0, 255, 178, 0.08)',  border: 'rgba(0, 255, 178, 0.2)',  title: 'var(--a1)' },
+      derived:  { icon: 'ℹ️', bg: 'rgba(80, 160, 255, 0.08)', border: 'rgba(80, 160, 255, 0.2)', title: 'var(--t1)' },
+      estimated:{ icon: '⚠️', bg: 'rgba(255, 184, 48, 0.08)', border: 'rgba(255, 184, 48, 0.2)', title: 'var(--a4)' },
+      none:     { icon: '❌', bg: 'rgba(255, 90, 90, 0.08)',  border: 'rgba(255, 90, 90, 0.2)',  title: 'var(--a4)' },
+      neutral:  { icon: 'ℹ️', bg: 'rgba(140, 140, 140, 0.08)', border: 'rgba(140, 140, 140, 0.2)', title: 'var(--t2)' },
+    };
+    const st = STYLE[srcConf.badge] || STYLE.neutral;
+    confBox.style.background = st.bg;
+    confBox.style.borderColor = st.border;
+    document.getElementById('y-src-conf-icon').textContent = st.icon;
+    const titleEl = document.getElementById('y-src-conf-title');
+    titleEl.textContent = srcConf.label;
+    titleEl.style.color = st.title;
+    document.getElementById('y-src-conf-desc').textContent = srcConf.note;
+  } else {
+    confBox.classList.add('hidden');
+  }
 
   // Elastane separate declaration card
   const indCard = document.getElementById('y-card-ind');

@@ -73,6 +73,7 @@ const { gaugeFromBulkData, estimateProcessLoss, greyRequirementForFinished } = r
 const { analyzeWetProcessing, greigeGsmTarget, resolveFamily } = require('./domain/wet-processing-engine');
 const { applyFabricPhysics } = require('./domain/fabric-physics');
 const { fibreAdvisory } = require('./domain/fibre-advisory');
+const { classifySource } = require('./domain/source-confidence');
 
 // ============================================================
 // MAIN CALCULATE FUNCTION
@@ -268,6 +269,15 @@ function calculate(params) {
       factoryLookup.blend_fallback = true;
       warnings.push(`No real factory sample data for a ${factoryRef._fallback_from.replace(/_/g, ' ')} ${fabricDef.name} — using the 100% cotton reference as a base, adjusted for composition. Treat count/SL as indicative for this blend.`);
     }
+    // Most derivative fabric IDs share their real sample data with a broader
+    // structural family bucket (FAB_BUCKET_ALIAS — e.g. cable_rib and 11 other
+    // rib variants all read the SAME real 'rib' records) rather than having
+    // samples measured for that exact derivative. Both are real factory data,
+    // but "matches this exact fabric" and "matches its structural family"
+    // are different claims — record which one this is so the confidence
+    // label downstream doesn't overstate it.
+    const bucket = FAB_BUCKET_ALIAS[fabric];
+    if (bucket && bucket !== fabric) factoryLookup.family_alias = bucket;
     trace.push({ step: '1.8', action: 'factory_lookup', result: factoryLookup });
   }
 
@@ -979,6 +989,7 @@ function calculate(params) {
       count_display: countResult.count_display,
       count_rounded: countResult.count_rounded,
       source: countResult.source,
+      source_confidence: classifySource(countResult.source, { familyAlias: countResult.family_alias }),
       // Elastane separate declaration (when composition includes elastane)
       elastane_denier_declared: (() => {
         if (!parsedComp || !parsedComp.has_elastane) return null;
@@ -1647,6 +1658,7 @@ function calculateCount(fabricId, gsm, fabricDef, compModifiers = {}, factoryLoo
       count_rounded,
       warning: standardCountWarning(fCount, count_rounded),
       source: factoryLookup.source || 'FACTORY_KNOWLEDGE',
+      family_alias: factoryLookup.family_alias || null,
       trace: {
         formula: factoryLookup.blend_fallback
           ? `Factory knowledge lookup (GSM=${gsm}, 100% cotton reference × composition factor ${countFactor} — no real sample data for this blend)`
