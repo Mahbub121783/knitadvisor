@@ -135,6 +135,9 @@ function switchTab(tabId) {
   } else if (tabId === 'tab-dyeing-prices' && !tabState.loaded.dyeingPrices) {
     tabState.loaded.dyeingPrices = true;
     loadDyeingPrices();
+  } else if (tabId === 'tab-validation' && !tabState.loaded.validation) {
+    tabState.loaded.validation = true;
+    loadValidationTab();
   } else if (tabId === 'tab-settings') {
     loadSettings();
   }
@@ -1203,6 +1206,175 @@ async function saveDyeingPrice(chemicalName, input) {
   }
 }
 
+// ── REAL-ORDER VALIDATION ─────────────────────────────────
+const TIER_BADGE_CLASS = {
+  verified: 'badge-green', derived: 'badge-blue', estimated: 'badge-amber',
+  none: 'badge-red', neutral: 'badge-gray',
+};
+let valCurPage = 1;
+let valFabricListLoaded = false;
+
+function valMsg(html, tone) {
+  const el = document.getElementById('val-msg');
+  if (!html) { el.classList.add('hidden'); el.innerHTML = ''; return; }
+  const c = tone === 'bad' ? '#ff4d6d' : tone === 'warn' ? '#fbbf24' : '#4ade80';
+  el.classList.remove('hidden');
+  el.innerHTML = `<div style="border:1px solid ${c}55;background:${c}12;border-radius:8px;` +
+    `padding:10px 12px;font-size:11px;line-height:1.6;color:var(--t1);">${html}</div>`;
+}
+
+function fmtPct(v) {
+  if (v == null) return '<span style="color:var(--t3);">—</span>';
+  const sign = v > 0 ? '+' : '';
+  const color = Math.abs(v) <= 5 ? 'var(--a1)' : Math.abs(v) <= 15 ? '#fbbf24' : '#ff4d6d';
+  return `<span style="color:${color};">${sign}${v}%</span>`;
+}
+
+async function loadValidationFabricList() {
+  if (valFabricListLoaded) return;
+  valFabricListLoaded = true;
+  try {
+    const list = await fetch(API_BASE + '/api/fabrics').then(r => r.json());
+    const dl = document.getElementById('val-fabric-list');
+    dl.innerHTML = (list || []).map(f => `<option value="${esc(f.id)}">${esc(f.name || f.id)}</option>`).join('');
+  } catch (_) { /* datalist is a convenience, not required */ }
+}
+
+async function loadValidationSummary() {
+  try {
+    const s = await api('/admin/api/validation/summary');
+    document.getElementById('val-sum-total').textContent =
+      `${s.usable_records}${s.failed_records ? ` (+${s.failed_records} failed)` : ''}`;
+    document.getElementById('val-sum-count-err').innerHTML = fmtPct(s.overall.count_mean_abs_pct);
+    document.getElementById('val-sum-count-bias').innerHTML = fmtPct(s.overall.count_bias_pct);
+    document.getElementById('val-sum-sl-err').innerHTML = fmtPct(s.overall.sl_mean_abs_pct);
+    document.getElementById('val-sum-sl-bias').innerHTML = fmtPct(s.overall.sl_bias_pct);
+
+    const famTb = document.getElementById('val-by-family-tbody');
+    famTb.innerHTML = (s.by_family || []).length ? s.by_family.map(g => `
+      <tr><td style="font-size:11px;">${esc(g.key)}</td><td>${g.n}</td>
+        <td>${fmtPct(g.count_mean_abs_pct)} <span style="color:var(--t3);font-size:9px;">(n=${g.count_n})</span></td>
+        <td>${fmtPct(g.sl_mean_abs_pct)} <span style="color:var(--t3);font-size:9px;">(n=${g.sl_n})</span></td></tr>
+    `).join('') : '<tr><td colspan="4" style="color:var(--t3);font-size:11px;">No records yet.</td></tr>';
+
+    const tierTb = document.getElementById('val-by-tier-tbody');
+    tierTb.innerHTML = (s.by_confidence_tier || []).length ? s.by_confidence_tier.map(g => `
+      <tr><td style="font-size:11px;">${esc(g.key)}</td><td>${g.n}</td>
+        <td>${fmtPct(g.count_mean_abs_pct)} <span style="color:var(--t3);font-size:9px;">(n=${g.count_n})</span></td>
+        <td>${fmtPct(g.sl_mean_abs_pct)} <span style="color:var(--t3);font-size:9px;">(n=${g.sl_n})</span></td></tr>
+    `).join('') : '<tr><td colspan="4" style="color:var(--t3);font-size:11px;">No records yet.</td></tr>';
+  } catch (err) {
+    console.error('[Validation Summary]', err);
+  }
+}
+
+async function loadValidationRecords(page = 1) {
+  valCurPage = page;
+  try {
+    const d = await api(`/admin/api/validation/records?page=${page}&limit=20`);
+    const tb = document.getElementById('val-records-tbody');
+    tb.innerHTML = '';
+    if (!(d.records || []).length) {
+      tb.innerHTML = '<tr><td colspan="8" style="color:var(--t3);font-size:11px;">No records yet — add a real order above.</td></tr>';
+    }
+    for (const r of d.records || []) {
+      const tr = document.createElement('tr');
+      if (r.calc_error) {
+        tr.innerHTML = `
+          <td style="font-size:11px;">${esc(r.fabric_id)}</td>
+          <td>${r.target_gsm ?? '—'}</td>
+          <td colspan="4" style="color:#ff4d6d;font-size:10px;">Spec no longer calculates: ${esc(r.calc_error)}</td>
+          <td style="font-size:10px;">${esc(r.mill_name || '')} ${esc(r.order_ref || '')}</td>
+          <td><button class="btn btn-ghost btn-xs val-del">Delete</button></td>
+        `;
+      } else {
+        const tier = r.predicted?.source_confidence;
+        const tierBadge = tier
+          ? `<span class="badge ${TIER_BADGE_CLASS[tier.badge] || 'badge-gray'}" title="${esc(tier.note)}">${esc(tier.label)}</span>`
+          : '—';
+        tr.innerHTML = `
+          <td style="font-size:11px;">${esc(r.fabric_id)}</td>
+          <td>${r.target_gsm ?? '—'}</td>
+          <td style="font-size:10px;">Ne ${r.predicted?.count_ne ?? '—'} · SL ${r.predicted?.sl_mm ?? '—'}mm</td>
+          <td style="font-size:10px;">Ne ${r.actual.count_ne ?? '—'} · SL ${r.actual.sl_mm ?? '—'}mm · GSM ${r.actual.gsm ?? '—'}</td>
+          <td style="font-size:10px;">Ne ${fmtPct(r.errors.count_pct)} · SL ${fmtPct(r.errors.sl_pct)}</td>
+          <td>${tierBadge}</td>
+          <td style="font-size:10px;">${esc(r.mill_name || '')} ${esc(r.order_ref || '')}${r.notes ? `<br><span style="color:var(--t3);">${esc(r.notes)}</span>` : ''}</td>
+          <td><button class="btn btn-ghost btn-xs val-del">Delete</button></td>
+        `;
+      }
+      tr.querySelector('.val-del').addEventListener('click', () => deleteValidationRecord(r.id));
+      tb.appendChild(tr);
+    }
+    renderPagination('val-pagination', d.page, d.pages, loadValidationRecords, d.total);
+  } catch (err) {
+    valMsg(`Could not load records: ${esc(err.message)}`, 'bad');
+  }
+}
+
+async function deleteValidationRecord(id) {
+  if (!confirm('Delete this record?')) return;
+  try {
+    await api(`/admin/api/validation/records/${id}`, 'DELETE');
+    await Promise.all([loadValidationRecords(valCurPage), loadValidationSummary()]);
+  } catch (err) {
+    valMsg(`Delete failed: ${esc(err.message)}`, 'bad');
+  }
+}
+
+async function addValidationRecord() {
+  const fabric = document.getElementById('val-fabric').value.trim();
+  const gsm = parseFloat(document.getElementById('val-gsm').value);
+  const composition = document.getElementById('val-composition').value.trim();
+  const gauge = parseFloat(document.getElementById('val-gauge').value);
+  const dia = parseFloat(document.getElementById('val-dia').value);
+  const actualCount = parseFloat(document.getElementById('val-actual-count').value);
+  const actualSl = parseFloat(document.getElementById('val-actual-sl').value);
+  const actualGsm = parseFloat(document.getElementById('val-actual-gsm').value);
+  const mill = document.getElementById('val-mill').value.trim();
+  const ref = document.getElementById('val-ref').value.trim();
+  const notes = document.getElementById('val-notes').value.trim();
+
+  if (!fabric || !(gsm > 0)) { valMsg('Fabric ID and ordered GSM are required.', 'warn'); return; }
+  if (isNaN(actualCount) && isNaN(actualSl) && isNaN(actualGsm)) {
+    valMsg('At least one actual value (count, SL, or finished GSM) is required.', 'warn');
+    return;
+  }
+
+  const spec_input = { fabric, gsm };
+  if (composition) spec_input.composition = composition;
+  if (gauge > 0) spec_input.gauge = gauge;
+  if (dia > 0) spec_input.dia = dia;
+
+  const btn = document.getElementById('val-add-btn');
+  btn.disabled = true;
+  try {
+    await api('/admin/api/validation/records', 'POST', {
+      spec_input,
+      actual_count_ne: isNaN(actualCount) ? null : actualCount,
+      actual_sl_mm: isNaN(actualSl) ? null : actualSl,
+      actual_gsm: isNaN(actualGsm) ? null : actualGsm,
+      mill_name: mill || null,
+      order_ref: ref || null,
+      notes: notes || null,
+    });
+    valMsg('Record added.', 'ok');
+    ['val-fabric','val-gsm','val-composition','val-gauge','val-dia','val-actual-count','val-actual-sl','val-actual-gsm','val-mill','val-ref','val-notes']
+      .forEach(id => document.getElementById(id).value = '');
+    await Promise.all([loadValidationRecords(1), loadValidationSummary()]);
+  } catch (err) {
+    valMsg(`Could not add record: ${esc(err.message)}`, 'bad');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function loadValidationTab() {
+  loadValidationFabricList();
+  loadValidationSummary();
+  loadValidationRecords(1);
+}
+
 // ── SETTINGS ───────────────────────────────────────────────
 async function loadSettings() {
   try {
@@ -1330,6 +1502,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('prices-reload-btn').addEventListener('click', loadYarnPrices);
   document.getElementById('prices-update-btn').addEventListener('click', updateYarnPrices);
   document.getElementById('dyeing-prices-reload-btn').addEventListener('click', loadDyeingPrices);
+  document.getElementById('val-reload-btn').addEventListener('click', loadValidationTab);
+  document.getElementById('val-add-btn').addEventListener('click', addValidationRecord);
   document.getElementById('cache-refresh-btn').addEventListener('click', () => { loadCacheStats(); loadCacheEntries(curCachePage); });
   document.getElementById('entry-viewer-close').addEventListener('click', () => document.getElementById('cache-entry-viewer').classList.add('hidden'));
 

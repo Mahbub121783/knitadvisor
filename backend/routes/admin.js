@@ -16,6 +16,9 @@ const memCache = require('../cache/memory-cache');
 const { resultCache } = require('../db/repositories/cache-repo');
 const logsRepo = require('../db/repositories/logs-repo');
 const adminRepo = require('../db/repositories/admin-repo');
+const validationRepo = require('../db/repositories/validation-repo');
+const { scoreRecord, summarize } = require('../engine/domain/validation-scoring');
+const { calculate } = require('../engine/index');
 const { query: dbQuery } = require('../db/client');
 const { verifyPassword, hashPassword, isLegacyHash } = require('../middleware/password');
 const { createRateLimiter } = require('../middleware/rate-limiter');
@@ -643,6 +646,82 @@ router.patch('/api/dyeing-prices/:name', adminAuth, async (req, res) => {
     res.json({ ok: true, status: dyeingPriceBook.status() });
   } catch (err) {
     console.error('[Dyeing Price Update Error]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================
+// REAL-ORDER VALIDATION — closing the loop the engine never had
+//
+// Admin-entered real mill order outcomes (spec + what was actually used/
+// produced), scored live against the CURRENT engine on every read — never
+// against a prediction frozen at entry time. See engine/domain/
+// validation-scoring.js for why, and 024_real_order_validation.sql for the
+// table this reads from.
+// ============================================================
+
+router.get('/api/validation/records', adminAuth, async (req, res) => {
+  try {
+    const { rows, total, page, pages } = await validationRepo.list({
+      page: parseInt(req.query.page, 10) || 1,
+      limit: parseInt(req.query.limit, 10) || 20,
+      fabric: req.query.fabric || null,
+    });
+    res.json({ records: rows.map(scoreRecord), total, page, pages });
+  } catch (err) {
+    console.error('[Validation List Error]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/api/validation/records', adminAuth, async (req, res) => {
+  try {
+    const { spec_input, actual_count_ne, actual_sl_mm, actual_gsm, mill_name, order_ref, notes } = req.body || {};
+
+    if (!spec_input || typeof spec_input !== 'object' || !spec_input.fabric || !spec_input.gsm) {
+      return res.status(400).json({ error: 'spec_input with at least fabric and gsm is required' });
+    }
+    if (actual_count_ne == null && actual_sl_mm == null && actual_gsm == null) {
+      return res.status(400).json({ error: 'At least one of actual_count_ne, actual_sl_mm, actual_gsm is required' });
+    }
+
+    // Reject a spec that does not calculate at all (typo'd fabric id, missing
+    // required field) at entry time — storing it would only surface the
+    // problem later as a silent calc_error in every list/summary read.
+    const testResult = calculate(spec_input);
+    if (testResult.error) {
+      return res.status(400).json({ error: `spec_input does not calculate: ${testResult.error}` });
+    }
+
+    const row = await validationRepo.add({
+      fabric_id: spec_input.fabric,
+      spec_input,
+      actual_count_ne, actual_sl_mm, actual_gsm,
+      mill_name, order_ref, notes,
+    });
+    res.json({ ok: true, record: scoreRecord(row) });
+  } catch (err) {
+    console.error('[Validation Add Error]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/api/validation/records/:id', adminAuth, async (req, res) => {
+  try {
+    await validationRepo.remove(parseInt(req.params.id, 10));
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[Validation Delete Error]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/api/validation/summary', adminAuth, async (req, res) => {
+  try {
+    const rows = await validationRepo.all();
+    res.json(summarize(rows.map(scoreRecord)));
+  } catch (err) {
+    console.error('[Validation Summary Error]', err);
     res.status(500).json({ error: err.message });
   }
 });

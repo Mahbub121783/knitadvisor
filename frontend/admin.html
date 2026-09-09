@@ -561,6 +561,7 @@
     <button class="tab-btn" data-tab="tab-cache">Cache</button>
     <button class="tab-btn" data-tab="tab-prices">Yarn Prices</button>
     <button class="tab-btn" data-tab="tab-dyeing-prices">Dyeing Prices</button>
+    <button class="tab-btn" data-tab="tab-validation">Real-Order Validation</button>
     <button class="tab-btn" data-tab="tab-inquiries">Inquiries</button>
     <button class="tab-btn" data-tab="tab-settings">Settings</button>
   </div>
@@ -864,6 +865,119 @@
           <tbody id="dyeing-prices-unresolved-tbody"></tbody>
         </table>
       </div>
+    </div>
+
+    <!-- ── REAL-ORDER VALIDATION ── -->
+    <div id="tab-validation" class="tab-panel">
+      <div class="row-between mb-20">
+        <div>
+          <div class="section-title">Real-Order Validation</div>
+          <div class="section-sub">What a real mill actually used, next to what the engine says today — the feedback loop the engine never had. Every score is re-computed live against the CURRENT engine, never cached.</div>
+        </div>
+        <button id="val-reload-btn" class="btn btn-ghost btn-sm">Reload</button>
+      </div>
+
+      <!-- Add record form -->
+      <div class="section-title" style="font-size:12px;">Add a real order</div>
+      <div class="section-sub mb-12">The spec as it was ordered/calculated, plus what actually got used or came off the machine. At least one "actual" field is required.</div>
+      <div class="tbl-wrap mb-8" style="padding:14px;">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;">
+          <div>
+            <label class="form-label">Fabric ID *</label>
+            <input id="val-fabric" class="form-input" list="val-fabric-list" placeholder="e.g. single_jersey">
+            <datalist id="val-fabric-list"></datalist>
+          </div>
+          <div>
+            <label class="form-label">Ordered GSM *</label>
+            <input id="val-gsm" type="number" class="form-input" placeholder="180">
+          </div>
+          <div>
+            <label class="form-label">Composition</label>
+            <input id="val-composition" class="form-input" placeholder="100% Cotton">
+          </div>
+          <div>
+            <label class="form-label">Gauge (GG)</label>
+            <input id="val-gauge" type="number" class="form-input" placeholder="optional">
+          </div>
+          <div>
+            <label class="form-label">Dia (inch)</label>
+            <input id="val-dia" type="number" class="form-input" placeholder="optional">
+          </div>
+          <div>
+            <label class="form-label" style="color:var(--a1);">Actual Count (Ne)</label>
+            <input id="val-actual-count" type="number" step="0.01" class="form-input" placeholder="what was used">
+          </div>
+          <div>
+            <label class="form-label" style="color:var(--a1);">Actual SL (mm)</label>
+            <input id="val-actual-sl" type="number" step="0.001" class="form-input" placeholder="what was used">
+          </div>
+          <div>
+            <label class="form-label" style="color:var(--a1);">Actual finished GSM</label>
+            <input id="val-actual-gsm" type="number" step="0.1" class="form-input" placeholder="what came off finishing">
+          </div>
+          <div>
+            <label class="form-label">Mill name</label>
+            <input id="val-mill" class="form-input" placeholder="optional">
+          </div>
+          <div>
+            <label class="form-label">Order ref</label>
+            <input id="val-ref" class="form-input" placeholder="optional PO#">
+          </div>
+          <div style="grid-column:span 2;">
+            <label class="form-label">Notes</label>
+            <input id="val-notes" class="form-input" placeholder="optional">
+          </div>
+        </div>
+        <div class="row gap-8 mt-12">
+          <button id="val-add-btn" class="btn btn-sm" style="background:var(--a1);color:#0b0b0f;font-weight:700;">Add Record</button>
+        </div>
+      </div>
+      <div id="val-msg" class="hidden mb-20"></div>
+
+      <!-- Summary -->
+      <div class="section-title" style="font-size:12px;">Calibration summary</div>
+      <div class="section-sub mb-12">Mean absolute % error and bias (+ = engine under-predicts, − = over-predicts), against every usable record on file</div>
+      <div class="stat-grid mb-16">
+        <div class="stat-card"><div class="stat-val" id="val-sum-total">—</div><div class="stat-lbl">Records on file</div></div>
+        <div class="stat-card"><div class="stat-val" id="val-sum-count-err">—</div><div class="stat-lbl">Count Ne — mean abs error</div></div>
+        <div class="stat-card"><div class="stat-val" id="val-sum-count-bias">—</div><div class="stat-lbl">Count Ne — bias</div></div>
+        <div class="stat-card"><div class="stat-val" id="val-sum-sl-err">—</div><div class="stat-lbl">Stitch length — mean abs error</div></div>
+        <div class="stat-card"><div class="stat-val" id="val-sum-sl-bias">—</div><div class="stat-lbl">Stitch length — bias</div></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div>
+          <div class="section-title" style="font-size:11px;">By structural family</div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead><tr><th>Family</th><th>n</th><th>Count err</th><th>SL err</th></tr></thead>
+              <tbody id="val-by-family-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div>
+          <div class="section-title" style="font-size:11px;">By confidence tier</div>
+          <div class="section-sub" style="font-size:9px;margin-bottom:6px;">The exact tiers shown on the result page — this is what tells us whether "Estimated" really is less accurate in the real world</div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead><tr><th>Tier</th><th>n</th><th>Count err</th><th>SL err</th></tr></thead>
+              <tbody id="val-by-tier-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Records -->
+      <div class="section-title mt-16" style="font-size:12px;">Records</div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr>
+            <th>Fabric</th><th>GSM</th><th>Predicted</th><th>Actual</th><th>Error</th><th>Confidence</th><th>Mill / Ref</th><th></th>
+          </tr></thead>
+          <tbody id="val-records-tbody"></tbody>
+        </table>
+      </div>
+      <div id="val-pagination" class="row gap-8 mt-12"></div>
     </div>
 
     <!-- ── INQUIRIES ── -->
