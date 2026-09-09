@@ -179,12 +179,13 @@ export class Knit3D {
       wales, courses, pitchY,
     });
 
-    // analytic drape — gentle curve + wrinkles so it reads as real cloth, not a
-    // flat card. Heavier / denser / double-bed fabrics drape less.
+    // drape — a real coarse cloth relaxation (cloth-sim.js) for the macro
+    // bulge/sag, plus a small procedural wrinkle on top for yarn-scale
+    // detail. Heavier / denser / double-bed fabrics drape less.
     const doubleBed = con.type === 'interlock' || con.type === 'rib';
     const drapeAmount = Math.max(0.2, Math.min(
       0.72 - (density.scalar - 1) * 0.35 - (doubleBed ? 0.15 : 0), 0.75));
-    applyDrape(paths, { amount: drapeAmount });
+    applyDrape(paths, { amount: drapeAmount, wales, courses });
 
     const radius = yarnRadius(this.opts.countNe, this.opts.tf, density);
     const group = buildFabricMesh(paths, material, {
