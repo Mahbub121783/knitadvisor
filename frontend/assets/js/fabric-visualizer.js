@@ -1705,11 +1705,14 @@ class FabricVisualizer {
       for (const [x, y, ww] of knit) this._strokeYarn(ctx, (dx, dy) => this._knitLegsPath(ctx, x, y, ww || cw, ch, dx, dy, false), yw, dyed, opts);
     }
 
-    // miss/float yarn lies straight ON TOP, across the held loops
+    // miss/float yarn lies straight ON TOP, across the held loops — lightened
+    // like the held loop itself (same reasoning: a float lies flat on the
+    // surface and catches more light than a knitted-through stitch).
+    const missShaded = this._shadeColorRgb(dyed, 0.16);
     for (const [x, y] of miss) this._strokeYarn(ctx, (dx, dy) => {
       ctx.moveTo(x - cw * 0.56 + dx, y - ch * 0.04 + dy);
       ctx.quadraticCurveTo(x + dx, y - ch * 0.10 + dy, x + cw * 0.56 + dx, y - ch * 0.04 + dy);
-    }, yw * 0.96, dyed, opts);
+    }, yw * 0.96, missShaded, opts);
 
     // fine fibre/ply detail only when zoomed enough to see it
     if (cw > 44 && (opts.fiberType === 'cotton' || opts.fiberType === 'modal' || opts.fiberType === 'viscose'))
@@ -1719,12 +1722,25 @@ class FabricVisualizer {
     if (con.type === 'pique' && side === 'front') this._overlayWaffle(ctx, W, H, g, dyed);
   }
 
-  // a held (elongated) loop — the loop a missed needle keeps for extra courses
+  // a held (elongated) loop — the loop a missed needle keeps for extra courses.
+  //
+  // A same-colour yarn stroke with a slightly different silhouette (the ONLY
+  // thing that used to mark this apart from a plain knit V) reads as
+  // identical at normal viewing scale — confirmed by direct instrumentation:
+  // tuck/miss WERE being computed and drawn correctly, against the real
+  // diagonal-fleece pattern data, and the diagonal cascade was still
+  // invisible on screen. Two follow-on attempts to fix it purely with a
+  // background shading layer behind the stroke also failed — verified by
+  // screenshot, not just assumed — because the yarn stroke itself is fully
+  // opaque and simply painted over the tint. What actually shows up is
+  // recolouring the YARN ITSELF: a missed stitch's float lies straight
+  // across on top of the fabric and catches more light, so it is lightened.
   _drawHeldLoop(ctx, cx, cy, cw, ch, dyed, opts) {
+    const shaded = this._shadeColorRgb(dyed, 0.16);
     const yw = this._yarnWidth(cw, opts);
-    this._strokeYarn(ctx, (dx, dy) => this._knitSinkerPath(ctx, cx, cy, cw, ch, dx, dy), yw * 0.82, dyed, opts);
-    this._strokeYarn(ctx, (dx, dy) => this._knitLegsPath(ctx, cx, cy + ch * 0.04, cw * 0.86, ch * 1.12, dx, dy), yw, dyed, opts);
-    this._strokeYarn(ctx, (dx, dy) => this._knitHeadPath(ctx, cx, cy + ch * 0.04, cw * 0.86, ch * 1.12, dx, dy), yw * 0.96, dyed, opts);
+    this._strokeYarn(ctx, (dx, dy) => this._knitSinkerPath(ctx, cx, cy, cw, ch, dx, dy), yw * 0.82, shaded, opts);
+    this._strokeYarn(ctx, (dx, dy) => this._knitLegsPath(ctx, cx, cy + ch * 0.04, cw * 0.86, ch * 1.12, dx, dy), yw, shaded, opts);
+    this._strokeYarn(ctx, (dx, dy) => this._knitHeadPath(ctx, cx, cy + ch * 0.04, cw * 0.86, ch * 1.12, dx, dy), yw * 0.96, shaded, opts);
   }
 
   // yarn line width from tightness factor (tighter cloth → fuller coverage)
@@ -1853,16 +1869,21 @@ class FabricVisualizer {
 
   // ── tuck stitch — the needle held its old loop AND took a new yarn, so the
   //    loop is elongated and a tuck yarn is caught beneath as a ∪. (ref. fig 6.6)
+  //
+  //    Recoloured darker, same reasoning as _drawHeldLoop above: a tucked
+  //    loop is pulled through to the technical back and sits recessed, and
+  //    that is the shadow a flat same-colour stroke never reproduced.
   _drawTuckLOD(ctx, cx, cy, cw, ch, dyed, opts) {
+    const shaded = this._shadeColorRgb(dyed, -0.20);
     const yw = this._yarnWidth(cw, opts);
     // the caught tuck yarn ( ∪ ) sitting under the held loop, drawn first/behind
     this._strokeYarn(ctx, (dx, dy) => {
       ctx.moveTo(cx - cw * 0.46 + dx, cy + ch * 0.06 + dy);
       ctx.quadraticCurveTo(cx + dx, cy + ch * 0.46 + dy, cx + cw * 0.46 + dx, cy + ch * 0.06 + dy);
-    }, yw * 0.92, dyed, opts);
+    }, yw * 0.92, shaded, opts);
     // the elongated held needle loop (taller than a normal loop)
-    this._strokeYarn(ctx, (dx, dy) => this._knitLegsPath(ctx, cx, cy - ch * 0.10, cw * 0.92, ch * 1.18, dx, dy), yw, dyed, opts);
-    this._strokeYarn(ctx, (dx, dy) => this._knitHeadPath(ctx, cx, cy - ch * 0.10, cw * 0.92, ch * 1.18, dx, dy), yw * 0.96, dyed, opts);
+    this._strokeYarn(ctx, (dx, dy) => this._knitLegsPath(ctx, cx, cy - ch * 0.10, cw * 0.92, ch * 1.18, dx, dy), yw, shaded, opts);
+    this._strokeYarn(ctx, (dx, dy) => this._knitHeadPath(ctx, cx, cy - ch * 0.10, cw * 0.92, ch * 1.18, dx, dy), yw * 0.96, shaded, opts);
   }
 
   // ── honeycomb / waffle relief for piqué technical face ──
