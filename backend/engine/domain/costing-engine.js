@@ -257,6 +257,8 @@ const FINISHING_COST_BY_FABRIC = {
   interlock:       0.45, pique_single: 0.50, pique_double: 0.55,
   fleece_2_thread: 0.65, fleece_3_thread: 0.75, fleece_diagonal: 0.75,
   french_terry:    0.55, terry_fabric: 0.60, ponte_di_roma: 0.50,
+  weft_lockknit:   0.40, birds_eye: 0.42,
+  popcorn_blister: 0.60, pique_interlock: 0.55,
   default:         0.45,
 };
 
@@ -332,6 +334,7 @@ const INVISIBLE_WASTE_PCT = {
   single_jersey: 2.5, rib_1x1: 3.0, rib_2x2: 3.0, interlock: 3.5,
   pique_single: 3.0, fleece_2_thread: 3.5, fleece_3_thread: 4.0,
   fleece_diagonal: 4.0, french_terry: 3.5, terry_fabric: 4.0,
+  weft_lockknit: 2.5, birds_eye: 2.8, popcorn_blister: 3.5, pique_interlock: 3.5,
   default: 3.0,
 };
 

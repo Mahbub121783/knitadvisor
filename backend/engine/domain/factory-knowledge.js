@@ -36,12 +36,20 @@ const FAB_BUCKET_ALIAS = {
   single_cross_tuck: 'single_jersey', mock_rib: 'single_jersey',
   knitted_twill: 'single_jersey', knitted_crepe: 'single_jersey',
   moss_stitch: 'single_jersey',
+  // 2026-09-11: textileblog.com gap-fill additions — all single-bed knit-miss/
+  // knit-tuck structures, same family as mock_rib/single_cross_tuck above.
+  weft_lockknit: 'single_jersey', birds_eye: 'single_jersey',
+  popcorn_blister: 'single_jersey',
 
   heavy_jersey: 'heavy_jersey',
 
   // pique / lacoste (single-bed tuck structures)
   pique_single: 'pique', pique_double: 'pique',
   lacoste_single: 'pique', lacoste_pique: 'pique', texipique: 'pique',
+  // interlock-based cross-tuck pique (2026-09-11 addition) — bucketed with
+  // its single-bed pique siblings, same convention already used above for
+  // lacoste_pique/texipique (both interlock too).
+  pique_interlock: 'pique',
   // lacoste_double was the one weft-knit fabric missing from this map. A
   // missing entry is silent: getCompositionReference() looks up
   // COMPOSITION_REFERENCE['lacoste_double'], finds nothing, and returns null,

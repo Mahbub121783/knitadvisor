@@ -51,6 +51,9 @@ const FAB_ALIAS = {
   knitted_crepe: 'single_jersey', mock_rib: 'single_jersey',
   pointelle: 'single_jersey', pointelle_eyelet: 'single_jersey', pointelle_chevron: 'single_jersey',
   blister_single: 'single_jersey', relief_single: 'single_jersey',
+  // 2026-09-11: textileblog.com gap-fill additions
+  weft_lockknit: 'single_jersey', birds_eye: 'single_jersey',
+  popcorn_blister: 'single_jersey',
   // rib family (incl. cardigan/milano interlock-rib structures)
   rib_1x1: 'rib', rib_2x2: 'rib', rib_2x1: 'rib', rib_3x3: 'rib', rib_3x2: 'rib', rib_4x1: 'rib',
   lycra_rib_1x1: 'rib', lycra_rib_2x2: 'rib', rib: 'rib',
@@ -59,6 +62,7 @@ const FAB_ALIAS = {
   // pique / lacoste
   pique_single: 'pique', pique_double: 'pique', lacoste_single: 'pique', lacoste_double: 'pique',
   lacoste_pique: 'pique', texipique: 'pique', pique: 'pique',
+  pique_interlock: 'pique', // 2026-09-11 addition — interlock-based, bucketed with its pique siblings
   // interlock & double-knit family
   interlock: 'interlock', ponte_di_roma: 'interlock', eight_lock: 'interlock',
   swiss_double_pique: 'interlock', french_double_pique: 'interlock',

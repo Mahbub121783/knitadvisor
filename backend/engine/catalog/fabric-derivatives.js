@@ -100,7 +100,16 @@ const FABRIC_DERIVATIVES = [
 
   {
     id: 'pique_single',
-    name: 'Single Pique (Polo Pique)',
+    // Name disambiguated 2026-09-11: some sources (e.g. textileblog.com) use
+    // "Single Pique" for an INTERLOCK (double-bed) cross-tuck structure —
+    // see `pique_interlock` below, a genuinely different machine/structure.
+    // THIS entry is single-bed, cylinder-only. Renamed for clarity; id kept
+    // unchanged (load-bearing across costing/quality/pattern/striper engines).
+    // NOTE: keep this string free of the word "double" — fabric-visualizer.js's
+    // _detectConstruction() does substring matching on id+category+name, and
+    // "double" here previously made a single-bed pique render mislabeled as
+    // "Finished double piqué" (caught by regression testing 2026-09-11).
+    name: 'Single-Bed Piqué (Polo Pique — Cross-Tuck)',
     name_bn: 'সিঙ্গেল পিকে',
     category: 'single_jersey',
     base: 'single_jersey',
@@ -825,6 +834,152 @@ const FABRIC_DERIVATIVES = [
     appearance: 'Pebbly, rough textured surface with low shine and good drapability.'
   },
 
+  // ── Added from textileblog.com's weft-knit structure survey (2026-09-11
+  // audit): 3 genuinely distinct single-bed knit-miss/knit-tuck structures
+  // that were missing from the catalog. "Cross Miss" from that same survey
+  // was deliberately NOT added as a separate entry — its 2-course K/M
+  // alternation is the same structure already on file as `mock_rib` (cyclic
+  // shift of the same pattern, different textbook's name for it), so a
+  // second entry would have been a duplicate with a different label, not a
+  // new fabric. Documented here rather than silently dropped so the mapping
+  // is traceable.
+  {
+    id: 'weft_lockknit',
+    name: 'Weft Lock-Knit',
+    name_bn: 'ওয়েফট লক-নিট',
+    category: 'single_jersey',
+    base: 'single_jersey',
+    machine_type: 'single_bed_circular',
+    gauge_range: { min: 18, max: 28 },
+    gsm_range: { min: 120, max: 220 },
+    count_formula: {
+      type: 'regression',
+      a: -0.141, b: 50.22,
+      source: 'ESTIMATED',
+      note: 'Two of four courses knit every needle — same density driver as plain single jersey — so its regression is reused, not independently derived from a PDF.'
+    },
+    ll_multiplier: 0.90,
+    ll_source: 'ESTIMATED — 2 of 4 courses miss half the needles, so less yarn is drawn into loops per repeat than a fully-knit single jersey',
+    typical_gauge: 24,
+    structure: {
+      type: 'weft_knit',
+      courses_per_repeat: 4,
+      wales_per_repeat: 2,
+      beds: ['cylinder'],
+      pattern: [
+        ['K','K'], // Feed 1 — full knit course (locks the previous repeat's float)
+        ['M','K'], // Feed 2 — A misses (floats), B knits
+        ['K','K'], // Feed 3 — full knit course (locks feed 2's float)
+        ['K','M']  // Feed 4 — A knits, B misses (floats)
+      ],
+      cam: [
+        { feed: 1, cylinder: 'K', note: 'All needles knit' },
+        { feed: 2, cylinder: 'M/K', note: 'A=miss (floats), B=knit' },
+        { feed: 3, cylinder: 'K', note: 'All needles knit' },
+        { feed: 4, cylinder: 'K/M', note: 'A=knit, B=miss (floats)' }
+      ],
+      needle_arrangement: {
+        butt_pattern: 'ABAB',
+        description: 'Alternating long/short butt needles. Unlike a bare 2-course cross-miss, only ONE needle group misses per half-repeat, and a full-knit course always follows — that intervening knit row "locks" the float so it can\'t ladder.'
+      }
+    },
+    machine_note: 'Sinker timing on the miss courses must hold (not drop) the un-knitted loop. 4-feeder minimum sequence.',
+    appearance: 'Face reads almost like plain single jersey; reverse shows short, evenly locked float lines every other course. More dimensionally stable and less prone to laddering/runs than plain single jersey.'
+  },
+
+  {
+    id: 'birds_eye',
+    name: 'Birds Eye (Double Cross-Miss)',
+    name_bn: 'বার্ডস আই',
+    category: 'single_jersey',
+    base: 'single_jersey',
+    machine_type: 'single_bed_circular',
+    gauge_range: { min: 18, max: 28 },
+    gsm_range: { min: 130, max: 230 },
+    count_formula: {
+      type: 'regression',
+      a: -0.140, b: 51.0,
+      source: 'ESTIMATED'
+    },
+    ll_multiplier: 0.93,
+    ll_source: 'ESTIMATED — paired-needle miss floats span 2 wales instead of 1, drawing slightly more yarn per repeat than Weft Lock-Knit\'s single-needle floats',
+    typical_gauge: 24,
+    structure: {
+      type: 'weft_knit',
+      courses_per_repeat: 4,
+      wales_per_repeat: 4,
+      beds: ['cylinder'],
+      pattern: [
+        ['K','K','M','M'], // Feed 1
+        ['M','M','K','K'], // Feed 2 — mirror of feed 1 (the "double" cross-miss)
+        ['K','K','M','M'], // Feed 3 — repeats feed 1
+        ['M','M','K','K']  // Feed 4 — repeats feed 2
+      ],
+      cam: [
+        { feed: 1, cylinder: 'KK/MM', note: 'Wales 1-2 knit, wales 3-4 miss' },
+        { feed: 2, cylinder: 'MM/KK', note: 'Wales 1-2 miss, wales 3-4 knit — mirror of feed 1' },
+        { feed: 3, cylinder: 'KK/MM', note: 'Same as feed 1' },
+        { feed: 4, cylinder: 'MM/KK', note: 'Same as feed 2' }
+      ],
+      needle_arrangement: {
+        butt_pattern: 'AABB',
+        description: 'Needles grouped in pairs, not single alternation — each miss float spans 2 wales, which is what produces the small round "eye" dot rather than a plain cross-miss float line.'
+      }
+    },
+    appearance: 'Small, evenly spaced raised "eye" dots on a plain-knit ground. Firmer hand and less curl than plain single jersey; classic lightweight alternative to pique in polo/golf shirts.'
+  },
+
+  {
+    id: 'popcorn_blister',
+    name: 'Popcorn Blister (Cellular Tuck, Single Bed)',
+    name_bn: 'পপকর্ন ব্লিস্টার',
+    category: 'single_jersey',
+    base: 'single_jersey',
+    machine_type: 'single_bed_circular',
+    gauge_range: { min: 16, max: 24 },
+    gsm_range: { min: 180, max: 320 },
+    count_formula: {
+      type: 'regression',
+      a: -0.135, b: 56.0,
+      source: 'ESTIMATED'
+    },
+    ll_multiplier: 1.45,
+    ll_source: 'ESTIMATED — each releasing needle knits off 3 stacked held tuck loops in one course, drawing substantially more yarn than a plain knit course',
+    typical_gauge: 20,
+    structure: {
+      type: 'weft_knit',
+      courses_per_repeat: 8,
+      wales_per_repeat: 2,
+      beds: ['cylinder'],
+      pattern: [
+        ['K','T'], // Feed 1 — A knits (ground), B tucks (1st held loop)
+        ['K','T'], // Feed 2 — B tucks again (2nd held loop)
+        ['K','T'], // Feed 3 — B tucks again (3rd held loop)
+        ['K','K'], // Feed 4 — B knits off all 3 held loops at once -> popcorn bump
+        ['T','K'], // Feed 5 — A tucks (1st held loop), B knits (ground)
+        ['T','K'], // Feed 6 — A tucks again (2nd held loop)
+        ['T','K'], // Feed 7 — A tucks again (3rd held loop)
+        ['K','K']  // Feed 8 — A knits off all 3 held loops at once -> popcorn bump, staggered from feed 4's
+      ],
+      cam: [
+        { feed: 1, cylinder: 'K/T', note: 'A=knit (ground), B=tuck (loop 1 of 3 held)' },
+        { feed: 2, cylinder: 'K/T', note: 'B=tuck (loop 2 of 3 held)' },
+        { feed: 3, cylinder: 'K/T', note: 'B=tuck (loop 3 of 3 held)' },
+        { feed: 4, cylinder: 'K', note: 'B releases — knits off all 3 held loops together, forming the popcorn bump' },
+        { feed: 5, cylinder: 'T/K', note: 'A=tuck (loop 1 of 3 held), B=knit (ground)' },
+        { feed: 6, cylinder: 'T/K', note: 'A=tuck (loop 2 of 3 held)' },
+        { feed: 7, cylinder: 'T/K', note: 'A=tuck (loop 3 of 3 held)' },
+        { feed: 8, cylinder: 'K', note: 'A releases — knits off all 3 held loops together, forming a bump staggered from feed 4\'s' }
+      ],
+      needle_arrangement: {
+        butt_pattern: 'ABAB',
+        description: 'Deep sinker throat / extended needle travel needed to hold 3 stacked tuck loops per needle without press-off before release.'
+      }
+    },
+    machine_note: 'Fine or highly elastic yarns are prone to dropped stitches under 3 stacked held loops — coarser, low-extension yarns hold more reliably.',
+    appearance: 'Raised 3-D "popcorn" bumps on a plain-knit ground, staggered checkerboard-style with a 4-course vertical offset between columns. Bump prominence is strongest on the technical back; face used as garment right side for a subtler texture, back for a bolder pop. All-cylinder single-bed structure — NOT the double-bed interlock puff (see Interlock Blister / blister_single below).'
+  },
+
   // ============================================================
   // CATEGORY 2: RIB & DERIVATIVES (Double Needle Bed)
   // ============================================================
@@ -1435,7 +1590,11 @@ const FABRIC_DERIVATIVES = [
 
   {
     id: 'blister_single',
-    name: 'Single Blister Fabric',
+    // Name disambiguated 2026-09-11: "Single" here means "single blister
+    // cell", NOT single-bed — this structure is cylinder+dial (interlock).
+    // The genuinely single-bed popcorn/blister structure is `popcorn_blister`
+    // above. Renamed for clarity; id kept unchanged (load-bearing elsewhere).
+    name: 'Interlock Blister (Double-Bed Cellular Puff)',
     name_bn: 'সিঙ্গেল ব্লিস্টার',
     category: 'interlock',
     base: 'interlock',
@@ -1629,6 +1788,58 @@ const FABRIC_DERIVATIVES = [
       }
     },
     appearance: 'Textured face, smooth back. More stable than single pique. Non-reversible.'
+  },
+
+  // ── Added from textileblog.com's weft-knit structure survey (2026-09-11
+  // audit) — resolves a real naming collision: that article's "Single Pique"
+  // is an INTERLOCK-machine structure (double bed), completely different
+  // from this catalog's `pique_single` which is a single-bed double-tuck
+  // structure that only happens to share the word "pique". Given a new,
+  // disambiguated id rather than overloading `pique_single`, because that id
+  // is already load-bearing across costing/quality/pattern/striper engines
+  // (see backend/engine/domain/*.js) — reusing or renaming it would silently
+  // break those, not fix a name.
+  {
+    id: 'pique_interlock',
+    name: 'Cross-Tuck Pique (Interlock, Combined-Bed)',
+    name_bn: 'ক্রস-টাক পিকে (ইন্টারলক)',
+    category: 'interlock',
+    base: 'interlock',
+    machine_type: 'double_bed_circular_interlock',
+    gauge_range: { min: 16, max: 28 },
+    gsm_range: { min: 200, max: 380 },
+    count_formula: {
+      type: 'regression',
+      a: -0.150, b: 63.0,
+      source: 'ESTIMATED'
+    },
+    ll_multiplier: 1.55,
+    ll_source: 'ESTIMATED — a 6-feed repeat with one combined cylinder+dial tuck course draws more yarn than Swiss/French Double Pique\'s 4-feed single-sided tuck',
+    typical_gauge: 24,
+    structure: {
+      type: 'weft_knit',
+      courses_per_repeat: 6,
+      wales_per_repeat: 2,
+      beds: ['cylinder', 'dial'],
+      pattern: {
+        C: [['K'],['K'],['T'],['K'],['K'],['T']],
+        D: [['K'],['T'],['K'],['K'],['T'],['K']]
+      },
+      cam: [
+        { feed: 1, cylinder: 'K', dial: 'K', note: 'Plain interlock ground course' },
+        { feed: 2, cylinder: 'K', dial: 'T', note: 'Dial tucks — first cross-tuck cell' },
+        { feed: 3, cylinder: 'T', dial: 'K', note: 'Cylinder tucks — mirrored cross-tuck cell' },
+        { feed: 4, cylinder: 'K', dial: 'K', note: 'Plain interlock ground course' },
+        { feed: 5, cylinder: 'K', dial: 'T', note: 'Dial tucks again' },
+        { feed: 6, cylinder: 'T', dial: 'K', note: 'Cylinder tucks again — both faces now carry a tuck cell, unlike Swiss (dial-only) or French (cylinder-only) Pique' }
+      ],
+      needle_arrangement: {
+        butt_pattern: 'Standard interlock ABAB, both beds independently cammed',
+        description: 'Interlock gating with a tuck cell alternated onto BOTH beds across the 6-feed repeat, instead of one bed only — throws the fabric noticeably wider than plain interlock.'
+      }
+    },
+    machine_note: '6-feeder minimum sequence. Because both beds carry a tuck course, the fabric relaxes roughly 15% wider than plain interlock at the same stitch length — machine settings and roll take-up must allow for it.',
+    appearance: 'Textured cell visible on BOTH faces (unlike Swiss/French Double Pique, textured on only one face) — the generic double-bed "pique" hand, often just called "interlock pique". Stable, non-reversible, heavier than single-bed pique.'
   },
 
   // ============================================================
@@ -2568,6 +2779,10 @@ const LL_MULTIPLIERS_COMPLETE = {
   waffle_knit:       { m: 1.50, gauge_ref: 16, source: 'ESTIMATED' },
   cable_rib:         { m: 1.52, gauge_ref: 14, source: 'ESTIMATED' },
   moss_stitch:       { m: 1.12, gauge_ref: 22, source: 'ESTIMATED' },
+  weft_lockknit:     { m: 0.90, gauge_ref: 24, source: 'ESTIMATED' },
+  birds_eye:         { m: 0.93, gauge_ref: 24, source: 'ESTIMATED' },
+  popcorn_blister:   { m: 1.45, gauge_ref: 20, source: 'ESTIMATED' },
+  pique_interlock:   { m: 1.55, gauge_ref: 24, source: 'ESTIMATED' },
 };
 
 // ============================================================
@@ -2624,6 +2839,10 @@ const GSM_COUNT_REGRESSION_COMPLETE = {
   waffle_knit:     { a: -0.105, b: 54.00, source: 'ESTIMATED',      gsm_range: [180,350] },
   cable_rib:       { a: -0.095, b: 52.00, source: 'ESTIMATED',      gsm_range: [200,400] },
   moss_stitch:     { a: -0.138, b: 54.00, source: 'ESTIMATED',      gsm_range: [150,280] },
+  weft_lockknit:   { a: -0.141, b: 50.22, source: 'ESTIMATED',      gsm_range: [120,220] },
+  birds_eye:       { a: -0.140, b: 51.00, source: 'ESTIMATED',      gsm_range: [130,230] },
+  popcorn_blister: { a: -0.135, b: 56.00, source: 'ESTIMATED',      gsm_range: [180,320] },
+  pique_interlock: { a: -0.150, b: 63.00, source: 'ESTIMATED',      gsm_range: [200,380] },
 };
 
 module.exports = {
