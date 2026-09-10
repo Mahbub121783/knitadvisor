@@ -1391,6 +1391,17 @@ class FabricVisualizer {
       else if (has('lacoste')) plabel = has('double') ? 'double lacoste' : 'single lacoste';
       return { type: 'pique', base: 'single', label: plabel, mesh: false, brush: false };
     }
+    // Waffle / honeycomb knit — fabric-derivatives.js gives this
+    // category: 'rib' because it really is knit on a rib-gaited double bed,
+    // that's a correct MACHINE classification, not a naming call. Caught
+    // here, before the generic rib fallback below, so it doesn't inherit
+    // rib's alternating-column look and a "1×1 rib"-shaped label for a
+    // fabric that is neither. Reuses 'pique' type for its honeycomb pillow
+    // relief overlay (_overlayWaffle) — the nearest existing visual model
+    // for a tuck-relief surface, not a literal claim the two structures knit
+    // the same way.
+    if (has('waffle', 'honeycomb'))
+      return { type: 'pique', base: 'double', label: 'waffle knit', mesh: false, brush: false };
     // RIB only when the fabric category really is rib — NOT "mock rib" (a
     // single-bed miss/knit jersey whose name merely contains "rib").
     if (cat === 'rib' || (has('rib') && !has('mock')))
