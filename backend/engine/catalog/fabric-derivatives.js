@@ -929,55 +929,333 @@ const FABRIC_DERIVATIVES = [
     appearance: 'Small, evenly spaced raised "eye" dots on a plain-knit ground. Firmer hand and less curl than plain single jersey; classic lightweight alternative to pique in polo/golf shirts.'
   },
 
+  // ── "Blister" family disambiguation (4 members in this catalog) ──
+  //   popcorn_blister  — single-bed, TUCK, asymmetric 4-vs-6-course tracks
+  //   cellular_blister — single-bed, TUCK, matched 8-course paired-wale blocks
+  //   jersey_blister   — single-bed, MISS (not tuck), unbalanced 5-course repeat
+  //   blister_single   — DOUBLE-bed interlock puff (see CATEGORY 3 below)
+  // All four look like "a bump/pucker on jersey" but form it by different
+  // mechanisms — kept as 4 separate ids rather than GSM/gauge variants of
+  // one entry, per KFS Study Material Unit II (ilide.info) which catalogues
+  // Popcorn and Cellular Blister as two distinct named structures.
   {
     id: 'popcorn_blister',
-    name: 'Popcorn Blister (Cellular Tuck, Single Bed)',
-    name_bn: 'পপকর্ন ব্লিস্টার',
+    name: 'Popcorn (Asymmetric Elongated Tuck)',
+    name_bn: 'পপকর্ন',
+    category: 'single_jersey',
+    base: 'single_jersey',
+    machine_type: 'single_bed_circular',
+    // 2026-09-11: structure corrected against KFS Study Material Unit II
+    // (ilide.info) p.7 — "the odd needle produced 4 courses and even needle
+    // produced 6 courses; multiple tuck produced elongated and inclined
+    // stitches, which cause curved effect in the fabric". The original
+    // version of this entry used a matched 8-course/3-hold pattern on BOTH
+    // needle groups — that turned out to be a different, real structure in
+    // its own right (now split out below as `cellular_blister`), not what
+    // "Popcorn" actually is. Popcorn's defining trait is the MISMATCH: one
+    // needle group cycles every 4 courses, the other every 6, so their
+    // release points drift against each other (LCM = 12 courses) instead of
+    // staying in lockstep — that drift is what skews/curves the fabric.
+    gauge_range: { min: 16, max: 24 },
+    gsm_range: { min: 180, max: 350 },
+    count_formula: {
+      type: 'regression',
+      a: -0.130, b: 57.0,
+      source: 'ESTIMATED'
+    },
+    ll_multiplier: 1.65,
+    ll_source: 'ESTIMATED — track B holds up to 5 stacked tucks before release (vs 3 in Cellular Blister), drawing more yarn per repeat',
+    typical_gauge: 18,
+    structure: {
+      type: 'weft_knit',
+      courses_per_repeat: 12,
+      wales_per_repeat: 2,
+      beds: ['cylinder'],
+      pattern: [
+        ['T','T'], // Feed 1
+        ['T','T'], // Feed 2
+        ['T','T'], // Feed 3
+        ['K','T'], // Feed 4 — A releases (3 held loops knocked over together)
+        ['T','T'], // Feed 5
+        ['T','K'], // Feed 6 — B releases (5 held loops knocked over together)
+        ['T','T'], // Feed 7
+        ['K','T'], // Feed 8 — A releases again (its 2nd cycle)
+        ['T','T'], // Feed 9
+        ['T','T'], // Feed 10
+        ['T','T'], // Feed 11
+        ['K','K']  // Feed 12 — BOTH release together (4-course and 6-course cycles coincide at their LCM)
+      ],
+      cam: [
+        { feed: 1, cylinder: 'T/T', note: 'A=tuck (1 of 3 held), B=tuck (1 of 5 held)' },
+        { feed: 2, cylinder: 'T/T', note: 'A=tuck (2 of 3), B=tuck (2 of 5)' },
+        { feed: 3, cylinder: 'T/T', note: 'A=tuck (3 of 3), B=tuck (3 of 5)' },
+        { feed: 4, cylinder: 'K/T', note: 'A releases (knocks over 3 held loops); B=tuck (4 of 5)' },
+        { feed: 5, cylinder: 'T/T', note: 'A=tuck (1 of 3, new cycle), B=tuck (5 of 5)' },
+        { feed: 6, cylinder: 'T/K', note: 'A=tuck (2 of 3); B releases (knocks over 5 held loops)' },
+        { feed: 7, cylinder: 'T/T', note: 'A=tuck (3 of 3), B=tuck (1 of 5, new cycle)' },
+        { feed: 8, cylinder: 'K/T', note: 'A releases (2nd time this repeat); B=tuck (2 of 5)' },
+        { feed: 9, cylinder: 'T/T', note: 'A=tuck (1 of 3), B=tuck (3 of 5)' },
+        { feed: 10, cylinder: 'T/T', note: 'A=tuck (2 of 3), B=tuck (4 of 5)' },
+        { feed: 11, cylinder: 'T/T', note: 'A=tuck (3 of 3), B=tuck (5 of 5)' },
+        { feed: 12, cylinder: 'K/K', note: 'A and B release together — the 4-course and 6-course tracks coincide at course 12 (LCM), resetting the repeat' }
+      ],
+      needle_arrangement: {
+        butt_pattern: 'A: 4-course cam track, B: 6-course cam track (mismatched, NOT a simple ABAB alternation)',
+        description: 'Two independently-timed tuck-hold cam tracks running out of phase with each other — this mismatch, not the tucking itself, is what produces Popcorn\'s characteristic elongated, inclined, slightly curved stitch look (vs. Cellular Blister\'s regular checkerboard, where both tracks share one timing).'
+      }
+    },
+    machine_note: 'Track B holds up to 5 stacked loops — higher press-off risk than Cellular Blister\'s 4. Coarser, low-extension yarns hold more reliably.',
+    appearance: 'Irregular, elongated, slightly inclined raised bumps (not a clean checkerboard) caused by the 4-course and 6-course tuck tracks drifting in and out of phase. Prone to a mild fabric skew/spirality for the same reason — flag for stenter anti-skew finishing. All-cylinder single-bed structure — see the family note above for how this differs from Cellular Blister, Jersey Blister and Interlock Blister.'
+  },
+
+  {
+    id: 'cellular_blister',
+    name: 'Cellular Blister (Matched Paired-Wale Tuck)',
+    name_bn: 'সেলুলার ব্লিস্টার',
     category: 'single_jersey',
     base: 'single_jersey',
     machine_type: 'single_bed_circular',
     gauge_range: { min: 16, max: 24 },
-    gsm_range: { min: 180, max: 320 },
+    gsm_range: { min: 190, max: 330 },
     count_formula: {
       type: 'regression',
-      a: -0.135, b: 56.0,
+      a: -0.132, b: 56.5,
       source: 'ESTIMATED'
     },
-    ll_multiplier: 1.45,
-    ll_source: 'ESTIMATED — each releasing needle knits off 3 stacked held tuck loops in one course, drawing substantially more yarn than a plain knit course',
-    typical_gauge: 20,
+    ll_multiplier: 1.58,
+    ll_source: 'ESTIMATED — each releasing wale-pair knocks over 4 stacked held tuck loops in one course',
+    typical_gauge: 18,
     structure: {
       type: 'weft_knit',
       courses_per_repeat: 8,
-      wales_per_repeat: 2,
+      wales_per_repeat: 4,
       beds: ['cylinder'],
       pattern: [
-        ['K','T'], // Feed 1 — A knits (ground), B tucks (1st held loop)
-        ['K','T'], // Feed 2 — B tucks again (2nd held loop)
-        ['K','T'], // Feed 3 — B tucks again (3rd held loop)
-        ['K','K'], // Feed 4 — B knits off all 3 held loops at once -> popcorn bump
-        ['T','K'], // Feed 5 — A tucks (1st held loop), B knits (ground)
-        ['T','K'], // Feed 6 — A tucks again (2nd held loop)
-        ['T','K'], // Feed 7 — A tucks again (3rd held loop)
-        ['K','K']  // Feed 8 — A knits off all 3 held loops at once -> popcorn bump, staggered from feed 4's
+        ['T','T','K','K'], // Feed 1 — wales 1-2 hold (1 of 4), wales 3-4 ground-knit
+        ['T','T','K','K'], // Feed 2 — wales 1-2 hold (2 of 4)
+        ['T','T','K','K'], // Feed 3 — wales 1-2 hold (3 of 4)
+        ['T','T','K','K'], // Feed 4 — wales 1-2 hold (4 of 4) — release happens on the NEXT feed's transition
+        ['K','K','T','T'], // Feed 5 — wales 1-2 release (knock over all 4); wales 3-4 begin holding (1 of 4)
+        ['K','K','T','T'], // Feed 6 — wales 3-4 hold (2 of 4)
+        ['K','K','T','T'], // Feed 7 — wales 3-4 hold (3 of 4)
+        ['K','K','T','T']  // Feed 8 — wales 3-4 hold (4 of 4) — releases at feed 1 of the next repeat
       ],
       cam: [
-        { feed: 1, cylinder: 'K/T', note: 'A=knit (ground), B=tuck (loop 1 of 3 held)' },
-        { feed: 2, cylinder: 'K/T', note: 'B=tuck (loop 2 of 3 held)' },
-        { feed: 3, cylinder: 'K/T', note: 'B=tuck (loop 3 of 3 held)' },
-        { feed: 4, cylinder: 'K', note: 'B releases — knits off all 3 held loops together, forming the popcorn bump' },
-        { feed: 5, cylinder: 'T/K', note: 'A=tuck (loop 1 of 3 held), B=knit (ground)' },
-        { feed: 6, cylinder: 'T/K', note: 'A=tuck (loop 2 of 3 held)' },
-        { feed: 7, cylinder: 'T/K', note: 'A=tuck (loop 3 of 3 held)' },
-        { feed: 8, cylinder: 'K', note: 'A releases — knits off all 3 held loops together, forming a bump staggered from feed 4\'s' }
+        { feed: 1, cylinder: 'T,T,K,K', note: 'Wales 1-2 tuck (held loop 1 of 4); wales 3-4 knit (ground)' },
+        { feed: 2, cylinder: 'T,T,K,K', note: 'Wales 1-2 tuck (2 of 4)' },
+        { feed: 3, cylinder: 'T,T,K,K', note: 'Wales 1-2 tuck (3 of 4)' },
+        { feed: 4, cylinder: 'T,T,K,K', note: 'Wales 1-2 tuck (4 of 4) — release cam engages at feed 5' },
+        { feed: 5, cylinder: 'K,K,T,T', note: 'Wales 1-2 knock over all 4 held loops (release -> puff cell); wales 3-4 begin tucking (1 of 4)' },
+        { feed: 6, cylinder: 'K,K,T,T', note: 'Wales 3-4 tuck (2 of 4)' },
+        { feed: 7, cylinder: 'K,K,T,T', note: 'Wales 3-4 tuck (3 of 4)' },
+        { feed: 8, cylinder: 'K,K,T,T', note: 'Wales 3-4 tuck (4 of 4) — release cam engages at feed 1 of next repeat' }
       ],
       needle_arrangement: {
-        butt_pattern: 'ABAB',
-        description: 'Deep sinker throat / extended needle travel needed to hold 3 stacked tuck loops per needle without press-off before release.'
+        butt_pattern: 'AABB, both wale-pairs sharing the SAME 8-course cam timing (unlike Popcorn\'s mismatched 4-vs-6)',
+        description: 'Paired-needle tuck blocks (2 wales wide, not single-needle) release in matched lockstep, giving a regular checkerboard of puff cells rather than Popcorn\'s drifting, elongated ones.'
       }
     },
-    machine_note: 'Fine or highly elastic yarns are prone to dropped stitches under 3 stacked held loops — coarser, low-extension yarns hold more reliably.',
-    appearance: 'Raised 3-D "popcorn" bumps on a plain-knit ground, staggered checkerboard-style with a 4-course vertical offset between columns. Bump prominence is strongest on the technical back; face used as garment right side for a subtler texture, back for a bolder pop. All-cylinder single-bed structure — NOT the double-bed interlock puff (see Interlock Blister / blister_single below).'
+    machine_note: '4 consecutive held tuck loops per needle before release — deep sinker throat / extended needle travel required, same caution as Popcorn.',
+    appearance: 'Regular checkerboard of blocky, 2-wale-wide puff cells, each formed by 4 held tuck loops releasing together — bigger and more evenly spaced than Popcorn\'s smaller, irregular bumps because both wale-groups share one timing instead of two mismatched ones.'
+  },
+
+  {
+    id: 'jersey_blister',
+    name: 'Jersey Blister (Miss-Pucker)',
+    name_bn: 'জার্সি ব্লিস্টার',
+    category: 'single_jersey',
+    base: 'single_jersey',
+    machine_type: 'single_bed_circular',
+    gauge_range: { min: 18, max: 28 },
+    gsm_range: { min: 140, max: 260 },
+    count_formula: {
+      type: 'regression',
+      a: -0.138, b: 53.0,
+      source: 'ESTIMATED'
+    },
+    ll_multiplier: 0.95,
+    ll_source: 'ESTIMATED — mostly-knit with sparse diagonal miss floats; the floats themselves draw little yarn, but the surrounding knit loops are pulled tighter/smaller to compensate, which is the actual pucker mechanism (not a tuck bulge)',
+    typical_gauge: 22,
+    structure: {
+      type: 'weft_knit',
+      courses_per_repeat: 5,
+      wales_per_repeat: 4,
+      beds: ['cylinder'],
+      pattern: [
+        ['K','K','K','M'], // Feed 1
+        ['K','K','M','K'], // Feed 2
+        ['K','M','K','K'], // Feed 3
+        ['M','K','K','K'], // Feed 4
+        ['K','K','K','K']  // Feed 5 — the odd course that breaks the diagonal's clean 4-course symmetry
+      ],
+      cam: [
+        { feed: 1, cylinder: 'KKKM', note: 'Wale 4 misses (floats); 1-3 knit' },
+        { feed: 2, cylinder: 'KKMK', note: 'Wale 3 misses; diagonal shift' },
+        { feed: 3, cylinder: 'KMKK', note: 'Wale 2 misses; diagonal shift' },
+        { feed: 4, cylinder: 'MKKK', note: 'Wale 1 misses; diagonal shift' },
+        { feed: 5, cylinder: 'K all', note: 'Full plain-knit course — has no equivalent in the 4-course diagonal, which is exactly what makes the 5-course repeat UNBALANCED (source: KFS Study Material — "repeat is five course and 4 wales, hence fabric is not balanced")' }
+      ],
+      needle_arrangement: {
+        butt_pattern: 'Diagonal single-miss shift + 1 plain course',
+        description: 'A clean 4-course diagonal miss (1 float per course, shifting by 1 wale) would repeat evenly. Inserting a 5th all-knit course deliberately breaks that symmetry — the repeat no longer divides the wale count evenly, so the pucker/blister forms irregularly rather than as a tidy diagonal line.'
+      }
+    },
+    appearance: 'Small, irregular blister/pucker from tight, starved knit loops around sparse diagonal miss floats — NOT a raised tuck bump (see Popcorn / Cellular Blister for that mechanism). Lighter-weight than the tuck-based blisters since floats consume almost no extra yarn.'
+  },
+
+  {
+    id: 'knop_honeycomb',
+    name: 'Knop / Honeycomb (Single-Bed Multi-Tuck)',
+    name_bn: 'নপ / মৌচাক',
+    category: 'single_jersey',
+    base: 'single_jersey',
+    machine_type: 'single_bed_circular',
+    // Distinct from `waffle_knit` elsewhere in this catalog, which achieves a
+    // similar honeycomb LOOK on a completely different (double-bed, rib-gaited)
+    // mechanism. Source: KFS Study Material Unit II (ilide.info) — "Knop
+    // fabrics or Honey Comb: distribution of MULTIPLE tucks diagonally or
+    // staggered through fabric... repeat size is 12 course & 4 wales." The
+    // "multiple" (plural, stacked) tucks per cell is what separates this from
+    // Knitted Twill's single-tuck diagonal elsewhere in this file.
+    gauge_range: { min: 14, max: 20 },
+    gsm_range: { min: 190, max: 340 },
+    count_formula: {
+      type: 'regression',
+      a: -0.115, b: 55.0,
+      source: 'ESTIMATED'
+    },
+    ll_multiplier: 1.50,
+    ll_source: 'ESTIMATED — 3 consecutive held tucks per cell before release, same magnitude as the tuck-based blisters above',
+    typical_gauge: 18,
+    structure: {
+      type: 'weft_knit',
+      courses_per_repeat: 12,
+      wales_per_repeat: 4,
+      beds: ['cylinder'],
+      pattern: [
+        ['T','T','K','K'], ['T','T','K','K'], ['T','T','K','K'], // wales 1-2 hold 3x, release into feed 4 of next block
+        ['K','T','T','K'], ['K','T','T','K'], ['K','T','T','K'], // wales 2-3 hold 3x
+        ['K','K','T','T'], ['K','K','T','T'], ['K','K','T','T'], // wales 3-4 hold 3x
+        ['T','K','K','T'], ['T','K','K','T'], ['T','K','K','T']  // wales 4-1 hold 3x (wraps around), releases into feed 1 of next repeat
+      ],
+      cam: [
+        { feed: 1, cylinder: 'T,T,K,K', note: 'Wales 1-2 tuck (1 of 3 held)' },
+        { feed: 2, cylinder: 'T,T,K,K', note: 'Wales 1-2 tuck (2 of 3)' },
+        { feed: 3, cylinder: 'T,T,K,K', note: 'Wales 1-2 tuck (3 of 3) — release cam engages at feed 4' },
+        { feed: 4, cylinder: 'K,T,T,K', note: 'Wales 1-2 release; wales 2-3 begin (1 of 3 held) — note wale 2 shares the boundary between adjacent cells' },
+        { feed: 5, cylinder: 'K,T,T,K', note: 'Wales 2-3 tuck (2 of 3)' },
+        { feed: 6, cylinder: 'K,T,T,K', note: 'Wales 2-3 tuck (3 of 3)' },
+        { feed: 7, cylinder: 'K,K,T,T', note: 'Wales 2-3 release; wales 3-4 begin (1 of 3 held)' },
+        { feed: 8, cylinder: 'K,K,T,T', note: 'Wales 3-4 tuck (2 of 3)' },
+        { feed: 9, cylinder: 'K,K,T,T', note: 'Wales 3-4 tuck (3 of 3)' },
+        { feed: 10, cylinder: 'T,K,K,T', note: 'Wales 3-4 release; wales 4-1 begin (1 of 3 held, wrapping past the repeat edge)' },
+        { feed: 11, cylinder: 'T,K,K,T', note: 'Wales 4-1 tuck (2 of 3)' },
+        { feed: 12, cylinder: 'T,K,K,T', note: 'Wales 4-1 tuck (3 of 3) — releases at feed 1 of the next repeat' }
+      ],
+      needle_arrangement: {
+        butt_pattern: 'Diagonal 2-wale tuck block, shifting by 1 wale every 3 courses',
+        description: '4 diagonal positions x 3-course dwell = 12-course repeat, exactly matching the source\'s "12 course & 4 wales". Denser than Knitted Twill (which shifts a single tuck by 1 wale every course) — the 3-course dwell per position is what stacks enough held loops to genuinely pucker into a honeycomb cell rather than just a diagonal line.'
+      }
+    },
+    appearance: 'Small raised honeycomb cells arranged in a diagonal cascade (not a static grid) from 3-course tuck-stacking that shifts one wale every 3 courses. All-cylinder single-bed structure — the double-bed waffle_knit elsewhere in this catalog gets a visually similar honeycomb look by a completely different mechanism.'
+  },
+
+  {
+    id: 'velour_plush',
+    name: 'Velour / Plush (Sinker Pile)',
+    name_bn: 'ভেলুর / প্লাশ',
+    category: 'single_jersey',
+    base: 'single_jersey',
+    machine_type: 'single_bed_circular',
+    gauge_range: { min: 16, max: 22 },
+    gsm_range: { min: 220, max: 420 },
+    count_formula: {
+      type: 'multi_yarn',
+      yarns: [
+        { role: 'ground', formula: { a: -0.10, b: 38.0 }, note: 'Ground/face yarn — structurally reuses french_terry\'s own ground-yarn regression (same 3-yarn sinker-pile mechanism), not an independently measured Velour figure', source: 'ESTIMATED' },
+        { role: 'tie', formula: { a: -0.07, b: 27.0 }, note: 'Tie yarn (holds the pile loops in)', source: 'ESTIMATED' },
+        { role: 'pile_inlay', note: 'Continuous-filament soft-twist pile yarn (finer than Terry\'s coarser spun pile, for a denser velvet-like nap after shearing)', source: 'ESTIMATED' }
+      ],
+      source: 'ESTIMATED',
+      note: 'No PDF lookup table for Velour specifically — reuses French Terry\'s verified ground/tie shape as the nearest real structural analogue. Flagged ESTIMATED, not PDF_VERIFIED, because of that.'
+    },
+    ll_multiplier: 1.55,
+    ll_source: 'ESTIMATED — same 3-yarn ground+tie+pile inlay draw as French Terry',
+    typical_gauge: 20,
+    structure: {
+      type: 'weft_knit',
+      courses_per_repeat: 2,
+      wales_per_repeat: 1,
+      beds: ['cylinder'],
+      yarn_feeds: 3,
+      pattern: [
+        ['K'],
+        ['K']
+      ],
+      cam: [
+        { feed: 1, cylinder: 'K', yarn: 'ground', note: 'Ground yarn knits all needles' },
+        { feed: 2, cylinder: 'K+T alternate', yarn: 'tie', note: 'Tie yarn tucks every 2nd needle, holding the pile inlay' },
+        { feed: 3, cylinder: 'inlay', yarn: 'pile', note: 'Soft-twist continuous-filament pile yarn floats over sinkers — forms uncut loops on the back' }
+      ],
+      needle_arrangement: {
+        butt_pattern: 'AAAA',
+        description: 'Same sinker-controlled inlay mechanism as French Terry. The structural knitting is identical; Velour/Plush and Terry diverge only in yarn choice and FINISHING.'
+      }
+    },
+    machine_note: 'Post-knit finishing decides the final hand: sheared = "true velour" (cut pile, like velvet); left as-is = "plush" (uncut loop pile, denser/finer than Terry).',
+    appearance: 'Dense, low, soft velvet-like pile with knit stretch. Cut pile (velour) is mechanically sheared after knitting; uncut pile (plush) is left as loops. Same knitting mechanism as French Terry — the difference is the pile yarn (finer, continuous-filament) and the finishing (shearing), not the stitch structure.'
+  },
+
+  {
+    id: 'accordion_tuck',
+    name: 'Selective Accordion (Anchored Float)',
+    name_bn: 'অ্যাকর্ডিয়ন',
+    category: 'single_jersey',
+    base: 'single_jersey',
+    machine_type: 'single_bed_circular',
+    // Source: KFS Study Material Unit II (ilide.info) — "Accordion fabric is
+    // single jersey with long floats held in place on the technical back by
+    // tuck stitches... [of its 3 variants] selective accordion is most widely
+    // used... requires a selection device that can select the tuck loops so
+    // they are carefully distributed to create the minimum of stitch
+    // distortion on the face." Modelled here as the selective variant only
+    // (straight/alternate accordion concentrate their tucks and were noted
+    // by the source itself as causing worse face distortion and colour
+    // grin-through — inferior versions of the same idea, not separately
+    // catalogued).
+    gauge_range: { min: 18, max: 28 },
+    gsm_range: { min: 130, max: 260 },
+    count_formula: {
+      type: 'regression',
+      a: -0.137, b: 51.5,
+      source: 'ESTIMATED'
+    },
+    ll_multiplier: 1.05,
+    ll_source: 'ESTIMATED — mostly knit+float (float draws little yarn); one rotating tuck per course adds a small, steady increment',
+    typical_gauge: 22,
+    structure: {
+      type: 'weft_knit',
+      courses_per_repeat: 4,
+      wales_per_repeat: 4,
+      beds: ['cylinder'],
+      pattern: [
+        ['K','M','M','T'], // Feed 1 — anchor tuck at wale 4
+        ['T','K','M','M'], // Feed 2 — anchor tuck rotates to wale 1
+        ['M','T','K','M'], // Feed 3 — anchor tuck rotates to wale 2
+        ['M','M','T','K']  // Feed 4 — anchor tuck rotates to wale 3
+      ],
+      cam: [
+        { feed: 1, cylinder: 'K,M,M,T', note: 'Base knit-and-float (jacquard ground); wale 4 tucks instead of floating, anchoring the long float behind it' },
+        { feed: 2, cylinder: 'T,K,M,M', note: 'Anchor tuck rotates to wale 1' },
+        { feed: 3, cylinder: 'M,T,K,M', note: 'Anchor tuck rotates to wale 2' },
+        { feed: 4, cylinder: 'M,M,T,K', note: 'Anchor tuck rotates to wale 3 — never repeats the same wale twice in the 4-course repeat' }
+      ],
+      needle_arrangement: {
+        butt_pattern: 'Requires independent per-needle K/T/M selection (3-step pattern wheel or electronic)',
+        description: 'A simple 2-step pattern wheel can only manage straight or alternate accordion (tucks concentrated on fixed odd/even needles). This distributed, rotating placement — never anchoring the same wale twice per repeat — needs a selection device that can choose all 3 stitch types independently per needle per feed.'
+      }
+    },
+    appearance: 'Long floats on the technical back, each anchored by a single rotating tuck stitch so no one wale carries all the stitch distortion. Used less as a standalone fashion fabric than as a technique inside multi-colour jacquard knits, to stop unselected colours "grinning through" between wales.'
   },
 
   // ============================================================
@@ -1840,6 +2118,72 @@ const FABRIC_DERIVATIVES = [
     },
     machine_note: '6-feeder minimum sequence. Because both beds carry a tuck course, the fabric relaxes roughly 15% wider than plain interlock at the same stitch length — machine settings and roll take-up must allow for it.',
     appearance: 'Textured cell visible on BOTH faces (unlike Swiss/French Double Pique, textured on only one face) — the generic double-bed "pique" hand, often just called "interlock pique". Stable, non-reversible, heavier than single-bed pique.'
+  },
+
+  // ============================================================
+  // CATEGORY 3.5: PURL (LINKS-LINKS) — a 4th fundamental weft-knit family
+  // ============================================================
+  // Added 2026-09-11 from fibre2fashion.com's "Weft knitted fabrics and
+  // derivatives" survey, which lists Purl alongside Plain/Rib/Interlock as
+  // one of the 4 basic weft-knit structures — a genuine gap, not a variant
+  // of anything already in this catalog.
+  //
+  // HONEST LIMITATION: Purl is not formed by a knit/tuck/miss CHOICE on a
+  // fixed-orientation needle the way every other structure in this file is.
+  // It needs a double-headed (latch on both ends) needle that physically
+  // transfers the loop from one hook to the other between courses, flipping
+  // which face the NEXT loop draws to. Every stitch is a full knit loop —
+  // there is no tuck or miss involved — so the K/T/M `pattern` grid this
+  // catalog uses everywhere else cannot represent the actual mechanism (it
+  // has no vocabulary for "which face"). `pattern` below is filled with 'K'
+  // (structurally correct — every stitch really is a knit loop) and the real
+  // face/back alternation is carried separately in `loop_orientation`, a
+  // field no other part of this codebase reads yet. Concretely: the 2D
+  // fabric-visualizer.js render for this id falls through to the generic
+  // single-jersey painter (a real fabric photo would show alternating
+  // horizontal ridges of face/back loops, which that painter does not
+  // attempt) — flagged here rather than silently left to look "fine".
+  {
+    id: 'purl_1x1',
+    name: 'Purl (Links-Links, 1×1)',
+    name_bn: 'পার্ল (লিংকস-লিংকস)',
+    category: 'purl',
+    base: 'purl',
+    machine_type: 'purl_double_headed_needle', // flat or circular purl machine — mechanism is the same either way
+    gauge_range: { min: 10, max: 18 }, // coarser than jersey/rib — double-headed needles need more room
+    gsm_range: { min: 200, max: 420 },
+    count_formula: {
+      type: 'regression',
+      a: -0.110, b: 52.0,
+      source: 'ESTIMATED'
+    },
+    ll_multiplier: 1.45,
+    ll_source: 'ESTIMATED — the loop-transfer action draws noticeably more yarn per stitch than a plain single-jersey knit loop, closer in magnitude to rib',
+    typical_gauge: 14,
+    structure: {
+      type: 'weft_knit',
+      courses_per_repeat: 2,
+      wales_per_repeat: 1,
+      beds: ['double_headed'], // not cylinder+dial — one set of transferable needles
+      pattern: [
+        ['K'], // Course 1 — every stitch IS a knit loop (see note above)
+        ['K']  // Course 2 — also a knit loop, just drawn to the opposite face
+      ],
+      loop_orientation: [
+        ['F'], // Course 1 — loop drawn to the FRONT (face)
+        ['B']  // Course 2 — needle transfers, loop drawn to the BACK
+      ],
+      cam: [
+        { feed: 1, cylinder: 'K (transfer to front hook)', note: 'Needle presents its front hook — new loop pulled through to the technical face' },
+        { feed: 2, cylinder: 'K (transfer to back hook)', note: 'Needle physically transfers the held loop to its back hook — new loop pulled through to the technical back' }
+      ],
+      needle_arrangement: {
+        butt_pattern: 'Double-headed latch needles (one set, not two opposing beds)',
+        description: 'NOT cylinder+dial gating like rib/interlock — a single needle bed of needles that can present either hook, alternating which side of the fabric each course\'s loop is drawn to. This is why Purl is reversible (identical face and back) while remaining a true single-bed structure.'
+      }
+    },
+    machine_note: 'Slower and mechanically more complex than any cylinder+dial or single-cylinder machine here — the transfer action limits production speed well below single jersey or rib.',
+    appearance: 'Fully reversible — courses of face (smooth V) loops alternate with courses of back (semi-circle) loops, giving a horizontally-corrugated, garment-like texture (visually close to hand-knit "garter stitch"). Very high length-way stretch and recovery (opposite emphasis to single jersey\'s width-way stretch). Curls far less than single jersey; commonly used for baby wear, cuffs/collars, and fully-fashioned garments needing shape retention.'
   },
 
   // ============================================================
@@ -2781,8 +3125,14 @@ const LL_MULTIPLIERS_COMPLETE = {
   moss_stitch:       { m: 1.12, gauge_ref: 22, source: 'ESTIMATED' },
   weft_lockknit:     { m: 0.90, gauge_ref: 24, source: 'ESTIMATED' },
   birds_eye:         { m: 0.93, gauge_ref: 24, source: 'ESTIMATED' },
-  popcorn_blister:   { m: 1.45, gauge_ref: 20, source: 'ESTIMATED' },
+  popcorn_blister:   { m: 1.65, gauge_ref: 18, source: 'ESTIMATED' },
   pique_interlock:   { m: 1.55, gauge_ref: 24, source: 'ESTIMATED' },
+  cellular_blister:  { m: 1.58, gauge_ref: 18, source: 'ESTIMATED' },
+  jersey_blister:    { m: 0.95, gauge_ref: 22, source: 'ESTIMATED' },
+  knop_honeycomb:    { m: 1.50, gauge_ref: 18, source: 'ESTIMATED' },
+  velour_plush:      { m: 1.55, gauge_ref: 20, source: 'ESTIMATED', note: 'Ground yarn reference' },
+  accordion_tuck:    { m: 1.05, gauge_ref: 22, source: 'ESTIMATED' },
+  purl_1x1:          { m: 1.45, gauge_ref: 14, source: 'ESTIMATED' },
 };
 
 // ============================================================
@@ -2841,8 +3191,14 @@ const GSM_COUNT_REGRESSION_COMPLETE = {
   moss_stitch:     { a: -0.138, b: 54.00, source: 'ESTIMATED',      gsm_range: [150,280] },
   weft_lockknit:   { a: -0.141, b: 50.22, source: 'ESTIMATED',      gsm_range: [120,220] },
   birds_eye:       { a: -0.140, b: 51.00, source: 'ESTIMATED',      gsm_range: [130,230] },
-  popcorn_blister: { a: -0.135, b: 56.00, source: 'ESTIMATED',      gsm_range: [180,320] },
+  popcorn_blister: { a: -0.130, b: 57.00, source: 'ESTIMATED',      gsm_range: [180,350] },
   pique_interlock: { a: -0.150, b: 63.00, source: 'ESTIMATED',      gsm_range: [200,380] },
+  cellular_blister:{ a: -0.132, b: 56.50, source: 'ESTIMATED',      gsm_range: [190,330] },
+  jersey_blister:  { a: -0.138, b: 53.00, source: 'ESTIMATED',      gsm_range: [140,260] },
+  knop_honeycomb:  { a: -0.115, b: 55.00, source: 'ESTIMATED',      gsm_range: [190,340] },
+  velour_plush:    { a: -0.100, b: 38.00, source: 'ESTIMATED',      gsm_range: [220,420], note: 'Ground yarn Ne' },
+  accordion_tuck:  { a: -0.137, b: 51.50, source: 'ESTIMATED',      gsm_range: [130,260] },
+  purl_1x1:        { a: -0.110, b: 52.00, source: 'ESTIMATED',      gsm_range: [200,420] },
 };
 
 module.exports = {

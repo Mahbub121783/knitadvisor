@@ -40,6 +40,17 @@ const FAB_BUCKET_ALIAS = {
   // knit-tuck structures, same family as mock_rib/single_cross_tuck above.
   weft_lockknit: 'single_jersey', birds_eye: 'single_jersey',
   popcorn_blister: 'single_jersey',
+  // 2026-09-11: KFS Study Material (ilide.info) gap-fill — more single-bed
+  // knit-miss/knit-tuck derivatives, same family.
+  cellular_blister: 'single_jersey', jersey_blister: 'single_jersey',
+  knop_honeycomb: 'single_jersey', accordion_tuck: 'single_jersey',
+  // purl_1x1 has no matching real-data bucket among the 8 this dataset
+  // covers (single_jersey|rib|pique|interlock|fleece|terry|waffle|
+  // heavy_jersey) — it's mechanically a 4th family entirely (double-headed
+  // transferable needles, not cylinder+dial). Bucketed to 'rib' as the
+  // nearest BEHAVIOURAL analogue (both reversible, high-stretch, high-
+  // recovery double-faced-feeling structures), not a structural claim.
+  purl_1x1: 'rib',
 
   heavy_jersey: 'heavy_jersey',
 
@@ -62,6 +73,9 @@ const FAB_BUCKET_ALIAS = {
   // distinct from toweling terry ('terry' bucket below)
   french_terry: 'fleece', fleece_2_thread: 'fleece', fleece_3_thread: 'fleece',
   fleece_diagonal: 'fleece',
+  // velour_plush shares French Terry's exact 3-yarn sinker-pile mechanism
+  // (see fabric-derivatives.js) — same bucket.
+  velour_plush: 'fleece',
 
   // toweling terry
   terry_fabric: 'terry',

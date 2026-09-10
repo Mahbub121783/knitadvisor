@@ -54,11 +54,19 @@ const FAB_ALIAS = {
   // 2026-09-11: textileblog.com gap-fill additions
   weft_lockknit: 'single_jersey', birds_eye: 'single_jersey',
   popcorn_blister: 'single_jersey',
+  // 2026-09-11: KFS Study Material (ilide.info) gap-fill additions
+  cellular_blister: 'single_jersey', jersey_blister: 'single_jersey',
+  knop_honeycomb: 'single_jersey', accordion_tuck: 'single_jersey',
   // rib family (incl. cardigan/milano interlock-rib structures)
   rib_1x1: 'rib', rib_2x2: 'rib', rib_2x1: 'rib', rib_3x3: 'rib', rib_3x2: 'rib', rib_4x1: 'rib',
   lycra_rib_1x1: 'rib', lycra_rib_2x2: 'rib', rib: 'rib',
   half_cardigan: 'rib', full_cardigan: 'rib', half_milano: 'rib', full_milano: 'rib',
   drop_needle_rib: 'rib',
+  // purl_1x1 (fibre2fashion addition) — no matching bucket among this
+  // dataset's 8 families (it's a 4th fundamental mechanism, double-headed
+  // transferable needles, not cylinder+dial); bucketed to 'rib' as the
+  // nearest behavioural analogue (reversible, high-stretch), not structural.
+  purl_1x1: 'rib',
   // pique / lacoste
   pique_single: 'pique', pique_double: 'pique', lacoste_single: 'pique', lacoste_double: 'pique',
   lacoste_pique: 'pique', texipique: 'pique', pique: 'pique',
@@ -70,6 +78,7 @@ const FAB_ALIAS = {
   // fleece / terry
   fleece_2_thread: 'fleece', fleece_3_thread: 'fleece', fleece_diagonal: 'fleece', fleece: 'fleece',
   french_terry: 'terry', terry_fabric: 'terry', terry: 'terry',
+  velour_plush: 'terry', // same 3-yarn sinker-pile mechanism as french_terry, bucketed the same as this file already does for it
   // misc
   waffle: 'waffle',
   heavy_jersey: 'heavy_jersey',

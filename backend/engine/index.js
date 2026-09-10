@@ -1792,6 +1792,11 @@ function lookupMultiYarnCount(fabricId, gsm, fabricDef, parsedComp = null, rawIn
     fleece_3_thread: GSM_COUNT_LOOKUP.fleece_3_thread_table,
     fleece_diagonal: GSM_COUNT_LOOKUP.fleece_3_thread_table,
     french_terry: GSM_COUNT_LOOKUP.fleece_3_thread_table, // same structure
+    // velour_plush (2026-09-11 addition) has no dedicated PDF lookup table —
+    // reuses french_terry's real ground/tie/pile table, same precedent as
+    // fleece_diagonal/french_terry above, since fabric-derivatives.js
+    // documents it as the identical 3-yarn sinker-pile mechanism.
+    velour_plush: GSM_COUNT_LOOKUP.fleece_3_thread_table,
   };
 
   const table = lookupTables[fabricId];

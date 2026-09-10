@@ -1391,6 +1391,16 @@ class FabricVisualizer {
       else if (has('lacoste')) plabel = has('double') ? 'double lacoste' : 'single lacoste';
       return { type: 'pique', base: 'single', label: plabel, mesh: false, brush: false };
     }
+    // Knop / Honeycomb (single-bed) — added 2026-09-11, id `knop_honeycomb`,
+    // category: single_jersey. Excluded from the waffle/honeycomb branch
+    // below by name (NOT "knop") for the same reason mock_rib is excluded
+    // from the rib branch: the word "honeycomb" alone isn't enough to tell
+    // this apart from waffle_knit, and getting it wrong would silently pull
+    // in waffle's double-bed density constants (base:'double') for a
+    // genuinely single-bed structure — the exact bug class this file's
+    // waffle branch was itself written to avoid (see its own comment below).
+    if (has('knop'))
+      return { type: 'jersey', base: 'single', label: 'knop honeycomb (single-bed)', mesh: false, brush: false };
     // Waffle / honeycomb knit — fabric-derivatives.js gives this
     // category: 'rib' because it really is knit on a rib-gaited double bed,
     // that's a correct MACHINE classification, not a naming call. Caught
@@ -1400,7 +1410,7 @@ class FabricVisualizer {
     // relief overlay (_overlayWaffle) — the nearest existing visual model
     // for a tuck-relief surface, not a literal claim the two structures knit
     // the same way.
-    if (has('waffle', 'honeycomb'))
+    if (has('waffle', 'honeycomb') && !has('knop'))
       return { type: 'pique', base: 'double', label: 'waffle knit', mesh: false, brush: false };
     // RIB only when the fabric category really is rib — NOT "mock rib" (a
     // single-bed miss/knit jersey whose name merely contains "rib").
@@ -1408,6 +1418,16 @@ class FabricVisualizer {
       return { type: 'rib', base: 'double', label: this._ribLabel(id, name), mesh: false, brush: false, ribRepeat: this._ribRepeat(id) };
     if (has('double jersey', 'double knit', 'ponte'))
       return { type: 'interlock', base: 'double', label: 'double knit', mesh: false, brush: false };
+
+    // Purl (links-links) — a real 4th weft-knit family (double-headed
+    // transferable needles, alternating face/back loop courses), added to
+    // fabric-derivatives.js 2026-09-11. This renderer has no bespoke
+    // face/back-ridge painter for it yet, so it's routed to the generic
+    // single-jersey path like everything below — caught HERE only so the
+    // "Finished ..." label reads 'purl' instead of silently mislabeling as
+    // 'single jersey' (the same class of bug fixed for waffle_knit earlier).
+    if (has('purl') || cat === 'purl')
+      return { type: 'jersey', base: 'single', label: 'purl (links-links)', mesh: false, brush: false };
 
     // Default: single jersey recipe. twill/crepe/mock-rib land here and render
     // their REAL diagonal/tuck/miss structure via the pattern matrix.
