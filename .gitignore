@@ -23,15 +23,18 @@ logs/
 *.log
 dist/
 build/
-.claude/settings.local.json
 scratch/out/
 scratch/render.js
 scratch/shoot3d.js
 scratch/shoot_integ.js
 scratch/shoot_rib.js
 
-# Agent worktree pointers — machine-local paths, not project state
-.claude/worktrees/
+# The whole Claude Code project-local config dir — not just settings.local.json.
+# settings.json itself (permissions allowlist) got committed for months before
+# this line existed, along with 153 commits' worth of "Co-Authored-By: Claude"
+# trailers; both were scrubbed from all history 2026-09-13. This ignores the
+# entire directory so nothing under .claude/ can be re-added by accident again.
+.claude/
 
 # local-only verification scratch
 .verify/
