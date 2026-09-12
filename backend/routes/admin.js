@@ -71,6 +71,12 @@ router.post('/login', loginLimiter, async (req, res) => {
     );
 
     if (rows.length === 0 || !verifyPassword(password, rows[0].password_hash)) {
+      // Security review 2026-09-13: failed attempts went unlogged, so an
+      // ongoing brute-force run (bounded to 10/5min by loginLimiter, but not
+      // prevented) left no trail once that window reset — nothing to look at
+      // in stderr.log after the fact. Username, not password, is logged.
+      const ip = req.ip || req.connection.remoteAddress || 'unknown';
+      console.warn(`[Login] Failed attempt for username "${username}" from ${ip}`);
       return res.status(401).json({ error: 'Invalid username or password' });
     }
 

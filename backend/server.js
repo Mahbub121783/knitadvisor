@@ -29,6 +29,7 @@ const adminRoutes = require('./routes/admin');
 const cronRoutes = require('./routes/internal-cron');
 const searchRoutes = require('./routes/search');
 const rateLimiter = require('./middleware/rate-limiter');
+const { createRateLimiter } = require('./middleware/rate-limiter');
 const { testConnection, poolStats, query } = require('./db/client');
 const seed = require('./db/seed');
 const reference = require('./engine/reference');
@@ -254,14 +255,27 @@ app.use(express.static(path.join(__dirname, '..', 'frontend'), {
 // Deep health check: verifies the database round-trips and reports pool
 // pressure. The plain /health below only proves the process is alive, which is
 // all the existing 5-minute cron ping needs; this one is for diagnosing.
-app.get('/health/deep', async (req, res) => {
+//
+// Security review 2026-09-13: this route sat outside app.use('/api', rateLimiter)
+// entirely — unauthenticated, unbounded, and each hit ran a real query against
+// the DB pool, plus a DB failure handed the caller err.message verbatim
+// (connection strings/host names on a bad day). Scoped rate limiter added and
+// the failure detail now goes to the server log only, not the response.
+const healthDeepLimiter = createRateLimiter({
+  name: 'health-deep',
+  max: 20,
+  windowMs: 60 * 1000,
+  message: 'Too many health-check requests.',
+});
+app.get('/health/deep', healthDeepLimiter, async (req, res) => {
   const started = Date.now();
   let db;
   try {
     const [row] = await query('SELECT now() AS ts');
     db = { ok: true, latency_ms: Date.now() - started, server_time: row.ts };
   } catch (err) {
-    db = { ok: false, error: err.message };
+    console.error('[Health/Deep] DB check failed:', err.message);
+    db = { ok: false, error: 'database unreachable' };
   }
   res.status(db.ok ? 200 : 503).json({
     status: db.ok ? 'ok' : 'degraded',
