@@ -23,6 +23,7 @@ const { DEFAULT_EXCHANGE_RATES } = require('../engine/domain/costing-engine');
 const { isWovenId } = require('../engine/catalog/woven-derivatives');
 const { calculateStriper, validateStriperInput } = require('../engine/domain/striper-engine');
 const { calculateGarmentCosting } = require('../engine/domain/garment-costing-engine');
+const { calculateFabricConsumption } = require('../engine/domain/fabric-consumption-engine');
 const { GARMENT_CATALOG } = require('../engine/catalog/garment-operations');
 const { predictQuality } = require('../engine/domain/quality-engine');
 const { calculateCost, SM_PRICE_MATRIX, YARN_TYPE_CATALOG, SM_SURCHARGES } = require('../engine/domain/costing-engine');
@@ -320,11 +321,14 @@ router.get('/garment-types', (req, res) => {
 // ============================================================
 // POST /api/garment-costing — Full Cut-Make-Trim + Fabric FOB estimate
 //
-// One call does both halves: runs the existing fabric-level costing engine
-// (same as /api/cost, requires garment_weight_g so it can produce a
-// per-garment fabric cost) and then the new CMT labor/trim engine on top,
-// so the caller gets a complete Fabric + Cut + Make + Trim + Overhead +
-// Profit breakdown instead of having to stitch two calls together.
+// Three stages: the existing fabric-level costing engine (same as /api/cost,
+// requires garment_weight_g so it can produce a per-garment fabric cost),
+// then the fabric-consumption/cutting-allowance engine (grosses that NET
+// fabric cost up to what the factory actually has to buy — marker loss,
+// rejection/damage, roll-end remnants, GSM-tolerance buffer, plus amortized
+// sample/development yardage), then the CMT labor/trim engine on the result
+// — so the caller gets a complete Fabric(net+gross) + Cut + Make + Trim +
+// Overhead + Profit breakdown instead of having to stitch calls together.
 // ============================================================
 router.post('/garment-costing', (req, res) => {
   const body = req.body || {};
@@ -345,6 +349,7 @@ router.post('/garment-costing', (req, res) => {
         wage_grade: 3,
         line_efficiency_pct: 60,
         addons: [],
+        order_quantity: 5000,
       },
     });
   }
@@ -355,7 +360,7 @@ router.post('/garment-costing', (req, res) => {
   }
 
   try {
-    // ---- Half 1: fabric cost (reuses the same real engine /api/cost uses) ----
+    // ---- Stage 1: fabric cost (reuses the same real engine /api/cost uses) ----
     const parsedComp = body.composition ? parseComposition(body.composition) : null;
     const fabricResult = calculateCost({
       ...body, gsm, parsedComp, garment_weight_g: garmentWeightG,
@@ -367,10 +372,29 @@ router.post('/garment-costing', (req, res) => {
       return res.status(500).json({ error: 'Fabric costing did not return a per-garment figure — check garment_weight_g and fabric inputs.' });
     }
 
-    // ---- Half 2: Cut-Make-Trim + overhead + profit ----
+    // ---- Stage 2: fabric consumption — gross NET fabric cost up to what the
+    //      cutting room actually buys (marker loss, rejection, remnants, GSM
+    //      buffer, amortized sample/development yardage). ----
+    const consumption = calculateFabricConsumption({
+      net_garment_weight_g: garmentWeightG,
+      fabric_cost_per_kg_usd: fabricResult.cost_breakdown_usd.total_per_kg,
+      garment_type: body.garment_type,
+      order_quantity: body.order_quantity,
+      marker_cutting_loss_pct: body.marker_cutting_loss_pct,
+      rejection_damage_pct: body.rejection_damage_pct,
+      end_bit_remnant_pct: body.end_bit_remnant_pct,
+      gsm_tolerance_buffer_pct: body.gsm_tolerance_buffer_pct,
+      sample_development_overrides: body.sample_development_overrides,
+    });
+
+    if (!consumption.success) {
+      return res.status(400).json(consumption);
+    }
+
+    // ---- Stage 3: Cut-Make-Trim + overhead + profit, on the GROSS fabric cost ----
     const garmentCosting = calculateGarmentCosting({
       ...body,
-      fabric_cost_per_garment_usd: fabricResult.garment.total_usd,
+      fabric_cost_per_garment_usd: consumption.fabric_cost_per_garment_usd,
     });
 
     if (!garmentCosting.success) {
@@ -380,11 +404,46 @@ router.post('/garment-costing', (req, res) => {
     res.json({
       success: true,
       fabric_costing: fabricResult,
+      fabric_consumption: consumption,
       garment_costing: garmentCosting,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// ============================================================
+// POST /api/fabric-consumption — Standalone cutting-room consumption/
+// allowance calculator (marker loss, rejection, remnants, GSM buffer, and
+// amortized sample/development yardage), usable without running the full
+// CMT costing flow — e.g. for a bulk fabric-requirement/booking estimate.
+// ============================================================
+router.post('/fabric-consumption', (req, res) => {
+  const body = req.body || {};
+  const result = calculateFabricConsumption({
+    net_garment_weight_g: body.net_garment_weight_g,
+    fabric_cost_per_kg_usd: body.fabric_cost_per_kg_usd,
+    garment_type: body.garment_type,
+    order_quantity: body.order_quantity,
+    marker_cutting_loss_pct: body.marker_cutting_loss_pct,
+    rejection_damage_pct: body.rejection_damage_pct,
+    end_bit_remnant_pct: body.end_bit_remnant_pct,
+    gsm_tolerance_buffer_pct: body.gsm_tolerance_buffer_pct,
+    sample_development_overrides: body.sample_development_overrides,
+  });
+
+  if (!result.success) {
+    return res.status(400).json({
+      ...result,
+      example: {
+        net_garment_weight_g: 180,
+        fabric_cost_per_kg_usd: 4.20,
+        garment_type: 'basic_tshirt',
+        order_quantity: 5000,
+      },
+    });
+  }
+  res.json(result);
 });
 
 // ============================================================
