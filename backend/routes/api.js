@@ -22,6 +22,8 @@ const { getDyeingTheory, getDyeClass, getMachine, getProcessFlow } = require('..
 const { DEFAULT_EXCHANGE_RATES } = require('../engine/domain/costing-engine');
 const { isWovenId } = require('../engine/catalog/woven-derivatives');
 const { calculateStriper, validateStriperInput } = require('../engine/domain/striper-engine');
+const { calculateGarmentCosting } = require('../engine/domain/garment-costing-engine');
+const { GARMENT_CATALOG } = require('../engine/catalog/garment-operations');
 const { predictQuality } = require('../engine/domain/quality-engine');
 const { calculateCost, SM_PRICE_MATRIX, YARN_TYPE_CATALOG, SM_SURCHARGES } = require('../engine/domain/costing-engine');
 const { parseComposition } = require('../engine/domain/composition-engine');
@@ -297,6 +299,89 @@ router.post('/cost', (req, res) => {
       live_prices: (key, ne, country) =>
         yarnPrices.lookup(key, ne, undefined, { country }) });
     res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================
+// GET /api/garment-types — Available garment types for CMT costing
+// ============================================================
+router.get('/garment-types', (req, res) => {
+  res.json(Object.entries(GARMENT_CATALOG).map(([id, g]) => ({
+    id,
+    name: g.name,
+    name_bn: g.name_bn,
+    benchmark_sam: g.benchmark_sam,
+    benchmark_source: g.benchmark_source,
+  })));
+});
+
+// ============================================================
+// POST /api/garment-costing — Full Cut-Make-Trim + Fabric FOB estimate
+//
+// One call does both halves: runs the existing fabric-level costing engine
+// (same as /api/cost, requires garment_weight_g so it can produce a
+// per-garment fabric cost) and then the new CMT labor/trim engine on top,
+// so the caller gets a complete Fabric + Cut + Make + Trim + Overhead +
+// Profit breakdown instead of having to stitch two calls together.
+// ============================================================
+router.post('/garment-costing', (req, res) => {
+  const body = req.body || {};
+  const gsm = parseFloat(body.gsm);
+  const garmentWeightG = parseFloat(body.garment_weight_g);
+
+  if (!gsm || isNaN(gsm)) {
+    return res.status(400).json({ error: 'gsm is required (fabric GSM, feeds the fabric-cost half of this calculation)' });
+  }
+  if (!garmentWeightG || isNaN(garmentWeightG)) {
+    return res.status(400).json({
+      error: 'garment_weight_g is required — the finished garment\'s fabric weight in grams (e.g. ~180g for a basic adult-M crew tee). This is what turns a per-kg fabric price into a per-garment fabric cost.',
+      example: {
+        fabric: 'single_jersey', gsm: 180, gauge: 24, count_ne: 30,
+        composition: '100% Cotton', color_shade: 'medium', currency: 'USD',
+        garment_weight_g: 180,
+        garment_type: 'basic_tshirt',
+        wage_grade: 3,
+        line_efficiency_pct: 60,
+        addons: [],
+      },
+    });
+  }
+  if (!body.garment_type || !GARMENT_CATALOG[String(body.garment_type).toLowerCase().trim()]) {
+    return res.status(400).json({
+      error: `garment_type is required. Valid options: ${Object.keys(GARMENT_CATALOG).join(', ')}`,
+    });
+  }
+
+  try {
+    // ---- Half 1: fabric cost (reuses the same real engine /api/cost uses) ----
+    const parsedComp = body.composition ? parseComposition(body.composition) : null;
+    const fabricResult = calculateCost({
+      ...body, gsm, parsedComp, garment_weight_g: garmentWeightG,
+      live_prices: (key, ne, country) =>
+        yarnPrices.lookup(key, ne, undefined, { country }),
+    });
+
+    if (!fabricResult || !fabricResult.garment) {
+      return res.status(500).json({ error: 'Fabric costing did not return a per-garment figure — check garment_weight_g and fabric inputs.' });
+    }
+
+    // ---- Half 2: Cut-Make-Trim + overhead + profit ----
+    const garmentCosting = calculateGarmentCosting({
+      ...body,
+      fabric_cost_per_garment_usd: fabricResult.garment.total_usd,
+    });
+
+    if (!garmentCosting.success) {
+      return res.status(400).json(garmentCosting);
+    }
+
+    res.json({
+      success: true,
+      fabric_costing: fabricResult,
+      garment_costing: garmentCosting,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
