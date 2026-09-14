@@ -518,6 +518,165 @@
       </div>
     </div>
 
+    <!-- ===== GARMENT CMT COSTING (fabric consumption gross-up + Cut-Make-Trim) =====
+         Off by default — this needs a garment type and a garment fabric
+         weight neither of which the main form asks for, so it lives here as
+         its own small calculator that reuses the fabric price above rather
+         than a second, disconnected page. Everything below the inputs comes
+         straight from /api/calculate's garment_costing block, computed from
+         the SAME per-kg fabric price the card above shows — never a second,
+         separately-estimated number. -->
+    <div class="result-section anim-in" id="sec-garment-costing-setup" style="border:1px solid rgba(0,200,255,.25); background:rgba(0,200,255,.04);">
+      <div class="result-section-title">
+        <div class="rst-icon" style="background:rgba(0,200,255,.1); color:var(--a2);">&#128085;</div>
+        <div class="rst-title-text">Garment CMT Costing</div>
+        <span class="badge" style="margin-left:auto; background:rgba(0,200,255,.1); color:var(--a2); border:1px solid rgba(0,200,255,.25); font-size:10px; padding:2px 8px;">Cut · Make · Trim · FOB</span>
+      </div>
+      <div class="info-box text-xs" style="font-size:10px; line-height:1.5; margin-bottom:12px;">
+        Turns the fabric price above into a full per-garment cost: real cutting-room fabric consumption (marker loss, rejection, roll-end remnants, GSM buffer, sample yardage), then sewing labor (SAM-based, Bangladesh wage board), trims, overhead and profit to a landed FOB estimate.
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
+        <div>
+          <label for="gc-garment-type" style="display:block; font-size:10px; color:var(--t3); text-transform:uppercase; letter-spacing:.5px; margin-bottom:5px;">Garment type</label>
+          <select id="gc-garment-type" style="width:100%;">
+            <option value="">— select —</option>
+            <option value="basic_tshirt">Basic Crew-Neck T-Shirt</option>
+            <option value="polo_shirt">Basic Short-Sleeve Polo Shirt</option>
+            <option value="basic_hoodie">Basic Pullover Hoodie</option>
+            <option value="basic_jogger">Basic Knit Jogger / Sweatpant</option>
+          </select>
+        </div>
+        <div>
+          <label for="gc-garment-weight" style="display:block; font-size:10px; color:var(--t3); text-transform:uppercase; letter-spacing:.5px; margin-bottom:5px;">Net garment fabric weight (g)</label>
+          <input type="number" id="gc-garment-weight" min="1" step="1" placeholder="e.g. 180" style="width:100%;">
+        </div>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px;">
+        <div>
+          <label for="gc-order-qty" style="display:block; font-size:10px; color:var(--t3); text-transform:uppercase; letter-spacing:.5px; margin-bottom:5px;">Order quantity (optional)</label>
+          <input type="number" id="gc-order-qty" min="1" step="1" placeholder="e.g. 5000" style="width:100%;">
+        </div>
+        <div>
+          <label for="gc-wage-grade" style="display:block; font-size:10px; color:var(--t3); text-transform:uppercase; letter-spacing:.5px; margin-bottom:5px;">Wage grade (1=highest–5=floor)</label>
+          <select id="gc-wage-grade" style="width:100%;">
+            <option value="1">Grade 1</option>
+            <option value="2">Grade 2</option>
+            <option value="3" selected>Grade 3 (typical)</option>
+            <option value="4">Grade 4</option>
+            <option value="5">Grade 5 (floor)</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn btn-secondary" id="gc-calc-btn" style="width:100%;" onclick="onGarmentCostingCalculate()">Calculate Garment Cost</button>
+      <div id="gc-error" class="hidden" style="margin-top:8px; font-size:10px; color:#fb923c;"></div>
+    </div>
+
+    <div class="result-section anim-in hidden" id="sec-garment-costing">
+      <div class="result-section-title">
+        <div class="rst-icon" style="background:rgba(0,200,255,.1); color:var(--a2);">&#128176;</div>
+        <div class="rst-title-text" id="gc-title">Garment FOB Estimate</div>
+      </div>
+
+      <div class="cost-headline">
+        <div>
+          <div class="ch-lbl">Estimated FOB, per garment</div>
+          <div class="ch-val" id="gc-fob-val">&#8212;</div>
+          <div class="ch-sub" id="gc-fob-sub">USD &middot; fabric + cut + make + trim + overhead + profit</div>
+        </div>
+      </div>
+
+      <div class="result-section-label" style="margin-top:0;">Fabric consumption &#8212; net &#8594; gross</div>
+      <div class="result-row">
+        <span class="result-key">Net fabric weight <span class="text-dim">(sewn into the garment)</span></span>
+        <span class="result-val white" id="gc-net-weight">&#8212;</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Gross fabric weight <span class="text-dim">(what you actually buy)</span></span>
+        <span class="result-val white" id="gc-gross-weight">&#8212;</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Total cutting-room wastage</span>
+        <span class="result-val amber" id="gc-total-wastage">&#8212;</span>
+      </div>
+      <div id="gc-allowance-lines" style="margin:6px 0 10px 0; font-size:10px; color:var(--t3); line-height:1.8;"></div>
+
+      <div class="result-section-label">Fabric cost per garment</div>
+      <div class="result-row">
+        <span class="result-key">Net (before allowances)</span>
+        <span class="result-val white" id="gc-net-cost">&#8212;</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Gross (what the factory buys)</span>
+        <span class="result-val white" id="gc-gross-cost">&#8212;</span>
+      </div>
+      <div class="result-row" id="gc-sample-row">
+        <span class="result-key">+ Sample/development, amortized</span>
+        <span class="result-val white" id="gc-sample-cost">&#8212;</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key font-bold">= Fabric cost used in CMT below</span>
+        <span class="result-val white font-bold" id="gc-final-fabric-cost">&#8212;</span>
+      </div>
+
+      <div class="result-section-label">Cut &#8226; Make &#8226; Trim</div>
+      <div class="result-row">
+        <span class="result-key">Sewing SAM <span class="text-dim" id="gc-sam-benchmark"></span></span>
+        <span class="result-val white" id="gc-sam">&#8212;</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Making (sewing labor)</span>
+        <span class="result-val white" id="gc-making-cost">&#8212;</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Cutting (labor)</span>
+        <span class="result-val white" id="gc-cutting-cost">&#8212;</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Trims (labels, hangtag, thread, packing)</span>
+        <span class="result-val white" id="gc-trim-cost">&#8212;</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key font-bold">CMT total</span>
+        <span class="result-val white font-bold" id="gc-cmt-total">&#8212;</span>
+      </div>
+
+      <div class="result-section-label">FOB build-up</div>
+      <div class="result-row">
+        <span class="result-key">Fabric + CMT</span>
+        <span class="result-val white" id="gc-direct-cost">&#8212;</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">+ Overhead</span>
+        <span class="result-val white" id="gc-overhead">&#8212;</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">+ Profit</span>
+        <span class="result-val white" id="gc-profit">&#8212;</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key font-bold">FOB total</span>
+        <span class="result-val white font-bold" id="gc-fob-total">&#8212;</span>
+      </div>
+      <div class="result-row">
+        <span class="result-key">Fabric share of FOB</span>
+        <span class="result-val" id="gc-fabric-share">&#8212;</span>
+      </div>
+
+      <div id="gc-order-block" class="hidden" style="margin-top:10px;">
+        <div class="result-section-label">Order total</div>
+        <div class="result-row">
+          <span class="result-key">Total fabric to book</span>
+          <span class="result-val white" id="gc-order-fabric">&#8212;</span>
+        </div>
+        <div class="result-row">
+          <span class="result-key">Total fabric spend</span>
+          <span class="result-val white" id="gc-order-spend">&#8212;</span>
+        </div>
+      </div>
+
+      <div id="gc-warnings" style="margin-top:10px; font-size:10px; color:#fbbf24; line-height:1.6;"></div>
+    </div>
+
     <!-- ===== FACTORY R&D DATA MATCH (real measured records) ===== -->
     <div class="result-section anim-in hidden" id="sec-factory" style="border:1px solid rgba(0,255,178,.4); background:rgba(0,255,178,.06);">
       <div class="result-section-title">
@@ -2060,6 +2219,11 @@ function renderResult(r, params) {
   renderDyeingRecipe(r.costing);
   renderDyeingTheoryNotes(r);
 
+  // — Garment CMT costing (fabric consumption gross-up + Cut-Make-Trim) —
+  // null unless the user has already run it once this page-load (the inputs
+  // live on this page, not the main form — see initGarmentCostingControls).
+  renderGarmentCosting(r.garment_costing);
+
   // — Production Critical Path Analysis (CPA) —
   renderCPA(r.critical_path);
 
@@ -2308,6 +2472,11 @@ async function onCountryChange() {
       costingParams = { ...costingParams, country: sel.value };
       renderCosting(r.costing);
       renderDyeingRecipe(r.costing);
+      // costingParams may already carry garment_type/garment_weight_g from an
+      // earlier "Calculate Garment Cost" click — if so, the country change
+      // just re-priced the fabric under it, so refresh that card from the
+      // SAME response rather than leaving it showing the old country's numbers.
+      if (costingParams.garment_type) renderGarmentCosting(r.garment_costing);
     }
   } catch (err) {
     // A failed re-cost must leave the previous, correct figures on screen
@@ -2318,6 +2487,146 @@ async function onCountryChange() {
     sel.disabled = false;
     busy.classList.add('hidden');
   }
+}
+
+// ── GARMENT CMT COSTING ─────────────────────────────────────────────────────
+// Its own small calculator on the result page (see sec-garment-costing-setup
+// above): the inputs it needs — garment type, net garment fabric weight,
+// order quantity, wage grade — aren't on the main form, so asking the user to
+// go back and resubmit the whole calculation would be worse than just asking
+// here. Every number rendered below comes from ONE /api/calculate response,
+// built on that response's own costResult — never a second, separately
+// fetched estimate that could quietly disagree with the fabric price above it.
+async function onGarmentCostingCalculate() {
+  const btn = document.getElementById('gc-calc-btn');
+  const errEl = document.getElementById('gc-error');
+  errEl.classList.add('hidden');
+
+  const garmentType = document.getElementById('gc-garment-type').value;
+  const garmentWeight = parseFloat(document.getElementById('gc-garment-weight').value);
+  const orderQty = parseInt(document.getElementById('gc-order-qty').value, 10);
+  const wageGrade = parseInt(document.getElementById('gc-wage-grade').value, 10);
+
+  if (!garmentType) {
+    errEl.textContent = 'Pick a garment type first.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+  if (!Number.isFinite(garmentWeight) || garmentWeight <= 0) {
+    errEl.textContent = 'Enter the garment\'s net fabric weight in grams (e.g. 180 for a basic adult-M tee).';
+    errEl.classList.remove('hidden');
+    return;
+  }
+  if (!costingParams) return;
+
+  const prevLabel = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Calculating…';
+  try {
+    const merged = {
+      ...costingParams,
+      garment_type: garmentType,
+      garment_weight_g: garmentWeight,
+      wage_grade: wageGrade,
+    };
+    if (Number.isFinite(orderQty) && orderQty > 0) merged.order_quantity = orderQty;
+    else delete merged.order_quantity;
+
+    const r = await apiCalculate(merged);
+    if (!r || !r.success) {
+      errEl.textContent = (r && r.error) || 'Calculation failed.';
+      errEl.classList.remove('hidden');
+      return;
+    }
+    if (!r.garment_costing) {
+      errEl.textContent = 'The engine did not return a garment costing result — check the inputs above.';
+      errEl.classList.remove('hidden');
+      return;
+    }
+    // Persisted into the shared params, so a later country change (above)
+    // keeps this card in sync automatically instead of going stale.
+    costingParams = merged;
+    renderGarmentCosting(r.garment_costing);
+  } catch (err) {
+    errEl.textContent = err.message || 'Could not reach the server.';
+    errEl.classList.remove('hidden');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = prevLabel;
+  }
+}
+
+function renderGarmentCosting(gcResult) {
+  const sec = document.getElementById('sec-garment-costing');
+  if (!gcResult) {
+    sec.classList.add('hidden');
+    return;
+  }
+  const esc = (x) => String(x == null ? '' : x).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  const { consumption: c, cmt } = gcResult;
+  sec.classList.remove('hidden');
+
+  document.getElementById('gc-title').textContent = `${cmt.garment.name} — FOB Estimate`;
+  document.getElementById('gc-fob-val').textContent = `$${fmt(cmt.summary.fob_total_usd, 2)}`;
+
+  document.getElementById('gc-net-weight').textContent = `${fmt(c.net.weight_g, 1)} g`;
+  document.getElementById('gc-gross-weight').textContent = `${fmt(c.gross.weight_g, 1)} g`;
+  document.getElementById('gc-total-wastage').textContent = `+${fmt(c.allowances.total_wastage_pct, 1)}%`;
+
+  const a = c.allowances;
+  document.getElementById('gc-allowance-lines').innerHTML = [
+    ['Marker/cutting loss', a.marker_cutting_loss_pct],
+    ['Rejection/damage', a.rejection_damage_pct],
+    ['End-bit/remnant', a.end_bit_remnant_pct],
+    ['GSM tolerance buffer', a.gsm_tolerance_buffer_pct],
+  ].map(([label, entry]) => `<div>&#8226; ${esc(label)}: <strong style="color:var(--t2);">+${fmt(entry.value, 1)}%</strong> <span style="opacity:.7;">(${esc(entry.source)})</span></div>`).join('');
+
+  document.getElementById('gc-net-cost').textContent = `$${fmt(c.net.fabric_cost_usd, 4)}`;
+  document.getElementById('gc-gross-cost').textContent = `$${fmt(c.gross.fabric_cost_usd, 4)}`;
+
+  const sampleRow = document.getElementById('gc-sample-row');
+  const sampleAmortized = c.sample_development.amortized_cost_per_garment_usd;
+  if (sampleAmortized != null) {
+    sampleRow.classList.remove('hidden');
+    document.getElementById('gc-sample-cost').textContent = `$${fmt(sampleAmortized, 4)}`;
+  } else {
+    sampleRow.classList.add('hidden');
+  }
+  document.getElementById('gc-final-fabric-cost').textContent = `$${fmt(c.fabric_cost_per_garment_usd, 4)}`;
+
+  document.getElementById('gc-sam').textContent = `${fmt(cmt.sam.sewing.sam_minutes, 3)} min`;
+  document.getElementById('gc-sam-benchmark').textContent =
+    `(benchmark ${cmt.sam.sewing.benchmark_sam} min, ${cmt.sam.sewing.benchmark_source})`;
+  document.getElementById('gc-making-cost').textContent = `$${fmt(cmt.labor.making_cost_usd, 4)}`;
+  document.getElementById('gc-cutting-cost').textContent = `$${fmt(cmt.labor.cutting_cost_usd, 4)}`;
+  document.getElementById('gc-trim-cost').textContent = `$${fmt(cmt.trim.total_usd, 4)}`;
+  document.getElementById('gc-cmt-total').textContent = `$${fmt(cmt.cmt_total_usd, 4)}`;
+
+  document.getElementById('gc-direct-cost').textContent = `$${fmt(cmt.summary.direct_cost_usd, 4)}`;
+  document.getElementById('gc-overhead').textContent = `$${fmt(cmt.summary.overhead_usd, 4)} (${cmt.summary.overhead_pct}%)`;
+  document.getElementById('gc-profit').textContent = `$${fmt(cmt.summary.profit_usd, 4)} (${cmt.summary.profit_pct}%)`;
+  document.getElementById('gc-fob-total').textContent = `$${fmt(cmt.summary.fob_total_usd, 4)}`;
+
+  const shareEl = document.getElementById('gc-fabric-share');
+  shareEl.textContent = `${fmt(cmt.summary.fabric_share_pct_of_fob, 1)}%`;
+  shareEl.className = 'result-val ' + (cmt.summary.fabric_share_pct_of_fob >= 40 && cmt.summary.fabric_share_pct_of_fob <= 80 ? 'green' : 'amber');
+
+  const orderBlock = document.getElementById('gc-order-block');
+  if (c.order) {
+    orderBlock.classList.remove('hidden');
+    document.getElementById('gc-order-fabric').textContent = `${fmt(c.order.total_fabric_kg, 1)} kg (order of ${c.order.quantity.toLocaleString()})`;
+    document.getElementById('gc-order-spend').textContent = `$${fmt(c.order.total_fabric_cost_usd, 2)}`;
+  } else {
+    orderBlock.classList.add('hidden');
+  }
+
+  const warnEl = document.getElementById('gc-warnings');
+  const allWarnings = [...(c.warnings || []), ...(cmt.warnings || [])];
+  warnEl.innerHTML = allWarnings.length
+    ? allWarnings.map(w => `<div>&#9888; ${esc(w)}</div>`).join('')
+    : '';
+
+  syncStages();
 }
 
 function renderCosting(costing) {

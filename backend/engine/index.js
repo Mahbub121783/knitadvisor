@@ -51,6 +51,8 @@ const {
 
 const { predictQuality } = require('./domain/quality-engine');
 const { calculateCost }  = require('./domain/costing-engine');
+const { calculateFabricConsumption } = require('./domain/fabric-consumption-engine');
+const { calculateGarmentCosting } = require('./domain/garment-costing-engine');
 const {
   denierToGSM,
   gsmToDenier,
@@ -866,8 +868,60 @@ function calculate(params) {
     at_sight: !!params.yarn_at_sight,
     yarn_form,
     feeder_type: params.feeder_type || null, // 'ff' (full feeder) | 'hf' (half feeder, default) — lycra rib knitting-cost tier
+    // Net per-garment fabric cost (weight x per-kg price, no cutting-room
+    // allowances yet — see 6.2b below for the gross-up). Only populated when
+    // the caller supplies a garment weight; costing-engine.js already handles
+    // the null case cleanly.
+    garment_weight_g: params.garment_weight_g || null,
   });
   trace.push({ step: '6.2', action: 'costing', total_usd_per_kg: costResult.cost_breakdown_usd.total_per_kg });
+
+  // --- 6.2b Garment Cut-Make-Trim costing (fabric consumption gross-up +
+  //          labor/trim/overhead/profit) — only runs when the caller supplies
+  //          both a garment weight and a garment type. Reuses costResult's
+  //          own per-kg price rather than recomputing it, so a garment total
+  //          can never disagree with the per-kg figure shown above it. ---
+  let garmentCosting = null;
+  if (params.garment_weight_g && params.garment_type) {
+    const consumption = calculateFabricConsumption({
+      net_garment_weight_g: params.garment_weight_g,
+      fabric_cost_per_kg_usd: costResult.cost_breakdown_usd.total_per_kg,
+      garment_type: params.garment_type,
+      order_quantity: params.order_quantity,
+      marker_cutting_loss_pct: params.marker_cutting_loss_pct,
+      rejection_damage_pct: params.rejection_damage_pct,
+      end_bit_remnant_pct: params.end_bit_remnant_pct,
+      gsm_tolerance_buffer_pct: params.gsm_tolerance_buffer_pct,
+    });
+    if (!consumption.success) {
+      warnings.push(`Fabric consumption calculation skipped: ${consumption.error}`);
+    } else {
+      const cmt = calculateGarmentCosting({
+        garment_type: params.garment_type,
+        fabric_cost_per_garment_usd: consumption.fabric_cost_per_garment_usd,
+        wage_grade: params.wage_grade,
+        line_efficiency_pct: params.line_efficiency_pct,
+        cutting_efficiency_pct: params.cutting_efficiency_pct,
+        cutting_sam_pct: params.cutting_sam_pct,
+        addons: params.addons,
+        overhead_pct: params.overhead_pct,
+        profit_pct: params.profit_pct,
+        bdt_per_usd: params.bdt_per_usd,
+      });
+      if (!cmt.success) {
+        warnings.push(`Garment CMT costing skipped: ${cmt.error}`);
+      } else {
+        garmentCosting = { consumption, cmt };
+        warnings.push(...consumption.warnings, ...cmt.warnings);
+        trace.push({
+          step: '6.2b', action: 'garment_cmt_costing',
+          result: `${cmt.garment.name}: net ${consumption.net.weight_g}g → gross `
+            + `${consumption.gross.weight_g}g (${consumption.allowances.total_wastage_pct}% wastage) → `
+            + `FOB $${cmt.summary.fob_total_usd} (fabric ${cmt.summary.fabric_share_pct_of_fob}% of FOB)`,
+        });
+      }
+    }
+  }
 
   // --- 6.3 Dynamic Pattern & Structural Adaptation ---
   const patternResult = getEnginePattern(fabricDef.id, gsm, gauge, composition);
@@ -1153,6 +1207,15 @@ function calculate(params) {
     pattern: patternResult || null,
     critical_path: cpaResult || null,
 
+    // Net-to-gross fabric consumption + full CMT/FOB estimate — null unless
+    // the caller supplied both garment_weight_g and garment_type. Built on
+    // the SAME costResult the `costing` block above renders from, so the
+    // two can never disagree.
+    garment_costing: garmentCosting ? {
+      consumption: garmentCosting.consumption,
+      cmt: garmentCosting.cmt,
+    } : null,
+
     warnings,
     formula_trace: trace,
   };
@@ -1211,6 +1274,13 @@ const ENGINE_INPUTS = Object.freeze([
   'country',
   // warp knit
   'denier', 'filaments', 'elastane_denier', 'elastane_pct',
+  // garment CMT costing + fabric consumption (all optional — garment_costing
+  // stays null in the response unless both garment_weight_g and garment_type
+  // are present)
+  'garment_weight_g', 'garment_type', 'order_quantity',
+  'wage_grade', 'line_efficiency_pct', 'cutting_efficiency_pct', 'cutting_sam_pct',
+  'addons', 'overhead_pct', 'profit_pct', 'bdt_per_usd',
+  'marker_cutting_loss_pct', 'rejection_damage_pct', 'end_bit_remnant_pct', 'gsm_tolerance_buffer_pct',
 ]);
 
 function normalizeParams(p) {
