@@ -59,6 +59,18 @@ const PROVIDER_DEFAULTS = {
   mistral: { daily_limit: 10000, per_min_limit: 10, api_url: 'https://api.mistral.ai/v1/chat/completions' },
   cohere:  { daily_limit:  1000, per_min_limit:  5, api_url: 'https://api.cohere.ai/v1/chat' },
   openai:  { daily_limit: 10000, per_min_limit: 60, api_url: 'https://api.openai.com/v1/chat/completions' },
+  // Metadata only, so these two show up as selectable "Add Provider" types
+  // and their keys can be entered/encrypted through the existing admin flow
+  // (getProviderKeys/decryptApiKey below). NOT wired into callProvider() or
+  // parse()'s rotation — engine/domain/knowledge-assistant-engine.js reads
+  // their key directly and calls the real Anthropic SDK / Voyage HTTP API
+  // itself, because those APIs are not OpenAI-chat-completions-shaped the
+  // way callProvider()'s five branches assume. If a row for either type is
+  // ever left enabled here, parse() attempting to use it hits callProvider()'s
+  // `Unknown provider type` throw BEFORE any network call — a caught,
+  // zero-cost fallback to the next provider, not a malformed live request.
+  anthropic: { daily_limit: 5000, per_min_limit: 50, api_url: 'https://api.anthropic.com/v1/messages' },
+  voyage:    { daily_limit: 5000, per_min_limit: 50, api_url: 'https://api.voyageai.com/v1/embeddings' },
 };
 
 let rrCursor = 0;
@@ -539,7 +551,9 @@ function getProviderTypes() {
     gemini: 'gemini-1.5-flash',
     mistral: 'mistral-small-latest',
     cohere: 'command-r',
-    openai: 'gpt-4o-mini'
+    openai: 'gpt-4o-mini',
+    anthropic: 'claude-sonnet-5',
+    voyage: 'voyage-4-lite',
   };
   return Object.entries(PROVIDER_DEFAULTS).map(([type, d]) => ({
     type,
@@ -558,7 +572,9 @@ async function addProvider({ provider_type, display_name, api_key_env, model_nam
     gemini: 'gemini-1.5-flash',
     mistral: 'mistral-small-latest',
     cohere: 'command-r',
-    openai: 'gpt-4o-mini'
+    openai: 'gpt-4o-mini',
+    anthropic: 'claude-sonnet-5',
+    voyage: 'voyage-4-lite',
   };
 
   // Auto-assign priority (max + 1)

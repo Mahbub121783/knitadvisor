@@ -28,6 +28,7 @@ const vizRoutes = require('./routes/viz');
 const adminRoutes = require('./routes/admin');
 const cronRoutes = require('./routes/internal-cron');
 const searchRoutes = require('./routes/search');
+const assistantRoutes = require('./routes/assistant');
 const rateLimiter = require('./middleware/rate-limiter');
 const { createRateLimiter } = require('./middleware/rate-limiter');
 const { testConnection, poolStats, query } = require('./db/client');
@@ -202,6 +203,11 @@ app.use('/api', vizRoutes);
 // beside the calculation API without being part of it — nothing here feeds
 // a calculation, it only helps a user find the right input.
 app.use('/api/search', searchRoutes);
+
+// Knowledge Assistant (RAG) — its own dedicated rate limit + daily budget
+// cap live inside assistant.js itself, on top of the general /api limiter
+// above, because this is the first route with real per-request $ cost.
+app.use('/api/assistant', assistantRoutes);
 
 // Admin routes
 app.use('/admin', adminRoutes);

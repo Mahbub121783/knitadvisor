@@ -259,3 +259,18 @@ async function apiVisualize(fabricId, resultObject) {
 async function apiVizConfig(fabricId) {
   return apiFetch(`/api/viz-config/${encodeURIComponent(fabricId)}`);
 }
+
+// ============================================================
+// POST /api/assistant/ask
+// Knowledge Assistant (RAG) — answers grounded ONLY in KnitAdvisor's own
+// reference data (fibre science, dyeing faults/theory, academy, garment
+// costing methodology). Throws (via apiFetch) on 400/429/503 — the caller
+// should show err.data?.error || err.message rather than a generic failure,
+// since this endpoint's error text is specifically written to be shown.
+// ============================================================
+async function apiAssistantAsk(question) {
+  return apiFetch('/api/assistant/ask', {
+    method: 'POST',
+    body: { question },
+  });
+}
