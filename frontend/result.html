@@ -438,6 +438,7 @@
       <div class="actions-bar">
         <button class="btn btn-ghost" onclick="window.print()">🖨 Print</button>
         <button class="btn btn-ghost" id="copy-btn" onclick="copyResults()">📋 Copy</button>
+        <button class="btn btn-ghost" id="techpack-btn" onclick="downloadTechPack()">📄 Tech Pack PDF</button>
         <button class="btn btn-secondary" onclick="goRecalculate()">↩ Recalculate</button>
       </div>
     </div>
@@ -2629,6 +2630,34 @@ function renderGarmentCosting(gcResult) {
     : '';
 
   syncStages();
+}
+
+// ── TECH PACK PDF ────────────────────────────────────────────────────────────
+// Sends the SAME costingParams already driving this page (including any
+// garment_type/garment_weight_g the user has entered above) so the PDF can
+// never show different numbers than the page it was downloaded from.
+async function downloadTechPack() {
+  if (!costingParams) return;
+  const btn = document.getElementById('techpack-btn');
+  const prevLabel = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Generating…';
+  try {
+    const { blob, filename } = await apiTechPackGenerate(costingParams);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    showToast((err.data && err.data.error) || err.message || 'Could not generate the tech pack PDF.', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = prevLabel;
+  }
 }
 
 function renderCosting(costing) {

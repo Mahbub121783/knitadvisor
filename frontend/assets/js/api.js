@@ -274,3 +274,27 @@ async function apiAssistantAsk(question) {
     body: { question },
   });
 }
+
+// ============================================================
+// POST /api/techpack/generate
+// Returns a PDF binary, not JSON — bypasses apiFetch's JSON-only assumption
+// and hands the caller a Blob to turn into a download.
+// ============================================================
+async function apiTechPackGenerate(params) {
+  const res = await fetch(`${API_BASE}/api/techpack/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/pdf' },
+    body: JSON.stringify(params),
+  });
+  if (!res.ok) {
+    let errData = {};
+    try { errData = await res.json(); } catch { /* non-JSON error body */ }
+    const err = new Error(errData.error || `HTTP ${res.status}`);
+    err.status = res.status;
+    err.data = errData;
+    throw err;
+  }
+  const disposition = res.headers.get('Content-Disposition') || '';
+  const match = disposition.match(/filename="([^"]+)"/);
+  return { blob: await res.blob(), filename: match ? match[1] : 'KnitAdvisor-TechPack.pdf' };
+}

@@ -30,6 +30,8 @@ const { calculateCost, SM_PRICE_MATRIX, YARN_TYPE_CATALOG, SM_SURCHARGES } = req
 const { parseComposition } = require('../engine/domain/composition-engine');
 const { GLOSSARY, BASIC_ELEMENTS, FORMATION_CYCLES, QUIZ_QUESTIONS } = require('../engine/domain/academy-engine');
 const colorEngine = require('../engine/domain/color-engine');
+const { buildTechPackContent } = require('../engine/domain/techpack-content-builder');
+const { renderTechPackPdf } = require('../engine/domain/techpack-pdf-renderer');
 
 const memCache = require('../cache/memory-cache');
 const { resultCache } = require('../db/repositories/cache-repo');
@@ -444,6 +446,68 @@ router.post('/fabric-consumption', (req, res) => {
     });
   }
   res.json(result);
+});
+
+// ============================================================
+// POST /api/techpack/generate — Fabric Technical Data Sheet (PDF export)
+//
+// Takes the exact same inputs as /api/calculate (garment_weight_g/
+// garment_type optional, for a Garment CMT & FOB section) and streams back
+// a PDF built from that SAME calculate() result — never a second,
+// separately-computed set of numbers. No response caching here (unlike
+// /api/calculate): this is a one-off binary export, not a repeatedly-polled
+// read, and pdfkit generation is pure in-process drawing (fast, no external
+// calls), so there is nothing worth caching.
+// ============================================================
+router.post('/techpack/generate', (req, res) => {
+  const body = req.body || {};
+  const fabric = body.fabric;
+  const gsm = body.gsm ? parseFloat(body.gsm) : null;
+
+  if (!fabric || !gsm) {
+    return res.status(400).json({
+      error: 'fabric and gsm are required',
+      example: { fabric: 'single_jersey', gsm: 180, gauge: 24, dia: 30, composition: '100% Cotton' },
+    });
+  }
+
+  try {
+    // Same canonical-input forwarding as /api/calculate (see ENGINE_INPUTS'
+    // own doc comment) — every field calculate() knows how to read, forwarded
+    // uniformly, so this route can never silently drop an input /api/calculate
+    // itself would have honoured.
+    const engineParams = {};
+    for (const field of ENGINE_INPUTS) {
+      if (body[field] !== undefined) engineParams[field] = body[field];
+    }
+    engineParams.fabric = fabric;
+    engineParams.gsm = gsm;
+    engineParams.efficiency = body.efficiency || 85;
+    engineParams.live_prices = (key, ne, country) =>
+      yarnPrices.lookup(key, ne, undefined, { country });
+
+    const result = calculate(engineParams);
+    if (result.error) {
+      return res.status(400).json(result);
+    }
+
+    const content = buildTechPackContent(result);
+    if (!content.ok) {
+      return res.status(500).json({ error: content.error });
+    }
+
+    const doc = renderTechPackPdf(content);
+    const safeName = (result.fabric.id || 'fabric').replace(/[^a-z0-9_-]/gi, '');
+    const filename = `KnitAdvisor-TechPack-${safeName}-${result.input.gsm}gsm.pdf`;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    doc.pipe(res);
+    doc.end();
+  } catch (err) {
+    console.error('[TechPack] generate failed:', err.message);
+    res.status(500).json({ error: 'Could not generate the tech pack PDF.' });
+  }
 });
 
 // ============================================================
