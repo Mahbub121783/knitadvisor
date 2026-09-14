@@ -29,6 +29,7 @@ const adminRoutes = require('./routes/admin');
 const cronRoutes = require('./routes/internal-cron');
 const searchRoutes = require('./routes/search');
 const assistantRoutes = require('./routes/assistant');
+const rfqRoutes = require('./routes/rfq');
 const rateLimiter = require('./middleware/rate-limiter');
 const { createRateLimiter } = require('./middleware/rate-limiter');
 const { testConnection, poolStats, query } = require('./db/client');
@@ -208,6 +209,10 @@ app.use('/api/search', searchRoutes);
 // cap live inside assistant.js itself, on top of the general /api limiter
 // above, because this is the first route with real per-request $ cost.
 app.use('/api/assistant', assistantRoutes);
+
+// RFQ (Request For Quotation) — buyer-facing submit + status lookup, its own
+// rate limits inside rfq.js. Admin-side RFQ management lives in admin.js.
+app.use('/api/rfq', rfqRoutes);
 
 // Admin routes
 app.use('/admin', adminRoutes);

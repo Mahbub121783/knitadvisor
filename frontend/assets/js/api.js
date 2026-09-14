@@ -298,3 +298,22 @@ async function apiTechPackGenerate(params) {
   const match = disposition.match(/filename="([^"]+)"/);
   return { blob: await res.blob(), filename: match ? match[1] : 'KnitAdvisor-TechPack.pdf' };
 }
+
+// ============================================================
+// POST /api/rfq/submit
+// body: { buyer_name, buyer_email, buyer_company?, buyer_country?, buyer_phone?,
+//         message?, line_items: [{ fabric_id, gsm, composition?, garment_type?,
+//         garment_weight_g?, order_quantity?, target_price_usd? }, ...] }
+// Throws (via apiFetch) with err.data.errors (array) on 400 validation failure.
+// ============================================================
+async function apiRfqSubmit(payload) {
+  return apiFetch('/api/rfq/submit', { method: 'POST', body: payload });
+}
+
+// ============================================================
+// GET /api/rfq/status/:code — public, no auth. Buyer-facing view only
+// (quoted prices once set, never the internal reference calc snapshot).
+// ============================================================
+async function apiRfqStatus(code) {
+  return apiFetch(`/api/rfq/status/${encodeURIComponent(code)}`);
+}

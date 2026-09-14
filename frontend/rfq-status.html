@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Check Quote Status — KnitAdvisor</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <meta name="description" content="Look up the status of a KnitAdvisor quote request using your reference code.">
+  <meta name="theme-color" content="#FFFFFF">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css">
+
+  <style>
+    .page-header { padding: 28px 0 20px; }
+    .page-title { margin-bottom: 4px; }
+    .page-sub { font-size: 12px; color: var(--t2); }
+    .lookup-bar { display: flex; gap: 8px; margin-bottom: 20px; }
+    .lookup-bar input { flex: 1; text-transform: uppercase; }
+
+    .status-badge { display: inline-block; padding: 4px 12px; border-radius: 999px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; }
+    .status-pending, .status-under_review { background: rgba(251,191,36,.12); color: #fbbf24; border: 1px solid rgba(251,191,36,.3); }
+    .status-quoted { background: rgba(0,200,255,.1); color: var(--a2); border: 1px solid rgba(0,200,255,.28); }
+    .status-accepted { background: rgba(0,255,178,.1); color: var(--a1); border: 1px solid rgba(0,255,178,.28); }
+    .status-rejected, .status-expired { background: rgba(255,77,109,.1); color: #ff4d6d; border: 1px solid rgba(255,77,109,.28); }
+
+    .rfq-line { border: 1px solid var(--line2); border-radius: 10px; padding: 14px; margin-bottom: 10px; background: var(--bg3); }
+    .main-content { padding: 0 0 40px; }
+  </style>
+</head>
+<body>
+<div class="page-wrap">
+
+  <header class="hdr">
+    <a href="/" class="logo">Knit<span>Advisor</span></a>
+    <div class="hdr-badge">BETA</div>
+    <div class="hdr-right">
+      <a href="/" class="btn btn-ghost hide-mobile">← Calculator</a>
+      <a href="rfq.html" class="btn btn-ghost hide-mobile">📝 Request a Quote</a>
+    </div>
+  </header>
+
+  <main class="container main-content">
+
+    <div class="page-header">
+      <h1 class="h1 page-title text-head">Check Quote Status</h1>
+      <div class="page-sub">Enter the reference code you received when you submitted a quote request.</div>
+    </div>
+
+    <div class="lookup-bar">
+      <input type="text" id="rfq-code-input" class="form-input" placeholder="RFQ-XXXXXX" maxlength="20">
+      <button class="btn btn-primary" id="rfq-lookup-btn" onclick="lookupRfq()">Check</button>
+    </div>
+
+    <div id="rfq-status-error" class="hidden" style="margin-bottom:16px;font-size:12px;color:#fb923c;"></div>
+
+    <div id="rfq-status-result" class="hidden">
+      <div class="result-section anim-in" style="margin-bottom:16px;">
+        <div class="result-section-title">
+          <div class="rst-title-text" id="rs-code">—</div>
+          <span id="rs-status-badge" class="status-badge" style="margin-left:auto;">—</span>
+        </div>
+        <div class="result-row">
+          <span class="result-key">Submitted</span>
+          <span class="result-val white" id="rs-created">—</span>
+        </div>
+        <div class="result-row hidden" id="rs-quoted-row">
+          <span class="result-key">Quoted</span>
+          <span class="result-val white" id="rs-quoted">—</span>
+        </div>
+      </div>
+      <div id="rs-lines"></div>
+    </div>
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:24px;">
+      <a href="/" class="btn btn-secondary" style="flex:1">← Main Calculator</a>
+      <a href="rfq.html" class="btn btn-secondary" style="flex:1">📝 Request a New Quote</a>
+    </div>
+
+  </main>
+
+  <footer class="footer">
+    <div class="footer-nav container">
+      <div class="footer-brand">
+        <span class="footer-brand-name">KnitAdvisor</span>
+        <span class="footer-brand-sub">Quote Status</span>
+      </div>
+      <nav class="footer-links">
+        <a href="/">Calculator</a>
+        <a href="rfq.html">Request a Quote</a>
+        <a href="rfq-status.html">Check Quote Status</a>
+      </nav>
+    </div>
+    <div class="footer-bottom container">
+      <div class="footer-platform">
+        <span class="footer-platform-label">Part of</span>
+        <a href="https://www.onlinetextileschool.com" target="_blank" rel="noopener" class="footer-platform-link">www.onlinetextileschool.com</a>
+      </div>
+    </div>
+  </footer>
+
+</div>
+
+<script src="assets/js/api.js"></script>
+<script src="assets/js/ui.js"></script>
+
+<script>
+function esc(x) {
+  return String(x == null ? '' : x).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c] || c));
+}
+
+const STATUS_LABELS = {
+  pending: 'Pending Review',
+  under_review: 'Under Review',
+  quoted: 'Quoted',
+  accepted: 'Accepted',
+  rejected: 'Rejected',
+  expired: 'Expired',
+};
+
+async function lookupRfq() {
+  const code = document.getElementById('rfq-code-input').value.trim().toUpperCase();
+  const errEl = document.getElementById('rfq-status-error');
+  const resultEl = document.getElementById('rfq-status-result');
+  errEl.classList.add('hidden');
+  resultEl.classList.add('hidden');
+
+  if (!code) return;
+
+  const btn = document.getElementById('rfq-lookup-btn');
+  btn.disabled = true;
+  btn.textContent = 'Checking…';
+
+  try {
+    const r = await apiRfqStatus(code);
+
+    document.getElementById('rs-code').textContent = r.reference_code;
+    const badge = document.getElementById('rs-status-badge');
+    badge.textContent = STATUS_LABELS[r.status] || r.status;
+    badge.className = `status-badge status-${r.status}`;
+    document.getElementById('rs-created').textContent = new Date(r.created_at).toLocaleString();
+
+    const quotedRow = document.getElementById('rs-quoted-row');
+    if (r.quoted_at) {
+      quotedRow.classList.remove('hidden');
+      document.getElementById('rs-quoted').textContent = new Date(r.quoted_at).toLocaleString();
+    } else {
+      quotedRow.classList.add('hidden');
+    }
+
+    const linesEl = document.getElementById('rs-lines');
+    linesEl.innerHTML = r.line_items.map(li => `
+      <div class="rfq-line">
+        <div style="font-weight:700;font-size:12px;margin-bottom:8px;">Style ${esc(li.line_number)} — ${esc(li.fabric_name)}</div>
+        <div class="result-row"><span class="result-key">GSM</span><span class="result-val white">${esc(li.gsm)}</span></div>
+        ${li.garment_type ? `<div class="result-row"><span class="result-key">Garment</span><span class="result-val white">${esc(li.garment_type)}</span></div>` : ''}
+        ${li.order_quantity ? `<div class="result-row"><span class="result-key">Quantity</span><span class="result-val white">${esc(li.order_quantity.toLocaleString())}</span></div>` : ''}
+        ${li.target_price_usd != null ? `<div class="result-row"><span class="result-key">Your target price</span><span class="result-val white">$${esc(li.target_price_usd)}</span></div>` : ''}
+        ${li.quoted_price_usd != null
+          ? `<div class="result-row"><span class="result-key font-bold">Quoted price</span><span class="result-val white font-bold" style="color:var(--a1);">$${esc(li.quoted_price_usd)}</span></div>`
+          : `<div class="result-row"><span class="result-key">Quoted price</span><span class="result-val" style="opacity:.6;">not yet quoted</span></div>`}
+        ${li.quoted_notes ? `<div class="text-xs text-dim mt-4">${esc(li.quoted_notes)}</div>` : ''}
+      </div>
+    `).join('');
+
+    resultEl.classList.remove('hidden');
+  } catch (err) {
+    errEl.textContent = (err.data && err.data.error) || err.message || 'Could not find that reference code.';
+    errEl.classList.remove('hidden');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Check';
+  }
+}
+
+document.getElementById('rfq-code-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') lookupRfq();
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('code');
+  if (code) {
+    document.getElementById('rfq-code-input').value = code;
+    lookupRfq();
+  }
+});
+</script>
+
+</body>
+</html>

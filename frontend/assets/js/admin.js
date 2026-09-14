@@ -129,6 +129,9 @@ function switchTab(tabId) {
   } else if (tabId === 'tab-inquiries' && !tabState.loaded.inquiries) {
     tabState.loaded.inquiries = true;
     loadInquiries(1, {});
+  } else if (tabId === 'tab-rfq' && !tabState.loaded.rfq) {
+    tabState.loaded.rfq = true;
+    loadRfqList(1, {});
   } else if (tabId === 'tab-prices' && !tabState.loaded.prices) {
     tabState.loaded.prices = true;
     loadYarnPrices();
@@ -989,6 +992,137 @@ async function downloadInquiriesCSV() {
   } catch (e) { toast('CSV download failed', 'error'); }
 }
 
+// ── RFQ / QUOTES ───────────────────────────────────────────
+const STATUS_BADGE_CLASS = {
+  pending: 'badge-yellow', under_review: 'badge-yellow', quoted: 'badge-blue',
+  accepted: 'badge-green', rejected: 'badge-red', expired: 'badge-red',
+};
+let curRfqPage = 1;
+let openRfqId = null;
+
+function getRfqFilters() {
+  return {
+    status: document.getElementById('rfq-filter-status').value,
+    search: document.getElementById('rfq-filter-search').value.trim(),
+  };
+}
+
+async function loadRfqList(page, filters) {
+  try {
+    const p = new URLSearchParams({ page, limit: 25 });
+    if (filters.status) p.append('status', filters.status);
+    if (filters.search) p.append('search', filters.search);
+
+    const d = await api('/admin/api/rfq?' + p);
+
+    const countsEl = document.getElementById('rfq-status-counts');
+    const sc = d.status_counts || {};
+    countsEl.innerHTML = Object.entries(sc).map(([status, n]) =>
+      `<div class="stat-card"><div class="stat-val">${esc(n)}</div><div class="stat-lbl">${esc(status.replace('_', ' '))}</div></div>`
+    ).join('');
+
+    const tbody = document.getElementById('rfq-tbody');
+    tbody.innerHTML = '';
+    if (!d.rows.length) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--t3);">No quote requests found</td></tr>';
+    }
+    for (const r of d.rows) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="padding:9px 10px;font-family:var(--mono);color:var(--t2);">${esc(r.reference_code)}</td>
+        <td style="padding:9px 10px;color:var(--t2);">${esc(r.buyer_name)}<div style="font-size:10px;color:var(--t3);">${esc(r.buyer_email)}</div></td>
+        <td style="padding:9px 10px;color:var(--t2);">${esc(r.buyer_company || '—')}</td>
+        <td style="padding:9px 10px;color:var(--t2);">${esc(r.line_item_count)}</td>
+        <td style="padding:9px 10px;"><span class="badge ${STATUS_BADGE_CLASS[r.status] || 'badge-gray'}">${esc(r.status.replace('_', ' '))}</span></td>
+        <td style="padding:9px 10px;color:var(--t3);font-family:var(--mono);">${esc(new Date(r.created_at).toLocaleDateString())}</td>
+        <td style="padding:9px 10px;"><button class="btn btn-ghost btn-sm" data-rfq-id="${esc(r.id)}">View</button></td>
+      `;
+      tbody.appendChild(tr);
+    }
+    renderPagination('rfq-pagination', d.page, d.pages, (pg) => loadRfqList(pg, getRfqFilters()), d.total);
+    curRfqPage = page;
+  } catch (e) { toast('Failed to load RFQs', 'error'); }
+}
+
+async function openRfqDetail(id) {
+  try {
+    const rfq = await api('/admin/api/rfq/' + id);
+    openRfqId = id;
+
+    document.getElementById('rfqd-title').textContent = `RFQ ${rfq.reference_code}`;
+    document.getElementById('rfqd-buyer').innerHTML =
+      `${esc(rfq.buyer_name)} &lt;${esc(rfq.buyer_email)}&gt;` +
+      (rfq.buyer_company ? `<br>${esc(rfq.buyer_company)}` : '') +
+      (rfq.buyer_country ? ` · ${esc(rfq.buyer_country)}` : '') +
+      (rfq.buyer_phone ? ` · ${esc(rfq.buyer_phone)}` : '');
+    document.getElementById('rfqd-message').textContent = rfq.message || '(no message)';
+    document.getElementById('rfqd-status').value = rfq.status;
+    document.getElementById('rfqd-admin-notes').value = rfq.admin_notes || '';
+
+    const linesEl = document.getElementById('rfqd-lines');
+    linesEl.innerHTML = rfq.line_items.map(li => `
+      <div class="card mb-8" style="padding:10px;">
+        <div style="font-weight:700;font-size:11px;margin-bottom:6px;">#${esc(li.line_number)} — ${esc(li.fabric_name)} · ${esc(li.gsm)}gsm${li.garment_type ? ' · ' + esc(li.garment_type) : ''}${li.order_quantity ? ' · qty ' + esc(li.order_quantity.toLocaleString()) : ''}</div>
+        <div style="font-size:10px;color:var(--t3);margin-bottom:8px;">
+          Reference fabric price: $${li.reference_fabric_price_usd != null ? esc(li.reference_fabric_price_usd) : '—'}/kg
+          ${li.reference_fob_price_usd != null ? ` · Reference FOB: $${esc(li.reference_fob_price_usd)}/garment` : ''}
+          ${li.target_price_usd != null ? ` · Buyer's target: $${esc(li.target_price_usd)}` : ''}
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Quoted price (USD)</label>
+            <input type="number" step="0.01" min="0" class="form-input rfqd-line-price" data-line-id="${li.id}" value="${li.quoted_price_usd != null ? esc(li.quoted_price_usd) : ''}">
+          </div>
+          <div class="form-group" style="flex:2;">
+            <label class="form-label">Notes</label>
+            <input type="text" class="form-input rfqd-line-notes" data-line-id="${li.id}" value="${esc(li.quoted_notes || '')}">
+          </div>
+        </div>
+      </div>
+    `).join('');
+
+    document.getElementById('rfqd-error').textContent = '';
+    document.getElementById('rfq-detail-modal').classList.remove('hidden');
+  } catch (e) { toast('Failed to load RFQ detail', 'error'); }
+}
+
+function closeRfqDetail() {
+  document.getElementById('rfq-detail-modal').classList.add('hidden');
+  openRfqId = null;
+}
+
+async function saveRfqDetail() {
+  if (!openRfqId) return;
+  const errEl = document.getElementById('rfqd-error');
+  errEl.textContent = '';
+  const btn = document.getElementById('rfqd-save');
+  btn.disabled = true;
+  try {
+    await api(`/admin/api/rfq/${openRfqId}/status`, 'PATCH', {
+      status: document.getElementById('rfqd-status').value,
+      admin_notes: document.getElementById('rfqd-admin-notes').value.trim() || undefined,
+    });
+
+    const lineUpdates = Array.from(document.querySelectorAll('.rfqd-line-price')).map(input => {
+      const lineId = input.dataset.lineId;
+      const notesInput = document.querySelector(`.rfqd-line-notes[data-line-id="${lineId}"]`);
+      return api(`/admin/api/rfq/line-items/${lineId}`, 'PATCH', {
+        quoted_price_usd: input.value !== '' ? parseFloat(input.value) : undefined,
+        quoted_notes: notesInput.value.trim() || undefined,
+      });
+    });
+    await Promise.all(lineUpdates);
+
+    toast('RFQ updated', 'success');
+    closeRfqDetail();
+    loadRfqList(curRfqPage, getRfqFilters());
+  } catch (e) {
+    errEl.textContent = e.message || 'Save failed';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 // ── YARN PRICES ────────────────────────────────────────────
 //
 // The costing engine ran for four months on a matrix typed into a source file
@@ -1510,6 +1644,23 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Inquiries
   document.getElementById('inq-apply-btn').addEventListener('click', () => loadInquiries(1, getInqFilters()));
   document.getElementById('inq-download-btn').addEventListener('click', downloadInquiriesCSV);
+
+  // RFQ / Quotes
+  document.getElementById('rfq-apply-btn').addEventListener('click', () => loadRfqList(1, getRfqFilters()));
+  document.getElementById('rfqd-cancel').addEventListener('click', () => closeRfqDetail());
+  document.getElementById('rfqd-save').addEventListener('click', () => saveRfqDetail());
+  document.getElementById('rfq-detail-modal').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeRfqDetail();
+  });
+  // Delegated — rows are rebuilt on every load, so a per-row listener would
+  // need re-attaching each time; one listener on the static container covers
+  // every row past and future. Also required under script-src-attr 'none':
+  // an inline onclick written into innerHTML never fires (see admin_surface
+  // .test.js), so this is the only way a dynamically-created row's button works.
+  document.getElementById('rfq-tbody').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-rfq-id]');
+    if (btn) openRfqDetail(parseInt(btn.dataset.rfqId, 10));
+  });
 
   // Settings
   document.getElementById('set-save-creds').addEventListener('click', saveCredentials);

@@ -17,6 +17,8 @@ const { resultCache } = require('../db/repositories/cache-repo');
 const logsRepo = require('../db/repositories/logs-repo');
 const adminRepo = require('../db/repositories/admin-repo');
 const validationRepo = require('../db/repositories/validation-repo');
+const rfqRepo = require('../db/repositories/rfq-repo');
+const { isValidStatus, VALID_STATUSES } = require('../engine/domain/rfq-engine');
 const { scoreRecord, summarize } = require('../engine/domain/validation-scoring');
 const { calculate } = require('../engine/index');
 const { query: dbQuery } = require('../db/client');
@@ -455,6 +457,70 @@ router.get('/api/inquiries', adminAuth, async (req, res) => {
     }));
   } catch (err) {
     console.error('[Inquiries Error]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================
+// RFQ (Request For Quotation) — admin-side management. Buyer-facing submit
+// and status lookup live in routes/rfq.js; this is the review/quote side.
+// ============================================================
+router.get('/api/rfq', adminAuth, async (req, res) => {
+  try {
+    const [list, statusCounts] = await Promise.all([
+      rfqRepo.list({
+        page: parseInt(req.query.page, 10) || 1,
+        limit: parseInt(req.query.limit, 10) || 25,
+        status: req.query.status || undefined,
+        search: req.query.search || undefined,
+      }),
+      rfqRepo.counts(),
+    ]);
+    res.json({ ...list, status_counts: statusCounts });
+  } catch (err) {
+    console.error('[RFQ Admin List Error]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/api/rfq/:id', adminAuth, async (req, res) => {
+  try {
+    const rfq = await rfqRepo.getById(parseInt(req.params.id, 10));
+    if (!rfq) return res.status(404).json({ error: 'RFQ not found' });
+    res.json(rfq);
+  } catch (err) {
+    console.error('[RFQ Admin Detail Error]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.patch('/api/rfq/:id/status', adminAuth, async (req, res) => {
+  try {
+    const { status, admin_notes } = req.body || {};
+    if (!isValidStatus(status)) return res.status(400).json({ error: `Invalid status. Valid: ${VALID_STATUSES.join(', ')}` });
+    const updated = await rfqRepo.updateStatus(parseInt(req.params.id, 10), status, admin_notes);
+    if (!updated) return res.status(404).json({ error: 'RFQ not found' });
+    res.json({ ok: true, rfq: updated });
+  } catch (err) {
+    console.error('[RFQ Admin Status Error]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.patch('/api/rfq/line-items/:lineId', adminAuth, async (req, res) => {
+  try {
+    const { quoted_price_usd, quoted_notes } = req.body || {};
+    if (quoted_price_usd != null && (!Number.isFinite(parseFloat(quoted_price_usd)) || parseFloat(quoted_price_usd) < 0)) {
+      return res.status(400).json({ error: 'quoted_price_usd must be zero or a positive number.' });
+    }
+    const updated = await rfqRepo.updateLineItemQuote(parseInt(req.params.lineId, 10), {
+      quotedPriceUsd: quoted_price_usd != null ? parseFloat(quoted_price_usd) : null,
+      quotedNotes: quoted_notes,
+    });
+    if (!updated) return res.status(404).json({ error: 'Line item not found' });
+    res.json({ ok: true, line_item: updated });
+  } catch (err) {
+    console.error('[RFQ Admin Line Item Error]', err);
     res.status(500).json({ error: err.message });
   }
 });

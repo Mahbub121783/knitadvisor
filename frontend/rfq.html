@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Request a Quote — KnitAdvisor</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <meta name="description" content="Submit a fabric/garment quote request to KnitAdvisor — one or more styles, priced against KnitAdvisor's own engineering reference before a factory quote comes back.">
+  <meta name="theme-color" content="#FFFFFF">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css">
+
+  <style>
+    .page-header { padding: 28px 0 20px; }
+    .page-title { margin-bottom: 4px; }
+    .page-sub { font-size: 12px; color: var(--t2); }
+
+    .rfq-section { border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg2); padding: 18px; margin-bottom: 16px; }
+    .rfq-section-title { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--t3); margin-bottom: 14px; font-weight: 700; }
+
+    .rfq-item {
+      border: 1px solid var(--line2); border-radius: 10px; padding: 14px; margin-bottom: 12px; background: var(--bg3);
+      position: relative;
+    }
+    .rfq-item-num { font-size: 10px; color: var(--t3); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 10px; font-weight: 700; }
+    .rfq-item-remove { position: absolute; top: 12px; right: 12px; font-size: 11px; color: #fb923c; background: none; border: none; cursor: pointer; }
+    .rfq-item-remove:hover { text-decoration: underline; }
+
+    .rfq-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    @media (max-width: 640px) { .rfq-grid { grid-template-columns: 1fr; } }
+
+    .rfq-confirm { text-align: center; padding: 40px 20px; }
+    .rfq-confirm-code { font-family: var(--mono); font-size: 28px; font-weight: 800; color: var(--a1); letter-spacing: 1px; margin: 14px 0; }
+
+    .main-content { padding: 0 0 40px; }
+  </style>
+</head>
+<body>
+<div class="page-wrap">
+
+  <!-- HEADER -->
+  <header class="hdr">
+    <a href="/" class="logo">Knit<span>Advisor</span></a>
+    <div class="hdr-badge">BETA</div>
+    <div class="hdr-right">
+      <a href="/" class="btn btn-ghost hide-mobile">← Calculator</a>
+      <a href="rfq-status.html" class="btn btn-ghost hide-mobile">🔎 Check Quote Status</a>
+      <a href="assistant.html" class="btn btn-ghost hide-mobile">💬 Assistant</a>
+    </div>
+  </header>
+
+  <main class="container main-content">
+
+    <div class="page-header">
+      <h1 class="h1 page-title text-head">Request a Quote</h1>
+      <div class="page-sub">Submit one or more fabric/garment styles. Each line is priced against KnitAdvisor's own engineering calculation before a factory quote comes back — you'll get a reference code to check status any time.</div>
+    </div>
+
+    <div id="rfq-form-wrap">
+      <div class="rfq-section">
+        <div class="rfq-section-title">Your Details</div>
+        <div class="rfq-grid">
+          <div class="form-group">
+            <label class="form-label">Name *</label>
+            <input type="text" id="rfq-name" class="form-input" maxlength="200" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Email *</label>
+            <input type="email" id="rfq-email" class="form-input" maxlength="200" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Company</label>
+            <input type="text" id="rfq-company" class="form-input" maxlength="200">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Country</label>
+            <input type="text" id="rfq-country" class="form-input" maxlength="100">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Phone</label>
+            <input type="text" id="rfq-phone" class="form-input" maxlength="40">
+          </div>
+        </div>
+        <div class="form-group mt-12">
+          <label class="form-label">Message (optional)</label>
+          <textarea id="rfq-message" class="form-input" rows="3" maxlength="2000" style="resize:vertical;"></textarea>
+        </div>
+      </div>
+
+      <div class="rfq-section">
+        <div class="rfq-section-title">Fabric / Garment Styles</div>
+        <div id="rfq-items"></div>
+        <button type="button" class="btn btn-ghost" id="rfq-add-item-btn" onclick="addRfqItem()">+ Add another style</button>
+      </div>
+
+      <div id="rfq-error" class="hidden" style="margin-bottom:12px;font-size:11px;color:#fb923c;"></div>
+      <button class="btn btn-primary" id="rfq-submit-btn" style="width:100%;" onclick="submitRfq()">Submit Quote Request</button>
+    </div>
+
+    <div id="rfq-confirm" class="rfq-section hidden">
+      <div class="rfq-confirm">
+        <div style="font-size:32px;">✅</div>
+        <div class="h3">Quote request submitted</div>
+        <div class="text-xs text-dim" style="margin-top:6px;">Save this reference code — you'll need it to check your quote status.</div>
+        <div class="rfq-confirm-code" id="rfq-confirm-code">—</div>
+        <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:10px;">
+          <button class="btn btn-secondary" onclick="copyRfqCode()">📋 Copy Code</button>
+          <a class="btn btn-secondary" id="rfq-confirm-status-link" href="#">🔎 Check Status</a>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:24px;">
+      <a href="/" class="btn btn-secondary" style="flex:1">← Main Calculator</a>
+    </div>
+
+  </main>
+
+  <footer class="footer">
+    <div class="footer-nav container">
+      <div class="footer-brand">
+        <span class="footer-brand-name">KnitAdvisor</span>
+        <span class="footer-brand-sub">Request a Quote</span>
+      </div>
+      <nav class="footer-links">
+        <a href="/">Calculator</a>
+        <a href="academy.html">Knitting Academy</a>
+        <a href="dyeing.html">Dyeing Recipes</a>
+        <a href="diagnostics.html">Diagnostics</a>
+        <a href="assistant.html">Knowledge Assistant</a>
+        <a href="rfq.html">Request a Quote</a>
+        <a href="rfq-status.html">Check Quote Status</a>
+      </nav>
+    </div>
+    <div class="footer-bottom container">
+      <div class="footer-platform">
+        <span class="footer-platform-label">Part of</span>
+        <a href="https://www.onlinetextileschool.com" target="_blank" rel="noopener" class="footer-platform-link">www.onlinetextileschool.com</a>
+      </div>
+      <div class="footer-sponsor">
+        <span class="footer-sponsor-label">Proud Sponsor</span>
+        <a href="https://www.asutex.com" target="_blank" rel="noopener" class="footer-sponsor-link">
+          <span class="footer-sponsor-dot"></span>
+          Asutex
+        </a>
+      </div>
+    </div>
+  </footer>
+
+</div>
+
+<script src="assets/js/api.js"></script>
+<script src="assets/js/ui.js"></script>
+
+<script>
+const GARMENT_TYPES = [
+  { value: '', label: '— none (fabric only) —' },
+  { value: 'basic_tshirt', label: 'Basic T-Shirt' },
+  { value: 'polo_shirt', label: 'Polo Shirt' },
+  { value: 'basic_hoodie', label: 'Hoodie' },
+  { value: 'basic_jogger', label: 'Jogger / Sweatpant' },
+];
+
+let allFabrics = [];
+let itemCount = 0;
+
+function esc(x) {
+  return String(x == null ? '' : x).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c] || c));
+}
+
+function fabricOptionsHtml() {
+  const byCategory = {};
+  for (const f of allFabrics) {
+    const cat = f.category || 'other';
+    (byCategory[cat] = byCategory[cat] || []).push(f);
+  }
+  return Object.keys(byCategory).sort().map(cat => {
+    const opts = byCategory[cat].map(f => `<option value="${esc(f.id)}">${esc(f.name)}</option>`).join('');
+    return `<optgroup label="${esc(cat.replace(/_/g, ' '))}">${opts}</optgroup>`;
+  }).join('');
+}
+
+function addRfqItem() {
+  itemCount++;
+  const id = itemCount;
+  const wrap = document.createElement('div');
+  wrap.className = 'rfq-item';
+  wrap.id = `rfq-item-${id}`;
+  wrap.innerHTML = `
+    <div class="rfq-item-num">Style ${id}</div>
+    <button type="button" class="rfq-item-remove" onclick="removeRfqItem(${id})">✕ remove</button>
+    <div class="rfq-grid">
+      <div class="form-group">
+        <label class="form-label">Fabric *</label>
+        <select class="form-select rfq-fabric">${fabricOptionsHtml()}</select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">GSM *</label>
+        <input type="number" class="form-input rfq-gsm" min="60" max="500" value="180">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Composition</label>
+        <input type="text" class="form-input rfq-composition" placeholder="e.g. 100% Cotton" maxlength="200">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Garment</label>
+        <select class="form-select rfq-garment-type">${GARMENT_TYPES.map(g => `<option value="${g.value}">${esc(g.label)}</option>`).join('')}</select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Garment weight (g)</label>
+        <input type="number" class="form-input rfq-garment-weight" min="1" placeholder="e.g. 180">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Order quantity</label>
+        <input type="number" class="form-input rfq-qty" min="1" placeholder="e.g. 5000">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Your target price (USD, optional)</label>
+        <input type="number" class="form-input rfq-target-price" min="0" step="0.01" placeholder="e.g. 1.80">
+      </div>
+    </div>
+  `;
+  document.getElementById('rfq-items').appendChild(wrap);
+  updateRemoveButtonsVisibility();
+}
+
+function removeRfqItem(id) {
+  const el = document.getElementById(`rfq-item-${id}`);
+  if (el) el.remove();
+  updateRemoveButtonsVisibility();
+}
+
+function updateRemoveButtonsVisibility() {
+  const items = document.querySelectorAll('.rfq-item');
+  document.querySelectorAll('.rfq-item-remove').forEach(btn => {
+    btn.style.display = items.length > 1 ? '' : 'none';
+  });
+}
+
+function collectLineItems() {
+  return Array.from(document.querySelectorAll('.rfq-item')).map(el => {
+    const item = {
+      fabric_id: el.querySelector('.rfq-fabric').value,
+      gsm: parseFloat(el.querySelector('.rfq-gsm').value),
+      composition: el.querySelector('.rfq-composition').value.trim() || undefined,
+      garment_type: el.querySelector('.rfq-garment-type').value || undefined,
+      garment_weight_g: el.querySelector('.rfq-garment-weight').value ? parseFloat(el.querySelector('.rfq-garment-weight').value) : undefined,
+      order_quantity: el.querySelector('.rfq-qty').value ? parseInt(el.querySelector('.rfq-qty').value, 10) : undefined,
+      target_price_usd: el.querySelector('.rfq-target-price').value ? parseFloat(el.querySelector('.rfq-target-price').value) : undefined,
+    };
+    Object.keys(item).forEach(k => item[k] === undefined && delete item[k]);
+    return item;
+  });
+}
+
+let lastReferenceCode = null;
+
+async function submitRfq() {
+  const errEl = document.getElementById('rfq-error');
+  errEl.classList.add('hidden');
+
+  const payload = {
+    buyer_name: document.getElementById('rfq-name').value.trim(),
+    buyer_email: document.getElementById('rfq-email').value.trim(),
+    buyer_company: document.getElementById('rfq-company').value.trim() || undefined,
+    buyer_country: document.getElementById('rfq-country').value.trim() || undefined,
+    buyer_phone: document.getElementById('rfq-phone').value.trim() || undefined,
+    message: document.getElementById('rfq-message').value.trim() || undefined,
+    line_items: collectLineItems(),
+  };
+
+  const btn = document.getElementById('rfq-submit-btn');
+  btn.disabled = true;
+  btn.textContent = 'Submitting…';
+
+  try {
+    const r = await apiRfqSubmit(payload);
+    lastReferenceCode = r.reference_code;
+    document.getElementById('rfq-confirm-code').textContent = r.reference_code;
+    document.getElementById('rfq-confirm-status-link').href = `rfq-status.html?code=${encodeURIComponent(r.reference_code)}`;
+    document.getElementById('rfq-form-wrap').classList.add('hidden');
+    document.getElementById('rfq-confirm').classList.remove('hidden');
+  } catch (err) {
+    const errors = (err.data && err.data.errors) || [err.message || 'Could not submit the quote request.'];
+    errEl.innerHTML = errors.map(e => `⚠ ${esc(e)}`).join('<br>');
+    errEl.classList.remove('hidden');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Submit Quote Request';
+  }
+}
+
+function copyRfqCode() {
+  if (!lastReferenceCode) return;
+  navigator.clipboard.writeText(lastReferenceCode).then(() => showToast('Reference code copied', 'success')).catch(() => {});
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
+    allFabrics = await apiFabrics();
+  } catch (e) {
+    allFabrics = [];
+  }
+  addRfqItem();
+});
+</script>
+
+</body>
+</html>

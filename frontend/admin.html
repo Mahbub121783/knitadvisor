@@ -563,6 +563,7 @@
     <button class="tab-btn" data-tab="tab-dyeing-prices">Dyeing Prices</button>
     <button class="tab-btn" data-tab="tab-validation">Real-Order Validation</button>
     <button class="tab-btn" data-tab="tab-inquiries">Inquiries</button>
+    <button class="tab-btn" data-tab="tab-rfq">RFQ / Quotes</button>
     <button class="tab-btn" data-tab="tab-settings">Settings</button>
   </div>
 
@@ -1028,6 +1029,92 @@
         </table>
       </div>
       <div id="inq-pagination" class="pagination"></div>
+    </div>
+
+    <!-- ── RFQ / QUOTES ── -->
+    <div id="tab-rfq" class="tab-panel">
+      <div class="row-between mb-20">
+        <div>
+          <div class="section-title">RFQ / Quotes</div>
+          <div class="section-sub">Buyer-submitted quote requests — priced against the live engine at submission, quoted by hand</div>
+        </div>
+      </div>
+      <div class="stat-grid mb-16" id="rfq-status-counts"></div>
+      <div class="card mb-16">
+        <div class="form-row">
+          <div class="form-group" style="min-width:150px;">
+            <label class="form-label">Status</label>
+            <select id="rfq-filter-status" class="form-select">
+              <option value="">All</option>
+              <option value="pending">Pending</option>
+              <option value="under_review">Under Review</option>
+              <option value="quoted">Quoted</option>
+              <option value="accepted">Accepted</option>
+              <option value="rejected">Rejected</option>
+              <option value="expired">Expired</option>
+            </select>
+          </div>
+          <div class="form-group" style="min-width:200px;">
+            <label class="form-label">Search (name, email, code)</label>
+            <input type="text" id="rfq-filter-search" class="form-input" placeholder="">
+          </div>
+          <div class="form-group" style="justify-content:flex-end;">
+            <label class="form-label" style="opacity:0;">.</label>
+            <button id="rfq-apply-btn" class="btn btn-ghost">Apply</button>
+          </div>
+        </div>
+      </div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr>
+            <th>Code</th><th>Buyer</th><th>Company</th><th>Items</th><th>Status</th><th>Submitted</th><th></th>
+          </tr></thead>
+          <tbody id="rfq-tbody"></tbody>
+        </table>
+      </div>
+      <div id="rfq-pagination" class="pagination"></div>
+    </div>
+
+    <!-- ── RFQ DETAIL MODAL ── -->
+    <div id="rfq-detail-modal" class="modal-overlay hidden">
+      <div class="modal-box" style="max-width:640px;">
+        <div class="modal-title" id="rfqd-title">RFQ Detail</div>
+
+        <div class="modal-grid">
+          <div class="form-group modal-full">
+            <label class="form-label">Buyer</label>
+            <div id="rfqd-buyer" style="font-size:12px;color:var(--t2);"></div>
+          </div>
+          <div class="form-group modal-full">
+            <label class="form-label">Message</label>
+            <div id="rfqd-message" style="font-size:12px;color:var(--t2);"></div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Status</label>
+            <select id="rfqd-status" class="form-select">
+              <option value="pending">Pending</option>
+              <option value="under_review">Under Review</option>
+              <option value="quoted">Quoted</option>
+              <option value="accepted">Accepted</option>
+              <option value="rejected">Rejected</option>
+              <option value="expired">Expired</option>
+            </select>
+          </div>
+          <div class="form-group modal-full">
+            <label class="form-label">Admin Notes</label>
+            <input type="text" id="rfqd-admin-notes" class="form-input">
+          </div>
+        </div>
+
+        <div id="rfqd-lines" style="margin:14px 0;"></div>
+
+        <div id="rfqd-error" style="font-size:11px;color:var(--a3);min-height:16px;margin-bottom:4px;"></div>
+
+        <div class="modal-footer">
+          <button class="btn btn-ghost" id="rfqd-cancel">Close</button>
+          <button class="btn btn-primary" id="rfqd-save">Save Changes</button>
+        </div>
+      </div>
     </div>
 
     <!-- ── SETTINGS ── -->
