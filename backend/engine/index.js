@@ -53,6 +53,7 @@ const { predictQuality } = require('./domain/quality-engine');
 const { calculateCost }  = require('./domain/costing-engine');
 const { calculateFabricConsumption } = require('./domain/fabric-consumption-engine');
 const { calculateGarmentCosting } = require('./domain/garment-costing-engine');
+const { calculateCarbonFootprint } = require('./domain/carbon-footprint-engine');
 const {
   denierToGSM,
   gsmToDenier,
@@ -923,6 +924,26 @@ function calculate(params) {
     }
   }
 
+  // --- 6.2c Carbon footprint (screening-level, cradle-to-fabric) — always
+  //          runs (unlike garment costing, needs no extra caller input
+  //          beyond what's already flowing through this calculation). ---
+  const carbonResult = calculateCarbonFootprint({
+    fibers: parsedComp ? parsedComp.fibers : null,
+    raw_composition: composition,
+    gsm,
+    garment_weight_g: params.garment_weight_g || null,
+    country: params.country || 'bangladesh',
+  });
+  if (carbonResult.success) {
+    trace.push({
+      step: '6.2c', action: 'carbon_footprint',
+      result: `${carbonResult.total_co2e_per_kg_fabric} kg CO2e/kg fabric `
+        + `(${carbonResult.vs_conventional_cotton_baseline.direction} ${Math.abs(carbonResult.vs_conventional_cotton_baseline.pct_difference)}% vs conventional cotton baseline)`,
+    });
+  } else {
+    warnings.push(`Carbon footprint estimate skipped: ${carbonResult.error}`);
+  }
+
   // --- 6.3 Dynamic Pattern & Structural Adaptation ---
   const patternResult = getEnginePattern(fabricDef.id, gsm, gauge, composition);
   trace.push({ step: '6.3', action: 'generate_pattern', result: patternResult ? 'SUCCESS' : 'FAILED' });
@@ -1215,6 +1236,12 @@ function calculate(params) {
       consumption: garmentCosting.consumption,
       cmt: garmentCosting.cmt,
     } : null,
+
+    // Screening-level cradle-to-fabric CO2e estimate — see
+    // engine/catalog/carbon-footprint-factors.js for full sourcing and why
+    // it is deliberately conservative about precision. Always present
+    // (unlike garment_costing, it needs no extra opt-in input).
+    carbon_footprint: carbonResult.success ? carbonResult : null,
 
     warnings,
     formula_trace: trace,

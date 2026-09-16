@@ -1546,6 +1546,54 @@
       </div>
     </div>
 
+    <!-- ===== CARBON FOOTPRINT (screening-level, cradle-to-fabric) =====
+         Deliberately hedged: textile LCA literature disagrees with itself
+         by 5-30x for the same fiber depending on methodology, so this is
+         presented as an indicative, sourced estimate with its own
+         confidence tags and a prominent scope disclosure — never a bare
+         precise-looking number. See carbon-footprint-factors.js. -->
+    <div class="result-section anim-in hidden" id="sec-carbon">
+      <div class="result-section-title">
+        <div class="rst-icon" style="background:rgba(74,222,128,.1); color:#4ade80;">🌱</div>
+        <div class="rst-title-text">Carbon Footprint (Screening Estimate)</div>
+        <span class="badge" style="margin-left:auto; background:rgba(74,222,128,.1); color:#4ade80; border:1px solid rgba(74,222,128,.25); font-size:10px; padding:2px 8px;">Indicative</span>
+      </div>
+
+      <div class="info-box text-xs" style="font-size:10px; line-height:1.6; margin-bottom:12px;">
+        <strong>Screening-level estimate, not a certified LCA.</strong> Fiber-production figures are triangulated from published LCA literature, which disagrees with itself substantially across studies and methodologies — every figure below carries its own confidence note. Covers fiber production + knitting/dyeing/finishing energy only; excludes transport, use-phase and end-of-life.
+      </div>
+
+      <div class="cost-headline">
+        <div>
+          <div class="ch-lbl">Total, per kg of fabric</div>
+          <div class="ch-val" id="carbon-total-val">&#8212;</div>
+          <div class="ch-sub">kg CO2e &middot; fiber production + processing energy</div>
+        </div>
+      </div>
+
+      <div class="result-row">
+        <span class="result-key">vs. conventional 100% cotton baseline</span>
+        <span class="result-val" id="carbon-vs-baseline">&#8212;</span>
+      </div>
+      <div class="result-row hidden" id="carbon-per-garment-row">
+        <span class="result-key">Per garment</span>
+        <span class="result-val white" id="carbon-per-garment">&#8212;</span>
+      </div>
+
+      <div class="result-section-label" style="margin-top:12px;">Fiber Production
+        <span style="font-weight:400;color:var(--t3);">&#8212; composition-weighted</span></div>
+      <div id="carbon-fiber-breakdown"></div>
+
+      <div class="result-section-label" style="margin-top:10px;">Processing Energy</div>
+      <div class="result-row">
+        <span class="result-key">Knitting + dyeing + finishing</span>
+        <span class="result-val white" id="carbon-processing-val">&#8212;</span>
+      </div>
+      <div class="text-xs text-dim" id="carbon-processing-note" style="font-size:9.5px; margin-top:4px;"></div>
+
+      <div id="carbon-warnings" style="margin-top:10px; font-size:10px; color:#fbbf24; line-height:1.6;"></div>
+    </div>
+
     </section>
 
     <!-- ===================== OTHER ===================== -->
@@ -2218,6 +2266,9 @@ function renderResult(r, params) {
 
   // — Quality prediction —
   renderQuality(r.quality_prediction);
+
+  // — Carbon footprint (screening estimate) —
+  renderCarbonFootprint(r.carbon_footprint);
 
   // — Costing —
   renderCosting(r.costing);
@@ -3171,6 +3222,60 @@ function renderQuality(q) {
   } else {
     recsContainer.innerHTML = '<li>No special finishing recommendations.</li>';
   }
+}
+
+/* ============================================================
+   CARBON FOOTPRINT RENDER (screening estimate)
+   ============================================================ */
+function renderCarbonFootprint(c) {
+  const esc = (x) => String(x == null ? '' : x).replace(/[&<>]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]));
+  const sec = document.getElementById('sec-carbon');
+  if (!c) { sec.classList.add('hidden'); syncStages(); return; }
+  sec.classList.remove('hidden');
+
+  document.getElementById('carbon-total-val').textContent = `${fmt(c.total_co2e_per_kg_fabric, 2)}`;
+
+  const vs = c.vs_conventional_cotton_baseline;
+  const vsEl = document.getElementById('carbon-vs-baseline');
+  if (vs && vs.direction === 'equal') {
+    vsEl.textContent = 'same (this is the baseline)';
+    vsEl.className = 'result-val white';
+  } else if (vs) {
+    vsEl.textContent = `${vs.direction === 'lower' ? '↓' : '↑'} ${fmt(Math.abs(vs.pct_difference), 1)}% ${vs.direction}`;
+    vsEl.className = 'result-val ' + (vs.direction === 'lower' ? 'green' : 'amber');
+  }
+
+  const gRow = document.getElementById('carbon-per-garment-row');
+  if (c.per_garment) {
+    gRow.classList.remove('hidden');
+    document.getElementById('carbon-per-garment').textContent = `${fmt(c.per_garment.total_co2e_kg, 3)} kg CO2e (${c.per_garment.garment_weight_g}g garment)`;
+  } else {
+    gRow.classList.add('hidden');
+  }
+
+  const fiberEl = document.getElementById('carbon-fiber-breakdown');
+  fiberEl.innerHTML = c.fiber_breakdown.map(f => {
+    if (!f.modeled) {
+      return `<div class="result-row"><span class="result-key">${esc(f.fiber)} (${esc(f.pct)}%)</span><span class="result-val" style="color:#fb923c;">not modeled</span></div>`;
+    }
+    const variantTag = f.variant ? ` <span style="opacity:.7;">(${esc(f.variant)})</span>` : '';
+    return `
+      <div class="result-row">
+        <span class="result-key">${esc(f.fiber)} (${esc(f.pct)}%)${variantTag}</span>
+        <span class="result-val white">${fmt(f.co2e_per_kg_fiber, 2)} kg CO2e/kg &middot; ${esc(f.confidence)}</span>
+      </div>`;
+  }).join('');
+
+  document.getElementById('carbon-processing-val').textContent =
+    `${fmt(c.processing.co2e_per_kg_fabric, 2)} kg CO2e/kg (${c.processing.energy_kwh_per_kg} kWh/kg × ${c.processing.grid_emission_factor_kg_co2_per_kwh} kg CO2/kWh grid factor)`;
+  document.getElementById('carbon-processing-note').textContent = c.processing.grid_factor_source;
+
+  const warnEl = document.getElementById('carbon-warnings');
+  warnEl.innerHTML = (c.warnings && c.warnings.length)
+    ? c.warnings.map(w => `<div>&#9888; ${esc(w)}</div>`).join('')
+    : '';
+
+  syncStages();
 }
 
 /* ============================================================
