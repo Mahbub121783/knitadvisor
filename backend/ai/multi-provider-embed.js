@@ -51,7 +51,12 @@ async function embed(text, inputType = 'query') {
   const res = await axios.post(MISTRAL_EMBED_URL, {
     model: MISTRAL_EMBED_MODEL,
     input: text,
-    output_dimension: MISTRAL_EMBED_DIMENSION,
+    // mistral-embed rejects output_dimension outright ("This model does not
+    // support output_dimension", verified live 2026-09-16) — Matryoshka-style
+    // truncation is apparently a newer/different Mistral model, not this one.
+    // Its natural output is checked against MISTRAL_EMBED_DIMENSION below on
+    // every call instead, so a silent dimension mismatch fails loudly rather
+    // than corrupting the vector(1024) column.
   }, {
     timeout: TIMEOUT_MS,
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
@@ -60,6 +65,12 @@ async function embed(text, inputType = 'query') {
   const item = res.data.data && res.data.data[0];
   if (!item || !Array.isArray(item.embedding)) {
     throw new Error('Mistral embeddings response missing an embedding vector.');
+  }
+  if (item.embedding.length !== MISTRAL_EMBED_DIMENSION) {
+    // Fail loudly rather than let a dimension mismatch reach the DB — the
+    // vector(1024) column would reject it too, but with a much less useful
+    // error than this one.
+    throw new Error(`Mistral returned a ${item.embedding.length}-dimension embedding, expected ${MISTRAL_EMBED_DIMENSION} — the knowledge_chunks.embedding column is fixed at vector(${MISTRAL_EMBED_DIMENSION}) and cannot store this.`);
   }
 
   return {
