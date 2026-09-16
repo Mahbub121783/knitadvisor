@@ -44,15 +44,16 @@ async function main() {
   console.log('  Grounding detection (NOT_COVERED sentinel) correct');
 
   // ==========================================================================
-  // 4. Cost estimation — hand-computed cross-check against the sourced rates
-  //    (Voyage voyage-4-lite $0.02/M, Sonnet 5 $2/$10 per MTok).
+  // 4. Cost estimation — this app's Knowledge Assistant runs on its own
+  //    existing multi-provider infra (Groq/Mistral/etc.), not one fixed-rate
+  //    paid API, so real per-token cost is deliberately untracked ($0) rather
+  //    than a fabricated blended rate. Confirms that stays true regardless
+  //    of token volume, rather than silently reintroducing a fake rate.
   // ==========================================================================
   {
-    const cost = estimateCostUsd({ embeddingTokens: 1000, inputTokens: 2000, outputTokens: 500 });
-    const expected = (1000 * 0.02 / 1e6) + (2000 * 2 / 1e6) + (500 * 10 / 1e6);
-    assert(Math.abs(cost - expected) < 1e-9, `Cost estimate mismatch: got ${cost}, expected ${expected}`);
+    assert.strictEqual(estimateCostUsd({ embeddingTokens: 1000, inputTokens: 2000, outputTokens: 500 }), 0);
     assert.strictEqual(estimateCostUsd({}), 0, 'No tokens should cost nothing');
-    console.log(`  Cost estimation matches hand-computed value: $${cost}`);
+    console.log('  Cost estimation correctly stays $0 — no fabricated per-token rate across a rotating multi-provider setup');
   }
 
   // ==========================================================================
@@ -108,7 +109,7 @@ async function main() {
     assert.strictEqual(result.grounded, true);
     assert.strictEqual(result.sources.length, 1);
     assert.strictEqual(result.sources[0].source_ref, 'crease_mark');
-    assert(result.cost_usd_estimate > 0);
+    assert.strictEqual(result.cost_usd_estimate, 0, 'Cost is deliberately untracked ($0) on this multi-provider setup');
     console.log('  On-topic question correctly generates a grounded answer with sources');
   }
 
@@ -130,7 +131,11 @@ async function main() {
   }
 
   // ==========================================================================
-  // 9. Anthropic refusal (safety decline) handled distinctly, never thrown.
+  // 9. A provider-level refusal signal (refused: true) is handled distinctly
+  //    and never thrown. None of this app's current providers (Groq/Mistral/
+  //    etc.) actually set this — multi-provider-chat.js always returns
+  //    refused: false — but the engine's contract supports it generically
+  //    for any future generateFn implementation that does.
   // ==========================================================================
   {
     const result = await answerQuestion({
@@ -141,7 +146,7 @@ async function main() {
     });
     assert.strictEqual(result.success, true, 'A refusal must be a clean result, not a throw');
     assert.strictEqual(result.grounded, false);
-    console.log('  Anthropic refusal handled cleanly (no throw)');
+    console.log('  Provider-level refusal signal handled cleanly (no throw)');
   }
 
   // ==========================================================================

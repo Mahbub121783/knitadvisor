@@ -38,14 +38,23 @@ const DEFAULT_TOP_K = 6;
 const MIN_QUESTION_LENGTH = 3;
 const MAX_QUESTION_LENGTH = 500;
 
-// Sourced pricing, current as of this engine's writing — see
-// ai/voyage-client.js and ai/anthropic-client.js for the model choices these
-// rates belong to. Kept here (not imported) because this file must stay
-// network/SDK-free for the "pure engine" testing guarantee above.
+// This app's Knowledge Assistant runs on its own existing multi-provider
+// infrastructure (Groq, Mistral, and whichever others are enabled — see
+// ai/multi-provider-chat.js), not a single dedicated paid API — so there is
+// no one fixed per-token rate to cite the way a single-vendor integration
+// would have. Generation cost is therefore tracked as $0 here rather than a
+// fabricated blended rate across providers whose actual pricing differs and
+// whose mix at answer time is not known in advance. Embeddings are pinned to
+// Mistral (ai/multi-provider-embed.js) for a real technical reason (fixed
+// vector dimension — see that file), but its exact current per-token price
+// was not sourced, so it is tracked the same way. The daily spend cap in
+// routes/assistant.js is kept as a harmless no-op safety net; the request-
+// volume limits already enforced per provider in ai_provider_stats
+// (daily_limit/per_min_limit) are this setup's real usage guard.
 const PRICING_USD_PER_TOKEN = {
-  voyage_embedding: 0.02 / 1_000_000,   // voyage-4-lite
-  sonnet5_input: 2 / 1_000_000,          // claude-sonnet-5 input
-  sonnet5_output: 10 / 1_000_000,        // claude-sonnet-5 output
+  embedding: 0, // Mistral — cost not tracked; see note above
+  generation_input: 0, // whichever provider answers — cost not tracked
+  generation_output: 0,
 };
 
 function round6(v) { return Math.round(v * 1e6) / 1e6; }
@@ -82,9 +91,9 @@ function isGrounded(answerText) {
 
 function estimateCostUsd({ embeddingTokens = 0, inputTokens = 0, outputTokens = 0 }) {
   return round6(
-    embeddingTokens * PRICING_USD_PER_TOKEN.voyage_embedding +
-    inputTokens * PRICING_USD_PER_TOKEN.sonnet5_input +
-    outputTokens * PRICING_USD_PER_TOKEN.sonnet5_output
+    embeddingTokens * PRICING_USD_PER_TOKEN.embedding +
+    inputTokens * PRICING_USD_PER_TOKEN.generation_input +
+    outputTokens * PRICING_USD_PER_TOKEN.generation_output
   );
 }
 

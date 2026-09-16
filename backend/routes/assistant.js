@@ -1,11 +1,19 @@
 /**
  * Knowledge Assistant routes — POST /api/assistant/ask.
  *
- * This is the first route in the app that spends real external money per
- * request (Voyage embeddings + Anthropic generation), so it carries two
- * guards neither /api/calculate nor any other route needs: a tighter,
- * dedicated rate limit, and a hard daily spend cap checked against the
- * actual logged cost in assistant_queries (not a guessed request count).
+ * Runs on this app's own existing multi-provider AI infrastructure (Groq,
+ * Mistral, and whichever others are enabled in the admin panel's AI
+ * Providers screen — see ai/multi-provider-chat.js) for generation, and
+ * Mistral specifically for embeddings (ai/multi-provider-embed.js — fixed
+ * to one provider for a real technical reason, not a preference; see that
+ * file). No Anthropic, no Voyage, no separate paid API of its own.
+ *
+ * Real per-token cost is not tracked (see knowledge-assistant-engine.js's
+ * PRICING_USD_PER_TOKEN — deliberately $0, not fabricated across a rotating
+ * multi-provider setup with unknown-in-advance pricing), so the daily spend
+ * cap below is a harmless no-op today; the request-volume rate limit is
+ * this route's real abuse guard, alongside each provider's own
+ * daily_limit/per_min_limit already enforced in ai_provider_stats.
  */
 const express = require('express');
 const crypto = require('crypto');
@@ -14,9 +22,8 @@ const router = express.Router();
 const { createRateLimiter } = require('../middleware/rate-limiter');
 const { answerQuestion } = require('../engine/domain/knowledge-assistant-engine');
 const knowledgeRepo = require('../db/repositories/knowledge-repo');
-const knowledgeKeys = require('../ai/knowledge-keys');
-const voyageClient = require('../ai/voyage-client');
-const anthropicClient = require('../ai/anthropic-client');
+const multiProviderEmbed = require('../ai/multi-provider-embed');
+const multiProviderChat = require('../ai/multi-provider-chat');
 
 const askLimiter = createRateLimiter({
   name: 'assistant-ask',
@@ -25,10 +32,9 @@ const askLimiter = createRateLimiter({
   message: 'Too many questions — please wait before asking another.',
 });
 
-// A coarse, cheap-to-check daily ceiling on total estimated spend. This is a
-// SAFETY NET, not a precision budget (per-process, and Passenger may run
-// more than one worker — same caveat the general rate limiter documents) —
-// its job is to stop a runaway cost event, not meter billing exactly.
+// A coarse, cheap-to-check daily ceiling on total estimated spend. Harmless
+// no-op while PRICING_USD_PER_TOKEN is $0 (see knowledge-assistant-engine.js) —
+// kept as a safety net in case real per-provider pricing is wired in later.
 const DAILY_BUDGET_USD = parseFloat(process.env.ASSISTANT_DAILY_BUDGET_USD) || 5.0;
 
 function hashIp(ip) {
@@ -48,22 +54,11 @@ router.post('/ask', askLimiter, async (req, res) => {
       });
     }
 
-    const [anthropicKey, voyageKey] = await Promise.all([
-      knowledgeKeys.getAnthropicKey(),
-      knowledgeKeys.getVoyageKey(),
-    ]);
-    if (!anthropicKey || !voyageKey) {
-      return res.status(503).json({
-        success: false,
-        error: 'The Knowledge Assistant is not configured yet (missing API key).',
-      });
-    }
-
     const result = await answerQuestion({
       question,
-      embedFn: (text, inputType) => voyageClient.embed(text, voyageKey, inputType),
+      embedFn: (text, inputType) => multiProviderEmbed.embed(text, inputType),
       searchFn: (embedding, questionText, topK) => knowledgeRepo.search(embedding, questionText, topK),
-      generateFn: (systemPrompt, q) => anthropicClient.generate(systemPrompt, q, anthropicKey),
+      generateFn: (systemPrompt, q) => multiProviderChat.generateAnswer(systemPrompt, q),
     });
 
     if (!result.success) {
@@ -93,7 +88,13 @@ router.post('/ask', askLimiter, async (req, res) => {
     });
   } catch (err) {
     console.error('[Assistant] /ask failed:', err.message);
-    res.status(500).json({ success: false, error: 'The Knowledge Assistant is temporarily unavailable.' });
+    // Embedding/generation failures (e.g. "no active Mistral key configured",
+    // "all AI providers failed") carry a genuinely useful message — surface
+    // it rather than a fully generic one, but never a raw stack trace.
+    const clientMessage = /no active|not configured|no ai provider|all ai providers/i.test(err.message)
+      ? err.message
+      : 'The Knowledge Assistant is temporarily unavailable.';
+    res.status(503).json({ success: false, error: clientMessage });
   }
 });
 

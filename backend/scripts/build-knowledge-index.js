@@ -30,8 +30,7 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') }
 
 const crypto = require('crypto');
 const knowledgeRepo = require('../db/repositories/knowledge-repo');
-const voyageClient = require('../ai/voyage-client');
-const knowledgeKeys = require('../ai/knowledge-keys');
+const multiProviderEmbed = require('../ai/multi-provider-embed');
 const { close } = require('../db/client');
 
 const { FAULTS_DATABASE } = require('../engine/domain/faults-engine');
@@ -170,9 +169,12 @@ async function main() {
     return;
   }
 
-  const apiKey = await knowledgeKeys.getVoyageKey();
-  if (!apiKey) {
-    console.error('No Voyage API key found (add one in the admin panel under AI Providers, type "voyage"). Aborting.');
+  // Fail fast with one clear message rather than repeating the same "no
+  // Mistral key" error across every one of ~98 chunks.
+  try {
+    await multiProviderEmbed.embed('connectivity check', 'document');
+  } catch (err) {
+    console.error(`Embedding provider not ready — ${err.message}`);
     process.exitCode = 1;
     return;
   }
@@ -188,7 +190,7 @@ async function main() {
       continue;
     }
     try {
-      const { embedding } = await voyageClient.embed(c.content, apiKey, 'document');
+      const { embedding } = await multiProviderEmbed.embed(c.content, 'document');
       await knowledgeRepo.upsertChunk({
         sourceModule: c.sourceModule,
         sourceRef: c.sourceRef,
@@ -196,7 +198,7 @@ async function main() {
         content: c.content,
         contentHash,
         embedding,
-        embeddingModel: voyageClient.VOYAGE_MODEL,
+        embeddingModel: multiProviderEmbed.MISTRAL_EMBED_MODEL,
       });
       embedded++;
       process.stdout.write(`  embedded: ${key}\n`);
