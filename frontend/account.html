@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <script src="assets/js/auth-guard.js?v=20260922a"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My account — KnitAdvisor</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <meta name="robots" content="noindex">
+  <link rel="stylesheet" href="assets/css/style.css?v=20260603c">
+  <style>
+    .acct-head { padding: 34px 0 18px; }
+    .acct-head h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; margin: 0; }
+    .acct-head p { color: var(--t2); margin-top: 6px; font-size: 14px; }
+    .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 22px; }
+    @media (max-width: 760px) { .kpis { grid-template-columns: 1fr 1fr; } }
+    .kpi { background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow-sm); }
+    .kpi .k { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--t3); }
+    .kpi .v { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; margin-top: 6px; font-variant-numeric: tabular-nums; }
+    .kpi .v.sm { font-size: 16px; line-height: 1.3; margin-top: 8px; letter-spacing: -0.01em; }
+    .kpi .s { font-size: 12px; color: var(--t3); margin-top: 2px; }
+
+    .a-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 20px; }
+    .a-tab { background: none; border: none; padding: 11px 16px; font: 600 14px/1 var(--head); color: var(--t2); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+    .a-tab[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+    .a-panel[hidden] { display: none; }
+
+    .toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+    .toolbar .form-input { max-width: 320px; }
+    .toolbar .grow { flex: 1; }
+
+    .calc-list { display: flex; flex-direction: column; gap: 10px; }
+    .calc { background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; display: grid; grid-template-columns: 1fr auto; gap: 12px 20px; align-items: center; box-shadow: var(--shadow-sm); }
+    @media (max-width: 640px) { .calc { grid-template-columns: 1fr; } }
+    .calc-title { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+    .calc-title .gsm { color: var(--accent); font-family: var(--mono); font-weight: 600; margin-left: 6px; }
+    .calc-sub { font-size: 12.5px; color: var(--t3); margin-top: 3px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .chip { font-size: 12px; background: var(--bg2); border: 1px solid var(--line); border-radius: 6px; padding: 4px 9px; color: var(--t2); }
+    .chip b { color: var(--t1); font-weight: 600; font-variant-numeric: tabular-nums; }
+    .calc-actions { display: flex; gap: 8px; }
+    .btn-danger-ghost { color: var(--danger); }
+    .btn-danger-ghost:hover { border-color: rgba(178,59,59,.5); color: var(--danger); }
+
+    .empty { text-align: center; padding: 48px 20px; background: var(--bg); border: 1px dashed var(--line2); border-radius: var(--radius); }
+    .empty h3 { font-size: 16px; margin: 0 0 6px; }
+    .empty p { color: var(--t2); margin: 0 0 16px; }
+
+    .pager { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; font-size: 13px; color: var(--t3); }
+    .pager .btns { display: flex; gap: 8px; }
+
+    .form-card { max-width: 520px; margin-bottom: 22px; }
+    .form-card h2 { font-size: 16px; font-weight: 700; margin: 0 0 4px; }
+    .form-card .sub { color: var(--t3); font-size: 13px; margin-bottom: 16px; }
+    .frow { margin-bottom: 14px; }
+    .frow label { display: block; font-size: 12.5px; font-weight: 600; margin-bottom: 6px; }
+    .frow input { width: 100%; }
+    .frow input[readonly] { background: var(--bg2); color: var(--t2); }
+    .msg { font-size: 13px; margin-top: 10px; min-height: 18px; }
+    .msg.ok { color: var(--good); }
+    .msg.err { color: var(--danger); }
+    .main-content { padding: 0 0 32px; }
+  </style>
+  <link rel="stylesheet" href="assets/css/theme-v2.css?v=20260922a">
+  <script src="assets/js/app-shell.js?v=20260922a" defer></script>
+</head>
+<body>
+<div class="page-wrap">
+  <header class="hdr"></header>
+
+  <main class="container main-content">
+    <div class="acct-head">
+      <h1>My account</h1>
+      <p id="welcome">Your calculations and settings.</p>
+    </div>
+
+    <div class="kpis" id="kpis">
+      <div class="kpi"><div class="k">Calculations run</div><div class="v" id="k-runs">—</div><div class="s" id="k-runs-s">&nbsp;</div></div>
+      <div class="kpi"><div class="k">Saved specs</div><div class="v" id="k-specs">—</div><div class="s">distinct fabrics &amp; settings</div></div>
+      <div class="kpi"><div class="k">Last 30 days</div><div class="v" id="k-30">—</div><div class="s">specs worked on</div></div>
+      <div class="kpi"><div class="k">Most used</div><div class="v sm" id="k-top">—</div><div class="s" id="k-top-s">&nbsp;</div></div>
+    </div>
+
+    <div class="a-tabs" role="tablist">
+      <button class="a-tab" role="tab" id="tab-history" aria-selected="true">My calculations</button>
+      <button class="a-tab" role="tab" id="tab-profile" aria-selected="false">Profile &amp; security</button>
+    </div>
+
+    <!-- HISTORY -->
+    <section class="a-panel" id="panel-history">
+      <div class="toolbar">
+        <input type="search" class="form-input" id="search" placeholder="Search fabric or composition" maxlength="80" aria-label="Search calculations">
+        <span class="grow"></span>
+        <button class="btn btn-ghost btn-danger-ghost" id="clear-all" hidden>Clear history</button>
+        <a class="btn btn-primary" href="/app.html">New calculation</a>
+      </div>
+      <div id="list" class="calc-list" aria-live="polite"></div>
+      <div class="pager" id="pager" hidden>
+        <span id="pager-info"></span>
+        <div class="btns"><button class="btn btn-ghost" id="prev">Previous</button><button class="btn btn-ghost" id="next">Next</button></div>
+      </div>
+    </section>
+
+    <!-- PROFILE -->
+    <section class="a-panel" id="panel-profile" hidden>
+      <div class="card form-card">
+        <h2>Your details</h2>
+        <p class="sub">Shown on your account. Your email is your sign-in and cannot be changed here.</p>
+        <form id="profile-form" novalidate>
+          <div class="frow"><label for="p-email">Email</label><input class="form-input" id="p-email" type="email" readonly></div>
+          <div class="frow"><label for="p-name">Full name</label><input class="form-input" id="p-name" type="text" maxlength="120" autocomplete="name"></div>
+          <div class="frow"><label for="p-company">Mill or company <span class="text-dim">(optional)</span></label><input class="form-input" id="p-company" type="text" maxlength="160" autocomplete="organization"></div>
+          <button class="btn btn-primary" type="submit" id="p-save">Save changes</button>
+          <div class="msg" id="p-msg" role="status"></div>
+        </form>
+      </div>
+
+      <div class="card form-card">
+        <h2>Change password</h2>
+        <p class="sub">At least 10 characters. Other devices are signed out when you change it.</p>
+        <form id="pw-form" novalidate>
+          <input type="text" autocomplete="username" hidden aria-hidden="true" tabindex="-1" id="pw-user">
+          <div class="frow"><label for="pw-cur">Current password</label><input class="form-input" id="pw-cur" type="password" autocomplete="current-password" maxlength="128"></div>
+          <div class="frow"><label for="pw-new">New password</label><input class="form-input" id="pw-new" type="password" autocomplete="new-password" maxlength="128"></div>
+          <div class="frow"><label for="pw-new2">Confirm new password</label><input class="form-input" id="pw-new2" type="password" autocomplete="new-password" maxlength="128"></div>
+          <button class="btn btn-primary" type="submit" id="pw-save">Change password</button>
+          <div class="msg" id="pw-msg" role="status"></div>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer"></footer>
+</div>
+
+<script src="assets/js/api.js?v=20260606b"></script>
+<script src="assets/js/ui.js?v=20260606b"></script>
+<script src="assets/js/storage.js?v=20260606b"></script>
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var state = { page: 1, pages: 1, total: 0, search: '' };
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function j(path, method, body) {
+    return fetch(API_BASE + path, {
+      method: method || 'GET',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (data) {
+        if (res.status === 401 && window.kaSignInRedirect) window.kaSignInRedirect();
+        if (!res.ok) { var e = new Error(data.error || ('HTTP ' + res.status)); e.status = res.status; throw e; }
+        return data;
+      });
+    });
+  }
+  function ago(iso) {
+    var s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+    if (s < 60) return 'just now';
+    if (s < 3600) return Math.floor(s / 60) + ' min ago';
+    if (s < 86400) return Math.floor(s / 3600) + ' h ago';
+    if (s < 86400 * 30) return Math.floor(s / 86400) + ' d ago';
+    return new Date(iso).toLocaleDateString();
+  }
+  function money(n) { return '$' + Number(n).toFixed(2); }
+
+  /* ---------- tabs ---------- */
+  function showTab(name) {
+    var hist = name !== 'profile';
+    $('tab-history').setAttribute('aria-selected', hist ? 'true' : 'false');
+    $('tab-profile').setAttribute('aria-selected', hist ? 'false' : 'true');
+    $('panel-history').hidden = !hist;
+    $('panel-profile').hidden = hist;
+    if (window.location.hash !== (hist ? '' : '#profile')) {
+      history.replaceState(null, '', hist ? window.location.pathname : '#profile');
+    }
+  }
+  $('tab-history').addEventListener('click', function () { showTab('history'); });
+  $('tab-profile').addEventListener('click', function () { showTab('profile'); });
+
+  /* ---------- summary ---------- */
+  function loadSummary() {
+    j('/api/account/summary').then(function (d) {
+      var st = d.stats || {};
+      $('k-runs').textContent = st.total_runs || 0;
+      $('k-runs-s').textContent = st.last_run_at ? 'last ' + ago(st.last_run_at) : 'none yet';
+      $('k-specs').textContent = st.distinct_specs || 0;
+      $('k-30').textContent = st.specs_30d || 0;
+      var top = (st.top_fabrics || [])[0];
+      $('k-top').textContent = top ? top.fabric : '—';
+      $('k-top-s').innerHTML = top ? esc(top.runs) + (top.runs === 1 ? ' run' : ' runs') : '&nbsp;';
+      if (d.member_since) $('welcome').textContent = 'Member since ' + new Date(d.member_since).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) + '.';
+    }).catch(function () {});
+  }
+
+  /* ---------- history ---------- */
+  function chip(label, value) { return '<span class="chip">' + esc(label) + ' <b>' + esc(value) + '</b></span>'; }
+
+  function rowHtml(r) {
+    var s = r.summary || {};
+    var chips = '';
+    if (s.yarn_count) chips += chip('Yarn', s.yarn_count);
+    if (s.fabric_price_usd_per_kg != null) chips += chip('Fabric', money(s.fabric_price_usd_per_kg) + '/kg');
+    if (s.loop_length_mm != null) chips += chip('Loop', s.loop_length_mm + ' mm');
+    if (s.kg_per_day != null) chips += chip('Output', Math.round(s.kg_per_day) + ' kg/day');
+    if (s.fob_usd != null) chips += chip('FOB', money(s.fob_usd));
+    var runs = r.run_count > 1 ? ' · run ' + r.run_count + ' times' : '';
+    return '<article class="calc" data-id="' + esc(r.id) + '">' +
+      '<div>' +
+        '<div class="calc-title">' + esc(r.fabric_name || r.fabric_id) + '<span class="gsm">' + esc(Number(r.gsm)) + ' GSM</span></div>' +
+        '<div class="calc-sub">' + esc(r.composition || 'Composition not set') + ' · ' + esc(ago(r.last_run_at)) + esc(runs) + '</div>' +
+        (chips ? '<div class="chips">' + chips + '</div>' : '') +
+      '</div>' +
+      '<div class="calc-actions">' +
+        '<button class="btn btn-primary" data-act="open">Open</button>' +
+        '<button class="btn btn-ghost btn-danger-ghost" data-act="delete" aria-label="Delete this calculation">Delete</button>' +
+      '</div>' +
+    '</article>';
+  }
+
+  var rowsById = {};
+  function loadHistory() {
+    var q = '?page=' + state.page + '&limit=10' + (state.search ? '&search=' + encodeURIComponent(state.search) : '');
+    j('/api/account/calculations' + q).then(function (d) {
+      state.pages = d.pages; state.total = d.total;
+      rowsById = {};
+      d.rows.forEach(function (r) { rowsById[r.id] = r; });
+      var list = $('list');
+      if (!d.rows.length) {
+        list.innerHTML = state.search
+          ? '<div class="empty"><h3>No matches</h3><p>Nothing in your history matches “' + esc(state.search) + '”.</p></div>'
+          : '<div class="empty"><h3>No calculations yet</h3><p>Every calculation you run is kept here so you can open it again.</p><a class="btn btn-primary" href="/app.html">Run your first calculation</a></div>';
+      } else {
+        list.innerHTML = d.rows.map(rowHtml).join('');
+      }
+      $('clear-all').hidden = !(state.total > 0 && !state.search);
+      $('pager').hidden = state.pages <= 1;
+      $('pager-info').textContent = 'Page ' + d.page + ' of ' + d.pages + ' · ' + d.total + ' saved';
+      $('prev').disabled = d.page <= 1;
+      $('next').disabled = d.page >= d.pages;
+    }).catch(function (e) {
+      $('list').innerHTML = '<div class="empty"><h3>Could not load your calculations</h3><p>' + esc(e.message) + '</p></div>';
+    });
+  }
+
+  $('list').addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-act]');
+    if (!btn) return;
+    var card = btn.closest('[data-id]');
+    var row = rowsById[card.getAttribute('data-id')];
+    if (!row) return;
+    if (btn.getAttribute('data-act') === 'open') {
+      savePending(row.params);
+      window.location.href = 'result.html';
+    } else if (btn.getAttribute('data-act') === 'delete') {
+      btn.disabled = true;
+      j('/api/account/calculations/' + encodeURIComponent(row.id), 'DELETE').then(function () {
+        if (typeof showToast === 'function') showToast('Removed from your history', 'success', 1800);
+        loadSummary(); loadHistory();
+      }).catch(function (err) {
+        btn.disabled = false;
+        if (typeof showToast === 'function') showToast(err.message, 'error');
+      });
+    }
+  });
+
+  var t;
+  $('search').addEventListener('input', function () {
+    clearTimeout(t);
+    t = setTimeout(function () { state.search = $('search').value.trim(); state.page = 1; loadHistory(); }, 250);
+  });
+  $('prev').addEventListener('click', function () { if (state.page > 1) { state.page--; loadHistory(); } });
+  $('next').addEventListener('click', function () { if (state.page < state.pages) { state.page++; loadHistory(); } });
+  $('clear-all').addEventListener('click', function () {
+    if (!window.confirm('Remove all ' + state.total + ' saved calculations? This cannot be undone.')) return;
+    j('/api/account/calculations', 'DELETE').then(function () { state.page = 1; loadSummary(); loadHistory(); })
+      .catch(function (err) { if (typeof showToast === 'function') showToast(err.message, 'error'); });
+  });
+
+  /* ---------- profile ---------- */
+  function setMsg(el, text, ok) { el.textContent = text; el.className = 'msg ' + (text ? (ok ? 'ok' : 'err') : ''); }
+
+  function fillProfile(u) {
+    $('p-email').value = u.email || '';
+    $('pw-user').value = u.email || '';
+    $('p-name').value = u.full_name || '';
+    $('p-company').value = u.company || '';
+  }
+
+  $('profile-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var btn = $('p-save'); btn.disabled = true; setMsg($('p-msg'), '', true);
+    j('/api/account/profile', 'PATCH', { full_name: $('p-name').value, company: $('p-company').value })
+      .then(function (d) { window.KA_USER = d.user; setMsg($('p-msg'), 'Saved.', true); })
+      .catch(function (err) { setMsg($('p-msg'), err.message, false); })
+      .then(function () { btn.disabled = false; });
+  });
+
+  $('pw-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var msg = $('pw-msg');
+    if ($('pw-new').value !== $('pw-new2').value) { setMsg(msg, 'The new passwords do not match.', false); return; }
+    var btn = $('pw-save'); btn.disabled = true; setMsg(msg, '', true);
+    j('/api/account/password', 'POST', { current_password: $('pw-cur').value, new_password: $('pw-new').value })
+      .then(function () { $('pw-form').reset(); setMsg(msg, 'Password changed. Other devices have been signed out.', true); })
+      .catch(function (err) { setMsg(msg, err.message, false); })
+      .then(function () { btn.disabled = false; });
+  });
+
+  /* ---------- boot ---------- */
+  (window.kaUserPromise || Promise.resolve(null)).then(function (u) { if (u) fillProfile(u); });
+  showTab(window.location.hash === '#profile' ? 'profile' : 'history');
+  window.addEventListener('hashchange', function () { showTab(window.location.hash === '#profile' ? 'profile' : 'history'); });
+  loadSummary();
+  loadHistory();
+})();
+</script>
+</body>
+</html>

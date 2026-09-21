@@ -140,10 +140,10 @@
       transition: border-color var(--t-fast);
     }
     .nl-box::placeholder { color: var(--t3); }
-    .nl-box:focus { border-color: rgba(192,132,252,.5); }
+    .nl-box:focus { border-color: rgba(24,87,196,.5); }
     .nl-coming-soon {
-      background: rgba(192,132,252,.05);
-      border: 1px solid rgba(192,132,252,.2);
+      background: rgba(24,87,196,.05);
+      border: 1px solid rgba(24,87,196,.2);
       border-radius: var(--radius-sm);
       padding: 10px 14px;
       font-size: 11px;
@@ -173,9 +173,9 @@
       transition: all var(--t-fast);
     }
     .cat-chip.active, .cat-chip:hover {
-      border-color: rgba(0,255,178,.4);
+      border-color: rgba(24,87,196,.4);
       color: var(--a1);
-      background: rgba(0,255,178,.06);
+      background: rgba(24,87,196,.06);
     }
 
     /* GSM range hints */
@@ -261,9 +261,9 @@
       transition: all var(--t-fast);
     }
     .comp-chip:hover, .comp-chip.active {
-      border-color: rgba(192,132,252,.5);
-      color: rgba(192,132,252,1);
-      background: rgba(192,132,252,.06);
+      border-color: rgba(24,87,196,.5);
+      color: rgba(24,87,196,1);
+      background: rgba(24,87,196,.06);
     }
 
     /* Color shade selector */
@@ -298,9 +298,9 @@
     .shade-btn[data-shade="dark"] .shade-swatch  { background: #1a1a1a; border-color: #444; }
     .shade-btn[data-shade="medium"] .shade-swatch { background: #808080; border-color: #aaa; }
     .shade-btn[data-shade="light"] .shade-swatch  { background: #f0f0f0; border-color: #ccc; }
-    .shade-btn:hover { border-color: rgba(0,255,178,.35); color: var(--t1); background: rgba(0,255,178,.04); }
+    .shade-btn:hover { border-color: rgba(24,87,196,.35); color: var(--t1); background: rgba(24,87,196,.04); }
     .shade-btn.active[data-shade="dark"]   { border-color: #555; background: rgba(50,50,50,.25); color: #ccc; }
-    .shade-btn.active[data-shade="medium"] { border-color: rgba(0,255,178,.5); background: rgba(0,255,178,.07); color: var(--a1); }
+    .shade-btn.active[data-shade="medium"] { border-color: rgba(24,87,196,.5); background: rgba(24,87,196,.07); color: var(--a1); }
     .shade-btn.active[data-shade="light"]  { border-color: rgba(255,255,255,.4); background: rgba(255,255,255,.06); color: #fff; }
     .shade-hint {
       font-size: 9.5px;
@@ -329,7 +329,7 @@
     .ce-preview {
       display: flex; align-items: center; gap: 12px; margin-top: 10px;
       padding: 10px 12px; border-radius: 10px;
-      border: 1px solid rgba(0,255,178,.18); background: rgba(0,255,178,.04);
+      border: 1px solid rgba(24,87,196,.18); background: rgba(24,87,196,.04);
     }
     /* `display:flex` above otherwise beats the browser's native
        [hidden]{display:none} rule (same specificity, author sheet wins) —
@@ -357,7 +357,7 @@
       max-height: 220px; overflow-y: auto;
     }
     .ce-opt { display: flex; align-items: center; gap: 8px; padding: 7px 10px; cursor: pointer; }
-    .ce-opt:hover { background: rgba(0,255,178,.06); }
+    .ce-opt:hover { background: rgba(24,87,196,.06); }
     .ce-opt-sw { width: 22px; height: 22px; border-radius: 5px; border: 1px solid rgba(255,255,255,.15); flex: 0 0 22px; }
     .ce-opt-name { font-size: 11.5px; color: var(--t1); }
     .ce-opt-code { font-size: 9px; color: var(--t3); font-family: var(--mono, monospace); }
@@ -367,6 +367,8 @@
       padding: 16px 0 32px;
     }
   </style>
+  <link rel="stylesheet" href="assets/css/theme-v2.css?v=20260922a">
+  <script src="assets/js/app-shell.js?v=20260922a" defer></script>
 </head>
 <body>
 <div class="page-wrap">
@@ -481,7 +483,7 @@
         <!-- Precise Color — COLOR ENGINE (optional, drives realistic visualization) -->
         <div class="form-group mb-16">
           <label class="form-label" style="color:var(--t1)">
-            Precise Color <span class="badge" style="margin-left:6px;background:rgba(0,255,178,.12);color:var(--a1);border:1px solid rgba(0,255,178,.3)">COLOR ENGINE</span>
+            Precise Color <span class="badge" style="margin-left:6px;background:rgba(24,87,196,.12);color:var(--a1);border:1px solid rgba(24,87,196,.3)">COLOR ENGINE</span>
             <span class="badge badge-gray" style="margin-left:4px">OPTIONAL</span>
           </label>
           <div class="ce-wrap">
@@ -548,7 +550,7 @@
         <div class="form-group mb-16">
           <label class="form-label" style="color:var(--t1);display:flex;align-items:center;gap:8px;cursor:pointer;">
             <input type="checkbox" id="depth-toggle" onchange="toggleShadeDepth(this.checked)" style="cursor:pointer;">
-            Shade Depth (%OWF) <span class="badge" style="margin-left:2px;background:rgba(0,255,178,.12);color:var(--a1);border:1px solid rgba(0,255,178,.3)">ADVANCED</span>
+            Shade Depth (%OWF) <span class="badge" style="margin-left:2px;background:rgba(24,87,196,.12);color:var(--a1);border:1px solid rgba(24,87,196,.3)">ADVANCED</span>
           </label>
           <div id="depth-controls" style="display:none;margin-top:8px;">
             <div style="display:flex;align-items:center;gap:12px;">
@@ -821,7 +823,7 @@
           <button id="calc-btn" class="btn btn-primary btn-lg" onclick="doCalculate()">
             Calculate Everything →
           </button>
-          <div class="calc-btn-hint">16+ calculations in &lt;50ms · No internet needed for form input</div>
+          <div class="calc-btn-hint">Yarn, machine, production, quality and cost — solved together from this one input</div>
         </div>
 
         <!-- WOVEN RESULT — shown in place, because a woven quality has no

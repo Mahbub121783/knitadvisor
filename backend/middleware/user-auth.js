@@ -62,7 +62,11 @@ async function loadUser(req) {
 async function requireUser(req, res, next) {
   try {
     const user = await loadUser(req);
-    if (user) { req.user = user; return next(); }
+    if (user) {
+      req.user = user;
+      req.sessionTokenHash = hashToken(readCookie(req.headers.cookie, COOKIE_NAME));
+      return next();
+    }
   } catch (err) {
     console.error('[UserAuth] Session lookup failed:', err.message);
     return res.status(500).json({ success: false, error: 'Could not verify your session. Please try again.' });

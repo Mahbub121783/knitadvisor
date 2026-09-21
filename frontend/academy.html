@@ -39,7 +39,7 @@
       transition: all var(--t-fast);
     }
     .tab-btn:hover { color: var(--t1); background: rgba(255,255,255,0.03); }
-    .tab-btn.active { color: #00ffb2; background: rgba(0,255,178,0.06); border: 1px solid rgba(0,255,178,0.2); }
+    .tab-btn.active { color: #1857C4; background: rgba(24,87,196,0.06); border: 1px solid rgba(24,87,196,0.2); }
 
     .tab-panel { display: none; }
     .tab-panel.active { display: block; }
@@ -86,7 +86,7 @@
       outline: none;
       transition: border-color var(--t-fast);
     }
-    .search-box:focus { border-color: #00ffb2; }
+    .search-box:focus { border-color: #1857C4; }
 
     .term-list {
       max-height: 400px;
@@ -108,8 +108,8 @@
       justify-content: space-between;
       align-items: center;
     }
-    .term-item:hover { border-color: #00ffb2; background: rgba(0,255,178,0.02); }
-    .term-item.active { border-color: #00ffb2; background: rgba(0,255,178,0.06); font-weight: 600; }
+    .term-item:hover { border-color: #1857C4; background: rgba(24,87,196,0.02); }
+    .term-item.active { border-color: #1857C4; background: rgba(24,87,196,0.06); font-weight: 600; }
     .term-page-badge {
       font-size: 10px;
       color: var(--t3);
@@ -127,7 +127,7 @@
     }
     .term-detail-title {
       font-size: 20px;
-      color: #00ffb2;
+      color: #1857C4;
       font-weight: 700;
       margin-bottom: 12px;
       border-bottom: 1px solid var(--line);
@@ -166,9 +166,9 @@
       border-radius: var(--radius-sm);
     }
     .sketch-nav-btn.active {
-      background: #00ffb2;
+      background: #1857C4;
       color: var(--bg);
-      border-color: #00ffb2;
+      border-color: #1857C4;
       font-weight: 700;
     }
 
@@ -179,8 +179,8 @@
       transition: stroke var(--t-fast), fill var(--t-fast);
     }
     .interactive-part:hover, .interactive-part.active {
-      stroke: #00ffb2 !important;
-      fill: rgba(0, 255, 178, 0.15) !important;
+      stroke: #1857C4 !important;
+      fill: rgba(24,87,196, 0.15) !important;
     }
 
     .info-overlay {
@@ -193,7 +193,7 @@
       margin-top: 16px;
       text-align: center;
     }
-    .info-part-name { font-weight: 700; color: #00ffb2; font-size: 12px; margin-bottom: 4px; }
+    .info-part-name { font-weight: 700; color: #1857C4; font-size: 12px; margin-bottom: 4px; }
     .info-part-desc { color: var(--t2); }
 
     /* Cycle sliders styles */
@@ -206,14 +206,14 @@
     }
     .cycle-slider {
       width: 100%;
-      accent-color: #00ffb2;
+      accent-color: #1857C4;
       cursor: pointer;
     }
     .step-badge {
       display: inline-block;
-      background: rgba(0,255,178,0.08);
-      border: 1px solid rgba(0,255,178,0.3);
-      color: #00ffb2;
+      background: rgba(24,87,196,0.08);
+      border: 1px solid rgba(24,87,196,0.3);
+      color: #1857C4;
       padding: 2px 8px;
       border-radius: 20px;
       font-weight: 600;
@@ -235,7 +235,7 @@
       padding-bottom: 10px;
     }
     .quiz-progress { font-family: var(--mono); font-size: 11px; color: var(--t3); }
-    .quiz-score { font-family: var(--mono); font-weight: 700; color: #00ffb2; }
+    .quiz-score { font-family: var(--mono); font-weight: 700; color: #1857C4; }
 
     .quiz-question-box {
       font-size: 15px;
@@ -265,13 +265,13 @@
       gap: 12px;
     }
     .option-btn:hover:not(.disabled) {
-      border-color: #00ffb2;
-      background: rgba(0,255,178,0.02);
+      border-color: #1857C4;
+      background: rgba(24,87,196,0.02);
       color: var(--t1);
     }
     .option-btn.selected {
-      border-color: #00ffb2;
-      background: rgba(0,255,178,0.08);
+      border-color: #1857C4;
+      background: rgba(24,87,196,0.08);
       color: var(--t1);
     }
     .option-btn.correct {
@@ -319,10 +319,12 @@
     /* Needle SVG parts outlines */
     .needle-stroke { stroke: #888888; stroke-width: 2px; fill: none; }
     .needle-fill { fill: #444444; }
-    .needle-highlight { stroke: #00ffb2; }
+    .needle-highlight { stroke: #1857C4; }
 
     .main-content { padding: 0 0 40px; }
   </style>
+  <link rel="stylesheet" href="assets/css/theme-v2.css?v=20260922a">
+  <script src="assets/js/app-shell.js?v=20260922a" defer></script>
 </head>
 <body>
 <div class="page-wrap">
@@ -408,7 +410,7 @@
               <!-- Latch -->
               <line id="latch-element" class="interactive-part needle-stroke" x1="80" y1="135" x2="105" y2="105" data-part="latch" stroke-linecap="round"/>
               <!-- Rivet -->
-              <circle class="interactive-part" cx="80" cy="135" r="4" fill="#00ffb2" data-part="rivet"/>
+              <circle class="interactive-part" cx="80" cy="135" r="4" fill="#1857C4" data-part="rivet"/>
               <!-- Stem -->
               <rect class="interactive-part" x="76" y="120" width="8" height="150" fill="#666" stroke="#888" stroke-width="1" data-part="stem"/>
               <!-- Butt -->
@@ -426,7 +428,7 @@
               <!-- Stem -->
               <rect class="interactive-part" x="76" y="120" width="8" height="180" fill="#666" stroke="#888" stroke-width="1" data-part="stem"/>
               <!-- Eye/Groove -->
-              <line class="interactive-part needle-stroke" x1="80" y1="135" x2="80" y2="160" stroke-dasharray="3,3" data-part="eye" stroke="#00ffb2"/>
+              <line class="interactive-part needle-stroke" x1="80" y1="135" x2="80" y2="160" stroke-dasharray="3,3" data-part="eye" stroke="#1857C4"/>
             </svg>
 
             <!-- Compound Needle SVG -->
@@ -434,7 +436,7 @@
               <!-- Hook -->
               <path class="interactive-part needle-stroke" d="M 80 100 C 80 50, 105 50, 105 75 L 105 80" data-part="hook" stroke-linecap="round"/>
               <!-- Sliding Latch (Tongue) -->
-              <line id="compound-tongue" class="interactive-part" x1="90" y1="130" x2="90" y2="82" stroke="#00ffb2" stroke-width="3" data-part="sliding_latch" stroke-linecap="round"/>
+              <line id="compound-tongue" class="interactive-part" x1="90" y1="130" x2="90" y2="82" stroke="#1857C4" stroke-width="3" data-part="sliding_latch" stroke-linecap="round"/>
               <!-- Stem -->
               <rect class="interactive-part" x="76" y="100" width="8" height="200" fill="#666" stroke="#888" stroke-width="1" data-part="stem"/>
             </svg>
@@ -492,7 +494,7 @@
               <!-- Sinker Loop / fabric -->
               <path id="cycle-fabric-loop" d="M 60 220 C 60 250, 90 250, 90 220" stroke="#888" stroke-width="3" fill="none"/>
               <path id="cycle-old-loop" d="M 90 220 C 90 160, 130 160, 130 220" stroke="#ffa62b" stroke-width="3" fill="none"/>
-              <path id="cycle-new-yarn" d="M 50 120 L 110 120" stroke="#00ffb2" stroke-width="3" fill="none" stroke-linecap="round"/>
+              <path id="cycle-new-yarn" d="M 50 120 L 110 120" stroke="#1857C4" stroke-width="3" fill="none" stroke-linecap="round"/>
 
               <!-- Interactive Needle Stem -->
               <g id="cycle-needle-group">
@@ -503,7 +505,7 @@
                 <!-- Latch -->
                 <line id="cycle-latch" x1="110" y1="115" x2="135" y2="85" stroke="#888" stroke-width="2" stroke-linecap="round"/>
                 <!-- Compound Sliding Latch / Tongue -->
-                <line id="cycle-compound-tongue" x1="120" y1="110" x2="120" y2="78" stroke="#00ffb2" stroke-width="3" stroke-linecap="round" style="display:none;"/>
+                <line id="cycle-compound-tongue" x1="120" y1="110" x2="120" y2="78" stroke="#1857C4" stroke-width="3" stroke-linecap="round" style="display:none;"/>
               </g>
             </svg>
             <div style="font-size:9px; color:var(--t3); font-family:var(--mono); margin-top:10px;">
@@ -553,7 +555,7 @@
         <div class="academy-card hidden" id="quiz-scoreboard" style="text-align:center; padding:40px 20px;">
           <div class="empty-icon" id="scoreboard-icon">🏆</div>
           <div class="h2" id="scoreboard-title">Well Done!</div>
-          <div class="h1" id="scoreboard-score" style="font-size:36px; color:#00ffb2; margin:16px 0;">0 / 30</div>
+          <div class="h1" id="scoreboard-score" style="font-size:36px; color:#1857C4; margin:16px 0;">0 / 30</div>
           <p class="text-xs text-dim mb-20" id="scoreboard-eval">You have successfully completed the Knitting Academy technology assessment!</p>
           <button class="btn btn-primary" onclick="restartQuiz()">Restart Quiz</button>
         </div>
@@ -601,12 +603,12 @@
             <div class="metric-card-grid" style="margin-top:12px; display:grid; grid-template-columns:1fr 1fr; gap:10px;">
               <div style="background:var(--bg3); border:1px solid var(--line2); border-radius:var(--radius-sm); padding:10px; display:flex; flex-direction:column;">
                 <span class="moc-lbl" style="font-size:9px; color:var(--t3); text-transform:uppercase; margin-bottom:4px;">Single-Jersey Ne</span>
-                <span class="moc-val" id="acad-ne-sj" style="font-size:18px; font-weight:700; color:#00ffb2;">—</span>
+                <span class="moc-val" id="acad-ne-sj" style="font-size:18px; font-weight:700; color:#1857C4;">—</span>
                 <span class="moc-sub" style="font-size:9px; color:var(--t3); font-family:var(--mono); margin-top:2px;">Formula: Ne = G² / 18</span>
               </div>
               <div style="background:var(--bg3); border:1px solid var(--line2); border-radius:var(--radius-sm); padding:10px; display:flex; flex-direction:column;">
                 <span class="moc-lbl" style="font-size:9px; color:var(--t3); text-transform:uppercase; margin-bottom:4px;">Rib / Double-Jersey Ne</span>
-                <span class="moc-val" id="acad-ne-rib" style="font-size:18px; font-weight:700; color:#00ffb2;">—</span>
+                <span class="moc-val" id="acad-ne-rib" style="font-size:18px; font-weight:700; color:#1857C4;">—</span>
                 <span class="moc-sub" style="font-size:9px; color:var(--t3); font-family:var(--mono); margin-top:2px;">Formula: Ne = G² / 15.3</span>
               </div>
             </div>
@@ -704,7 +706,7 @@
               </g>
 
               <!-- Dial Needles -->
-              <g id="svg-dial-needles" stroke="#00ffb2" stroke-width="2">
+              <g id="svg-dial-needles" stroke="#1857C4" stroke-width="2">
                 <line x1="60" y1="70" x2="60" y2="30" id="dial-n-1"/>
                 <line x1="100" y1="70" x2="100" y2="30" id="dial-n-2"/>
                 <line x1="140" y1="70" x2="140" y2="30" id="dial-n-3"/>
@@ -715,11 +717,11 @@
               <!-- Cylinder Draw Curve -->
               <path id="curve-cyl-path" d="M 20 130 C 60 130, 70 170, 80 170 C 90 170, 100 130, 140 130 S 180 130, 200 130" stroke="#fff" stroke-width="1.5" fill="none"/>
               <!-- Dial Draw Curve -->
-              <path id="curve-dial-path" d="M 20 70 C 60 70, 70 30, 80 30 C 90 30, 100 70, 140 70 S 180 70, 200 70" stroke="#00ffb2" stroke-width="1.5" fill="none" stroke-dasharray="2,2"/>
+              <path id="curve-dial-path" d="M 20 70 C 60 70, 70 30, 80 30 C 90 30, 100 70, 140 70 S 180 70, 200 70" stroke="#1857C4" stroke-width="1.5" fill="none" stroke-dasharray="2,2"/>
               
               <!-- Draw Points (Needle Tips) -->
               <circle cx="80" cy="170" r="3" fill="#fff" id="dot-cyl"/>
-              <circle cx="80" cy="30" r="3" fill="#00ffb2" id="dot-dial"/>
+              <circle cx="80" cy="30" r="3" fill="#1857C4" id="dot-dial"/>
             </svg>
 
             <!-- Text Explanation in visualizer -->
@@ -1353,7 +1355,7 @@
         <div style="background:var(--bg3); border:1px solid var(--line2); border-radius:var(--radius); padding:16px; margin-top:16px; text-align:center;">
           <svg width="120" height="90" viewBox="0 0 120 90">
             <!-- Needle Loop -->
-            <path d="M 30 60 C 30 10, 90 10, 90 60 M 20 60 C 20 5, 100 5, 100 60" stroke="#00ffb2" stroke-width="3" fill="none"/>
+            <path d="M 30 60 C 30 10, 90 10, 90 60 M 20 60 C 20 5, 100 5, 100 60" stroke="#1857C4" stroke-width="3" fill="none"/>
             <!-- Sinker connects -->
             <path d="M 10 75 C 20 75, 25 60, 30 60" stroke="#888" stroke-width="2" fill="none"/>
             <path d="M 90 60 C 95 60, 100 75, 110 75" stroke="#888" stroke-width="2" fill="none"/>
@@ -1366,10 +1368,10 @@
         <div style="background:var(--bg3); border:1px solid var(--line2); border-radius:var(--radius); padding:16px; margin-top:16px; text-align:center;">
           <svg width="120" height="90" viewBox="0 0 120 90">
             <!-- Row of loops -->
-            <path d="M 10 30 C 10 10, 30 10, 30 30 C 30 50, 50 50, 50 30 C 50 10, 70 10, 70 30 C 70 50, 90 50, 90 30 C 90 10, 110 10, 110 30" stroke="${key === 'course' ? '#00ffb2' : '#888'}" stroke-width="2" fill="none"/>
-            <path d="M 10 60 C 10 40, 30 40, 30 60 C 30 80, 50 80, 50 60 C 50 40, 70 40, 70 60 C 70 80, 90 80, 90 60 C 90 40, 110 40, 110 60" stroke="${key === 'course' ? '#00ffb2' : '#888'}" stroke-width="2" fill="none"/>
+            <path d="M 10 30 C 10 10, 30 10, 30 30 C 30 50, 50 50, 50 30 C 50 10, 70 10, 70 30 C 70 50, 90 50, 90 30 C 90 10, 110 10, 110 30" stroke="${key === 'course' ? '#1857C4' : '#888'}" stroke-width="2" fill="none"/>
+            <path d="M 10 60 C 10 40, 30 40, 30 60 C 30 80, 50 80, 50 60 C 50 40, 70 40, 70 60 C 70 80, 90 80, 90 60 C 90 40, 110 40, 110 60" stroke="${key === 'course' ? '#1857C4' : '#888'}" stroke-width="2" fill="none"/>
             <!-- Wale indicator line -->
-            ${key === 'wale' ? '<line x1="30" y1="5" x2="30" y2="85" stroke="#00ffb2" stroke-dasharray="3,3" stroke-width="2"/>' : ''}
+            ${key === 'wale' ? '<line x1="30" y1="5" x2="30" y2="85" stroke="#1857C4" stroke-dasharray="3,3" stroke-width="2"/>' : ''}
             <text x="60" y="85" fill="var(--t3)" font-size="9" font-family="var(--mono)" text-anchor="middle">${key === 'course' ? 'Courses (Horizontal Row)' : 'Wales (Vertical Column)'}</text>
           </svg>
         </div>
@@ -1428,7 +1430,7 @@
     Object.entries(needle.parts).forEach(([partKey, partDesc]) => {
       partsHtml += `
         <div style="padding:8px 10px; background:var(--bg3); border-left: 2px solid var(--line); font-size:11px;" id="lbl-part-${partKey}">
-          <span style="font-weight:700; color:#00ffb2; text-transform:capitalize;">${partKey.replace('_', ' ')}:</span>
+          <span style="font-weight:700; color:#1857C4; text-transform:capitalize;">${partKey.replace('_', ' ')}:</span>
           <span style="color:var(--t2);">${partDesc}</span>
         </div>
       `;
@@ -1461,7 +1463,7 @@
           // Highlight label in left column
           document.querySelectorAll('[id^="lbl-part-"]').forEach(lbl => lbl.style.borderLeftColor = 'var(--line)');
           const lbl = document.getElementById(`lbl-part-${partName}`);
-          if (lbl) lbl.style.borderLeftColor = '#00ffb2';
+          if (lbl) lbl.style.borderLeftColor = '#1857C4';
         }
       });
     });
@@ -1772,7 +1774,7 @@
 
     if (m.formula) {
       detailHtml += `
-        <div style="background:var(--bg3); border-left:3px solid #00ffb2; padding:8px 10px; border-radius:var(--radius-sm); font-family:var(--mono); font-size:11px; color:#00ffb2; margin-bottom:12px;">
+        <div style="background:var(--bg3); border-left:3px solid #1857C4; padding:8px 10px; border-radius:var(--radius-sm); font-family:var(--mono); font-size:11px; color:#1857C4; margin-bottom:12px;">
           Yarn count rule: ${m.formula}
         </div>
       `;
@@ -1787,7 +1789,7 @@
     }
 
     card.innerHTML = `
-      <div style="font-weight:700; font-size:14px; color:#00ffb2; margin-bottom:8px; border-bottom:1px solid var(--line2); padding-bottom:4px;">
+      <div style="font-weight:700; font-size:14px; color:#1857C4; margin-bottom:8px; border-bottom:1px solid var(--line2); padding-bottom:4px;">
         ${m.name}
       </div>
       ${detailHtml}

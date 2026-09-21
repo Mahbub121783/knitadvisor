@@ -51,8 +51,8 @@
       align-items: center;
       gap: 8px;
       padding: 10px 14px;
-      background: rgba(0,255,178,.06);
-      border: 1px solid rgba(0,255,178,.2);
+      background: rgba(24,87,196,.06);
+      border: 1px solid rgba(24,87,196,.2);
       border-radius: var(--radius-sm);
       margin-bottom: 16px;
     }
@@ -95,10 +95,10 @@
       font-size: 14px;
       flex-shrink: 0;
     }
-    .rst-icon.green { background: rgba(0,255,178,.12); }
-    .rst-icon.blue  { background: rgba(108,142,255,.12); }
+    .rst-icon.green { background: rgba(24,87,196,.12); }
+    .rst-icon.blue  { background: rgba(24,87,196,.12); }
     .rst-icon.amber { background: rgba(255,184,48,.1); }
-    .rst-icon.purple{ background: rgba(192,132,252,.1); }
+    .rst-icon.purple{ background: rgba(24,87,196,.1); }
 
     .rst-title-text {
       font-family: var(--head);
@@ -127,7 +127,7 @@
       gap: 16px;
       flex-wrap: wrap;
       background: var(--bg3);
-      border: 1px solid rgba(0,255,178,.28);
+      border: 1px solid rgba(24,87,196,.28);
       border-radius: var(--radius-sm);
       padding: 14px 16px;
       margin-bottom: 12px;
@@ -360,7 +360,7 @@
       color: var(--t3);
       margin-left: auto;
     }
-    .cache-tag.hit { background: rgba(0,255,178,.08); border-color: rgba(0,255,178,.2); color: var(--a1); }
+    .cache-tag.hit { background: rgba(24,87,196,.08); border-color: rgba(24,87,196,.2); color: var(--a1); }
 
     /* Skeleton placeholders while loading */
     .skel-line {
@@ -384,6 +384,8 @@
       margin-top: 8px;
     }
   </style>
+  <link rel="stylesheet" href="assets/css/theme-v2.css?v=20260922a">
+  <script src="assets/js/app-shell.js?v=20260922a" defer></script>
 </head>
 <body>
 <div class="page-wrap">
@@ -530,11 +532,11 @@
          straight from /api/calculate's garment_costing block, computed from
          the SAME per-kg fabric price the card above shows — never a second,
          separately-estimated number. -->
-    <div class="result-section anim-in" id="sec-garment-costing-setup" style="border:1px solid rgba(0,200,255,.25); background:rgba(0,200,255,.04);">
+    <div class="result-section anim-in" id="sec-garment-costing-setup" style="border:1px solid rgba(24,87,196,.25); background:rgba(24,87,196,.04);">
       <div class="result-section-title">
-        <div class="rst-icon" style="background:rgba(0,200,255,.1); color:var(--a2);">&#128085;</div>
+        <div class="rst-icon" style="background:rgba(24,87,196,.1); color:var(--a2);">&#128085;</div>
         <div class="rst-title-text">Garment CMT Costing</div>
-        <span class="badge" style="margin-left:auto; background:rgba(0,200,255,.1); color:var(--a2); border:1px solid rgba(0,200,255,.25); font-size:10px; padding:2px 8px;">Cut · Make · Trim · FOB</span>
+        <span class="badge" style="margin-left:auto; background:rgba(24,87,196,.1); color:var(--a2); border:1px solid rgba(24,87,196,.25); font-size:10px; padding:2px 8px;">Cut · Make · Trim · FOB</span>
       </div>
       <div class="info-box text-xs" style="font-size:10px; line-height:1.5; margin-bottom:12px;">
         Turns the fabric price above into a full per-garment cost: real cutting-room fabric consumption (marker loss, rejection, roll-end remnants, GSM buffer, sample yardage), then sewing labor (SAM-based, Bangladesh wage board), trims, overhead and profit to a landed FOB estimate.
@@ -577,7 +579,7 @@
 
     <div class="result-section anim-in hidden" id="sec-garment-costing">
       <div class="result-section-title">
-        <div class="rst-icon" style="background:rgba(0,200,255,.1); color:var(--a2);">&#128176;</div>
+        <div class="rst-icon" style="background:rgba(24,87,196,.1); color:var(--a2);">&#128176;</div>
         <div class="rst-title-text" id="gc-title">Garment FOB Estimate</div>
       </div>
 
@@ -682,7 +684,7 @@
     </div>
 
     <!-- ===== FACTORY R&D DATA MATCH (real measured records) ===== -->
-    <div class="result-section anim-in hidden" id="sec-factory" style="border:1px solid rgba(0,255,178,.4); background:rgba(0,255,178,.06);">
+    <div class="result-section anim-in hidden" id="sec-factory" style="border:1px solid rgba(24,87,196,.4); background:rgba(24,87,196,.06);">
       <div class="result-section-title">
         <div class="rst-icon green">🏭</div>
         <div class="rst-title-text" style="color:var(--a1);">Factory R&amp;D Data Match</div>
@@ -692,7 +694,7 @@
         Anchored to <strong>real factory greige→finish records</strong> (<span id="fac-info-count">—</span> measured samples). These are what the machine actually delivered after dyeing + finishing.
       </div>
       <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:10px;">
-        <div style="background:rgba(0,255,178,.08); border:1px solid rgba(0,255,178,.25); border-radius:10px; padding:12px 8px; text-align:center;">
+        <div style="background:rgba(24,87,196,.08); border:1px solid rgba(24,87,196,.25); border-radius:10px; padding:12px 8px; text-align:center;">
           <div style="font-size:9px; text-transform:uppercase; letter-spacing:.6px; color:var(--t3); margin-bottom:4px;">Stitch Length</div>
           <div style="font-size:22px; font-weight:800; color:var(--a1); font-family:var(--head); line-height:1;" id="fac-sl">—</div>
           <div style="font-size:9px; color:var(--t3); margin-top:3px;">mm (body SL)</div>
@@ -702,7 +704,7 @@
           <div style="font-size:22px; font-weight:800; color:#fb923c; font-family:var(--head); line-height:1;" id="fac-gsm">—</div>
           <div style="font-size:9px; color:var(--t3); margin-top:3px;" id="fac-gsm-gain">after dye+finish</div>
         </div>
-        <div style="background:rgba(0,200,255,.06); border:1px solid rgba(0,200,255,.18); border-radius:10px; padding:12px 8px; text-align:center;">
+        <div style="background:rgba(24,87,196,.06); border:1px solid rgba(24,87,196,.18); border-radius:10px; padding:12px 8px; text-align:center;">
           <div style="font-size:9px; text-transform:uppercase; letter-spacing:.6px; color:var(--t3); margin-bottom:4px;">Finished Width</div>
           <div style="font-size:22px; font-weight:800; color:var(--a2); font-family:var(--head); line-height:1;" id="fac-width">—</div>
           <div style="font-size:9px; color:var(--t3); margin-top:3px;">inch (open)</div>
@@ -719,22 +721,22 @@
 
     <!-- ===== BULK PRODUCTION DATA (Knitting Master File, 5000+ bookings) —
          independent of whether a Factory R&D nearest-sample match was found above ===== -->
-    <div class="result-section anim-in hidden" id="sec-bulk-production" style="border:1px solid rgba(168,85,247,.3); background:rgba(168,85,247,.04);">
+    <div class="result-section anim-in hidden" id="sec-bulk-production" style="border:1px solid rgba(24,87,196,.3); background:rgba(24,87,196,.04);">
       <div class="result-section-title">
-        <div class="rst-icon" style="color:#a855f7;">📦</div>
-        <div class="rst-title-text" style="color:#a855f7;">Bulk Production Data</div>
-        <span class="badge" style="margin-left:auto;background:rgba(168,85,247,.12);color:#a855f7;border:1px solid rgba(168,85,247,.3);">5000+ floor bookings</span>
+        <div class="rst-icon" style="color:#1857C4;">📦</div>
+        <div class="rst-title-text" style="color:#1857C4;">Bulk Production Data</div>
+        <span class="badge" style="margin-left:auto;background:rgba(24,87,196,.12);color:#1857C4;border:1px solid rgba(24,87,196,.3);">5000+ floor bookings</span>
       </div>
       <div id="fac-bulk-block">
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
-          <div style="background:rgba(0,200,255,.06); border:1px solid rgba(0,200,255,.18); border-radius:10px; padding:11px 8px; text-align:center;">
+          <div style="background:rgba(24,87,196,.06); border:1px solid rgba(24,87,196,.18); border-radius:10px; padding:11px 8px; text-align:center;">
             <div style="font-size:9px; text-transform:uppercase; letter-spacing:.6px; color:var(--t3); margin-bottom:4px;">Factory Gauge</div>
             <div style="font-size:20px; font-weight:800; color:var(--a2); font-family:var(--head); line-height:1;" id="fac-bulk-gauge">—</div>
             <div style="font-size:9px; color:var(--t3); margin-top:3px;" id="fac-bulk-gauge-sub">needles/inch (booked)</div>
           </div>
-          <div style="background:rgba(168,85,247,.06); border:1px solid rgba(168,85,247,.2); border-radius:10px; padding:11px 8px; text-align:center;">
+          <div style="background:rgba(24,87,196,.06); border:1px solid rgba(24,87,196,.2); border-radius:10px; padding:11px 8px; text-align:center;">
             <div style="font-size:9px; text-transform:uppercase; letter-spacing:.6px; color:var(--t3); margin-bottom:4px;">Process Loss</div>
-            <div style="font-size:20px; font-weight:800; color:#a855f7; font-family:var(--head); line-height:1;" id="fac-loss">—</div>
+            <div style="font-size:20px; font-weight:800; color:#1857C4; font-family:var(--head); line-height:1;" id="fac-loss">—</div>
             <div style="font-size:9px; color:var(--t3); margin-top:3px;">grey → finished</div>
           </div>
         </div>
@@ -825,7 +827,7 @@
       </div>
 
       <!-- YARN EXPERTISE (grade, spinning system, strength, evenness) -->
-      <div id="yarn-expertise-block" class="hidden" style="margin-top:12px; border:1px solid rgba(0,255,178,.2); background:rgba(0,255,178,.03); border-radius:10px; padding:12px;">
+      <div id="yarn-expertise-block" class="hidden" style="margin-top:12px; border:1px solid rgba(24,87,196,.2); background:rgba(24,87,196,.03); border-radius:10px; padding:12px;">
         <div class="result-section-label" style="margin-top:0; color:var(--a1);">Yarn Expertise Analysis</div>
         <div class="result-row">
           <span class="result-key">Fibre Grade</span>
@@ -949,11 +951,11 @@
     </div>
 
     <!-- Fibre science, reasoning about this fabric -->
-    <div class="result-section anim-in hidden" id="sec-fibre-advisory" style="border:1px solid rgba(129,140,248,.3); background:rgba(129,140,248,.04);">
+    <div class="result-section anim-in hidden" id="sec-fibre-advisory" style="border:1px solid rgba(24,87,196,.3); background:rgba(24,87,196,.04);">
       <div class="result-section-title">
-        <div class="rst-icon" style="color:#818cf8;">🧪</div>
-        <div class="rst-title-text" style="color:#818cf8;">Fibre Science — what the measurements say about this fabric</div>
-        <span id="fa-badge" class="badge" style="margin-left:auto;background:rgba(129,140,248,.12);color:#818cf8;border:1px solid rgba(129,140,248,.3);">—</span>
+        <div class="rst-icon" style="color:#1857C4;">🧪</div>
+        <div class="rst-title-text" style="color:#1857C4;">Fibre Science — what the measurements say about this fabric</div>
+        <span id="fa-badge" class="badge" style="margin-left:auto;background:rgba(24,87,196,.12);color:#1857C4;border:1px solid rgba(24,87,196,.3);">—</span>
       </div>
       <div id="fa-headline" style="font-size:12px;line-height:1.65;color:var(--t1);margin-bottom:10px;font-weight:600;"></div>
 
@@ -969,8 +971,8 @@
       <div id="fa-key"></div>
 
       <button type="button" id="fa-toggle" style="width:100%;margin:4px 0 0;padding:7px 10px;
-        background:rgba(129,140,248,.08);border:1px solid rgba(129,140,248,.28);border-radius:7px;
-        color:#818cf8;font-family:inherit;font-size:10px;font-weight:700;letter-spacing:.3px;
+        background:rgba(24,87,196,.08);border:1px solid rgba(24,87,196,.28);border-radius:7px;
+        color:#1857C4;font-family:inherit;font-size:10px;font-weight:700;letter-spacing:.3px;
         cursor:pointer;text-align:center;"></button>
 
       <div id="fa-full" class="hidden" style="margin-top:10px;">
@@ -1046,7 +1048,7 @@
     </div>
 
     <!-- ===== OPTIMAL SINGLE MACHINE SETUP (expert request) ===== -->
-    <div class="result-section anim-in hidden" id="sec-optimal" style="border:1px solid rgba(0,255,178,.35); background:rgba(0,255,178,.05);">
+    <div class="result-section anim-in hidden" id="sec-optimal" style="border:1px solid rgba(24,87,196,.35); background:rgba(24,87,196,.05);">
       <div class="result-section-title">
         <div class="rst-icon green">🎯</div>
         <div class="rst-title-text" style="color:var(--a1);">Optimal Machine Setup</div>
@@ -1055,12 +1057,12 @@
 
       <!-- Headline: single Dia × single Gauge -->
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px;">
-        <div style="background:rgba(0,255,178,.08); border:1px solid rgba(0,255,178,.25); border-radius:10px; padding:14px 12px; text-align:center;">
+        <div style="background:rgba(24,87,196,.08); border:1px solid rgba(24,87,196,.25); border-radius:10px; padding:14px 12px; text-align:center;">
           <div style="font-size:9px; text-transform:uppercase; letter-spacing:.7px; color:var(--t3); margin-bottom:4px;">Optimal Dia</div>
           <div style="font-size:30px; font-weight:800; color:var(--a1); font-family:var(--head); line-height:1;" id="opt-dia">—</div>
           <div style="font-size:10px; color:var(--t3); margin-top:3px;">inch</div>
         </div>
-        <div style="background:rgba(0,255,178,.08); border:1px solid rgba(0,255,178,.25); border-radius:10px; padding:14px 12px; text-align:center;">
+        <div style="background:rgba(24,87,196,.08); border:1px solid rgba(24,87,196,.25); border-radius:10px; padding:14px 12px; text-align:center;">
           <div style="font-size:9px; text-transform:uppercase; letter-spacing:.7px; color:var(--t3); margin-bottom:4px;">Optimal Gauge</div>
           <div style="font-size:30px; font-weight:800; color:var(--a1); font-family:var(--head); line-height:1;" id="opt-gauge">—</div>
           <div style="font-size:10px; color:var(--t3); margin-top:3px;">needles / inch (GG)</div>
@@ -1099,7 +1101,7 @@
       </div>
 
       <!-- Basis banner (shows when analysis uses recommended machine) -->
-      <div id="cpa-basis" class="hidden" style="font-size:10px; line-height:1.5; padding:8px 10px; margin-bottom:10px; background:rgba(0,255,178,.05); border:1px solid rgba(0,255,178,.18); border-radius:6px; color:var(--t2);"></div>
+      <div id="cpa-basis" class="hidden" style="font-size:10px; line-height:1.5; padding:8px 10px; margin-bottom:10px; background:rgba(24,87,196,.05); border:1px solid rgba(24,87,196,.18); border-radius:6px; color:var(--t2);"></div>
 
       <!-- Clearance Sub-section -->
       <div class="result-section-label" style="color:var(--a2); margin-top:8px;">1. Yarn-to-Needle Slot Clearance</div>
@@ -1285,11 +1287,11 @@
       </div>
 
     <!-- ===== COLOR SHADE SECTION (shown whenever shade is selected) ===== -->
-    <div class="result-section anim-in hidden" id="sec-shade" style="border-color: rgba(168,85,247,0.3); background: rgba(168,85,247,0.04);">
+    <div class="result-section anim-in hidden" id="sec-shade" style="border-color: rgba(24,87,196,0.3); background: rgba(24,87,196,0.04);">
       <div class="result-section-title">
-        <div class="rst-icon" style="color:#a855f7;">🎨</div>
-        <div class="rst-title-text" style="color:#a855f7;">Color Shade Impact</div>
-        <span id="shade-badge" class="badge" style="margin-left:auto; background:rgba(168,85,247,0.15); color:#a855f7; border:1px solid rgba(168,85,247,0.3);">—</span>
+        <div class="rst-icon" style="color:#1857C4;">🎨</div>
+        <div class="rst-title-text" style="color:#1857C4;">Color Shade Impact</div>
+        <span id="shade-badge" class="badge" style="margin-left:auto; background:rgba(24,87,196,0.15); color:#1857C4; border:1px solid rgba(24,87,196,0.3);">—</span>
       </div>
 
       <!-- GSM Targets — most important info -->
@@ -1299,7 +1301,7 @@
           <div style="font-size:20px; font-weight:800; color:#fb923c; font-family:var(--head);" id="c-grey-gsm-val">—</div>
           <div style="font-size:9px; color:var(--t3);">g/m² (before dyeing)</div>
         </div>
-        <div style="background:rgba(0,255,178,0.06); border:1px solid rgba(0,255,178,0.15); border-radius:8px; padding:10px 12px; text-align:center;">
+        <div style="background:rgba(24,87,196,0.06); border:1px solid rgba(24,87,196,0.15); border-radius:8px; padding:10px 12px; text-align:center;">
           <div style="font-size:9px; text-transform:uppercase; letter-spacing:.6px; color:var(--t3); margin-bottom:4px;">Finish GSM — After Dye</div>
           <div style="font-size:20px; font-weight:800; color:var(--a1); font-family:var(--head);" id="c-finish-gsm-val">—</div>
           <div style="font-size:9px; color:var(--t3);">g/m² (target delivered)</div>
@@ -1322,7 +1324,7 @@
         <span class="result-key">Combined SL Factor</span>
         <span class="result-val amber" id="c-combined-sl">—</span>
       </div>
-      <div id="c-shade-note" class="mt-6" style="font-size:10px;color:var(--t3);line-height:1.6;padding:8px 10px;background:rgba(255,255,255,.03);border-radius:6px;border-left:2px solid rgba(168,85,247,0.4)"></div>
+      <div id="c-shade-note" class="mt-6" style="font-size:10px;color:var(--t3);line-height:1.6;padding:8px 10px;background:rgba(255,255,255,.03);border-radius:6px;border-left:2px solid rgba(24,87,196,0.4)"></div>
     </div>
 
     <!-- ===== REAL DYEING RECIPE (only when a real, cost-verified factory
@@ -1389,11 +1391,11 @@
     </div>
 
     <!-- ===== STITCH LENGTH BY SHADE (explicit dark / medium / light) ===== -->
-    <div class="result-section anim-in hidden" id="sec-sl-shade" style="border:1px solid rgba(0,209,255,.3); background:rgba(0,209,255,.04);">
+    <div class="result-section anim-in hidden" id="sec-sl-shade" style="border:1px solid rgba(24,87,196,.3); background:rgba(24,87,196,.04);">
       <div class="result-section-title">
-        <div class="rst-icon" style="color:#00d1ff;">📏</div>
-        <div class="rst-title-text" style="color:#00d1ff;">Stitch Length by Color Shade</div>
-        <span class="badge" style="margin-left:auto;background:rgba(0,209,255,.12);color:#00d1ff;border:1px solid rgba(0,209,255,.3);">SET ON MACHINE</span>
+        <div class="rst-icon" style="color:#1857C4;">📏</div>
+        <div class="rst-title-text" style="color:#1857C4;">Stitch Length by Color Shade</div>
+        <span class="badge" style="margin-left:auto;background:rgba(24,87,196,.12);color:#1857C4;border:1px solid rgba(24,87,196,.3);">SET ON MACHINE</span>
       </div>
       <div style="font-size:10px;color:var(--t3);margin-bottom:8px;">The single most-asked number on the floor — what SL to set the machine to for each shade. All three deliver the <b>same finished GSM</b>.</div>
       <table style="width:100%;border-collapse:collapse;font-size:11px;">
@@ -1408,7 +1410,7 @@
         </thead>
         <tbody id="sl-shade-rows"></tbody>
       </table>
-      <div id="sl-shade-note" class="mt-6" style="font-size:10px;color:var(--t3);line-height:1.6;padding:8px 10px;background:rgba(255,255,255,.03);border-radius:6px;border-left:2px solid rgba(0,209,255,.4)"></div>
+      <div id="sl-shade-note" class="mt-6" style="font-size:10px;color:var(--t3);line-height:1.6;padding:8px 10px;background:rgba(255,255,255,.03);border-radius:6px;border-left:2px solid rgba(24,87,196,.4)"></div>
     </div>
 
     <div class="result-section anim-in hidden" id="sec-wet" style="border:1px solid rgba(251,146,60,.3); background:rgba(251,146,60,.04);">
@@ -1425,7 +1427,7 @@
           <div style="font-size:22px;font-weight:800;color:#fb923c;font-family:var(--head);" id="wet-grey-gsm">—</div>
           <div style="font-size:9px;color:var(--t3);" id="wet-grey-range">before dyeing</div>
         </div>
-        <div style="background:rgba(0,255,178,.06);border:1px solid rgba(0,255,178,.15);border-radius:8px;padding:10px 12px;text-align:center;">
+        <div style="background:rgba(24,87,196,.06);border:1px solid rgba(24,87,196,.15);border-radius:8px;padding:10px 12px;text-align:center;">
           <div style="font-size:9px;text-transform:uppercase;letter-spacing:.6px;color:var(--t3);margin-bottom:4px;">Delivers Finish GSM</div>
           <div style="font-size:22px;font-weight:800;color:var(--a1);font-family:var(--head);" id="wet-finish-gsm">—</div>
           <div style="font-size:9px;color:var(--t3);" id="wet-loss">after dye + finish</div>
@@ -1435,7 +1437,7 @@
 
       <!-- Grey GSM for every shade lives in the Stitch Length by Color Shade table
            above (#sec-sl-shade) — same underlying formula, shown once. -->
-      <div style="font-size:10px;color:var(--t3);margin-bottom:10px;">Grey GSM for every shade at this finish target is in <a href="#sec-sl-shade" style="color:#00d1ff;">Stitch Length by Color Shade</a> above.</div>
+      <div style="font-size:10px;color:var(--t3);margin-bottom:10px;">Grey GSM for every shade at this finish target is in <a href="#sec-sl-shade" style="color:#1857C4;">Stitch Length by Color Shade</a> above.</div>
 
       <!-- Process route -->
       <div class="result-section-label">Process Route</div>
@@ -1523,7 +1525,7 @@
       </div>
 
       <!-- Accuracy / test-standard footnote -->
-      <div id="quality-accuracy-note" class="mt-6" style="font-size:9.5px;color:var(--t3);line-height:1.6;padding:8px 10px;background:rgba(192,132,252,.05);border-radius:6px;border-left:2px solid var(--purple, #c084fc)"></div>
+      <div id="quality-accuracy-note" class="mt-6" style="font-size:9.5px;color:var(--t3);line-height:1.6;padding:8px 10px;background:rgba(24,87,196,.05);border-radius:6px;border-left:2px solid var(--purple, #1857C4)"></div>
 
       <div class="result-section-label" style="color:var(--a3);">Recommended Finishing Process</div>
       <ul id="quality-finishing-recs" style="padding-left:16px; margin-top:8px; font-size:12px; color:var(--t2); line-height:1.6; display:flex; flex-direction:column; gap:6px;">
@@ -1752,7 +1754,7 @@ function renderFibreAdvisory(a) {
     severe:   { c: '#ff4d6d', bg: 'rgba(255,77,109,.10)', b: 'rgba(255,77,109,.30)', label: 'severe' },
     high:     { c: '#fb923c', bg: 'rgba(251,146,60,.10)', b: 'rgba(251,146,60,.28)', label: 'high' },
     moderate: { c: '#fbbf24', bg: 'rgba(251,191,36,.09)', b: 'rgba(251,191,36,.25)', label: 'moderate' },
-    info:     { c: '#818cf8', bg: 'rgba(129,140,248,.07)', b: 'rgba(129,140,248,.20)', label: 'note' },
+    info:     { c: '#1857C4', bg: 'rgba(24,87,196,.07)', b: 'rgba(24,87,196,.20)', label: 'note' },
   };
 
   const cov = a.coverage || {};
@@ -1917,7 +1919,7 @@ function renderWetProcessing(w) {
             <div style="color:var(--t3);"><b>Cause:</b> ${esc(p.cause)}</div>
             <div style="color:var(--t2);"><b>Solution:</b> ${esc(p.solution)}</div>
             <div style="color:var(--t2);"><b>Remedy:</b> ${esc(p.remedy)}</div>
-            ${p.formula ? `<div style="color:#00d1ff;font-family:var(--mono,monospace);font-size:9px;"><b>Calc:</b> ${esc(p.formula)}</div>` : ''}
+            ${p.formula ? `<div style="color:#1857C4;font-family:var(--mono,monospace);font-size:9px;"><b>Calc:</b> ${esc(p.formula)}</div>` : ''}
           </div>`).join('')}
       </div>
     </details>`).join('');
@@ -1934,7 +1936,7 @@ function renderWetProcessing(w) {
     mechWrap.classList.add('hidden');
   } else {
     mechWrap.classList.remove('hidden');
-    const TONE = { severe: '#ff8080', high: '#fb923c', moderate: '#fbbf24', low: '#4ade80', info: '#00d1ff' };
+    const TONE = { severe: '#ff8080', high: '#fb923c', moderate: '#fbbf24', low: '#4ade80', info: '#1857C4' };
     const pct = v => (v == null ? '—' : Math.round(v * 100) + '%');
     const bar = (label, v) => {
       // 100% is the conditioned value, so the scale runs to 2x to leave room
@@ -1978,7 +1980,7 @@ function renderWetProcessing(w) {
 
   // Structure issues
   document.getElementById('wet-struct').innerHTML = (w.fabric_structure_issues || []).map(i => `
-    <div style="padding:6px 8px;margin-bottom:5px;background:rgba(255,255,255,.02);border-radius:5px;border-left:2px solid rgba(0,209,255,.4);font-size:10px;line-height:1.6;">
+    <div style="padding:6px 8px;margin-bottom:5px;background:rgba(255,255,255,.02);border-radius:5px;border-left:2px solid rgba(24,87,196,.4);font-size:10px;line-height:1.6;">
       <div style="color:#ff8080;font-weight:700;">⚠ ${esc(i.problem)}</div>
       <div style="color:var(--t3);"><b>Cause:</b> ${esc(i.cause)}</div>
       <div style="color:var(--t2);"><b>Solution:</b> ${esc(i.solution)}</div>
@@ -1987,8 +1989,8 @@ function renderWetProcessing(w) {
 
   // Colour / chemical issues
   document.getElementById('wet-colour').innerHTML = (w.colour_chemical_issues || []).map(i => `
-    <div style="padding:6px 8px;margin-bottom:5px;background:rgba(255,255,255,.02);border-radius:5px;border-left:2px solid rgba(168,85,247,.4);font-size:10px;line-height:1.6;">
-      <div style="color:#c084fc;font-weight:700;">🧪 ${esc(i.issue)}</div>
+    <div style="padding:6px 8px;margin-bottom:5px;background:rgba(255,255,255,.02);border-radius:5px;border-left:2px solid rgba(24,87,196,.4);font-size:10px;line-height:1.6;">
+      <div style="color:#1857C4;font-weight:700;">🧪 ${esc(i.issue)}</div>
       <div style="color:var(--t3);"><b>Cause:</b> ${esc(i.cause)}</div>
       <div style="color:var(--t2);"><b>Solution:</b> ${esc(i.solution)}</div>
       <div style="color:var(--t3);"><b>Impact:</b> ${esc(i.impact)}</div>
@@ -2075,8 +2077,8 @@ function renderResult(r, params) {
     // samples backing the reference — otherwise it's an estimate, not verification.
     const wellSampled = v.confidence === 'very_high' || v.confidence === 'high';
     if (v.valid && wellSampled) {
-      rndBox.style.background = 'rgba(0, 255, 178, 0.08)';
-      rndBox.style.borderColor = 'rgba(0, 255, 178, 0.2)';
+      rndBox.style.background = 'rgba(24,87,196, 0.08)';
+      rndBox.style.borderColor = 'rgba(24,87,196, 0.2)';
       iconEl.textContent = '✅';
       titleEl.textContent = 'Factory Verified';
       titleEl.style.color = 'var(--a1)';
@@ -2157,9 +2159,9 @@ function renderResult(r, params) {
     tbody.innerHTML = sbs.rows.map(row => {
       const sel = sbs.selected_shade === row.shade;
       const dirArrow = row.sl_direction === 'looser' ? '↑' : row.sl_direction === 'tighter' ? '↓' : '→';
-      return `<tr style="border-top:1px solid rgba(255,255,255,.06);${sel ? 'background:rgba(0,209,255,.10);' : ''}">
-        <td style="padding:7px 4px;font-weight:${sel ? '800' : '600'};color:${sel ? '#00d1ff' : 'var(--t1)'};">${lbl[row.shade] || row.shade}${sel ? ' <span style="font-size:8px;color:#00d1ff;">◀ selected</span>' : ''}</td>
-        <td style="padding:7px 4px;text-align:right;font-weight:800;font-family:var(--head);color:${sel ? '#00d1ff' : 'var(--t1)'};">${dirArrow} ${row.sl_mm}</td>
+      return `<tr style="border-top:1px solid rgba(255,255,255,.06);${sel ? 'background:rgba(24,87,196,.10);' : ''}">
+        <td style="padding:7px 4px;font-weight:${sel ? '800' : '600'};color:${sel ? '#1857C4' : 'var(--t1)'};">${lbl[row.shade] || row.shade}${sel ? ' <span style="font-size:8px;color:#1857C4;">◀ selected</span>' : ''}</td>
+        <td style="padding:7px 4px;text-align:right;font-weight:800;font-family:var(--head);color:${sel ? '#1857C4' : 'var(--t1)'};">${dirArrow} ${row.sl_mm}</td>
         <td style="padding:7px 4px;text-align:right;color:var(--t3);">${row.sl_cm}</td>
         <td style="padding:7px 4px;text-align:right;color:#fb923c;">${row.grey_gsm}</td>
         <td style="padding:7px 4px;text-align:right;color:var(--t3);">+${row.dye_gain_pct}%</td>
@@ -3434,7 +3436,7 @@ function renderYarn(yarn) {
   if (srcConf) {
     confBox.classList.remove('hidden');
     const STYLE = {
-      verified: { icon: '✅', bg: 'rgba(0, 255, 178, 0.08)',  border: 'rgba(0, 255, 178, 0.2)',  title: 'var(--a1)' },
+      verified: { icon: '✅', bg: 'rgba(24,87,196, 0.08)',  border: 'rgba(24,87,196, 0.2)',  title: 'var(--a1)' },
       derived:  { icon: 'ℹ️', bg: 'rgba(80, 160, 255, 0.08)', border: 'rgba(80, 160, 255, 0.2)', title: 'var(--t1)' },
       estimated:{ icon: '⚠️', bg: 'rgba(255, 184, 48, 0.08)', border: 'rgba(255, 184, 48, 0.2)', title: 'var(--a4)' },
       none:     { icon: '❌', bg: 'rgba(255, 90, 90, 0.08)',  border: 'rgba(255, 90, 90, 0.2)',  title: 'var(--a4)' },

@@ -44,6 +44,32 @@ function validateSignup(body) {
   return { ok: true, errors: [], value: { email, password, full_name: fullName, company: company || null, plan_interest: plan } };
 }
 
+function validatePasswordRule(password, email) {
+  if (typeof password !== 'string' || password.length < PASSWORD_MIN) return `Password must be at least ${PASSWORD_MIN} characters.`;
+  if (password.length > PASSWORD_MAX) return `Password must be at most ${PASSWORD_MAX} characters.`;
+  if (email && password.toLowerCase() === email) return 'Password must not be the same as your email.';
+  return null;
+}
+
+function validateProfile(body) {
+  const b = body || {};
+  const fullName = String(b.full_name == null ? '' : b.full_name).trim();
+  const company = String(b.company == null ? '' : b.company).trim();
+  if (fullName.length < 2 || fullName.length > 120) return { ok: false, errors: ['Enter your full name (2–120 characters).'] };
+  if (company.length > 160) return { ok: false, errors: ['Company name must be at most 160 characters.'] };
+  return { ok: true, errors: [], value: { full_name: fullName, company: company || null } };
+}
+
+function validatePasswordChange(body, email) {
+  const b = body || {};
+  const current = typeof b.current_password === 'string' ? b.current_password : '';
+  if (!current || current.length > PASSWORD_MAX) return { ok: false, errors: ['Enter your current password.'] };
+  const problem = validatePasswordRule(b.new_password, email);
+  if (problem) return { ok: false, errors: [problem] };
+  if (b.new_password === current) return { ok: false, errors: ['Choose a password different from your current one.'] };
+  return { ok: true, errors: [], value: { current_password: current, new_password: b.new_password } };
+}
+
 function validateLogin(body) {
   const b = body || {};
   const email = normalizeEmail(b.email);
@@ -62,6 +88,6 @@ function safeNextPath(next) {
 }
 
 module.exports = {
-  validateSignup, validateLogin, normalizeEmail, safeNextPath,
+  validateSignup, validateLogin, validateProfile, validatePasswordChange, normalizeEmail, safeNextPath,
   PASSWORD_MIN, PASSWORD_MAX, PLAN_INTERESTS,
 };

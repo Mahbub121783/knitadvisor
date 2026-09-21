@@ -8,6 +8,8 @@
  */
 const express = require('express');
 const { requireUser } = require('../middleware/user-auth');
+const userRepo = require('../db/repositories/user-repo');
+const { buildHistoryEntry } = require('../engine/domain/calc-history');
 const crypto = require('crypto');
 const router = express.Router();
 
@@ -80,6 +82,16 @@ function hashIp(ip) {
   return ip ? crypto.createHash('sha256').update(IP_HASH_SALT + ip).digest('hex').slice(0, 32) : null;
 }
 
+// A signed-in user's calculations are kept as their history. Fire-and-forget: a
+// failure to record must never fail the calculation it describes.
+function recordHistory(req, body, result) {
+  if (!req.user) return;
+  const entry = buildHistoryEntry(ENGINE_INPUTS, body, result);
+  if (!entry) return;
+  userRepo.calculations.record(req.user.id, entry)
+    .catch(err => console.error('[History] record failed:', err.message));
+}
+
 // ============================================================
 // POST /api/calculate
 // ============================================================
@@ -147,6 +159,7 @@ router.post('/calculate', requireUser, async (req, res) => {
       user_agent: (req.get('user-agent') || '').slice(0, 200),
     }).catch(() => {});
 
+    recordHistory(req, body, memResult);
     return res.json(memResult);
   }
 
@@ -169,6 +182,7 @@ router.post('/calculate', requireUser, async (req, res) => {
       user_agent: (req.get('user-agent') || '').slice(0, 200),
     }).catch(() => {});
 
+    recordHistory(req, body, dbResult);
     return res.json(dbResult);
   }
 
@@ -205,6 +219,7 @@ router.post('/calculate', requireUser, async (req, res) => {
     user_agent: (req.get('user-agent') || '').slice(0, 200),
   }).catch(() => {});
 
+  recordHistory(req, body, result);
   res.json(result);
 });
 

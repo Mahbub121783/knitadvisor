@@ -93,9 +93,9 @@
       font-size: 10px;
       padding: 2px 6px;
       border-radius: 2px;
-      background: rgba(0, 255, 178, 0.08);
-      border: 1px solid rgba(0, 255, 178, 0.3);
-      color: #00ffb2;
+      background: rgba(24,87,196, 0.08);
+      border: 1px solid rgba(24,87,196, 0.3);
+      color: #1857C4;
       font-weight: 600;
       white-space: nowrap;
     }
@@ -161,7 +161,7 @@
       content: '✓';
       position: absolute;
       left: 0;
-      color: #00ffb2;
+      color: #1857C4;
       font-weight: bold;
     }
 
@@ -184,6 +184,8 @@
 
     .main-content { padding: 0 0 40px; }
   </style>
+  <link rel="stylesheet" href="assets/css/theme-v2.css?v=20260922a">
+  <script src="assets/js/app-shell.js?v=20260922a" defer></script>
 </head>
 <body>
 <div class="page-wrap">
@@ -656,7 +658,7 @@
           </div>
           
           <div class="remedies-box mt-8">
-            <div class="causes-title" style="color:#00ffb2;">Corrective Remedies</div>
+            <div class="causes-title" style="color:#1857C4;">Corrective Remedies</div>
             <ul class="remedies-list">
               ${f.remedies.map(r => `<li>${r}</li>`).join('')}
             </ul>
@@ -711,7 +713,7 @@
 
     diagnosed.forEach(d => {
       html += `
-        <div class="diag-result-card" style="border-left: 4px solid #00ffb2; padding-left: 14px;">
+        <div class="diag-result-card" style="border-left: 4px solid #1857C4; padding-left: 14px;">
           <div class="diag-card-hdr">
             <div class="diag-fault-name">${d.name}</div>
             <span class="confidence-badge">Match: ${d.confidence}%</span>
@@ -738,7 +740,7 @@
           </div>
           
           <div class="remedies-box mt-8">
-            <div class="causes-title" style="color:#00ffb2;">Corrective Remedies</div>
+            <div class="causes-title" style="color:#1857C4;">Corrective Remedies</div>
             <ul class="remedies-list">
               ${d.remedies.map(r => `<li>${r}</li>`).join('')}
             </ul>

@@ -35,7 +35,7 @@
 
   function mountUserChip(user) {
     var bar = document.querySelector('.hdr-right');
-    if (!bar || document.getElementById('ka-user-chip')) return;
+    if (!bar || document.getElementById('ka-user-chip') || document.querySelector('.ka-bar')) return;
     var chip = document.createElement('div');
     chip.id = 'ka-user-chip';
     chip.style.cssText = 'display:inline-flex;align-items:center;gap:8px;margin-left:6px;';
@@ -60,12 +60,15 @@
   }
 
   var redirecting = false;
+  var resolveUser;
+  window.kaUserPromise = new Promise(function (r) { resolveUser = r; });
   fetch(base + '/api/auth/me', { headers: { Accept: 'application/json' }, cache: 'no-store' })
     .then(function (res) {
       if (res.status === 401) { redirecting = true; toSignIn(); return null; }
       return res.ok ? res.json() : null;
     })
     .then(function (data) {
+      resolveUser(data && data.user ? data.user : null);
       if (data && data.user) {
         window.KA_USER = data.user;
         if (document.readyState === 'loading') {
@@ -79,5 +82,5 @@
       // will surface the real problem instead of leaving a blank screen.
       if (!redirecting) root.classList.remove('ka-auth-pending');
     })
-    .catch(function () { root.classList.remove('ka-auth-pending'); });
+    .catch(function () { resolveUser(null); root.classList.remove('ka-auth-pending'); });
 })();

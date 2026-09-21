@@ -46,14 +46,14 @@
       line-height: 1.55;
       white-space: pre-wrap;
     }
-    .chat-msg.user .chat-bubble { background: rgba(0,200,255,.14); border: 1px solid rgba(0,200,255,.3); color: var(--t1); }
+    .chat-msg.user .chat-bubble { background: rgba(24,87,196,.14); border: 1px solid rgba(24,87,196,.3); color: var(--t1); }
     .chat-msg.assistant .chat-bubble { background: var(--bg3, rgba(255,255,255,.03)); border: 1px solid var(--line); color: var(--t1); }
     .chat-msg.assistant.not-grounded .chat-bubble { border-color: rgba(251,191,36,.35); background: rgba(251,191,36,.06); }
     .chat-sources { display: flex; flex-wrap: wrap; gap: 6px; }
     .chat-source-tag {
       font-size: 9px; text-transform: uppercase; letter-spacing: .4px;
       padding: 3px 8px; border-radius: 999px;
-      background: rgba(0,255,178,.08); border: 1px solid rgba(0,255,178,.25); color: var(--a1);
+      background: rgba(24,87,196,.08); border: 1px solid rgba(24,87,196,.25); color: var(--a1);
     }
     .chat-empty {
       flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -64,7 +64,7 @@
       font-size: 11px; padding: 7px 12px; border-radius: 999px;
       background: rgba(255,255,255,.03); border: 1px solid var(--line); color: var(--t2);
     }
-    .chat-suggestion-btn:hover { color: var(--t1); border-color: rgba(0,255,178,.3); }
+    .chat-suggestion-btn:hover { color: var(--t1); border-color: rgba(24,87,196,.3); }
 
     .chat-input-bar {
       display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--line);
@@ -81,6 +81,8 @@
     .chat-typing { font-size: 11px; color: var(--t3); padding: 0 18px 4px; }
     .main-content { padding: 0 0 40px; }
   </style>
+  <link rel="stylesheet" href="assets/css/theme-v2.css?v=20260922a">
+  <script src="assets/js/app-shell.js?v=20260922a" defer></script>
 </head>
 <body>
 <div class="page-wrap">

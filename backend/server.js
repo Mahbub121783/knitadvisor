@@ -31,6 +31,7 @@ const searchRoutes = require('./routes/search');
 const assistantRoutes = require('./routes/assistant');
 const rfqRoutes = require('./routes/rfq');
 const authRoutes = require('./routes/auth');
+const accountRoutes = require('./routes/account');
 const rateLimiter = require('./middleware/rate-limiter');
 const { createRateLimiter } = require('./middleware/rate-limiter');
 const { testConnection, poolStats, query } = require('./db/client');
@@ -199,6 +200,7 @@ app.use('/api', rateLimiter);
 // sit behind requireUser; reference tools (converter, academy, dyeing
 // knowledge, search) stay public.
 app.use('/api/auth', authRoutes);
+app.use('/api/account', accountRoutes);
 
 // API routes
 app.use('/api', apiRoutes);
