@@ -18,6 +18,7 @@ const logsRepo = require('../db/repositories/logs-repo');
 const adminRepo = require('../db/repositories/admin-repo');
 const validationRepo = require('../db/repositories/validation-repo');
 const rfqRepo = require('../db/repositories/rfq-repo');
+const userRepo = require('../db/repositories/user-repo');
 const { isValidStatus, VALID_STATUSES } = require('../engine/domain/rfq-engine');
 const { scoreRecord, summarize } = require('../engine/domain/validation-scoring');
 const { calculate } = require('../engine/index');
@@ -480,6 +481,33 @@ router.get('/api/rfq', adminAuth, async (req, res) => {
   } catch (err) {
     console.error('[RFQ Admin List Error]', err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Customer accounts (the calculator sign-ups). Read-only except for disabling.
+router.get('/api/users', adminAuth, async (req, res) => {
+  try {
+    res.json(await userRepo.users.listForAdmin({
+      page: req.query.page, limit: req.query.limit, search: req.query.search || undefined,
+    }));
+  } catch (err) {
+    console.error('[Users Admin List Error]', err);
+    res.status(500).json({ error: 'Failed to load users' });
+  }
+});
+
+router.patch('/api/users/:id/disabled', adminAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id) || typeof (req.body || {}).disabled !== 'boolean') {
+      return res.status(400).json({ error: 'A user id and a boolean "disabled" are required' });
+    }
+    const row = await userRepo.users.setDisabled(id, req.body.disabled);
+    if (!row) return res.status(404).json({ error: 'User not found' });
+    res.json({ ok: true, id: row.id, disabled: row.disabled });
+  } catch (err) {
+    console.error('[Users Admin Disable Error]', err);
+    res.status(500).json({ error: 'Failed to update user' });
   }
 });
 

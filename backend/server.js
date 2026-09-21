@@ -30,6 +30,7 @@ const cronRoutes = require('./routes/internal-cron');
 const searchRoutes = require('./routes/search');
 const assistantRoutes = require('./routes/assistant');
 const rfqRoutes = require('./routes/rfq');
+const authRoutes = require('./routes/auth');
 const rateLimiter = require('./middleware/rate-limiter');
 const { createRateLimiter } = require('./middleware/rate-limiter');
 const { testConnection, poolStats, query } = require('./db/client');
@@ -193,6 +194,11 @@ app.use('/api', rateLimiter);
 // ============================================================
 // ROUTES
 // ============================================================
+
+// Customer accounts (sign up / sign in / me). The engine endpoints in api.js
+// sit behind requireUser; reference tools (converter, academy, dyeing
+// knowledge, search) stay public.
+app.use('/api/auth', authRoutes);
 
 // API routes
 app.use('/api', apiRoutes);

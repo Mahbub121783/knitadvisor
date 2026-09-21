@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <script src="assets/js/auth-guard.js?v=20260922a"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Result — KnitAdvisor</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -400,7 +401,7 @@
       <a href="dyeing.html" class="btn btn-ghost hide-mobile">🧪 Dyeing</a>
       <a href="assistant.html" class="btn btn-ghost hide-mobile">💬 Assistant</a>
       <a href="rfq.html" class="btn btn-ghost hide-mobile">📝 Request a Quote</a>
-      <a href="/" class="btn btn-ghost" id="new-calc-btn">+ New Calc</a>
+      <a href="/app.html" class="btn btn-ghost" id="new-calc-btn">+ New Calc</a>
     </div>
   </header>
 
@@ -416,7 +417,7 @@
     <!-- Top bar -->
     <div class="result-header">
       <div class="result-header-top">
-        <a href="/" class="back-btn" id="back-link">← Back</a>
+        <a href="/app.html" class="back-btn" id="back-link">← Back</a>
         <div class="cache-tag" id="cache-tag">—</div>
       </div>
 
@@ -1703,7 +1704,7 @@
 // never cleared on this page), so just send the user back to the form with a flag
 // telling it to prefill from that same data instead of starting blank.
 function goRecalculate() {
-  window.location.href = 'index.html?recalc=1';
+  window.location.href = 'app.html?recalc=1';
 }
 
 document.addEventListener('DOMContentLoaded', async () => {

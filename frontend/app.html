@@ -1,0 +1,1828 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <script src="assets/js/auth-guard.js?v=20260922a"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KnitAdvisor — Knit Fabric Calculation Engine</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <meta name="description" content="GSM + Fabric Type দিলেই Yarn Count, Loop Length, Machine Spec, K/T/M Pattern সব auto calculate। Bangladesh knitting industry এর জন্য।">
+  <meta name="theme-color" content="#FFFFFF">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css?v=20260603c">
+
+  <!-- Three.js (vendored locally) for the woven 3-D preview; lazy-imported by
+       js/woven3d/, which also reuses several js/knit3d/ pieces directly. -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "/assets/js/vendor/three.module.js",
+      "three/addons/controls/OrbitControls.js": "/assets/js/vendor/OrbitControls.js"
+    }
+  }
+  </script>
+
+  <style>
+    /* Page-specific styles */
+    .hero {
+      padding: 32px 0 16px;
+      text-align: center;
+    }
+    .hero-eyebrow {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--a1);
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+    .hero-title {
+      font-family: var(--head);
+      font-size: clamp(26px, 6vw, 42px);
+      font-weight: 800;
+      line-height: 1.1;
+      letter-spacing: -1px;
+      margin-bottom: 10px;
+    }
+    .hero-title span { color: var(--a1); }
+    .hero-sub {
+      font-size: 12px;
+      color: var(--t2);
+      line-height: 1.7;
+      max-width: 420px;
+      margin: 0 auto 28px;
+    }
+
+    /* Input card */
+    .input-card {
+      background: var(--bg2);
+      border: 1px solid var(--line2);
+      border-radius: 14px;
+      padding: 22px;
+      margin-bottom: 16px;
+    }
+
+    .gsm-input-wrap {
+      position: relative;
+    }
+    .gsm-input {
+      font-size: 28px !important;
+      font-weight: 600 !important;
+      padding: 14px 70px 14px 16px !important;
+      color: var(--a1) !important;
+    }
+    .gsm-unit {
+      position: absolute;
+      right: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 12px;
+      color: var(--t3);
+      pointer-events: none;
+    }
+
+    .optional-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    @media (max-width: 480px) {
+      .optional-grid { grid-template-columns: 1fr; }
+    }
+
+    /* Path tabs */
+    .path-tabs {
+      display: flex;
+      gap: 0;
+      background: var(--bg3);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 3px;
+      margin-bottom: 20px;
+    }
+    .path-tab {
+      flex: 1;
+      padding: 8px 12px;
+      border-radius: 6px;
+      background: transparent;
+      border: none;
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--t3);
+      cursor: pointer;
+      transition: all var(--t-fast);
+      text-align: center;
+    }
+    .path-tab.active {
+      background: var(--bg4);
+      color: var(--t1);
+      border: 1px solid var(--line2);
+    }
+
+    /* NL input tab */
+    .nl-box {
+      background: var(--bg3);
+      border: 1px solid var(--line2);
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--t1);
+      width: 100%;
+      resize: none;
+      outline: none;
+      min-height: 80px;
+      transition: border-color var(--t-fast);
+    }
+    .nl-box::placeholder { color: var(--t3); }
+    .nl-box:focus { border-color: rgba(192,132,252,.5); }
+    .nl-coming-soon {
+      background: rgba(192,132,252,.05);
+      border: 1px solid rgba(192,132,252,.2);
+      border-radius: var(--radius-sm);
+      padding: 10px 14px;
+      font-size: 11px;
+      color: var(--t2);
+      margin-top: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Fabric chips (category filter) */
+    .fabric-cats {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+    .cat-chip {
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 10px;
+      font-weight: 600;
+      border: 1px solid var(--line2);
+      background: var(--bg3);
+      color: var(--t3);
+      cursor: pointer;
+      transition: all var(--t-fast);
+    }
+    .cat-chip.active, .cat-chip:hover {
+      border-color: rgba(0,255,178,.4);
+      color: var(--a1);
+      background: rgba(0,255,178,.06);
+    }
+
+    /* GSM range hints */
+    .gsm-hints {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+    .gsm-hint {
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 11px;
+      background: var(--bg3);
+      border: 1px solid var(--line);
+      color: var(--t3);
+      cursor: pointer;
+      transition: all var(--t-fast);
+    }
+    .gsm-hint:hover {
+      border-color: var(--a1);
+      color: var(--a1);
+    }
+
+    /* Calculate button */
+    .calc-btn-wrap {
+      position: relative;
+    }
+    #calc-btn {
+      border-radius: 8px;
+      font-size: 15px;
+      letter-spacing: .2px;
+    }
+    .calc-btn-hint {
+      text-align: center;
+      font-size: 10px;
+      color: var(--t3);
+      margin-top: 8px;
+    }
+
+    /* Recents section */
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+
+    /* Features row */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 8px;
+      margin: 24px 0;
+    }
+    .feat-card {
+      background: var(--bg2);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      padding: 14px 12px;
+      text-align: center;
+    }
+    .feat-icon { font-size: 20px; margin-bottom: 6px; }
+    .feat-name { font-size: 11px; font-weight: 600; color: var(--t1); margin-bottom: 2px; }
+    .feat-desc { font-size: 10px; color: var(--t3); line-height: 1.5; }
+
+    /* Composition chips */
+    .comp-chips {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+    .comp-chip {
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      background: var(--bg3);
+      border: 1px solid var(--line);
+      color: var(--t3);
+      cursor: pointer;
+      transition: all var(--t-fast);
+    }
+    .comp-chip:hover, .comp-chip.active {
+      border-color: rgba(192,132,252,.5);
+      color: rgba(192,132,252,1);
+      background: rgba(192,132,252,.06);
+    }
+
+    /* Color shade selector */
+    .shade-selector {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+      margin-top: 4px;
+    }
+    .shade-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 10px 6px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      background: var(--bg3);
+      border: 1.5px solid var(--line);
+      color: var(--t3);
+      cursor: pointer;
+      transition: all var(--t-fast);
+      line-height: 1.3;
+    }
+    .shade-btn .shade-swatch {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 1.5px solid var(--line);
+    }
+    .shade-btn[data-shade="dark"] .shade-swatch  { background: #1a1a1a; border-color: #444; }
+    .shade-btn[data-shade="medium"] .shade-swatch { background: #808080; border-color: #aaa; }
+    .shade-btn[data-shade="light"] .shade-swatch  { background: #f0f0f0; border-color: #ccc; }
+    .shade-btn:hover { border-color: rgba(0,255,178,.35); color: var(--t1); background: rgba(0,255,178,.04); }
+    .shade-btn.active[data-shade="dark"]   { border-color: #555; background: rgba(50,50,50,.25); color: #ccc; }
+    .shade-btn.active[data-shade="medium"] { border-color: rgba(0,255,178,.5); background: rgba(0,255,178,.07); color: var(--a1); }
+    .shade-btn.active[data-shade="light"]  { border-color: rgba(255,255,255,.4); background: rgba(255,255,255,.06); color: #fff; }
+    .shade-hint {
+      font-size: 9.5px;
+      color: var(--t3);
+      margin-top: 5px;
+      line-height: 1.5;
+    }
+
+    /* Color Engine widget */
+    .ce-wrap { position: relative; }
+    .ce-row { display: flex; gap: 8px; align-items: stretch; }
+    .ce-picker {
+      flex: 0 0 44px; width: 44px; height: 40px; padding: 2px;
+      border: 1px solid rgba(255,255,255,.14); border-radius: 8px;
+      background: var(--s2, #11151c); cursor: pointer;
+    }
+    .ce-picker::-webkit-color-swatch-wrapper { padding: 0; }
+    .ce-picker::-webkit-color-swatch { border: none; border-radius: 5px; }
+    .ce-text { flex: 1 1 auto; min-width: 0; }
+    .ce-clear {
+      flex: 0 0 40px; border: 1px solid rgba(255,255,255,.14); border-radius: 8px;
+      background: rgba(255,255,255,.03); color: var(--t3); cursor: pointer; font-size: 13px;
+      transition: all .15s;
+    }
+    .ce-clear:hover { color: var(--a3, #ff5a5a); border-color: rgba(255,90,90,.4); }
+    .ce-preview {
+      display: flex; align-items: center; gap: 12px; margin-top: 10px;
+      padding: 10px 12px; border-radius: 10px;
+      border: 1px solid rgba(0,255,178,.18); background: rgba(0,255,178,.04);
+    }
+    /* `display:flex` above otherwise beats the browser's native
+       [hidden]{display:none} rule (same specificity, author sheet wins) —
+       so this card rendered PERMANENTLY VISIBLE from page load, showing its
+       raw empty placeholder ("—", blank swatch) before any color was ever
+       picked. This is what made the widget look broken/empty in practice. */
+    .ce-preview[hidden] { display: none; }
+    .ce-swatch {
+      flex: 0 0 46px; width: 46px; height: 46px; border-radius: 8px;
+      border: 1px solid rgba(255,255,255,.18);
+      box-shadow: inset 0 1px 3px rgba(0,0,0,.4), 0 2px 6px rgba(0,0,0,.3);
+    }
+    .ce-meta { flex: 1 1 auto; min-width: 0; }
+    .ce-name { font-size: 13px; font-weight: 600; color: var(--t1); }
+    .ce-sub { font-size: 10px; color: var(--t3); margin-top: 2px; font-family: var(--mono, monospace); }
+    .ce-chips { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; max-width: 130px; }
+    .ce-chip {
+      font-size: 8.5px; padding: 2px 6px; border-radius: 20px; text-transform: capitalize;
+      border: 1px solid rgba(255,255,255,.12); color: var(--t2); background: rgba(255,255,255,.03);
+    }
+    .ce-suggest {
+      position: absolute; left: 52px; right: 48px; z-index: 30; margin-top: 4px;
+      background: var(--s1, #0c0f14); border: 1px solid rgba(255,255,255,.14);
+      border-radius: 10px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,.5);
+      max-height: 220px; overflow-y: auto;
+    }
+    .ce-opt { display: flex; align-items: center; gap: 8px; padding: 7px 10px; cursor: pointer; }
+    .ce-opt:hover { background: rgba(0,255,178,.06); }
+    .ce-opt-sw { width: 22px; height: 22px; border-radius: 5px; border: 1px solid rgba(255,255,255,.15); flex: 0 0 22px; }
+    .ce-opt-name { font-size: 11.5px; color: var(--t1); }
+    .ce-opt-code { font-size: 9px; color: var(--t3); font-family: var(--mono, monospace); }
+
+    /* Panel sections */
+    .main-content {
+      padding: 16px 0 32px;
+    }
+  </style>
+</head>
+<body>
+<div class="page-wrap">
+
+  <!-- HEADER -->
+  <header class="hdr">
+    <a href="/" class="logo">Knit<span>Advisor</span></a>
+    <div class="hdr-badge">BETA</div>
+    <div class="hdr-right">
+      <a href="converter.html" class="btn btn-ghost hide-mobile" id="nav-converter">⇄ Converter</a>
+      <a href="patterns.html" class="btn btn-ghost hide-mobile" id="nav-patterns">⊞ Patterns</a>
+      <a href="diagnostics.html" class="btn btn-ghost hide-mobile" id="nav-diagnostics">🔍 Diagnostics</a>
+      <a href="weft-calc.html" class="btn btn-ghost hide-mobile" id="nav-weft-calc">⚙️ Weft Calc</a>
+      <a href="academy.html" class="btn btn-ghost hide-mobile" id="nav-academy">🎓 Academy</a>
+      <a href="dyeing.html" class="btn btn-ghost hide-mobile">🧪 Dyeing</a>
+      <a href="assistant.html" class="btn btn-ghost hide-mobile">💬 Assistant</a>
+      <a href="rfq.html" class="btn btn-ghost hide-mobile">📝 Request a Quote</a>
+    </div>
+  </header>
+
+  <!-- MAIN -->
+  <main class="container main-content">
+
+    <!-- HERO -->
+    <div class="hero">
+      <div class="hero-eyebrow">🧵 Knitting Calculation Engine</div>
+      <h1 class="hero-title">GSM + Fabric Type<br><span>→ Everything Automated</span></h1>
+      <p class="hero-sub">Yarn count, loop length, machine gauge, K/T/M pattern, production rate — no manual calculation needed.</p>
+    </div>
+
+    <!-- PATH SELECTOR -->
+    <div class="path-tabs" id="path-tabs" role="tablist">
+      <button class="path-tab active" id="tab-form" data-panel="panel-form" role="tab" onclick="switchPath('form')">
+        📋 Form Input
+      </button>
+      <button class="path-tab" id="tab-nl" data-panel="panel-nl" role="tab" onclick="switchPath('nl')">
+        💬 Natural Language
+      </button>
+    </div>
+
+    <!-- FORM INPUT PANEL -->
+    <div id="panel-form">
+      <div class="input-card">
+
+        <!-- GSM Input -->
+        <div class="form-group mb-16">
+          <label class="form-label label green" for="gsm-input">Target GSM <span style="color:var(--a3)">*</span></label>
+          <div class="gsm-input-wrap">
+            <input
+              type="number"
+              id="gsm-input"
+              class="form-input gsm-input"
+              placeholder="e.g. 180"
+              min="60"
+              max="500"
+              step="1"
+              autocomplete="off"
+              inputmode="numeric"
+            >
+            <span class="gsm-unit">g/m²</span>
+          </div>
+          <!-- Quick GSM hints -->
+          <div class="gsm-hints" id="gsm-hints">
+            <button class="gsm-hint" onclick="setGSM(160)">160</button>
+            <button class="gsm-hint" onclick="setGSM(180)">180</button>
+            <button class="gsm-hint" onclick="setGSM(200)">200</button>
+            <button class="gsm-hint" onclick="setGSM(220)">220</button>
+            <button class="gsm-hint" onclick="setGSM(240)">240</button>
+            <button class="gsm-hint" onclick="setGSM(260)">260</button>
+          </div>
+        </div>
+
+        <!-- Composition Input -->
+        <div class="form-group mb-16">
+          <label class="form-label" for="comp-input" style="color:var(--t1)">Composition <span class="badge badge-gray" style="margin-left:6px">OPTIONAL</span></label>
+          <input
+            type="text"
+            id="comp-input"
+            class="form-input"
+            placeholder="e.g. 100% Cotton, CVC, 95% Cotton 5% Spandex"
+            autocomplete="off"
+          >
+          <div class="comp-chips" id="comp-chips">
+            <button class="comp-chip" onclick="setComp('100% Cotton', this)">100% Cotton</button>
+            <button class="comp-chip" onclick="setComp('95% Cotton 5% Elastane', this)">95/5 Ctn+Lycra</button>
+            <button class="comp-chip" onclick="setComp('60% Cotton 40% Polyester', this)">CVC 60/40</button>
+            <button class="comp-chip" onclick="setComp('65% Polyester 35% Cotton', this)">PC 65/35</button>
+            <button class="comp-chip" onclick="setComp('85% Cotton 15% Viscose', this)">Cotton/Viscose</button>
+            <button class="comp-chip" onclick="setComp('55% Cotton 40% Polyester 5% Elastane', this)">Ctn+Poly+Lycra</button>
+            <button class="comp-chip" onclick="setComp('100% Polyester', this)">100% Polyester</button>
+          </div>
+        </div>
+
+        <!-- Fabric Type -->
+        <div class="form-group mb-16">
+          <label class="form-label label green" for="fabric-select">Fabric Type <span style="color:var(--a3)">*</span></label>
+          <!-- Category filter chips -->
+          <div class="fabric-cats" id="fabric-cats">
+            <button class="cat-chip active" onclick="filterFabrics('all', this)">All</button>
+            <button class="cat-chip" onclick="filterFabrics('single_jersey', this)">Single Jersey</button>
+            <button class="cat-chip" onclick="filterFabrics('rib', this)">Rib</button>
+            <button class="cat-chip" onclick="filterFabrics('interlock', this)">Interlock</button>
+            <button class="cat-chip" onclick="filterFabrics('warp_knit', this)">Warp Knit</button>
+            <button class="cat-chip" onclick="filterFabrics('woven', this)">Woven</button>
+          </div>
+          <select id="fabric-select" class="form-select">
+            <option value="">— Select fabric type —</option>
+          </select>
+          <div id="fabric-info" class="text-xs text-dim mt-4" style="min-height:16px;"></div>
+        </div>
+
+        <!-- Precise Color — COLOR ENGINE (optional, drives realistic visualization) -->
+        <div class="form-group mb-16">
+          <label class="form-label" style="color:var(--t1)">
+            Precise Color <span class="badge" style="margin-left:6px;background:rgba(0,255,178,.12);color:var(--a1);border:1px solid rgba(0,255,178,.3)">COLOR ENGINE</span>
+            <span class="badge badge-gray" style="margin-left:4px">OPTIONAL</span>
+          </label>
+          <div class="ce-wrap">
+            <div class="ce-row">
+              <input type="color" id="ce-picker" class="ce-picker" value="#0F4C81" title="Pick any color">
+              <input type="text" id="ce-text" class="form-input ce-text" autocomplete="off"
+                     placeholder="TCX code, hex, or color name — e.g. 19-4052, #0F4C81, Classic Blue">
+              <button type="button" id="ce-clear" class="ce-clear" title="Clear precise color">✕</button>
+            </div>
+            <div class="ce-preview" id="ce-preview" hidden>
+              <div class="ce-swatch" id="ce-swatch"></div>
+              <div class="ce-meta">
+                <div class="ce-name" id="ce-name">—</div>
+                <div class="ce-sub" id="ce-sub">—</div>
+              </div>
+              <div class="ce-chips" id="ce-chips"></div>
+            </div>
+            <div class="ce-suggest" id="ce-suggest" hidden></div>
+            <input type="hidden" id="color-engine-input" value="">
+            <div class="shade-hint" id="ce-hint">Pick an exact color to drive a true-to-life dyed-fabric preview. Leave empty to use only the Color Shade mode below.</div>
+          </div>
+        </div>
+
+        <!-- Color Shade — MAIN FORM (visible by default) -->
+        <div class="form-group mb-16">
+          <label class="form-label" style="color:var(--t1)">Color Shade <span class="badge badge-gray" style="margin-left:6px">OPTIONAL</span></label>
+          <div class="shade-selector" id="shade-selector" style="grid-template-columns:repeat(3,1fr);">
+            <button class="shade-btn" data-shade="black" type="button" onclick="setShade('black', this)">
+              <div class="shade-swatch" style="background:#111;border-color:#333;"></div>
+              Black
+              <span style="font-size:9px;font-weight:400;color:var(--t3)">Pure Black</span>
+            </button>
+            <button class="shade-btn" data-shade="dark_navy" type="button" onclick="setShade('dark_navy', this)">
+              <div class="shade-swatch" style="background:#1a2a5e;border-color:#2a3a7e;"></div>
+              Dark/Navy
+              <span style="font-size:9px;font-weight:400;color:var(--t3)">Navy/Maroon/Dark</span>
+            </button>
+            <button class="shade-btn" data-shade="light_medium" type="button" onclick="setShade('light_medium', this)">
+              <div class="shade-swatch" style="background:#4a8fcc;border-color:#5a9fdc;"></div>
+              Light/Medium
+              <span style="font-size:9px;font-weight:400;color:var(--t3)">Blue/Red/Green/Pink</span>
+            </button>
+            <button class="shade-btn" data-shade="fluorescent" type="button" onclick="setShade('fluorescent', this)">
+              <div class="shade-swatch" style="background:#b0ff00;border-color:#c0ff20;"></div>
+              Fluorescent
+              <span style="font-size:9px;font-weight:400;color:var(--t3)">Neon/Electric</span>
+            </button>
+            <button class="shade-btn" data-shade="white_melange" type="button" onclick="setShade('white_melange', this)">
+              <div class="shade-swatch" style="background:#f5f5f0;border-color:#ddd;"></div>
+              White
+              <span style="font-size:9px;font-weight:400;color:var(--t3)">White/Ecru/Ivory</span>
+            </button>
+            <button class="shade-btn" data-shade="melange" type="button" onclick="setShade('melange', this)">
+              <div class="shade-swatch" style="background:linear-gradient(135deg,#888 50%,#ddd 50%);border-color:#aaa;"></div>
+              Melange
+              <span style="font-size:9px;font-weight:400;color:var(--t3)">Heather/Grey-Mel</span>
+            </button>
+          </div>
+          <input type="hidden" id="color-input" value="">
+          <div class="shade-hint" id="shade-hint"></div>
+        </div>
+
+        <!-- Shade Depth — continuous %OWF (dye concentration), overrides the 6-tier buttons above -->
+        <div class="form-group mb-16">
+          <label class="form-label" style="color:var(--t1);display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" id="depth-toggle" onchange="toggleShadeDepth(this.checked)" style="cursor:pointer;">
+            Shade Depth (%OWF) <span class="badge" style="margin-left:2px;background:rgba(0,255,178,.12);color:var(--a1);border:1px solid rgba(0,255,178,.3)">ADVANCED</span>
+          </label>
+          <div id="depth-controls" style="display:none;margin-top:8px;">
+            <div style="display:flex;align-items:center;gap:12px;">
+              <input type="range" id="depth-slider" min="0" max="20" step="0.5" value="4" style="flex:1 1 auto;" oninput="onDepthInput(this.value)">
+              <input type="number" id="depth-number" min="0" max="25" step="0.5" value="4" class="form-input" style="width:72px;flex:0 0 auto;" oninput="onDepthInput(this.value)">
+              <span class="text-xs text-dim">% OWF</span>
+            </div>
+            <div class="shade-hint" id="depth-hint" style="margin-top:6px;"></div>
+          </div>
+        </div>
+
+        <!-- Optional machine specs (collapsible) -->
+        <button class="collapsible-trigger" id="optional-trigger" onclick="toggleOptional()">
+          <span>⚙ Machine Specs <span class="badge badge-gray" style="margin-left:6px">OPTIONAL</span> — Add for production metrics</span>
+          <span class="arrow">▼</span>
+        </button>
+        <div class="collapsible-body" id="optional-body">
+          <div class="collapsible-inner">
+            <div class="optional-grid">
+              <div class="form-group">
+                <label class="form-label" for="dia-input" id="dia-label">Machine Dia (inch)</label>
+                <input type="number" id="dia-input" class="form-input" placeholder="e.g. 30" min="14" max="260" step="0.5">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="gauge-input">Gauge (GG)</label>
+                <input type="number" id="gauge-input" class="form-input" placeholder="e.g. 24" min="8" max="48" step="1">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="rpm-input" id="rpm-label">RPM</label>
+                <input type="number" id="rpm-input" class="form-input" placeholder="e.g. 25" min="5" max="3000" step="1">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="eff-input">Efficiency (%)</label>
+                <input type="number" id="eff-input" class="form-input" placeholder="85" min="30" max="100" step="1" value="85">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="sl-input">Stitch Length (mm)</label>
+                <input type="number" id="sl-input" class="form-input" placeholder="auto" min="1" max="10" step="0.01">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="feeders-input">Feeders (override)</label>
+                <input type="number" id="feeders-input" class="form-input" placeholder="auto" min="1" max="200" step="1">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="width-input">Target Width (inch, open)</label>
+                <input type="number" id="width-input" class="form-input" placeholder="e.g. 70" min="20" max="120" step="1">
+              </div>
+            </div>
+
+            <div class="info-box mt-12" style="grid-column: 1 / -1">
+              <strong>Dia + Gauge + RPM</strong> will give exact production rates (kg/hr, shift, day).<br>
+              <strong>Target Width</strong> → system recommends the exact single optimal Dia. Leave blank for the standard economical machine.
+            </div>
+
+            <!-- YARN SPECIFICATION (fiber grade + spinning system + form) -->
+            <div style="grid-column: 1 / -1; border-top: 1px solid var(--line2); padding-top: 12px; margin-top: 12px;">
+              <div class="optional-label" style="margin-bottom: 8px;">Yarn Specification <span class="text-dim">(grade, spinning system & form)</span></div>
+              <div class="optional-grid">
+                <div class="form-group">
+                  <label class="form-label" for="fiber-grade-input">Fibre Grade</label>
+                  <select id="fiber-grade-input" class="form-select">
+                    <option value="">— auto (Combed Upland) —</option>
+                    <option value="supima">Supima / Pima (ELS, finest)</option>
+                    <option value="giza">Egyptian Giza (ELS)</option>
+                    <option value="combed_upland">Combed Upland (standard)</option>
+                    <option value="carded_upland">Carded Upland</option>
+                    <option value="bci">BCI Cotton</option>
+                    <option value="organic">Organic Cotton (GOTS)</option>
+                    <option value="cmia">Cotton made in Africa</option>
+                    <option value="recycled">Recycled Cotton</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="spinning-input">Spinning System</label>
+                  <select id="spinning-input" class="form-select">
+                    <option value="">— auto (by count) —</option>
+                    <option value="compact">Compact (finest, strongest)</option>
+                    <option value="combed">Combed Ring</option>
+                    <option value="carded">Carded Ring</option>
+                    <option value="open_end">Open-End / Rotor</option>
+                    <option value="vortex">Air-Jet / Vortex (low spiral)</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="yarn-form-input">Yarn Form</label>
+                  <select id="yarn-form-input" class="form-select">
+                    <option value="">— Single —</option>
+                    <option value="ply2">2-Ply (torque-balanced)</option>
+                    <option value="slub">Slub / Fancy</option>
+                    <option value="core_spun">Core-Spun (lycra core)</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="feeder-type-input">Feeder Type <span class="text-dim">(lycra rib)</span></label>
+                  <select id="feeder-type-input" class="form-select">
+                    <option value="">— auto (half feeder) —</option>
+                    <option value="hf">Half Feeder (HF)</option>
+                    <option value="ff">Full Feeder (FF)</option>
+                  </select>
+                </div>
+              </div>
+              <div class="info-box mt-12" style="font-size:10px; line-height:1.6;">
+                Quality hierarchy: <strong>Supima/Giza (ELS) › Combed › Carded › Open-End › Recycled</strong>.
+                The engine returns strength (RKM/CSP), evenness (U%), spinnability check & price index.
+                Spinning system also drives spirality. Sources: Klein, Uster Statistics 2018.
+              </div>
+
+              <!-- Mill price yarn type (SM Spinning Mills real price list) -->
+              <div class="optional-grid" style="margin-top:10px;">
+                <div class="form-group">
+                  <label class="form-label" for="yarn-price-type">Mill Yarn Type <span class="text-dim">(real price)</span></label>
+                  <select id="yarn-price-type" class="form-select">
+                    <option value="">— auto-detect from composition —</option>
+                    <optgroup label="100% Cotton — Carded">
+                      <option value="carded_regular">Carded Regular</option>
+                      <option value="carded_white">Carded White</option>
+                      <option value="carded_slub">Carded Slub</option>
+                    </optgroup>
+                    <optgroup label="100% Cotton — Combed">
+                      <option value="combed_regular">Combed Regular</option>
+                      <option value="combed_white">Combed White</option>
+                      <option value="supima_combed">Supima / Pima Combed</option>
+                    </optgroup>
+                    <optgroup label="CVC (Cotton-rich blend)">
+                      <option value="cvc_60_40">CVC 60/40</option>
+                      <option value="cvc_80_20">CVC 80/20</option>
+                      <option value="cvc_60_40_slub">CVC 60/40 Slub</option>
+                      <option value="cvc_80_20_slub">CVC 80/20 Slub</option>
+                      <option value="cvc_60_40_siro">CVC 60/40 Siro</option>
+                      <option value="cvc_50_50_siro">CVC 50/50 Siro</option>
+                    </optgroup>
+                    <optgroup label="PC / Modal / Viscose">
+                      <option value="pc_65_35">PC 65/35</option>
+                      <option value="cotton_modal_50_50">Cotton/Modal 50/50</option>
+                      <option value="cotton_viscose_50_50">Cotton/Viscose 50/50</option>
+                      <option value="viscose_regular">100% Viscose</option>
+                    </optgroup>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Price Add-ons <span class="text-dim">(SM footnotes)</span></label>
+                  <div style="display:flex; flex-wrap:wrap; gap:10px; font-size:11px; padding-top:6px;">
+                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox" id="yarn-white"> White</label>
+                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox" id="yarn-organic"> Organic</label>
+                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox" id="yarn-ecovero"> Ecovero</label>
+                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox" id="yarn-at-sight"> At-Sight</label>
+                  </div>
+                </div>
+              </div>
+              <div class="info-box mt-12" style="font-size:9.5px; line-height:1.6;">
+                Real count-based prices from <strong>SM Spinning Mills (2 May 2026)</strong>. Add-ons per price-list footnotes:
+                White +$0.10 cotton/+$0.05 blend · Organic +$0.60 (GOTS/OCS) · Slub +$0.30 · Ecovero +$0.45 · At-Sight −$0.05.
+              </div>
+            </div>
+
+            <!-- FINISHING & QUALITY INPUTS (shrinkage & spirality accuracy) -->
+            <div style="grid-column: 1 / -1; border-top: 1px solid var(--line2); padding-top: 12px; margin-top: 12px;">
+              <div class="optional-label" style="margin-bottom: 8px;">Finishing &amp; Quality <span class="text-dim">(boosts shrinkage accuracy)</span></div>
+              <div class="optional-grid">
+                <div class="form-group">
+                  <label class="form-label" for="finishing-route-input">Finishing Route</label>
+                  <select id="finishing-route-input" class="form-select">
+                    <option value="">— auto (compacted) —</option>
+                    <option value="greige">Greige / Unfinished</option>
+                    <option value="tubular_relaxed">Tubular Relaxed / Tumble-dried</option>
+                    <option value="compacted">Compacted / Sanforized</option>
+                    <option value="heat_set">Heat-Set (synthetic)</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="dyeing-method-input">Dyeing Method <span class="text-dim">(critical path)</span></label>
+                  <select id="dyeing-method-input" class="form-select">
+                    <option value="">— auto (reactive) —</option>
+                    <option value="reactive">Reactive (exhaust)</option>
+                    <option value="pigment">Pigment / Pigment AOP</option>
+                    <option value="discharge">Discharge Print</option>
+                    <option value="disperse">Disperse (poly/CVC)</option>
+                    <option value="garment_wash">Garment Wash</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="twist-input">Twist Multiplier (αe) <span class="text-dim">opt.</span></label>
+                  <input type="number" id="twist-input" class="form-input" placeholder="auto 3.75" min="2.5" max="5.5" step="0.05">
+                </div>
+              </div>
+              <div class="info-box mt-12" style="font-size:10px; line-height:1.6;">
+                <strong>Finishing route</strong> is the #1 driver of residual shrinkage — compacted ≈ half of greige.
+                Based on Munden relaxation theory · tested per AATCC 135 / AATCC 179.
+              </div>
+            </div>
+
+            <!-- WOVEN INPUTS (hidden unless a woven quality is selected) -->
+            <div id="woven-panel" class="hidden" style="grid-column: 1 / -1; border-top: 1px solid var(--line2); padding-top: 12px; margin-top: 12px;">
+              <div class="optional-label" style="margin-bottom: 8px;">Woven Construction <span class="text-dim">(pre-filled from the selected quality)</span></div>
+              <div class="optional-row">
+                <div class="inp-group">
+                  <label for="epi-input">Ends / inch (EPI)</label>
+                  <input type="number" id="epi-input" class="form-input" min="1" max="600" step="1" placeholder="e.g. 56">
+                </div>
+                <div class="inp-group">
+                  <label for="ppi-input">Picks / inch (PPI)</label>
+                  <input type="number" id="ppi-input" class="form-input" min="1" max="600" step="1" placeholder="e.g. 44">
+                </div>
+              </div>
+              <div class="optional-row">
+                <div class="inp-group">
+                  <label for="warp-count-input">Warp count</label>
+                  <input type="text" id="warp-count-input" class="form-input" placeholder="e.g. 8s or 2/80s" autocomplete="off">
+                </div>
+                <div class="inp-group">
+                  <label for="weft-count-input">Weft count</label>
+                  <input type="text" id="weft-count-input" class="form-input" placeholder="e.g. 6s or 2/80s" autocomplete="off">
+                </div>
+              </div>
+              <div class="optional-row">
+                <div class="inp-group">
+                  <label for="dent-input">Ends / dent</label>
+                  <input type="number" id="dent-input" class="form-input" min="1" max="8" step="1" value="2">
+                </div>
+                <div class="inp-group">
+                  <label for="wastage-input">Wastage (%)</label>
+                  <input type="number" id="wastage-input" class="form-input" min="0" max="20" step="0.5" value="3">
+                </div>
+              </div>
+              <div class="optional-row">
+                <div class="inp-group">
+                  <label for="cloth-width-input">Width (inch)</label>
+                  <input type="number" id="cloth-width-input" class="form-input" min="10" max="140" step="1" placeholder="e.g. 60">
+                </div>
+                <div class="inp-group">
+                  <label for="cloth-length-input">Length (m)</label>
+                  <input type="number" id="cloth-length-input" class="form-input" min="1" step="1" placeholder="e.g. 1000">
+                </div>
+              </div>
+              <div class="info-box mt-12" style="font-size:10px; line-height:1.6;">
+                Fill in width and length to get the yarn requirement in kilograms, split warp and weft.
+                Leave the sett and counts as they are to use the quality the book prints.
+              </div>
+            </div>
+
+            <!-- WARP KNIT INPUTS (hidden for non-warp fabrics) -->
+            <div id="warp-knit-panel" class="hidden" style="grid-column: 1 / -1; border-top: 1px solid var(--line2); padding-top: 12px; margin-top: 12px;">
+              <div class="optional-label" style="margin-bottom: 8px;">Warp Knit <span class="text-dim">(optional)</span></div>
+              <div class="optional-row">
+                <div class="inp-group">
+                  <label for="denier-input">Denier (D)</label>
+                  <input type="number" id="denier-input" class="form-input" min="20" max="500" placeholder="e.g. 70">
+                </div>
+                <div class="inp-group">
+                  <label for="filaments-input">Filaments (f)</label>
+                  <input type="number" id="filaments-input" class="form-input" min="1" max="200" placeholder="e.g. 34">
+                </div>
+              </div>
+              <div class="optional-row">
+                <div class="inp-group">
+                  <label for="elastane-denier-input">Elastane Denier <span class="text-dim">(Powernet)</span></label>
+                  <input type="number" id="elastane-denier-input" class="form-input" min="0" max="500" placeholder="e.g. 280">
+                </div>
+                <div class="inp-group">
+                  <label for="elastane-pct-input">Elastane %</label>
+                  <input type="number" id="elastane-pct-input" class="form-input" min="0" max="50" placeholder="e.g. 20">
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Calculate Button -->
+        <div class="calc-btn-wrap mt-16">
+          <button id="calc-btn" class="btn btn-primary btn-lg" onclick="doCalculate()">
+            Calculate Everything →
+          </button>
+          <div class="calc-btn-hint">16+ calculations in &lt;50ms · No internet needed for form input</div>
+        </div>
+
+        <!-- WOVEN RESULT — shown in place, because a woven quality has no
+             costing, quality or dyeing model behind it here and should not be
+             sent to a result page that implies otherwise. -->
+        <div id="woven-result-wrap" class="hidden mt-16">
+          <div class="card">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px;">
+              <div class="h3" id="woven-result-title">Woven Analysis</div>
+              <button class="btn btn-sm" onclick="clearWovenResult()">Clear</button>
+            </div>
+            <div id="woven-result"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- NATURAL LANGUAGE PANEL -->
+    <div id="panel-nl" class="hidden">
+      <div class="input-card">
+        <div class="form-group mb-12">
+          <label class="form-label label" style="color:var(--t1)">Natural Language Input</label>
+          <textarea
+            class="nl-box"
+            id="nl-input"
+            placeholder="e.g. &quot;I need 200 gsm terry for 30 dia machine&quot; or &quot;180 GSM single jersey for H&M&quot;"
+            rows="3"
+            style="border-color:var(--line2);"
+          ></textarea>
+        </div>
+        <div class="nl-coming-soon" style="background:var(--bg2); border-color:var(--line2)">
+          <span style="font-size:18px">💬</span>
+          <div>
+            <div style="color:var(--t1);font-weight:600;margin-bottom:2px;">Describe your requirements</div>
+            <div class="text-dim text-xs">Enter your fabric specifications in plain text and we will extract them automatically.</div>
+          </div>
+        </div>
+        <button id="parse-btn" class="btn btn-primary btn-lg mt-12" style="width:100%;" onclick="doParse()">
+          Parse &amp; Calculate
+        </button>
+      </div>
+    </div>
+
+    <!-- RECENT CALCULATIONS -->
+    <div id="recents-section" class="hidden">
+      <div class="section-header mt-8">
+        <div class="h3">Recent Calculations</div>
+        <button class="btn btn-ghost" style="font-size:10px;padding:4px 10px;" onclick="clearAllRecents()">Clear</button>
+      </div>
+      <div class="recent-list" id="recents-list"></div>
+    </div>
+
+    <!-- FEATURES INFO -->
+    <div class="features-grid">
+      <div class="feat-card">
+        <div class="feat-icon">🔢</div>
+        <div class="feat-name">Yarn Count</div>
+        <div class="feat-desc">Ne, display, multi-yarn breakdown</div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">📏</div>
+        <div class="feat-name">Loop Length</div>
+        <div class="feat-desc">mm + cm, formula trace</div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">⚙️</div>
+        <div class="feat-name">Machine Spec</div>
+        <div class="feat-desc">Gauge, Dia, Feeders, Needles</div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">⊞</div>
+        <div class="feat-name">K/T/M Pattern</div>
+        <div class="feat-desc">Visual grid, cam & needle</div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">🏭</div>
+        <div class="feat-name">Production</div>
+        <div class="feat-desc">kg/hr, shift, day</div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">⚖️</div>
+        <div class="feat-name">GSM ↔ OSY</div>
+        <div class="feat-desc">Auto unit convert</div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="footer-nav container">
+      <div class="footer-brand">
+        <span class="footer-brand-name">KnitAdvisor</span>
+        <span class="footer-brand-sub">v1.0 · 29 fabric structures</span>
+      </div>
+      <nav class="footer-links">
+        <a href="converter.html">Unit Converter</a>
+        <a href="patterns.html">Pattern Catalog</a>
+        <a href="diagnostics.html">Diagnostics Hub</a>
+        <a href="weft-calc.html">Weft Calculator</a>
+        <a href="academy.html">Knitting Academy</a>
+        <a href="dyeing.html">Dyeing Recipes</a>
+        <a href="assistant.html">Knowledge Assistant</a>
+        <a href="rfq.html">Request a Quote</a>
+      </nav>
+    </div>
+    <div class="footer-bottom container">
+      <div class="footer-platform">
+        <span class="footer-platform-label">Part of</span>
+        <a href="https://www.onlinetextileschool.com" target="_blank" rel="noopener" class="footer-platform-link">www.onlinetextileschool.com</a>
+      </div>
+      <div class="footer-sponsor">
+        <span class="footer-sponsor-label">Proud Sponsor</span>
+        <a href="https://www.asutex.com" target="_blank" rel="noopener" class="footer-sponsor-link">
+          <span class="footer-sponsor-dot"></span>
+          Asutex
+        </a>
+      </div>
+    </div>
+  </footer>
+
+</div><!-- .page-wrap -->
+
+<!-- SCRIPTS -->
+<script src="assets/js/api.js?v=20260606b"></script>
+<script src="assets/js/ui.js?v=20260606b"></script>
+<script src="assets/js/storage.js?v=20260606b"></script>
+<!-- Draws the woven loom plans in place. Knit results render on result.html;
+     a woven quality answers here, so the renderer has to be on this page too. -->
+<script src="assets/js/pattern-renderer.js?v=20260831a"></script>
+<!-- Realistic 2D/3D weave preview, mounted by pattern-renderer.js's woven
+     branch into the "Realistic Preview" section it now emits. -->
+<script src="assets/js/woven-visualizer.js?v=20260903b"></script>
+
+<script>
+/* ============================================================
+   STATE
+   ============================================================ */
+let allFabrics = [];
+let activeCategory = 'all';
+
+/* ============================================================
+   INIT
+   ============================================================ */
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadFabrics();
+  applyQueryParams();
+
+  // "Recalculate" from result.html — prefill the whole form from the params that
+  // produced the result the user just came from, instead of starting blank.
+  if (new URLSearchParams(window.location.search).get('recalc') === '1') {
+    applyPrefill(loadPending());
+  }
+
+  loadRecentsUI();
+
+  // Auto-focus GSM input
+  document.getElementById('gsm-input').focus();
+});
+
+/* ============================================================
+   RECALCULATE PREFILL — mirrors doCalculate()'s params object in reverse
+   ============================================================ */
+const PREFILL_FIELD_MAP = {
+  gsm: 'gsm-input',
+  composition: 'comp-input',
+  dia: 'dia-input',
+  gauge: 'gauge-input',
+  rpm: 'rpm-input',
+  efficiency: 'eff-input',
+  stitch_length: 'sl-input',
+  feeders: 'feeders-input',
+  target_width: 'width-input',
+  fiber_grade: 'fiber-grade-input',
+  spinning_system: 'spinning-input',
+  yarn_form: 'yarn-form-input',
+  feeder_type: 'feeder-type-input',
+  finishing_route: 'finishing-route-input',
+  dyeing_method: 'dyeing-method-input',
+  twist_multiplier: 'twist-input',
+  yarn_price_type: 'yarn-price-type',
+  denier: 'denier-input',
+  filaments: 'filaments-input',
+  elastane_denier: 'elastane-denier-input',
+  elastane_pct: 'elastane-pct-input',
+  shade_depth_pct: 'depth-number',
+};
+const PREFILL_CHECKBOX_MAP = {
+  yarn_white: 'yarn-white',
+  yarn_organic: 'yarn-organic',
+  yarn_ecovero: 'yarn-ecovero',
+  yarn_at_sight: 'yarn-at-sight',
+};
+// Fields whose presence should auto-expand the "Machine Specs" collapsible so the
+// user can see what actually got carried over instead of it staying tucked away.
+const PREFILL_OPENS_OPTIONAL = [
+  'dia', 'gauge', 'rpm', 'stitch_length', 'feeders', 'target_width',
+  'fiber_grade', 'spinning_system', 'yarn_form', 'finishing_route',
+  'dyeing_method', 'twist_multiplier', 'yarn_price_type',
+];
+
+function applyPrefill(params) {
+  if (!params) return;
+
+  // Fabric select (needs the dependent UI — dia/gauge labels, warp-knit panel — to
+  // refresh via onFabricChange() same as manual selection would).
+  if (params.fabric) {
+    const sel = document.getElementById('fabric-select');
+    for (const opt of sel.options) {
+      if (opt.value === params.fabric) { sel.value = params.fabric; break; }
+    }
+  }
+
+  Object.entries(PREFILL_FIELD_MAP).forEach(([key, id]) => {
+    if (params[key] == null) return;
+    const el = document.getElementById(id);
+    if (el) el.value = params[key];
+  });
+
+  Object.entries(PREFILL_CHECKBOX_MAP).forEach(([key, id]) => {
+    const el = document.getElementById(id);
+    if (el) el.checked = !!params[key];
+  });
+
+  onFabricChange();
+
+  // Composition chip active-state (mirrors setComp()) — chip values live inline in
+  // their onclick handlers, so match against that rather than a data attribute.
+  if (params.composition) {
+    document.querySelectorAll('.comp-chip').forEach(c => {
+      const m = (c.getAttribute('onclick') || '').match(/setComp\('([^']*)'/);
+      c.classList.toggle('active', !!m && m[1] === params.composition);
+    });
+  }
+
+  // Shade depth (%OWF) — reveal + sync the slider/checkbox when carried over
+  if (params.shade_depth_pct != null) {
+    document.getElementById('depth-toggle').checked = true;
+    toggleShadeDepth(true);
+    onDepthInput(params.shade_depth_pct);
+  }
+
+  // Color shade button active-state (mirrors setShade())
+  if (params.color_shade) {
+    const btn = document.querySelector(`.shade-btn[data-shade="${params.color_shade}"]`);
+    if (typeof setShade === 'function') setShade(params.color_shade, btn || null);
+  }
+
+  // Precise color engine text — set the visible text field and let its own input
+  // handler re-resolve the preview/hidden value (avoids duplicating that logic here).
+  if (params.color_input) {
+    const ceText = document.getElementById('ce-text');
+    if (ceText) {
+      ceText.value = params.color_input;
+      ceText.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  }
+
+  if (PREFILL_OPENS_OPTIONAL.some(k => params[k] != null)) {
+    openOptional();
+  }
+
+  if (typeof showToast === 'function') {
+    showToast('Previous calculation loaded — edit and recalculate', 'info', 3000);
+  }
+}
+
+function applyQueryParams() {
+  const params = new URLSearchParams(window.location.search);
+  const fabric = params.get('fabric');
+  if (!fabric) return;
+
+  const sel = document.getElementById('fabric-select');
+  if (!sel) return;
+
+  for (const opt of sel.options) {
+    if (opt.value === fabric) {
+      sel.value = fabric;
+      onFabricChange();
+      break;
+    }
+  }
+}
+
+/* ============================================================
+   LOAD FABRICS FROM API
+   ============================================================ */
+async function loadFabrics() {
+  const select = document.getElementById('fabric-select');
+  try {
+    allFabrics = await apiFabrics();
+    populateFabricSelect(allFabrics);
+  } catch (err) {
+    // Fallback list if API not running
+    select.innerHTML = `
+      <option value="">— Select fabric type —</option>
+      <option value="single_jersey">Single Jersey</option>
+      <option value="heavy_jersey">Heavy Single Jersey</option>
+      <option value="terry_fabric">Terry Fabric</option>
+      <option value="fleece">Fleece</option>
+      <option value="rib_1x1">1×1 Rib</option>
+      <option value="rib_2x2">2×2 Rib</option>
+      <option value="interlock">Interlock</option>
+      <option value="pique">Pique</option>
+      <option value="lacoste">Lacoste</option>
+    `;
+    console.warn('[KnitAdvisor] API not available, using fallback fabric list');
+  }
+
+  // Fabric change → show info
+  select.addEventListener('change', onFabricChange);
+}
+
+function populateFabricSelect(fabrics, category = 'all') {
+  const select = document.getElementById('fabric-select');
+  const prev = select.value;
+
+  const filtered = category === 'all' ? fabrics : fabrics.filter(f => f.category === category);
+
+  // Group by category
+  const groups = {};
+  filtered.forEach(f => {
+    const g = f.category || 'other';
+    if (!groups[g]) groups[g] = [];
+    groups[g].push(f);
+  });
+
+  const catLabels = {
+    single_jersey: '— Single Bed (Jersey / Terry / Fleece) —',
+    rib: '— Rib Structures —',
+    interlock: '— Double Bed (Interlock) —',
+    warp_knit: '— Warp Knit —',
+    woven: '— Woven —',
+  };
+
+  let html = '<option value="">— Select fabric type —</option>';
+  Object.entries(groups).forEach(([cat, items]) => {
+    html += `<optgroup label="${catLabels[cat] || cat}">`;
+    items.forEach(f => {
+      const sel = f.id === prev ? 'selected' : '';
+      const detail = f.is_woven
+        ? (f.construction ? ` (${f.construction} — ${f.nominal_gsm} GSM)` : '')
+        : (f.gsm_range ? ` (${f.gsm_range[0]}–${f.gsm_range[1]} GSM)` : '');
+      html += `<option value="${f.id}" ${sel}>${f.name}${detail}</option>`;
+    });
+    html += `</optgroup>`;
+  });
+
+  select.innerHTML = html;
+}
+
+/* ============================================================
+   FABRIC CHANGE HANDLER
+   ============================================================ */
+function onFabricChange() {
+  const select = document.getElementById('fabric-select');
+  const info = document.getElementById('fabric-info');
+  const warpPanel = document.getElementById('warp-knit-panel');
+  const fabricId = select.value;
+  if (!fabricId) { info.textContent = ''; return; }
+
+  const fabric = allFabrics.find(f => f.id === fabricId);
+  if (!fabric) { info.textContent = ''; return; }
+
+  const parts = [];
+  if (fabric.gsm_range) parts.push(`GSM: ${fabric.gsm_range[0]}–${fabric.gsm_range[1]}`);
+  if (fabric.gauge_range) parts.push(`Gauge: ${fabric.gauge_range[0]}–${fabric.gauge_range[1]} GG`);
+  if (fabric.is_multi_yarn) parts.push('Multi-yarn (ground + pile)');
+  if (fabric.is_warp) parts.push('Warp knit (denier-based)');
+
+  // A woven quality is described by its construction, and by whether that
+  // construction is one the book prints or a working default. Saying which
+  // matters more than the number itself.
+  const wovenPanel = document.getElementById('woven-panel');
+  if (fabric.is_woven) {
+    parts.length = 0;
+    if (fabric.construction) parts.push(fabric.construction);
+    if (fabric.nominal_gsm) parts.push(`${fabric.nominal_gsm} GSM`);
+    parts.push(fabric.sett_source === 'BOOK_VERIFIED'
+      ? 'construction from Gokarneshan (2005)'
+      : 'working default sett — replace with your own');
+    if (!fabric.has_structure) parts.push('weave grid not stored for this structure');
+    info.textContent = parts.join(' · ');
+    warpPanel.classList.add('hidden');
+    wovenPanel.classList.remove('hidden');
+    prefillWovenConstruction(fabric);
+    document.getElementById('optional-body').classList.add('open');
+    return;
+  }
+  wovenPanel.classList.add('hidden');
+  info.textContent = parts.join(' · ');
+
+  // Show/hide warp knit panel and update field labels
+  const diaLabel = document.getElementById('dia-label');
+  const rpmLabel = document.getElementById('rpm-label');
+  const diaInput = document.getElementById('dia-input');
+  const rpmInput = document.getElementById('rpm-input');
+
+  if (fabric.is_warp) {
+    warpPanel.classList.remove('hidden');
+    // Warp knit: dia = working width (inch), rpm = courses/min
+    if (diaLabel) diaLabel.textContent = 'Working Width (inch)';
+    if (rpmLabel) rpmLabel.textContent = 'Speed (courses/min)';
+    if (diaInput) { diaInput.placeholder = 'e.g. 60'; diaInput.min = 30; diaInput.max = 260; }
+    if (rpmInput) { rpmInput.placeholder = 'e.g. 1500'; rpmInput.min = 100; rpmInput.max = 3000; }
+  } else {
+    warpPanel.classList.add('hidden');
+    // Restore weft knit labels
+    if (diaLabel) diaLabel.textContent = 'Machine Dia (inch)';
+    if (rpmLabel) rpmLabel.textContent = 'RPM';
+    if (diaInput) { diaInput.placeholder = 'e.g. 30'; diaInput.min = 14; diaInput.max = 60; }
+    if (rpmInput) { rpmInput.placeholder = 'e.g. 25'; rpmInput.min = 5; rpmInput.max = 80; }
+    // Clear warp knit fields when switching away
+    document.getElementById('denier-input').value = '';
+    document.getElementById('filaments-input').value = '';
+    document.getElementById('elastane-denier-input').value = '';
+    document.getElementById('elastane-pct-input').value = '';
+  }
+}
+
+/* ============================================================
+   WOVEN CONSTRUCTION
+   ============================================================ */
+
+/**
+ * Put the selected quality's own sett into the form. The fields stay editable
+ * because a merchandiser quotes the cloth in front of them, not the one in the
+ * book — but they start from something real rather than empty.
+ */
+function prefillWovenConstruction(fabric) {
+  const m = (fabric.construction || '').match(/^(\d+)×(\d+),\s*(.+?)\/(.+)$/);
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+  if (m) {
+    set('epi-input', m[1]);
+    set('ppi-input', m[2]);
+    set('warp-count-input', m[3].trim());
+    set('weft-count-input', m[4].trim());
+  } else {
+    ['epi-input', 'ppi-input', 'warp-count-input', 'weft-count-input'].forEach(id => set(id, ''));
+  }
+}
+
+function clearWovenResult() {
+  document.getElementById('woven-result').innerHTML = '';
+  document.getElementById('woven-result-wrap').classList.add('hidden');
+}
+
+async function doWovenCalculate(fabricId, btn) {
+  const numOrUndef = id => {
+    const v = parseFloat((document.getElementById(id) || {}).value);
+    return Number.isFinite(v) ? v : undefined;
+  };
+  const strOrUndef = id => {
+    const v = ((document.getElementById(id) || {}).value || '').trim();
+    return v || undefined;
+  };
+
+  const params = {
+    fabric_id: fabricId,
+    epi: numOrUndef('epi-input'),
+    ppi: numOrUndef('ppi-input'),
+    warp_count: strOrUndef('warp-count-input'),
+    weft_count: strOrUndef('weft-count-input'),
+    ends_per_dent: numOrUndef('dent-input'),
+    wastage_pct: numOrUndef('wastage-input'),
+    width_inch: numOrUndef('cloth-width-input'),
+    length_m: numOrUndef('cloth-length-input'),
+  };
+  Object.keys(params).forEach(k => params[k] === undefined && delete params[k]);
+
+  setButtonLoading(btn, true, 'Calculating...');
+  try {
+    const r = await apiWovenCalculate(params);
+    if (!r.success) {
+      showToast(r.message || r.error || 'Woven calculation failed', 'error');
+      return;
+    }
+    document.getElementById('woven-result-title').textContent = r.fabric.name;
+    // The same payload shape the pattern endpoint returns, so one renderer
+    // serves both this page and the pattern library.
+    renderPatternGrid(document.getElementById('woven-result'), {
+      fabric_type: 'woven',
+      fabric_id: r.fabric.id,
+      fabric_name: r.fabric.name,
+      family: r.fabric.family,
+      construction: r.construction,
+      structure: r.structure,
+      weight: r.weight,
+      cover: r.cover,
+      twill_angle: r.twill_angle,
+      consumption: r.consumption,
+      characteristics: r.fabric.characteristics,
+      end_uses: r.fabric.end_uses,
+      book_page: r.fabric.book_page,
+      notes: r.notes,
+    });
+    const wrap = document.getElementById('woven-result-wrap');
+    wrap.classList.remove('hidden');
+    wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (err) {
+    showToast(err.message || 'API error — is the server running?', 'error');
+  } finally {
+    setButtonLoading(btn, false);
+  }
+}
+
+/* ============================================================
+   CATEGORY FILTER
+   ============================================================ */
+function filterFabrics(category, chipEl) {
+  activeCategory = category;
+  document.querySelectorAll('.cat-chip').forEach(c => c.classList.remove('active'));
+  chipEl.classList.add('active');
+  populateFabricSelect(allFabrics, category);
+}
+
+/* ============================================================
+   PATH SWITCHING (form ↔ NL)
+   ============================================================ */
+function switchPath(path) {
+  const formPanel = document.getElementById('panel-form');
+  const nlPanel = document.getElementById('panel-nl');
+  const tabForm = document.getElementById('tab-form');
+  const tabNL = document.getElementById('tab-nl');
+
+  if (path === 'form') {
+    formPanel.classList.remove('hidden');
+    nlPanel.classList.add('hidden');
+    tabForm.classList.add('active');
+    tabNL.classList.remove('active');
+  } else {
+    formPanel.classList.add('hidden');
+    nlPanel.classList.remove('hidden');
+    tabForm.classList.remove('active');
+    tabNL.classList.add('active');
+  }
+}
+
+/* ============================================================
+   OPTIONAL PANEL TOGGLE
+   ============================================================ */
+function toggleOptional() {
+  const body  = document.getElementById('optional-body');
+  const btn   = document.getElementById('optional-trigger');
+  const inner = body.querySelector('.collapsible-inner');
+  const isOpen = btn.classList.contains('open');
+
+  if (isOpen) {
+    body.style.height = body.scrollHeight + 'px';
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => { body.style.height = '0px'; });
+    });
+    btn.classList.remove('open');
+  } else {
+    openOptional();
+  }
+}
+
+function openOptional() {
+  const body  = document.getElementById('optional-body');
+  const btn   = document.getElementById('optional-trigger');
+  if (btn.classList.contains('open')) return;
+  const inner = body.querySelector('.collapsible-inner');
+  const targetH = (inner ? inner.scrollHeight : 400) + 32;
+  body.style.height = targetH + 'px';
+  btn.classList.add('open');
+}
+
+/* ============================================================
+   GSM HINTS
+   ============================================================ */
+function setGSM(val) {
+  document.getElementById('gsm-input').value = val;
+  document.getElementById('gsm-input').focus();
+}
+
+/* ============================================================
+   COMPOSITION & COLOR CHIPS
+   ============================================================ */
+function setComp(val, btn) {
+  document.getElementById('comp-input').value = val;
+  document.querySelectorAll('.comp-chip').forEach(c => c.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+}
+
+const SHADE_HINTS = {
+  dark:   'Grey GSM will be knit ~4% below target. SL set looser. Dye uptake brings final GSM to target.',
+  medium: 'Grey GSM knit ~1.5% below target. Standard SL. Normal dye uptake.',
+  light:  'Minimal dye uptake. Knit at target GSM. SL set slightly tighter.',
+};
+
+function setShade(val, btn) {
+  const current = document.getElementById('color-input').value;
+  // Toggle off if clicking same shade again
+  if (current === val) {
+    document.getElementById('color-input').value = '';
+    document.getElementById('shade-hint').textContent = '';
+    document.querySelectorAll('.shade-btn').forEach(c => c.classList.remove('active'));
+    return;
+  }
+  document.getElementById('color-input').value = val;
+  document.querySelectorAll('.shade-btn').forEach(c => c.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  document.getElementById('shade-hint').textContent = SHADE_HINTS[val] || '';
+}
+
+/* ============================================================
+   SHADE DEPTH — continuous %OWF, overrides the 6-tier buttons
+   ============================================================ */
+function toggleShadeDepth(on) {
+  document.getElementById('depth-controls').style.display = on ? 'block' : 'none';
+  const selector = document.getElementById('shade-selector');
+  selector.style.opacity = on ? '0.35' : '1';
+  selector.style.pointerEvents = on ? 'none' : 'auto';
+  if (on) onDepthInput(document.getElementById('depth-slider').value);
+  else document.getElementById('depth-hint').textContent = '';
+}
+function onDepthInput(val) {
+  let pct = parseFloat(val);
+  if (isNaN(pct)) pct = 0;
+  pct = Math.max(0, Math.min(25, pct));
+  document.getElementById('depth-slider').value = Math.min(20, pct);
+  document.getElementById('depth-number').value = pct;
+  let tier = 'White/Melange';
+  if (pct >= 10) tier = 'Black';
+  else if (pct >= 6) tier = 'Dark/Navy';
+  else if (pct >= 1) tier = 'Light/Medium';
+  document.getElementById('depth-hint').textContent =
+    `${pct}% OWF — continuously scaled dye-mass gain (nearest tier for family data: ${tier}). Real dye-recipe concentration instead of a fixed bucket.`;
+}
+
+/* ============================================================
+   COLOR ENGINE WIDGET — precise color → live preview + shade tier
+   ============================================================ */
+(function initColorEngine() {
+  const text    = document.getElementById('ce-text');
+  const picker  = document.getElementById('ce-picker');
+  const clearBt = document.getElementById('ce-clear');
+  const hidden  = document.getElementById('color-engine-input');
+  const preview = document.getElementById('ce-preview');
+  const swatch  = document.getElementById('ce-swatch');
+  const nameEl  = document.getElementById('ce-name');
+  const subEl   = document.getElementById('ce-sub');
+  const chipsEl = document.getElementById('ce-chips');
+  const suggest = document.getElementById('ce-suggest');
+  const hintEl  = document.getElementById('ce-hint');
+  if (!text || !picker) return;
+
+  let debTimer = null, sugTimer = null, lastResolved = null;
+
+  const SHADE_LABEL = {
+    black: 'Black', dark_navy: 'Dark / Navy', light_medium: 'Light / Medium',
+    fluorescent: 'Fluorescent', white_melange: 'White', melange: 'Melange',
+  };
+
+  function clearPreview() {
+    preview.hidden = true;
+    hidden.value = '';
+    lastResolved = null;
+    hintEl.textContent = 'Pick an exact color to drive a true-to-life dyed-fabric preview. Leave empty to use only the Color Shade mode below.';
+  }
+
+  function showPreview(c, rawInput) {
+    if (!c || !c.hex) { clearPreview(); return; }
+    lastResolved = c;
+    hidden.value = (c.tcx_code ? (c.tcx_code + ' TCX') : null) || rawInput || c.hex;
+    swatch.style.background = c.hex;
+    nameEl.textContent = c.name || 'Custom Color';
+    const codeBits = [];
+    if (c.tcx_label) codeBits.push(c.tcx_label);
+    else if (c.scotdic_label) codeBits.push(c.scotdic_label);
+    else if (c.bros_label) codeBits.push(c.bros_label);
+    else if (c.archroma_label) codeBits.push(c.archroma_label);
+    codeBits.push(c.hex);
+    subEl.textContent = codeBits.join('  ·  ');
+    const chips = [];
+    if (c.family) chips.push(c.family);
+    if (c.temperature) chips.push(c.temperature);
+    if (c.shade_tier) chips.push(SHADE_LABEL[c.shade_tier] || c.shade_tier);
+    chipsEl.innerHTML = chips.map(t => `<span class="ce-chip">${t}</span>`).join('');
+    preview.hidden = false;
+    try { picker.value = c.hex; } catch (_) {}
+    const shadeMode = document.getElementById('color-input').value;
+    hintEl.textContent = shadeMode
+      ? `Visualization will use this exact color; shade-mode math uses "${shadeMode}".`
+      : `Exact color set → shade tier "${SHADE_LABEL[c.shade_tier] || c.shade_tier}" will drive the dyeing/SL math automatically.`;
+  }
+
+  // ── CLIENT-SIDE colour resolver (works with zero network) ──
+  // Guarantees the picker & any hex always produce a live preview and feed
+  // the visualization, even if the backend / a cached api.js is unavailable.
+  function localResolve(input) {
+    const s = (input || '').trim();
+    const m = s.match(/^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/);
+    if (!m) return null;
+    let h = m[1];
+    if (h.length === 3) h = h.split('').map(x => x + x).join('');
+    const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+    const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+    const L = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+    const chroma = d / 255;
+    let hue = 0;
+    if (d > 0.5) {
+      if (max === r) hue = ((g - b) / d % 6) * 60;
+      else if (max === g) hue = ((b - r) / d + 2) * 60;
+      else hue = ((r - g) / d + 4) * 60;
+      if (hue < 0) hue += 360;
+    }
+    let shade;
+    if (L < 0.07) shade = 'black';
+    else if (chroma > 0.55 && L > 0.5) shade = 'fluorescent';
+    else if (L >= 0.86) shade = 'white_melange';
+    else if (L >= 0.40) shade = 'light_medium';
+    else shade = 'dark_navy';
+    let family = 'gray';
+    if (chroma >= 0.08) {
+      if (hue < 15 || hue >= 345) family = 'red';
+      else if (hue < 45) family = 'orange';
+      else if (hue < 70) family = 'yellow';
+      else if (hue < 165) family = 'green';
+      else if (hue < 200) family = 'teal';
+      else if (hue < 255) family = 'blue';
+      else if (hue < 300) family = 'purple';
+      else family = 'pink';
+    } else if (L > 0.85) family = 'white';
+    else if (L < 0.1) family = 'black';
+    const temperature = chroma < 0.08 ? 'neutral' : (hue <= 80 || hue >= 320) ? 'warm' : (hue >= 160 && hue <= 280) ? 'cool' : 'warm';
+    return { hex: '#' + h.toUpperCase(), name: 'Custom Color', family, temperature, shade_tier: shade };
+  }
+
+  async function resolve(input) {
+    if (!input || !input.trim()) { clearPreview(); return; }
+    // 1) instant local resolution for any hex (picker path) — never blocks
+    const local = localResolve(input);
+    if (local) showPreview(local, input.trim());
+    // 2) enrich / resolve names & TCX codes via backend when available
+    if (typeof apiColorPreview === 'function') {
+      try {
+        const data = await apiColorPreview(input.trim());
+        if (data && data.color) showPreview(data.color, input.trim());
+        else if (!local) clearPreview();
+      } catch (_) { if (!local) clearPreview(); }
+    } else if (!local) {
+      clearPreview();
+    }
+  }
+
+  async function runSuggest(q) {
+    suggest.hidden = true;
+    if (typeof apiColorSearch !== 'function') return;
+    if (!q || q.trim().length < 2 || /^#?[0-9a-fA-F]{3,6}$/.test(q.trim()) || /\d{2}-\d{4}/.test(q.trim())) return;
+    try {
+      const data = await apiColorSearch(q.trim(), 8);
+      if (!data || !data.results || !data.results.length) return;
+      suggest.innerHTML = data.results.map(r =>
+        `<div class="ce-opt" data-code="${r.code}" data-hex="${r.hex}">
+           <div class="ce-opt-sw" style="background:${r.hex}"></div>
+           <div><div class="ce-opt-name">${r.name}</div><div class="ce-opt-code">${r.code} TCX · ${r.hex}</div></div>
+         </div>`).join('');
+      suggest.hidden = false;
+      suggest.querySelectorAll('.ce-opt').forEach(opt => {
+        opt.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          text.value = opt.dataset.code + ' TCX';
+          suggest.hidden = true;
+          resolve(text.value);
+        });
+      });
+    } catch (_) {}
+  }
+
+  text.addEventListener('input', () => {
+    clearTimeout(debTimer); clearTimeout(sugTimer);
+    const v = text.value;
+    debTimer = setTimeout(() => resolve(v), 280);
+    sugTimer = setTimeout(() => runSuggest(v), 220);
+  });
+  text.addEventListener('blur', () => setTimeout(() => { suggest.hidden = true; }, 150));
+  picker.addEventListener('input', () => {
+    text.value = picker.value.toUpperCase();
+    suggest.hidden = true;
+    clearTimeout(debTimer);
+    debTimer = setTimeout(() => resolve(picker.value), 120);
+  });
+  clearBt.addEventListener('click', () => { text.value = ''; suggest.hidden = true; clearPreview(); });
+})();
+
+/* ============================================================
+   CALCULATE
+   ============================================================ */
+async function doCalculate() {
+  const gsmEl = document.getElementById('gsm-input');
+  const fabricEl = document.getElementById('fabric-select');
+  const btn = document.getElementById('calc-btn');
+
+  const gsm = parseFloat(gsmEl.value);
+  const fabric = fabricEl.value;
+
+  // Validate
+  if (!fabric) {
+    showToast('Please select a fabric type', 'error');
+    fabricEl.focus();
+    return;
+  }
+
+  // A woven cloth has no target GSM to enter: its weight FOLLOWS from the sett
+  // and the counts. So it branches before the knit validation, not after.
+  const selected = allFabrics.find(f => f.id === fabric);
+  if (selected && selected.is_woven) {
+    return doWovenCalculate(fabric, btn);
+  }
+
+  if (!gsm || isNaN(gsm) || gsm < 60 || gsm > 500) {
+    showToast('Please enter a valid GSM (60–500)', 'error');
+    gsmEl.focus();
+    return;
+  }
+
+  // Build params
+  const params = {
+    fabric,
+    gsm,
+    composition: document.getElementById('comp-input').value || undefined,
+    color_shade: document.getElementById('color-input').value || undefined,
+    color_input: document.getElementById('color-engine-input').value || undefined,
+    shade_depth_pct: document.getElementById('depth-toggle').checked
+      ? parseFloat(document.getElementById('depth-number').value) : undefined,
+    dia: parseFloat(document.getElementById('dia-input').value) || undefined,
+    gauge: parseFloat(document.getElementById('gauge-input').value) || undefined,
+    rpm: parseFloat(document.getElementById('rpm-input').value) || undefined,
+    efficiency: parseFloat(document.getElementById('eff-input').value) || 85,
+    stitch_length: parseFloat(document.getElementById('sl-input').value) || undefined,
+    feeders: parseInt(document.getElementById('feeders-input').value) || undefined,
+    target_width: parseFloat(document.getElementById('width-input').value) || undefined,
+    fiber_grade: document.getElementById('fiber-grade-input').value || undefined,
+    spinning_system: document.getElementById('spinning-input').value || undefined,
+    yarn_form: document.getElementById('yarn-form-input').value || undefined,
+    feeder_type: document.getElementById('feeder-type-input').value || undefined,
+    finishing_route: document.getElementById('finishing-route-input').value || undefined,
+    dyeing_method: document.getElementById('dyeing-method-input').value || undefined,
+    twist_multiplier: parseFloat(document.getElementById('twist-input').value) || undefined,
+    yarn_price_type: document.getElementById('yarn-price-type').value || undefined,
+    yarn_white: document.getElementById('yarn-white').checked || undefined,
+    yarn_organic: document.getElementById('yarn-organic').checked || undefined,
+    yarn_ecovero: document.getElementById('yarn-ecovero').checked || undefined,
+    yarn_at_sight: document.getElementById('yarn-at-sight').checked || undefined,
+    // Warp knit parameters
+    denier: parseFloat(document.getElementById('denier-input').value) || undefined,
+    filaments: parseInt(document.getElementById('filaments-input').value) || undefined,
+    elastane_denier: parseFloat(document.getElementById('elastane-denier-input').value) || undefined,
+    elastane_pct: parseFloat(document.getElementById('elastane-pct-input').value) || undefined,
+  };
+
+  // Remove undefined keys
+  Object.keys(params).forEach(k => params[k] === undefined && delete params[k]);
+
+  setButtonLoading(btn, true, 'Calculating...');
+
+  try {
+    const result = await apiCalculate(params);
+
+    if (!result.success) {
+      showToast(result.error || 'Calculation failed', 'error');
+      return;
+    }
+
+    // Save to storage and redirect
+    savePending(params);
+    saveRecent(params, result);
+
+    // Navigate to result page
+    window.location.href = 'result.html';
+  } catch (err) {
+    showToast(err.message || 'API error — is the server running?', 'error');
+  } finally {
+    setButtonLoading(btn, false);
+  }
+}
+
+/* ============================================================
+   AI PARSE
+   ============================================================ */
+async function doParse() {
+  const nlEl = document.getElementById('nl-input');
+  const btn = document.getElementById('parse-btn');
+  const text = nlEl.value.trim();
+  
+  if (!text) {
+    showToast('Please enter some text', 'error');
+    nlEl.focus();
+    return;
+  }
+  
+  setButtonLoading(btn, true, 'Parsing...');
+  try {
+    const res = await fetch('/api/parse', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text })
+    });
+    const parsed = await res.json();
+    if (res.status === 401 && parsed.code === 'AUTH_REQUIRED' && window.kaSignInRedirect) window.kaSignInRedirect();
+    
+    if (!res.ok) throw new Error(parsed.error || 'Parsing failed');
+    
+    if (parsed.confidence === 'low' || !parsed.fabric || !parsed.gsm) {
+      showToast(parsed.message || 'Could not understand fabric and GSM. Please specify clearly.', 'warning');
+      return;
+    }
+    
+    // Fill form and switch
+    document.getElementById('gsm-input').value = parsed.gsm;
+    
+    // Attempt to set fabric in select
+    const sel = document.getElementById('fabric-select');
+    let matched = false;
+    for (const opt of sel.options) {
+      if (opt.value === parsed.fabric) {
+        sel.value = parsed.fabric;
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) {
+      showToast(`Extracted fabric '${parsed.fabric}', but it's not in our list.`, 'warning');
+      return;
+    }
+    
+    // Optional params
+    if (parsed.dia) { document.getElementById('dia-input').value = parsed.dia; openOptional(); }
+    if (parsed.gauge) { document.getElementById('gauge-input').value = parsed.gauge; openOptional(); }
+    if (parsed.rpm) document.getElementById('rpm-input').value = parsed.rpm;
+    
+    onFabricChange();
+    switchPath('form');
+    
+    // Auto calculate
+    setTimeout(() => {
+      doCalculate();
+    }, 500);
+    
+  } catch(err) {
+    showToast(err.message || 'Error communicating with parser', 'error');
+  } finally {
+    setButtonLoading(btn, false);
+  }
+}
+
+// Allow Enter key on inputs
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    const active = document.activeElement;
+    if (active && (active.classList.contains('form-input') || active.classList.contains('form-select'))) {
+      doCalculate();
+    }
+  }
+});
+
+/* ============================================================
+   RECENTS
+   ============================================================ */
+function loadRecentsUI() {
+  const recents = getRecents();
+  const section = document.getElementById('recents-section');
+  const list = document.getElementById('recents-list');
+
+  if (recents.length === 0) {
+    section.classList.add('hidden');
+    return;
+  }
+  section.classList.remove('hidden');
+
+  list.innerHTML = recents.map(r => `
+    <div class="recent-item" onclick="reuseRecent('${r.params.fabric}', ${r.params.gsm})">
+      <div class="recent-fabric">${r.params.fabric.replace(/_/g,' ')} · ${r.params.gsm} GSM</div>
+      <div class="recent-gsm">${r.summary || ''}</div>
+      <div class="recent-time">${timeAgo(r.ts)}</div>
+    </div>
+  `).join('');
+}
+
+function reuseRecent(fabric, gsm) {
+  document.getElementById('gsm-input').value = gsm;
+  const sel = document.getElementById('fabric-select');
+  // Try to set fabric in select
+  for (const opt of sel.options) {
+    if (opt.value === fabric) {
+      sel.value = fabric;
+      onFabricChange();
+      break;
+    }
+  }
+  doCalculate();
+}
+
+function clearAllRecents() {
+  clearRecents();
+  document.getElementById('recents-section').classList.add('hidden');
+  showToast('Recents cleared', 'info', 1500);
+}
+</script>
+
+</body>
+</html>

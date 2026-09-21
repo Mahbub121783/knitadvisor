@@ -129,6 +129,9 @@ function switchTab(tabId) {
   } else if (tabId === 'tab-inquiries' && !tabState.loaded.inquiries) {
     tabState.loaded.inquiries = true;
     loadInquiries(1, {});
+  } else if (tabId === 'tab-users' && !tabState.loaded.users) {
+    tabState.loaded.users = true;
+    loadUsers(1, {});
   } else if (tabId === 'tab-rfq' && !tabState.loaded.rfq) {
     tabState.loaded.rfq = true;
     loadRfqList(1, {});
@@ -992,6 +995,49 @@ async function downloadInquiriesCSV() {
   } catch (e) { toast('CSV download failed', 'error'); }
 }
 
+// ── USERS ──────────────────────────────────────────────────
+const PLAN_LABELS = { floor: 'Floor', mill: 'Mill', buying_house: 'Buying House' };
+
+function getUsrFilters() {
+  return { search: document.getElementById('usr-filter-search').value.trim() };
+}
+
+async function loadUsers(page, filters) {
+  try {
+    const p = new URLSearchParams({ page, limit: 25 });
+    if (filters.search) p.append('search', filters.search);
+    const d = await api('/admin/api/users?' + p);
+
+    const tbody = document.getElementById('usr-tbody');
+    tbody.innerHTML = '';
+    if (!d.rows.length) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--t3);">No users found</td></tr>';
+    }
+    for (const u of d.rows) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="padding:9px 10px;color:var(--t2);">${esc(u.full_name)}<div style="font-size:10px;color:var(--t3);">${esc(u.email)}</div></td>
+        <td style="padding:9px 10px;color:var(--t2);">${esc(u.company || '—')}</td>
+        <td style="padding:9px 10px;color:var(--t2);">${esc(PLAN_LABELS[u.plan_interest] || '—')}</td>
+        <td style="padding:9px 10px;color:var(--t3);font-family:var(--mono);">${esc(new Date(u.created_at).toLocaleDateString())}</td>
+        <td style="padding:9px 10px;color:var(--t3);font-family:var(--mono);">${u.last_login_at ? esc(new Date(u.last_login_at).toLocaleString()) : '—'}</td>
+        <td style="padding:9px 10px;"><span class="badge ${u.disabled ? 'badge-red' : 'badge-green'}">${u.disabled ? 'disabled' : 'active'}</span></td>
+        <td style="padding:9px 10px;"><button class="btn btn-ghost btn-sm" data-usr-id="${esc(u.id)}" data-usr-disable="${u.disabled ? 'false' : 'true'}">${u.disabled ? 'Enable' : 'Disable'}</button></td>
+      `;
+      tbody.appendChild(tr);
+    }
+    renderPagination('usr-pagination', d.page, d.pages, (pg) => loadUsers(pg, getUsrFilters()), d.total);
+  } catch (e) { toast('Failed to load users', 'error'); }
+}
+
+async function setUserDisabled(id, disabled) {
+  try {
+    await api('/admin/api/users/' + id + '/disabled', 'PATCH', { disabled });
+    toast(disabled ? 'User disabled and signed out' : 'User enabled', 'success');
+    loadUsers(1, getUsrFilters());
+  } catch (e) { toast('Failed to update user', 'error'); }
+}
+
 // ── RFQ / QUOTES ───────────────────────────────────────────
 const STATUS_BADGE_CLASS = {
   pending: 'badge-yellow', under_review: 'badge-yellow', quoted: 'badge-blue',
@@ -1644,6 +1690,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Inquiries
   document.getElementById('inq-apply-btn').addEventListener('click', () => loadInquiries(1, getInqFilters()));
   document.getElementById('inq-download-btn').addEventListener('click', downloadInquiriesCSV);
+
+  // Users — delegated for the same reason as the RFQ table below
+  document.getElementById('usr-apply-btn').addEventListener('click', () => loadUsers(1, getUsrFilters()));
+  document.getElementById('usr-tbody').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-usr-id]');
+    if (btn) setUserDisabled(parseInt(btn.dataset.usrId, 10), btn.dataset.usrDisable === 'true');
+  });
 
   // RFQ / Quotes
   document.getElementById('rfq-apply-btn').addEventListener('click', () => loadRfqList(1, getRfqFilters()));

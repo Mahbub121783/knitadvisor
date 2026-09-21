@@ -7,6 +7,7 @@
  * GET  /api/pattern/:slug — K/T/M pattern for a fabric
  */
 const express = require('express');
+const { requireUser } = require('../middleware/user-auth');
 const crypto = require('crypto');
 const router = express.Router();
 
@@ -82,7 +83,7 @@ function hashIp(ip) {
 // ============================================================
 // POST /api/calculate
 // ============================================================
-router.post('/calculate', async (req, res) => {
+router.post('/calculate', requireUser, async (req, res) => {
   const startTime = Date.now();
   const body = req.body || {};
 
@@ -210,7 +211,7 @@ router.post('/calculate', async (req, res) => {
 // ============================================================
 // POST /api/striper
 // ============================================================
-router.post('/striper', (req, res) => {
+router.post('/striper', requireUser, (req, res) => {
   const body = req.body || {};
 
   const validationErrors = validateStriperInput(body);
@@ -249,7 +250,7 @@ router.post('/striper', (req, res) => {
 // ============================================================
 // POST /api/quality — Predictive Shrinkage, Spirality & Quality
 // ============================================================
-router.post('/quality', (req, res) => {
+router.post('/quality', requireUser, (req, res) => {
   const body = req.body || {};
   const gsm = parseFloat(body.gsm);
   if (!gsm || isNaN(gsm)) {
@@ -277,7 +278,7 @@ router.post('/quality', (req, res) => {
 // ============================================================
 // POST /api/cost — Financial Raw Material Costing
 // ============================================================
-router.post('/cost', (req, res) => {
+router.post('/cost', requireUser, (req, res) => {
   const body = req.body || {};
   const gsm = parseFloat(body.gsm);
   if (!gsm || isNaN(gsm)) {
@@ -332,7 +333,7 @@ router.get('/garment-types', (req, res) => {
 // — so the caller gets a complete Fabric(net+gross) + Cut + Make + Trim +
 // Overhead + Profit breakdown instead of having to stitch calls together.
 // ============================================================
-router.post('/garment-costing', (req, res) => {
+router.post('/garment-costing', requireUser, (req, res) => {
   const body = req.body || {};
   const gsm = parseFloat(body.gsm);
   const garmentWeightG = parseFloat(body.garment_weight_g);
@@ -420,7 +421,7 @@ router.post('/garment-costing', (req, res) => {
 // amortized sample/development yardage), usable without running the full
 // CMT costing flow — e.g. for a bulk fabric-requirement/booking estimate.
 // ============================================================
-router.post('/fabric-consumption', (req, res) => {
+router.post('/fabric-consumption', requireUser, (req, res) => {
   const body = req.body || {};
   const result = calculateFabricConsumption({
     net_garment_weight_g: body.net_garment_weight_g,
@@ -459,7 +460,7 @@ router.post('/fabric-consumption', (req, res) => {
 // read, and pdfkit generation is pure in-process drawing (fast, no external
 // calls), so there is nothing worth caching.
 // ============================================================
-router.post('/techpack/generate', (req, res) => {
+router.post('/techpack/generate', requireUser, (req, res) => {
   const body = req.body || {};
   const fabric = body.fabric;
   const gsm = body.gsm ? parseFloat(body.gsm) : null;
@@ -675,7 +676,7 @@ router.get('/fabrics', (req, res) => {
 // answers "what does this construction weigh and how is it set up on a loom".
 // They share no input beyond the fabric name, so one endpoint would be two
 // endpoints wearing one URL.
-router.post('/woven/calculate', (req, res) => {
+router.post('/woven/calculate', requireUser, (req, res) => {
   try {
     const result = calculateWoven(req.body || {});
     if (!result.success) return res.status(400).json(result);
@@ -878,7 +879,7 @@ const parseLimiter = createRateLimiter({
   message: 'Too many natural-language queries. Please wait a minute.',
 });
 
-router.post('/parse', parseLimiter, async (req, res) => {
+router.post('/parse', requireUser, parseLimiter, async (req, res) => {
   const { text } = req.body || {};
   if (!text || typeof text !== 'string' || text.trim() === '') {
     return res.status(400).json({ error: 'text is required' });

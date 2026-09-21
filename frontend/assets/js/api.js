@@ -28,6 +28,9 @@ async function apiFetch(endpoint, options = {}) {
   const res = await fetch(url, config);
   const data = await res.json();
 
+  if (res.status === 401 && data && data.code === 'AUTH_REQUIRED' && window.kaSignInRedirect) {
+    window.kaSignInRedirect();
+  }
   if (!res.ok) {
     const err = new Error(data.error || data.message || `HTTP ${res.status}`);
     err.status = res.status;
@@ -289,6 +292,7 @@ async function apiTechPackGenerate(params) {
   if (!res.ok) {
     let errData = {};
     try { errData = await res.json(); } catch { /* non-JSON error body */ }
+    if (res.status === 401 && errData.code === 'AUTH_REQUIRED' && window.kaSignInRedirect) window.kaSignInRedirect();
     const err = new Error(errData.error || `HTTP ${res.status}`);
     err.status = res.status;
     err.data = errData;
