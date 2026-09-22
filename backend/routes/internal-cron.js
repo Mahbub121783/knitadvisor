@@ -175,6 +175,30 @@ const JOBS = {
   },
 
   /**
+   * Downgrade any student plan whose year is up. The account itself is never
+   * touched beyond its plan fields — this only flips
+   * app_student_verifications.status and the app_users cache columns that
+   * mirror it, and mails the account so a lapse is never silent.
+   */
+  async 'expire-student-verifications'() {
+    const studentRepo = require('../db/repositories/student-repo');
+    const userRepo = require('../db/repositories/user-repo');
+    const mailClient = require('../mail/client');
+    const { studentExpiredEmail } = require('../mail/templates');
+
+    const expired = await studentRepo.expireDue();
+    for (const row of expired) {
+      await userRepo.users.setStudentStatus(row.user_id, 'expired', null);
+      const user = await userRepo.users.findById(row.user_id);
+      if (user) {
+        const notice = studentExpiredEmail({ fullName: user.full_name });
+        await mailClient.sendMail({ to: user.email, subject: notice.subject, html: notice.html }).catch(() => {});
+      }
+    }
+    return { expired: expired.length };
+  },
+
+  /**
    * Close connections this app left idle in a transaction.
    * Mirrors the kill-idle-connections job already running for the OTS API. A
    * shared Postgres has a global connection ceiling, so one app leaking idle

@@ -8,6 +8,7 @@
  */
 const express = require('express');
 const { requireUser } = require('../middleware/user-auth');
+const { enforceDailyLimit } = require('../middleware/plan-limit');
 const userRepo = require('../db/repositories/user-repo');
 const { buildHistoryEntry } = require('../engine/domain/calc-history');
 const crypto = require('crypto');
@@ -95,7 +96,7 @@ function recordHistory(req, body, result) {
 // ============================================================
 // POST /api/calculate
 // ============================================================
-router.post('/calculate', requireUser, async (req, res) => {
+router.post('/calculate', requireUser, enforceDailyLimit, async (req, res) => {
   const startTime = Date.now();
   const body = req.body || {};
 
@@ -226,7 +227,7 @@ router.post('/calculate', requireUser, async (req, res) => {
 // ============================================================
 // POST /api/striper
 // ============================================================
-router.post('/striper', requireUser, (req, res) => {
+router.post('/striper', requireUser, enforceDailyLimit, (req, res) => {
   const body = req.body || {};
 
   const validationErrors = validateStriperInput(body);
@@ -265,7 +266,7 @@ router.post('/striper', requireUser, (req, res) => {
 // ============================================================
 // POST /api/quality — Predictive Shrinkage, Spirality & Quality
 // ============================================================
-router.post('/quality', requireUser, (req, res) => {
+router.post('/quality', requireUser, enforceDailyLimit, (req, res) => {
   const body = req.body || {};
   const gsm = parseFloat(body.gsm);
   if (!gsm || isNaN(gsm)) {
@@ -293,7 +294,7 @@ router.post('/quality', requireUser, (req, res) => {
 // ============================================================
 // POST /api/cost — Financial Raw Material Costing
 // ============================================================
-router.post('/cost', requireUser, (req, res) => {
+router.post('/cost', requireUser, enforceDailyLimit, (req, res) => {
   const body = req.body || {};
   const gsm = parseFloat(body.gsm);
   if (!gsm || isNaN(gsm)) {
@@ -348,7 +349,7 @@ router.get('/garment-types', (req, res) => {
 // — so the caller gets a complete Fabric(net+gross) + Cut + Make + Trim +
 // Overhead + Profit breakdown instead of having to stitch calls together.
 // ============================================================
-router.post('/garment-costing', requireUser, (req, res) => {
+router.post('/garment-costing', requireUser, enforceDailyLimit, (req, res) => {
   const body = req.body || {};
   const gsm = parseFloat(body.gsm);
   const garmentWeightG = parseFloat(body.garment_weight_g);
@@ -436,7 +437,7 @@ router.post('/garment-costing', requireUser, (req, res) => {
 // amortized sample/development yardage), usable without running the full
 // CMT costing flow — e.g. for a bulk fabric-requirement/booking estimate.
 // ============================================================
-router.post('/fabric-consumption', requireUser, (req, res) => {
+router.post('/fabric-consumption', requireUser, enforceDailyLimit, (req, res) => {
   const body = req.body || {};
   const result = calculateFabricConsumption({
     net_garment_weight_g: body.net_garment_weight_g,
@@ -475,7 +476,7 @@ router.post('/fabric-consumption', requireUser, (req, res) => {
 // read, and pdfkit generation is pure in-process drawing (fast, no external
 // calls), so there is nothing worth caching.
 // ============================================================
-router.post('/techpack/generate', requireUser, (req, res) => {
+router.post('/techpack/generate', requireUser, enforceDailyLimit, (req, res) => {
   const body = req.body || {};
   const fabric = body.fabric;
   const gsm = body.gsm ? parseFloat(body.gsm) : null;
@@ -691,7 +692,7 @@ router.get('/fabrics', (req, res) => {
 // answers "what does this construction weigh and how is it set up on a loom".
 // They share no input beyond the fabric name, so one endpoint would be two
 // endpoints wearing one URL.
-router.post('/woven/calculate', requireUser, (req, res) => {
+router.post('/woven/calculate', requireUser, enforceDailyLimit, (req, res) => {
   try {
     const result = calculateWoven(req.body || {});
     if (!result.success) return res.status(400).json(result);
@@ -894,7 +895,7 @@ const parseLimiter = createRateLimiter({
   message: 'Too many natural-language queries. Please wait a minute.',
 });
 
-router.post('/parse', requireUser, parseLimiter, async (req, res) => {
+router.post('/parse', requireUser, enforceDailyLimit, parseLimiter, async (req, res) => {
   const { text } = req.body || {};
   if (!text || typeof text !== 'string' || text.trim() === '') {
     return res.status(400).json({ error: 'text is required' });

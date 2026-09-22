@@ -53,9 +53,32 @@ const users = {
 
   findById(id) {
     return queryOne(
-      'SELECT id, email, username, username_changed_at, full_name, company, plan_interest, password_hash, disabled, email_verified, created_at, last_login_at FROM app_users WHERE id = $1',
+      'SELECT id, email, username, username_changed_at, full_name, company, plan_interest, password_hash, disabled, ' +
+      'email_verified, is_paid, student_status, student_expires_at, created_at, last_login_at FROM app_users WHERE id = $1',
       [id]
     );
+  },
+
+  /**
+   * Admin-set only — there is no payment gateway yet, so this is how an
+   * account becomes unlimited until one exists.
+   */
+  async setPaid(id, isPaid) {
+    const rows = await query('UPDATE app_users SET is_paid = $2 WHERE id = $1 RETURNING id, is_paid', [id, !!isPaid]);
+    return rows[0] || null;
+  },
+
+  /**
+   * The cached half of the student-plan state (db/repositories/student-repo.js
+   * holds the audit trail in app_student_verifications). Callers keep both in
+   * sync in the same request — see routes/account.js and routes/admin.js.
+   */
+  async setStudentStatus(id, status, expiresAt) {
+    const rows = await query(
+      'UPDATE app_users SET student_status = $2, student_expires_at = $3 WHERE id = $1 RETURNING id, student_status, student_expires_at',
+      [id, status, expiresAt || null]
+    );
+    return rows[0] || null;
   },
 
   /**
@@ -132,7 +155,8 @@ const users = {
     const params = term ? [term] : [];
     const total = Number((await queryOne('SELECT count(*)::int AS count FROM app_users ' + where, params)).count);
     const rows = await query(
-      'SELECT id, email, username, full_name, company, plan_interest, disabled, email_verified, created_at, last_login_at ' +
+      'SELECT id, email, username, full_name, company, plan_interest, disabled, email_verified, ' +
+      'is_paid, student_status, student_expires_at, created_at, last_login_at ' +
       'FROM app_users ' + where + ' ORDER BY created_at DESC, id DESC ' +
       'LIMIT ' + lim + ' OFFSET ' + ((pageN - 1) * lim),
       params
@@ -169,7 +193,7 @@ const sessions = {
   /** The user behind a valid, unexpired token hash — or null. Disabled accounts never match. */
   findUserByTokenHash(tokenHash) {
     return queryOne(
-      `SELECT u.id, u.email, u.full_name, u.company
+      `SELECT u.id, u.email, u.username, u.full_name, u.company, u.is_paid, u.student_status, u.student_expires_at
          FROM app_user_sessions s
          JOIN app_users u ON u.id = s.user_id
         WHERE s.token_hash = $1 AND s.expires_at > now() AND NOT u.disabled`,

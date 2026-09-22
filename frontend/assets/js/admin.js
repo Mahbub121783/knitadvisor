@@ -118,7 +118,7 @@ const TAB_TITLES = {
   'tab-overview': 'Dashboard', 'tab-logs': 'Query Logs', 'tab-providers': 'AI Providers',
   'tab-cache': 'Cache', 'tab-prices': 'Yarn Prices', 'tab-dyeing-prices': 'Dyeing Prices',
   'tab-validation': 'Real-Order Validation', 'tab-inquiries': 'Inquiries', 'tab-rfq': 'RFQ / Quotes',
-  'tab-users': 'Users', 'tab-settings': 'Settings',
+  'tab-users': 'Users', 'tab-students': 'Student Plan', 'tab-settings': 'Settings',
 };
 
 function switchTab(tabId) {
@@ -150,6 +150,10 @@ function switchTab(tabId) {
   } else if (tabId === 'tab-users' && !tabState.loaded.users) {
     tabState.loaded.users = true;
     loadUsers(1, {});
+  } else if (tabId === 'tab-students' && !tabState.loaded.students) {
+    tabState.loaded.students = true;
+    loadUniversities();
+    loadStudents(1, getStuFilters());
   } else if (tabId === 'tab-rfq' && !tabState.loaded.rfq) {
     tabState.loaded.rfq = true;
     loadRfqList(1, {});
@@ -318,6 +322,8 @@ async function loadOverview() {
 
     const rfqBadge = document.getElementById('sb-count-rfq');
     if (d.rfq.counts.pending > 0) { rfqBadge.textContent = d.rfq.counts.pending; rfqBadge.hidden = false; } else { rfqBadge.hidden = true; }
+    const stuBadge = document.getElementById('sb-count-students');
+    if (d.students && d.students.pending > 0) { stuBadge.textContent = d.students.pending; stuBadge.hidden = false; } else { stuBadge.hidden = true; }
     const provBadge = document.getElementById('sb-count-providers');
     const unhealthyCount = d.providers.health.filter(function (p) { return p.is_enabled && !p.is_healthy; }).length;
     if (unhealthyCount > 0) { provBadge.textContent = unhealthyCount; provBadge.hidden = false; } else { provBadge.hidden = true; }
@@ -1112,6 +1118,17 @@ async function downloadInquiriesCSV() {
 // ── USERS ──────────────────────────────────────────────────
 const PLAN_LABELS = { floor: 'Floor', mill: 'Mill', buying_house: 'Buying House' };
 
+// Mirrors engine/domain/student-eligibility.js's resolvePlanLimits() for
+// display only — the server is always the one that actually enforces it.
+function userPlanBadge(u) {
+  if (u.is_paid) return '<span class="badge badge-purple">Paid</span>';
+  if (u.student_status === 'active' && u.student_expires_at && new Date(u.student_expires_at) > new Date()) {
+    const days = Math.max(0, Math.ceil((new Date(u.student_expires_at) - Date.now()) / 86400000));
+    return '<span class="badge badge-blue">Student · ' + days + 'd left</span>';
+  }
+  return '<span class="badge badge-gray">Free</span>';
+}
+
 function getUsrFilters() {
   return { search: document.getElementById('usr-filter-search').value.trim() };
 }
@@ -1133,7 +1150,7 @@ async function loadUsers(page, filters) {
         <td style="padding:9px 10px;color:var(--t2);">${esc(u.full_name)}<div style="font-size:10px;color:var(--t3);">${esc(u.email)}</div></td>
         <td style="padding:9px 10px;color:var(--t2);font-family:var(--mono);">${esc(u.username || '—')}</td>
         <td style="padding:9px 10px;color:var(--t2);">${esc(u.company || '—')}</td>
-        <td style="padding:9px 10px;color:var(--t2);">${esc(PLAN_LABELS[u.plan_interest] || '—')}</td>
+        <td style="padding:9px 10px;white-space:nowrap;">${userPlanBadge(u)}</td>
         <td style="padding:9px 10px;color:var(--t3);font-family:var(--mono);">${esc(new Date(u.created_at).toLocaleDateString())}</td>
         <td style="padding:9px 10px;color:var(--t3);font-family:var(--mono);">${u.last_login_at ? esc(new Date(u.last_login_at).toLocaleString()) : '—'}</td>
         <td style="padding:9px 10px;white-space:nowrap;">
@@ -1216,6 +1233,19 @@ async function openUserDetail(id) {
     setUdMsg('ud-email-msg', '', null);
     setUdMsg('ud-pw-msg', 'At least 10 characters, 3 of: lower/upper/number/symbol. Signs out every device.', null);
 
+    const paidBtn = document.getElementById('ud-paid-toggle');
+    paidBtn.textContent = u.is_paid ? 'Paid — click to remove' : 'Not paid — click to grant';
+    paidBtn.dataset.paid = u.is_paid ? 'false' : 'true'; // the value it will BECOME on click
+    const stuLine = document.getElementById('ud-student-line');
+    if (u.student_status === 'active' && u.student_expires_at) {
+      stuLine.innerHTML = 'Student plan active until ' + esc(new Date(u.student_expires_at).toLocaleDateString()) +
+        ' — manage on the <span style="text-decoration:underline;cursor:pointer;" id="ud-goto-students">Student Plan</span> tab.';
+    } else if (u.student_status && u.student_status !== 'none') {
+      stuLine.textContent = 'Student application: ' + u.student_status + '.';
+    } else {
+      stuLine.textContent = 'No student application on file.';
+    }
+
     document.getElementById('user-detail-modal').classList.remove('hidden');
   } catch (e) { toast('Failed to load user detail', 'error'); }
 }
@@ -1284,6 +1314,172 @@ async function saveUserPassword() {
   } catch (e) {
     setUdMsg('ud-pw-msg', e.message, false);
   } finally { btn.disabled = false; }
+}
+
+async function toggleUserPaid() {
+  if (openUserId == null) return;
+  const btn = document.getElementById('ud-paid-toggle');
+  const nextValue = btn.dataset.paid === 'true';
+  btn.disabled = true;
+  try {
+    await api('/admin/api/users/' + openUserId + '/paid', 'PATCH', { is_paid: nextValue });
+    toast(nextValue ? 'Marked as paid — unlimited use' : 'Paid flag removed', 'success');
+    loadUsers(1, getUsrFilters());
+    await openUserDetail(openUserId);
+  } catch (e) { toast(e.message, 'error'); }
+  finally { btn.disabled = false; }
+}
+
+// ── STUDENT PLAN: university allow-list + verification queue ─
+const STU_STATUS_BADGE = {
+  pending: 'badge-yellow', active: 'badge-green', rejected: 'badge-red',
+  revoked: 'badge-red', expired: 'badge-gray',
+};
+
+let universitiesCache = [];
+
+async function loadUniversities() {
+  try {
+    const d = await api('/admin/api/universities');
+    universitiesCache = d.universities || [];
+    const wrap = document.getElementById('uni-list');
+    if (!universitiesCache.length) {
+      wrap.innerHTML = '<div style="color:var(--t3);font-size:11px;">No universities added yet — a student can still apply as "not listed" for manual review.</div>';
+      return;
+    }
+    wrap.innerHTML = universitiesCache.map((u) => `
+      <span class="badge ${u.active ? 'badge-blue' : 'badge-gray'}" style="font-size:11px;padding:5px 9px;display:inline-flex;gap:8px;align-items:center;">
+        ${esc(u.name)} <span style="opacity:.7;">@${esc(u.domain)}</span>
+        <button class="btn-icon" data-uni-toggle="${esc(u.id)}" data-uni-active="${u.active ? 'false' : 'true'}" title="${u.active ? 'Disable' : 'Enable'}" style="border:none;background:none;cursor:pointer;color:inherit;">${u.active ? '⏸' : '▶'}</button>
+        <button class="btn-icon" data-uni-delete="${esc(u.id)}" title="Remove" style="border:none;background:none;cursor:pointer;color:var(--a3);">✕</button>
+      </span>
+    `).join('');
+  } catch (e) { toast('Failed to load universities', 'error'); }
+}
+
+async function addUniversity() {
+  const nameInput = document.getElementById('uni-name-input');
+  const domainInput = document.getElementById('uni-domain-input');
+  const name = nameInput.value.trim();
+  const domain = domainInput.value.trim().toLowerCase();
+  const msg = document.getElementById('uni-add-msg');
+  const btn = document.getElementById('uni-add-btn');
+  btn.disabled = true;
+  try {
+    await api('/admin/api/universities', 'POST', { name, domain });
+    nameInput.value = ''; domainInput.value = '';
+    msg.textContent = 'Added.'; msg.style.color = 'var(--a1)';
+    loadUniversities();
+  } catch (e) {
+    msg.textContent = e.message; msg.style.color = 'var(--a3)';
+  } finally { btn.disabled = false; }
+}
+
+async function toggleUniversity(id, active) {
+  try { await api('/admin/api/universities/' + id + '/active', 'PATCH', { active }); loadUniversities(); }
+  catch (e) { toast(e.message, 'error'); }
+}
+
+async function deleteUniversity(id) {
+  if (!window.confirm('Remove this university from the allow-list? Past applications keep their record either way.')) return;
+  try { await api('/admin/api/universities/' + id, 'DELETE'); loadUniversities(); }
+  catch (e) { toast(e.message, 'error'); }
+}
+
+function getStuFilters() {
+  return { status: document.getElementById('stu-filter-status').value };
+}
+
+async function loadStudents(page, filters) {
+  try {
+    const p = new URLSearchParams({ page, limit: 25 });
+    if (filters.status) p.append('status', filters.status);
+    const d = await api('/admin/api/students?' + p);
+
+    const tbody = document.getElementById('stu-tbody');
+    tbody.innerHTML = '';
+    if (!d.rows.length) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--t3);">No applications</td></tr>';
+    }
+    for (const s of d.rows) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="padding:9px 10px;color:var(--t2);">${esc(s.full_name)}<div style="font-size:10px;color:var(--t3);">${esc(s.account_email)}</div></td>
+        <td style="padding:9px 10px;color:var(--t2);">${esc(s.university_name)}</td>
+        <td style="padding:9px 10px;">${s.student_email_verified_at ? '<span class="badge badge-green">yes</span>' : (s.student_email ? '<span class="badge badge-gray">no</span>' : '<span class="badge badge-gray">n/a</span>')}</td>
+        <td style="padding:9px 10px;">${s.document_path ? '<span class="badge badge-green">uploaded</span>' : '<span class="badge badge-gray">none</span>'}</td>
+        <td style="padding:9px 10px;"><span class="badge ${STU_STATUS_BADGE[s.status] || 'badge-gray'}">${esc(s.status)}</span></td>
+        <td style="padding:9px 10px;color:var(--t3);font-family:var(--mono);">${esc(new Date(s.created_at).toLocaleDateString())}</td>
+        <td style="padding:9px 10px;"><button class="btn btn-ghost btn-sm" data-stu-view="${esc(s.id)}">Review</button></td>
+      `;
+      tbody.appendChild(tr);
+    }
+    renderPagination('stu-pagination', d.page, d.pages, (pg) => loadStudents(pg, getStuFilters()), d.total);
+  } catch (e) { toast('Failed to load student applications', 'error'); }
+}
+
+let openStudentId = null;
+
+async function openStudentDetail(id) {
+  try {
+    const s = await api('/admin/api/students/' + id);
+    openStudentId = id;
+    document.getElementById('sd-name').textContent = s.full_name || '(no name)';
+    document.getElementById('sd-email').textContent = (s.username ? '@' + s.username + '  ·  ' : '') + s.account_email;
+
+    const meta = [];
+    meta.push('University: <b>' + esc(s.university_name) + '</b>' + (s.university_id ? ' (allow-listed)' : ' (not listed — manual review)'));
+    if (s.student_email) meta.push('University email: ' + esc(s.student_email) + (s.student_email_verified_at ? ' (verified)' : ' (not verified)'));
+    meta.push('Status: <b>' + esc(s.status) + '</b>' + (s.decided_by ? ' by ' + esc(s.decided_by) : ''));
+    if (s.expires_at) meta.push('Expires: ' + esc(new Date(s.expires_at).toLocaleDateString()));
+    if (s.reason) meta.push('Reason on file: ' + esc(s.reason));
+    document.getElementById('sd-meta').innerHTML = meta.map((m) => '<div>' + m + '</div>').join('');
+
+    document.getElementById('sd-view-doc').disabled = !s.document_path;
+    document.getElementById('sd-view-doc').textContent = s.document_path ? 'View uploaded document' : 'No document uploaded';
+    document.getElementById('sd-reason').value = '';
+    document.getElementById('sd-msg').textContent = '';
+
+    const actions = document.getElementById('sd-actions');
+    let btns = '<button class="btn btn-ghost" id="sd-cancel-2">Close</button>';
+    if (s.status === 'pending') {
+      btns += '<button class="btn btn-primary" data-sd-act="approve">Approve</button>';
+      btns += '<button class="btn btn-danger" data-sd-act="reject">Reject</button>';
+    } else if (s.status === 'active') {
+      btns += '<button class="btn btn-danger" data-sd-act="revoke">Revoke</button>';
+    }
+    actions.innerHTML = btns;
+
+    document.getElementById('student-detail-modal').classList.remove('hidden');
+  } catch (e) { toast('Failed to load that application', 'error'); }
+}
+
+function closeStudentDetail() {
+  document.getElementById('student-detail-modal').classList.add('hidden');
+  openStudentId = null;
+}
+
+async function viewStudentDocument() {
+  if (openStudentId == null) return;
+  try {
+    const res = await fetch(API_BASE + '/admin/api/students/' + openStudentId + '/document', { headers: { 'X-Admin-Token': getToken() } });
+    if (!res.ok) throw new Error('Could not load the document');
+    const blob = await res.blob();
+    window.open(URL.createObjectURL(blob), '_blank');
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function decideStudent(action) {
+  if (openStudentId == null) return;
+  const reason = document.getElementById('sd-reason').value.trim();
+  const msg = document.getElementById('sd-msg');
+  try {
+    await api('/admin/api/students/' + openStudentId + '/' + action, 'POST', reason ? { reason } : undefined);
+    toast('Application ' + action + 'd', 'success');
+    closeStudentDetail();
+    loadStudents(1, getStuFilters());
+    loadOverview(); // refreshes the sidebar pending badge
+  } catch (e) { msg.textContent = e.message; msg.style.color = 'var(--a3)'; }
 }
 
 // ── RFQ / QUOTES ───────────────────────────────────────────
@@ -1957,6 +2153,36 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('ud-username-save').addEventListener('click', saveUserUsername);
   document.getElementById('ud-email-save').addEventListener('click', saveUserEmail);
   document.getElementById('ud-pw-save').addEventListener('click', saveUserPassword);
+  document.getElementById('ud-paid-toggle').addEventListener('click', toggleUserPaid);
+  document.getElementById('ud-student-line').addEventListener('click', (e) => {
+    if (e.target.closest('#ud-goto-students')) { closeUserDetail(); switchTab('tab-students'); }
+  });
+
+  // Student plan — university allow-list
+  document.getElementById('uni-add-btn').addEventListener('click', addUniversity);
+  document.getElementById('uni-list').addEventListener('click', (e) => {
+    const t = e.target.closest('[data-uni-toggle]');
+    if (t) { toggleUniversity(parseInt(t.dataset.uniToggle, 10), t.dataset.uniActive === 'true'); return; }
+    const d = e.target.closest('[data-uni-delete]');
+    if (d) deleteUniversity(parseInt(d.dataset.uniDelete, 10));
+  });
+
+  // Student plan — verification queue
+  document.getElementById('stu-apply-btn').addEventListener('click', () => loadStudents(1, getStuFilters()));
+  document.getElementById('stu-tbody').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-stu-view]');
+    if (btn) openStudentDetail(parseInt(btn.dataset.stuView, 10));
+  });
+  document.getElementById('sd-cancel').addEventListener('click', closeStudentDetail);
+  document.getElementById('student-detail-modal').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeStudentDetail();
+  });
+  document.getElementById('sd-view-doc').addEventListener('click', viewStudentDocument);
+  document.getElementById('sd-actions').addEventListener('click', (e) => {
+    if (e.target.closest('#sd-cancel-2')) { closeStudentDetail(); return; }
+    const btn = e.target.closest('[data-sd-act]');
+    if (btn) decideStudent(btn.dataset.sdAct);
+  });
 
   // Dashboard alerts jump straight to the tab they are about
   document.getElementById('ov-alerts').addEventListener('click', (e) => {

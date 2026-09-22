@@ -8,17 +8,36 @@
  *   PATCH  /profile             name and company
  *   POST   /username            change username (self-service, 60-day cooldown)
  *   POST   /password            change password (ends their other sessions)
+ *   GET    /universities        allow-listed universities, for the student-plan picker
+ *   GET    /student/status      this account's student verification state
+ *   POST   /student/apply       start a verification (a listed university + email, or "Other")
+ *   POST   /student/verify-code confirm the code mailed to the university email
+ *   POST   /student/document    upload the ID card / admission document
  *
  * Every route is behind requireUser and only ever reads or writes rows keyed to
  * req.user.id — there is no user id in any URL or body to tamper with.
  */
 const express = require('express');
 const router = express.Router();
+const fs = require('fs');
 
 const userRepo = require('../db/repositories/user-repo');
+const universityRepo = require('../db/repositories/university-repo');
+const studentRepo = require('../db/repositories/student-repo');
+const usageRepo = require('../db/repositories/usage-repo');
 const { requireUser } = require('../middleware/user-auth');
 const { hashPassword, verifyPassword } = require('../middleware/password');
 const { createRateLimiter } = require('../middleware/rate-limiter');
+const { studentDocUpload, relativePath, absolutePath } = require('../middleware/upload');
+const { issueAndSend } = require('../services/account-codes');
+const { issueCode, checkCode } = require('../engine/domain/otp');
+const {
+  matchUniversityDomain, resolveOutcome, resolvePlanLimits, STUDENT_DURATION_DAYS,
+} = require('../engine/domain/student-eligibility');
+const {
+  studentApprovedEmail, studentPendingReviewEmail,
+} = require('../mail/templates');
+const mailClient = require('../mail/client');
 const {
   validateProfile, validatePasswordChange, validateUsernameChange, USERNAME_CHANGE_COOLDOWN_DAYS,
 } = require('../engine/domain/auth-validation');
@@ -34,6 +53,24 @@ const usernameLimiter = createRateLimiter({
   max: 6,
   windowMs: 15 * 60 * 1000,
   message: 'Too many attempts. Try again in a few minutes.',
+});
+const studentApplyLimiter = createRateLimiter({
+  name: 'account-student-apply',
+  max: 8,
+  windowMs: 15 * 60 * 1000,
+  message: 'Too many attempts. Try again in a few minutes.',
+});
+const studentCodeLimiter = createRateLimiter({
+  name: 'account-student-code',
+  max: 10,
+  windowMs: 15 * 60 * 1000,
+  message: 'Too many attempts. Try again in a few minutes.',
+});
+const studentDocLimiter = createRateLimiter({
+  name: 'account-student-doc',
+  max: 8,
+  windowMs: 15 * 60 * 1000,
+  message: 'Too many uploads. Try again in a few minutes.',
 });
 
 router.use(requireUser);
@@ -142,6 +179,171 @@ router.post('/password', passwordLimiter, async (req, res) => {
     await userRepo.sessions.removeOthers(req.user.id, req.sessionTokenHash);
     res.json({ success: true });
   } catch (err) { fail(res, 'password', err, 'Could not change your password.'); }
+});
+
+// ── Student plan ─────────────────────────────────────────────────────────
+
+/**
+ * Checks whether a verification now qualifies for the automatic path and, if
+ * so, activates it — shared by the document-upload and verify-code routes
+ * since either one can be the step that completes the set (the flow does
+ * not force a strict order between "confirm the code" and "upload the
+ * document").
+ * @returns {Promise<boolean>} whether it was just auto-approved
+ */
+async function tryAutoApprove(verification, user) {
+  const outcome = resolveOutcome({
+    universityMatched: !!verification.university_id,
+    emailVerified: !!verification.student_email_verified_at,
+    hasDocument: !!verification.document_path,
+  });
+  if (outcome !== 'active') return false;
+  const expiresAt = new Date(Date.now() + STUDENT_DURATION_DAYS * 86400000);
+  await studentRepo.decide(verification.id, 'active', { decidedBy: 'auto', expiresAt });
+  await userRepo.users.setStudentStatus(user.id, 'active', expiresAt);
+  const { subject, html } = studentApprovedEmail({ fullName: user.full_name, expiresAt });
+  mailClient.sendMail({ to: user.email, subject, html }).catch(() => {});
+  return true;
+}
+
+router.get('/universities', async (req, res) => {
+  try {
+    res.json({ success: true, universities: await universityRepo.listActive() });
+  } catch (err) { fail(res, 'universities', err, 'Could not load the university list.'); }
+});
+
+router.get('/student/status', async (req, res) => {
+  try {
+    const [verification, usedToday, row] = await Promise.all([
+      studentRepo.latestForUser(req.user.id),
+      usageRepo.todayCount(req.user.id),
+      userRepo.users.findById(req.user.id),
+    ]);
+    const { plan, dailyLimit } = resolvePlanLimits(row);
+    res.json({
+      success: true,
+      plan, daily_limit: dailyLimit, used_today: usedToday,
+      verification: verification ? {
+        id: verification.id,
+        status: verification.status,
+        university_name: verification.university_name,
+        student_email: verification.student_email,
+        email_verified: !!verification.student_email_verified_at,
+        has_document: !!verification.document_path,
+        reason: verification.reason,
+        expires_at: verification.expires_at,
+        created_at: verification.created_at,
+      } : null,
+    });
+  } catch (err) { fail(res, 'student status', err, 'Could not load your student status.'); }
+});
+
+router.post('/student/apply', studentApplyLimiter, async (req, res) => {
+  try {
+    const current = await studentRepo.latestForUser(req.user.id);
+    if (current && current.status === 'active' && current.expires_at && new Date(current.expires_at) > new Date()) {
+      return res.status(409).json({ success: false, error: 'Your student plan is already active.' });
+    }
+    if (current && current.status === 'pending') {
+      return res.status(409).json({ success: false, error: 'You already have an application awaiting review.' });
+    }
+
+    const universityId = req.body && req.body.university_id != null ? parseInt(req.body.university_id, 10) : null;
+
+    if (universityId) {
+      const uni = await universityRepo.findById(universityId);
+      if (!uni || !uni.active) return res.status(400).json({ success: false, error: 'Please choose a university from the list.' });
+      const studentEmail = String((req.body && req.body.student_email) || '').trim().toLowerCase();
+      if (!studentEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(studentEmail)) {
+        return res.status(400).json({ success: false, error: 'Enter a valid university email address.' });
+      }
+      const matched = matchUniversityDomain(studentEmail, [uni]);
+      if (!matched) {
+        return res.status(400).json({ success: false, error: `That email doesn't match ${uni.name}'s registered domain (@${uni.domain}).` });
+      }
+      const row = await studentRepo.create({
+        userId: req.user.id, universityId: uni.id, universityName: uni.name, studentEmail,
+      });
+      await issueAndSend(req.user.id, 'student_email', { to: studentEmail, fullName: req.user.full_name });
+      return res.json({ success: true, verification_id: row.id, needs_code: true, needs_document: true });
+    }
+
+    // "Other" — no domain to check, so no automatic path: document upload alone, reviewed by an admin.
+    const otherName = String((req.body && req.body.university_name_other) || '').trim().slice(0, 160);
+    if (otherName.length < 2) return res.status(400).json({ success: false, error: 'Enter your university’s name.' });
+    const row = await studentRepo.create({ userId: req.user.id, universityId: null, universityName: otherName, studentEmail: null });
+    res.json({ success: true, verification_id: row.id, needs_code: false, needs_document: true });
+  } catch (err) { fail(res, 'student apply', err, 'Could not start your student application.'); }
+});
+
+router.post('/student/verify-code', studentCodeLimiter, async (req, res) => {
+  try {
+    const verification = await studentRepo.latestForUser(req.user.id);
+    if (!verification || !verification.student_email || verification.status !== 'pending') {
+      return res.status(400).json({ success: false, error: 'No pending university email to verify.' });
+    }
+    if (verification.student_email_verified_at) {
+      return res.json({ success: true, already_verified: true });
+    }
+    const codeRow = await userRepo.codes.latest(req.user.id, 'student_email');
+    const result = checkCode(String((req.body && req.body.code) || ''), codeRow);
+    if (!result.ok) {
+      if (codeRow && result.reason === 'mismatch') await userRepo.codes.incrementAttempts(codeRow.id);
+      const messages = {
+        not_found: 'Request a new code first.',
+        consumed: 'That code was already used. Request a new one.',
+        expired: 'That code expired. Request a new one.',
+        too_many_attempts: 'Too many wrong attempts. Request a new code.',
+        mismatch: 'That code is incorrect.',
+      };
+      return res.status(400).json({ success: false, error: messages[result.reason] || 'That code is incorrect.' });
+    }
+    await userRepo.codes.consume(codeRow.id);
+    await studentRepo.markEmailVerified(verification.id);
+
+    // A document uploaded before the code was verified (order isn't enforced)
+    // means every condition is now met — approve here rather than leaving it
+    // stuck at "pending" until some other action happens to re-check it.
+    if (verification.document_path) {
+      const approved = await tryAutoApprove({ ...verification, student_email_verified_at: new Date() }, req.user);
+      if (approved) return res.json({ success: true, needs_document: false, status: 'active' });
+    }
+    res.json({ success: true, needs_document: !verification.document_path });
+  } catch (err) { fail(res, 'student verify-code', err, 'Could not verify that code.'); }
+});
+
+router.post('/student/document', studentDocLimiter, (req, res) => {
+  studentDocUpload(req, res, async (uploadErr) => {
+    if (uploadErr) {
+      const msg = uploadErr.code === 'LIMIT_FILE_SIZE' ? 'That file is too large (8MB max).' : 'Upload a JPG, PNG or PDF.';
+      return res.status(400).json({ success: false, error: msg });
+    }
+    if (!req.file) return res.status(400).json({ success: false, error: 'Attach your ID card or admission document.' });
+
+    try {
+      const verification = await studentRepo.latestForUser(req.user.id);
+      if (!verification || verification.status !== 'pending') {
+        fs.unlink(req.file.path, () => {});
+        return res.status(400).json({ success: false, error: 'Start an application first.' });
+      }
+
+      // Replace, not accumulate — an old upload for this same attempt is dead weight.
+      if (verification.document_path) {
+        fs.unlink(absolutePath(verification.document_path), () => {});
+      }
+      await studentRepo.setDocument(verification.id, relativePath(req));
+
+      const approved = await tryAutoApprove({ ...verification, document_path: relativePath(req) }, req.user);
+      if (approved) {
+        const fresh = await studentRepo.findById(verification.id);
+        return res.json({ success: true, status: 'active', expires_at: fresh.expires_at });
+      }
+
+      const { subject, html } = studentPendingReviewEmail({ fullName: req.user.full_name });
+      mailClient.sendMail({ to: req.user.email, subject, html }).catch(() => {});
+      res.json({ success: true, status: 'pending' });
+    } catch (err) { fail(res, 'student document', err, 'Could not save your document.'); }
+  });
 });
 
 module.exports = router;

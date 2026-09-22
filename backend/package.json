@@ -18,6 +18,7 @@
     "groq-sdk": "^1.2.1",
     "helmet": "^7.1.0",
     "lru-cache": "^10.1.0",
+    "multer": "^2.0.1",
     "mysql2": "^3.6.5",
     "nodemailer": "^10.0.10",
     "pdfkit": "^0.20.2",

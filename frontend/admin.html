@@ -231,6 +231,7 @@
     .badge-yellow{ background: rgba(255,179,0,.12); color: var(--a4); border: 1px solid rgba(255,179,0,.25); }
     .badge-blue  { background: rgba(108,142,255,.12); color: var(--a2); border: 1px solid rgba(108,142,255,.25); }
     .badge-gray  { background: var(--bg4); color: var(--t3); border: 1px solid var(--line); }
+    .badge-purple{ background: rgba(168,109,255,.12); color: #A86DFF; border: 1px solid rgba(168,109,255,.3); }
 
     /* ── FORM ── */
     .form-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
@@ -721,6 +722,10 @@
         <button class="tab-btn sb-link" data-tab="tab-users">
           <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke-linecap="round"/><path d="M16 4.5c1.7.4 3 2 3 3.9 0 1.9-1.3 3.5-3 3.9M21 20c0-2.9-2-5.3-4.7-5.9" stroke-linecap="round"/></svg>
           Users
+        </button>
+        <button class="tab-btn sb-link" data-tab="tab-students">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M12 3 2 8l10 5 10-5-10-5z"/><path d="M6 10.5V16c0 1.7 2.7 3 6 3s6-1.3 6-3v-5.5"/></svg>
+          Student Plan<span class="sb-count" id="sb-count-students" hidden>0</span>
         </button>
       </div>
       <div class="sb-group">
@@ -1273,12 +1278,96 @@
       <div class="tbl-wrap">
         <table class="tbl">
           <thead><tr>
-            <th>Name</th><th>Username</th><th>Company</th><th>Plan interest</th><th>Joined</th><th>Last sign-in</th><th>Status</th><th></th>
+            <th>Name</th><th>Username</th><th>Company</th><th>Plan</th><th>Joined</th><th>Last sign-in</th><th>Status</th><th></th>
           </tr></thead>
           <tbody id="usr-tbody"></tbody>
         </table>
       </div>
       <div id="usr-pagination" class="pagination"></div>
+    </div>
+
+    <div id="tab-students" class="tab-panel">
+      <div class="row-between mb-20">
+        <div>
+          <div class="section-title">Student plan</div>
+          <div class="section-sub">Allow-listed universities, and every verification attempt — automatic and manual</div>
+        </div>
+      </div>
+
+      <div class="card mb-16">
+        <div class="form-row" style="align-items:flex-end;">
+          <div class="form-group" style="min-width:200px;">
+            <label class="form-label">University name</label>
+            <input type="text" id="uni-name-input" class="form-input" placeholder="e.g. BRAC University" maxlength="160">
+          </div>
+          <div class="form-group" style="min-width:200px;">
+            <label class="form-label">Student email domain</label>
+            <input type="text" id="uni-domain-input" class="form-input" placeholder="e.g. g.bracu.ac.bd">
+          </div>
+          <div class="form-group" style="justify-content:flex-end;">
+            <button id="uni-add-btn" class="btn btn-primary">Add university</button>
+          </div>
+        </div>
+        <div id="uni-add-msg" style="font-size:11px;min-height:15px;margin-top:6px;color:var(--t3);">Only an exact match of this domain lets a student auto-approve — never a wildcard, so a look-alike domain can't slip in.</div>
+        <div id="uni-list" style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;"></div>
+      </div>
+
+      <div class="card mb-16">
+        <div class="form-row">
+          <div class="form-group" style="min-width:200px;">
+            <label class="form-label">Status</label>
+            <select id="stu-filter-status" class="form-input">
+              <option value="pending">Pending review</option>
+              <option value="active">Active</option>
+              <option value="rejected">Rejected</option>
+              <option value="revoked">Revoked</option>
+              <option value="expired">Expired</option>
+              <option value="">All</option>
+            </select>
+          </div>
+          <div class="form-group" style="justify-content:flex-end;">
+            <label class="form-label" style="opacity:0;">.</label>
+            <button id="stu-apply-btn" class="btn btn-ghost">Apply</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr>
+            <th>Applicant</th><th>University</th><th>Email verified</th><th>Document</th><th>Status</th><th>Applied</th><th></th>
+          </tr></thead>
+          <tbody id="stu-tbody"></tbody>
+        </table>
+      </div>
+      <div id="stu-pagination" class="pagination"></div>
+    </div>
+
+    <!-- ── STUDENT APPLICATION MODAL ── -->
+    <div id="student-detail-modal" class="modal-overlay hidden">
+      <div class="modal-box" style="max-width:480px;">
+        <div class="u-head">
+          <div>
+            <div class="u-name" id="sd-name">—</div>
+            <div class="u-email" id="sd-email">—</div>
+          </div>
+        </div>
+        <div class="form-group modal-full mb-16">
+          <label class="form-label">Application</label>
+          <div id="sd-meta" style="font-size:12px;color:var(--t2);line-height:1.7;"></div>
+        </div>
+        <div class="form-group modal-full mb-16">
+          <button class="btn btn-ghost" id="sd-view-doc">View uploaded document</button>
+        </div>
+        <div class="form-group modal-full">
+          <label class="form-label">Reason <span style="opacity:.6;">(shown to the applicant, for reject/revoke)</span></label>
+          <input type="text" id="sd-reason" class="form-input" maxlength="300" placeholder="optional">
+        </div>
+        <div id="sd-msg" style="font-size:11px;min-height:15px;margin-top:8px;"></div>
+        <div class="modal-footer" id="sd-actions">
+          <button class="btn btn-ghost" id="sd-cancel">Close</button>
+        </div>
+      </div>
     </div>
 
     <!-- ── USER DETAIL MODAL ── -->
@@ -1325,6 +1414,12 @@
             <button class="btn btn-ghost btn-sm" id="ud-pw-save">Set password</button>
           </div>
           <div id="ud-pw-msg" style="font-size:10.5px;min-height:15px;margin-top:5px;">At least 10 characters, 3 of: lower/upper/number/symbol. Signs out every device.</div>
+
+          <div class="row" style="margin-top:12px;align-items:center;">
+            <span style="font-size:12px;color:var(--t2);flex:1;">Paid plan (no payment gateway yet — admin-set, unlimited daily use)</span>
+            <button class="btn btn-ghost btn-sm" id="ud-paid-toggle">—</button>
+          </div>
+          <div id="ud-student-line" style="font-size:10.5px;min-height:15px;margin-top:8px;color:var(--t3);"></div>
         </div>
 
         <div class="modal-footer">

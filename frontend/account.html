@@ -54,8 +54,10 @@
     .form-card .sub { color: var(--t3); font-size: 13px; margin-bottom: 16px; }
     .frow { margin-bottom: 14px; }
     .frow label { display: block; font-size: 12.5px; font-weight: 600; margin-bottom: 6px; }
-    .frow input { width: 100%; }
+    .frow input, .frow select { width: 100%; }
     .frow input[readonly] { background: var(--bg2); color: var(--t2); }
+    .frow input[type="file"] { padding: 9px 12px; }
+    #student-card .msg:empty, #student-card .msg[role="status"]:empty { min-height: 0; margin-top: 0; }
     .msg { font-size: 13px; margin-top: 10px; min-height: 18px; }
     .msg.ok { color: var(--good); }
     .msg.err { color: var(--danger); }
@@ -126,6 +128,51 @@
           </div>
           <button class="btn btn-primary" type="submit" id="uname-save">Change username</button>
           <div class="msg" id="uname-msg" role="status"></div>
+        </form>
+      </div>
+
+      <div class="card form-card" id="student-card">
+        <h2>Student plan</h2>
+        <p class="sub" id="student-sub">Verify you're a student for 30 requests a day, free for one year.</p>
+        <div id="student-status-box" style="margin-bottom:14px;" hidden></div>
+
+        <form id="student-apply-form" novalidate>
+          <div class="frow">
+            <label for="student-uni">University</label>
+            <select class="form-input" id="student-uni">
+              <option value="">Loading…</option>
+            </select>
+          </div>
+          <div class="frow" id="student-uni-other-row" hidden>
+            <label for="student-uni-other">Your university's name</label>
+            <input class="form-input" id="student-uni-other" type="text" maxlength="160" placeholder="e.g. XYZ Textile College">
+          </div>
+          <div class="frow" id="student-email-row" hidden>
+            <label for="student-email">University email</label>
+            <input class="form-input" id="student-email" type="email" placeholder="you@youruniversity.edu.bd" autocomplete="email">
+          </div>
+          <button class="btn btn-primary" type="submit" id="student-apply-btn">Start verification</button>
+          <div class="msg" id="student-apply-msg" role="status"></div>
+        </form>
+
+        <form id="student-code-form" novalidate hidden>
+          <div class="frow">
+            <label for="student-code">Code sent to your university email</label>
+            <input class="form-input" id="student-code" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code">
+            <p class="msg" style="margin-top:4px;">Can't find it? Check your spam folder — university mail servers sometimes file it there.</p>
+          </div>
+          <button class="btn btn-primary" type="submit" id="student-code-btn">Verify code</button>
+          <div class="msg" id="student-code-msg" role="status"></div>
+        </form>
+
+        <form id="student-doc-form" novalidate hidden>
+          <div class="frow">
+            <label for="student-doc">Student ID card or admission letter</label>
+            <input class="form-input" id="student-doc" type="file" accept="image/jpeg,image/png,image/webp,application/pdf">
+            <p class="msg" style="margin-top:4px;">JPG, PNG or PDF, up to 8MB.</p>
+          </div>
+          <button class="btn btn-primary" type="submit" id="student-doc-btn">Submit</button>
+          <div class="msg" id="student-doc-msg" role="status"></div>
         </form>
       </div>
 
@@ -399,12 +446,143 @@
       .then(function () { btn.disabled = false; });
   });
 
+  /* ---------- student plan ---------- */
+  var studentUniversities = [];
+  var studentVer = null;
+
+  function studentPlanLabel(plan) {
+    return plan === 'paid' ? 'Paid plan — unlimited' : plan === 'student' ? 'Student plan — 30/day' : 'Free plan — 5/day';
+  }
+
+  function renderStudentUsage(d) {
+    var box = $('student-status-box');
+    var usage = d.daily_limit == null ? 'Unlimited requests.' : (d.used_today + ' of ' + d.daily_limit + ' requests used today.');
+    box.innerHTML = '<p class="sub" style="margin:0;"><b>' + esc(studentPlanLabel(d.plan)) + '</b> · ' + esc(usage) + '</p>';
+    box.hidden = false;
+  }
+
+  function showStudentStep(step) {
+    $('student-apply-form').hidden = step !== 'apply';
+    $('student-code-form').hidden = step !== 'code';
+    $('student-doc-form').hidden = step !== 'doc';
+  }
+
+  function studentUniOnChange() {
+    var v = $('student-uni').value;
+    $('student-uni-other-row').hidden = v !== 'other';
+    $('student-email-row').hidden = !(v && v !== 'other');
+  }
+  $('student-uni').addEventListener('change', studentUniOnChange);
+
+  function loadUniversities() {
+    return j('/api/account/universities').then(function (d) {
+      studentUniversities = d.universities || [];
+      var sel = $('student-uni');
+      sel.innerHTML = '<option value="">Choose your university…</option>' +
+        studentUniversities.map(function (u) { return '<option value="' + esc(u.id) + '">' + esc(u.name) + '</option>'; }).join('') +
+        '<option value="other">My university isn’t listed</option>';
+      studentUniOnChange();
+    }).catch(function () {});
+  }
+
+  function loadStudentStatus() {
+    j('/api/account/student/status').then(function (d) {
+      studentVer = d.verification;
+      renderStudentUsage(d);
+
+      if (studentVer && studentVer.status === 'active') {
+        showStudentStep('none');
+        $('student-sub').textContent = 'Active through ' +
+          new Date(studentVer.expires_at).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }) + '.';
+      } else if (studentVer && studentVer.status === 'pending' && studentVer.has_document) {
+        showStudentStep('none');
+        $('student-sub').textContent = 'Your application is under review. We’ll email you the result.';
+      } else if (studentVer && studentVer.status === 'pending' && !studentVer.email_verified && studentVer.student_email) {
+        showStudentStep('code');
+        $('student-sub').textContent = 'One more step — verify the code sent to ' + esc(studentVer.student_email) + '.';
+      } else if (studentVer && studentVer.status === 'pending') {
+        showStudentStep('doc');
+        $('student-sub').textContent = 'Upload your ID card or admission document to finish.';
+      } else {
+        if (studentVer && ['rejected', 'revoked', 'expired'].indexOf(studentVer.status) > -1) {
+          $('student-sub').textContent = (studentVer.status === 'expired'
+            ? 'Your student year ended.'
+            : 'Your last application wasn’t approved' + (studentVer.reason ? ': ' + studentVer.reason : '.')) + ' You can apply again below.';
+        } else {
+          $('student-sub').textContent = 'Verify you’re a student for 30 requests a day, free for one year.';
+        }
+        showStudentStep('apply');
+        loadUniversities();
+      }
+    }).catch(function () {});
+  }
+
+  $('student-apply-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var uniVal = $('student-uni').value;
+    var msg = $('student-apply-msg');
+    if (!uniVal) { setMsg(msg, 'Choose your university, or "not listed".', false); return; }
+    var body;
+    if (uniVal === 'other') {
+      var name = $('student-uni-other').value.trim();
+      if (name.length < 2) { setMsg(msg, 'Enter your university’s name.', false); return; }
+      body = { university_id: null, university_name_other: name };
+    } else {
+      var email = $('student-email').value.trim();
+      if (!email) { setMsg(msg, 'Enter your university email.', false); return; }
+      body = { university_id: parseInt(uniVal, 10), student_email: email };
+    }
+    var btn = $('student-apply-btn'); btn.disabled = true; setMsg(msg, '', true);
+    j('/api/account/student/apply', 'POST', body)
+      .then(function (d) {
+        setMsg(msg, '', true);
+        showStudentStep(d.needs_code ? 'code' : 'doc');
+        $('student-sub').textContent = d.needs_code
+          ? 'One more step — verify the code sent to ' + esc(body.student_email) + '.'
+          : 'Upload your ID card or admission document to finish.';
+      })
+      .catch(function (err) { setMsg(msg, err.message, false); })
+      .then(function () { btn.disabled = false; });
+  });
+
+  $('student-code-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var msg = $('student-code-msg');
+    var btn = $('student-code-btn'); btn.disabled = true; setMsg(msg, '', true);
+    j('/api/account/student/verify-code', 'POST', { code: $('student-code').value.trim() })
+      .then(function (d) {
+        if (d.status === 'active') { loadStudentStatus(); return; }
+        setMsg(msg, '', true);
+        showStudentStep('doc');
+        $('student-sub').textContent = 'Upload your ID card or admission document to finish.';
+      })
+      .catch(function (err) { setMsg(msg, err.message, false); })
+      .then(function () { btn.disabled = false; });
+  });
+
+  $('student-doc-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var msg = $('student-doc-msg');
+    var file = $('student-doc').files[0];
+    if (!file) { setMsg(msg, 'Attach a file first.', false); return; }
+    var btn = $('student-doc-btn'); btn.disabled = true; setMsg(msg, '', true);
+    var fd = new FormData(); fd.append('document', file);
+    fetch(API_BASE + '/api/account/student/document', { method: 'POST', body: fd, credentials: 'same-origin' })
+      .then(function (res) { return res.json().then(function (d) { if (!res.ok) throw new Error(d.error || 'Upload failed.'); return d; }); })
+      .then(function () {
+        if (typeof showToast === 'function') showToast('Submitted', 'success', 1800);
+        loadStudentStatus();
+      })
+      .catch(function (err) { setMsg(msg, err.message, false); btn.disabled = false; });
+  });
+
   /* ---------- boot ---------- */
   (window.kaUserPromise || Promise.resolve(null)).then(function (u) { if (u) fillProfile(u); });
   showTab(window.location.hash === '#profile' ? 'profile' : 'history');
   window.addEventListener('hashchange', function () { showTab(window.location.hash === '#profile' ? 'profile' : 'history'); });
   loadSummary();
   loadHistory();
+  loadStudentStatus();
 })();
 </script>
 </body>

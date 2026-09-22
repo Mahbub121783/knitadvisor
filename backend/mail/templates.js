@@ -64,4 +64,63 @@ function emailChangedNoticeEmail({ fullName, newEmail }) {
   return { subject: 'Your KnitAdvisor account email was changed', html };
 }
 
-module.exports = { activationEmail, passwordResetEmail, passwordChangedByAdminEmail, emailChangedNoticeEmail };
+function studentEmailCodeEmail({ fullName, code }) {
+  const html = shell('Verify your university email', `
+    <p style="font-size:14px;line-height:1.6;">Hi ${esc(fullName || 'there')},</p>
+    <p style="font-size:14px;line-height:1.6;">Enter this code to confirm this university email is yours, as part of applying for KnitAdvisor's free student plan:</p>
+    ${codeBlock(code)}
+    <p style="font-size:13px;color:#565C64;">This code expires in ${CODE_TTL_MINUTES} minutes.</p>
+  `);
+  return { subject: 'Your KnitAdvisor student verification code', html };
+}
+
+function studentApprovedEmail({ fullName, expiresAt }) {
+  const until = expiresAt ? new Date(expiresAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
+  const html = shell('You are verified as a student', `
+    <p style="font-size:14px;line-height:1.6;">Hi ${esc(fullName || 'there')},</p>
+    <p style="font-size:14px;line-height:1.6;">Your KnitAdvisor student plan is active — ${require('../engine/domain/student-eligibility').STUDENT_DAILY_LIMIT} requests a day, free${until ? `, through <b>${esc(until)}</b>` : ''}.</p>
+    <p style="font-size:13px;color:#565C64;">You can re-verify any time before it ends to keep it going.</p>
+  `);
+  return { subject: 'Your KnitAdvisor student plan is active', html };
+}
+
+function studentPendingReviewEmail({ fullName }) {
+  const html = shell('Your student application was received', `
+    <p style="font-size:14px;line-height:1.6;">Hi ${esc(fullName || 'there')},</p>
+    <p style="font-size:14px;line-height:1.6;">We received your student verification and the document you uploaded. Someone on our team will review it shortly — we'll email you the result.</p>
+  `);
+  return { subject: 'Your KnitAdvisor student application was received', html };
+}
+
+function studentRejectedEmail({ fullName, reason }) {
+  const html = shell('Your student application was not approved', `
+    <p style="font-size:14px;line-height:1.6;">Hi ${esc(fullName || 'there')},</p>
+    <p style="font-size:14px;line-height:1.6;">We could not verify your student status${reason ? `: <b>${esc(reason)}</b>` : '.'}</p>
+    <p style="font-size:13px;color:#565C64;">You can apply again from your account page with a clearer document or a different university email.</p>
+  `);
+  return { subject: 'Your KnitAdvisor student application was not approved', html };
+}
+
+function studentRevokedEmail({ fullName, reason }) {
+  const html = shell('Your student plan was ended', `
+    <p style="font-size:14px;line-height:1.6;">Hi ${esc(fullName || 'there')},</p>
+    <p style="font-size:14px;line-height:1.6;">A KnitAdvisor administrator ended your student plan${reason ? `: <b>${esc(reason)}</b>` : '.'} Your account is back on the free plan.</p>
+    <p style="font-size:13px;color:#565C64;">If you think this is a mistake, reply to this email.</p>
+  `);
+  return { subject: 'Your KnitAdvisor student plan was ended', html };
+}
+
+function studentExpiredEmail({ fullName }) {
+  const html = shell('Your student year has ended', `
+    <p style="font-size:14px;line-height:1.6;">Hi ${esc(fullName || 'there')},</p>
+    <p style="font-size:14px;line-height:1.6;">Your one year of free KnitAdvisor student access has ended, so your account is back on the free plan.</p>
+    <p style="font-size:13px;color:#565C64;">Still a student? You can re-verify any time from your account page.</p>
+  `);
+  return { subject: 'Your KnitAdvisor student year has ended', html };
+}
+
+module.exports = {
+  activationEmail, passwordResetEmail, passwordChangedByAdminEmail, emailChangedNoticeEmail,
+  studentEmailCodeEmail, studentApprovedEmail, studentPendingReviewEmail, studentRejectedEmail,
+  studentRevokedEmail, studentExpiredEmail,
+};

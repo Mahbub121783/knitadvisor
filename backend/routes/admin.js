@@ -29,7 +29,15 @@ const crypto = require('crypto');
 const { validateEmailOnly, passwordProblem, usernameProblem } = require('../engine/domain/auth-validation');
 const { issueAndSend } = require('../services/account-codes');
 const mailClient = require('../mail/client');
-const { passwordChangedByAdminEmail, emailChangedNoticeEmail } = require('../mail/templates');
+const {
+  passwordChangedByAdminEmail, emailChangedNoticeEmail,
+  studentApprovedEmail, studentRejectedEmail, studentRevokedEmail,
+} = require('../mail/templates');
+const universityRepo = require('../db/repositories/university-repo');
+const studentRepo = require('../db/repositories/student-repo');
+const { STUDENT_DURATION_DAYS } = require('../engine/domain/student-eligibility');
+const { absolutePath } = require('../middleware/upload');
+const fs = require('fs');
 
 const CSV_EXPORT_LIMIT = parseInt(process.env.CSV_EXPORT_LIMIT, 10) || 10000;
 
@@ -145,7 +153,7 @@ router.get('/api/overview', adminAuth, async (req, res) => {
   try {
     const [
       todayStats, series, topFabrics, rfqCounts, userTotal, userNew, activeSessions, providers,
-      memStats, dbCacheStats,
+      memStats, dbCacheStats, pendingStudents,
     ] = await Promise.all([
       logsRepo.todayStats(),
       logsRepo.dailySeries(14),
@@ -157,6 +165,7 @@ router.get('/api/overview', adminAuth, async (req, res) => {
       providerManager.getProviders(),
       Promise.resolve(memCache.stats()),
       resultCache.stats(),
+      studentRepo.listByStatus('pending', { page: 1, limit: 1 }),
     ]);
 
     const yesterday = series.length >= 2 ? series[series.length - 2] : null;
@@ -182,6 +191,13 @@ router.get('/api/overview', adminAuth, async (req, res) => {
         tab: 'tab-rfq',
       });
     }
+    if (pendingStudents.total > 0) {
+      alerts.push({
+        level: 'info',
+        text: pendingStudents.total + (pendingStudents.total === 1 ? ' student application is' : ' student applications are') + ' awaiting review.',
+        tab: 'tab-students',
+      });
+    }
     if (todayStats.today_total >= 20 && todayStats.cache_hit_pct < 50) {
       alerts.push({
         level: 'info',
@@ -199,6 +215,7 @@ router.get('/api/overview', adminAuth, async (req, res) => {
       users: { total: userTotal, new_today: userNew.today, new_7d: userNew.last_7d, active_sessions: activeSessions },
       providers: { active: activeProviders, total: providers.length, health: providerHealth },
       cache: { mem_size: memStats.size, db_entries: Number(dbCacheStats.entries) || 0 },
+      students: { pending: pendingStudents.total },
       alerts,
     });
   } catch (err) {
@@ -588,6 +605,7 @@ router.get('/api/users/:id', adminAuth, async (req, res) => {
       id: user.id, email: user.email, username: user.username, username_changed_at: user.username_changed_at,
       full_name: user.full_name, company: user.company,
       plan_interest: user.plan_interest, disabled: user.disabled, email_verified: user.email_verified,
+      is_paid: user.is_paid, student_status: user.student_status, student_expires_at: user.student_expires_at,
       created_at: user.created_at, last_login_at: user.last_login_at,
       stats, recent_calculations: recent.rows, active_sessions: activeSessions,
     });
@@ -687,6 +705,205 @@ router.patch('/api/users/:id/disabled', adminAuth, async (req, res) => {
   } catch (err) {
     console.error('[Users Admin Disable Error]', err);
     res.status(500).json({ error: 'Failed to update user' });
+  }
+});
+
+// Admin-set only — no payment gateway exists yet, so this is how an account
+// becomes unlimited-use until one does.
+router.patch('/api/users/:id/paid', adminAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id) || typeof (req.body || {}).is_paid !== 'boolean') {
+      return res.status(400).json({ error: 'A user id and a boolean "is_paid" are required' });
+    }
+    const row = await userRepo.users.setPaid(id, req.body.is_paid);
+    if (!row) return res.status(404).json({ error: 'User not found' });
+    res.json({ ok: true, id: row.id, is_paid: row.is_paid });
+  } catch (err) {
+    console.error('[Users Admin Paid Error]', err);
+    res.status(500).json({ error: 'Failed to update the plan' });
+  }
+});
+
+// ============================================================
+// Student plan: university allow-list + verification queue
+// ============================================================
+
+router.get('/api/universities', adminAuth, async (req, res) => {
+  try {
+    res.json({ universities: await universityRepo.listAll() });
+  } catch (err) {
+    console.error('[Universities List Error]', err);
+    res.status(500).json({ error: 'Failed to load universities' });
+  }
+});
+
+router.post('/api/universities', adminAuth, async (req, res) => {
+  try {
+    const name = String((req.body && req.body.name) || '').trim().slice(0, 160);
+    const domain = String((req.body && req.body.domain) || '').trim().toLowerCase();
+    if (name.length < 2 || !/^[a-z0-9.-]+\.[a-z]{2,}$/.test(domain)) {
+      return res.status(400).json({ error: 'A university name and a valid email domain (e.g. g.bracu.ac.bd) are required.' });
+    }
+    const { row, conflict } = await universityRepo.create({ name, domain });
+    if (conflict) return res.status(409).json({ error: 'That domain is already on the list.' });
+    res.json({ ok: true, university: row });
+  } catch (err) {
+    console.error('[Universities Create Error]', err);
+    res.status(500).json({ error: 'Failed to add the university' });
+  }
+});
+
+router.patch('/api/universities/:id/active', adminAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id) || typeof (req.body || {}).active !== 'boolean') {
+      return res.status(400).json({ error: 'An id and a boolean "active" are required' });
+    }
+    const row = await universityRepo.setActive(id, req.body.active);
+    if (!row) return res.status(404).json({ error: 'University not found' });
+    res.json({ ok: true, id: row.id, active: row.active });
+  } catch (err) {
+    console.error('[Universities Toggle Error]', err);
+    res.status(500).json({ error: 'Failed to update the university' });
+  }
+});
+
+router.delete('/api/universities/:id', adminAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid id' });
+    const removed = await universityRepo.remove(id);
+    if (!removed) return res.status(404).json({ error: 'University not found' });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[Universities Delete Error]', err);
+    res.status(500).json({ error: 'Failed to remove the university' });
+  }
+});
+
+// `status` filters the queue: omit for all, or pending/active/rejected/revoked/expired.
+router.get('/api/students', adminAuth, async (req, res) => {
+  try {
+    const list = await studentRepo.listByStatus(req.query.status || undefined, {
+      page: req.query.page, limit: req.query.limit,
+    });
+    res.json(list);
+  } catch (err) {
+    console.error('[Students List Error]', err);
+    res.status(500).json({ error: 'Failed to load student applications' });
+  }
+});
+
+router.get('/api/students/:id', adminAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid id' });
+    const row = await studentRepo.findById(id);
+    if (!row) return res.status(404).json({ error: 'Application not found' });
+    // findById reads app_student_verifications alone (what decide()/tryAutoApprove
+    // need); the admin detail view also wants who the applicant is.
+    const user = await userRepo.users.findById(row.user_id);
+    res.json({
+      ...row,
+      account_email: user ? user.email : null,
+      username: user ? user.username : null,
+      full_name: user ? user.full_name : null,
+    });
+  } catch (err) {
+    console.error('[Students Detail Error]', err);
+    res.status(500).json({ error: 'Failed to load that application' });
+  }
+});
+
+// Streams the uploaded document — never a public URL, only reachable through
+// this adminAuth-gated route (see middleware/upload.js's header).
+router.get('/api/students/:id/document', adminAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid id' });
+    const row = await studentRepo.findById(id);
+    if (!row || !row.document_path) return res.status(404).json({ error: 'No document on file' });
+    const full = absolutePath(row.document_path);
+    if (!fs.existsSync(full)) return res.status(404).json({ error: 'Document file is missing' });
+    res.sendFile(full);
+  } catch (err) {
+    console.error('[Students Document Error]', err);
+    res.status(500).json({ error: 'Failed to load that document' });
+  }
+});
+
+router.post('/api/students/:id/approve', adminAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid id' });
+    const row = await studentRepo.findById(id);
+    if (!row) return res.status(404).json({ error: 'Application not found' });
+    if (row.status !== 'pending') return res.status(409).json({ error: `This application is already ${row.status}.` });
+
+    const expiresAt = new Date(Date.now() + STUDENT_DURATION_DAYS * 86400000);
+    await studentRepo.decide(id, 'active', { decidedBy: 'admin', expiresAt });
+    await userRepo.users.setStudentStatus(row.user_id, 'active', expiresAt);
+
+    const user = await userRepo.users.findById(row.user_id);
+    if (user) {
+      const notice = studentApprovedEmail({ fullName: user.full_name, expiresAt });
+      mailClient.sendMail({ to: user.email, subject: notice.subject, html: notice.html }).catch(() => {});
+    }
+    res.json({ ok: true, id, status: 'active', expires_at: expiresAt });
+  } catch (err) {
+    console.error('[Students Approve Error]', err);
+    res.status(500).json({ error: 'Failed to approve that application' });
+  }
+});
+
+router.post('/api/students/:id/reject', adminAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid id' });
+    const row = await studentRepo.findById(id);
+    if (!row) return res.status(404).json({ error: 'Application not found' });
+    if (row.status !== 'pending') return res.status(409).json({ error: `This application is already ${row.status}.` });
+
+    const reason = String((req.body && req.body.reason) || '').trim().slice(0, 300) || null;
+    await studentRepo.decide(id, 'rejected', { decidedBy: 'admin', reason });
+    await userRepo.users.setStudentStatus(row.user_id, 'rejected', null);
+
+    const user = await userRepo.users.findById(row.user_id);
+    if (user) {
+      const notice = studentRejectedEmail({ fullName: user.full_name, reason });
+      mailClient.sendMail({ to: user.email, subject: notice.subject, html: notice.html }).catch(() => {});
+    }
+    res.json({ ok: true, id, status: 'rejected' });
+  } catch (err) {
+    console.error('[Students Reject Error]', err);
+    res.status(500).json({ error: 'Failed to reject that application' });
+  }
+});
+
+// Works on an active (auto- or admin-approved) plan — the fraud backstop for
+// the automatic path: an admin can always pull an approval after the fact.
+router.post('/api/students/:id/revoke', adminAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid id' });
+    const row = await studentRepo.findById(id);
+    if (!row) return res.status(404).json({ error: 'Application not found' });
+    if (row.status !== 'active') return res.status(409).json({ error: 'Only an active student plan can be revoked.' });
+
+    const reason = String((req.body && req.body.reason) || '').trim().slice(0, 300) || null;
+    await studentRepo.decide(id, 'revoked', { decidedBy: 'admin', reason });
+    await userRepo.users.setStudentStatus(row.user_id, 'revoked', null);
+
+    const user = await userRepo.users.findById(row.user_id);
+    if (user) {
+      const notice = studentRevokedEmail({ fullName: user.full_name, reason });
+      mailClient.sendMail({ to: user.email, subject: notice.subject, html: notice.html }).catch(() => {});
+    }
+    res.json({ ok: true, id, status: 'revoked' });
+  } catch (err) {
+    console.error('[Students Revoke Error]', err);
+    res.status(500).json({ error: 'Failed to revoke that plan' });
   }
 });
 
