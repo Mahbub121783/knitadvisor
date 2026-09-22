@@ -9,28 +9,72 @@ const SESSION_DAYS = parseInt(process.env.USER_SESSION_DAYS, 10) || 14;
 const users = {
   findByEmail(email) {
     return queryOne(
-      'SELECT id, email, full_name, company, password_hash, disabled, email_verified FROM app_users WHERE lower(email) = lower($1)',
+      'SELECT id, email, username, full_name, company, password_hash, disabled, email_verified FROM app_users WHERE lower(email) = lower($1)',
       [email]
     );
   },
 
-  /** Returns the new row, or null when the email is already registered. */
-  async create({ email, fullName, company, planInterest, passwordHash }) {
-    const rows = await query(
-      `INSERT INTO app_users (email, full_name, company, plan_interest, password_hash)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (lower(email)) DO NOTHING
-       RETURNING id, email, full_name, company`,
-      [email, fullName, company, planInterest || null, passwordHash]
+  findByUsername(username) {
+    return queryOne(
+      'SELECT id, email, username, full_name, company, password_hash, disabled, email_verified FROM app_users WHERE lower(username) = lower($1)',
+      [username]
     );
-    return rows[0] || null;
+  },
+
+  /** identifier is whatever validateIdentifier() in auth-validation.js already
+   *  classified — no '@' can ever appear in a valid username, so which lookup
+   *  to run is unambiguous from the string alone. */
+  findByIdentifier(identifier) {
+    const id = String(identifier || '');
+    return id.indexOf('@') > -1 ? this.findByEmail(id) : this.findByUsername(id);
+  },
+
+  /**
+   * @returns {Promise<{row: object|null, conflictField: 'email'|'username'|null}>}
+   *   conflictField names which unique constraint blocked the insert, so the
+   *   route can say "that username is taken" instead of a generic failure.
+   */
+  async create({ email, username, fullName, company, planInterest, passwordHash }) {
+    try {
+      const rows = await query(
+        `INSERT INTO app_users (email, username, full_name, company, plan_interest, password_hash)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING id, email, username, full_name, company`,
+        [email, username, fullName, company, planInterest || null, passwordHash]
+      );
+      return { row: rows[0], conflictField: null };
+    } catch (err) {
+      if (err.code === '23505') {
+        return { row: null, conflictField: (err.constraint || '').includes('username') ? 'username' : 'email' };
+      }
+      throw err;
+    }
   },
 
   findById(id) {
     return queryOne(
-      'SELECT id, email, full_name, company, plan_interest, password_hash, disabled, email_verified, created_at, last_login_at FROM app_users WHERE id = $1',
+      'SELECT id, email, username, username_changed_at, full_name, company, plan_interest, password_hash, disabled, email_verified, created_at, last_login_at FROM app_users WHERE id = $1',
       [id]
     );
+  },
+
+  /**
+   * Changes username unconditionally — the caller enforces any cooldown
+   * (routes/account.js does, for the self-service path; routes/admin.js's
+   * override deliberately does not call it via that check).
+   * @returns {Promise<{row: object|null, conflict: boolean}>}
+   */
+  async setUsername(id, newUsername) {
+    try {
+      const rows = await query(
+        'UPDATE app_users SET username = $2, username_changed_at = now() WHERE id = $1 RETURNING id, username, username_changed_at',
+        [id, newUsername]
+      );
+      return { row: rows[0] || null, conflict: false };
+    } catch (err) {
+      if (err.code === '23505') return { row: null, conflict: true }; // unique_violation on lower(username)
+      throw err;
+    }
   },
 
   markEmailVerified(id) {
@@ -83,12 +127,12 @@ const users = {
     const lim = Math.min(100, Math.max(1, parseInt(limit, 10) || 25));
     const term = search ? '%' + String(search).replace(/[\\%_]/g, m => '\\' + m) + '%' : null;
     const where = term
-      ? "WHERE full_name ILIKE $1 OR email ILIKE $1 OR coalesce(company, '') ILIKE $1"
+      ? "WHERE full_name ILIKE $1 OR email ILIKE $1 OR username ILIKE $1 OR coalesce(company, '') ILIKE $1"
       : '';
     const params = term ? [term] : [];
     const total = Number((await queryOne('SELECT count(*)::int AS count FROM app_users ' + where, params)).count);
     const rows = await query(
-      'SELECT id, email, full_name, company, plan_interest, disabled, email_verified, created_at, last_login_at ' +
+      'SELECT id, email, username, full_name, company, plan_interest, disabled, email_verified, created_at, last_login_at ' +
       'FROM app_users ' + where + ' ORDER BY created_at DESC, id DESC ' +
       'LIMIT ' + lim + ' OFFSET ' + ((pageN - 1) * lim),
       params

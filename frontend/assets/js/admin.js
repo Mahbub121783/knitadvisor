@@ -1125,12 +1125,13 @@ async function loadUsers(page, filters) {
     const tbody = document.getElementById('usr-tbody');
     tbody.innerHTML = '';
     if (!d.rows.length) {
-      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--t3);">No users found</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--t3);">No users found</td></tr>';
     }
     for (const u of d.rows) {
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td style="padding:9px 10px;color:var(--t2);">${esc(u.full_name)}<div style="font-size:10px;color:var(--t3);">${esc(u.email)}</div></td>
+        <td style="padding:9px 10px;color:var(--t2);font-family:var(--mono);">${esc(u.username || '—')}</td>
         <td style="padding:9px 10px;color:var(--t2);">${esc(u.company || '—')}</td>
         <td style="padding:9px 10px;color:var(--t2);">${esc(PLAN_LABELS[u.plan_interest] || '—')}</td>
         <td style="padding:9px 10px;color:var(--t3);font-family:var(--mono);">${esc(new Date(u.created_at).toLocaleDateString())}</td>
@@ -1173,7 +1174,7 @@ async function openUserDetail(id) {
     openUserId = id;
     document.getElementById('ud-avatar').textContent = userInitials(u);
     document.getElementById('ud-name').textContent = u.full_name || '(no name)';
-    document.getElementById('ud-email').textContent = u.email;
+    document.getElementById('ud-email').textContent = u.username ? '@' + u.username + '  ·  ' + u.email : u.email;
     document.getElementById('ud-runs').textContent = u.stats.total_runs || 0;
     document.getElementById('ud-specs').textContent = u.stats.distinct_specs || 0;
     document.getElementById('ud-sessions').textContent = u.active_sessions;
@@ -1208,8 +1209,10 @@ async function openUserDetail(id) {
     toggleBtn.className = u.disabled ? 'btn btn-primary' : 'btn btn-danger';
     toggleBtn.dataset.disabled = u.disabled ? 'false' : 'true';
 
+    document.getElementById('ud-username-input').value = u.username || '';
     document.getElementById('ud-email-input').value = u.email;
     document.getElementById('ud-pw-input').value = '';
+    setUdMsg('ud-username-msg', '3–30 characters: letters, numbers, underscore, period. No 60-day wait for an admin change.', null);
     setUdMsg('ud-email-msg', '', null);
     setUdMsg('ud-pw-msg', 'At least 10 characters, 3 of: lower/upper/number/symbol. Signs out every device.', null);
 
@@ -1228,6 +1231,23 @@ function setUdMsg(elId, text, ok) {
   el.style.color = ok === true ? 'var(--a1)' : ok === false ? 'var(--a3)' : 'var(--t3)';
 }
 
+async function saveUserUsername() {
+  if (openUserId == null) return;
+  const input = document.getElementById('ud-username-input');
+  const username = input.value.trim();
+  const btn = document.getElementById('ud-username-save');
+  btn.disabled = true;
+  try {
+    await api('/admin/api/users/' + openUserId + '/username', 'PATCH', { username });
+    toast('Username changed', 'success');
+    loadUsers(1, getUsrFilters());
+    await openUserDetail(openUserId);
+    setUdMsg('ud-username-msg', 'Username changed.', true);
+  } catch (e) {
+    setUdMsg('ud-username-msg', e.message, false);
+  } finally { btn.disabled = false; }
+}
+
 async function saveUserEmail() {
   if (openUserId == null) return;
   const input = document.getElementById('ud-email-input');
@@ -1236,10 +1256,10 @@ async function saveUserEmail() {
   btn.disabled = true;
   try {
     await api('/admin/api/users/' + openUserId + '/email', 'PATCH', { email });
-    setUdMsg('ud-email-msg', 'Email updated — an activation code was sent to the new address.', true);
     toast('Email changed', 'success');
     loadUsers(1, getUsrFilters());
-    document.getElementById('ud-email').textContent = email;
+    await openUserDetail(openUserId); // refreshes every field (email_verified flips, username prefix, etc.)
+    setUdMsg('ud-email-msg', 'Email updated — an activation code was sent to the new address.', true);
   } catch (e) {
     setUdMsg('ud-email-msg', e.message, false);
   } finally { btn.disabled = false; }
@@ -1255,9 +1275,12 @@ async function saveUserPassword() {
   try {
     await api('/admin/api/users/' + openUserId + '/reset-password', 'POST', { new_password });
     input.value = '';
-    setUdMsg('ud-pw-msg', 'Password set — the user was emailed and every device was signed out.', true);
     toast('Password reset', 'success');
-    if (openUserId) openUserDetail(openUserId); // refresh active-session count
+    // openUserDetail() re-populates every field, including this message's
+    // neutral hint — refresh first, then set the success message, or the
+    // refresh silently wipes it.
+    await openUserDetail(openUserId);
+    setUdMsg('ud-pw-msg', 'Password set — the user was emailed and every device was signed out.', true);
   } catch (e) {
     setUdMsg('ud-pw-msg', e.message, false);
   } finally { btn.disabled = false; }
@@ -1931,6 +1954,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('ud-toggle-disabled').addEventListener('click', (e) => {
     if (openUserId != null) setUserDisabled(openUserId, e.currentTarget.dataset.disabled === 'true');
   });
+  document.getElementById('ud-username-save').addEventListener('click', saveUserUsername);
   document.getElementById('ud-email-save').addEventListener('click', saveUserEmail);
   document.getElementById('ud-pw-save').addEventListener('click', saveUserPassword);
 

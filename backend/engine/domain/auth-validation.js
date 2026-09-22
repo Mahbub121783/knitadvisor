@@ -20,6 +20,19 @@ const PASSWORD_MAX = 128; // scrypt cost is per-byte of input; bound it so a hug
 const PASSWORD_CLASSES = [/[a-z]/, /[A-Z]/, /[0-9]/, /[^A-Za-z0-9]/];
 const PASSWORD_MIN_CLASSES = 3;
 
+const USERNAME_MIN = 3;
+const USERNAME_MAX = 30;
+// No '@' — that is exactly what makes "does this look like an email or a
+// username" unambiguous everywhere an identifier is accepted (see
+// validateIdentifier below): a username can never be mistaken for an email.
+const USERNAME_RE = /^[A-Za-z0-9_.]+$/;
+const USERNAME_EDGE_RE = /^[_.]|[_.]$/;
+const RESERVED_USERNAMES = new Set([
+  'admin', 'administrator', 'root', 'support', 'help', 'contact', 'staff',
+  'knitadvisor', 'api', 'null', 'undefined', 'system', 'moderator', 'owner',
+]);
+const USERNAME_CHANGE_COOLDOWN_DAYS = 60;
+
 function normalizeEmail(email) {
   return String(email == null ? '' : email).trim().toLowerCase();
 }
@@ -41,8 +54,21 @@ function passwordProblem(password, email) {
   return null;
 }
 
+/** Format only — never checks uniqueness (that needs the database, and lives
+ *  in the route/repo layer, same split as email's ON CONFLICT). */
+function usernameProblem(username) {
+  const u = typeof username === 'string' ? username : '';
+  if (u.length < USERNAME_MIN || u.length > USERNAME_MAX) {
+    return `Username must be ${USERNAME_MIN}–${USERNAME_MAX} characters.`;
+  }
+  if (!USERNAME_RE.test(u)) return 'Username can only contain letters, numbers, underscores and periods.';
+  if (USERNAME_EDGE_RE.test(u)) return 'Username cannot start or end with an underscore or period.';
+  if (RESERVED_USERNAMES.has(u.toLowerCase())) return 'That username is reserved — please choose another.';
+  return null;
+}
+
 /**
- * @returns {{ok: boolean, errors: string[], value?: {email, password, full_name, company}}}
+ * @returns {{ok: boolean, errors: string[], value?: {email, username, password, full_name, company}}}
  */
 function validateSignup(body) {
   const b = body || {};
@@ -50,6 +76,10 @@ function validateSignup(body) {
 
   const email = normalizeEmail(b.email);
   if (!email || email.length > 254 || !EMAIL_RE.test(email)) errors.push('Enter a valid work email address.');
+
+  const username = typeof b.username === 'string' ? b.username.trim() : '';
+  const unameProblem = usernameProblem(username);
+  if (unameProblem) errors.push(unameProblem);
 
   const password = typeof b.password === 'string' ? b.password : '';
   const pwProblem = passwordProblem(password, email);
@@ -66,7 +96,7 @@ function validateSignup(body) {
   const plan = PLAN_INTERESTS.includes(b.plan_interest) ? b.plan_interest : null;
 
   if (errors.length) return { ok: false, errors };
-  return { ok: true, errors: [], value: { email, password, full_name: fullName, company: company || null, plan_interest: plan } };
+  return { ok: true, errors: [], value: { email, username, password, full_name: fullName, company: company || null, plan_interest: plan } };
 }
 
 function validateProfile(body) {
@@ -88,14 +118,33 @@ function validatePasswordChange(body, email) {
   return { ok: true, errors: [], value: { current_password: current, new_password: b.new_password } };
 }
 
+/**
+ * An identifier a user typed to mean "me" — either their email or their
+ * username. A username can never contain '@' (USERNAME_RE forbids it), so
+ * "contains an @" is a complete, unambiguous test for which one this is.
+ * @returns {{ok: boolean, errors: string[], value?: {identifier: string, kind: 'email'|'username'}}}
+ */
+function validateIdentifier(rawIdentifier) {
+  const raw = String(rawIdentifier == null ? '' : rawIdentifier).trim();
+  if (!raw) return { ok: false, errors: ['Enter your email or username.'] };
+  if (raw.indexOf('@') > -1) {
+    const email = normalizeEmail(raw);
+    if (email.length > 254 || !EMAIL_RE.test(email)) return { ok: false, errors: ['Enter a valid email address.'] };
+    return { ok: true, errors: [], value: { identifier: email, kind: 'email' } };
+  }
+  const problem = usernameProblem(raw);
+  if (problem) return { ok: false, errors: ['Enter your email or username.'] };
+  return { ok: true, errors: [], value: { identifier: raw, kind: 'username' } };
+}
+
 function validateLogin(body) {
   const b = body || {};
-  const email = normalizeEmail(b.email);
+  const idCheck = validateIdentifier(b.identifier != null ? b.identifier : b.email);
   const password = typeof b.password === 'string' ? b.password : '';
-  if (!email || !password || email.length > 254 || password.length > PASSWORD_MAX) {
-    return { ok: false, errors: ['Enter your email and password.'] };
+  if (!idCheck.ok || !password || password.length > PASSWORD_MAX) {
+    return { ok: false, errors: ['Enter your email/username and password.'] };
   }
-  return { ok: true, errors: [], value: { email, password } };
+  return { ok: true, errors: [], value: { identifier: idCheck.value.identifier, password } };
 }
 
 function validateEmailOnly(body) {
@@ -112,14 +161,34 @@ function validateVerifyCode(body) {
   return { ok: true, errors: [], value: { email, code: b.code } };
 }
 
+/** Forgot-password accepts the same identifier login does — the code still
+ *  only ever gets mailed to the real email already on the account. */
+function validateForgotPassword(body) {
+  const b = body || {};
+  const idCheck = validateIdentifier(b.identifier != null ? b.identifier : b.email);
+  if (!idCheck.ok) return idCheck;
+  return { ok: true, errors: [], value: { identifier: idCheck.value.identifier } };
+}
+
 function validateResetPassword(body) {
   const b = body || {};
-  const email = normalizeEmail(b.email);
-  if (!email || !EMAIL_RE.test(email)) return { ok: false, errors: ['Enter a valid email address.'] };
+  const idCheck = validateIdentifier(b.identifier != null ? b.identifier : b.email);
+  if (!idCheck.ok) return idCheck;
   if (!isValidCodeFormat(b.code)) return { ok: false, errors: ['Enter the 6-digit code from your email.'] };
-  const problem = passwordProblem(b.new_password, email);
+  // Can only compare against the account's real email when the identifier
+  // itself is one; a username tells us nothing about what the password must
+  // not equal, so that specific check is skipped rather than guessed at.
+  const emailForCompare = idCheck.value.kind === 'email' ? idCheck.value.identifier : null;
+  const problem = passwordProblem(b.new_password, emailForCompare);
   if (problem) return { ok: false, errors: [problem] };
-  return { ok: true, errors: [], value: { email, code: b.code, new_password: b.new_password } };
+  return { ok: true, errors: [], value: { identifier: idCheck.value.identifier, code: b.code, new_password: b.new_password } };
+}
+
+function validateUsernameChange(body) {
+  const raw = typeof (body || {}).username === 'string' ? body.username.trim() : '';
+  const problem = usernameProblem(raw);
+  if (problem) return { ok: false, errors: [problem] };
+  return { ok: true, errors: [], value: { username: raw } };
 }
 
 /** Same-origin relative path only — anything else would make login an open redirect. */
@@ -131,7 +200,9 @@ function safeNextPath(next) {
 
 module.exports = {
   validateSignup, validateLogin, validateProfile, validatePasswordChange,
-  validateEmailOnly, validateVerifyCode, validateResetPassword,
+  validateEmailOnly, validateVerifyCode, validateForgotPassword, validateResetPassword,
+  validateIdentifier, validateUsernameChange, usernameProblem,
   normalizeEmail, safeNextPath, passwordProblem,
   PASSWORD_MIN, PASSWORD_MAX, PASSWORD_MIN_CLASSES, PLAN_INTERESTS,
+  USERNAME_MIN, USERNAME_MAX, USERNAME_CHANGE_COOLDOWN_DAYS,
 };

@@ -26,7 +26,7 @@ const { query: dbQuery } = require('../db/client');
 const { verifyPassword, hashPassword, isLegacyHash } = require('../middleware/password');
 const { createRateLimiter } = require('../middleware/rate-limiter');
 const crypto = require('crypto');
-const { validateEmailOnly, passwordProblem } = require('../engine/domain/auth-validation');
+const { validateEmailOnly, passwordProblem, usernameProblem } = require('../engine/domain/auth-validation');
 const { issueAndSend } = require('../services/account-codes');
 const mailClient = require('../mail/client');
 const { passwordChangedByAdminEmail, emailChangedNoticeEmail } = require('../mail/templates');
@@ -585,7 +585,8 @@ router.get('/api/users/:id', adminAuth, async (req, res) => {
       userRepo.sessions.countForUser(id),
     ]);
     res.json({
-      id: user.id, email: user.email, full_name: user.full_name, company: user.company,
+      id: user.id, email: user.email, username: user.username, username_changed_at: user.username_changed_at,
+      full_name: user.full_name, company: user.company,
       plan_interest: user.plan_interest, disabled: user.disabled, email_verified: user.email_verified,
       created_at: user.created_at, last_login_at: user.last_login_at,
       stats, recent_calculations: recent.rows, active_sessions: activeSessions,
@@ -649,6 +650,28 @@ router.post('/api/users/:id/reset-password', adminAuth, async (req, res) => {
   } catch (err) {
     console.error('[Users Admin Reset Password Error]', err);
     res.status(500).json({ error: 'Failed to reset the password' });
+  }
+});
+
+// Admin username override — the only path that bypasses the 60-day
+// self-service cooldown (routes/account.js's POST /username enforces it;
+// this route deliberately never checks it, the same asymmetry as email and
+// password above).
+router.patch('/api/users/:id/username', adminAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const raw = String((req.body && req.body.username) || '').trim();
+    const problem = usernameProblem(raw);
+    if (!Number.isInteger(id) || problem) {
+      return res.status(400).json({ error: problem || 'A user id and a valid username are required' });
+    }
+    const { row, conflict } = await userRepo.users.setUsername(id, raw);
+    if (conflict) return res.status(409).json({ error: 'That username is already taken.' });
+    if (!row) return res.status(404).json({ error: 'User not found' });
+    res.json({ ok: true, id: row.id, username: row.username });
+  } catch (err) {
+    console.error('[Users Admin Username Error]', err);
+    res.status(500).json({ error: 'Failed to update the username' });
   }
 });
 

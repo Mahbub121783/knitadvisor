@@ -1,14 +1,15 @@
 /**
  * Customer accounts — /api/auth/*
  *
- *   POST /signup             create an account (unverified), mail an activation code
- *   POST /verify-email       {email, code} — activates the account and signs in
- *   POST /resend-activation  {email} — a fresh activation code, rate-limited
- *   POST /login              sign in (blocked until the email is verified)
- *   POST /forgot-password    {email} — mails a password-reset code
- *   POST /reset-password     {email, code, new_password} — resets and signs in
- *   POST /logout             end the session
- *   GET  /me                 who am I (200 with the user, 401 when signed out)
+ *   POST /signup                create an account (unverified), mail an activation code
+ *   POST /verify-email          {email, code} — activates the account and signs in
+ *   POST /resend-activation     {email} — a fresh activation code, rate-limited
+ *   GET  /username-availability ?username= — live check while typing, format + uniqueness
+ *   POST /login                 {identifier, password} — email OR username; blocked until verified
+ *   POST /forgot-password       {identifier} — mails a password-reset code to the account's real email
+ *   POST /reset-password        {identifier, code, new_password} — resets and signs in
+ *   POST /logout                end the session
+ *   GET  /me                    who am I (200 with the user, 401 when signed out)
  *
  * Distinct from the admin login in routes/admin.js: different table, different
  * cookie, and an admin token is never accepted here or the reverse.
@@ -24,7 +25,8 @@ const {
   setSessionCookie, clearSessionCookie, loadUser,
 } = require('../middleware/user-auth');
 const {
-  validateSignup, validateLogin, validateEmailOnly, validateVerifyCode, validateResetPassword,
+  validateSignup, validateLogin, validateEmailOnly, validateVerifyCode,
+  validateForgotPassword, validateResetPassword, usernameProblem,
 } = require('../engine/domain/auth-validation');
 const { checkCode } = require('../engine/domain/otp');
 const { issueAndSend } = require('../services/account-codes');
@@ -48,13 +50,19 @@ const codeVerifyLimiter = createRateLimiter({
   name: 'auth-code-verify', max: 20, windowMs: 15 * 60 * 1000,
   message: 'Too many attempts. Please wait before trying again.',
 });
+// Typed per keystroke (debounced client-side) — same headroom as the app's
+// existing fuzzy-search endpoints (search.js), not the tighter auth limiters.
+const usernameCheckLimiter = createRateLimiter({
+  name: 'auth-username-check', max: 120, windowMs: 60 * 1000,
+  message: 'Too many checks — slow down a moment.',
+});
 
 // A real verifyPassword() against a throwaway hash, so "no such email" and
 // "wrong password" cost the same time and timing cannot enumerate accounts.
 const DUMMY_HASH = hashPassword('not-a-real-password-just-burns-the-same-cpu');
 
 function publicUser(u) {
-  return { id: u.id, email: u.email, full_name: u.full_name, company: u.company };
+  return { id: u.id, email: u.email, username: u.username, full_name: u.full_name, company: u.company };
 }
 
 async function startSession(req, res, userId) {
@@ -68,12 +76,15 @@ router.post('/signup', signupLimiter, async (req, res) => {
   if (!v.ok) return res.status(400).json({ success: false, error: v.errors[0], errors: v.errors });
 
   try {
-    const { email, password, full_name, company, plan_interest } = v.value;
-    const user = await userRepo.users.create({
-      email, fullName: full_name, company, planInterest: plan_interest, passwordHash: hashPassword(password),
+    const { email, username, password, full_name, company, plan_interest } = v.value;
+    const { row: user, conflictField } = await userRepo.users.create({
+      email, username, fullName: full_name, company, planInterest: plan_interest, passwordHash: hashPassword(password),
     });
     if (!user) {
-      return res.status(409).json({ success: false, error: 'An account with this email already exists. Try signing in.' });
+      const message = conflictField === 'username'
+        ? 'That username is already taken. Try another.'
+        : 'An account with this email already exists. Try signing in.';
+      return res.status(409).json({ success: false, error: message, conflict: conflictField });
     }
     await issueAndSend(user.id, 'activation', { to: user.email, fullName: user.full_name });
     // No session yet — the account cannot do anything until the code lands.
@@ -144,17 +155,33 @@ router.post('/resend-activation', codeRequestLimiter, async (req, res) => {
   }
 });
 
+router.get('/username-availability', usernameCheckLimiter, async (req, res) => {
+  const raw = String(req.query.username || '').trim();
+  const problem = usernameProblem(raw);
+  if (problem) return res.json({ available: false, reason: problem });
+  try {
+    const existing = await userRepo.users.findByUsername(raw);
+    res.json({ available: !existing });
+  } catch (err) {
+    console.error('[Auth] username-availability failed:', err.message);
+    // Unknown, not false — a DB hiccup here must not block a signup the
+    // eventual INSERT would have allowed; the real uniqueness check still
+    // happens there regardless of what this convenience endpoint said.
+    res.json({ available: null });
+  }
+});
+
 router.post('/login', loginLimiter, async (req, res) => {
   const v = validateLogin(req.body);
   if (!v.ok) return res.status(400).json({ success: false, error: v.errors[0] });
 
   try {
-    const { email, password } = v.value;
-    const row = await userRepo.users.findByEmail(email);
+    const { identifier, password } = v.value;
+    const row = await userRepo.users.findByIdentifier(identifier);
     const ok = verifyPassword(password, row ? row.password_hash : DUMMY_HASH);
     if (!row || !ok || row.disabled) {
-      console.warn(`[Auth] Failed sign-in for "${email}" from ${req.ip || 'unknown'}`);
-      return res.status(401).json({ success: false, error: 'Incorrect email or password.' });
+      console.warn(`[Auth] Failed sign-in for "${identifier}" from ${req.ip || 'unknown'}`);
+      return res.status(401).json({ success: false, error: 'Incorrect email/username or password.' });
     }
     if (!row.email_verified) {
       return res.status(403).json({
@@ -172,13 +199,16 @@ router.post('/login', loginLimiter, async (req, res) => {
 });
 
 router.post('/forgot-password', codeRequestLimiter, async (req, res) => {
-  const v = validateEmailOnly(req.body);
+  const v = validateForgotPassword(req.body);
   if (!v.ok) return res.status(400).json({ success: false, error: v.errors[0] });
 
+  // Generic regardless of identifier kind — this must not become a way to
+  // check whether a given email OR username is registered.
   const generic = { success: true, message: 'If that account exists, a reset code is on its way.' };
   try {
-    const user = await userRepo.users.findByEmail(v.value.email);
+    const user = await userRepo.users.findByIdentifier(v.value.identifier);
     if (user && !user.disabled) {
+      // Always the real address on file — a username never doubles as an inbox.
       await issueAndSend(user.id, 'password_reset', { to: user.email, fullName: user.full_name });
     }
     res.json(generic);
@@ -193,8 +223,8 @@ router.post('/reset-password', codeVerifyLimiter, async (req, res) => {
   if (!v.ok) return res.status(400).json({ success: false, error: v.errors[0] });
 
   try {
-    const { email, code, new_password } = v.value;
-    const user = await userRepo.users.findByEmail(email);
+    const { identifier, code, new_password } = v.value;
+    const user = await userRepo.users.findByIdentifier(identifier);
     if (!user) return res.status(400).json({ success: false, error: 'Invalid or expired code.' });
 
     const row = await userRepo.codes.latest(user.id, 'password_reset');

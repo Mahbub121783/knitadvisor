@@ -453,12 +453,17 @@
         <label for="fName">Full name</label>
         <input type="text" id="fName" autocomplete="name" maxlength="120">
       </div>
+      <div class="login-field" id="fieldUsername" hidden>
+        <label for="fUsername">Username</label>
+        <input type="text" id="fUsername" autocomplete="username" maxlength="30" placeholder="rahim_uddin" autocapitalize="off" autocorrect="off" spellcheck="false">
+        <p class="hint" id="unameHint">3–30 characters: letters, numbers, underscore, period.</p>
+      </div>
       <div class="login-field" id="fieldCompany" hidden>
         <label for="fCompany">Mill or company <small>(optional)</small></label>
         <input type="text" id="fCompany" autocomplete="organization" maxlength="160">
       </div>
       <div class="login-field" id="fieldEmail">
-        <label for="fEmail">Work email</label>
+        <label for="fEmail" id="fEmailLabel">Work email</label>
         <input type="email" id="fEmail" autocomplete="username" placeholder="you@yourmill.com" maxlength="254">
       </div>
       <div class="login-field" id="fieldCode" hidden>
@@ -497,7 +502,7 @@
   var mode = 'signin';       // 'signin' | 'signup' | 'verify' | 'forgot' | 'reset'
   var planInterest = null;
   var lastFocus = null;
-  var pendingEmail = null;   // the email a verify/reset step is acting on
+  var pendingIdentifier = null;   // the email/username a verify/reset step is acting on
   var PLAN_NAMES = { floor: 'Floor', mill: 'Mill', buying_house: 'Buying House' };
 
   /* ---------- api ---------- */
@@ -531,7 +536,7 @@
     if (user) {
       $('userMenuBtn').textContent = initials(user);
       $('userMenuName').textContent = user.full_name || 'Signed in';
-      $('userMenuEmail').textContent = user.email;
+      $('userMenuEmail').textContent = user.username ? '@' + user.username + ' · ' + user.email : user.email;
       hero.textContent = 'Open the calculator';
       viz.textContent = 'Open the calculator';
     } else {
@@ -573,8 +578,14 @@
     $('tabSignUp').setAttribute('aria-selected', isSignup ? 'true' : 'false');
 
     $('fieldName').hidden = !isSignup;
+    $('fieldUsername').hidden = !isSignup;
+    $('unameHint').className = 'hint';
+    $('unameHint').textContent = '3–30 characters: letters, numbers, underscore, period.';
     $('fieldCompany').hidden = !isSignup;
     $('fieldEmail').hidden = false;
+    $('fEmailLabel').textContent = isSignup ? 'Work email' : 'Email or username';
+    $('fEmail').type = isSignup ? 'email' : 'text';
+    $('fEmail').placeholder = isSignup ? 'you@yourmill.com' : 'you@yourmill.com or username';
     $('fEmail').readOnly = isVerify || isReset;
     $('fieldCode').hidden = !(isVerify || isReset);
     $('fieldPassword').hidden = isVerify || isForgot;
@@ -596,11 +607,14 @@
     var plan = planInterest ? ' You are requesting the ' + PLAN_NAMES[planInterest] + ' plan.' : '';
     var spamNote = " Don't see it? Check your spam folder.";
     var subs = {
-      signin: 'Use your work email to open the calculator.',
+      signin: 'Use your email or username to open the calculator.',
       signup: 'Free while plans are finalised.' + plan,
-      verify: (pendingEmail ? 'Enter the 6-digit code we emailed to ' + pendingEmail + '.' : 'Enter the 6-digit code we emailed you.') + spamNote,
-      forgot: 'Enter your account email and we will mail you a reset code.',
-      reset: (pendingEmail ? 'Enter the code we emailed to ' + pendingEmail + ' and choose a new password.' : 'Enter the code and choose a new password.') + spamNote,
+      verify: (pendingIdentifier ? 'Enter the 6-digit code we emailed to ' + pendingIdentifier + '.' : 'Enter the 6-digit code we emailed you.') + spamNote,
+      forgot: 'Enter your account email or username and we will mail a reset code to the address on file.',
+      // Never echo the identifier here — in reset mode it may be the username
+      // they typed in forgot mode, and showing "we emailed <username>" reads
+      // as a bug even though the code correctly went to their real email.
+      reset: 'Enter the code we emailed to the address on file, and choose a new password.' + spamNote,
     };
     $('loginSub').textContent = subs[m];
 
@@ -620,7 +634,8 @@
   function closeAuth(){
     overlay.hidden = true;
     $('authForm').reset();
-    pendingEmail = null;
+    pendingIdentifier = null;
+    setUnameStatus('', '');
     clearMessages();
     if (lastFocus && lastFocus.focus) lastFocus.focus();
   }
@@ -631,15 +646,16 @@
   });
   $('tabSignIn').addEventListener('click', function(){ setMode('signin'); });
   $('tabSignUp').addEventListener('click', function(){ setMode('signup'); });
-  $('backToSignIn').addEventListener('click', function(){ pendingEmail = null; setMode('signin'); });
+  $('backToSignIn').addEventListener('click', function(){ pendingIdentifier = null; setMode('signin'); });
   $('forgotLink').addEventListener('click', function(){ setMode('forgot'); $('fEmail').value = $('fEmail').value || ''; });
 
   function requestFreshCode(kind){
-    // kind: 'activation' (verify mode) or 'reset' (reset mode) — both hit the
-    // endpoint that issues+mails a fresh code; both always answer success so
-    // this reveals nothing about whether the account exists.
-    var path = kind === 'reset' ? '/api/auth/forgot-password' : '/api/auth/resend-activation';
-    return postJSON(path, { email: pendingEmail });
+    // kind: 'activation' (verify mode, always a real email) or 'reset' (reset
+    // mode, may be a username) — both hit the endpoint that issues+mails a
+    // fresh code; both always answer success so this reveals nothing about
+    // whether the account exists.
+    if (kind === 'reset') return postJSON('/api/auth/forgot-password', { identifier: pendingIdentifier });
+    return postJSON('/api/auth/resend-activation', { email: pendingIdentifier });
   }
 
   // Live strength hint — mirrors the server's real rule (engine/domain/
@@ -669,6 +685,40 @@
     hint.className = 'hint warn';
   });
 
+  // Live username availability — debounced, format-checked client-side first
+  // so a request only goes out once it could plausibly succeed. The server
+  // (GET /api/auth/username-availability, and the real uniqueness check at
+  // signup) is the actual authority; this is a convenience, not a gate.
+  var unameStatus = null; // true | false | null(unknown/empty)
+  function setUnameStatus(text, cls){
+    var hint = $('unameHint');
+    hint.textContent = text;
+    hint.className = 'hint' + (cls ? ' ' + cls : '');
+  }
+  var unameCheckSeq = 0;
+  var unameTimer = null;
+  $('fUsername').addEventListener('input', function(){
+    var raw = $('fUsername').value.trim();
+    unameStatus = null;
+    clearTimeout(unameTimer);
+    if (!raw) { setUnameStatus('3–30 characters: letters, numbers, underscore, period.', ''); return; }
+    if (raw.length < 3) { setUnameStatus('Too short (minimum 3 characters).', 'warn'); return; }
+    if (!/^[A-Za-z0-9_.]+$/.test(raw)) { setUnameStatus('Only letters, numbers, underscore and period.', 'warn'); return; }
+    setUnameStatus('Checking…', '');
+    var mySeq = ++unameCheckSeq;
+    unameTimer = setTimeout(function(){
+      fetch(API + '/api/auth/username-availability?username=' + encodeURIComponent(raw))
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+          if (mySeq !== unameCheckSeq) return; // a newer keystroke already superseded this check
+          if (d.available === true) { unameStatus = true; setUnameStatus('Available.', 'ok'); }
+          else if (d.available === false) { unameStatus = false; setUnameStatus(d.reason || 'That username is taken.', 'warn'); }
+          else { setUnameStatus('3–30 characters: letters, numbers, underscore, period.', ''); }
+        })
+        .catch(function(){ if (mySeq === unameCheckSeq) setUnameStatus('3–30 characters: letters, numbers, underscore, period.', ''); });
+    }, 350);
+  });
+
   $('resendLink').addEventListener('click', function(){
     var btn = $('resendLink');
     btn.disabled = true;
@@ -680,7 +730,8 @@
 
   $('authForm').addEventListener('submit', function(e){
     e.preventDefault();
-    var email = ($('fEmail').value || '').trim();
+    var identifier = ($('fEmail').value || '').trim();
+    var username = ($('fUsername').value || '').trim();
     var password = $('fPassword').value;
     var code = ($('fCode').value || '').trim();
     var btn = $('authSubmit');
@@ -689,19 +740,19 @@
     var path, body;
     if (mode === 'signup') {
       path = '/api/auth/signup';
-      body = { email: email, password: password, full_name: $('fName').value.trim(), company: $('fCompany').value.trim(), plan_interest: planInterest };
+      body = { email: identifier, username: username, password: password, full_name: $('fName').value.trim(), company: $('fCompany').value.trim(), plan_interest: planInterest };
     } else if (mode === 'verify') {
       path = '/api/auth/verify-email';
-      body = { email: pendingEmail, code: code };
+      body = { email: pendingIdentifier, code: code };
     } else if (mode === 'forgot') {
       path = '/api/auth/forgot-password';
-      body = { email: email };
+      body = { identifier: identifier };
     } else if (mode === 'reset') {
       path = '/api/auth/reset-password';
-      body = { email: pendingEmail, code: code, new_password: password };
+      body = { identifier: pendingIdentifier, code: code, new_password: password };
     } else {
       path = '/api/auth/login';
-      body = { email: email, password: password };
+      body = { identifier: identifier, password: password };
     }
 
     var label = btn.textContent;
@@ -714,13 +765,13 @@
       if (r.ok && r.data && r.data.user) { window.location.href = safeNext(); return; }
 
       if (mode === 'signup' && r.ok && r.data && r.data.verification_required) {
-        pendingEmail = r.data.email || email;
+        pendingIdentifier = r.data.email || identifier;
         setMode('verify');
         showInfo(r.data.message || 'Enter the 6-digit code we emailed you.');
         return;
       }
       if (mode === 'signin' && r.data && r.data.code === 'EMAIL_NOT_VERIFIED') {
-        pendingEmail = r.data.email || email;
+        pendingIdentifier = r.data.email || identifier;
         setMode('verify');
         requestFreshCode('activation').then(function(rr){
           showInfo((rr.data && rr.data.message) || 'We emailed you a fresh code.');
@@ -728,7 +779,7 @@
         return;
       }
       if (mode === 'forgot' && r.ok) {
-        pendingEmail = email;
+        pendingIdentifier = identifier;
         setMode('reset');
         showInfo((r.data && r.data.message) || 'If that account exists, a reset code is on its way.');
         return;

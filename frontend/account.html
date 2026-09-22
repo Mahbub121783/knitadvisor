@@ -116,6 +116,20 @@
       </div>
 
       <div class="card form-card">
+        <h2>Username</h2>
+        <p class="sub" id="uname-sub">Used to sign in alongside your email. Can be changed once every 60 days.</p>
+        <form id="uname-form" novalidate>
+          <div class="frow">
+            <label for="uname-new">Username</label>
+            <input class="form-input" id="uname-new" type="text" maxlength="30" autocapitalize="off" autocorrect="off" spellcheck="false">
+            <p class="msg" id="uname-hint" style="margin-top:4px;">&nbsp;</p>
+          </div>
+          <button class="btn btn-primary" type="submit" id="uname-save">Change username</button>
+          <div class="msg" id="uname-msg" role="status"></div>
+        </form>
+      </div>
+
+      <div class="card form-card">
         <h2>Change password</h2>
         <p class="sub">At least 10 characters, with 3 of: lowercase, uppercase, numbers, symbols. Other devices are signed out when you change it.</p>
         <form id="pw-form" novalidate>
@@ -190,6 +204,14 @@
   $('tab-profile').addEventListener('click', function () { showTab('profile'); });
 
   /* ---------- summary ---------- */
+  var usernameChangeableAt = null;
+  function applyUsernameLock() {
+    var locked = usernameChangeableAt && new Date(usernameChangeableAt).getTime() > Date.now();
+    $('uname-save').disabled = !!locked;
+    $('uname-sub').textContent = locked
+      ? 'You can change it again on ' + new Date(usernameChangeableAt).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }) + '.'
+      : 'Used to sign in alongside your email. Can be changed once every 60 days.';
+  }
   function loadSummary() {
     j('/api/account/summary').then(function (d) {
       var st = d.stats || {};
@@ -201,6 +223,9 @@
       $('k-top').textContent = top ? top.fabric : '—';
       $('k-top-s').innerHTML = top ? esc(top.runs) + (top.runs === 1 ? ' run' : ' runs') : '&nbsp;';
       if (d.member_since) $('welcome').textContent = 'Member since ' + new Date(d.member_since).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) + '.';
+      if (document.activeElement !== $('uname-new')) $('uname-new').value = d.username || '';
+      usernameChangeableAt = d.username_changeable_at || null;
+      applyUsernameLock();
     }).catch(function () {});
   }
 
@@ -289,7 +314,9 @@
   });
 
   /* ---------- profile ---------- */
-  function setMsg(el, text, ok) { el.textContent = text; el.className = 'msg ' + (text ? (ok ? 'ok' : 'err') : ''); }
+  // ok: true (green), false (red), null (neutral/checking) — a third state
+  // the availability checks below need but the original two-state calls don't.
+  function setMsg(el, text, ok) { el.textContent = text; el.className = 'msg ' + (text ? (ok === true ? 'ok' : ok === false ? 'err' : '') : ''); }
 
   function fillProfile(u) {
     $('p-email').value = u.email || '';
@@ -305,6 +332,37 @@
       .then(function (d) { window.KA_USER = d.user; setMsg($('p-msg'), 'Saved.', true); })
       .catch(function (err) { setMsg($('p-msg'), err.message, false); })
       .then(function () { btn.disabled = false; });
+  });
+
+  // Live availability, same rule and endpoint the landing page's signup form uses.
+  var unameTimer;
+  $('uname-new').addEventListener('input', function () {
+    var raw = $('uname-new').value.trim();
+    clearTimeout(unameTimer);
+    if (!raw) { setMsg($('uname-hint'), '', null); return; }
+    if (raw.length < 3) { setMsg($('uname-hint'), 'Too short (minimum 3 characters).', false); return; }
+    if (!/^[A-Za-z0-9_.]+$/.test(raw)) { setMsg($('uname-hint'), 'Only letters, numbers, underscore and period.', false); return; }
+    setMsg($('uname-hint'), 'Checking…', null);
+    unameTimer = setTimeout(function () {
+      fetch(API_BASE + '/api/auth/username-availability?username=' + encodeURIComponent(raw))
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d.available === true) setMsg($('uname-hint'), 'Available.', true);
+          else if (d.available === false) setMsg($('uname-hint'), d.reason || 'That username is taken.', false);
+          else setMsg($('uname-hint'), '', null);
+        }).catch(function () { setMsg($('uname-hint'), '', null); });
+    }, 350);
+  });
+
+  $('uname-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var btn = $('uname-save'); btn.disabled = true; setMsg($('uname-msg'), '', true);
+    j('/api/account/username', 'POST', { username: $('uname-new').value.trim() })
+      .then(function (d) {
+        setMsg($('uname-msg'), 'Username changed to ' + d.username + '.', true);
+        loadSummary();
+      })
+      .catch(function (err) { setMsg($('uname-msg'), err.message, false); btn.disabled = false; });
   });
 
   // Live strength hint — mirrors the server's real rule (engine/domain/

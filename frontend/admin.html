@@ -1273,7 +1273,7 @@
       <div class="tbl-wrap">
         <table class="tbl">
           <thead><tr>
-            <th>Name</th><th>Company</th><th>Plan interest</th><th>Joined</th><th>Last sign-in</th><th>Status</th><th></th>
+            <th>Name</th><th>Username</th><th>Company</th><th>Plan interest</th><th>Joined</th><th>Last sign-in</th><th>Status</th><th></th>
           </tr></thead>
           <tbody id="usr-tbody"></tbody>
         </table>
@@ -1309,6 +1309,12 @@
         <div class="form-group modal-full mt-16" style="border-top:1px solid var(--line);padding-top:14px;">
           <label class="form-label">Admin actions</label>
           <div class="row" style="margin-top:8px;">
+            <input type="text" id="ud-username-input" class="form-input" style="flex:1;min-width:180px;" placeholder="new username" autocapitalize="off" autocorrect="off" spellcheck="false">
+            <button class="btn btn-ghost btn-sm" id="ud-username-save">Change username</button>
+          </div>
+          <div id="ud-username-msg" style="font-size:10.5px;min-height:15px;margin-top:5px;">3–30 characters: letters, numbers, underscore, period. No 60-day wait for an admin change.</div>
+
+          <div class="row" style="margin-top:12px;">
             <input type="email" id="ud-email-input" class="form-input" style="flex:1;min-width:180px;" placeholder="new email address">
             <button class="btn btn-ghost btn-sm" id="ud-email-save">Change email</button>
           </div>
