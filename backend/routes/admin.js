@@ -26,6 +26,10 @@ const { query: dbQuery } = require('../db/client');
 const { verifyPassword, hashPassword, isLegacyHash } = require('../middleware/password');
 const { createRateLimiter } = require('../middleware/rate-limiter');
 const crypto = require('crypto');
+const { validateEmailOnly, passwordProblem } = require('../engine/domain/auth-validation');
+const { issueAndSend } = require('../services/account-codes');
+const mailClient = require('../mail/client');
+const { passwordChangedByAdminEmail, emailChangedNoticeEmail } = require('../mail/templates');
 
 const CSV_EXPORT_LIMIT = parseInt(process.env.CSV_EXPORT_LIMIT, 10) || 10000;
 
@@ -589,6 +593,62 @@ router.get('/api/users/:id', adminAuth, async (req, res) => {
   } catch (err) {
     console.error('[User Detail Error]', err);
     res.status(500).json({ error: 'Failed to load user' });
+  }
+});
+
+// Admin-set email and password. Both are trusted-operator actions with no
+// "prove you know the current one" step (that is what /api/users/:id being
+// behind adminAuth already is) — unlike the customer's own self-service
+// change in routes/account.js, which does require the current password.
+router.patch('/api/users/:id/email', adminAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const v = validateEmailOnly(req.body);
+    if (!Number.isInteger(id) || !v.ok) {
+      return res.status(400).json({ error: (v.errors && v.errors[0]) || 'A user id and a valid email are required' });
+    }
+    const before = await userRepo.users.findById(id);
+    if (!before) return res.status(404).json({ error: 'User not found' });
+
+    const { row, conflict } = await userRepo.users.setEmail(id, v.value.email);
+    if (conflict) return res.status(409).json({ error: 'Another account already uses that email address.' });
+    if (!row) return res.status(404).json({ error: 'User not found' });
+
+    // The account just lost its verified status (setEmail always does that) —
+    // send the new owner-to-be their activation code immediately so admin
+    // does not have to separately remember to trigger it.
+    issueAndSend(row.id, 'activation', { to: row.email, fullName: row.full_name }).catch(() => {});
+    if (before.email !== row.email) {
+      const notice = emailChangedNoticeEmail({ fullName: row.full_name, newEmail: row.email });
+      mailClient.sendMail({ to: before.email, subject: notice.subject, html: notice.html }).catch(() => {});
+    }
+    res.json({ ok: true, id: row.id, email: row.email });
+  } catch (err) {
+    console.error('[Users Admin Email Error]', err);
+    res.status(500).json({ error: 'Failed to update the email address' });
+  }
+});
+
+router.post('/api/users/:id/reset-password', adminAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid id' });
+    const user = await userRepo.users.findById(id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const problem = passwordProblem(req.body && req.body.new_password, user.email.toLowerCase());
+    if (problem) return res.status(400).json({ error: problem });
+
+    await userRepo.users.updatePassword(id, hashPassword(req.body.new_password));
+    // Same reasoning as a self-service change or a code-based reset: a
+    // password change ends every existing session, admin-initiated or not.
+    await userRepo.sessions.removeAllForUser(id);
+    const notice = passwordChangedByAdminEmail({ fullName: user.full_name });
+    mailClient.sendMail({ to: user.email, subject: notice.subject, html: notice.html }).catch(() => {});
+    res.json({ ok: true, id });
+  } catch (err) {
+    console.error('[Users Admin Reset Password Error]', err);
+    res.status(500).json({ error: 'Failed to reset the password' });
   }
 });
 

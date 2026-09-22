@@ -26,9 +26,8 @@ const {
 const {
   validateSignup, validateLogin, validateEmailOnly, validateVerifyCode, validateResetPassword,
 } = require('../engine/domain/auth-validation');
-const { issueCode, checkCode } = require('../engine/domain/otp');
-const mailClient = require('../mail/client');
-const { activationEmail, passwordResetEmail } = require('../mail/templates');
+const { checkCode } = require('../engine/domain/otp');
+const { issueAndSend } = require('../services/account-codes');
 
 const signupLimiter = createRateLimiter({
   name: 'auth-signup', max: 8, windowMs: 60 * 60 * 1000,
@@ -62,18 +61,6 @@ async function startSession(req, res, userId) {
   const { rawToken, tokenHash } = newToken();
   const session = await userRepo.sessions.create(userId, tokenHash);
   setSessionCookie(req, res, rawToken, session.maxAgeSeconds);
-}
-
-/** Issues a code, stores its hash, and mails it. Never throws — the caller
- *  decides what an unsent email means for its own response. */
-async function issueAndSend(userId, purpose, { to, fullName }) {
-  const { code, hash, expiresAt } = issueCode();
-  await userRepo.codes.create(userId, purpose, hash, expiresAt);
-  const build = purpose === 'activation' ? activationEmail : passwordResetEmail;
-  const { subject, html } = build({ fullName, code });
-  const result = await mailClient.sendMail({ to, subject, html });
-  if (!result.sent) console.error(`[Auth] Could not email ${purpose} code to ${to}: ${result.reason}`);
-  return result;
 }
 
 router.post('/signup', signupLimiter, async (req, res) => {

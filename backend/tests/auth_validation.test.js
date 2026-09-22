@@ -7,6 +7,14 @@ const {
 const { readCookie, hashToken, newToken, COOKIE_NAME } = require('../middleware/user-auth');
 const { hashPassword, verifyPassword } = require('../middleware/password');
 
+// A password meeting the real strength rule (>= PASSWORD_MIN chars, 3+ of
+// lower/upper/digit/symbol) for test cases where the password itself isn't
+// what's under test.
+function strongPw(n) {
+  const base = 'Aa1_';
+  return (base + 'x'.repeat(Math.max(0, n - base.length))).slice(0, Math.max(n, base.length));
+}
+
 console.log('--- Running Customer Auth Tests ---');
 
 // ── Sign-up validation ──────────────────────────────────────────────────────
@@ -17,13 +25,13 @@ console.log('--- Running Customer Auth Tests ---');
   assert.strictEqual(ok.value.full_name, 'Rahim Uddin');
   assert.strictEqual(ok.value.company, 'ABC Knit');
 
-  assert.strictEqual(validateSignup({ email: 'a@b.co', password: 'x'.repeat(PASSWORD_MIN), full_name: 'Ab' }).value.company, null, 'company is optional');
-  const planOf = (p) => validateSignup({ email: 'a@b.co', password: 'x'.repeat(PASSWORD_MIN), full_name: 'Ab', plan_interest: p }).value.plan_interest;
+  assert.strictEqual(validateSignup({ email: 'a@b.co', password: strongPw(PASSWORD_MIN), full_name: 'Ab' }).value.company, null, 'company is optional');
+  const planOf = (p) => validateSignup({ email: 'a@b.co', password: strongPw(PASSWORD_MIN), full_name: 'Ab', plan_interest: p }).value.plan_interest;
   assert.strictEqual(planOf('mill'), 'mill');
   assert.strictEqual(planOf('enterprise'), null, 'unknown plan is dropped, not rejected');
   assert.strictEqual(planOf(undefined), null);
 
-  const bad = (over) => validateSignup({ email: 'a@b.co', password: 'x'.repeat(PASSWORD_MIN), full_name: 'Ab', ...over });
+  const bad = (over) => validateSignup({ email: 'a@b.co', password: strongPw(PASSWORD_MIN), full_name: 'Ab', ...over });
   assert.strictEqual(bad({ email: 'nope' }).ok, false, 'malformed email');
   assert.strictEqual(bad({ email: 'a@b' }).ok, false, 'email needs a dotted domain');
   assert.strictEqual(bad({ password: 'x'.repeat(PASSWORD_MIN - 1) }).ok, false, 'password too short');
@@ -34,6 +42,22 @@ console.log('--- Running Customer Auth Tests ---');
   assert.strictEqual(validateSignup(undefined).ok, false, 'no body');
   assert.strictEqual(validateSignup({ email: ['a@b.co'], password: 12345678901, full_name: 'Ab' }).ok, false, 'non-string password is rejected, not coerced');
   console.log('  Sign-up validation OK');
+}
+
+// ── Password strength — long is not enough, needs 3 of 4 character classes ──
+{
+  const bad = (pw) => validateSignup({ email: 'a@b.co', password: pw, full_name: 'Ab' });
+  assert.strictEqual(bad('aaaaaaaaaa').ok, false, 'all-lowercase, 10 chars, still rejected');
+  assert.strictEqual(bad('AAAAAAAAAA').ok, false, 'all-uppercase, 10 chars, still rejected');
+  assert.strictEqual(bad('1234567890').ok, false, 'all-digits, 10 chars, still rejected');
+  assert.strictEqual(bad('aaaaaaaaaA').ok, false, 'only 2 classes (lower+upper), still rejected');
+  assert.strictEqual(bad('aaaaaaaaA1').ok, true, '3 classes (lower+upper+digit) is enough');
+  assert.strictEqual(bad('aaaaaaaa-1').ok, true, '3 classes (lower+digit+symbol) is enough');
+  assert.strictEqual(
+    validateSignup({ email: 'a@b.co', password: 'aaaaaaaaaa', full_name: 'Ab' }).errors[0],
+    'Password must include at least 3 of: lowercase letters, uppercase letters, numbers, symbols.'
+  );
+  console.log('  Password strength rule OK (3-of-4 character classes, not just length)');
 }
 
 // ── Sign-in validation ──────────────────────────────────────────────────────

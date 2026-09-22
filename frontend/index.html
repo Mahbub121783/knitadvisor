@@ -184,6 +184,8 @@
   .login-field input{width:100%;padding:10px 12px;border:1px solid var(--border-strong);border-radius:6px;background:var(--bg);color:var(--text);font-size:14px;font-family:inherit;}
   .login-field input:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent);}
   .login-field .hint{margin-top:5px;font-size:12px;color:var(--text-faint);}
+  .login-field .hint.ok{color:var(--good);}
+  .login-field .hint.warn{color:var(--danger);}
   .login-error{display:none;margin-top:12px;font-size:13px;color:var(--danger);line-height:1.45;}
   .login-error.show{display:block;}
   .login-info{margin-top:12px;font-size:13px;color:var(--good);line-height:1.45;}
@@ -466,7 +468,7 @@
       <div class="login-field" id="fieldPassword">
         <label for="fPassword" id="fPasswordLabel">Password</label>
         <input type="password" id="fPassword" autocomplete="current-password" maxlength="128">
-        <p class="hint" id="pwHint" hidden>At least 10 characters.</p>
+        <p class="hint" id="pwHint" hidden>At least 10 characters, with 3 of: lowercase, uppercase, numbers, symbols.</p>
       </div>
       <button type="button" class="link-btn" id="forgotLink" hidden>Forgot password?</button>
       <p class="login-error" id="authError" role="alert"></p>
@@ -479,6 +481,7 @@
   </div>
 </div>
 
+<script src="assets/js/password-toggle.js?v=20260922a"></script>
 <script>
 (function(){
   "use strict";
@@ -577,6 +580,8 @@
     $('fieldPassword').hidden = isVerify || isForgot;
     $('fPasswordLabel').textContent = isReset ? 'New password' : 'Password';
     $('pwHint').hidden = !(isSignup || isReset);
+    $('pwHint').className = 'hint';
+    $('pwHint').textContent = 'At least 10 characters, with 3 of: lowercase, uppercase, numbers, symbols.';
     $('fPassword').setAttribute('autocomplete', (isSignup || isReset) ? 'new-password' : 'current-password');
     $('forgotLink').hidden = m !== 'signin';
     $('resendLink').hidden = !(isVerify || isReset);
@@ -635,6 +640,33 @@
     var path = kind === 'reset' ? '/api/auth/forgot-password' : '/api/auth/resend-activation';
     return postJSON(path, { email: pendingEmail });
   }
+
+  // Live strength hint — mirrors the server's real rule (engine/domain/
+  // auth-validation.js's passwordProblem: >=10 chars, 3 of 4 classes) so a
+  // password that reads as "long enough" isn't rejected as a surprise after
+  // submit. The server re-checks everything regardless; this is UX only.
+  function passwordClassCount(pw){
+    var n = 0;
+    if (/[a-z]/.test(pw)) n++;
+    if (/[A-Z]/.test(pw)) n++;
+    if (/[0-9]/.test(pw)) n++;
+    if (/[^A-Za-z0-9]/.test(pw)) n++;
+    return n;
+  }
+  $('fPassword').addEventListener('input', function(){
+    if (mode !== 'signup' && mode !== 'reset') return;
+    var pw = $('fPassword').value;
+    var hint = $('pwHint');
+    if (!pw) { hint.textContent = 'At least 10 characters, with 3 of: lowercase, uppercase, numbers, symbols.'; hint.className = 'hint'; return; }
+    var classes = passwordClassCount(pw);
+    var longEnough = pw.length >= 10;
+    if (longEnough && classes >= 3) { hint.textContent = 'Looks good.'; hint.className = 'hint ok'; return; }
+    var need = [];
+    if (!longEnough) need.push((10 - pw.length) + ' more character' + (10 - pw.length === 1 ? '' : 's'));
+    if (classes < 3) need.push((3 - classes) + ' more type' + (3 - classes === 1 ? '' : 's') + ' (lower/upper/number/symbol)');
+    hint.textContent = 'Needs: ' + need.join(' and ') + '.';
+    hint.className = 'hint warn';
+  });
 
   $('resendLink').addEventListener('click', function(){
     var btn = $('resendLink');

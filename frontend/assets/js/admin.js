@@ -1208,6 +1208,11 @@ async function openUserDetail(id) {
     toggleBtn.className = u.disabled ? 'btn btn-primary' : 'btn btn-danger';
     toggleBtn.dataset.disabled = u.disabled ? 'false' : 'true';
 
+    document.getElementById('ud-email-input').value = u.email;
+    document.getElementById('ud-pw-input').value = '';
+    setUdMsg('ud-email-msg', '', null);
+    setUdMsg('ud-pw-msg', 'At least 10 characters, 3 of: lower/upper/number/symbol. Signs out every device.', null);
+
     document.getElementById('user-detail-modal').classList.remove('hidden');
   } catch (e) { toast('Failed to load user detail', 'error'); }
 }
@@ -1215,6 +1220,47 @@ async function openUserDetail(id) {
 function closeUserDetail() {
   document.getElementById('user-detail-modal').classList.add('hidden');
   openUserId = null;
+}
+
+function setUdMsg(elId, text, ok) {
+  const el = document.getElementById(elId);
+  el.textContent = text;
+  el.style.color = ok === true ? 'var(--a1)' : ok === false ? 'var(--a3)' : 'var(--t3)';
+}
+
+async function saveUserEmail() {
+  if (openUserId == null) return;
+  const input = document.getElementById('ud-email-input');
+  const email = input.value.trim();
+  const btn = document.getElementById('ud-email-save');
+  btn.disabled = true;
+  try {
+    await api('/admin/api/users/' + openUserId + '/email', 'PATCH', { email });
+    setUdMsg('ud-email-msg', 'Email updated — an activation code was sent to the new address.', true);
+    toast('Email changed', 'success');
+    loadUsers(1, getUsrFilters());
+    document.getElementById('ud-email').textContent = email;
+  } catch (e) {
+    setUdMsg('ud-email-msg', e.message, false);
+  } finally { btn.disabled = false; }
+}
+
+async function saveUserPassword() {
+  if (openUserId == null) return;
+  const input = document.getElementById('ud-pw-input');
+  const new_password = input.value;
+  if (!new_password) { setUdMsg('ud-pw-msg', 'Enter a new password first.', false); return; }
+  const btn = document.getElementById('ud-pw-save');
+  btn.disabled = true;
+  try {
+    await api('/admin/api/users/' + openUserId + '/reset-password', 'POST', { new_password });
+    input.value = '';
+    setUdMsg('ud-pw-msg', 'Password set — the user was emailed and every device was signed out.', true);
+    toast('Password reset', 'success');
+    if (openUserId) openUserDetail(openUserId); // refresh active-session count
+  } catch (e) {
+    setUdMsg('ud-pw-msg', e.message, false);
+  } finally { btn.disabled = false; }
 }
 
 // ── RFQ / QUOTES ───────────────────────────────────────────
@@ -1885,6 +1931,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('ud-toggle-disabled').addEventListener('click', (e) => {
     if (openUserId != null) setUserDisabled(openUserId, e.currentTarget.dataset.disabled === 'true');
   });
+  document.getElementById('ud-email-save').addEventListener('click', saveUserEmail);
+  document.getElementById('ud-pw-save').addEventListener('click', saveUserPassword);
 
   // Dashboard alerts jump straight to the tab they are about
   document.getElementById('ov-alerts').addEventListener('click', (e) => {

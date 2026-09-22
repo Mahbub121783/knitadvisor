@@ -55,10 +55,10 @@ console.log('--- Running One-Time Code Tests ---');
   assert.strictEqual(validateVerifyCode({ email: 'a@b.co', code: '12345' }).ok, false);
   assert.strictEqual(validateVerifyCode({ email: 'a@b.co', code: '123456; DROP TABLE' }).ok, false);
 
-  const okReset = validateResetPassword({ email: 'a@b.co', code: '654321', new_password: 'a-good-long-password' });
+  const okReset = validateResetPassword({ email: 'a@b.co', code: '654321', new_password: 'Aa1-good-long-pass' });
   assert.strictEqual(okReset.ok, true);
   assert.strictEqual(validateResetPassword({ email: 'a@b.co', code: '654321', new_password: 'short' }).ok, false);
-  assert.strictEqual(validateResetPassword({ email: 'a@b.co', code: 'abcdef', new_password: 'a-good-long-password' }).ok, false);
+  assert.strictEqual(validateResetPassword({ email: 'a@b.co', code: 'abcdef', new_password: 'Aa1-good-long-pass' }).ok, false);
   console.log('  validateVerifyCode / validateResetPassword / validateEmailOnly OK');
 }
 

@@ -46,4 +46,22 @@ function passwordResetEmail({ fullName, code }) {
   return { subject: 'Your KnitAdvisor password reset code', html };
 }
 
-module.exports = { activationEmail, passwordResetEmail };
+function passwordChangedByAdminEmail({ fullName }) {
+  const html = shell('Your password was changed', `
+    <p style="font-size:14px;line-height:1.6;">Hi ${esc(fullName || 'there')},</p>
+    <p style="font-size:14px;line-height:1.6;">A KnitAdvisor administrator has set a new password for your account. Every other device you were signed in on has been signed out.</p>
+    <p style="font-size:13px;color:#565C64;">If you were not expecting this, contact us straight away.</p>
+  `);
+  return { subject: 'Your KnitAdvisor password was changed', html };
+}
+
+function emailChangedNoticeEmail({ fullName, newEmail }) {
+  const html = shell('Your account email was changed', `
+    <p style="font-size:14px;line-height:1.6;">Hi ${esc(fullName || 'there')},</p>
+    <p style="font-size:14px;line-height:1.6;">A KnitAdvisor administrator changed the sign-in email on your account to <b>${esc(newEmail)}</b>.</p>
+    <p style="font-size:13px;color:#565C64;">If you were not expecting this, contact us straight away.</p>
+  `);
+  return { subject: 'Your KnitAdvisor account email was changed', html };
+}
+
+module.exports = { activationEmail, passwordResetEmail, passwordChangedByAdminEmail, emailChangedNoticeEmail };

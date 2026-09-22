@@ -117,11 +117,15 @@
 
       <div class="card form-card">
         <h2>Change password</h2>
-        <p class="sub">At least 10 characters. Other devices are signed out when you change it.</p>
+        <p class="sub">At least 10 characters, with 3 of: lowercase, uppercase, numbers, symbols. Other devices are signed out when you change it.</p>
         <form id="pw-form" novalidate>
           <input type="text" autocomplete="username" hidden aria-hidden="true" tabindex="-1" id="pw-user">
           <div class="frow"><label for="pw-cur">Current password</label><input class="form-input" id="pw-cur" type="password" autocomplete="current-password" maxlength="128"></div>
-          <div class="frow"><label for="pw-new">New password</label><input class="form-input" id="pw-new" type="password" autocomplete="new-password" maxlength="128"></div>
+          <div class="frow">
+            <label for="pw-new">New password</label>
+            <input class="form-input" id="pw-new" type="password" autocomplete="new-password" maxlength="128">
+            <p class="msg" id="pw-new-hint" style="margin-top:4px;">&nbsp;</p>
+          </div>
           <div class="frow"><label for="pw-new2">Confirm new password</label><input class="form-input" id="pw-new2" type="password" autocomplete="new-password" maxlength="128"></div>
           <button class="btn btn-primary" type="submit" id="pw-save">Change password</button>
           <div class="msg" id="pw-msg" role="status"></div>
@@ -136,6 +140,7 @@
 <script src="assets/js/api.js?v=20260606b"></script>
 <script src="assets/js/ui.js?v=20260606b"></script>
 <script src="assets/js/storage.js?v=20260606b"></script>
+<script src="assets/js/password-toggle.js?v=20260922a"></script>
 <script>
 (function () {
   'use strict';
@@ -300,6 +305,29 @@
       .then(function (d) { window.KA_USER = d.user; setMsg($('p-msg'), 'Saved.', true); })
       .catch(function (err) { setMsg($('p-msg'), err.message, false); })
       .then(function () { btn.disabled = false; });
+  });
+
+  // Live strength hint — mirrors the server's real rule (engine/domain/
+  // auth-validation.js's passwordProblem). Server re-checks regardless.
+  function passwordClassCount(pw) {
+    var n = 0;
+    if (/[a-z]/.test(pw)) n++;
+    if (/[A-Z]/.test(pw)) n++;
+    if (/[0-9]/.test(pw)) n++;
+    if (/[^A-Za-z0-9]/.test(pw)) n++;
+    return n;
+  }
+  $('pw-new').addEventListener('input', function () {
+    var pw = $('pw-new').value;
+    var hint = $('pw-new-hint');
+    if (!pw) { hint.innerHTML = '&nbsp;'; hint.className = 'msg'; return; }
+    var classes = passwordClassCount(pw), longEnough = pw.length >= 10;
+    if (longEnough && classes >= 3) { hint.textContent = 'Looks good.'; hint.className = 'msg ok'; return; }
+    var need = [];
+    if (!longEnough) need.push((10 - pw.length) + ' more character' + (10 - pw.length === 1 ? '' : 's'));
+    if (classes < 3) need.push((3 - classes) + ' more type' + (3 - classes === 1 ? '' : 's') + ' (lower/upper/number/symbol)');
+    hint.textContent = 'Needs: ' + need.join(' and ') + '.';
+    hint.className = 'msg err';
   });
 
   $('pw-form').addEventListener('submit', function (e) {

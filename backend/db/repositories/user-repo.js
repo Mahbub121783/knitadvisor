@@ -37,6 +37,26 @@ const users = {
     return query('UPDATE app_users SET email_verified = true WHERE id = $1', [id]);
   },
 
+  /**
+   * Admin-initiated email change. Unverifies the account — a changed email
+   * has not been proven to belong to whoever is now using it, the same as a
+   * brand-new signup — the caller is expected to send a fresh activation code
+   * to the new address right after this succeeds.
+   * @returns {Promise<{row: object|null, conflict: boolean}>}
+   */
+  async setEmail(id, newEmail) {
+    try {
+      const rows = await query(
+        'UPDATE app_users SET email = $2, email_verified = false WHERE id = $1 RETURNING id, email, full_name',
+        [id, newEmail]
+      );
+      return { row: rows[0] || null, conflict: false };
+    } catch (err) {
+      if (err.code === '23505') return { row: null, conflict: true }; // unique_violation on lower(email)
+      throw err;
+    }
+  },
+
   async updateProfile(id, { fullName, company }) {
     const rows = await query(
       'UPDATE app_users SET full_name = $2, company = $3 WHERE id = $1 RETURNING id, email, full_name, company',
