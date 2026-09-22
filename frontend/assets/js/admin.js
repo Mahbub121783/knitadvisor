@@ -220,7 +220,11 @@ function renderChart(series) {
     const missH = totalH - hitH;
     const yTotal = H - PAD_B - totalH;
     const yHit = H - PAD_B - hitH;
-    const dateShort = String(d.date).slice(5).replace('-', '/');
+    // pg returns a DATE column as a full ISO-datetime string (midnight UTC) via
+    // node-postgres/JSON, not a bare YYYY-MM-DD — slice(5) alone left the time
+    // portion ("09-08T06:00:00.000Z") in every axis label, overlapping the next.
+    const datePart = String(d.date).split('T')[0];
+    const dateShort = datePart.slice(5).replace('-', '/');
     const showLabel = n <= 10 || i % Math.ceil(n / 7) === 0;
     return '<g class="chart-bar-group">' +
       '<title>' + esc(d.date) + ': ' + esc(d.total) + ' queries, ' + esc(d.cache_hits) + ' from cache</title>' +
