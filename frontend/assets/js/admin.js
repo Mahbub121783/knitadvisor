@@ -114,11 +114,29 @@ function initApp() {
 // ── TABS ────────────────────────────────────────────────────
 const tabState = { loaded: {} };
 
+const TAB_TITLES = {
+  'tab-overview': 'Dashboard', 'tab-logs': 'Query Logs', 'tab-providers': 'AI Providers',
+  'tab-cache': 'Cache', 'tab-prices': 'Yarn Prices', 'tab-dyeing-prices': 'Dyeing Prices',
+  'tab-validation': 'Real-Order Validation', 'tab-inquiries': 'Inquiries', 'tab-rfq': 'RFQ / Quotes',
+  'tab-users': 'Users', 'tab-settings': 'Settings',
+};
+
 function switchTab(tabId) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tabId));
   document.querySelectorAll('.tab-panel').forEach(p => {
     p.classList.toggle('active', p.id === tabId);
   });
+  const title = document.getElementById('page-title');
+  if (title) title.textContent = TAB_TITLES[tabId] || 'Admin';
+  // Mobile: picking a section should close the off-canvas sidebar.
+  const sidebar = document.getElementById('sidebar');
+  const backdrop = document.getElementById('sidebar-backdrop');
+  if (sidebar && sidebar.classList.contains('open')) {
+    sidebar.classList.remove('open');
+    if (backdrop) backdrop.classList.remove('show');
+    const toggle = document.getElementById('sidebar-toggle');
+    if (toggle) toggle.setAttribute('aria-expanded', 'false');
+  }
 
   if (tabId === 'tab-providers' && !tabState.loaded.providers) {
     tabState.loaded.providers = true;
@@ -149,73 +167,161 @@ function switchTab(tabId) {
   }
 }
 
-// ── OVERVIEW ───────────────────────────────────────────────
+// ── OVERVIEW / DASHBOARD ─────────────────────────────────────
+// One aggregated call (see routes/admin.js's GET /api/overview) backs every
+// card here — the trend chart and "Top fabrics" now read the real
+// materialized-view rollups (mv_daily_query_stats / mv_fabric_popularity)
+// instead of the old client-side count over the last 100 raw log rows.
+const STATUS_COLOR = {
+  pending: '#E0A64A', under_review: '#E0A64A', quoted: '#5B9DF5',
+  accepted: '#49B58B', rejected: '#E06A6A', expired: '#7B818A',
+};
+
+function fmtPct(n) { return (Number(n) || 0).toFixed(1).replace(/\.0$/, '') + '%'; }
+function fmtDelta(cur, prev) {
+  if (prev == null) return { text: '', cls: '' };
+  const diff = cur - prev;
+  if (diff === 0) return { text: 'same as yesterday', cls: '' };
+  const pct = prev > 0 ? Math.round(Math.abs(diff) / prev * 100) : null;
+  const dir = diff > 0 ? 'up' : 'down';
+  const arrow = diff > 0 ? '↑' : '↓';
+  return { text: arrow + ' ' + Math.abs(diff) + (pct != null ? ' (' + pct + '%)' : '') + ' vs yesterday', cls: dir };
+}
+
+function renderAlerts(alerts) {
+  const el = document.getElementById('ov-alerts');
+  if (!alerts.length) { el.innerHTML = ''; return; }
+  el.innerHTML = alerts.map(function (a, i) {
+    return '<div class="alert-item ' + esc(a.level) + '" data-alert-tab="' + esc(a.tab) + '">' +
+      '<span class="adot"></span><span class="at">' + esc(a.text) + '</span><span class="aarrow">View &rarr;</span></div>';
+  }).join('');
+}
+
+function renderChart(series) {
+  const el = document.getElementById('ov-chart');
+  if (!series.length || !series.some(function (d) { return d.total > 0; })) {
+    el.innerHTML = '<div style="color:var(--t3);font-size:11px;padding:20px 0;text-align:center;">No queries logged yet.</div>';
+    return;
+  }
+  const W = 560, H = 150, PAD_B = 16, PAD_T = 8, gap = 4;
+  const n = series.length;
+  const barW = Math.max(4, (W - gap * (n - 1)) / n);
+  const max = Math.max(1, Math.max.apply(null, series.map(function (d) { return d.total; })));
+  const scale = (H - PAD_B - PAD_T) / max;
+
+  const bars = series.map(function (d, i) {
+    const x = i * (barW + gap);
+    const totalH = d.total * scale;
+    const hitH = d.cache_hits * scale;
+    const missH = totalH - hitH;
+    const yTotal = H - PAD_B - totalH;
+    const yHit = H - PAD_B - hitH;
+    const dateShort = String(d.date).slice(5).replace('-', '/');
+    const showLabel = n <= 10 || i % Math.ceil(n / 7) === 0;
+    return '<g class="chart-bar-group">' +
+      '<title>' + esc(d.date) + ': ' + esc(d.total) + ' queries, ' + esc(d.cache_hits) + ' from cache</title>' +
+      '<rect class="bar-total" x="' + x + '" y="' + yTotal + '" width="' + barW + '" height="' + Math.max(0, missH) + '" fill="#3A4A63" rx="2"/>' +
+      '<rect x="' + x + '" y="' + yHit + '" width="' + barW + '" height="' + Math.max(0, hitH) + '" fill="#5B9DF5" rx="2"/>' +
+      (showLabel ? '<text class="chart-axis-label" x="' + (x + barW / 2) + '" y="' + (H - 2) + '" text-anchor="middle">' + esc(dateShort) + '</text>' : '') +
+      '</g>';
+  }).join('');
+
+  el.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="chart-wrap" style="width:100%;height:150px;display:block;">' + bars + '</svg>' +
+    '<div class="chart-legend"><span><i style="background:#5B9DF5;"></i>From cache</span><span><i style="background:#3A4A63;"></i>Computed fresh</span></div>';
+
+  const totalSum = series.reduce(function (a, d) { return a + d.total; }, 0);
+  document.getElementById('ov-chart-sub').textContent = totalSum.toLocaleString() + ' total over ' + n + ' days';
+}
+
+function renderFunnel(counts, total) {
+  const el = document.getElementById('ov-rfq-funnel');
+  document.getElementById('ov-rfq-total').textContent = total + ' total';
+  if (!total) {
+    el.innerHTML = '<div style="color:var(--t3);font-size:11px;padding:8px 0;">No quote requests yet.</div>';
+    return;
+  }
+  const order = ['pending', 'under_review', 'quoted', 'accepted', 'rejected', 'expired'];
+  el.innerHTML = order.map(function (status) {
+    const n = counts[status] || 0;
+    const pct = total ? Math.max(2, Math.round(n / total * 100)) : 0;
+    return '<div class="funnel-row">' +
+      '<span class="funnel-lbl">' + esc(status.replace('_', ' ')) + '</span>' +
+      '<div class="funnel-track"><div class="funnel-fill" style="width:' + (n ? pct : 0) + '%;background:' + STATUS_COLOR[status] + ';"></div></div>' +
+      '<span class="funnel-val">' + esc(n) + '</span>' +
+      '</div>';
+  }).join('');
+}
+
+function renderProviderHealth(health) {
+  const hEl = document.getElementById('ov-provider-health');
+  if (!health.length) { hEl.innerHTML = '<div style="color:var(--t3);font-size:11px;">No providers configured</div>'; return; }
+  hEl.innerHTML = health.map(function (p) {
+    const ok = p.is_enabled && p.is_healthy;
+    const col = !p.is_enabled ? 'var(--t4)' : p.is_healthy ? 'var(--a1)' : 'var(--a3)';
+    const status = !p.is_enabled ? 'Disabled' : p.is_healthy ? 'Healthy' : 'Unhealthy';
+    return '<div class="ov-health-row">' +
+      '<div style="display:flex;align-items:center;gap:10px;">' +
+        '<span style="width:7px;height:7px;border-radius:50%;background:' + col + ';display:inline-block;flex-shrink:0;"></span>' +
+        '<span style="font-weight:600;color:var(--t1);font-size:12px;">' + esc(String(p.provider_name).toUpperCase()) + '</span>' +
+        '<span style="font-size:10px;color:var(--t3);">' + esc(p.model_name) + '</span>' +
+      '</div>' +
+      '<div style="display:flex;align-items:center;gap:10px;">' +
+        '<span style="font-size:10px;color:' + col + ';">' + status + '</span>' +
+        '<span style="font-size:10px;color:var(--t3);">Priority #' + esc(p.priority) + '</span>' +
+        '<span style="font-size:10px;color:var(--t3);">' + esc(p.requests_today) + ' req/today</span>' +
+      '</div></div>';
+  }).join('');
+}
+
+function renderTopFabrics(rows) {
+  const topEl = document.getElementById('ov-top-fabrics');
+  if (!rows.length) { topEl.innerHTML = '<div style="color:var(--t3);font-size:11px;">No queries yet</div>'; return; }
+  const max = rows[0].count || 1;
+  topEl.innerHTML = rows.map(function (r) {
+    return '<div style="margin-bottom:10px;">' +
+      '<div style="display:flex;justify-content:space-between;margin-bottom:4px;">' +
+        '<span style="font-size:11px;color:var(--t2);">' + esc(String(r.fabric).replace(/_/g, ' ')) + (r.avg_gsm ? ' <span style="color:var(--t4);">&middot; avg ' + Math.round(r.avg_gsm) + ' GSM</span>' : '') + '</span>' +
+        '<span style="font-size:10px;color:var(--t3);">' + esc(r.count) + '</span>' +
+      '</div>' +
+      '<div style="height:3px;background:var(--bg4);border-radius:2px;">' +
+        '<div style="height:3px;background:var(--a1);border-radius:2px;width:' + Math.round(r.count / max * 100) + '%;"></div>' +
+      '</div></div>';
+  }).join('');
+}
+
 async function loadOverview() {
   try {
-    const [logStats, cacheStats, provData, inqData] = await Promise.all([
-      api('/admin/api/logs/stats'),
-      api('/admin/api/cache/stats'),
-      api('/admin/api/providers'),
-      api('/admin/api/inquiries?limit=1'),
-    ]);
+    const d = await api('/admin/api/overview');
 
-    document.getElementById('ov-total').textContent       = (inqData.total || 0).toLocaleString();
-    document.getElementById('ov-today').textContent       = logStats.today_total || 0;
-    document.getElementById('ov-cache').textContent       = (logStats.cache_hit_pct || 0) + '%';
-    document.getElementById('ov-avg-ms').textContent      = (logStats.avg_response_ms || 0) + 'ms';
-    document.getElementById('ov-cache-entries').textContent = (cacheStats.db_entries || 0).toLocaleString();
+    document.getElementById('kpi-users-total').textContent = d.users.total.toLocaleString();
+    document.getElementById('kpi-users-sub').textContent = d.users.new_7d + ' new in last 7 days';
+    document.getElementById('kpi-sessions').textContent = d.users.active_sessions;
+    document.getElementById('kpi-today').textContent = d.today.today_total;
+    const delta = fmtDelta(d.today.today_total, d.yesterday_total);
+    document.getElementById('kpi-today-sub').textContent = delta.text || ' ';
+    document.getElementById('kpi-today-sub').className = 'kpi-sub ' + delta.cls;
+    document.getElementById('kpi-cache').textContent = fmtPct(d.today.cache_hit_pct);
+    document.getElementById('kpi-avg-ms').textContent = (d.today.avg_response_ms || 0) + 'ms';
+    document.getElementById('kpi-rfq-pending').textContent = d.rfq.counts.pending;
+    document.getElementById('kpi-rfq-sub').textContent = d.rfq.total + ' total requests';
+    document.getElementById('kpi-providers').textContent = d.providers.active + '/' + d.providers.total;
+    document.getElementById('kpi-cache-entries').textContent = d.cache.db_entries.toLocaleString();
+    document.getElementById('kpi-new-users').textContent = d.users.new_today;
 
-    const active = provData.providers.filter(p => p.is_enabled && p.is_healthy).length;
-    document.getElementById('ov-providers').textContent = active + '/' + provData.providers.length;
+    const rfqBadge = document.getElementById('sb-count-rfq');
+    if (d.rfq.counts.pending > 0) { rfqBadge.textContent = d.rfq.counts.pending; rfqBadge.hidden = false; } else { rfqBadge.hidden = true; }
+    const provBadge = document.getElementById('sb-count-providers');
+    const unhealthyCount = d.providers.health.filter(function (p) { return p.is_enabled && !p.is_healthy; }).length;
+    if (unhealthyCount > 0) { provBadge.textContent = unhealthyCount; provBadge.hidden = false; } else { provBadge.hidden = true; }
 
-    // Provider health
-    const hEl = document.getElementById('ov-provider-health');
-    hEl.innerHTML = provData.providers.map(p => {
-      const ok = p.is_enabled && p.is_healthy;
-      const col = !p.is_enabled ? 'var(--t4)' : p.is_healthy ? 'var(--a1)' : 'var(--a3)';
-      const status = !p.is_enabled ? 'Disabled' : p.is_healthy ? 'Healthy' : 'Unhealthy';
-      return `<div class="ov-health-row">
-        <div style="display:flex;align-items:center;gap:10px;">
-          <span style="width:7px;height:7px;border-radius:50%;background:${col};display:inline-block;flex-shrink:0;"></span>
-          <span style="font-weight:600;color:var(--t1);font-size:12px;">${esc(String(p.provider_name).toUpperCase())}</span>
-          <span style="font-size:10px;color:var(--t3);">${esc(p.model_name)}</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:10px;">
-          <span style="font-size:10px;color:${col};">${status}</span>
-          <span style="font-size:10px;color:var(--t3);">Priority #${esc(p.priority)}</span>
-          <span style="font-size:10px;color:var(--t3);">${esc(p.requests_today)} req/today</span>
-        </div>
-      </div>`;
-    }).join('');
-
-    // Top fabrics (simple from logs)
-    const topEl = document.getElementById('ov-top-fabrics');
-    topEl.innerHTML = '<div style="color:var(--t3);font-size:11px;">Fetching from logs…</div>';
-    try {
-      const logsData = await api('/admin/api/logs?limit=100');
-      const fabricCount = {};
-      for (const r of logsData.rows) {
-        if (r.parsed_fabric) fabricCount[r.parsed_fabric] = (fabricCount[r.parsed_fabric] || 0) + 1;
-      }
-      const sorted = Object.entries(fabricCount).sort((a,b) => b[1]-a[1]).slice(0,6);
-      if (!sorted.length) { topEl.innerHTML = '<div style="color:var(--t3);font-size:11px;">No queries yet</div>'; }
-      else {
-        const max = sorted[0][1];
-        topEl.innerHTML = sorted.map(([f, c]) => `
-          <div style="margin-bottom:10px;">
-            <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-              <span style="font-size:11px;color:var(--t2);">${esc(f.replace(/_/g,' '))}</span>
-              <span style="font-size:10px;color:var(--t3);">${esc(c)}</span>
-            </div>
-            <div style="height:3px;background:var(--bg4);border-radius:2px;">
-              <div style="height:3px;background:var(--a1);border-radius:2px;width:${Math.round(c/max*100)}%;"></div>
-            </div>
-          </div>
-        `).join('');
-      }
-    } catch (_) {}
+    renderAlerts(d.alerts);
+    renderChart(d.series);
+    renderFunnel(d.rfq.counts, d.rfq.total);
+    renderProviderHealth(d.providers.health);
+    renderTopFabrics(d.top_fabrics);
   } catch (e) {
     console.error('Overview error:', e);
+    toast('Failed to load dashboard', 'error');
   }
 }
 
@@ -1022,7 +1128,10 @@ async function loadUsers(page, filters) {
         <td style="padding:9px 10px;color:var(--t3);font-family:var(--mono);">${esc(new Date(u.created_at).toLocaleDateString())}</td>
         <td style="padding:9px 10px;color:var(--t3);font-family:var(--mono);">${u.last_login_at ? esc(new Date(u.last_login_at).toLocaleString()) : '—'}</td>
         <td style="padding:9px 10px;"><span class="badge ${u.disabled ? 'badge-red' : 'badge-green'}">${u.disabled ? 'disabled' : 'active'}</span></td>
-        <td style="padding:9px 10px;"><button class="btn btn-ghost btn-sm" data-usr-id="${esc(u.id)}" data-usr-disable="${u.disabled ? 'false' : 'true'}">${u.disabled ? 'Enable' : 'Disable'}</button></td>
+        <td style="padding:9px 10px;white-space:nowrap;">
+          <button class="btn btn-ghost btn-sm" data-usr-view="${esc(u.id)}">View</button>
+          <button class="btn btn-ghost btn-sm" data-usr-id="${esc(u.id)}" data-usr-disable="${u.disabled ? 'false' : 'true'}">${u.disabled ? 'Enable' : 'Disable'}</button>
+        </td>
       `;
       tbody.appendChild(tr);
     }
@@ -1035,7 +1144,65 @@ async function setUserDisabled(id, disabled) {
     await api('/admin/api/users/' + id + '/disabled', 'PATCH', { disabled });
     toast(disabled ? 'User disabled and signed out' : 'User enabled', 'success');
     loadUsers(1, getUsrFilters());
+    if (openUserId === id) openUserDetail(id);
   } catch (e) { toast('Failed to update user', 'error'); }
+}
+
+// ── USER DETAIL MODAL ────────────────────────────────────────
+let openUserId = null;
+
+function userInitials(u) {
+  const parts = (u.full_name || u.email || '?').trim().split(/\s+/);
+  return ((parts[0][0] || '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
+}
+
+async function openUserDetail(id) {
+  try {
+    const u = await api('/admin/api/users/' + id);
+    openUserId = id;
+    document.getElementById('ud-avatar').textContent = userInitials(u);
+    document.getElementById('ud-name').textContent = u.full_name || '(no name)';
+    document.getElementById('ud-email').textContent = u.email;
+    document.getElementById('ud-runs').textContent = u.stats.total_runs || 0;
+    document.getElementById('ud-specs').textContent = u.stats.distinct_specs || 0;
+    document.getElementById('ud-sessions').textContent = u.active_sessions;
+    document.getElementById('ud-joined').textContent = new Date(u.created_at).toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+
+    const meta = [];
+    meta.push(u.company ? esc(u.company) : 'No company on file');
+    meta.push(PLAN_LABELS[u.plan_interest] ? esc(PLAN_LABELS[u.plan_interest]) + ' plan interest' : 'No plan interest recorded');
+    meta.push(u.last_login_at ? 'last signed in ' + esc(new Date(u.last_login_at).toLocaleString()) : 'never signed in again after signup');
+    document.getElementById('ud-meta').innerHTML = meta.join(' &middot; ');
+
+    const recentEl = document.getElementById('ud-recent');
+    if (!u.recent_calculations.length) {
+      recentEl.innerHTML = '<div style="color:var(--t3);font-size:11px;">No calculations yet.</div>';
+    } else {
+      recentEl.innerHTML = u.recent_calculations.map((r) => {
+        const s = r.summary || {};
+        const chips = [];
+        if (s.fabric_price_usd_per_kg != null) chips.push('<span class="chip">Fabric<b>$' + Number(s.fabric_price_usd_per_kg).toFixed(2) + '/kg</b></span>');
+        if (s.yarn_count) chips.push('<span class="chip">Yarn<b>' + esc(s.yarn_count) + '</b></span>');
+        return '<div class="u-recent-item">' +
+          '<div class="u-recent-title">' + esc(r.fabric_name || r.fabric_id) + ' <span style="color:var(--a1);font-family:var(--mono);">' + esc(Number(r.gsm)) + ' GSM</span></div>' +
+          '<div class="u-recent-sub">' + esc(new Date(r.last_run_at).toLocaleString()) + (r.run_count > 1 ? ' &middot; run ' + esc(r.run_count) + ' times' : '') + '</div>' +
+          (chips.length ? '<div>' + chips.join('') + '</div>' : '') +
+          '</div>';
+      }).join('');
+    }
+
+    const toggleBtn = document.getElementById('ud-toggle-disabled');
+    toggleBtn.textContent = u.disabled ? 'Enable account' : 'Disable account';
+    toggleBtn.className = u.disabled ? 'btn btn-primary' : 'btn btn-danger';
+    toggleBtn.dataset.disabled = u.disabled ? 'false' : 'true';
+
+    document.getElementById('user-detail-modal').classList.remove('hidden');
+  } catch (e) { toast('Failed to load user detail', 'error'); }
+}
+
+function closeUserDetail() {
+  document.getElementById('user-detail-modal').classList.add('hidden');
+  openUserId = null;
 }
 
 // ── RFQ / QUOTES ───────────────────────────────────────────
@@ -1694,9 +1861,41 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Users — delegated for the same reason as the RFQ table below
   document.getElementById('usr-apply-btn').addEventListener('click', () => loadUsers(1, getUsrFilters()));
   document.getElementById('usr-tbody').addEventListener('click', (e) => {
+    const viewBtn = e.target.closest('[data-usr-view]');
+    if (viewBtn) { openUserDetail(parseInt(viewBtn.dataset.usrView, 10)); return; }
     const btn = e.target.closest('[data-usr-id]');
     if (btn) setUserDisabled(parseInt(btn.dataset.usrId, 10), btn.dataset.usrDisable === 'true');
   });
+  document.getElementById('ud-cancel').addEventListener('click', closeUserDetail);
+  document.getElementById('user-detail-modal').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeUserDetail();
+  });
+  document.getElementById('ud-toggle-disabled').addEventListener('click', (e) => {
+    if (openUserId != null) setUserDisabled(openUserId, e.currentTarget.dataset.disabled === 'true');
+  });
+
+  // Dashboard alerts jump straight to the tab they are about
+  document.getElementById('ov-alerts').addEventListener('click', (e) => {
+    const item = e.target.closest('[data-alert-tab]');
+    if (item && item.dataset.alertTab) switchTab(item.dataset.alertTab);
+  });
+
+  // Sidebar (mobile off-canvas)
+  const sidebar = document.getElementById('sidebar');
+  const sidebarToggle = document.getElementById('sidebar-toggle');
+  const sidebarBackdrop = document.getElementById('sidebar-backdrop');
+  function closeSidebar() {
+    sidebar.classList.remove('open');
+    sidebarBackdrop.classList.remove('show');
+    sidebarToggle.setAttribute('aria-expanded', 'false');
+  }
+  sidebarToggle.addEventListener('click', () => {
+    const open = !sidebar.classList.contains('open');
+    sidebar.classList.toggle('open', open);
+    sidebarBackdrop.classList.toggle('show', open);
+    sidebarToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+  sidebarBackdrop.addEventListener('click', closeSidebar);
 
   // RFQ / Quotes
   document.getElementById('rfq-apply-btn').addEventListener('click', () => loadRfqList(1, getRfqFilters()));

@@ -28,7 +28,7 @@ const users = {
 
   findById(id) {
     return queryOne(
-      'SELECT id, email, full_name, company, plan_interest, password_hash, created_at, last_login_at FROM app_users WHERE id = $1',
+      'SELECT id, email, full_name, company, plan_interest, password_hash, disabled, created_at, last_login_at FROM app_users WHERE id = $1',
       [id]
     );
   },
@@ -73,6 +73,23 @@ const users = {
   },
 
   /** Disabling also ends every live session, so it takes effect immediately. */
+  /**
+   * New-signup counts for the admin dashboard, bucketed on Asia/Dhaka business
+   * days like logs-repo's todayStats() — a server-local (Mountain time) cutoff
+   * would flip "today" around midday in Bangladesh.
+   */
+  async newCounts() {
+    const row = await queryOne(
+      `SELECT
+         count(*) FILTER (WHERE (created_at AT TIME ZONE $1)::date = (now() AT TIME ZONE $1)::date)::int AS today,
+         count(*) FILTER (WHERE created_at > now() - interval '7 days')::int AS last_7d,
+         count(*) FILTER (WHERE created_at > now() - interval '30 days')::int AS last_30d
+       FROM app_users`,
+      [process.env.BUSINESS_TIMEZONE || 'Asia/Dhaka']
+    );
+    return { today: row.today, last_7d: row.last_7d, last_30d: row.last_30d };
+  },
+
   async setDisabled(id, disabled) {
     const rows = await query('UPDATE app_users SET disabled = $2 WHERE id = $1 RETURNING id, disabled', [id, !!disabled]);
     if (rows[0] && disabled) await query('DELETE FROM app_user_sessions WHERE user_id = $1', [id]);
@@ -109,6 +126,15 @@ const sessions = {
 
   remove(tokenHash) {
     return query('DELETE FROM app_user_sessions WHERE token_hash = $1', [tokenHash]);
+  },
+
+  async countActive() {
+    return Number((await queryOne('SELECT count(*)::int AS count FROM app_user_sessions WHERE expires_at > now()')).count);
+  },
+
+  countForUser(userId) {
+    return queryOne('SELECT count(*)::int AS count FROM app_user_sessions WHERE user_id = $1 AND expires_at > now()', [userId])
+      .then(r => r.count);
   },
 
   purgeExpired() {

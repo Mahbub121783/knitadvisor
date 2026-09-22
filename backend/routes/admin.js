@@ -130,6 +130,79 @@ router.get('/ping', adminAuth, async (req, res) => {
 // PROTECTED: Admin API Routes
 // ============================================================
 
+// ============================================================
+// OVERVIEW — one aggregated call for the dashboard's command-center tab.
+// Every figure here is read straight from existing repos/tables (the
+// materialized-view rollups logs-repo already builds, rfqRepo.counts(),
+// user-repo's new-signup/session counts) — nothing is computed client-side
+// from a truncated log sample the way the old "Top Fabrics" card was.
+// ============================================================
+router.get('/api/overview', adminAuth, async (req, res) => {
+  try {
+    const [
+      todayStats, series, topFabrics, rfqCounts, userTotal, userNew, activeSessions, providers,
+      memStats, dbCacheStats,
+    ] = await Promise.all([
+      logsRepo.todayStats(),
+      logsRepo.dailySeries(14),
+      logsRepo.topFabrics(6),
+      rfqRepo.counts(),
+      userRepo.users.count(),
+      userRepo.users.newCounts(),
+      userRepo.sessions.countActive(),
+      providerManager.getProviders(),
+      Promise.resolve(memCache.stats()),
+      resultCache.stats(),
+    ]);
+
+    const yesterday = series.length >= 2 ? series[series.length - 2] : null;
+    const providerHealth = providers.map(p => ({
+      provider_name: p.provider_name, model_name: p.model_name, priority: p.priority,
+      is_enabled: p.is_enabled, is_healthy: p.is_healthy, requests_today: p.requests_today,
+    }));
+    const activeProviders = providers.filter(p => p.is_enabled && p.is_healthy).length;
+
+    // Plain, disclosed heuristics — not a fabricated "AI insight". Each rule is
+    // named so the threshold it fired on is visible in the response, not hidden
+    // client-side logic that could silently diverge from what is displayed.
+    const alerts = [];
+    for (const p of providers) {
+      if (p.is_enabled && !p.is_healthy) {
+        alerts.push({ level: 'warn', text: p.provider_name + ' is enabled but unhealthy — check its key/quota.', tab: 'tab-providers' });
+      }
+    }
+    if (rfqCounts.pending > 0) {
+      alerts.push({
+        level: rfqCounts.pending >= 5 ? 'warn' : 'info',
+        text: rfqCounts.pending + (rfqCounts.pending === 1 ? ' RFQ is' : ' RFQs are') + ' awaiting review.',
+        tab: 'tab-rfq',
+      });
+    }
+    if (todayStats.today_total >= 20 && todayStats.cache_hit_pct < 50) {
+      alerts.push({
+        level: 'info',
+        text: 'Cache hit rate is ' + todayStats.cache_hit_pct + '% today (usually higher) — a price sync or deploy may have just invalidated it.',
+        tab: 'tab-cache',
+      });
+    }
+
+    res.json({
+      today: todayStats,
+      yesterday_total: yesterday ? Number(yesterday.total_queries) : null,
+      series: series.map(r => ({ date: r.stat_date, total: Number(r.total_queries), cache_hits: Number(r.cache_hits) })),
+      top_fabrics: topFabrics.map(r => ({ fabric: r.fabric, count: Number(r.query_count), avg_gsm: r.avg_gsm ? Number(r.avg_gsm) : null })),
+      rfq: { counts: rfqCounts, total: Object.values(rfqCounts).reduce((a, b) => a + b, 0) },
+      users: { total: userTotal, new_today: userNew.today, new_7d: userNew.last_7d, active_sessions: activeSessions },
+      providers: { active: activeProviders, total: providers.length, health: providerHealth },
+      cache: { mem_size: memStats.size, db_entries: Number(dbCacheStats.entries) || 0 },
+      alerts,
+    });
+  } catch (err) {
+    console.error('[Overview Error]', err);
+    res.status(500).json({ error: 'Failed to load overview' });
+  }
+});
+
 // Query Logs
 router.get('/api/logs/stats', adminAuth, async (req, res) => {
   try {
@@ -493,6 +566,28 @@ router.get('/api/users', adminAuth, async (req, res) => {
   } catch (err) {
     console.error('[Users Admin List Error]', err);
     res.status(500).json({ error: 'Failed to load users' });
+  }
+});
+
+router.get('/api/users/:id', adminAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid id' });
+    const user = await userRepo.users.findById(id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    const [stats, recent, activeSessions] = await Promise.all([
+      userRepo.calculations.stats(id),
+      userRepo.calculations.list(id, { page: 1, limit: 8 }),
+      userRepo.sessions.countForUser(id),
+    ]);
+    res.json({
+      id: user.id, email: user.email, full_name: user.full_name, company: user.company,
+      plan_interest: user.plan_interest, disabled: user.disabled, created_at: user.created_at, last_login_at: user.last_login_at,
+      stats, recent_calculations: recent.rows, active_sessions: activeSessions,
+    });
+  } catch (err) {
+    console.error('[User Detail Error]', err);
+    res.status(500).json({ error: 'Failed to load user' });
   }
 });
 

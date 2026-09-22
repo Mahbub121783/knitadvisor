@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#000000">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -25,12 +25,12 @@
       --t2:    rgba(255,255,255,.7);
       --t3:    rgba(255,255,255,.35);
       --t4:    rgba(255,255,255,.18);
-      --a1:    #00ffb2;
+      --a1:    #5B9DF5;
       --a2:    #6c8eff;
       --a3:    #ff4444;
       --a4:    #ffb300;
-      --mono:  'JetBrains Mono', monospace;
-      --sans:  'Syne', sans-serif;
+      --mono:  'IBM Plex Mono', ui-monospace, monospace;
+      --sans:  'Public Sans', system-ui, sans-serif;
       --rad:   8px;
       --rad-sm:4px;
     }
@@ -111,8 +111,8 @@
     .topbar-logo span { color: var(--a1); }
     .topbar-badge {
       font-size: 9px; letter-spacing: 1.2px; text-transform: uppercase;
-      background: rgba(0,255,178,.12); color: var(--a1);
-      border: 1px solid rgba(0,255,178,.25); border-radius: 3px;
+      background: rgba(91,157,245,.12); color: var(--a1);
+      border: 1px solid rgba(91,157,245,.25); border-radius: 3px;
       padding: 2px 7px;
     }
     .topbar-spacer { flex: 1; }
@@ -226,7 +226,7 @@
 
     /* ── BADGES ── */
     .badge { display: inline-block; font-size: 9px; font-weight: 700; letter-spacing: .5px; padding: 2px 7px; border-radius: 3px; }
-    .badge-green { background: rgba(0,255,178,.12); color: var(--a1); border: 1px solid rgba(0,255,178,.25); }
+    .badge-green { background: rgba(91,157,245,.12); color: var(--a1); border: 1px solid rgba(91,157,245,.25); }
     .badge-red   { background: rgba(255,68,68,.12); color: var(--a3); border: 1px solid rgba(255,68,68,.25); }
     .badge-yellow{ background: rgba(255,179,0,.12); color: var(--a4); border: 1px solid rgba(255,179,0,.25); }
     .badge-blue  { background: rgba(108,142,255,.12); color: var(--a2); border: 1px solid rgba(108,142,255,.25); }
@@ -262,7 +262,7 @@
       pointer-events: all;
     }
     @keyframes toastIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-    .toast-ok  { background: rgba(0,255,178,.15); border: 1px solid rgba(0,255,178,.3); color: var(--a1); }
+    .toast-ok  { background: rgba(91,157,245,.15); border: 1px solid rgba(91,157,245,.3); color: var(--a1); }
     .toast-err { background: rgba(255,68,68,.15); border: 1px solid rgba(255,68,68,.3); color: var(--a3); }
     .toast-info{ background: rgba(108,142,255,.15); border: 1px solid rgba(108,142,255,.3); color: var(--a2); }
 
@@ -337,7 +337,7 @@
       width: 14px; height: 14px; border-radius: 50%;
       background: var(--t3); transition: transform .15s, background .15s;
     }
-    .toggle input:checked + .toggle-track { background: rgba(0,255,178,.2); border-color: rgba(0,255,178,.4); }
+    .toggle input:checked + .toggle-track { background: rgba(91,157,245,.2); border-color: rgba(91,157,245,.4); }
     .toggle input:checked + .toggle-track::after { transform: translateX(16px); background: var(--a1); }
 
     /* Provider expanded body */
@@ -383,7 +383,7 @@
     }
     .key-set-badge {
       font-size: 9px; padding: 2px 7px; border-radius: 3px; font-weight: 700;
-      background: rgba(0,255,178,.1); color: var(--a1); border: 1px solid rgba(0,255,178,.2);
+      background: rgba(91,157,245,.1); color: var(--a1); border: 1px solid rgba(91,157,245,.2);
     }
     .key-notset-badge {
       font-size: 9px; padding: 2px 7px; border-radius: 3px; font-weight: 700;
@@ -398,7 +398,7 @@
       font-family: var(--mono); font-size: 11px; color: var(--t1);
       outline: none; transition: border-color .15s; letter-spacing: 1px;
     }
-    .key-input:focus { border-color: var(--a1); box-shadow: 0 0 0 2px rgba(0,255,178,.08); }
+    .key-input:focus { border-color: var(--a1); box-shadow: 0 0 0 2px rgba(91,157,245,.08); }
     .key-input::placeholder { color: var(--t4); letter-spacing: 0; }
 
     .key-toggle-btn {
@@ -421,7 +421,7 @@
       font-size: 10px; padding: 7px 12px;
       border-radius: var(--rad-sm); display: none;
     }
-    .prov-test-result.ok  { background: rgba(0,255,178,.1); color: var(--a1); border: 1px solid rgba(0,255,178,.2); }
+    .prov-test-result.ok  { background: rgba(91,157,245,.1); color: var(--a1); border: 1px solid rgba(91,157,245,.2); }
     .prov-test-result.warn { background: rgba(255,179,0,.1); color: var(--a4); border: 1px solid rgba(255,179,0,.2); }
     .prov-test-result.err { background: rgba(255,68,68,.1); color: var(--a3); border: 1px solid rgba(255,68,68,.2); }
 
@@ -460,7 +460,7 @@
       transition: all .15s; cursor: pointer; font-family: var(--mono);
     }
     .strategy-btn.active {
-      background: rgba(0,255,178,.12); border-color: rgba(0,255,178,.35);
+      background: rgba(91,157,245,.12); border-color: rgba(91,157,245,.35);
       color: var(--a1); font-weight: 600;
     }
     .strategy-btn:hover:not(.active) { border-color: var(--line3); color: var(--t2); }
@@ -480,7 +480,7 @@
       border: 1px solid var(--line2); background: var(--bg4); color: var(--t2);
       white-space: nowrap;
     }
-    .chain-node.active { border-color: rgba(0,255,178,.4); background: rgba(0,255,178,.08); color: var(--a1); }
+    .chain-node.active { border-color: rgba(91,157,245,.4); background: rgba(91,157,245,.08); color: var(--a1); }
     .chain-node.disabled { opacity: .35; }
     .chain-node.unhealthy { border-color: rgba(255,68,68,.3); background: rgba(255,68,68,.06); color: var(--a3); }
     .chain-arrow { font-size: 10px; color: var(--t4); padding: 0 4px; }
@@ -513,9 +513,155 @@
       text-align: center; cursor: pointer; transition: all .15s;
     }
     .type-card:hover { border-color: var(--line3); }
-    .type-card.selected { border-color: var(--a1); background: rgba(0,255,178,.06); }
+    .type-card.selected { border-color: var(--a1); background: rgba(91,157,245,.06); }
     .type-card-name { font-size: 11px; font-weight: 600; color: var(--t2); }
     .type-card-model { font-size: 9px; color: var(--t4); margin-top: 3px; }
+
+    /* ═══════════════════════════════════════════════════════════
+       SHELL — sidebar + content column, replacing the horizontal
+       tab bar now that there are ten sections and growing.
+       ═══════════════════════════════════════════════════════════ */
+    .shell { display: flex; align-items: stretch; min-height: 100vh; }
+
+    .sidebar {
+      width: 232px; flex: none;
+      background: var(--bg2); border-right: 1px solid var(--line);
+      display: flex; flex-direction: column;
+      position: sticky; top: 0; height: 100vh; overflow-y: auto;
+    }
+    .sidebar-brand {
+      display: flex; align-items: center; gap: 8px;
+      padding: 18px 18px 16px; border-bottom: 1px solid var(--line);
+    }
+    .sidebar-logo { font-family: var(--sans); font-size: 15px; font-weight: 800; color: var(--t1); }
+    .sidebar-logo span { color: var(--a1); }
+    .sidebar-badge {
+      font-size: 9px; letter-spacing: 1.2px; text-transform: uppercase;
+      background: rgba(91,157,245,.12); color: var(--a1);
+      border: 1px solid rgba(91,157,245,.25); border-radius: 3px;
+      padding: 2px 7px;
+    }
+    .sidebar-nav { flex: 1; padding: 14px 10px 18px; }
+    .sb-group { margin-bottom: 18px; }
+    .sb-group-label {
+      font-size: 9px; text-transform: uppercase; letter-spacing: .8px; font-weight: 700;
+      color: var(--t4); padding: 0 10px; margin-bottom: 6px;
+    }
+    .sb-link {
+      width: 100%; display: flex; align-items: center; gap: 10px;
+      padding: 8px 10px; border-radius: var(--rad-sm);
+      font-family: var(--sans); font-size: 12.5px; font-weight: 600; color: var(--t2);
+      background: transparent; border: none; text-align: left;
+      border-bottom: none; letter-spacing: 0; transition: background .12s, color .12s;
+    }
+    .sb-link svg { width: 15px; height: 15px; flex: none; stroke: currentColor; opacity: .85; }
+    .sb-link:hover { background: var(--bg3); color: var(--t1); }
+    .sb-link.active { background: rgba(91,157,245,.1); color: var(--a1); }
+    .sb-link .sb-count {
+      margin-left: auto; font-size: 10px; font-weight: 700; font-family: var(--mono);
+      background: var(--bg4); color: var(--t3); border-radius: 10px; padding: 1px 7px;
+    }
+    .sb-link.active .sb-count { background: rgba(91,157,245,.18); color: var(--a1); }
+
+    .sidebar-toggle {
+      display: none; background: transparent; border: 1px solid var(--line2);
+      color: var(--t2); border-radius: var(--rad-sm); width: 30px; height: 30px;
+      font-size: 15px; align-items: center; justify-content: center;
+    }
+    .sidebar-backdrop { display: none; }
+
+    .main-col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+    .topbar-title { font-family: var(--sans); font-size: 14px; font-weight: 700; color: var(--t1); }
+
+    @media (max-width: 900px) {
+      .sidebar {
+        position: fixed; left: 0; top: 0; bottom: 0; z-index: 400;
+        transform: translateX(-100%); transition: transform .2s ease; box-shadow: 0 0 0 transparent;
+      }
+      .sidebar.open { transform: translateX(0); box-shadow: 20px 0 40px rgba(0,0,0,.4); }
+      .sidebar-toggle { display: inline-flex; }
+      .sidebar-backdrop {
+        display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 390;
+      }
+      .sidebar-backdrop.show { display: block; }
+      .main { padding: 20px 16px 60px; }
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       DASHBOARD (Overview tab)
+       ═══════════════════════════════════════════════════════════ */
+    .alert-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+    .alert-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 14px; border-radius: var(--rad-sm); font-size: 12px;
+      border: 1px solid var(--line); background: var(--bg2); cursor: pointer;
+      transition: border-color .12s;
+    }
+    .alert-item:hover { border-color: var(--line3); }
+    .alert-item .adot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+    .alert-item.warn .adot { background: var(--a4); box-shadow: 0 0 5px var(--a4); }
+    .alert-item.info .adot { background: var(--a2); box-shadow: 0 0 5px var(--a2); }
+    .alert-item span.at { color: var(--t2); flex: 1; }
+    .alert-item .aarrow { color: var(--t4); font-size: 11px; }
+
+    .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 18px; }
+    @media (max-width: 900px) { .kpi-grid { grid-template-columns: 1fr 1fr; } }
+    .kpi-card {
+      background: var(--bg2); border: 1px solid var(--line); border-radius: var(--rad);
+      padding: 14px 16px;
+    }
+    .kpi-lbl { font-size: 9.5px; text-transform: uppercase; letter-spacing: .6px; color: var(--t3); font-weight: 600; }
+    .kpi-val { font-family: var(--sans); font-size: 24px; font-weight: 800; color: var(--t1); margin-top: 6px; line-height: 1; }
+    .kpi-sub { font-size: 10.5px; color: var(--t3); margin-top: 5px; }
+    .kpi-sub.up { color: var(--a1); }
+    .kpi-sub.down { color: var(--a3); }
+
+    .dash-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; margin-bottom: 16px; }
+    @media (max-width: 1000px) { .dash-grid { grid-template-columns: 1fr; } }
+    .card-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 14px; }
+    .card-title { font-family: var(--sans); font-size: 12.5px; font-weight: 700; color: var(--t1); text-transform: uppercase; letter-spacing: .5px; }
+    .card-sub { font-size: 10.5px; color: var(--t3); }
+
+    /* Hand-rolled SVG bar chart — no charting library: admin's CSP is
+       script-src 'self', so a CDN chart script would silently fail to load. */
+    .chart-wrap { }
+    .chart-bar-group:hover rect.bar-total { fill: var(--bg5); }
+    .chart-axis-label { font-size: 8.5px; fill: var(--t4); font-family: var(--mono); }
+    .chart-legend { display: flex; gap: 14px; margin-top: 8px; font-size: 10px; color: var(--t3); }
+    .chart-legend span { display: inline-flex; align-items: center; gap: 5px; }
+    .chart-legend i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+
+    .funnel-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .funnel-lbl { width: 92px; flex: none; font-size: 10.5px; color: var(--t2); text-transform: capitalize; }
+    .funnel-track { flex: 1; height: 8px; background: var(--bg4); border-radius: 4px; overflow: hidden; }
+    .funnel-fill { height: 100%; border-radius: 4px; }
+    .funnel-val { width: 28px; flex: none; text-align: right; font-size: 11px; font-weight: 700; color: var(--t1); font-family: var(--mono); }
+
+    /* ═══════════════════════════════════════════════════════════
+       User detail modal + shared "chip" (reused from the public
+       account page's design for calculation summaries)
+       ═══════════════════════════════════════════════════════════ */
+    .u-head { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+    .u-avatar {
+      width: 44px; height: 44px; border-radius: 50%; flex: none;
+      background: rgba(91,157,245,.15); color: var(--a1); border: 1px solid rgba(91,157,245,.3);
+      display: flex; align-items: center; justify-content: center; font-family: var(--sans); font-weight: 700; font-size: 15px;
+    }
+    .u-name { font-family: var(--sans); font-size: 15px; font-weight: 700; color: var(--t1); }
+    .u-email { font-size: 11px; color: var(--t3); margin-top: 2px; }
+    .u-stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+    .u-stat { background: var(--bg3); border: 1px solid var(--line); border-radius: var(--rad-sm); padding: 10px 12px; text-align: center; }
+    .u-stat b { display: block; font-family: var(--sans); font-size: 17px; font-weight: 800; color: var(--t1); }
+    .u-stat span { font-size: 9px; text-transform: uppercase; letter-spacing: .4px; color: var(--t3); }
+    .u-recent-item { padding: 9px 0; border-bottom: 1px solid var(--line); }
+    .u-recent-item:last-child { border-bottom: none; }
+    .u-recent-title { font-size: 12px; color: var(--t1); font-weight: 600; }
+    .u-recent-sub { font-size: 10.5px; color: var(--t3); margin-top: 2px; }
+    .chip {
+      display: inline-flex; font-size: 10px; background: var(--bg4); border: 1px solid var(--line);
+      border-radius: 5px; padding: 3px 8px; color: var(--t3); margin: 4px 6px 0 0;
+    }
+    .chip b { color: var(--t1); font-family: var(--mono); font-weight: 600; margin-left: 3px; }
   </style>
 </head>
 <body>
@@ -543,29 +689,85 @@
 
 <!-- ══ ADMIN APP ══ -->
 <div id="admin-app" class="hidden">
+<div class="shell">
 
+  <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <span class="sidebar-logo">Knit<span>Advisor</span></span>
+      <span class="sidebar-badge">Admin</span>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="sb-group">
+        <div class="sb-group-label">Overview</div>
+        <button class="tab-btn sb-link active" data-tab="tab-overview">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+          Dashboard
+        </button>
+      </div>
+      <div class="sb-group">
+        <div class="sb-group-label">Analytics</div>
+        <button class="tab-btn sb-link" data-tab="tab-logs">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M4 19V9M12 19V5M20 19v-6" stroke-linecap="round"/></svg>
+          Query Logs
+        </button>
+      </div>
+      <div class="sb-group">
+        <div class="sb-group-label">Commerce</div>
+        <button class="tab-btn sb-link" data-tab="tab-rfq">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h7M9 17h7"/></svg>
+          RFQ / Quotes<span class="sb-count" id="sb-count-rfq" hidden>0</span>
+        </button>
+        <button class="tab-btn sb-link" data-tab="tab-users">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke-linecap="round"/><path d="M16 4.5c1.7.4 3 2 3 3.9 0 1.9-1.3 3.5-3 3.9M21 20c0-2.9-2-5.3-4.7-5.9" stroke-linecap="round"/></svg>
+          Users
+        </button>
+      </div>
+      <div class="sb-group">
+        <div class="sb-group-label">Catalog &amp; pricing</div>
+        <button class="tab-btn sb-link" data-tab="tab-prices">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M12 2l3 6.5L22 9l-5 4.9L18.2 21 12 17.6 5.8 21 7 13.9 2 9l7-.5z"/></svg>
+          Yarn Prices
+        </button>
+        <button class="tab-btn sb-link" data-tab="tab-dyeing-prices">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M12 3c3 4 5 6.5 5 10a5 5 0 0 1-10 0c0-3.5 2-6 5-10z"/></svg>
+          Dyeing Prices
+        </button>
+        <button class="tab-btn sb-link" data-tab="tab-validation">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M9 12l2 2 4-4"/><rect x="3" y="3" width="18" height="18" rx="3"/></svg>
+          Real-Order Validation
+        </button>
+      </div>
+      <div class="sb-group">
+        <div class="sb-group-label">System</div>
+        <button class="tab-btn sb-link" data-tab="tab-providers">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><circle cx="7" cy="7.5" r="1"/><circle cx="7" cy="16.5" r="1"/></svg>
+          AI Providers<span class="sb-count" id="sb-count-providers" hidden>0</span>
+        </button>
+        <button class="tab-btn sb-link" data-tab="tab-cache">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>
+          Cache
+        </button>
+        <button class="tab-btn sb-link" data-tab="tab-inquiries">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          Inquiries
+        </button>
+        <button class="tab-btn sb-link" data-tab="tab-settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          Settings
+        </button>
+      </div>
+    </nav>
+  </aside>
+
+  <div class="main-col">
   <!-- TOPBAR -->
   <div class="topbar">
-    <div class="topbar-logo">Knit<span>Advisor</span></div>
-    <span class="topbar-badge">ADMIN</span>
+    <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Toggle menu" aria-expanded="false">&#9776;</button>
+    <div class="topbar-title" id="page-title">Dashboard</div>
     <div class="topbar-spacer"></div>
     <span class="status-dot" id="status-dot"></span>
     <button id="logout-btn" class="btn-logout">Logout</button>
-  </div>
-
-  <!-- TABS -->
-  <div class="tab-bar">
-    <button class="tab-btn active" data-tab="tab-overview">Overview</button>
-    <button class="tab-btn" data-tab="tab-logs">Query Logs</button>
-    <button class="tab-btn" data-tab="tab-providers">AI Providers</button>
-    <button class="tab-btn" data-tab="tab-cache">Cache</button>
-    <button class="tab-btn" data-tab="tab-prices">Yarn Prices</button>
-    <button class="tab-btn" data-tab="tab-dyeing-prices">Dyeing Prices</button>
-    <button class="tab-btn" data-tab="tab-validation">Real-Order Validation</button>
-    <button class="tab-btn" data-tab="tab-inquiries">Inquiries</button>
-    <button class="tab-btn" data-tab="tab-rfq">RFQ / Quotes</button>
-    <button class="tab-btn" data-tab="tab-users">Users</button>
-    <button class="tab-btn" data-tab="tab-settings">Settings</button>
   </div>
 
   <!-- MAIN -->
@@ -573,21 +775,37 @@
 
     <!-- ── OVERVIEW ── -->
     <div id="tab-overview" class="tab-panel active">
-      <div class="stat-grid" id="ov-stat-grid">
-        <div class="stat-card"><div class="stat-val" id="ov-total">—</div><div class="stat-lbl">Total Queries</div></div>
-        <div class="stat-card"><div class="stat-val" id="ov-today">—</div><div class="stat-lbl">Today</div></div>
-        <div class="stat-card"><div class="stat-val" id="ov-cache">—</div><div class="stat-lbl">Cache Hit %</div></div>
-        <div class="stat-card"><div class="stat-val" id="ov-avg-ms">—</div><div class="stat-lbl">Avg Response</div></div>
-        <div class="stat-card"><div class="stat-val" id="ov-providers">—</div><div class="stat-lbl">Active Providers</div></div>
-        <div class="stat-card"><div class="stat-val" id="ov-cache-entries">—</div><div class="stat-lbl">Cache Entries</div></div>
+      <div id="ov-alerts" class="alert-list"></div>
+
+      <div class="kpi-grid" id="kpi-grid">
+        <div class="kpi-card"><div class="kpi-lbl">Total users</div><div class="kpi-val" id="kpi-users-total">—</div><div class="kpi-sub" id="kpi-users-sub">&nbsp;</div></div>
+        <div class="kpi-card"><div class="kpi-lbl">Active sessions</div><div class="kpi-val" id="kpi-sessions">—</div><div class="kpi-sub">signed in right now</div></div>
+        <div class="kpi-card"><div class="kpi-lbl">Queries today</div><div class="kpi-val" id="kpi-today">—</div><div class="kpi-sub" id="kpi-today-sub">&nbsp;</div></div>
+        <div class="kpi-card"><div class="kpi-lbl">Cache hit rate</div><div class="kpi-val" id="kpi-cache">—</div><div class="kpi-sub">today, avg <span id="kpi-avg-ms">—</span></div></div>
+        <div class="kpi-card"><div class="kpi-lbl">Pending RFQs</div><div class="kpi-val" id="kpi-rfq-pending">—</div><div class="kpi-sub" id="kpi-rfq-sub">&nbsp;</div></div>
+        <div class="kpi-card"><div class="kpi-lbl">AI providers</div><div class="kpi-val" id="kpi-providers">—</div><div class="kpi-sub">healthy &amp; enabled</div></div>
+        <div class="kpi-card"><div class="kpi-lbl">Cache entries</div><div class="kpi-val" id="kpi-cache-entries">—</div><div class="kpi-sub">in the database cache</div></div>
+        <div class="kpi-card"><div class="kpi-lbl">New signups</div><div class="kpi-val" id="kpi-new-users">—</div><div class="kpi-sub" id="kpi-new-users-sub">today</div></div>
       </div>
+
+      <div class="dash-grid">
+        <div class="card">
+          <div class="card-head"><span class="card-title">Queries — last 14 days</span><span class="card-sub" id="ov-chart-sub">&nbsp;</span></div>
+          <div id="ov-chart"><div style="color:var(--t3);font-size:11px;">Loading…</div></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><span class="card-title">RFQ pipeline</span><span class="card-sub" id="ov-rfq-total">&nbsp;</span></div>
+          <div id="ov-rfq-funnel"><div style="color:var(--t3);font-size:11px;">Loading…</div></div>
+        </div>
+      </div>
+
       <div class="ov-grid">
         <div class="card">
-          <div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--t3);font-weight:600;margin-bottom:14px;">Provider Health</div>
+          <div class="card-head"><span class="card-title">Provider health</span></div>
           <div id="ov-provider-health"><div style="color:var(--t3);font-size:11px;">Loading…</div></div>
         </div>
         <div class="card">
-          <div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--t3);font-weight:600;margin-bottom:14px;">Top Fabrics Today</div>
+          <div class="card-head"><span class="card-title">Top fabrics</span><span class="card-sub">by total queries</span></div>
           <div id="ov-top-fabrics"><div style="color:var(--t3);font-size:11px;">No data</div></div>
         </div>
       </div>
@@ -1063,6 +1281,37 @@
       <div id="usr-pagination" class="pagination"></div>
     </div>
 
+    <!-- ── USER DETAIL MODAL ── -->
+    <div id="user-detail-modal" class="modal-overlay hidden">
+      <div class="modal-box" style="max-width:560px;">
+        <div class="u-head">
+          <div class="u-avatar" id="ud-avatar">—</div>
+          <div>
+            <div class="u-name" id="ud-name">—</div>
+            <div class="u-email" id="ud-email">—</div>
+          </div>
+        </div>
+        <div class="u-stat-row">
+          <div class="u-stat"><b id="ud-runs">—</b><span>Total runs</span></div>
+          <div class="u-stat"><b id="ud-specs">—</b><span>Saved specs</span></div>
+          <div class="u-stat"><b id="ud-sessions">—</b><span>Active sessions</span></div>
+          <div class="u-stat"><b id="ud-joined">—</b><span>Member since</span></div>
+        </div>
+        <div class="form-group modal-full mb-16">
+          <label class="form-label">Company &middot; plan interest &middot; last sign-in</label>
+          <div id="ud-meta" style="font-size:12px;color:var(--t2);"></div>
+        </div>
+        <div class="form-group modal-full">
+          <label class="form-label">Recent calculations</label>
+          <div id="ud-recent" style="margin-top:6px;"></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-ghost" id="ud-cancel">Close</button>
+          <button class="btn btn-danger" id="ud-toggle-disabled">Disable account</button>
+        </div>
+      </div>
+    </div>
+
     <!-- ── RFQ / QUOTES ── -->
     <div id="tab-rfq" class="tab-panel">
       <div class="row-between mb-20">
@@ -1178,6 +1427,8 @@
     </div>
 
   </div><!-- /main -->
+  </div><!-- /main-col -->
+</div><!-- /shell -->
 </div><!-- /admin-app -->
 
 <script src="assets/js/admin.js"></script>
