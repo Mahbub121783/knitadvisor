@@ -594,12 +594,13 @@
     $('loginTitle').textContent = titles[m];
 
     var plan = planInterest ? ' You are requesting the ' + PLAN_NAMES[planInterest] + ' plan.' : '';
+    var spamNote = " Don't see it? Check your spam folder.";
     var subs = {
       signin: 'Use your work email to open the calculator.',
       signup: 'Free while plans are finalised.' + plan,
-      verify: pendingEmail ? 'Enter the 6-digit code we emailed to ' + pendingEmail + '.' : 'Enter the 6-digit code we emailed you.',
+      verify: (pendingEmail ? 'Enter the 6-digit code we emailed to ' + pendingEmail + '.' : 'Enter the 6-digit code we emailed you.') + spamNote,
       forgot: 'Enter your account email and we will mail you a reset code.',
-      reset: pendingEmail ? 'Enter the code we emailed to ' + pendingEmail + ' and choose a new password.' : 'Enter the code and choose a new password.',
+      reset: (pendingEmail ? 'Enter the code we emailed to ' + pendingEmail + ' and choose a new password.' : 'Enter the code and choose a new password.') + spamNote,
     };
     $('loginSub').textContent = subs[m];
 
