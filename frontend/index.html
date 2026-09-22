@@ -186,6 +186,9 @@
   .login-field .hint{margin-top:5px;font-size:12px;color:var(--text-faint);}
   .login-error{display:none;margin-top:12px;font-size:13px;color:var(--danger);line-height:1.45;}
   .login-error.show{display:block;}
+  .login-info{margin-top:12px;font-size:13px;color:var(--good);line-height:1.45;}
+  .link-btn{display:block;margin-top:12px;background:none;border:none;padding:0;font-size:13px;color:var(--accent);cursor:pointer;font-family:inherit;text-align:left;}
+  .link-btn:hover{text-decoration:underline;}
   .login-submit{width:100%;margin-top:18px;padding:11px 14px;border-radius:6px;border:1px solid var(--accent);background:var(--accent);color:var(--on-accent);font-weight:700;font-size:14.5px;cursor:pointer;font-family:inherit;}
   .login-submit:hover{background:var(--accent-hover);border-color:var(--accent-hover);}
   .login-submit[disabled]{opacity:.65;cursor:default;}
@@ -436,7 +439,7 @@
       <svg viewBox="0 0 26 26" fill="none" aria-hidden="true"><path d="M3 13c0-4 3-7 7-7M3 13c0 4 3 7 7 7M3 13h20M13 6c4 0 7 3 7 7s-3 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
       <span>KnitAdvisor</span>
     </div>
-    <div class="tabs" role="tablist">
+    <div class="tabs" role="tablist" id="authTabs">
       <button type="button" class="tab" role="tab" id="tabSignIn" aria-selected="true">Sign in</button>
       <button type="button" class="tab" role="tab" id="tabSignUp" aria-selected="false">Create account</button>
     </div>
@@ -452,17 +455,25 @@
         <label for="fCompany">Mill or company <small>(optional)</small></label>
         <input type="text" id="fCompany" autocomplete="organization" maxlength="160">
       </div>
-      <div class="login-field">
+      <div class="login-field" id="fieldEmail">
         <label for="fEmail">Work email</label>
         <input type="email" id="fEmail" autocomplete="username" placeholder="you@yourmill.com" maxlength="254">
       </div>
-      <div class="login-field">
-        <label for="fPassword">Password</label>
+      <div class="login-field" id="fieldCode" hidden>
+        <label for="fCode">6-digit code</label>
+        <input type="text" id="fCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" style="letter-spacing:4px;font-variant-numeric:tabular-nums;">
+      </div>
+      <div class="login-field" id="fieldPassword">
+        <label for="fPassword" id="fPasswordLabel">Password</label>
         <input type="password" id="fPassword" autocomplete="current-password" maxlength="128">
         <p class="hint" id="pwHint" hidden>At least 10 characters.</p>
       </div>
+      <button type="button" class="link-btn" id="forgotLink" hidden>Forgot password?</button>
       <p class="login-error" id="authError" role="alert"></p>
+      <p class="login-info" id="authInfo" hidden></p>
       <button type="submit" class="login-submit" id="authSubmit">Sign in</button>
+      <button type="button" class="link-btn" id="resendLink" hidden>Resend code</button>
+      <button type="button" class="link-btn" id="backToSignIn" hidden>&larr; Back to sign in</button>
     </form>
     <div class="login-foot" id="loginFoot">New here? Choose <b>Create account</b> above &mdash; it takes under a minute.</div>
   </div>
@@ -480,9 +491,10 @@
 
   /* ---------- state ---------- */
   var user = null;
-  var mode = 'signin';       // 'signin' | 'signup'
+  var mode = 'signin';       // 'signin' | 'signup' | 'verify' | 'forgot' | 'reset'
   var planInterest = null;
   var lastFocus = null;
+  var pendingEmail = null;   // the email a verify/reset step is acting on
   var PLAN_NAMES = { floor: 'Floor', mill: 'Mill', buying_house: 'Buying House' };
 
   /* ---------- api ---------- */
@@ -527,26 +539,71 @@
 
   /* ---------- modal ---------- */
   var overlay = $('loginOverlay');
+
+  function showError(msg){
+    $('authInfo').hidden = true;
+    var el = $('authError');
+    el.textContent = msg;
+    el.classList.add('show');
+  }
+  function showInfo(msg){
+    $('authError').classList.remove('show');
+    var el = $('authInfo');
+    el.textContent = msg;
+    el.hidden = false;
+  }
+  function clearMessages(){
+    $('authError').classList.remove('show');
+    $('authInfo').hidden = true;
+  }
+
   function setMode(m){
     mode = m;
-    var up = m === 'signup';
-    $('tabSignIn').setAttribute('aria-selected', up ? 'false' : 'true');
-    $('tabSignUp').setAttribute('aria-selected', up ? 'true' : 'false');
-    $('fieldName').hidden = !up;
-    $('fieldCompany').hidden = !up;
-    $('pwHint').hidden = !up;
-    $('fPassword').setAttribute('autocomplete', up ? 'new-password' : 'current-password');
-    $('authSubmit').textContent = up ? 'Create account' : 'Sign in';
-    $('loginTitle').textContent = up ? 'Create your account' : 'Sign in to continue';
+    var isSignup = m === 'signup';
+    var isVerify = m === 'verify';
+    var isForgot = m === 'forgot';
+    var isReset = m === 'reset';
+    var isTabbed = m === 'signin' || m === 'signup';
+
+    $('authTabs').hidden = !isTabbed;
+    $('tabSignIn').setAttribute('aria-selected', isSignup ? 'false' : 'true');
+    $('tabSignUp').setAttribute('aria-selected', isSignup ? 'true' : 'false');
+
+    $('fieldName').hidden = !isSignup;
+    $('fieldCompany').hidden = !isSignup;
+    $('fieldEmail').hidden = false;
+    $('fEmail').readOnly = isVerify || isReset;
+    $('fieldCode').hidden = !(isVerify || isReset);
+    $('fieldPassword').hidden = isVerify || isForgot;
+    $('fPasswordLabel').textContent = isReset ? 'New password' : 'Password';
+    $('pwHint').hidden = !(isSignup || isReset);
+    $('fPassword').setAttribute('autocomplete', (isSignup || isReset) ? 'new-password' : 'current-password');
+    $('forgotLink').hidden = m !== 'signin';
+    $('resendLink').hidden = !(isVerify || isReset);
+    $('backToSignIn').hidden = isTabbed;
+
+    var labels = { signin: 'Sign in', signup: 'Create account', verify: 'Verify email', forgot: 'Send reset code', reset: 'Reset password' };
+    $('authSubmit').textContent = labels[m];
+
+    var titles = { signin: 'Sign in to continue', signup: 'Create your account', verify: 'Check your email', forgot: 'Reset your password', reset: 'Choose a new password' };
+    $('loginTitle').textContent = titles[m];
+
     var plan = planInterest ? ' You are requesting the ' + PLAN_NAMES[planInterest] + ' plan.' : '';
-    $('loginSub').textContent = up
-      ? 'Free while plans are finalised.' + plan
-      : 'Use your work email to open the calculator.';
-    $('loginFoot').innerHTML = up
+    var subs = {
+      signin: 'Use your work email to open the calculator.',
+      signup: 'Free while plans are finalised.' + plan,
+      verify: pendingEmail ? 'Enter the 6-digit code we emailed to ' + pendingEmail + '.' : 'Enter the 6-digit code we emailed you.',
+      forgot: 'Enter your account email and we will mail you a reset code.',
+      reset: pendingEmail ? 'Enter the code we emailed to ' + pendingEmail + ' and choose a new password.' : 'Enter the code and choose a new password.',
+    };
+    $('loginSub').textContent = subs[m];
+
+    $('loginFoot').innerHTML = isSignup
       ? 'Already registered? Choose <b>Sign in</b> above.'
-      : 'New here? Choose <b>Create account</b> above &mdash; it takes under a minute.';
-    $('authError').classList.remove('show');
+      : isTabbed ? 'New here? Choose <b>Create account</b> above &mdash; it takes under a minute.' : '';
+    clearMessages();
   }
+
   function openAuth(m, plan){
     if (plan !== undefined) planInterest = plan;
     lastFocus = document.activeElement;
@@ -557,7 +614,8 @@
   function closeAuth(){
     overlay.hidden = true;
     $('authForm').reset();
-    $('authError').classList.remove('show');
+    pendingEmail = null;
+    clearMessages();
     if (lastFocus && lastFocus.focus) lastFocus.focus();
   }
   $('loginClose').addEventListener('click', closeAuth);
@@ -567,24 +625,47 @@
   });
   $('tabSignIn').addEventListener('click', function(){ setMode('signin'); });
   $('tabSignUp').addEventListener('click', function(){ setMode('signup'); });
+  $('backToSignIn').addEventListener('click', function(){ pendingEmail = null; setMode('signin'); });
+  $('forgotLink').addEventListener('click', function(){ setMode('forgot'); $('fEmail').value = $('fEmail').value || ''; });
 
-  function showError(msg){
-    var el = $('authError');
-    el.textContent = msg;
-    el.classList.add('show');
+  function requestFreshCode(kind){
+    // kind: 'activation' (verify mode) or 'reset' (reset mode) — both hit the
+    // endpoint that issues+mails a fresh code; both always answer success so
+    // this reveals nothing about whether the account exists.
+    var path = kind === 'reset' ? '/api/auth/forgot-password' : '/api/auth/resend-activation';
+    return postJSON(path, { email: pendingEmail });
   }
+
+  $('resendLink').addEventListener('click', function(){
+    var btn = $('resendLink');
+    btn.disabled = true;
+    requestFreshCode(mode === 'reset' ? 'reset' : 'activation').then(function(r){
+      showInfo((r.data && r.data.message) || 'A new code is on its way.');
+      btn.disabled = false;
+    }).catch(function(){ showError('Could not reach the server.'); btn.disabled = false; });
+  });
 
   $('authForm').addEventListener('submit', function(e){
     e.preventDefault();
-    var email = $('fEmail').value.trim();
+    var email = ($('fEmail').value || '').trim();
     var password = $('fPassword').value;
+    var code = ($('fCode').value || '').trim();
     var btn = $('authSubmit');
-    $('authError').classList.remove('show');
+    clearMessages();
 
     var path, body;
     if (mode === 'signup') {
       path = '/api/auth/signup';
       body = { email: email, password: password, full_name: $('fName').value.trim(), company: $('fCompany').value.trim(), plan_interest: planInterest };
+    } else if (mode === 'verify') {
+      path = '/api/auth/verify-email';
+      body = { email: pendingEmail, code: code };
+    } else if (mode === 'forgot') {
+      path = '/api/auth/forgot-password';
+      body = { email: email };
+    } else if (mode === 'reset') {
+      path = '/api/auth/reset-password';
+      body = { email: pendingEmail, code: code, new_password: password };
     } else {
       path = '/api/auth/login';
       body = { email: email, password: password };
@@ -592,19 +673,39 @@
 
     var label = btn.textContent;
     btn.disabled = true;
-    btn.textContent = mode === 'signup' ? 'Creating account…' : 'Signing in…';
+    btn.textContent = 'Working…';
     postJSON(path, body).then(function(r){
-      if (r.ok && r.data && r.data.user) {
-        window.location.href = safeNext();
+      btn.disabled = false;
+      btn.textContent = label;
+
+      if (r.ok && r.data && r.data.user) { window.location.href = safeNext(); return; }
+
+      if (mode === 'signup' && r.ok && r.data && r.data.verification_required) {
+        pendingEmail = r.data.email || email;
+        setMode('verify');
+        showInfo(r.data.message || 'Enter the 6-digit code we emailed you.');
         return;
       }
+      if (mode === 'signin' && r.data && r.data.code === 'EMAIL_NOT_VERIFIED') {
+        pendingEmail = r.data.email || email;
+        setMode('verify');
+        requestFreshCode('activation').then(function(rr){
+          showInfo((rr.data && rr.data.message) || 'We emailed you a fresh code.');
+        });
+        return;
+      }
+      if (mode === 'forgot' && r.ok) {
+        pendingEmail = email;
+        setMode('reset');
+        showInfo((r.data && r.data.message) || 'If that account exists, a reset code is on its way.');
+        return;
+      }
+
       showError((r.data && r.data.error) || 'Something went wrong. Please try again.');
-      btn.disabled = false;
-      btn.textContent = label;
     }).catch(function(){
-      showError('Could not reach the server. Check your connection and try again.');
       btn.disabled = false;
       btn.textContent = label;
+      showError('Could not reach the server. Check your connection and try again.');
     });
   });
 

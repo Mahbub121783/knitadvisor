@@ -1135,7 +1135,10 @@ async function loadUsers(page, filters) {
         <td style="padding:9px 10px;color:var(--t2);">${esc(PLAN_LABELS[u.plan_interest] || '—')}</td>
         <td style="padding:9px 10px;color:var(--t3);font-family:var(--mono);">${esc(new Date(u.created_at).toLocaleDateString())}</td>
         <td style="padding:9px 10px;color:var(--t3);font-family:var(--mono);">${u.last_login_at ? esc(new Date(u.last_login_at).toLocaleString()) : '—'}</td>
-        <td style="padding:9px 10px;"><span class="badge ${u.disabled ? 'badge-red' : 'badge-green'}">${u.disabled ? 'disabled' : 'active'}</span></td>
+        <td style="padding:9px 10px;white-space:nowrap;">
+          <span class="badge ${u.disabled ? 'badge-red' : 'badge-green'}">${u.disabled ? 'disabled' : 'active'}</span>
+          ${u.email_verified ? '' : '<span class="badge badge-yellow" title="Has not entered their activation code yet">unverified</span>'}
+        </td>
         <td style="padding:9px 10px;white-space:nowrap;">
           <button class="btn btn-ghost btn-sm" data-usr-view="${esc(u.id)}">View</button>
           <button class="btn btn-ghost btn-sm" data-usr-id="${esc(u.id)}" data-usr-disable="${u.disabled ? 'false' : 'true'}">${u.disabled ? 'Enable' : 'Disable'}</button>
@@ -1177,6 +1180,7 @@ async function openUserDetail(id) {
     document.getElementById('ud-joined').textContent = new Date(u.created_at).toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
 
     const meta = [];
+    meta.push(u.email_verified ? '<span style="color:var(--a1);">email verified</span>' : '<span style="color:var(--a4);">email NOT verified</span>');
     meta.push(u.company ? esc(u.company) : 'No company on file');
     meta.push(PLAN_LABELS[u.plan_interest] ? esc(PLAN_LABELS[u.plan_interest]) + ' plan interest' : 'No plan interest recorded');
     meta.push(u.last_login_at ? 'last signed in ' + esc(new Date(u.last_login_at).toLocaleString()) : 'never signed in again after signup');

@@ -582,7 +582,8 @@ router.get('/api/users/:id', adminAuth, async (req, res) => {
     ]);
     res.json({
       id: user.id, email: user.email, full_name: user.full_name, company: user.company,
-      plan_interest: user.plan_interest, disabled: user.disabled, created_at: user.created_at, last_login_at: user.last_login_at,
+      plan_interest: user.plan_interest, disabled: user.disabled, email_verified: user.email_verified,
+      created_at: user.created_at, last_login_at: user.last_login_at,
       stats, recent_calculations: recent.rows, active_sessions: activeSessions,
     });
   } catch (err) {

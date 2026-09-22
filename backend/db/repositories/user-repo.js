@@ -9,7 +9,7 @@ const SESSION_DAYS = parseInt(process.env.USER_SESSION_DAYS, 10) || 14;
 const users = {
   findByEmail(email) {
     return queryOne(
-      'SELECT id, email, full_name, company, password_hash, disabled FROM app_users WHERE lower(email) = lower($1)',
+      'SELECT id, email, full_name, company, password_hash, disabled, email_verified FROM app_users WHERE lower(email) = lower($1)',
       [email]
     );
   },
@@ -28,9 +28,13 @@ const users = {
 
   findById(id) {
     return queryOne(
-      'SELECT id, email, full_name, company, plan_interest, password_hash, disabled, created_at, last_login_at FROM app_users WHERE id = $1',
+      'SELECT id, email, full_name, company, plan_interest, password_hash, disabled, email_verified, created_at, last_login_at FROM app_users WHERE id = $1',
       [id]
     );
+  },
+
+  markEmailVerified(id) {
+    return query('UPDATE app_users SET email_verified = true WHERE id = $1', [id]);
   },
 
   async updateProfile(id, { fullName, company }) {
@@ -64,7 +68,7 @@ const users = {
     const params = term ? [term] : [];
     const total = Number((await queryOne('SELECT count(*)::int AS count FROM app_users ' + where, params)).count);
     const rows = await query(
-      'SELECT id, email, full_name, company, plan_interest, disabled, created_at, last_login_at ' +
+      'SELECT id, email, full_name, company, plan_interest, disabled, email_verified, created_at, last_login_at ' +
       'FROM app_users ' + where + ' ORDER BY created_at DESC, id DESC ' +
       'LIMIT ' + lim + ' OFFSET ' + ((pageN - 1) * lim),
       params
@@ -122,6 +126,11 @@ const sessions = {
   /** Ends every session for the user except the one making the request. */
   removeOthers(userId, keepTokenHash) {
     return query('DELETE FROM app_user_sessions WHERE user_id = $1 AND token_hash <> $2', [userId, keepTokenHash]);
+  },
+
+  /** Ends every session for the user — used by password reset, where there is no "current" session to keep. */
+  removeAllForUser(userId) {
+    return query('DELETE FROM app_user_sessions WHERE user_id = $1', [userId]);
   },
 
   remove(tokenHash) {
@@ -219,4 +228,37 @@ const calculations = {
   },
 };
 
-module.exports = { users, sessions, calculations, SESSION_DAYS, MAX_HISTORY_PER_USER };
+const codes = {
+  /** Stores a freshly-issued code (see engine/domain/otp.js's issueCode()). */
+  create(userId, purpose, hash, expiresAt) {
+    return query(
+      'INSERT INTO app_user_codes (user_id, purpose, code_hash, expires_at) VALUES ($1, $2, $3, $4)',
+      [userId, purpose, hash, expiresAt]
+    );
+  },
+
+  /** The newest code of this purpose for this user, consumed or not — checkCode() in otp.js reads its state. */
+  latest(userId, purpose) {
+    return queryOne(
+      `SELECT id, code_hash, attempts, expires_at, consumed_at
+         FROM app_user_codes WHERE user_id = $1 AND purpose = $2
+        ORDER BY created_at DESC LIMIT 1`,
+      [userId, purpose]
+    );
+  },
+
+  incrementAttempts(id) {
+    return query('UPDATE app_user_codes SET attempts = attempts + 1 WHERE id = $1', [id]);
+  },
+
+  consume(id) {
+    return query('UPDATE app_user_codes SET consumed_at = now() WHERE id = $1', [id]);
+  },
+
+  /** Cron-friendly: codes are tiny rows but there is no reason to keep them past their usefulness. */
+  pruneExpired() {
+    return query("DELETE FROM app_user_codes WHERE expires_at < now() - interval '7 days'");
+  },
+};
+
+module.exports = { users, sessions, calculations, codes, SESSION_DAYS, MAX_HISTORY_PER_USER };

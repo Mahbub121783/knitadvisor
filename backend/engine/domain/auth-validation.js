@@ -5,6 +5,8 @@
  * route file reads as wiring, the same split rfq-engine.js uses.
  */
 
+const { isValidCodeFormat } = require('./otp');
+
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 const PLAN_INTERESTS = ['floor', 'mill', 'buying_house'];
@@ -80,6 +82,30 @@ function validateLogin(body) {
   return { ok: true, errors: [], value: { email, password } };
 }
 
+function validateEmailOnly(body) {
+  const email = normalizeEmail((body || {}).email);
+  if (!email || email.length > 254 || !EMAIL_RE.test(email)) return { ok: false, errors: ['Enter a valid email address.'] };
+  return { ok: true, errors: [], value: { email } };
+}
+
+function validateVerifyCode(body) {
+  const b = body || {};
+  const email = normalizeEmail(b.email);
+  if (!email || !EMAIL_RE.test(email)) return { ok: false, errors: ['Enter a valid email address.'] };
+  if (!isValidCodeFormat(b.code)) return { ok: false, errors: ['Enter the 6-digit code from your email.'] };
+  return { ok: true, errors: [], value: { email, code: b.code } };
+}
+
+function validateResetPassword(body) {
+  const b = body || {};
+  const email = normalizeEmail(b.email);
+  if (!email || !EMAIL_RE.test(email)) return { ok: false, errors: ['Enter a valid email address.'] };
+  if (!isValidCodeFormat(b.code)) return { ok: false, errors: ['Enter the 6-digit code from your email.'] };
+  const problem = validatePasswordRule(b.new_password, email);
+  if (problem) return { ok: false, errors: [problem] };
+  return { ok: true, errors: [], value: { email, code: b.code, new_password: b.new_password } };
+}
+
 /** Same-origin relative path only — anything else would make login an open redirect. */
 function safeNextPath(next) {
   if (typeof next !== 'string') return '/app.html';
@@ -88,6 +114,8 @@ function safeNextPath(next) {
 }
 
 module.exports = {
-  validateSignup, validateLogin, validateProfile, validatePasswordChange, normalizeEmail, safeNextPath,
+  validateSignup, validateLogin, validateProfile, validatePasswordChange,
+  validateEmailOnly, validateVerifyCode, validateResetPassword,
+  normalizeEmail, safeNextPath,
   PASSWORD_MIN, PASSWORD_MAX, PLAN_INTERESTS,
 };
