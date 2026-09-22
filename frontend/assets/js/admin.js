@@ -177,7 +177,11 @@ const STATUS_COLOR = {
   accepted: '#49B58B', rejected: '#E06A6A', expired: '#7B818A',
 };
 
-function fmtPct(n) { return (Number(n) || 0).toFixed(1).replace(/\.0$/, '') + '%'; }
+// Named distinctly from the validation tab's fmtPct() further down this file
+// — both are top-level function declarations, so a same-named pair silently
+// collides (the later one in source order wins for every call site, hoisting
+// makes call order irrelevant), which is exactly what happened here once.
+function kpiPct(n) { return (Number(n) || 0).toFixed(1).replace(/\.0$/, '') + '%'; }
 function fmtDelta(cur, prev) {
   if (prev == null) return { text: '', cls: '' };
   const diff = cur - prev;
@@ -300,7 +304,7 @@ async function loadOverview() {
     const delta = fmtDelta(d.today.today_total, d.yesterday_total);
     document.getElementById('kpi-today-sub').textContent = delta.text || ' ';
     document.getElementById('kpi-today-sub').className = 'kpi-sub ' + delta.cls;
-    document.getElementById('kpi-cache').textContent = fmtPct(d.today.cache_hit_pct);
+    document.getElementById('kpi-cache').textContent = kpiPct(d.today.cache_hit_pct);
     document.getElementById('kpi-avg-ms').textContent = (d.today.avg_response_ms || 0) + 'ms';
     document.getElementById('kpi-rfq-pending').textContent = d.rfq.counts.pending;
     document.getElementById('kpi-rfq-sub').textContent = d.rfq.total + ' total requests';
