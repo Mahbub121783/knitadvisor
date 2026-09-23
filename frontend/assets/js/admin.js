@@ -1342,19 +1342,40 @@ async function loadUniversities() {
   try {
     const d = await api('/admin/api/universities');
     universitiesCache = d.universities || [];
-    const wrap = document.getElementById('uni-list');
-    if (!universitiesCache.length) {
-      wrap.innerHTML = '<div style="color:var(--t3);font-size:11px;">No universities added yet — a student can still apply as "not listed" for manual review.</div>';
-      return;
-    }
-    wrap.innerHTML = universitiesCache.map((u) => `
-      <span class="badge ${u.active ? 'badge-blue' : 'badge-gray'}" style="font-size:11px;padding:5px 9px;display:inline-flex;gap:8px;align-items:center;">
-        ${esc(u.name)} <span style="opacity:.7;">@${esc(u.domain)}</span>
-        <button class="btn-icon" data-uni-toggle="${esc(u.id)}" data-uni-active="${u.active ? 'false' : 'true'}" title="${u.active ? 'Disable' : 'Enable'}" style="border:none;background:none;cursor:pointer;color:inherit;">${u.active ? '⏸' : '▶'}</button>
-        <button class="btn-icon" data-uni-delete="${esc(u.id)}" title="Remove" style="border:none;background:none;cursor:pointer;color:var(--a3);">✕</button>
-      </span>
-    `).join('');
+    renderUniversitiesList(document.getElementById('uni-search').value.trim());
   } catch (e) { toast('Failed to load universities', 'error'); }
+}
+
+// Client-side filter — the whole list is already fetched (a few hundred
+// rows is nothing over the wire), so no need for a paged/searchable
+// endpoint just for this.
+function renderUniversitiesList(filterText) {
+  const wrap = document.getElementById('uni-list');
+  const countEl = document.getElementById('uni-count');
+  const q = (filterText || '').toLowerCase();
+  const rows = q
+    ? universitiesCache.filter((u) => u.name.toLowerCase().includes(q) || u.domain.toLowerCase().includes(q))
+    : universitiesCache;
+
+  countEl.textContent = universitiesCache.length
+    ? rows.length + ' of ' + universitiesCache.length + ' shown' + (rows.length !== universitiesCache.length ? ' (filtered)' : '')
+    : '';
+
+  if (!universitiesCache.length) {
+    wrap.innerHTML = '<div style="color:var(--t3);font-size:11px;">No universities added yet — a student can still apply as "not listed" for manual review.</div>';
+    return;
+  }
+  if (!rows.length) {
+    wrap.innerHTML = '<div style="color:var(--t3);font-size:11px;">No matches.</div>';
+    return;
+  }
+  wrap.innerHTML = rows.map((u) => `
+    <span class="badge ${u.active ? 'badge-blue' : 'badge-gray'}" style="font-size:11px;padding:5px 9px;display:inline-flex;gap:8px;align-items:center;">
+      ${esc(u.name)} <span style="opacity:.7;">@${esc(u.domain)}</span>
+      <button class="btn-icon" data-uni-toggle="${esc(u.id)}" data-uni-active="${u.active ? 'false' : 'true'}" title="${u.active ? 'Disable' : 'Enable'}" style="border:none;background:none;cursor:pointer;color:inherit;">${u.active ? '⏸' : '▶'}</button>
+      <button class="btn-icon" data-uni-delete="${esc(u.id)}" title="Remove" style="border:none;background:none;cursor:pointer;color:var(--a3);">✕</button>
+    </span>
+  `).join('');
 }
 
 async function addUniversity() {
@@ -1369,6 +1390,41 @@ async function addUniversity() {
     await api('/admin/api/universities', 'POST', { name, domain });
     nameInput.value = ''; domainInput.value = '';
     msg.textContent = 'Added.'; msg.style.color = 'var(--a1)';
+    loadUniversities();
+  } catch (e) {
+    msg.textContent = e.message; msg.style.color = 'var(--a3)';
+  } finally { btn.disabled = false; }
+}
+
+// Accepts "Name, domain" or "Name | domain" or "Name\tdomain" per line —
+// whichever separator someone pastes from a spreadsheet.
+function parseBulkUniversityText(text) {
+  const rows = [];
+  text.split('\n').forEach((line) => {
+    const t = line.trim();
+    if (!t) return;
+    const parts = t.split(/\t|,|\|/).map((s) => s.trim()).filter(Boolean);
+    if (parts.length < 2) return;
+    const domain = parts[parts.length - 1];
+    const name = parts.slice(0, -1).join(', ');
+    rows.push({ name, domain });
+  });
+  return rows;
+}
+
+async function bulkImportUniversities() {
+  const textEl = document.getElementById('uni-bulk-text');
+  const msg = document.getElementById('uni-bulk-msg');
+  const btn = document.getElementById('uni-bulk-submit');
+  const rows = parseBulkUniversityText(textEl.value);
+  if (!rows.length) { msg.textContent = 'Nothing to import — one "Name, domain" per line.'; msg.style.color = 'var(--a3)'; return; }
+  btn.disabled = true;
+  msg.textContent = 'Importing ' + rows.length + '…'; msg.style.color = 'var(--t3)';
+  try {
+    const d = await api('/admin/api/universities/bulk', 'POST', { rows });
+    msg.textContent = d.added + ' added' + (d.skipped_count ? ', ' + d.skipped_count + ' skipped (duplicate or invalid)' : '') + '.';
+    msg.style.color = 'var(--a1)';
+    if (d.added > 0) textEl.value = '';
     loadUniversities();
   } catch (e) {
     msg.textContent = e.message; msg.style.color = 'var(--a3)';
@@ -2166,6 +2222,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     const d = e.target.closest('[data-uni-delete]');
     if (d) deleteUniversity(parseInt(d.dataset.uniDelete, 10));
   });
+  document.getElementById('uni-search').addEventListener('input', (e) => renderUniversitiesList(e.target.value.trim()));
+  document.getElementById('uni-bulk-toggle').addEventListener('click', () => {
+    const wrap = document.getElementById('uni-bulk-wrap');
+    wrap.hidden = !wrap.hidden;
+  });
+  document.getElementById('uni-bulk-submit').addEventListener('click', bulkImportUniversities);
 
   // Student plan — verification queue
   document.getElementById('stu-apply-btn').addEventListener('click', () => loadStudents(1, getStuFilters()));

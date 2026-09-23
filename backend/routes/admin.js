@@ -754,6 +754,36 @@ router.post('/api/universities', adminAuth, async (req, res) => {
   }
 });
 
+// Bulk seed/extend the allow-list — {rows: [{name, domain}, ...]}, up to 1000
+// per call. Reuses the same create() as the single-add form, row by row, so
+// a bad or duplicate row is skipped and reported rather than failing the
+// whole batch (a 342-row import must not die on row #200).
+router.post('/api/universities/bulk', adminAuth, async (req, res) => {
+  try {
+    const rows = Array.isArray(req.body && req.body.rows) ? req.body.rows : null;
+    if (!rows || !rows.length) return res.status(400).json({ error: 'Provide a non-empty "rows" array of {name, domain}.' });
+    if (rows.length > 1000) return res.status(400).json({ error: 'Send at most 1000 rows per call.' });
+
+    let added = 0;
+    const skipped = [];
+    for (const r of rows) {
+      const name = String((r && r.name) || '').trim().slice(0, 160);
+      const domain = String((r && r.domain) || '').trim().toLowerCase();
+      if (name.length < 2 || !/^[a-z0-9.-]+\.[a-z]{2,}$/.test(domain)) {
+        skipped.push({ name: name || '(blank)', domain, reason: 'invalid' });
+        continue;
+      }
+      const { conflict } = await universityRepo.create({ name, domain });
+      if (conflict) { skipped.push({ name, domain, reason: 'duplicate' }); continue; }
+      added++;
+    }
+    res.json({ ok: true, added, skipped_count: skipped.length, skipped: skipped.slice(0, 50) });
+  } catch (err) {
+    console.error('[Universities Bulk Create Error]', err);
+    res.status(500).json({ error: 'Failed to import universities' });
+  }
+});
+
 router.patch('/api/universities/:id/active', adminAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);

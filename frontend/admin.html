@@ -1309,7 +1309,24 @@
           </div>
         </div>
         <div id="uni-add-msg" style="font-size:11px;min-height:15px;margin-top:6px;color:var(--t3);">Only an exact match of this domain lets a student auto-approve — never a wildcard, so a look-alike domain can't slip in.</div>
-        <div id="uni-list" style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;"></div>
+
+        <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line);">
+          <button type="button" class="btn btn-ghost btn-sm" id="uni-bulk-toggle">Bulk add / onboard many</button>
+          <div id="uni-bulk-wrap" hidden style="margin-top:10px;">
+            <label class="form-label">One per line: <code>Institution Name, domain.tld</code></label>
+            <textarea id="uni-bulk-text" class="form-input" rows="6" style="font-family:var(--mono);font-size:11.5px;" placeholder="North South University, northsouth.edu&#10;University of Dhaka, du.ac.bd"></textarea>
+            <div style="margin-top:8px;display:flex;gap:8px;align-items:center;">
+              <button type="button" class="btn btn-primary btn-sm" id="uni-bulk-submit">Import all</button>
+              <span id="uni-bulk-msg" style="font-size:11px;color:var(--t3);"></span>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top:14px;">
+          <input type="text" id="uni-search" class="form-input" placeholder="Search allow-listed universities by name or domain…">
+        </div>
+        <div id="uni-count" style="font-size:11px;color:var(--t3);margin-top:6px;"></div>
+        <div id="uni-list" style="margin-top:8px;max-height:340px;overflow-y:auto;display:flex;flex-wrap:wrap;gap:8px;align-content:flex-start;"></div>
       </div>
 
       <div class="card mb-16">
