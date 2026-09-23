@@ -181,8 +181,11 @@
   .login-field{margin-top:14px;}
   .login-field label{display:block;font-size:13px;font-weight:600;margin-bottom:6px;}
   .login-field label small{font-weight:400;color:var(--text-faint);}
-  .login-field input{width:100%;padding:10px 12px;border:1px solid var(--border-strong);border-radius:6px;background:var(--bg);color:var(--text);font-size:14px;font-family:inherit;}
-  .login-field input:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent);}
+  .login-field input,.login-field select{width:100%;padding:10px 12px;border:1px solid var(--border-strong);border-radius:6px;background:var(--bg);color:var(--text);font-size:14px;font-family:inherit;}
+  .login-field input:focus,.login-field select:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent);}
+  .login-field input[type="file"]{padding:8px;}
+  .login-field input[type="checkbox"]{width:auto;}
+  .student-toggle-label{display:flex;align-items:center;gap:9px;font-size:13.5px;font-weight:600;cursor:pointer;}
   .login-field .hint{margin-top:5px;font-size:12px;color:var(--text-faint);}
   .login-field .hint.ok{color:var(--good);}
   .login-field .hint.warn{color:var(--danger);}
@@ -374,8 +377,10 @@
           <li>Full calculation engine for knit constructions</li>
           <li>Unit converter, pattern catalog and academy</li>
           <li>Dyeing recipes and fault diagnostics</li>
+          <li><b>Students:</b> verify at signup for 30 requests/day, free for 1 year</li>
         </ul>
         <button type="button" class="btn" data-plan="floor">Create free account</button>
+        <button type="button" class="link-btn" id="planStudentLink" style="margin-top:-6px;">I'm a student — verify at signup</button>
       </div>
       <div class="plan featured">
         <div><h3>Mill</h3><p class="tagline">For production and planning teams costing and running fabric.</p></div>
@@ -466,9 +471,35 @@
         <label for="fEmail" id="fEmailLabel">Work email</label>
         <input type="email" id="fEmail" autocomplete="username" placeholder="you@yourmill.com" maxlength="254">
       </div>
+      <div class="login-field" id="fieldStudentToggle" hidden>
+        <label class="student-toggle-label" for="fStudentToggle">
+          <input type="checkbox" id="fStudentToggle">
+          I'm a student — verify for 30 requests/day, free for 1 year
+        </label>
+      </div>
+      <div class="login-field" id="fieldStudentUni" hidden>
+        <label for="fStudentUni">University</label>
+        <select id="fStudentUni">
+          <option value="">Choose your university…</option>
+          <option value="other">My university isn&rsquo;t listed</option>
+        </select>
+      </div>
+      <div class="login-field" id="fieldStudentUniOther" hidden>
+        <label for="fStudentUniOther">Your university&rsquo;s name</label>
+        <input type="text" id="fStudentUniOther" maxlength="160" placeholder="e.g. XYZ Textile College">
+      </div>
+      <div class="login-field" id="fieldStudentEmail" hidden>
+        <label for="fStudentEmail">University email</label>
+        <input type="email" id="fStudentEmail" maxlength="254" placeholder="you@youruniversity.edu.bd">
+      </div>
       <div class="login-field" id="fieldCode" hidden>
-        <label for="fCode">6-digit code</label>
+        <label for="fCode" id="fCodeLabel">6-digit code</label>
         <input type="text" id="fCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" style="letter-spacing:4px;font-variant-numeric:tabular-nums;">
+      </div>
+      <div class="login-field" id="fieldStudentDoc" hidden>
+        <label for="fStudentDoc">Student ID card or admission document</label>
+        <input type="file" id="fStudentDoc" accept="image/jpeg,image/png,image/webp,application/pdf">
+        <p class="hint">JPG, PNG or PDF, up to 8MB.</p>
       </div>
       <div class="login-field" id="fieldPassword">
         <label for="fPassword" id="fPasswordLabel">Password</label>
@@ -481,6 +512,7 @@
       <button type="submit" class="login-submit" id="authSubmit">Sign in</button>
       <button type="button" class="link-btn" id="resendLink" hidden>Resend code</button>
       <button type="button" class="link-btn" id="backToSignIn" hidden>&larr; Back to sign in</button>
+      <button type="button" class="link-btn" id="skipStudentLink" hidden>Skip for now &mdash; I&rsquo;ll finish later</button>
     </form>
     <div class="login-foot" id="loginFoot">New here? Choose <b>Create account</b> above &mdash; it takes under a minute.</div>
   </div>
@@ -571,6 +603,9 @@
     var isVerify = m === 'verify';
     var isForgot = m === 'forgot';
     var isReset = m === 'reset';
+    var isStudentCode = m === 'student-code';
+    var isStudentDoc = m === 'student-doc';
+    var isStudentRetry = m === 'student-retry';
     var isTabbed = m === 'signin' || m === 'signup';
 
     $('authTabs').hidden = !isTabbed;
@@ -582,13 +617,16 @@
     $('unameHint').className = 'hint';
     $('unameHint').textContent = '3–30 characters: letters, numbers, underscore, period.';
     $('fieldCompany').hidden = !isSignup;
-    $('fieldEmail').hidden = false;
+    $('fieldEmail').hidden = isStudentCode || isStudentDoc || isStudentRetry;
     $('fEmailLabel').textContent = isSignup ? 'Work email' : 'Email or username';
     $('fEmail').type = isSignup ? 'email' : 'text';
     $('fEmail').placeholder = isSignup ? 'you@yourmill.com' : 'you@yourmill.com or username';
     $('fEmail').readOnly = isVerify || isReset;
-    $('fieldCode').hidden = !(isVerify || isReset);
-    $('fieldPassword').hidden = isVerify || isForgot;
+    updateStudentFieldsVisibility();
+    $('fieldCode').hidden = !(isVerify || isReset || isStudentCode);
+    $('fCodeLabel').textContent = isStudentCode ? '6-digit code from your university email' : '6-digit code';
+    $('fieldStudentDoc').hidden = !isStudentDoc;
+    $('fieldPassword').hidden = isVerify || isForgot || isStudentCode || isStudentDoc || isStudentRetry;
     $('fPasswordLabel').textContent = isReset ? 'New password' : 'Password';
     $('pwHint').hidden = !(isSignup || isReset);
     $('pwHint').className = 'hint';
@@ -596,12 +634,20 @@
     $('fPassword').setAttribute('autocomplete', (isSignup || isReset) ? 'new-password' : 'current-password');
     $('forgotLink').hidden = m !== 'signin';
     $('resendLink').hidden = !(isVerify || isReset);
-    $('backToSignIn').hidden = isTabbed;
+    $('backToSignIn').hidden = isTabbed || isStudentCode || isStudentDoc || isStudentRetry;
+    $('skipStudentLink').hidden = !(isStudentCode || isStudentDoc || isStudentRetry);
 
-    var labels = { signin: 'Sign in', signup: 'Create account', verify: 'Verify email', forgot: 'Send reset code', reset: 'Reset password' };
+    var labels = {
+      signin: 'Sign in', signup: 'Create account', verify: 'Verify email', forgot: 'Send reset code', reset: 'Reset password',
+      'student-code': 'Verify code', 'student-doc': 'Submit', 'student-retry': 'Try again',
+    };
     $('authSubmit').textContent = labels[m];
 
-    var titles = { signin: 'Sign in to continue', signup: 'Create your account', verify: 'Check your email', forgot: 'Reset your password', reset: 'Choose a new password' };
+    var titles = {
+      signin: 'Sign in to continue', signup: 'Create your account', verify: 'Check your email',
+      forgot: 'Reset your password', reset: 'Choose a new password',
+      'student-code': 'Verify your university email', 'student-doc': 'Almost done', 'student-retry': 'Let’s try that again',
+    };
     $('loginTitle').textContent = titles[m];
 
     var plan = planInterest ? ' You are requesting the ' + PLAN_NAMES[planInterest] + ' plan.' : '';
@@ -615,6 +661,9 @@
       // they typed in forgot mode, and showing "we emailed <username>" reads
       // as a bug even though the code correctly went to their real email.
       reset: 'Enter the code we emailed to the address on file, and choose a new password.' + spamNote,
+      'student-code': 'Enter the code we emailed to ' + (studentChoice ? studentChoice.studentEmail : 'your university address') + '.' + spamNote,
+      'student-doc': 'Upload your student ID card or admission document to finish — this is what turns the plan on.',
+      'student-retry': 'Double-check your university and its email below.',
     };
     $('loginSub').textContent = subs[m];
 
@@ -623,6 +672,110 @@
       : isTabbed ? 'New here? Choose <b>Create account</b> above &mdash; it takes under a minute.' : '';
     clearMessages();
   }
+
+  /* ---------- student-plan signup entry point ---------- */
+  var studentIntent = false;
+  var studentChoice = null; // { universityId, studentEmail, universityOther }
+  var universitiesLoaded = false;
+
+  function updateStudentFieldsVisibility(){
+    var isSignup = mode === 'signup';
+    var isRetry = mode === 'student-retry';
+    $('fieldStudentToggle').hidden = !isSignup;
+    var checked = (isSignup && $('fStudentToggle').checked) || isRetry;
+    var uniVal = $('fStudentUni').value;
+    $('fieldStudentUni').hidden = !checked;
+    $('fieldStudentUniOther').hidden = !(checked && uniVal === 'other');
+    $('fieldStudentEmail').hidden = !(checked && uniVal && uniVal !== 'other');
+  }
+  /** Reads the (possibly just-corrected) university fields off the form. @returns {ok:true, body} or {ok:false, error} */
+  function readStudentApplyBody(){
+    var uniVal = $('fStudentUni').value;
+    if (uniVal && uniVal !== 'other') {
+      var email = ($('fStudentEmail').value || '').trim().toLowerCase();
+      if (!email) return { ok: false, error: 'Enter your university email.' };
+      return { ok: true, body: { university_id: parseInt(uniVal, 10), student_email: email } };
+    }
+    var other = ($('fStudentUniOther').value || '').trim();
+    if (!uniVal || uniVal === 'other') {
+      if (other.length < 2) return { ok: false, error: 'Choose your university, or enter its name if it isn’t listed.' };
+      return { ok: true, body: { university_id: null, university_name_other: other } };
+    }
+    return { ok: false, error: 'Choose your university.' };
+  }
+  function loadUniversitiesOnce(){
+    if (universitiesLoaded) return;
+    universitiesLoaded = true;
+    fetch(API + '/api/auth/universities').then(function(r){ return r.json(); }).then(function(d){
+      var sel = $('fStudentUni');
+      var opts = (d.universities || []).map(function(u){ return '<option value="' + u.id + '">' + u.name.replace(/[<>&]/g, '') + '</option>'; }).join('');
+      sel.innerHTML = '<option value="">Choose your university…</option>' + opts + '<option value="other">My university isn’t listed</option>';
+    }).catch(function(){});
+  }
+  $('fStudentToggle').addEventListener('change', function(){
+    if ($('fStudentToggle').checked) loadUniversitiesOnce();
+    updateStudentFieldsVisibility();
+  });
+  $('fStudentUni').addEventListener('change', updateStudentFieldsVisibility);
+
+  function startStudentFlow(){
+    var btn = $('authSubmit');
+    btn.disabled = true;
+    var body = studentChoice.universityId
+      ? { university_id: studentChoice.universityId, student_email: studentChoice.studentEmail }
+      : { university_id: null, university_name_other: studentChoice.universityOther };
+    submitStudentApply(body, btn);
+  }
+  // A wrong/mistyped university email (the one data-entry mistake a real
+  // student could plausibly make) must not silently drop them — signup is
+  // the ONLY entry point, so failing quietly here would strand the account
+  // with no way to ever finish. Anything else genuinely unrecoverable (rate
+  // limit, server hiccup) still falls through to onboarding rather than
+  // trapping them in the modal.
+  function submitStudentApply(body, btn){
+    postJSON('/api/account/student/apply', body).then(function(r){
+      if (btn) btn.disabled = false;
+      if (!r.ok || !r.data || !r.data.success) {
+        var recoverable = r.status === 400; // a bad domain/email match — everything else, give up gracefully
+        if (recoverable) {
+          setMode('student-retry');
+          showError((r.data && r.data.error) || 'Could not verify that university email.');
+          return;
+        }
+        finishStudentFlow();
+        return;
+      }
+      if (r.data.needs_code) { setMode('student-code'); }
+      else { setMode('student-doc'); }
+    }).catch(function(){ finishStudentFlow(); });
+  }
+  function finishStudentFlow(msg){
+    if (msg) { showInfo(msg); setTimeout(function(){ window.location.href = safeNext(); }, 1400); return; }
+    window.location.href = safeNext();
+  }
+  function handleStudentDocSubmit(){
+    var file = ($('fStudentDoc').files || [])[0];
+    if (!file) { showError('Attach your ID card or admission document.'); return; }
+    var btn = $('authSubmit');
+    btn.disabled = true; btn.textContent = 'Working…';
+    var fd = new FormData();
+    fd.append('document', file);
+    fetch(API + '/api/account/student/document', { method: 'POST', body: fd, credentials: 'include' })
+      .then(function(res){ return res.json().catch(function(){ return {}; }).then(function(data){ return { ok: res.ok, data: data }; }); })
+      .then(function(r){
+        btn.disabled = false; btn.textContent = 'Submit';
+        if (!r.ok || !r.data || !r.data.success) { showError((r.data && r.data.error) || 'Could not save your document.'); return; }
+        finishStudentFlow(r.data.status === 'active' ? 'Your student plan is active — welcome in!' : 'Submitted — we’ll email you once it’s reviewed.');
+      })
+      .catch(function(){ btn.disabled = false; btn.textContent = 'Submit'; showError('Could not reach the server.'); });
+  }
+  $('skipStudentLink').addEventListener('click', function(){ finishStudentFlow(); });
+  $('planStudentLink').addEventListener('click', function(){
+    openAuth('signup', 'floor');
+    $('fStudentToggle').checked = true;
+    loadUniversitiesOnce();
+    updateStudentFieldsVisibility();
+  });
 
   function openAuth(m, plan){
     if (plan !== undefined) planInterest = plan;
@@ -635,6 +788,9 @@
     overlay.hidden = true;
     $('authForm').reset();
     pendingIdentifier = null;
+    studentIntent = false;
+    studentChoice = null;
+    updateStudentFieldsVisibility();
     setUnameStatus('', '');
     clearMessages();
     if (lastFocus && lastFocus.focus) lastFocus.focus();
@@ -730,6 +886,17 @@
 
   $('authForm').addEventListener('submit', function(e){
     e.preventDefault();
+    if (mode === 'student-doc') { handleStudentDocSubmit(); return; }
+    if (mode === 'student-retry') {
+      clearMessages();
+      var retry = readStudentApplyBody();
+      if (!retry.ok) { showError(retry.error); return; }
+      var retryBtn = $('authSubmit');
+      retryBtn.disabled = true;
+      submitStudentApply(retry.body, retryBtn);
+      return;
+    }
+
     var identifier = ($('fEmail').value || '').trim();
     var username = ($('fUsername').value || '').trim();
     var password = $('fPassword').value;
@@ -741,9 +908,30 @@
     if (mode === 'signup') {
       path = '/api/auth/signup';
       body = { email: identifier, username: username, password: password, full_name: $('fName').value.trim(), company: $('fCompany').value.trim(), plan_interest: planInterest };
+      // Captured now, before the form/fields get hidden by the next setMode()
+      // — the education entry point only exists here, at signup, so this is
+      // the one moment the choice is read off the DOM.
+      studentIntent = $('fStudentToggle').checked;
+      if (studentIntent) {
+        var uniVal = $('fStudentUni').value;
+        studentChoice = uniVal && uniVal !== 'other'
+          ? { universityId: parseInt(uniVal, 10), studentEmail: ($('fStudentEmail').value || '').trim().toLowerCase(), universityOther: null }
+          : { universityId: null, studentEmail: null, universityOther: ($('fStudentUniOther').value || '').trim() };
+        if (uniVal && uniVal !== 'other' && !studentChoice.studentEmail) {
+          showError('Enter your university email, or uncheck the student option.');
+          return;
+        }
+        if ((!uniVal || uniVal === 'other') && studentChoice.universityOther.length < 2) {
+          showError('Choose your university, or enter its name if it isn’t listed.');
+          return;
+        }
+      }
     } else if (mode === 'verify') {
       path = '/api/auth/verify-email';
       body = { email: pendingIdentifier, code: code };
+    } else if (mode === 'student-code') {
+      path = '/api/account/student/verify-code';
+      body = { code: code };
     } else if (mode === 'forgot') {
       path = '/api/auth/forgot-password';
       body = { identifier: identifier };
@@ -762,7 +950,11 @@
       btn.disabled = false;
       btn.textContent = label;
 
-      if (r.ok && r.data && r.data.user) { window.location.href = safeNext(); return; }
+      if (r.ok && r.data && r.data.user) {
+        if (studentIntent) { startStudentFlow(); return; }
+        window.location.href = safeNext();
+        return;
+      }
 
       if (mode === 'signup' && r.ok && r.data && r.data.verification_required) {
         pendingIdentifier = r.data.email || identifier;
@@ -776,6 +968,11 @@
         requestFreshCode('activation').then(function(rr){
           showInfo((rr.data && rr.data.message) || 'We emailed you a fresh code.');
         });
+        return;
+      }
+      if (mode === 'student-code' && r.ok && r.data && r.data.success) {
+        if (r.data.status === 'active') { finishStudentFlow('Your student plan is active — welcome in!'); return; }
+        setMode('student-doc');
         return;
       }
       if (mode === 'forgot' && r.ok) {

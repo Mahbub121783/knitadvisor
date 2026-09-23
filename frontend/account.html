@@ -136,24 +136,7 @@
         <p class="sub" id="student-sub">Verify you're a student for 30 requests a day, free for one year.</p>
         <div id="student-status-box" style="margin-bottom:14px;" hidden></div>
 
-        <form id="student-apply-form" novalidate>
-          <div class="frow">
-            <label for="student-uni">University</label>
-            <select class="form-input" id="student-uni">
-              <option value="">Loading…</option>
-            </select>
-          </div>
-          <div class="frow" id="student-uni-other-row" hidden>
-            <label for="student-uni-other">Your university's name</label>
-            <input class="form-input" id="student-uni-other" type="text" maxlength="160" placeholder="e.g. XYZ Textile College">
-          </div>
-          <div class="frow" id="student-email-row" hidden>
-            <label for="student-email">University email</label>
-            <input class="form-input" id="student-email" type="email" placeholder="you@youruniversity.edu.bd" autocomplete="email">
-          </div>
-          <button class="btn btn-primary" type="submit" id="student-apply-btn">Start verification</button>
-          <div class="msg" id="student-apply-msg" role="status"></div>
-        </form>
+        <p class="sub" id="student-no-entry" hidden>Student verification is offered once, right when you create your account &mdash; it isn&rsquo;t something you can start from here later.</p>
 
         <form id="student-code-form" novalidate hidden>
           <div class="frow">
@@ -447,7 +430,6 @@
   });
 
   /* ---------- student plan ---------- */
-  var studentUniversities = [];
   var studentVer = null;
 
   function studentPlanLabel(plan) {
@@ -461,28 +443,14 @@
     box.hidden = false;
   }
 
+  // Resume-only: an application is only ever STARTED from the signup flow
+  // (index.html). This card can only continue one already in progress — a
+  // half-finished code or document step — or show its current/final state.
+  // There is deliberately no "start a new one" form here.
   function showStudentStep(step) {
-    $('student-apply-form').hidden = step !== 'apply';
+    $('student-no-entry').hidden = step !== 'none-entry';
     $('student-code-form').hidden = step !== 'code';
     $('student-doc-form').hidden = step !== 'doc';
-  }
-
-  function studentUniOnChange() {
-    var v = $('student-uni').value;
-    $('student-uni-other-row').hidden = v !== 'other';
-    $('student-email-row').hidden = !(v && v !== 'other');
-  }
-  $('student-uni').addEventListener('change', studentUniOnChange);
-
-  function loadUniversities() {
-    return j('/api/account/universities').then(function (d) {
-      studentUniversities = d.universities || [];
-      var sel = $('student-uni');
-      sel.innerHTML = '<option value="">Choose your university…</option>' +
-        studentUniversities.map(function (u) { return '<option value="' + esc(u.id) + '">' + esc(u.name) + '</option>'; }).join('') +
-        '<option value="other">My university isn’t listed</option>';
-      studentUniOnChange();
-    }).catch(function () {});
   }
 
   function loadStudentStatus() {
@@ -504,46 +472,17 @@
         showStudentStep('doc');
         $('student-sub').textContent = 'Upload your ID card or admission document to finish.';
       } else {
+        showStudentStep('none-entry');
         if (studentVer && ['rejected', 'revoked', 'expired'].indexOf(studentVer.status) > -1) {
-          $('student-sub').textContent = (studentVer.status === 'expired'
+          $('student-sub').textContent = studentVer.status === 'expired'
             ? 'Your student year ended.'
-            : 'Your last application wasn’t approved' + (studentVer.reason ? ': ' + studentVer.reason : '.')) + ' You can apply again below.';
+            : 'Your application wasn’t approved' + (studentVer.reason ? ': ' + studentVer.reason : '.');
         } else {
-          $('student-sub').textContent = 'Verify you’re a student for 30 requests a day, free for one year.';
+          $('student-sub').textContent = 'Student verification is offered at signup.';
         }
-        showStudentStep('apply');
-        loadUniversities();
       }
     }).catch(function () {});
   }
-
-  $('student-apply-form').addEventListener('submit', function (e) {
-    e.preventDefault();
-    var uniVal = $('student-uni').value;
-    var msg = $('student-apply-msg');
-    if (!uniVal) { setMsg(msg, 'Choose your university, or "not listed".', false); return; }
-    var body;
-    if (uniVal === 'other') {
-      var name = $('student-uni-other').value.trim();
-      if (name.length < 2) { setMsg(msg, 'Enter your university’s name.', false); return; }
-      body = { university_id: null, university_name_other: name };
-    } else {
-      var email = $('student-email').value.trim();
-      if (!email) { setMsg(msg, 'Enter your university email.', false); return; }
-      body = { university_id: parseInt(uniVal, 10), student_email: email };
-    }
-    var btn = $('student-apply-btn'); btn.disabled = true; setMsg(msg, '', true);
-    j('/api/account/student/apply', 'POST', body)
-      .then(function (d) {
-        setMsg(msg, '', true);
-        showStudentStep(d.needs_code ? 'code' : 'doc');
-        $('student-sub').textContent = d.needs_code
-          ? 'One more step — verify the code sent to ' + esc(body.student_email) + '.'
-          : 'Upload your ID card or admission document to finish.';
-      })
-      .catch(function (err) { setMsg(msg, err.message, false); })
-      .then(function () { btn.disabled = false; });
-  });
 
   $('student-code-form').addEventListener('submit', function (e) {
     e.preventDefault();

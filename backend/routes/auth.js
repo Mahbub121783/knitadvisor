@@ -30,6 +30,7 @@ const {
 } = require('../engine/domain/auth-validation');
 const { checkCode } = require('../engine/domain/otp');
 const { issueAndSend } = require('../services/account-codes');
+const universityRepo = require('../db/repositories/university-repo');
 
 const signupLimiter = createRateLimiter({
   name: 'auth-signup', max: 8, windowMs: 60 * 60 * 1000,
@@ -168,6 +169,18 @@ router.get('/username-availability', usernameCheckLimiter, async (req, res) => {
     // eventual INSERT would have allowed; the real uniqueness check still
     // happens there regardless of what this convenience endpoint said.
     res.json({ available: null });
+  }
+});
+
+// Public on purpose — the student-plan picker on the signup form needs this
+// list before an account (and therefore a session) exists. Read-only, no
+// PII, same generous per-minute budget as username-availability.
+router.get('/universities', usernameCheckLimiter, async (req, res) => {
+  try {
+    res.json({ success: true, universities: await universityRepo.listActive() });
+  } catch (err) {
+    console.error('[Auth] universities failed:', err.message);
+    res.json({ success: true, universities: [] }); // a listing hiccup must not block signup itself
   }
 });
 
