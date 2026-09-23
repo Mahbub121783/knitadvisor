@@ -42,12 +42,6 @@ const {
   validateProfile, validatePasswordChange, validateUsernameChange, USERNAME_CHANGE_COOLDOWN_DAYS,
 } = require('../engine/domain/auth-validation');
 
-// How long after account creation the student-plan entry point stays open.
-// Generous enough to cover a slow signup (typing a code from a phone, finding
-// a document to photograph) without turning into a standing "apply anytime"
-// path a free account could revisit weeks later.
-const STUDENT_SIGNUP_WINDOW_HOURS = 6;
-
 const passwordLimiter = createRateLimiter({
   name: 'account-password',
   max: 6,
@@ -246,26 +240,17 @@ router.get('/student/status', async (req, res) => {
 
 router.post('/student/apply', studentApplyLimiter, async (req, res) => {
   try {
-    // Entry point is the signup flow only (index.html offers this right after
-    // activation, before the "student" toggle's choice is ever discarded) —
-    // once any attempt exists for this account, ever, apply() is done; a
-    // rejected/revoked/expired one is not a green light to just try again
-    // later, and an already-active one obviously isn't either.
+    // Reachable from the "I'm a student" link on index.html — either inline
+    // during signup, or later from a live session on the landing page — but
+    // only ever once per account, signed in or not. A rejected/revoked/
+    // expired attempt is not a green light to just try again; an admin
+    // reopening it is the only way back in from there.
     const current = await studentRepo.latestForUser(req.user.id);
     if (current) {
       const msg = current.status === 'active' ? 'Your student plan is already active.'
         : current.status === 'pending' ? 'You already have an application awaiting review.'
-        : 'Student verification is only offered once, when you first create your account.';
+        : 'You’ve already applied for the student plan once. Contact us if you’d like it reconsidered.';
       return res.status(409).json({ success: false, error: msg });
-    }
-
-    const account = await userRepo.users.findById(req.user.id);
-    const ageHours = account ? (Date.now() - new Date(account.created_at).getTime()) / 3600000 : Infinity;
-    if (ageHours > STUDENT_SIGNUP_WINDOW_HOURS) {
-      return res.status(403).json({
-        success: false,
-        error: 'Student verification is only available when you first create your account — it can’t be started later.',
-      });
     }
 
     const universityId = req.body && req.body.university_id != null ? parseInt(req.body.university_id, 10) : null;

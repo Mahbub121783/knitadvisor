@@ -383,10 +383,10 @@
           <li>Full calculation engine for knit constructions</li>
           <li>Unit converter, pattern catalog and academy</li>
           <li>Dyeing recipes and fault diagnostics</li>
-          <li><b>Students:</b> verify at signup for 30 requests/day, free for 1 year</li>
+          <li><b>Students:</b> verify once for 30 requests/day, free for 1 year</li>
         </ul>
         <button type="button" class="btn" data-plan="floor">Create free account</button>
-        <button type="button" class="link-btn" id="planStudentLink" style="margin-top:-6px;">I'm a student — verify at signup</button>
+        <button type="button" class="link-btn" id="planStudentLink" style="margin-top:-6px;">I'm a student — verify now</button>
       </div>
       <div class="plan featured">
         <div><h3>Mill</h3><p class="tagline">For production and planning teams costing and running fabric.</p></div>
@@ -611,6 +611,7 @@
     var isStudentCode = m === 'student-code';
     var isStudentDoc = m === 'student-doc';
     var isStudentRetry = m === 'student-retry';
+    var isStudentOnly = m === 'student-only';
     var isTabbed = m === 'signin' || m === 'signup';
 
     $('authTabs').hidden = !isTabbed;
@@ -622,7 +623,7 @@
     $('unameHint').className = 'hint';
     $('unameHint').textContent = '3–30 characters: letters, numbers, underscore, period.';
     $('fieldCompany').hidden = !isSignup;
-    $('fieldEmail').hidden = isStudentCode || isStudentDoc || isStudentRetry;
+    $('fieldEmail').hidden = isStudentCode || isStudentDoc || isStudentRetry || isStudentOnly;
     $('fEmailLabel').textContent = isSignup ? 'Work email' : 'Email or username';
     $('fEmail').type = isSignup ? 'email' : 'text';
     $('fEmail').placeholder = isSignup ? 'you@yourmill.com' : 'you@yourmill.com or username';
@@ -631,7 +632,7 @@
     $('fieldCode').hidden = !(isVerify || isReset || isStudentCode);
     $('fCodeLabel').textContent = isStudentCode ? '6-digit code from your university email' : '6-digit code';
     $('fieldStudentDoc').hidden = !isStudentDoc;
-    $('fieldPassword').hidden = isVerify || isForgot || isStudentCode || isStudentDoc || isStudentRetry;
+    $('fieldPassword').hidden = isVerify || isForgot || isStudentCode || isStudentDoc || isStudentRetry || isStudentOnly;
     $('fPasswordLabel').textContent = isReset ? 'New password' : 'Password';
     $('pwHint').hidden = !(isSignup || isReset);
     $('pwHint').className = 'hint';
@@ -639,12 +640,12 @@
     $('fPassword').setAttribute('autocomplete', (isSignup || isReset) ? 'new-password' : 'current-password');
     $('forgotLink').hidden = m !== 'signin';
     $('resendLink').hidden = !(isVerify || isReset);
-    $('backToSignIn').hidden = isTabbed || isStudentCode || isStudentDoc || isStudentRetry;
+    $('backToSignIn').hidden = isTabbed || isStudentCode || isStudentDoc || isStudentRetry || isStudentOnly;
     $('skipStudentLink').hidden = !(isStudentCode || isStudentDoc || isStudentRetry);
 
     var labels = {
       signin: 'Sign in', signup: 'Create account', verify: 'Verify email', forgot: 'Send reset code', reset: 'Reset password',
-      'student-code': 'Verify code', 'student-doc': 'Submit', 'student-retry': 'Try again',
+      'student-code': 'Verify code', 'student-doc': 'Submit', 'student-retry': 'Try again', 'student-only': 'Start verification',
     };
     $('authSubmit').textContent = labels[m];
 
@@ -652,6 +653,7 @@
       signin: 'Sign in to continue', signup: 'Create your account', verify: 'Check your email',
       forgot: 'Reset your password', reset: 'Choose a new password',
       'student-code': 'Verify your university email', 'student-doc': 'Almost done', 'student-retry': 'Let’s try that again',
+      'student-only': 'Verify your student status',
     };
     $('loginTitle').textContent = titles[m];
 
@@ -669,6 +671,7 @@
       'student-code': 'Enter the code we emailed to ' + (studentChoice ? studentChoice.studentEmail : 'your university address') + '.' + spamNote,
       'student-doc': 'Upload your student ID card or admission document to finish — this is what turns the plan on.',
       'student-retry': 'Double-check your university and its email below.',
+      'student-only': '30 requests/day, free for 1 year. Pick your university below — this can only be done once.',
     };
     $('loginSub').textContent = subs[m];
 
@@ -686,7 +689,7 @@
 
   function updateStudentFieldsVisibility(){
     var isSignup = mode === 'signup';
-    var isRetry = mode === 'student-retry';
+    var isRetry = mode === 'student-retry' || mode === 'student-only';
     $('fieldStudentToggle').hidden = !isSignup;
     var checked = (isSignup && $('fStudentToggle').checked) || isRetry;
     var uniVal = $('fStudentUni').value;
@@ -796,19 +799,25 @@
     submitStudentApply(body, btn);
   }
   // A wrong/mistyped university email (the one data-entry mistake a real
-  // student could plausibly make) must not silently drop them — signup is
-  // the ONLY entry point, so failing quietly here would strand the account
-  // with no way to ever finish. Anything else genuinely unrecoverable (rate
-  // limit, server hiccup) still falls through to onboarding rather than
-  // trapping them in the modal.
+  // student could plausibly make) must not silently drop them, whichever way
+  // they got here — failing quietly would strand the account with no way to
+  // ever finish (this can only be attempted once, ever). Started mid-signup,
+  // anything else genuinely unrecoverable (rate limit, server hiccup) falls
+  // through to onboarding rather than trapping them in the modal; started
+  // from an already-signed-in visit (student-only), there is no onboarding
+  // to fall through to, so the real reason (already applied, etc.) is shown
+  // instead of a confusing silent redirect.
   function submitStudentApply(body, btn){
     postJSON('/api/account/student/apply', body).then(function(r){
       if (btn) btn.disabled = false;
       if (!r.ok || !r.data || !r.data.success) {
-        var recoverable = r.status === 400; // a bad domain/email match — everything else, give up gracefully
-        if (recoverable) {
+        if (r.status === 400) {
           setMode('student-retry');
           showError((r.data && r.data.error) || 'Could not verify that university email.');
+          return;
+        }
+        if (mode === 'student-only') {
+          showError((r.data && r.data.error) || 'Could not start verification.');
           return;
         }
         finishStudentFlow();
@@ -816,7 +825,10 @@
       }
       if (r.data.needs_code) { setMode('student-code'); }
       else { setMode('student-doc'); }
-    }).catch(function(){ finishStudentFlow(); });
+    }).catch(function(){
+      if (mode === 'student-only') { showError('Could not reach the server.'); return; }
+      finishStudentFlow();
+    });
   }
   function finishStudentFlow(msg){
     if (msg) { showInfo(msg); setTimeout(function(){ window.location.href = safeNext(); }, 1400); return; }
@@ -839,7 +851,19 @@
       .catch(function(){ btn.disabled = false; btn.textContent = 'Submit'; showError('Could not reach the server.'); });
   }
   $('skipStudentLink').addEventListener('click', function(){ finishStudentFlow(); });
+
+  // Already signed in and clicking "I'm a student" must never show the
+  // create-account form again (name/username/password fields for an
+  // account that already exists) — go straight to picking a university.
+  function openStudentOnly(){
+    lastFocus = document.activeElement;
+    setMode('student-only');
+    overlay.hidden = false;
+    loadUniversitiesOnce();
+    $('fStudentUniSearch').focus();
+  }
   $('planStudentLink').addEventListener('click', function(){
+    if (user) { openStudentOnly(); return; }
     openAuth('signup', 'floor');
     $('fStudentToggle').checked = true;
     loadUniversitiesOnce();
@@ -956,7 +980,7 @@
   $('authForm').addEventListener('submit', function(e){
     e.preventDefault();
     if (mode === 'student-doc') { handleStudentDocSubmit(); return; }
-    if (mode === 'student-retry') {
+    if (mode === 'student-retry' || mode === 'student-only') {
       clearMessages();
       var retry = readStudentApplyBody();
       if (!retry.ok) { showError(retry.error); return; }
