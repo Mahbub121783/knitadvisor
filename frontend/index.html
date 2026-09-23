@@ -186,6 +186,12 @@
   .login-field input[type="file"]{padding:8px;}
   .login-field input[type="checkbox"]{width:auto;}
   .student-toggle-label{display:flex;align-items:center;gap:9px;font-size:13.5px;font-weight:600;cursor:pointer;}
+  .uni-suggest{position:absolute;left:0;right:0;top:100%;margin-top:4px;background:var(--card);border:1px solid var(--border-strong);border-radius:8px;box-shadow:var(--shadow);max-height:220px;overflow-y:auto;z-index:5;}
+  .uni-suggest-item{padding:9px 12px;font-size:13.5px;cursor:pointer;display:flex;justify-content:space-between;gap:10px;align-items:baseline;}
+  .uni-suggest-item .d{font-size:11.5px;color:var(--text-faint);white-space:nowrap;}
+  .uni-suggest-item:hover,.uni-suggest-item.active{background:var(--bg-alt);}
+  .uni-suggest-item.other{color:var(--accent);font-weight:600;border-top:1px solid var(--border);}
+  .uni-suggest-empty{padding:10px 12px;font-size:12.5px;color:var(--text-faint);}
   .login-field .hint{margin-top:5px;font-size:12px;color:var(--text-faint);}
   .login-field .hint.ok{color:var(--good);}
   .login-field .hint.warn{color:var(--danger);}
@@ -477,12 +483,11 @@
           I'm a student — verify for 30 requests/day, free for 1 year
         </label>
       </div>
-      <div class="login-field" id="fieldStudentUni" hidden>
-        <label for="fStudentUni">University</label>
-        <select id="fStudentUni">
-          <option value="">Choose your university…</option>
-          <option value="other">My university isn&rsquo;t listed</option>
-        </select>
+      <div class="login-field" id="fieldStudentUni" hidden style="position:relative;">
+        <label for="fStudentUniSearch">University</label>
+        <input type="text" id="fStudentUniSearch" autocomplete="off" placeholder="Type to search your university…">
+        <input type="hidden" id="fStudentUni">
+        <div id="fStudentUniSuggest" class="uni-suggest" hidden role="listbox"></div>
       </div>
       <div class="login-field" id="fieldStudentUniOther" hidden>
         <label for="fStudentUniOther">Your university&rsquo;s name</label>
@@ -677,6 +682,7 @@
   var studentIntent = false;
   var studentChoice = null; // { universityId, studentEmail, universityOther }
   var universitiesLoaded = false;
+  var studentUniversities = []; // the full allow-list, fetched once — a few hundred rows is nothing to filter client-side
 
   function updateStudentFieldsVisibility(){
     var isSignup = mode === 'signup';
@@ -707,16 +713,79 @@
     if (universitiesLoaded) return;
     universitiesLoaded = true;
     fetch(API + '/api/auth/universities').then(function(r){ return r.json(); }).then(function(d){
-      var sel = $('fStudentUni');
-      var opts = (d.universities || []).map(function(u){ return '<option value="' + u.id + '">' + u.name.replace(/[<>&]/g, '') + '</option>'; }).join('');
-      sel.innerHTML = '<option value="">Choose your university…</option>' + opts + '<option value="other">My university isn’t listed</option>';
+      studentUniversities = d.universities || [];
     }).catch(function(){});
   }
+
+  /* ---------- university search combobox (typeahead over a few hundred rows) ---------- */
+  var uniSuggestActive = -1; // index into the currently rendered suggestion rows, -1 = none highlighted
+
+  function selectUniversity(u){
+    // u is a real {id, name, domain} row, or null for "not listed".
+    $('fStudentUni').value = u ? String(u.id) : 'other';
+    $('fStudentUniSearch').value = u ? u.name : "My university isn’t listed";
+    $('fStudentUniSuggest').hidden = true;
+    uniSuggestActive = -1;
+    updateStudentFieldsVisibility();
+  }
+  function renderUniSuggestions(query){
+    var box = $('fStudentUniSuggest');
+    var q = (query || '').trim().toLowerCase();
+    var matches = q
+      ? studentUniversities.filter(function(u){ return u.name.toLowerCase().indexOf(q) > -1; }).slice(0, 8)
+      : studentUniversities.slice(0, 8);
+
+    var rows = matches.map(function(u, i){
+      return '<div class="uni-suggest-item" role="option" data-uni-idx="' + i + '">' +
+        '<span>' + esc(u.name) + '</span><span class="d">' + esc(u.domain) + '</span></div>';
+    }).join('');
+    var otherRow = '<div class="uni-suggest-item other" role="option" data-uni-idx="' + matches.length + '">' +
+      (q && !matches.length ? 'No match — my university isn’t listed' : 'My university isn’t listed') + '</div>';
+    box.innerHTML = (matches.length ? rows : (q ? '<div class="uni-suggest-empty">No match for “' + esc(query) + '”.</div>' : '')) + otherRow;
+    box.hidden = false;
+    box.__matches = matches; // stashed for click/keyboard selection, cheaper than re-filtering on select
+    uniSuggestActive = -1;
+  }
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]; }); }
+
+  $('fStudentUniSearch').addEventListener('focus', function(){ loadUniversitiesOnce(); renderUniSuggestions($('fStudentUniSearch').value); });
+  $('fStudentUniSearch').addEventListener('input', function(){
+    $('fStudentUni').value = ''; // typing again invalidates whatever was picked before
+    updateStudentFieldsVisibility();
+    renderUniSuggestions($('fStudentUniSearch').value);
+  });
+  $('fStudentUniSearch').addEventListener('keydown', function(e){
+    var box = $('fStudentUniSuggest');
+    if (box.hidden) return;
+    var rows = box.querySelectorAll('.uni-suggest-item');
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      uniSuggestActive = Math.max(0, Math.min(rows.length - 1, uniSuggestActive + (e.key === 'ArrowDown' ? 1 : -1)));
+      rows.forEach(function(r, i){ r.classList.toggle('active', i === uniSuggestActive); });
+      rows[uniSuggestActive] && rows[uniSuggestActive].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      var idx = uniSuggestActive > -1 ? uniSuggestActive : 0;
+      var matches = box.__matches || [];
+      selectUniversity(idx < matches.length ? matches[idx] : null);
+    } else if (e.key === 'Escape') {
+      box.hidden = true;
+    }
+  });
+  $('fStudentUniSuggest').addEventListener('click', function(e){
+    var item = e.target.closest('[data-uni-idx]');
+    if (!item) return;
+    var idx = parseInt(item.dataset.uniIdx, 10);
+    var matches = $('fStudentUniSuggest').__matches || [];
+    selectUniversity(idx < matches.length ? matches[idx] : null);
+  });
+  document.addEventListener('click', function(e){
+    if (!e.target.closest('#fieldStudentUni')) $('fStudentUniSuggest').hidden = true;
+  });
   $('fStudentToggle').addEventListener('change', function(){
     if ($('fStudentToggle').checked) loadUniversitiesOnce();
     updateStudentFieldsVisibility();
   });
-  $('fStudentUni').addEventListener('change', updateStudentFieldsVisibility);
 
   function startStudentFlow(){
     var btn = $('authSubmit');
