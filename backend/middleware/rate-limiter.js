@@ -1,16 +1,19 @@
 /**
- * Simple in-memory rate limiter.
+ * Rate limiters.
  *
- * Default export: 240 req/min per IP for /api.
- * createRateLimiter(): separate, independently-counted buckets for endpoints
- * that need a tighter ceiling than general API browsing — the admin login
- * (brute-force target) and the AI parse endpoint (spends paid provider quota).
+ * Default export: 240 req/min per IP across /api. Counted in process memory on
+ * purpose — it bounds runaway scripts, and a database write per API request
+ * would cost far more than the abuse it stops. Its ceiling is therefore the
+ * configured limit times the worker count; it is not a billing control.
  *
- * Counting is per-process and Passenger runs more than one worker, so the real
- * ceiling is the configured limit times the worker count. That is fine for the
- * "bound runaway abuse" job it does here; it is not a billing control. If a hard
- * global limit is ever needed it has to move into the database or a shared store.
+ * createRateLimiter(): independently-counted buckets for endpoints where the
+ * count matters — login, signup, verification codes, AI parse (paid quota),
+ * student verification, RFQ submit. These count in the database
+ * (rate_limit_hits, migration 032) so every worker shares one count and a
+ * restart does not reset it.
  */
+const { query } = require('../db/client');
+
 const limits = new Map();
 
 const WINDOW_MS = 60 * 1000;     // 1 minute
@@ -53,44 +56,54 @@ function rateLimiter(req, res, next) {
   next();
 }
 
-// Cleanup old entries every 5 minutes
+// Cleanup old entries every 5 minutes. unref(): this timer alone must never
+// keep a process alive — it would hang any script that loads this module.
 setInterval(() => {
   const now = Date.now();
   for (const [ip, entry] of limits) {
     if (now - entry.windowStart > WINDOW_MS * 5) limits.delete(ip);
   }
-}, 5 * 60 * 1000);
-
-const scopedLimits = new Map();
+}, 5 * 60 * 1000).unref();
 
 /**
- * Build an independently-counted limiter. `name` keys its own bucket map so a
- * burst of ordinary /api traffic can never consume an endpoint's login budget.
+ * Shared counter store (migration 032). One atomic UPSERT per hit: a row whose
+ * window has lapsed restarts at 1, otherwise it increments. Returns the count
+ * and when the current window opened, so the caller can say how long to wait.
+ */
+const HIT_SQL = `
+  INSERT INTO rate_limit_hits (bucket, key, window_start, count)
+  VALUES ($1, $2, now(), 1)
+  ON CONFLICT (bucket, key) DO UPDATE SET
+    window_start = CASE WHEN rate_limit_hits.window_start < now() - make_interval(secs => $3::double precision)
+                        THEN now() ELSE rate_limit_hits.window_start END,
+    count        = CASE WHEN rate_limit_hits.window_start < now() - make_interval(secs => $3::double precision)
+                        THEN 1 ELSE rate_limit_hits.count + 1 END
+  RETURNING count, window_start`;
+
+/**
+ * Build a limiter whose counts are shared across every Passenger worker and
+ * survive a restart. `name` is the bucket, so a burst on one endpoint never
+ * spends another endpoint's budget.
+ *
+ * If the database cannot be reached, the request is ALLOWED and the failure
+ * logged. Failing closed would turn a database blip into a site-wide login
+ * outage; a few unlimited attempts during that blip is the lesser harm.
  */
 function createRateLimiter({ name, max, windowMs = WINDOW_MS, message }) {
-  if (!scopedLimits.has(name)) scopedLimits.set(name, new Map());
-  const buckets = scopedLimits.get(name);
-
-  setInterval(() => {
-    const now = Date.now();
-    for (const [ip, entry] of buckets) {
-      if (now - entry.windowStart > windowMs * 5) buckets.delete(ip);
-    }
-  }, 5 * 60 * 1000).unref();
-
-  return function scopedRateLimiter(req, res, next) {
+  return async function scopedRateLimiter(req, res, next) {
     const ip = req.ip || req.connection.remoteAddress || 'unknown';
-    const now = Date.now();
-    const entry = buckets.get(ip);
-
-    if (!entry || now - entry.windowStart > windowMs) {
-      buckets.set(ip, { count: 1, windowStart: now });
+    let hit;
+    try {
+      const rows = await query(HIT_SQL, [name, ip, windowMs / 1000]);
+      hit = rows[0];
+    } catch (err) {
+      console.error(`[RateLimit] shared store unavailable for "${name}", allowing request:`, err.message);
       return next();
     }
 
-    entry.count++;
-    if (entry.count > max) {
-      const retryAfter = Math.ceil((entry.windowStart + windowMs - now) / 1000);
+    if (hit.count > max) {
+      const windowEnd = new Date(hit.window_start).getTime() + windowMs;
+      const retryAfter = Math.max(1, Math.ceil((windowEnd - Date.now()) / 1000));
       res.set('Retry-After', retryAfter);
       return res.status(429).json({
         error: message || 'Too many requests',
@@ -101,5 +114,15 @@ function createRateLimiter({ name, max, windowMs = WINDOW_MS, message }) {
   };
 }
 
+/** Housekeeping for the cron job — a counter row is useless once its window has long passed. */
+async function pruneRateLimitHits(olderThanHours = 24) {
+  const rows = await query(
+    "DELETE FROM rate_limit_hits WHERE window_start < now() - make_interval(hours => $1::int) RETURNING 1",
+    [olderThanHours]
+  );
+  return rows.length;
+}
+
 module.exports = rateLimiter;
 module.exports.createRateLimiter = createRateLimiter;
+module.exports.pruneRateLimitHits = pruneRateLimitHits;

@@ -94,6 +94,12 @@ const JOBS = {
     return { result_cache_deleted: results, viz_cache_deleted: viz, sessions_deleted: sessions };
   },
 
+  /** Drop rate-limit counter rows whose window closed more than a day ago. */
+  async 'prune-rate-limits'() {
+    const { pruneRateLimitHits } = require('../middleware/rate-limiter');
+    return { deleted: await pruneRateLimitHits(24) };
+  },
+
   /** Drop query logs past the retention window. */
   async 'prune-logs'() {
     const deleted = await logsRepo.prune(QUERY_LOG_RETENTION_DAYS);
