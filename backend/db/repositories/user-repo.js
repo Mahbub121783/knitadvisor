@@ -182,6 +182,25 @@ const users = {
     return { today: row.today, last_7d: row.last_7d, last_30d: row.last_30d };
   },
 
+  /**
+   * Where signed-up people stop, read straight from the tables that already
+   * exist — no separate analytics. Each stage is a subset of the one before
+   * only in the sense the product intends; the counts are independent facts.
+   */
+  async funnelCounts() {
+    const row = await queryOne(
+      `SELECT
+         count(*)::int AS signups,
+         count(*) FILTER (WHERE email_verified)::int AS verified,
+         count(*) FILTER (WHERE created_at > now() - interval '30 days')::int AS signups_30d,
+         count(*) FILTER (WHERE student_status = 'active')::int AS student_active,
+         count(*) FILTER (WHERE is_paid)::int AS paid,
+         (SELECT count(DISTINCT user_id)::int FROM user_calculations) AS calculated
+       FROM app_users`
+    );
+    return row;
+  },
+
   async setDisabled(id, disabled) {
     const rows = await query('UPDATE app_users SET disabled = $2 WHERE id = $1 RETURNING id, disabled', [id, !!disabled]);
     if (rows[0] && disabled) await query('DELETE FROM app_user_sessions WHERE user_id = $1', [id]);

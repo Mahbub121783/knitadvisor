@@ -319,6 +319,16 @@ async function loadOverview() {
     document.getElementById('kpi-providers').textContent = d.providers.active + '/' + d.providers.total;
     document.getElementById('kpi-cache-entries').textContent = d.cache.db_entries.toLocaleString();
     document.getElementById('kpi-new-users').textContent = d.users.new_today;
+    if (d.funnel) {
+      // Each number is an independent count from the same table; a drop between
+      // steps is where people stop. Percentages are of total signups.
+      const pct = (n) => d.funnel.signups ? Math.round((n / d.funnel.signups) * 100) + '%' : '—';
+      document.getElementById('kpi-funnel').innerHTML =
+        'Signed up <b>' + d.funnel.signups + '</b> (' + d.funnel.signups_30d + ' in 30d)' +
+        ' &rarr; verified <b>' + d.funnel.verified + '</b> (' + pct(d.funnel.verified) + ')' +
+        ' &rarr; ran a calculation <b>' + d.funnel.calculated + '</b> (' + pct(d.funnel.calculated) + ')' +
+        ' &rarr; student plan <b>' + d.funnel.student_active + '</b> &middot; paid <b>' + d.funnel.paid + '</b>';
+    }
 
     const rfqBadge = document.getElementById('sb-count-rfq');
     if (d.rfq.counts.pending > 0) { rfqBadge.textContent = d.rfq.counts.pending; rfqBadge.hidden = false; } else { rfqBadge.hidden = true; }

@@ -153,7 +153,7 @@ router.get('/api/overview', adminAuth, async (req, res) => {
   try {
     const [
       todayStats, series, topFabrics, rfqCounts, userTotal, userNew, activeSessions, providers,
-      memStats, dbCacheStats, pendingStudents,
+      memStats, dbCacheStats, pendingStudents, funnel,
     ] = await Promise.all([
       logsRepo.todayStats(),
       logsRepo.dailySeries(14),
@@ -166,6 +166,7 @@ router.get('/api/overview', adminAuth, async (req, res) => {
       Promise.resolve(memCache.stats()),
       resultCache.stats(),
       studentRepo.listByStatus('pending', { page: 1, limit: 1 }),
+      userRepo.users.funnelCounts(),
     ]);
 
     const yesterday = series.length >= 2 ? series[series.length - 2] : null;
@@ -216,6 +217,7 @@ router.get('/api/overview', adminAuth, async (req, res) => {
       providers: { active: activeProviders, total: providers.length, health: providerHealth },
       cache: { mem_size: memStats.size, db_entries: Number(dbCacheStats.entries) || 0 },
       students: { pending: pendingStudents.total },
+      funnel,
       alerts,
     });
   } catch (err) {
