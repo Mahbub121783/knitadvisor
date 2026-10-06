@@ -35,7 +35,7 @@ export const LIGHT_PRESET_ORDER = ['d65', 'tl84', 'a'];
 // intensity aimed the wrong way, which is why the flipped view used to read
 // as near-black.
 export function addStudioLighting(scene, withShadow) {
-  const hemi = new THREE.HemisphereLight(0xffffff, 0x4a4f5a, 1.5);
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x4a4f5a, 1.0);
   scene.add(hemi);
 
   const key = new THREE.DirectionalLight(0xffffff, 2.6);
@@ -78,4 +78,44 @@ export function configureShadowCamera(key, size) {
   cam.left = -r; cam.right = r; cam.top = r; cam.bottom = -r;
   cam.near = 0.5; cam.far = r * 6;
   cam.updateProjectionMatrix();
+}
+
+// ── Image-based light ────────────────────────────────────────────────────────
+// The rig above is a handful of directional lights, so every loop reflects the
+// same few points of light and the yarn reads as a lit plastic tube. A real
+// fabric sits in a room: it picks up a gradient of sky and wall, a bright
+// softbox here and there, and a darker floor. We build that room once as a
+// small scene, bake it into a prefiltered environment map (PMREM), and assign
+// it to scene.environment, so every fibre reflects a whole studio instead of
+// three points.
+export function buildStudioEnvironment(renderer) {
+  const room = new THREE.Scene();
+
+  // Walls and ceiling: a soft, neutral dome.
+  const dome = new THREE.Mesh(
+    new THREE.SphereGeometry(40, 48, 24),
+    new THREE.MeshBasicMaterial({ color: 0x8f96a2, side: THREE.BackSide }),
+  );
+  room.add(dome);
+
+  // Softboxes: emissive panels above-left, right, and behind. Values above 1
+  // are kept on purpose: the environment is HDR, so these produce the bright
+  // specular glints that make cotton look like cotton and not like matt paper.
+  const softbox = (w, h, intensity, pos) => {
+    const panel = new THREE.Mesh(
+      new THREE.PlaneGeometry(w, h),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(1, 1, 1).multiplyScalar(intensity), side: THREE.DoubleSide }),
+    );
+    panel.position.copy(pos);
+    panel.lookAt(0, 0, 0);
+    room.add(panel);
+  };
+  softbox(16, 9, 5.0, new THREE.Vector3(-18, 16, 18));
+  softbox(12, 7, 2.2, new THREE.Vector3(24, 6, 12));
+  softbox(9, 14, 1.6, new THREE.Vector3(0, 9, -26));
+
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const target = pmrem.fromScene(room, 0.04);
+  pmrem.dispose();
+  return target;
 }

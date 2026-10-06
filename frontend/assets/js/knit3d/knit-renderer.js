@@ -15,7 +15,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { buildYarnPaths } from './topology-builder.js?v=20260608g';
 import { createYarnMaterial, setYarnColorHex } from './yarn-material.js?v=20260608g';
 import { buildFabricMesh, yarnRadius } from './fabric-mesh.js?v=20260608g';
-import { addStudioLighting, configureShadowCamera, applyLightPreset, DEFAULT_LIGHT_PRESET } from './lighting.js?v=20260608g';
+import { addStudioLighting, configureShadowCamera, applyLightPreset, DEFAULT_LIGHT_PRESET, buildStudioEnvironment } from './lighting.js?v=20260608g';
 import { buildPile } from './pile.js?v=20260608g';
 import { applyDrape } from './drape.js?v=20260608g';
 import { BACKING, PITCH_Y, RIB_PITCH_SCALE } from './constants.js?v=20260608g';
@@ -55,6 +55,10 @@ export class Knit3D {
     const scene = new THREE.Scene();
     this.scene = scene;
     const lights = addStudioLighting(scene, this._shadows);
+    // Studio room as image-based light — real specular glints on every loop.
+    this._envTarget = buildStudioEnvironment(renderer);
+    scene.environment = this._envTarget.texture;
+    scene.environmentIntensity = 0.9;
     this._key = lights.key;
     this._fill = lights.fill;
     this._rim = lights.rim;
@@ -554,6 +558,7 @@ export class Knit3D {
     if (this._raf) cancelAnimationFrame(this._raf);
     if (this._ro) this._ro.disconnect();
     if (this.controls) this.controls.dispose();
+    if (this._envTarget) this._envTarget.dispose();
     if (this.group) {
       this.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
     }

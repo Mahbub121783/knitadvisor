@@ -92,6 +92,28 @@ export function yarnRadius(countNe, tf, density) {
  * @param {object} opts { radius, radialSegments }
  * @returns {THREE.Group}
  */
+// Per-vertex brightness that reads as occlusion and per-loop variation.
+//
+// A real knit is dark where one loop passes under another and bright where a
+// loop is exposed on top. The renderer has no shadow-casting between every
+// loop, so we approximate that from the surface itself: a vertex whose normal
+// points away from the viewer (and down) sits in a crevice and is darker.
+// Each loop also gets a small random tint so a patch never reads as one
+// repeated stamp. Multiplied into the shared yarn colour via vertex colours.
+function occlusionColours(geo, loopSeed) {
+  const pos = geo.attributes.position;
+  const nor = geo.attributes.normal;
+  const variation = 1 + (hash2(loopSeed, 7) - 0.5) * 0.12;   // ±6% per loop
+  const col = new Float32Array(pos.count * 3);
+  for (let v = 0; v < pos.count; v++) {
+    const exposed = Math.max(0, 0.65 * nor.getZ(v) + 0.35 * nor.getY(v));
+    const ao = 0.36 + 0.64 * exposed;                       // 0.36 in crevices → 1 on the crown
+    const k = ao * variation;
+    col[v * 3] = k; col[v * 3 + 1] = k; col[v * 3 + 2] = k;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+}
+
 export function buildFabricMesh(paths, material, opts = {}) {
   const radius = opts.radius != null ? opts.radius : 0.18;
   const radial = opts.radialSegments || 7;
@@ -100,6 +122,12 @@ export function buildFabricMesh(paths, material, opts = {}) {
   const slub = shadows && NATURAL.has(opts.fiberType || 'cotton');
   const group = new THREE.Group();
   const cap = new THREE.SphereGeometry(radius * 0.96, 6, 5);
+  // Caps take the same vertex-colour path as the yarn (white = no change), or
+  // vertexColors would read them as black.
+  cap.setAttribute('color', new THREE.BufferAttribute(new Float32Array(cap.attributes.position.count * 3).fill(0.8), 3));
+  // The shared material multiplies its colour by these vertex colours.
+  material.vertexColors = true;
+  material.needsUpdate = true;
 
   let pi = 0;
   for (const path of paths) {
@@ -110,6 +138,7 @@ export function buildFabricMesh(paths, material, opts = {}) {
     const geo = new THREE.TubeGeometry(curve, tubular, radius, radial, false);
     if (slub) applySlub(geo, curve, tubular, radial, hash2(pi, 1));
     geo.computeTangents();   // anisotropic specular runs along the yarn
+    occlusionColours(geo, pi);
     const mesh = new THREE.Mesh(geo, material);
     if (shadows) { mesh.castShadow = true; mesh.receiveShadow = true; }
     group.add(mesh);
