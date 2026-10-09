@@ -31,7 +31,14 @@ const SMOOTH = new Set(['polyester', 'nylon', 'silk']);
 // Draw the twist+fuzz HEIGHTFIELD (grayscale) into ctx. The helix DIRECTION
 // (S vs Z) and FREQUENCY (twist multiplier / TPI) are data-driven so the yarn
 // reads as the real spun count, not a generic pipe. Returns the helix repeat.
-function drawTwistHeight(ctx, w, h, synthetic, fuzz, twist) {
+//
+// `fine`, when true, adds a SECOND layer above the twist helix: hundreds of
+// short, near-parallel strokes following the same twist direction, at a much
+// higher frequency than the helix itself — individual staple fibres within
+// the spun yarn, not the yarn's own twist. This is the layer that only needs
+// to exist once the camera is actually close enough to resolve it; drawing it
+// at the normal viewing resolution would just be noise.
+function drawTwistHeight(ctx, w, h, synthetic, fuzz, twist, fine) {
   ctx.fillStyle = '#808080';
   ctx.fillRect(0, 0, w, h);
   const dir = (twist && twist.dir === 's') ? -1 : 1;   // Z = +slope, S = −slope
@@ -51,15 +58,38 @@ function drawTwistHeight(ctx, w, h, synthetic, fuzz, twist) {
       ctx.fillRect(Math.random() * w, Math.random() * h, 1, 1.3);
     }
   }
+  if (fine) {
+    // Staple fibres run roughly along the twist helix with their own small
+    // scatter — a filament yarn (synthetic) has fewer, straighter ones; a
+    // staple yarn (cotton/wool/...) has many, shorter, more irregular ones.
+    const n = synthetic ? 1100 : 2600;
+    for (let k = 0; k < n; k++) {
+      const x0 = Math.random() * (w + h) - h, y0 = Math.random() * h;
+      const len = (synthetic ? 14 : 8) + Math.random() * 10;
+      const wobble = (Math.random() - 0.5) * (synthetic ? 1.5 : 4);
+      const x1 = x0 + dir * len + wobble;
+      const y1 = y0 + len;
+      const v = 90 + (Math.random() * 100 | 0);
+      ctx.strokeStyle = `rgba(${v},${v},${v},${synthetic ? 0.4 : 0.6})`;
+      ctx.lineWidth = synthetic ? 0.5 : 0.8;
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+    }
+  }
   return Math.max(6, Math.round(tm * 2.2));   // TPI → helices per loop
 }
 
 // True tangent-space NORMAL map (Sobel of the heightfield) → far more convincing
 // fibre relief than a bump map under shadowed PBR lighting.
-function twistNormalTexture(synthetic, fuzz, twist) {
-  const w = 128, h = 128;
+//
+// `resolution`/`fine` build the CLOSE-UP tier: a bigger canvas (so the Sobel
+// pass has more pixels to resolve) plus the individual-fibre layer above.
+// Built once per material, alongside the normal (far) tier — see
+// createYarnMaterial — and swapped in by knit-renderer.js `_applyLod` only
+// once the camera is actually close enough to need it.
+function twistNormalTexture(synthetic, fuzz, twist, resolution, fine) {
+  const w = resolution || 128, h = resolution || 128;
   const hc = document.createElement('canvas'); hc.width = w; hc.height = h;
-  const repeatX = drawTwistHeight(hc.getContext('2d'), w, h, synthetic, fuzz, twist);
+  const repeatX = drawTwistHeight(hc.getContext('2d'), w, h, synthetic, fuzz, twist, !!fine);
   const src = hc.getContext('2d').getImageData(0, 0, w, h).data;
   const H = (x, y) => src[(((y + h) % h) * w + ((x + w) % w)) * 4] / 255;
 
@@ -146,11 +176,19 @@ export function createYarnMaterial(opts) {
   material.sheenColor = new THREE.Color(1, 1, 1);
   setYarnColorRGB(material, opts.dyed || { r: 120, g: 124, b: 134 });
 
-  const normal = twistNormalTexture(synthetic, fuzz, opts.twist);
-  material.normalMap = normal;
+  // Two detail tiers: the normal viewing-distance map (cheap, built first so
+  // it is on screen immediately), and a bigger, finer one — individual
+  // staple/filament fibres, not just the yarn's own twist — that only gets
+  // assigned to the material once the camera is actually close enough
+  // (knit-renderer.js `_applyLod`) to make the extra resolution visible.
+  const normalFar = twistNormalTexture(synthetic, fuzz, opts.twist, 128, false);
+  const normalNear = twistNormalTexture(synthetic, fuzz, opts.twist, 512, true);
+  material.normalMap = normalFar;
   const ns = Math.max(0.3, Math.min(bump * 35, 1.4));   // per-fibre relief strength
   material.normalScale = new THREE.Vector2(ns, ns);
   material.userData.baseNormalScale = ns;               // LOD swaps around this
+  material.userData.normalFar = normalFar;
+  material.userData.normalNear = normalNear;
 
-  return { material, textures: [normal] };
+  return { material, textures: [normalFar, normalNear] };
 }

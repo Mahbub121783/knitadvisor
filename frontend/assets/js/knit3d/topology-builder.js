@@ -85,18 +85,24 @@ export function buildYarnPaths(opts) {
   if (con.type === 'interlock') {
     const wales = opts.wales || PATCH.interlockWales;
     const courses = opts.courses || PATCH.interlockCourses;
-    // The FINISHED interlock face reads as full knit on BOTH sides (the K/M
-    // per-feed alternation isn't visible in the cloth). So each bed forms a full
-    // knit fabric, gaited half a wale and depth-separated → a dense, solid,
-    // reversible double-knit (not a holey checkerboard).
+    // A PLAIN interlock reads as full knit on both sides — the cylinder and
+    // dial circuits both knit every feed, so each bed is forced to 'knit'.
+    // A PATTERNED interlock (the dial carrying its own tuck/miss programme,
+    // via pattern-engine's `pat.dial`) genuinely differs bed to bed — that is
+    // real backend data, computed and handed down as `sampleBack`, that this
+    // branch used to discard outright by forcing 'knit' regardless. Falling
+    // back to `sample` keeps a plain interlock pixel-identical to before
+    // (sampleBack resolves to 'knit' too when there is no dial programme —
+    // see fabric-visualizer.js `_tokenAt`'s `useDial` check).
+    const sampleBack = typeof opts.sampleBack === 'function' ? opts.sampleBack : sample;
     for (let c = 0; c < courses; c++) {
       paths.push(buildCourse(c, {
         wales, courses, sample, xPitch: PITCH_X, xOffset: 0, pitchY,
         baseMirror: false, forceToken: 'knit', zBaseFor: () => INTERLOCK_DEPTH,
       }));
       paths.push(buildCourse(c, {
-        wales, courses, sample, xPitch: PITCH_X, xOffset: PITCH_X * INTERLOCK_GAIT, pitchY,
-        baseMirror: true, forceToken: 'knit', zBaseFor: () => -INTERLOCK_DEPTH,
+        wales, courses, sample: sampleBack, xPitch: PITCH_X, xOffset: PITCH_X * INTERLOCK_GAIT, pitchY,
+        baseMirror: true, zBaseFor: () => -INTERLOCK_DEPTH,
       }));
     }
     return { paths };

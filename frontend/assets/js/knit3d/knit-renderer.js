@@ -85,7 +85,10 @@ export class Knit3D {
     controls.enableDamping = true;
     controls.dampingFactor = 0.09;
     controls.rotateSpeed = 0.85;
-    controls.minDistance = this._fitDist * 0.35;
+    // Close enough to actually resolve individual fibres (the 'ultra' LOD
+    // tier in _applyLod below), not just the loop shapes — floored so a very
+    // small/low-LOD patch can never let the camera clip through the yarn.
+    controls.minDistance = Math.max(0.6, this._fitDist * 0.12);
     controls.maxDistance = this._fitDist * 2.2;
     controls.target.set(0, 0, 0);
     controls.update();
@@ -94,7 +97,7 @@ export class Knit3D {
 
     // real camera-distance LOD: boost fibre relief up close, soften far away
     // (cheap material-tier swap — only touched on tier transitions)
-    this._lodK = 1;
+    this._lodTier = 'mid';
     controls.addEventListener('change', () => {
       this._applyLod();
       // Free-orbiting (not just the Front/Back buttons) can carry the camera
@@ -193,7 +196,7 @@ export class Knit3D {
 
     const radius = yarnRadius(this.opts.countNe, this.opts.tf, density);
     const group = buildFabricMesh(paths, material, {
-      radius, radialSegments: 6, shadows: this._shadows,
+      radius, radialSegments: 10, shadows: this._shadows,  // rounder cross-section — a hexagonal tube facets badly now that zooming in close is possible
       fiberType: this.opts.fiberType,
     });
     this.group = group;
@@ -245,17 +248,26 @@ export class Knit3D {
     return Math.min(distFillHeight, distFillWidth) * 0.98;
   }
 
-  // Camera-distance LOD (material tier): near → stronger normal-map relief so
-  // the twist/fibre reads when zoomed in; far → softer so it doesn't shimmer.
+  // Camera-distance LOD: near → stronger normal-map relief so the twist/fibre
+  // reads when zoomed in; far → softer so it doesn't shimmer. Below the 'near'
+  // tier, zooming further (down to controls.minDistance — see mount() above)
+  // crosses into 'ultra': the material SWAPS to the bigger, finer normal map
+  // built in yarn-material.js (individual staple/filament fibres, not just
+  // the yarn's twist), not just a stronger scale on the same low-res map —
+  // scaling alone has no new detail left to reveal.
   _applyLod() {
     const m = this._material;
     if (!m || !m.userData || !m.userData.baseNormalScale || !this.controls) return;
     const ratio = this.controls.getDistance() / (this._fitDist || 1);
-    const k = ratio < 0.6 ? 1.4 : ratio > 1.3 ? 0.65 : 1.0;
-    if (k === this._lodK) return;                 // only on tier transition
-    this._lodK = k;
-    const ns = m.userData.baseNormalScale * k;
+    const tier = ratio < 0.28 ? 'ultra' : ratio < 0.6 ? 'near' : ratio > 1.3 ? 'far' : 'mid';
+    if (tier === this._lodTier) return;            // only on tier transition
+    this._lodTier = tier;
+    const K = { far: 0.65, mid: 1.0, near: 1.4, ultra: 1.6 };
+    const ns = m.userData.baseNormalScale * K[tier];
     m.normalScale.set(ns, ns);
+    const wantNear = tier === 'ultra';
+    const tex = wantNear ? m.userData.normalNear : m.userData.normalFar;
+    if (tex && m.normalMap !== tex) { m.normalMap = tex; m.needsUpdate = true; }
   }
 
   // density multiplier from viewport — full on desktop, lighter on small/low-DPR
@@ -546,7 +558,7 @@ export class Knit3D {
       const len = dir.length() || 1;
       dir.multiplyScalar(newFit / len);
       this.camera.position.copy(this.controls.target).add(dir);
-      this.controls.minDistance = newFit * 0.35;
+      this.controls.minDistance = Math.max(0.6, newFit * 0.12);
       this.controls.maxDistance = newFit * 2.2;
       this._fitDist = newFit;
       this.controls.update();
