@@ -21,6 +21,7 @@ import { buildWarpPaths } from './warp-topology.js?v=20260608g';
 import {
   PITCH_X, PITCH_Y, RIB_PITCH_SCALE, RIB_DEPTH,
   INTERLOCK_DEPTH, INTERLOCK_GAIT, JITTER, PATCH,
+  FLEECE_BIND_DEPTH, FLEECE_TUCK_EVERY, MISS,
 } from './constants.js?v=20260608g';
 
 const isHoldToken = (t) => t === 'tuck' || t === 'miss';
@@ -63,12 +64,42 @@ function buildCourse(c, p) {
   return { points };
 }
 
+// Which wales tie the binding/fleecy yarn in (tuck) vs let it float (miss),
+// on course c — staggered course to course (real fabric never ties in down
+// one straight vertical line). Shared by the course builder below AND by
+// knit-renderer.js's pile placement, so the two can never silently disagree
+// about where the real floats are.
+function isFleeceBindWale(w, c, tuckEvery) {
+  const stagger = c % tuckEvery;
+  return ((w + stagger) % tuckEvery) === 0;
+}
+
+/**
+ * World-space anchor points for every FLOAT segment of the binding/fleecy
+ * yarn — i.e. everywhere it is NOT tucked in. This is what real finishing
+ * brushes into the raised nap, so pile fibres are rooted here (see
+ * knit-renderer.js `_addPile`) instead of scattered across an unrelated flat
+ * plane with no structural relationship to the knit.
+ */
+export function fleeceFloatAnchors({ wales, courses, tuckEvery = FLEECE_TUCK_EVERY, xPitch = PITCH_X, pitchY = PITCH_Y, zDepth = FLEECE_BIND_DEPTH }) {
+  const anchors = [];
+  for (let c = 0; c < courses; c++) {
+    for (let w = 0; w < wales; w++) {
+      if (isFleeceBindWale(w, c, tuckEvery)) continue;   // tucked in here, not floating
+      anchors.push({
+        x: w * xPitch, y: c * pitchY + MISS.y, z: zDepth + MISS.z,
+      });
+    }
+  }
+  return anchors;
+}
+
 /**
  * @param {object} opts
  *   construction : { type, ribRepeat, holeShape, ... }
  *   sample       : (w,c) -> 'knit'|'purl'|'tuck'|'miss'
  *   wales,courses: optional patch size overrides
- * @returns {{ paths: {points: THREE.Vector3[]}[] }}
+ * @returns {{ paths: {points: THREE.Vector3[]}[], backPaths?, floatAnchors? }}
  */
 export function buildYarnPaths(opts) {
   const con = opts.construction || { type: 'jersey' };
@@ -106,6 +137,37 @@ export function buildYarnPaths(opts) {
       }));
     }
     return { paths };
+  }
+
+  // 3-thread fleece: a real second yarn (binding + fleecy), not a cosmetic
+  // overlay. The FACE course is a plain knit, identical to single jersey —
+  // real 3-thread fleece's technical face reads the same as plain jersey,
+  // which is the point of the construction. The BINDING+FLEECY course runs
+  // behind it: tucked in every FLEECE_TUCK_EVERY-th wale (the real 3-thread
+  // ratio), floating the rest of the way — those floats are exactly what
+  // _addPile (knit-renderer.js) brushes into the raised nap, via
+  // fleeceFloatAnchors above, instead of an unrelated flat backing plane.
+  if (con.type === 'fleece' && con.pile === 'brush') {
+    const wales = opts.wales || PATCH.wales;
+    const courses = opts.courses || PATCH.courses;
+    const tuckEvery = FLEECE_TUCK_EVERY;
+    const facePaths = [];
+    const backPaths = [];
+    for (let c = 0; c < courses; c++) {
+      facePaths.push(buildCourse(c, {
+        wales, courses, sample, xPitch: PITCH_X, xOffset: 0, pitchY,
+        baseMirror: false, zBaseFor: () => 0,
+      }));
+      const bindSample = (w, cc) => (isFleeceBindWale(w, cc, tuckEvery) ? 'tuck' : 'miss');
+      backPaths.push(buildCourse(c, {
+        wales, courses, sample: bindSample, xPitch: PITCH_X, xOffset: 0, pitchY,
+        baseMirror: false, zBaseFor: () => FLEECE_BIND_DEPTH,
+      }));
+    }
+    return {
+      paths: facePaths.concat(backPaths),
+      floatAnchors: fleeceFloatAnchors({ wales, courses, tuckEvery, xPitch: PITCH_X, pitchY }),
+    };
   }
 
   if (con.type === 'rib') {

@@ -58,6 +58,15 @@ export const RIB_DEPTH       = 0.28;  // front/back bed separation for rib corru
 export const INTERLOCK_DEPTH = 0.40;  // front/back bed separation — beds must NOT interpenetrate
 export const INTERLOCK_GAIT  = 0.5;   // back bed offset by half a wale (rib gaiting)
 
+// ── 3-thread fleece: FACE yarn (plain knit, see LOOP above) + a separate
+//    BINDING/FLEECY yarn that ties in with a periodic tuck and floats behind
+//    the rest of the time. The floats are the real yarn that finishing
+//    brushes into the raised nap — see topology-builder.js's fleece branch
+//    and knit-renderer.js `_addPile`, which samples pile fibres along them
+//    instead of scattering them over an unrelated flat plane. ──
+export const FLEECE_BIND_DEPTH = 0.55;  // how far back the binding+fleecy course sits
+export const FLEECE_TUCK_EVERY = 3;     // ties in every 3rd wale — the textbook 3-thread ratio
+
 // ── Pointelle / eyelet mesh (ধাপ ২ transfer stitch) ──
 // A hole is a transferred (omitted) loop. The yarn that would have formed it is
 // carried across the back (TRANSFER_Z, hidden behind the backing) so the eyelet

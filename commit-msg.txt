@@ -1,0 +1,42 @@
+feat(3d): real 3-thread fleece construction (face + binding + fleecy float)
+
+Fleece was never actually modeled as fleece in the 3D view — it fell into
+the same generic single-bed branch as plain single jersey, with the
+brushed nap bolted on afterward as a decorative instanced-fibre layer with
+no structural relationship to the knit. Given a real 3-thread fleece
+construction diagram (needle loop, sinker loop, binding/tuck yarn, fleecy
+yarn, float), rebuilt it properly, scoped to fleece only:
+
+- topology-builder.js: a real second yarn course per row — the binding+
+  fleecy yarn — alongside the plain-knit face course. It ties in (tuck,
+  reusing the existing tuckCup anatomy) every FLEECE_TUCK_EVERY-th wale
+  (the textbook 3-thread ratio) and floats the rest of the way (reusing
+  missFloat), staggered course to course like a real tie-in pattern. The
+  float segments are exported as world-space anchors.
+- knit-renderer.js: those anchors are handed to the pile builder, so nap
+  fibres root at the real float positions instead of a uniform random
+  scatter with no connection to the knit. The flat opaque "backing board"
+  every other construction needs (to hide see-through gaps) is skipped for
+  fleece — the real floats plus the nap now give the back genuine
+  structural coverage, which a real fabric has anyway; the flat board was
+  exactly the slab artefact flagged against real photos.
+- pile.js: the brushed-fibre geometry itself was wrong at any zoom close
+  enough to actually see it — 0.55x-radius-wide, 4.2x-radius-long 5-facet
+  cones read as rigid angular blades, not soft fuzz (this is what the
+  "rows of trees" artefact in the screenshots actually was, now confirmed
+  by rendering it in isolation). Thinned and shortened to read as fine
+  teased-out filament instead of a scaled-down copy of the yarn it came
+  from, with one more radial facet for a rounder silhouette.
+
+Verified visually against production's real engine output for
+fleece_3_thread: technical face renders a plain-knit structure (correct —
+that is what a real 3-thread fleece face is); technical back now shows
+fibre clusters rooted at real tuck/float positions with no flat panel
+behind them, not the previous uniform scatter of oversized blades.
+Density is deliberately conservative — pushing it further caused the
+swatch's build cost to spike badly enough to stall the page in headless
+testing, and a real device deserves the same caution. Left as a known
+next step if a fuller nap is wanted.
+
+Scoped to fleece only, as asked; every other construction's code path is
+untouched.

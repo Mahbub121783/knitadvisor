@@ -153,7 +153,16 @@ export class Knit3D {
     };
     const aspect = this.camera.aspect || 1.8;
     const lod = this._lodScale();
-    const beds = con.type === 'interlock' ? 2 : 1;
+    // 3-thread fleece now builds a real second (binding+fleecy) course per
+    // row alongside the face course — same point-count order as interlock's
+    // two beds, so both the stitch-count cap and the base density below
+    // treat it the same way.
+    const isFleece3Thread = con.type === 'fleece' && con.pile === 'brush';
+    // The binding+fleecy course doubles the path count the same way
+    // interlock's second bed does, so it needs the same cap treatment —
+    // a lighter cap here let the stitch grid grow enough to stall the main
+    // thread building the pile instances (found while tuning nap density).
+    const beds = (con.type === 'interlock' || isFleece3Thread) ? 2 : 1;
 
     // effective course spacing (loop height): taller when loose (low cpc/wpc)
     const ribComp = con.type === 'rib' ? 1 / RIB_PITCH_SCALE : 1;
@@ -170,7 +179,7 @@ export class Knit3D {
     // photography shows a handful of stitches filling the frame, not dozens;
     // matching that (roughly a 2.5x reduction) puts each stitch at 20px+ and
     // the yarn/pile radius at a legible several px.
-    const baseCourses = con.type === 'interlock' ? 12 : 16;
+    const baseCourses = (con.type === 'interlock' || isFleece3Thread) ? 12 : 16;
     let courses = Math.max(10, Math.round(baseCourses * lod * density.scalar));
     let wales = Math.max(12, Math.round(courses * pitchY * aspect * ribComp));
     // performance cap — keep total stitches bounded; shrink loops, not the count
@@ -181,10 +190,17 @@ export class Knit3D {
       wales = Math.max(14, Math.round(wales * k));
     }
 
-    const { paths } = buildYarnPaths({
+    const { paths, floatAnchors } = buildYarnPaths({
       construction: con, sample: this.opts.sample, sampleBack: this.opts.sampleBack,
       wales, courses, pitchY,
     });
+    // Real 3-thread fleece (see topology-builder.js): the binding+fleecy
+    // yarn's floats already give the back real structural coverage, so the
+    // flat opaque "backing board" every other construction needs (to hide
+    // see-through gaps) is not just unnecessary here, it is exactly the flat
+    // slab artefact the realism review flagged — a real fabric has no such
+    // extra opaque layer, the floats and the brushed nap ARE the backing.
+    const skipFlatBacking = !!floatAnchors;
 
     // drape — a real coarse cloth relaxation (cloth-sim.js) for the macro
     // bulge/sag, plus a small procedural wrinkle on top for yarn-scale
@@ -193,6 +209,12 @@ export class Knit3D {
     const drapeAmount = Math.max(0.2, Math.min(
       0.72 - (density.scalar - 1) * 0.35 - (doubleBed ? 0.15 : 0), 0.75));
     applyDrape(paths, { amount: drapeAmount, wales, courses });
+    // floatAnchors were computed on the pre-drape grid and are not re-sampled
+    // through the same cloth relaxation paths/above just went through — drape's
+    // bulge is a small, smooth, low-frequency offset (see drape.js), so the
+    // pile sits very slightly off the now-draped binding yarn rather than
+    // exactly on it. Acceptable for where fuzz roots visually land; not
+    // claimed to be exact.
 
     const radius = yarnRadius(this.opts.countNe, this.opts.tf, density);
     const group = buildFabricMesh(paths, material, {
@@ -212,8 +234,8 @@ export class Knit3D {
     // of the brushed nap (previously the backing only cleared the plain loop
     // geometry, so it silently occluded most/all of the pile from behind).
     const pileParams = this._pileParams(radius);
-    this._addBacking(group, center, size, radius, box, pileParams ? pileParams.maxReach : 0);
-    this._addPile(group, box, pileParams);
+    if (!skipFlatBacking) this._addBacking(group, center, size, radius, box, pileParams ? pileParams.maxReach : 0);
+    this._addPile(group, box, pileParams, floatAnchors);
     this._addGrainline(group, box, size);
 
     // centre on the loops + fit so the fabric COVERS the frame (fills edge-to-edge)
@@ -358,13 +380,20 @@ export class Knit3D {
     return { kind, isVelour, pileRadius, pileDensity, lengthScale, zOffset, maxReach };
   }
 
-  _addPile(group, box, pileParams) {
+  _addPile(group, box, pileParams, floatAnchors) {
     if (!pileParams) return;
     const { kind, pileRadius, pileDensity, lengthScale, zOffset } = pileParams;
     const bounds = {
       minX: box.min.x, maxX: box.max.x, minY: box.min.y, maxY: box.max.y,
       z: box.min.z - zOffset,   // behind the fabric
     };
+    // 3-thread fleece: root the nap at the real binding/fleecy yarn's float
+    // positions (topology-builder.js `fleeceFloatAnchors`) instead of a
+    // uniform random grid across the whole patch — real brushing raises the
+    // float yarn that is actually there, not an independent decorative layer,
+    // and a grid keyed purely off instance index tiled visibly once the old
+    // instance cap was raised (the "rows of identical sprites" artefact).
+    if (floatAnchors && floatAnchors.length) bounds.anchors = floatAnchors;
     // A raised, torn-fibre nap scatters light differently than the smooth
     // knit face — slightly lighter and softer (higher roughness/sheen) than
     // the flat dyed yarn, which is how a real brushed pile reads next to its
