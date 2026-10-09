@@ -495,11 +495,22 @@ export class Knit3D {
   // proportionally accurate, not a re-simulation of loop relaxation.
   previewShrink(t) {
     if (!this.group) return;
+    this._shrinkT = t;
     const shr = this.opts && this.opts.shrinkage;
-    if (!shr) return;
-    const sx = 1 - (shr.width_pct / 100) * t;
-    const sy = 1 - (shr.length_pct / 100) * t;
-    this.group.scale.set(sx, sy, 1);
+    if (shr) {
+      const sx = 1 - (shr.width_pct / 100) * t;
+      const sy = 1 - (shr.length_pct / 100) * t;
+      this.group.scale.set(sx, sy, 1);
+    }
+    // Brushing/napping is a FINISHING step done AFTER knitting, not during
+    // it — a real as-knit (greige) fabric off the machine shows the bare
+    // loop structure and the binding/fleecy yarn's smooth float, with no
+    // raised fibre yet; the pile only exists once brushed. The pile mesh
+    // used to stay visible in BOTH states (same threshold the "Show:
+    // As-Knit/Finished" button label already uses), which is exactly why
+    // the two looked identical. Hide it below the finished half of the
+    // animation instead of just scaling the frame.
+    if (this._pile && this._pile.mesh) this._pile.mesh.visible = t >= 0.5;
   }
 
   // ROTATE THE FABRIC, not the camera. The camera moving to -z used to look
@@ -555,7 +566,13 @@ export class Knit3D {
     const on = this._material.wireframe;
     // hide the solid backing (and pile) so the loop paths are fully visible
     if (this._backing && this._backing.mesh) this._backing.mesh.visible = !on;
-    if (this._pile && this._pile.mesh) this._pile.mesh.visible = !on;
+    // Restore to whatever as-knit/finished state previewShrink last set
+    // (undefined — no shrink toggle on this fabric — defaults to shown),
+    // not unconditionally true, or leaving wireframe mode would always
+    // reveal the pile even while "As-Knit" is selected.
+    if (this._pile && this._pile.mesh) {
+      this._pile.mesh.visible = !on && (this._shrinkT == null || this._shrinkT >= 0.5);
+    }
     return on;
   }
 

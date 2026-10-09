@@ -45,9 +45,14 @@ export function buildPile(kind, bounds, material, opts = {}) {
   // a believable tuft needs more of them per float than the old thick-blade
   // version did — real brushed fleece is a near-solid fuzzy mat, not visible
   // tufts with gaps between them.
-  const fibersPerAnchor = Math.max(4, Math.min(9, Math.round(density / 2)));
+  // Raised from an earlier, over-conservative pass (max 9/float, 18k cap) —
+  // real brushed fleece reads as a near-solid fuzzy mat even at a casual
+  // glance, not a visibly dotted one. This is the pile INSTANCE layer only
+  // (InstancedMesh), independent of the stitch-grid size that actually
+  // caused the earlier performance regression, so it can go denser safely.
+  const fibersPerAnchor = Math.max(8, Math.min(18, Math.round(density / 1.1)));
   const count = anchors && anchors.length
-    ? Math.min(anchors.length * fibersPerAnchor, 18000)
+    ? Math.min(anchors.length * fibersPerAnchor, 32000)
     : Math.max(400, Math.min(Math.round(w * h * density), 14000));
 
   let geometry;
@@ -72,7 +77,7 @@ export function buildPile(kind, bounds, material, opts = {}) {
   // Wide enough that neighbouring floats' fibre clouds OVERLAP — a real
   // brushed nap merges into a continuous mat, it does not read as separate
   // tufts with visible gaps between each float's anchor point.
-  const jitterXY = radius * 2.8;
+  const jitterXY = radius * 4.2;
   for (let i = 0; i < count; i++) {
     const rx = hash2(i, 1), ry = hash2(i, 2), ra = hash2(i, 3), rb = hash2(i, 4), rl = hash2(i, 5);
     const rz = hash2(i, 6), rc = hash2(i, 7);
