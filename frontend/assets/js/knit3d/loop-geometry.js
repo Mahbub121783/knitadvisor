@@ -59,6 +59,44 @@ export function knitLoop(ctx) {
 }
 
 /**
+ * Purl: the technical BACK of a knit loop, as actually seen by the camera —
+ * NOT simply a z-mirrored knitLoop. Mirroring only negates z, so the x/y
+ * path (the silhouette any front-on camera actually sees) was IDENTICAL to
+ * a knit loop — a 1x1 rib rendered as uniform V chevrons in every column,
+ * with no visible rib corrugation, which is exactly backwards: what faces
+ * the viewer on a purl wale is the sinker arcs and the rounded head/foot
+ * curves, which read as a wide, LOW, horizontal "pearl" bump, not a tall
+ * narrow V. Matches the 2D view's own purl silhouette (see
+ * fabric-visualizer.js `_drawPurlLOD`'s "half-moon bump lying across the
+ * wale") instead of a depth-only approximation that collapsed to nothing
+ * under an orthogonal camera.
+ */
+export function purlLoop(ctx) {
+  const up = (ctx.heldExtra || 0) * 0.92;
+  const L = LOOP;
+  // Wide, low-but-tall-ENOUGH arc: a purl bump that stays small/far back
+  // disappears entirely behind the neighbouring knit column's own wide,
+  // forward-pushed legs under a front-on camera — the real bug a first pass
+  // at this function had (confirmed by direct instrumentation: the right
+  // token WAS being generated and dispatched, it just never read as
+  // visually distinct). Tall and wide enough to clear the gap between two
+  // knit V's, not receding as far back as RIB_DEPTH's full offset implies
+  // (see topology-builder.js's rib branch, which now gives purl a shallower
+  // z than knit's).
+  const pts = [
+    P(ctx, -L.footHalf,        L.footY,                      L.footZ),
+    P(ctx, -L.headHalf * 1.08, L.legY + 0.10,                 L.shoulderZ),
+    P(ctx, -L.headHalf * 0.62, L.shoulderY * 0.85 + up * 0.5, L.headZ + 0.06),
+    P(ctx,  0,                 L.shoulderY * 1.05 + up,       L.headZ + 0.02),
+    P(ctx,  L.headHalf * 0.62, L.shoulderY * 0.85 + up * 0.5, L.headZ + 0.06),
+    P(ctx,  L.headHalf * 1.08, L.legY + 0.10,                 L.shoulderZ),
+    P(ctx,  L.footHalf,        L.footY,                      L.footZ),
+  ];
+  if (ctx.sinker) pts.push(sinker(ctx));
+  return pts;
+}
+
+/**
  * Tuck: the new yarn is caught but the old loop is NOT cleared. The course yarn
  * forms a shallow cup that recedes to the BACK; the held loop from below rises
  * through it in front (rendered as that lower loop's heldExtra elongation).
@@ -115,7 +153,7 @@ export function stitchPoints(token, ctx) {
     case 'tuck':     return tuckCup(ctx);
     case 'miss':     return missFloat(ctx);
     case 'transfer': return transferFloat(ctx);
-    case 'purl':     return knitLoop({ ...ctx, mirror: !ctx.mirror }); // purl = back of a knit loop
+    case 'purl':     return purlLoop(ctx);
     case 'knit':
     default:         return knitLoop(ctx);
   }

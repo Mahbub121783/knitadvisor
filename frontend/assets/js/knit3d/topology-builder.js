@@ -177,7 +177,14 @@ export function buildYarnPaths(opts) {
     for (let c = 0; c < courses; c++) {
       paths.push(buildCourse(c, {
         wales, courses, sample, xPitch, xOffset: 0, pitchY, baseMirror: false,
-        zBaseFor: (token) => (token === 'purl' ? -RIB_DEPTH : RIB_DEPTH),
+        // Purl recedes only PART of the way back — the full -RIB_DEPTH offset
+        // (matching knit's own +RIB_DEPTH push forward) buried the purl bump
+        // entirely behind the neighbouring knit column's wide, forward legs
+        // under a straight-on camera, so every column read as the same knit
+        // V regardless of the real alternating stitch (see loop-geometry.js
+        // `purlLoop`). A shallower recede keeps real depth parallax for
+        // orbiting while staying visible head-on.
+        zBaseFor: (token) => (token === 'purl' ? -RIB_DEPTH * 0.12 : RIB_DEPTH),
       }));
     }
     return { paths };
