@@ -31,8 +31,10 @@ class FabricVisualizer {
     this._three = { rotX: -14, rotY: 0, zoom: 1, brush: false, dragging: false, lastX: 0, lastY: 0, painted: false };
     this._faceCache = { front: null, back: null, brushBack: null };
     // Shrinkage preview: 0 = as-knit (greige), 1 = fully finished — animated
-    // between the two by the loupe bar's toggle, see _gridGeom.
-    this._shrinkT = 0;
+    // between the two by the loupe bar's toggle, see _gridGeom. Opens on the
+    // FINISHED fabric — what the buyer actually receives; As-Knit is the
+    // comparison step back.
+    this._shrinkT = 1;
   }
 
   // ─────────────────────────────────────────────────────────
@@ -1056,7 +1058,7 @@ class FabricVisualizer {
         <span class="ka-loupe-zoom" id="ka-loupe-zoom">1.0×</span>
         <button class="ka-loupe-btn" data-act="in">+</button>
         <button class="ka-loupe-btn" data-act="reset" title="Fit">Fit</button>
-        ${opts.shrinkage ? `<button class="ka-loupe-btn" id="ka-shrink-btn" data-act="shrink" title="Animate to the computed finished-fabric shrinkage">Show: As-Knit</button>` : ''}
+        ${opts.shrinkage ? `<button class="ka-loupe-btn" id="ka-shrink-btn" data-act="shrink" title="Animate to the computed finished-fabric shrinkage">${this._shrinkT >= 0.5 ? 'Show: Finished' : 'Show: As-Knit'}</button>` : ''}
         <span class="ka-loupe-tip">Click to zoom into a point · scroll to magnify · drag to pan</span>
       </div>
       <div class="ka-loupe-stage"></div>`;
@@ -2235,8 +2237,8 @@ class FabricVisualizer {
         <button class="ka3d-btn" data-act="reset" title="Reset view">⟳</button>
         <button class="ka3d-btn" data-act="wire" title="Show loop paths">Loops</button>
         <button class="ka3d-btn" data-act="light" title="Preview under a different lightbox illuminant">Light: D65</button>
-        ${opts.shrinkage ? `<button class="ka3d-btn" data-act="shrink" title="Animate to the computed finished-fabric shrinkage">Show: As-Knit</button>` : ''}
-        <span class="ka3d-hint" style="margin-left:6px">Drag to orbit · scroll to zoom · real 3-D yarn loops</span>
+        ${opts.shrinkage ? `<button class="ka3d-btn" data-act="shrink" title="Animate to the computed finished-fabric shrinkage">${this._shrinkT >= 0.5 ? 'Show: Finished' : 'Show: As-Knit'}</button>` : ''}
+        <span class="ka3d-hint" style="margin-left:6px">Drag to orbit · scroll in to the loops and fibres</span>
       </div>
       <div class="ka3dgl-mount"></div>
       <div class="ka3dgl-loading" style="font:11px var(--mono,monospace);color:var(--t3,#778);padding:6px 2px;">Loading 3-D engine…</div>`;

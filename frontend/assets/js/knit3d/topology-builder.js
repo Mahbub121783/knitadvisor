@@ -26,6 +26,13 @@ import {
 
 const isHoldToken = (t) => t === 'tuck' || t === 'miss';
 
+// Set per buildYarnPaths call (synchronous). When building a tile to bake
+// into a repeating texture, the per-stitch imperfection must repeat with
+// the tile too, or the tile edges would not meet.
+let jitterPeriod = null;
+const gcd = (a, b) => (b ? gcd(b, a % b) : a);
+const lcm = (a, b) => (a && b ? (a * b) / gcd(a, b) : (a || b || 1));
+
 // How many consecutive held (tuck/miss) courses sit directly above (w,c).
 function heldAbove(sample, w, c, courses) {
   let n = 0;
@@ -45,7 +52,9 @@ function buildCourse(c, p) {
     const token = isHole ? 'transfer' : (p.forceToken || p.sample(w, c));
 
     // base imperfection + (for mesh) lean away from neighbouring holes
-    const jit = stitchJitter(w, c, JITTER);
+    const jit = jitterPeriod
+      ? stitchJitter(w % jitterPeriod.w, c % jitterPeriod.c, JITTER)
+      : stitchJitter(w, c, JITTER);
     if (p.holes) {
       const d = p.holes.displacement(w, c);
       jit.x += d.x; jit.y += d.y; jit.z += d.z;
@@ -88,6 +97,36 @@ function fleeceFeeds(pattern) {
 }
 
 /**
+ * The structure's true repeat — in wales, in courses — and the wale pitch:
+ * the smallest tile after which every stitch token, every bed offset and
+ * every fleecy feed recurs. Null where the structure has no fixed repeat
+ * (synthetic eyelet motifs, warp knits), which the macro view then skips.
+ */
+export function structureRepeat(con, pattern) {
+  if (!con || con.base === 'warp' || con.type === 'tricot' || con.type === 'mesh' || con.type === 'spacer') return null;
+  const pc = (pattern && pattern.cols) || 1, pr = (pattern && pattern.rows) || 1;
+  if (con.type === 'fleece' && con.pile === 'brush') {
+    const feeds = fleeceFeeds(pattern);
+    const faces = feeds.filter(f => f.face).length || 1;
+    const w = feeds.reduce((acc, f) => (f.fleecy ? lcm(acc, f.fleecy.length) : acc), 1);
+    return { wales: w, courses: faces, xPitch: PITCH_X };
+  }
+  if (con.type === 'interlock') {
+    return {
+      wales: lcm(pc, (pattern && pattern.dialCols) || 1),
+      courses: lcm(pr, (pattern && pattern.dialRows) || 1),
+      xPitch: PITCH_X,
+    };
+  }
+  if (con.type === 'rib') {
+    const rep = con.ribRepeat || { a: 1, b: 1 };
+    const period = Math.max(1, rep.a || 1) + Math.max(1, rep.b || 1);
+    return { wales: lcm(period, pc), courses: pr, xPitch: PITCH_X * RIB_PITCH_SCALE };
+  }
+  return { wales: pc, courses: pr, xPitch: PITCH_X };
+}
+
+/**
  * Nap roots: the midpoint of every fleecy-yarn float, read from the paths'
  * CURRENT (post-drape) points — computing them from the flat pre-drape grid
  * left the nap hovering off the floats wherever the drape bulged the cloth.
@@ -113,6 +152,7 @@ export function floatAnchorsFromPaths(paths) {
  * @returns {{ paths: {points: THREE.Vector3[]}[], backPaths?, floatAnchors? }}
  */
 export function buildYarnPaths(opts) {
+  jitterPeriod = opts.jitterPeriod || null;
   const con = opts.construction || { type: 'jersey' };
   const sample = typeof opts.sample === 'function' ? opts.sample : () => 'knit';
   const pitchY = opts.pitchY || PITCH_Y;     // density-driven course spacing

@@ -12,7 +12,8 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-import { buildYarnPaths, floatAnchorsFromPaths } from './topology-builder.js?v=20260608g';
+import { buildYarnPaths, floatAnchorsFromPaths, structureRepeat } from './topology-builder.js?v=20260608g';
+import { bakeStructure, clothGeometry, fibreSurfaceTexture, wavePhase } from './macro.js?v=20260608g';
 import { buildNap } from './nap.js?v=20260608g';
 import { fibreGeometry } from './hairiness.js?v=20260608g';
 import { createYarnMaterial, setYarnColorHex, twistPitch } from './yarn-material.js?v=20260608g';
@@ -75,13 +76,19 @@ export class Knit3D {
     // side faces it gets the strong key light instead of the rim's leftover
     // intensity aimed the wrong way.
     this._lightBaseZ = { key: this._key.position.z, fill: this._fill.position.z, rim: this._rim.position.z };
+    this._keyDir = this._key.position.clone().normalize();
     this._showingBack = false;
 
     const camera = new THREE.PerspectiveCamera(40, W / H, 0.1, 200);
     this.camera = camera;
 
     this._buildFabric();
-    if (this._shadows) configureShadowCamera(this._key, this._size);
+    if (this._macro) {
+      camera.far = Math.max(200, this._distForWidth(this._macro.fullW) * 4);
+      camera.updateProjectionMatrix();
+      if (this._shadows) this._key.shadow.mapSize.set(2048, 2048);
+    }
+    if (this._shadows) this._fitShadow(this._size);
 
     // Default view BEFORE OrbitControls so it becomes the saved reset state:
     // a swatch lying on a table seen from a seated viewer (24° down, a touch
@@ -90,8 +97,10 @@ export class Knit3D {
     // the yarn's roundness read at first glance.
     // Slightly inside the flat-on cover distance: tilted, the far edge
     // foreshortens and would otherwise pull the swatch's border into frame.
+    // With a macro view, the default is the whole cloth at ~14 cm across —
+    // how a fabric is actually first looked at; zooming in reaches the loops.
     const el = 24 * Math.PI / 180, az = 8 * Math.PI / 180;
-    const d0 = this._fitDist * 0.8;
+    const d0 = this._macro ? this._distForWidth(this._macro.viewW) : this._fitDist * 0.8;
     camera.position.set(
       d0 * Math.sin(az) * Math.cos(el),
       -d0 * Math.sin(el),
@@ -107,16 +116,25 @@ export class Knit3D {
     // tier in _applyLod below), not just the loop shapes — floored so a very
     // small/low-LOD patch can never let the camera clip through the yarn.
     controls.minDistance = Math.max(0.6, this._fitDist * 0.12);
-    controls.maxDistance = this._fitDist * 2.2;
+    controls.maxDistance = this._macro ? this._distForWidth(this._macro.fullW) : this._fitDist * 2.2;
+    if (this._macro) {
+      // ~25x of zoom range (whole cloth → single fibres): faster wheel steps,
+      // and no panning — the zoom always dives into the point where the
+      // loop model sits.
+      controls.zoomSpeed = 2.2;
+      controls.enablePan = false;
+    }
     controls.target.set(0, 0, 0);
     controls.update();
     controls.saveState();
     this.controls = controls;
+    this._applyMode();
 
     // real camera-distance LOD: boost fibre relief up close, soften far away
     // (cheap material-tier swap — only touched on tier transitions)
     this._lodTier = 'mid';
     controls.addEventListener('change', () => {
+      this._applyMode();
       this._applyLod();
       // Free-orbiting (not just the Front/Back buttons) can carry the camera
       // past the fabric's edge into "looking at the back" territory — re-side
@@ -243,10 +261,13 @@ export class Knit3D {
     const binderScale = this.opts.tieNe && this.opts.countNe
       ? Math.max(0.35, Math.min(1, Math.sqrt(this.opts.countNe / this.opts.tieNe)))
       : 0.65;
-    for (const p of paths) {
-      if (p.role === 'fleecy') p.radiusScale = fleecyScale;
-      else if (p.role === 'binder') p.radiusScale = binderScale;
-    }
+    this._applyYarnScales = (ps) => {
+      for (const p of ps) {
+        if (p.role === 'fleecy') p.radiusScale = fleecyScale;
+        else if (p.role === 'binder') p.radiusScale = binderScale;
+      }
+    };
+    this._applyYarnScales(paths);
     this._fleecyRadius = radius * fleecyScale;
     const group = buildFabricMesh(paths, material, {
       radius, radialSegments: 10, shadows: this._shadows,  // rounder cross-section — a hexagonal tube facets badly now that zooming in close is possible
@@ -304,6 +325,174 @@ export class Knit3D {
 
     this._size = size;
     this._fitDist = this._coverDistance(size);
+    this._buildMacro({ con, density, pitchY, radius, center });
+  }
+
+  // ── Macro view (macro.js) ──────────────────────────────────────────────
+  // A full piece of cloth at real size, textured with maps baked from one
+  // repeat of this same structure. It is the default view; the loop model
+  // above takes over once the camera comes close enough (_applyMode).
+  _buildMacro({ con, density, pitchY, radius, center }) {
+    this._macro = null;
+    const wpc = density && density.wpc;
+    const rep = structureRepeat(con, this.opts.pattern);
+    if (!rep || !(wpc > 0)) return;            // no fixed repeat / no real stitch size
+
+    // Tile: a whole number of repeats, at least ~6 units each way, with a
+    // margin of whole repeats around it so every yarn in the tile has its
+    // real neighbours (crossings, occlusion) on all sides.
+    const TILE_MIN = 6;
+    const tileWales = Math.min(32, rep.wales * Math.max(1, Math.ceil(TILE_MIN / (rep.wales * rep.xPitch))));
+    const tileCourses = Math.min(32, rep.courses * Math.max(1, Math.ceil(TILE_MIN / (rep.courses * pitchY))));
+    const mW = rep.wales * Math.ceil(2 / rep.wales);
+    const mC = rep.courses * Math.ceil(2 / rep.courses);
+    const { paths } = buildYarnPaths({
+      construction: con, sample: this.opts.sample, sampleBack: this.opts.sampleBack,
+      pattern: this.opts.pattern, wales: tileWales + 2 * mW, courses: tileCourses + 2 * mC, pitchY,
+      jitterPeriod: { w: tileWales, c: tileCourses },
+    });
+    this._applyYarnScales(paths);
+    const tmp = new THREE.MeshBasicMaterial();
+    const tile = buildFabricMesh(paths, tmp, {
+      radius, radialSegments: 8, shadows: false, fiberType: this.opts.fiberType,
+      twistPitch: twistPitch(radius, this.opts.twist),
+    });
+    const win = { x0: mW * rep.xPitch, y0: mC * pitchY, w: tileWales * rep.xPitch, h: tileCourses * pitchY };
+    const bake = bakeStructure(this.renderer, tile, win, 48);
+    tile.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
+    tmp.dispose();
+
+    // Real size: one wale (rep.xPitch units) is 1/wpc cm.
+    const cm = wpc * rep.xPitch;
+    const S = 24;                                // cloth edge, cm
+    const scalar = Number.isFinite(density.scalar) ? density.scalar : 1;
+    const stiff = Math.max(0, Math.min(1.2, scalar - 0.7));
+    const geo = clothGeometry({
+      // The dive point (origin) sits off-centre so the near-right corner,
+      // turned back over itself, comes into the default view (camera looks
+      // from -y) without its flap reaching the origin.
+      minX: -0.7 * S * cm, maxX: 0.3 * S * cm, minY: -0.3 * S * cm, maxY: 0.7 * S * cm,
+      seg: 0.12 * cm,
+      tileW: win.w, tileH: win.h, uOff: center.x - win.x0, vOff: center.y - win.y0,
+      fold: {
+        n: { x: Math.SQRT1_2, y: -Math.SQRT1_2 }, d0: 5.5 * cm,
+        r: (0.35 + 0.22 * stiff) * cm,
+        t: (0.08 + 0.06 * stiff) * cm,          // fabric thickness the flap lies at
+      },
+      wave: { amp: 0.2 * (1.25 - 0.3 * stiff) * cm, len: 7 * cm, flatR: 2.2 * cm, rampR: 5 * cm, phase: wavePhase(wpc * 7 + scalar) },
+    });
+
+    const aniso = this.renderer.capabilities.getMaxAnisotropy();
+    const y = this._material;
+    const peach = this.opts.physics && this.opts.physics.texture_modifier === 'micro_fuzz';
+    const clothMat = (maps) => {
+      const m = new THREE.MeshPhysicalMaterial({
+        color: y.color.clone(), map: maps.ao, normalMap: maps.normal,
+        normalScale: new THREE.Vector2(peach ? 0.75 : 1, peach ? 0.75 : 1),
+        roughness: y.roughness, metalness: 0,
+        // Sheen is the soft lit rim a fibrous surface gets at grazing angles;
+        // a peach (sanded) finish is mostly that rim.
+        sheen: peach ? 1 : y.sheen, sheenRoughness: peach ? 0.35 : y.sheenRoughness,
+        sheenColor: y.sheenColor.clone(),
+      });
+      m.shadowSide = THREE.DoubleSide;
+      return m;
+    };
+    const faceMat = clothMat(bake.front);
+    const backMat = clothMat(bake.back);
+
+    // Finished backs whose structure is hidden under fibre: a brushed nap
+    // (fleece / velour) appears with the "Finished" state; a loop-pile back
+    // (french terry) is knitted that way, so it is always there.
+    let napMat = null, napTex = null;
+    if (con.pile === 'brush' || con.pile === 'velour' || con.pile === 'loop') {
+      const kind = con.pile === 'loop' ? 'loops' : 'nap';
+      const surf = fibreSurfaceTexture(kind, aniso);
+      napTex = surf.normal;
+      const t = (kind === 'nap' ? 1.6 : 2.4) * cm;   // texture tile, cm
+      for (const tx of [surf.normal, surf.shade]) tx.repeat.set(win.w / t, win.h / t);
+      this._napShade = surf.shade;
+      // The shade map is a mid-grey field; lift the base colour so the lit
+      // tops land on the dyed shade rather than below it.
+      const lift = kind === 'nap' ? 1.6 : 1.45;
+      napMat = new THREE.MeshPhysicalMaterial({
+        color: y.color.clone().lerp(new THREE.Color(1, 1, 1), kind === 'nap' ? 0.12 : 0.05).multiplyScalar(lift),
+        map: surf.shade,
+        normalMap: napTex, normalScale: new THREE.Vector2(0.8, 0.8),
+        roughness: 1, metalness: 0,
+        sheen: kind === 'nap' ? 1 : 0.6, sheenRoughness: kind === 'nap' ? 0.5 : 0.7,
+        sheenColor: y.color.clone().lerp(new THREE.Color(1, 1, 1), 0.45),
+      });
+      napMat.shadowSide = THREE.DoubleSide;
+    }
+
+    const front = new THREE.Mesh(geo.front, faceMat);
+    const back = new THREE.Mesh(geo.back, backMat);
+    if (this._shadows) {
+      front.castShadow = true; front.receiveShadow = true;
+      back.receiveShadow = true;
+    }
+    const macroGroup = new THREE.Group();
+    macroGroup.add(front, back);
+    this._pivot.add(macroGroup);
+
+    const box = new THREE.Box3().setFromObject(macroGroup);
+    this._macro = {
+      group: macroGroup, front, back, faceMat, backMat, napMat, napTex,
+      napAlways: con.pile === 'loop',
+      napLift: con.pile === 'loop' ? 1.45 : 1.6, napShade: this._napShade || null,
+      targets: bake.targets, size: box.getSize(new THREE.Vector3()),
+      viewW: 14 * cm,                            // default view: ~14 cm across
+      fullW: 0.62 * S * cm * 2,                  // fully zoomed out: the whole piece
+    };
+    this._syncMacroBack();
+  }
+
+  // Camera distance at which `width` scene units span the viewport.
+  _distForWidth(width) {
+    const t = Math.tan((this.camera.fov * Math.PI / 180) / 2);
+    return width / (2 * t * (this.camera.aspect || 1.8));
+  }
+
+  _syncMacroBack() {
+    const m = this._macro;
+    if (!m) return;
+    const finished = this._shrinkT == null || this._shrinkT >= 0.5;
+    m.back.material = m.napMat && (m.napAlways || finished) ? m.napMat : m.backMat;
+  }
+
+  // Macro cloth when the camera is far, the loop model when it is close
+  // enough that the model fills the view. A small hysteresis band stops the
+  // two flickering while damping settles exactly on the threshold.
+  _applyMode() {
+    if (!this._macro || !this.controls) return;
+    const d = this.controls.getDistance();
+    // 0.62 of the cover distance: under the default tilt, the loop model's
+    // far edge is still out of frame there, and the baked texture (48 px per
+    // wale) is still sharper than the screen right up to the handover.
+    const micro = this._mode === 'micro' ? d < this._fitDist * 0.66 : d < this._fitDist * 0.62;
+    const mode = micro ? 'micro' : 'macro';
+    if (mode === this._mode) return;
+    this._mode = mode;
+    this.group.visible = micro;
+    this._macro.group.visible = !micro;
+    this.camera.near = micro ? 0.1 : 1.0;
+    this.camera.updateProjectionMatrix();
+    if (this._shadows) this._fitShadow(micro ? this._size : this._macro.size);
+  }
+
+  // Fit the key light's shadow frustum to `size`, and move the (directional)
+  // light far enough out along its own direction that nothing in the frustum
+  // sits behind it — direction, and so the lighting, is unchanged.
+  _fitShadow(size) {
+    const k = this._key;
+    if (!k || !this._keyDir) return;
+    const r = Math.max(size.x, size.y) * 0.7;
+    k.position.copy(this._keyDir).multiplyScalar(Math.max(10, r * 2.5));
+    this._lightBaseZ.key = k.position.z;
+    if (this._showingBack) k.position.z = -k.position.z;
+    configureShadowCamera(k, size);
+    k.shadow.normalBias = r * 0.002;
   }
 
   // Distance at which the patch COVERS the viewport (fills both axes, cropping
@@ -587,6 +776,14 @@ export class Knit3D {
       this._pileMaterial.color.lerp(new THREE.Color(1, 1, 1), 0.32);
     }
     if (this._pile && this._pile.setColor) this._pile.setColor(this._material.color);
+    if (this._macro) {
+      const m = this._macro;
+      for (const mat of [m.faceMat, m.backMat]) setYarnColorHex(mat, hex);
+      if (m.napMat) {
+        m.napMat.color.copy(this._material.color).lerp(new THREE.Color(1, 1, 1), m.napAlways ? 0.05 : 0.12).multiplyScalar(m.napLift);
+        m.napMat.sheenColor.copy(this._material.color).lerp(new THREE.Color(1, 1, 1), 0.45);
+      }
+    }
     if (this._hair) {
       this._hair.material.color.copy(this._material.color).lerp(new THREE.Color(1, 1, 1), 0.16);
     }
@@ -629,6 +826,7 @@ export class Knit3D {
     // animation instead of just scaling the frame.
     if (this._pile && this._pile.mesh) this._pile.mesh.visible = t >= 0.5;
     this._syncBacking();
+    this._syncMacroBack();
   }
 
   _syncBacking() {
@@ -708,6 +906,13 @@ export class Knit3D {
     if (!this._material) return false;
     this._material.wireframe = !this._material.wireframe;
     const on = this._material.wireframe;
+    // "Loops" shows the yarn paths — those only exist in the loop model, so
+    // from the macro view, move in to where it takes over.
+    if (on && this._mode === 'macro' && this.controls) {
+      const dir = this.camera.position.clone().sub(this.controls.target).normalize();
+      this.camera.position.copy(this.controls.target).addScaledVector(dir, this._fitDist * 0.6);
+      this.controls.update();
+    }
     // hide the solid backing (and pile) so the loop paths are fully visible
     if (this._backing && this._backing.mesh) this._backing.mesh.visible = !on;
     // Restore to whatever as-knit/finished state previewShrink last set
@@ -755,7 +960,7 @@ export class Knit3D {
       dir.multiplyScalar((newFit * ratio) / len);
       this.camera.position.copy(this.controls.target).add(dir);
       this.controls.minDistance = Math.max(0.6, newFit * 0.12);
-      this.controls.maxDistance = newFit * 2.2;
+      this.controls.maxDistance = this._macro ? this._distForWidth(this._macro.fullW) : newFit * 2.2;
       this._fitDist = newFit;
       this.controls.update();
     }
@@ -774,6 +979,12 @@ export class Knit3D {
     if (this._pile) { this._pile.geometry.dispose(); if (this._pile.dispose) this._pile.dispose(); }
     if (this._pileMaterial) this._pileMaterial.dispose();
     if (this._hair) this._hair.material.dispose();
+    if (this._macro) {
+      const m = this._macro;
+      m.front.geometry.dispose(); m.back.geometry.dispose();
+      [m.faceMat, m.backMat, m.napMat, m.napTex, m.napShade].forEach((x) => { if (x) x.dispose(); });
+      m.targets.forEach((t) => t.dispose());
+    }
     if (this._textures) this._textures.forEach((t) => t.dispose());
     if (this._material) this._material.dispose();
     if (this.renderer) {
