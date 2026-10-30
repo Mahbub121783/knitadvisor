@@ -21,7 +21,7 @@ import { buildWarpPaths } from './warp-topology.js?v=20260608g';
 import {
   PITCH_X, PITCH_Y, RIB_PITCH_SCALE, RIB_DEPTH,
   INTERLOCK_DEPTH, INTERLOCK_GAIT, JITTER, PATCH,
-  FLEECE_BIND_DEPTH, FLEECE_TUCK_EVERY, MISS,
+  FLEECE_BIND_DEPTH, FLEECE_TUCK_Z, FLEECE_TUCK_EVERY, FLEECE_BINDER_Z,
 } from './constants.js?v=20260608g';
 
 const isHoldToken = (t) => t === 'tuck' || t === 'miss';
@@ -38,7 +38,9 @@ function heldAbove(sample, w, c, courses) {
 // Build one course as a single continuous polyline (authored left→right).
 function buildCourse(c, p) {
   const points = [];
+  const starts = [];                  // index of each wale's first point
   for (let w = 0; w < p.wales; w++) {
+    starts.push(points.length);
     const isHole = p.holes && p.holes.isHole(w, c);
     const token = isHole ? 'transfer' : (p.forceToken || p.sample(w, c));
 
@@ -61,34 +63,43 @@ function buildCourse(c, p) {
     const stitch = stitchPoints(token, ctx);
     for (const pt of stitch) points.push(pt);
   }
-  return { points };
+  return { points, starts };
 }
 
-// Which wales tie the binding/fleecy yarn in (tuck) vs let it float (miss),
-// on course c — staggered course to course (real fabric never ties in down
-// one straight vertical line). Shared by the course builder below AND by
-// knit-renderer.js's pile placement, so the two can never silently disagree
-// about where the real floats are.
-function isFleeceBindWale(w, c, tuckEvery) {
-  const stagger = c % tuckEvery;
-  return ((w + stagger) % tuckEvery) === 0;
+// The machine's feed sequence for a fleece, from the engine's real cylinder
+// programme (pattern_cylinder): an all-K row is a FACE/ground feed, a row
+// with T/M is a FLEECY feed (that yarn tucks where the row says T and floats
+// where it says M). 3-thread fleece comes back as K,K,M/T,K,K,M/T — two
+// knitted courses per fleecy feed, tucking every 4th needle, staggered by 2.
+// Falls back to a synthetic one-fleecy-feed-per-course, tuck-every-4th
+// sequence only when no usable programme is present.
+function fleeceFeeds(pattern) {
+  const grid = pattern && pattern.grid;
+  if (Array.isArray(grid) && grid.length) {
+    const yarns = pattern.feedYarns || [];
+    const feeds = grid.map((row, i) => (row.some(c => c === 'T' || c === 'M')
+      ? { fleecy: row }
+      : { face: true, plated: yarns[i] === 'plated' }));
+    if (feeds.some(f => f.face) && feeds.some(f => f.fleecy && f.fleecy.includes('T'))) return feeds;
+  }
+  const n = FLEECE_TUCK_EVERY;
+  const row = (shift) => Array.from({ length: n }, (_, i) => (i === shift ? 'T' : 'M'));
+  return [{ face: true }, { fleecy: row(0) }, { face: true }, { fleecy: row(n >> 1) }];
 }
 
 /**
- * World-space anchor points for every FLOAT segment of the binding/fleecy
- * yarn — i.e. everywhere it is NOT tucked in. This is what real finishing
- * brushes into the raised nap, so pile fibres are rooted here (see
- * knit-renderer.js `_addPile`) instead of scattered across an unrelated flat
- * plane with no structural relationship to the knit.
+ * Nap roots: the midpoint of every fleecy-yarn float, read from the paths'
+ * CURRENT (post-drape) points — computing them from the flat pre-drape grid
+ * left the nap hovering off the floats wherever the drape bulged the cloth.
  */
-export function fleeceFloatAnchors({ wales, courses, tuckEvery = FLEECE_TUCK_EVERY, xPitch = PITCH_X, pitchY = PITCH_Y, zDepth = FLEECE_BIND_DEPTH }) {
+export function floatAnchorsFromPaths(paths) {
   const anchors = [];
-  for (let c = 0; c < courses; c++) {
-    for (let w = 0; w < wales; w++) {
-      if (isFleeceBindWale(w, c, tuckEvery)) continue;   // tucked in here, not floating
-      anchors.push({
-        x: w * xPitch, y: c * pitchY + MISS.y, z: zDepth + MISS.z,
-      });
+  for (const path of paths) {
+    if (!path.floatIdx) continue;
+    for (const i of path.floatIdx) {
+      const a = path.points[i], b = path.points[i + 1];
+      if (!a || !b) continue;
+      anchors.push({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 });
     }
   }
   return anchors;
@@ -139,35 +150,61 @@ export function buildYarnPaths(opts) {
     return { paths };
   }
 
-  // 3-thread fleece: a real second yarn (binding + fleecy), not a cosmetic
-  // overlay. The FACE course is a plain knit, identical to single jersey —
-  // real 3-thread fleece's technical face reads the same as plain jersey,
-  // which is the point of the construction. The BINDING+FLEECY course runs
-  // behind it: tucked in every FLEECE_TUCK_EVERY-th wale (the real 3-thread
-  // ratio), floating the rest of the way — those floats are exactly what
-  // _addPile (knit-renderer.js) brushes into the raised nap, via
-  // fleeceFloatAnchors above, instead of an unrelated flat backing plane.
+  // Fleece: the face is plain jersey — every face/ground feed knits every
+  // needle, which is the whole point of the construction. The fleecy yarn is
+  // a separate yarn laid in between face courses at its own feed: caught into
+  // the BACK of a face loop where it tucks, floating across the technical
+  // back everywhere else. Those floats are what brushing raises into the nap,
+  // so the pile is rooted on them (floatAnchors → knit-renderer.js _addPile).
   if (con.type === 'fleece' && con.pile === 'brush') {
     const wales = opts.wales || PATCH.wales;
     const courses = opts.courses || PATCH.courses;
-    const tuckEvery = FLEECE_TUCK_EVERY;
+    const feeds = fleeceFeeds(opts.pattern);
+    const knitOnly = () => 'knit';
     const facePaths = [];
     const backPaths = [];
-    for (let c = 0; c < courses; c++) {
-      facePaths.push(buildCourse(c, {
-        wales, courses, sample, xPitch: PITCH_X, xOffset: 0, pitchY,
-        baseMirror: false, zBaseFor: () => 0,
-      }));
-      const bindSample = (w, cc) => (isFleeceBindWale(w, cc, tuckEvery) ? 'tuck' : 'miss');
-      backPaths.push(buildCourse(c, {
-        wales, courses, sample: bindSample, xPitch: PITCH_X, xOffset: 0, pitchY,
-        baseMirror: false, zBaseFor: () => FLEECE_BIND_DEPTH,
-      }));
+    const floatAnchors = [];
+    for (let c = 0, f = 0; c < courses; f++) {
+      const feed = feeds[f % feeds.length];
+      if (feed.face) {
+        facePaths.push(buildCourse(c, {
+          wales, courses, sample: knitOnly, xPitch: PITCH_X, xOffset: 0, pitchY,
+          baseMirror: false, zBaseFor: () => 0,
+        }));
+        // Plated feed: the tie-in binder is knitted into the SAME loops,
+        // directly behind the face yarn — hidden from the face, closing it
+        // from behind, and holding the fleecy yarn's tucks in place.
+        if (feed.plated) {
+          const binder = buildCourse(c, {
+            wales, courses, sample: knitOnly, xPitch: PITCH_X, xOffset: 0, pitchY,
+            baseMirror: false, zBaseFor: () => FLEECE_BINDER_Z,
+          });
+          binder.role = 'binder';
+          backPaths.push(binder);
+        }
+        c++;
+        continue;
+      }
+      const row = feed.fleecy;
+      const tokenAt = (w) => (row[w % row.length] === 'T' ? 'tuck' : 'miss');
+      const host = Math.max(0, c - 1);              // the face course it is laid into
+      const lift = pitchY * 0.5;                    // between that course and the next
+      const course = buildCourse(host, {
+        wales, courses, sample: (w) => tokenAt(w), xPitch: PITCH_X, xOffset: 0, pitchY,
+        baseMirror: false, zBaseFor: (tok) => (tok === 'tuck' ? FLEECE_TUCK_Z : FLEECE_BIND_DEPTH),
+      });
+      for (const p of course.points) p.y += lift;
+      // Remember where each float's two mid points sit in this path, so the
+      // renderer can root the nap on the floats AFTER the drape pass has
+      // moved them (see floatAnchorsFromPaths).
+      course.role = 'fleecy';
+      course.floatIdx = [];
+      for (let w = 0; w < wales; w++) {
+        if (tokenAt(w) === 'miss') course.floatIdx.push(course.starts[w] + 1);
+      }
+      backPaths.push(course);
     }
-    return {
-      paths: facePaths.concat(backPaths),
-      floatAnchors: fleeceFloatAnchors({ wales, courses, tuckEvery, xPitch: PITCH_X, pitchY }),
-    };
+    return { paths: facePaths.concat(backPaths), floatAnchors: true };
   }
 
   if (con.type === 'rib') {

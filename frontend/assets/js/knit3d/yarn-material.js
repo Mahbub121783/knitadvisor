@@ -28,95 +28,124 @@ const FIBER = {
 };
 const SMOOTH = new Set(['polyester', 'nylon', 'silk']);
 
-// Draw the twist+fuzz HEIGHTFIELD (grayscale) into ctx. The helix DIRECTION
-// (S vs Z) and FREQUENCY (twist multiplier / TPI) are data-driven so the yarn
-// reads as the real spun count, not a generic pipe. Returns the helix repeat.
+// ── Yarn surface tile ──────────────────────────────────────────────────────
+// One tile = exactly ONE helix turn of yarn: u runs along the yarn, v once
+// around its circumference. fabric-mesh.js scales every tube's u by its own
+// arc length / twistPitch(), so a stroke drawn corner-to-corner here wraps
+// the real yarn as a helix at the real twist angle.
 //
-// `fine`, when true, adds a SECOND layer above the twist helix: hundreds of
-// short, near-parallel strokes following the same twist direction, at a much
-// higher frequency than the helix itself — individual staple fibres within
-// the spun yarn, not the yarn's own twist. This is the layer that only needs
-// to exist once the camera is actually close enough to resolve it; drawing it
-// at the normal viewing resolution would just be noise.
-function drawTwistHeight(ctx, w, h, synthetic, fuzz, twist, fine) {
-  ctx.fillStyle = '#808080';
-  ctx.fillRect(0, 0, w, h);
-  const dir = (twist && twist.dir === 's') ? -1 : 1;   // Z = +slope, S = −slope
-  const tm = (twist && twist.tm) || 3.8;               // twist multiplier
-  const step = Math.max(5, Math.min(11, Math.round(13 - tm * 1.6)));  // more twist → tighter helix
-  for (let i = -h; i < w + h; i += step) {
-    ctx.strokeStyle = '#5d5d5d'; ctx.lineWidth = 2.6;
-    ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i + dir * h, h); ctx.stroke();
-    ctx.strokeStyle = '#a8a8a8'; ctx.lineWidth = 1.3;
-    ctx.beginPath(); ctx.moveTo(i + dir * 3, 0); ctx.lineTo(i + dir * (h + 3), h); ctx.stroke();
-  }
-  if (!synthetic) {
-    const n = Math.round(3000 * fuzz);
-    for (let k = 0; k < n; k++) {
-      const v = 100 + (Math.random() * 56 | 0);
-      ctx.fillStyle = `rgb(${v},${v},${v})`;
-      ctx.fillRect(Math.random() * w, Math.random() * h, 1, 1.3);
-    }
-  }
-  if (fine) {
-    // Staple fibres run roughly along the twist helix with their own small
-    // scatter — a filament yarn (synthetic) has fewer, straighter ones; a
-    // staple yarn (cotton/wool/...) has many, shorter, more irregular ones.
-    const n = synthetic ? 1100 : 2600;
-    for (let k = 0; k < n; k++) {
-      const x0 = Math.random() * (w + h) - h, y0 = Math.random() * h;
-      const len = (synthetic ? 14 : 8) + Math.random() * 10;
-      const wobble = (Math.random() - 0.5) * (synthetic ? 1.5 : 4);
-      const x1 = x0 + dir * len + wobble;
-      const y1 = y0 + len;
-      const v = 90 + (Math.random() * 100 | 0);
-      ctx.strokeStyle = `rgba(${v},${v},${v},${synthetic ? 0.4 : 0.6})`;
-      ctx.lineWidth = synthetic ? 0.5 : 0.8;
-      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
-    }
-  }
-  return Math.max(6, Math.round(tm * 2.2));   // TPI → helices per loop
+// The old texture repeated ~8 times across a whole COURSE (100+ units of
+// yarn), so the helix was stretched ~30x into stripes running parallel to the
+// yarn — the "grooved plastic pipe" look up close.
+//
+// The tile holds individual FIBRES (raised strokes along the helix, staple =
+// short and irregular, filament = long and straight) over two soft helical
+// grooves, and paints the same fibres into an ALBEDO tile: real dyed fibres
+// never take up dye identically, which is a large part of why yarn reads as
+// yarn and not as a uniformly painted surface.
+function rng(seed) {
+  let s = seed >>> 0;
+  return () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296);
 }
 
-// True tangent-space NORMAL map (Sobel of the heightfield) → far more convincing
-// fibre relief than a bump map under shadowed PBR lighting.
-//
-// `resolution`/`fine` build the CLOSE-UP tier: a bigger canvas (so the Sobel
-// pass has more pixels to resolve) plus the individual-fibre layer above.
-// Built once per material, alongside the normal (far) tier — see
-// createYarnMaterial — and swapped in by knit-renderer.js `_applyLod` only
-// once the camera is actually close enough to need it.
-function twistNormalTexture(synthetic, fuzz, twist, resolution, fine) {
-  const w = resolution || 128, h = resolution || 128;
-  const hc = document.createElement('canvas'); hc.width = w; hc.height = h;
-  const repeatX = drawTwistHeight(hc.getContext('2d'), w, h, synthetic, fuzz, twist, !!fine);
-  const src = hc.getContext('2d').getImageData(0, 0, w, h).data;
-  const H = (x, y) => src[(((y + h) % h) * w + ((x + w) % w)) * 4] / 255;
+function paintYarnTile(hctx, actx, size, synthetic, fuzz, dir, fine) {
+  const R = rng(fine ? 7919 : 104729);
+  hctx.fillStyle = '#7a7a7a'; hctx.fillRect(0, 0, size, size);
+  actx.fillStyle = '#efefef'; actx.fillRect(0, 0, size, size);
+  // Tile-seamless stroke: repeat at every neighbouring tile offset.
+  const stroke = (ctx, x0, y0, x1, y1) => {
+    for (const ox of [-size, 0, size]) for (const oy of [-size, 0, size]) {
+      ctx.beginPath(); ctx.moveTo(x0 + ox, y0 + oy); ctx.lineTo(x1 + ox, y1 + oy); ctx.stroke();
+    }
+  };
+  // Two broad, soft helical grooves per turn — what reads as "twisted" from
+  // normal viewing distance, before individual fibres are resolvable.
+  hctx.lineCap = 'round';
+  for (let g = 0; g < 2; g++) {
+    hctx.strokeStyle = 'rgba(40,40,40,0.55)';
+    hctx.lineWidth = size * 0.11;
+    const x0 = g * size / 2;
+    stroke(hctx, x0, 0, x0 + dir * size, size);
+  }
+  // Individual fibres along the helix.
+  const n = fine ? (synthetic ? 700 : 1500) : (synthetic ? 140 : 300);
+  const angleJitter = synthetic ? 0.04 : 0.16;
+  for (let k = 0; k < n; k++) {
+    const x0 = R() * size, y0 = R() * size;
+    const len = size * (synthetic ? 0.45 + R() * 0.45 : 0.12 + R() * 0.32);
+    const a = Math.PI / 4 + (R() - 0.5) * angleJitter * Math.PI;
+    const x1 = x0 + dir * Math.cos(a) * len, y1 = y0 + Math.sin(a) * len;
+    const lw = (fine ? size / 512 : size / 128) * (synthetic ? 0.9 + R() * 0.6 : 0.7 + R() * 1.1);
+    const hv = 150 + (R() * 90 | 0);
+    hctx.strokeStyle = `rgba(${hv},${hv},${hv},${synthetic ? 0.55 : 0.75})`;
+    hctx.lineWidth = lw * 1.6;
+    stroke(hctx, x0, y0, x1, y1);
+    const av = synthetic ? 228 + (R() * 27 | 0) : 205 + (R() * 50 | 0);
+    actx.strokeStyle = `rgba(${av},${av},${av},0.85)`;
+    actx.lineWidth = lw * 1.6;
+    stroke(actx, x0, y0, x1, y1);
+  }
+  // Fibre-end speckle on staple yarns (fuzz) — tiny broken ends.
+  if (!synthetic) {
+    const m = Math.round((fine ? 900 : 220) * fuzz);
+    for (let k = 0; k < m; k++) {
+      const v = 160 + (R() * 80 | 0);
+      hctx.fillStyle = `rgb(${v},${v},${v})`;
+      const s = fine ? 1.2 : 1;
+      hctx.fillRect(R() * size, R() * size, s, s);
+    }
+  }
+}
 
-  const out = document.createElement('canvas'); out.width = w; out.height = h;
+// Normal map (Sobel of the heightfield) + albedo variation map, one tile each.
+// `resolution`/`fine` build the CLOSE-UP tier — swapped in by knit-renderer.js
+// `_applyLod` only once the camera is close enough to resolve single fibres.
+function yarnSurfaceTextures(synthetic, fuzz, twist, resolution, fine) {
+  const size = resolution || 128;
+  const dir = (twist && twist.dir === 's') ? -1 : 1;     // Z = +slope, S = −slope
+  const hc = document.createElement('canvas'); hc.width = hc.height = size;
+  const ac = document.createElement('canvas'); ac.width = ac.height = size;
+  paintYarnTile(hc.getContext('2d'), ac.getContext('2d'), size, synthetic, fuzz, dir, !!fine);
+  const src = hc.getContext('2d').getImageData(0, 0, size, size).data;
+  const H = (x, y) => src[(((y + size) % size) * size + ((x + size) % size)) * 4] / 255;
+
+  const out = document.createElement('canvas'); out.width = out.height = size;
   const octx = out.getContext('2d');
-  const img = octx.createImageData(w, h);
-  const strength = 2.2;
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
+  const img = octx.createImageData(size, size);
+  const strength = fine ? 3.2 : 2.4;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
       const dx = (H(x - 1, y) - H(x + 1, y)) * strength;
       const dy = (H(x, y - 1) - H(x, y + 1)) * strength;
-      const nz = 1.0;
-      const len = Math.hypot(dx, dy, nz) || 1;
-      const i = (y * w + x) * 4;
+      const len = Math.hypot(dx, dy, 1) || 1;
+      const i = (y * size + x) * 4;
       img.data[i]     = (dx / len * 0.5 + 0.5) * 255;
       img.data[i + 1] = (dy / len * 0.5 + 0.5) * 255;
-      img.data[i + 2] = (nz / len * 0.5 + 0.5) * 255;
+      img.data[i + 2] = (1 / len * 0.5 + 0.5) * 255;
       img.data[i + 3] = 255;
     }
   }
   octx.putImageData(img, 0, 0);
-  const tex = new THREE.CanvasTexture(out);
-  tex.colorSpace = THREE.NoColorSpace;     // normal maps must NOT be sRGB-decoded
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.anisotropy = 4;
-  tex.repeat.set(repeatX, 2);
-  return tex;
+  const normal = new THREE.CanvasTexture(out);
+  normal.colorSpace = THREE.NoColorSpace;     // normal maps must NOT be sRGB-decoded
+  const albedo = new THREE.CanvasTexture(ac);
+  albedo.colorSpace = THREE.SRGBColorSpace;
+  for (const t of [normal, albedo]) {
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.anisotropy = 8;
+  }
+  return { normal, albedo };
+}
+
+/**
+ * Length of yarn (scene units) for ONE full twist turn. A spun yarn's twist
+ * angle is independent of its count: tan θ = π·d·TPmm with TPI = tm·√Ne and
+ * d = 0.907/√Ne mm, so tan θ = 0.1122·tm (tm 3.8 → 23°). The pitch then
+ * follows from the rendered circumference: P = 2πr / tan θ.
+ */
+export function twistPitch(radius, twist) {
+  const tm = (twist && twist.tm) || 3.8;
+  return (2 * Math.PI * radius) / Math.max(0.12, 0.1122 * tm);
 }
 
 /** Set a material's colour from an {r,g,b} 0–255 triple in sRGB. */
@@ -181,14 +210,17 @@ export function createYarnMaterial(opts) {
   // staple/filament fibres, not just the yarn's own twist — that only gets
   // assigned to the material once the camera is actually close enough
   // (knit-renderer.js `_applyLod`) to make the extra resolution visible.
-  const normalFar = twistNormalTexture(synthetic, fuzz, opts.twist, 128, false);
-  const normalNear = twistNormalTexture(synthetic, fuzz, opts.twist, 512, true);
-  material.normalMap = normalFar;
-  const ns = Math.max(0.3, Math.min(bump * 35, 1.4));   // per-fibre relief strength
+  const far = yarnSurfaceTextures(synthetic, fuzz, opts.twist, 128, false);
+  const near = yarnSurfaceTextures(synthetic, fuzz, opts.twist, 512, true);
+  material.normalMap = far.normal;
+  material.map = far.albedo;
+  const ns = Math.max(0.35, Math.min(bump * 40, 1.5));  // per-fibre relief strength
   material.normalScale = new THREE.Vector2(ns, ns);
   material.userData.baseNormalScale = ns;               // LOD swaps around this
-  material.userData.normalFar = normalFar;
-  material.userData.normalNear = normalNear;
+  material.userData.normalFar = far.normal;
+  material.userData.normalNear = near.normal;
+  material.userData.albedoFar = far.albedo;
+  material.userData.albedoNear = near.albedo;
 
-  return { material, textures: [normalFar, normalNear] };
+  return { material, textures: [far.normal, near.normal, far.albedo, near.albedo] };
 }

@@ -30,7 +30,7 @@ function P(ctx, lx, ly, lz) {
 // The trailing sinker: a short arc from this stitch's right foot toward the next
 // wale's left foot. Kept as one mid control point; the spline rounds it.
 function sinker(ctx) {
-  return P(ctx, PITCH_X * 0.5, LOOP.sinkerY - LOOP.footY, LOOP.sinkerZ - 0);
+  return P(ctx, PITCH_X * 0.5, LOOP.sinkerY, LOOP.sinkerZ);
 }
 
 /**
@@ -44,15 +44,17 @@ export function knitLoop(ctx) {
   const up = (ctx.heldExtra || 0) * 0.92;            // extra height per held course
   const L = LOOP;
   const pts = [
-    P(ctx, -L.footHalf,        L.footY,            L.footZ),
-    P(ctx, -L.legHalf,         L.legY,             L.legZ),
-    P(ctx, -L.headHalf * 0.94, L.shoulderY + up * 0.5, L.shoulderZ),
-    P(ctx, -L.headHalf,        L.headY - 0.06 + up, L.shoulderZ),
-    P(ctx,  0,                 L.headY + up,        L.headZ),     // crown, frontmost
-    P(ctx,  L.headHalf,        L.headY - 0.06 + up, L.shoulderZ),
-    P(ctx,  L.headHalf * 0.94, L.shoulderY + up * 0.5, L.shoulderZ),
-    P(ctx,  L.legHalf,         L.legY,             L.legZ),
-    P(ctx,  L.footHalf,        L.footY,            L.footZ),
+    P(ctx, -L.footHalf,     L.footY,                L.footZ),
+    P(ctx, -L.lowLegHalf,   L.lowLegY,              L.lowLegZ),
+    P(ctx, -L.legHalf,      L.legY + up * 0.35,     L.legZ),
+    P(ctx, -L.shoulderHalf, L.shoulderY + up * 0.7, L.shoulderZ),
+    P(ctx, -L.headHalf,     L.headSideY + up,       L.headSideZ),
+    P(ctx,  0,              L.headY + up,           L.headZ),
+    P(ctx,  L.headHalf,     L.headSideY + up,       L.headSideZ),
+    P(ctx,  L.shoulderHalf, L.shoulderY + up * 0.7, L.shoulderZ),
+    P(ctx,  L.legHalf,      L.legY + up * 0.35,     L.legZ),
+    P(ctx,  L.lowLegHalf,   L.lowLegY,              L.lowLegZ),
+    P(ctx,  L.footHalf,     L.footY,                L.footZ),
   ];
   if (ctx.sinker) pts.push(sinker(ctx));
   return pts;
@@ -83,14 +85,18 @@ export function purlLoop(ctx) {
   // knit V's, not receding as far back as RIB_DEPTH's full offset implies
   // (see topology-builder.js's rib branch, which now gives purl a shallower
   // z than knit's).
+  // Explicit numbers, not derived from LOOP's knit profile: this silhouette
+  // was tuned and verified on its own, and must not drift whenever the knit
+  // loop is reshaped. Only the two feet are shared, so the course stays one
+  // continuous strand from a knit wale into a purl wale and back.
   const pts = [
-    P(ctx, -L.footHalf,        L.footY,                      L.footZ),
-    P(ctx, -L.headHalf * 1.08, L.legY + 0.10,                 L.shoulderZ),
-    P(ctx, -L.headHalf * 0.62, L.shoulderY * 0.85 + up * 0.5, L.headZ + 0.06),
-    P(ctx,  0,                 L.shoulderY * 1.05 + up,       L.headZ + 0.02),
-    P(ctx,  L.headHalf * 0.62, L.shoulderY * 0.85 + up * 0.5, L.headZ + 0.06),
-    P(ctx,  L.headHalf * 1.08, L.legY + 0.10,                 L.shoulderZ),
-    P(ctx,  L.footHalf,        L.footY,                      L.footZ),
+    P(ctx, -L.footHalf, L.footY,             L.footZ),
+    P(ctx, -0.50,       -0.06,               0.16),
+    P(ctx, -0.29,       0.29 + up * 0.5,     0.06),
+    P(ctx,  0,          0.36 + up,           0.02),
+    P(ctx,  0.29,       0.29 + up * 0.5,     0.06),
+    P(ctx,  0.50,       -0.06,               0.16),
+    P(ctx,  L.footHalf, L.footY,             L.footZ),
   ];
   if (ctx.sinker) pts.push(sinker(ctx));
   return pts;

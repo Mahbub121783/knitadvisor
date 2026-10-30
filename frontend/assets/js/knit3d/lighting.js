@@ -35,7 +35,10 @@ export const LIGHT_PRESET_ORDER = ['d65', 'tl84', 'a'];
 // intensity aimed the wrong way, which is why the flipped view used to read
 // as near-black.
 export function addStudioLighting(scene, withShadow) {
-  const hemi = new THREE.HemisphereLight(0xffffff, 0x4a4f5a, 1.0);
+  // Fill kept well below the key: every extra unit of flat fill light lifts
+  // the crevices between loops and erases the contact shadows that make a
+  // knit read as layered yarn rather than a printed pattern.
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x4a4f5a, 0.7);
   scene.add(hemi);
 
   const key = new THREE.DirectionalLight(0xffffff, 2.6);
@@ -55,7 +58,7 @@ export function addStudioLighting(scene, withShadow) {
   rim.position.set(0, 2, -5);
   scene.add(rim);
 
-  scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+  scene.add(new THREE.AmbientLight(0xffffff, 0.15));
   return { key, fill, rim, hemi };
 }
 

@@ -34,8 +34,43 @@ function applySlub(geo, curve, tubular, radial, phase) {
       pos.setXYZ(idx, c.x + (x - c.x) * scale, c.y + (y - c.y) * scale, c.z + (z - c.z) * scale);
     }
   }
+  // A uniform radial scale about the axis leaves the surface normals'
+  // directions unchanged; recomputing them from faces instead would split
+  // the tube's UV seam into a visible shading line.
   pos.needsUpdate = true;
-  geo.computeVertexNormals();
+}
+
+// Real yarn in a fabric is not round: inter-yarn pressure flattens it,
+// wider in the fabric plane, thinner through it (~1.2-1.4 : 1). Scale each
+// ring about its own axis point; normals take the inverse scale, exactly.
+function flattenCrossSection(geo, curve, tubular, radial, inPlane, through) {
+  const pos = geo.attributes.position;
+  const nor = geo.attributes.normal;
+  const c = new THREE.Vector3();
+  for (let i = 0; i <= tubular; i++) {
+    curve.getPointAt(i / tubular, c);
+    for (let j = 0; j <= radial; j++) {
+      const idx = i * (radial + 1) + j;
+      pos.setXYZ(idx,
+        c.x + (pos.getX(idx) - c.x) * inPlane,
+        c.y + (pos.getY(idx) - c.y) * inPlane,
+        c.z + (pos.getZ(idx) - c.z) * through);
+      const nx = nor.getX(idx) / inPlane, ny = nor.getY(idx) / inPlane, nz = nor.getZ(idx) / through;
+      const l = Math.hypot(nx, ny, nz) || 1;
+      nor.setXYZ(idx, nx / l, ny / l, nz / l);
+    }
+  }
+  pos.needsUpdate = true;
+  nor.needsUpdate = true;
+}
+
+// Map u along each tube to ARC LENGTH in twist turns, so one texture tile is
+// one real helix turn of yarn (see yarn-material.js `twistPitch`).
+function arcLengthUVs(geo, curveLength, pitch) {
+  const uv = geo.attributes.uv;
+  const k = curveLength / Math.max(1e-3, pitch);
+  for (let i = 0; i < uv.count; i++) uv.setX(i, uv.getX(i) * k);
+  uv.needsUpdate = true;
 }
 
 /**
@@ -92,24 +127,82 @@ export function yarnRadius(countNe, tf, density) {
  * @param {object} opts { radius, radialSegments }
  * @returns {THREE.Group}
  */
-// Per-vertex brightness that reads as occlusion and per-loop variation.
-//
-// A real knit is dark where one loop passes under another and bright where a
-// loop is exposed on top. The renderer has no shadow-casting between every
-// loop, so we approximate that from the surface itself: a vertex whose normal
-// points away from the viewer (and down) sits in a crevice and is darker.
-// Each loop also gets a small random tint so a patch never reads as one
-// repeated stamp. Multiplied into the shared yarn colour via vertex colours.
-function occlusionColours(geo, loopSeed) {
-  const pos = geo.attributes.position;
-  const nor = geo.attributes.normal;
-  const variation = 1 + (hash2(loopSeed, 7) - 0.5) * 0.12;   // ±6% per loop
-  const col = new Float32Array(pos.count * 3);
-  for (let v = 0; v < pos.count; v++) {
-    const exposed = Math.max(0, 0.65 * nor.getZ(v) + 0.35 * nor.getY(v));
-    const ao = 0.36 + 0.64 * exposed;                       // 0.36 in crevices → 1 on the crown
-    const k = ao * variation;
-    col[v * 3] = k; col[v * 3 + 1] = k; col[v * 3 + 2] = k;
+// ── Contact occlusion from the real yarn layout ────────────────────────────
+// A real knit is dark exactly where one yarn passes over or under another and
+// bright where a loop is exposed. The old shading only looked at which way a
+// surface faced (darkening anything facing away from +z), which neither
+// knew where the crossings were nor worked on the flipped back view. Here
+// every vertex looks for yarn axis samples sitting IN FRONT of its own normal
+// within a few yarn radii: the closer and more head-on that yarn is, the less
+// light reaches the vertex. Computed once at build time into vertex colours —
+// no post-processing pass, same cost at render time as before.
+// Dense uniform grid over all yarn-axis samples (counting-sort layout: one
+// flat Float32Array, per-cell start offsets) — the occlusion pass touches
+// ~200k vertices × a few dozen neighbours, so no Maps, strings or closures.
+function buildAxisGrid(pts, cell) {
+  const n = pts.length / 3;
+  let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+  for (let i = 0; i < pts.length; i += 3) {
+    const x = pts[i], y = pts[i + 1], z = pts[i + 2];
+    if (x < minX) minX = x; if (x > maxX) maxX = x;
+    if (y < minY) minY = y; if (y > maxY) maxY = y;
+    if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
+  }
+  const nx = Math.floor((maxX - minX) / cell) + 1;
+  const ny = Math.floor((maxY - minY) / cell) + 1;
+  const nz = Math.floor((maxZ - minZ) / cell) + 1;
+  const cellOf = (x, y, z) =>
+    (Math.floor((z - minZ) / cell) * ny + Math.floor((y - minY) / cell)) * nx + Math.floor((x - minX) / cell);
+  const starts = new Int32Array(nx * ny * nz + 1);
+  const ids = new Int32Array(n);
+  for (let i = 0; i < n; i++) { ids[i] = cellOf(pts[i * 3], pts[i * 3 + 1], pts[i * 3 + 2]); starts[ids[i] + 1]++; }
+  for (let c = 0; c < nx * ny * nz; c++) starts[c + 1] += starts[c];
+  const cursor = starts.slice(0, nx * ny * nz);
+  const sorted = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    const o = cursor[ids[i]]++ * 3;
+    sorted[o] = pts[i * 3]; sorted[o + 1] = pts[i * 3 + 1]; sorted[o + 2] = pts[i * 3 + 2];
+  }
+  return { minX, minY, minZ, nx, ny, nz, cell, starts, sorted };
+}
+
+function contactOcclusionColours(geo, g, radius, reach, loopSeed) {
+  const P = geo.attributes.position.array;
+  const N = geo.attributes.normal.array;
+  const count = geo.attributes.position.count;
+  const variation = 1 + (hash2(loopSeed, 7) - 0.5) * 0.10;   // ±5% per course
+  const col = new Float32Array(count * 3);
+  const { minX, minY, minZ, nx, ny, nz, cell, starts, sorted } = g;
+  const invReach = 1 / reach;
+  for (let v = 0; v < count; v++) {
+    const o = v * 3;
+    const px = P[o], py = P[o + 1], pz = P[o + 2];
+    const qx = N[o], qy = N[o + 1], qz = N[o + 2];
+    const cx = Math.floor((px - minX) / cell), cy = Math.floor((py - minY) / cell), cz = Math.floor((pz - minZ) / cell);
+    let occ = 0;
+    for (let k = cz - 1; k <= cz + 1; k++) {
+      if (k < 0 || k >= nz) continue;
+      for (let j = cy - 1; j <= cy + 1; j++) {
+        if (j < 0 || j >= ny) continue;
+        const row = (k * ny + j) * nx;
+        const i0 = Math.max(0, cx - 1), i1 = Math.min(nx - 1, cx + 1);
+        const s0 = starts[row + i0] * 3, s1 = starts[row + i1 + 1] * 3;
+        for (let s = s0; s < s1; s += 3) {
+          const dx = sorted[s] - px, dy = sorted[s + 1] - py, dz = sorted[s + 2] - pz;
+          const dot = dx * qx + dy * qy + dz * qz;        // >0: that yarn is in front
+          if (dot <= 0) continue;
+          const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+          const facing = dot / d;
+          if (facing <= 0.05) continue;
+          const fall = 1 - Math.max(0, d - radius) * invReach;
+          if (fall <= 0) continue;
+          occ += facing * fall * fall;
+        }
+      }
+    }
+    const ao = 1 - Math.min(0.78, occ * 0.24);
+    const kk = ao * variation;
+    col[o] = kk; col[o + 1] = kk; col[o + 2] = kk;
   }
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
 }
@@ -118,10 +211,11 @@ export function buildFabricMesh(paths, material, opts = {}) {
   const radius = opts.radius != null ? opts.radius : 0.18;
   const radial = opts.radialSegments || 7;
   const shadows = !!opts.shadows;
+  const pitch = opts.twistPitch || radius * 15;
   // slub/nep only for natural fibres, and only on the capable (shadow) tier
   const slub = shadows && NATURAL.has(opts.fiberType || 'cotton');
   const group = new THREE.Group();
-  const cap = new THREE.SphereGeometry(radius * 0.96, 6, 5);
+  const cap = new THREE.SphereGeometry(radius * 0.96, 8, 6);
   // Caps take the same vertex-colour path as the yarn (white = no change), or
   // vertexColors would read them as black.
   cap.setAttribute('color', new THREE.BufferAttribute(new Float32Array(cap.attributes.position.count * 3).fill(0.8), 3));
@@ -129,16 +223,34 @@ export function buildFabricMesh(paths, material, opts = {}) {
   material.vertexColors = true;
   material.needsUpdate = true;
 
+  const reach = radius * 2.6;
+  const axis = [];
+  const built = [];
   let pi = 0;
   for (const path of paths) {
     if (!path.points || path.points.length < 2) continue;
     const curve = new THREE.CatmullRomCurve3(path.points, false, 'centripetal', 0.5);
+    const length = curve.getLength();
     // ~3 tubular segments per control-point span → smooth yet light.
     const tubular = Math.min(Math.max(48, path.points.length * 3), 4000);
-    const geo = new THREE.TubeGeometry(curve, tubular, radius, radial, false);
+    // A path can carry its own yarn (e.g. fleece's much thicker fleecy yarn).
+    const r = radius * (path.radiusScale || 1);
+    const geo = new THREE.TubeGeometry(curve, tubular, r, radial, false);
+    flattenCrossSection(geo, curve, tubular, radial, 1.10, 0.84);
     if (slub) applySlub(geo, curve, tubular, radial, hash2(pi, 1));
+    arcLengthUVs(geo, length, pitch * (r / radius));   // same twist angle on a thicker yarn
     geo.computeTangents();   // anisotropic specular runs along the yarn
-    occlusionColours(geo, pi);
+    const samples = Math.max(8, Math.ceil(length / (radius * 0.8)));
+    for (const p of curve.getSpacedPoints(samples)) axis.push(p.x, p.y, p.z);
+    built.push({ geo, path, seed: pi, r });
+    group.userData.totalLength = (group.userData.totalLength || 0) + length;
+    pi++;
+  }
+  group.userData.tubes = built.map(b => b.geo);
+  const grid = buildAxisGrid(axis, radius + reach);
+
+  for (const { geo, path, seed, r } of built) {
+    contactOcclusionColours(geo, grid, r, reach, seed);
     const mesh = new THREE.Mesh(geo, material);
     if (shadows) { mesh.castShadow = true; mesh.receiveShadow = true; }
     group.add(mesh);
@@ -147,9 +259,9 @@ export function buildFabricMesh(paths, material, opts = {}) {
     const a = path.points[0], b = path.points[path.points.length - 1];
     const ca = new THREE.Mesh(cap, material); ca.position.copy(a);
     const cb = new THREE.Mesh(cap, material); cb.position.copy(b);
+    ca.scale.setScalar(r / radius); cb.scale.setScalar(r / radius);
     if (shadows) { ca.castShadow = cb.castShadow = true; }
     group.add(ca); group.add(cb);
-    pi++;
   }
   return group;
 }

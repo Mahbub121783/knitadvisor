@@ -12,11 +12,14 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-import { buildYarnPaths } from './topology-builder.js?v=20260608g';
-import { createYarnMaterial, setYarnColorHex } from './yarn-material.js?v=20260608g';
+import { buildYarnPaths, floatAnchorsFromPaths } from './topology-builder.js?v=20260608g';
+import { buildNap } from './nap.js?v=20260608g';
+import { fibreGeometry } from './hairiness.js?v=20260608g';
+import { createYarnMaterial, setYarnColorHex, twistPitch } from './yarn-material.js?v=20260608g';
 import { buildFabricMesh, yarnRadius } from './fabric-mesh.js?v=20260608g';
 import { addStudioLighting, configureShadowCamera, applyLightPreset, DEFAULT_LIGHT_PRESET, buildStudioEnvironment } from './lighting.js?v=20260608g';
 import { buildPile } from './pile.js?v=20260608g';
+import { buildHairiness } from './hairiness.js?v=20260608g';
 import { applyDrape } from './drape.js?v=20260608g';
 import { BACKING, PITCH_Y, RIB_PITCH_SCALE } from './constants.js?v=20260608g';
 
@@ -44,8 +47,11 @@ export class Knit3D {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setSize(W, H);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.05;
+    // Khronos PBR Neutral: reproduces the base (dyed) colour faithfully and
+    // only rolls off highlights. ACES Filmic shifted hue and desaturated mid
+    // tones — wrong for a tool whose whole point is showing a shade.
+    renderer.toneMapping = THREE.NeutralToneMapping;
+    renderer.toneMappingExposure = 1.0;
     if (this._shadows) { renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; }
     renderer.domElement.style.cssText =
       'width:100%;height:380px;display:block;border-radius:12px;cursor:grab;';
@@ -58,7 +64,7 @@ export class Knit3D {
     // Studio room as image-based light — real specular glints on every loop.
     this._envTarget = buildStudioEnvironment(renderer);
     scene.environment = this._envTarget.texture;
-    scene.environmentIntensity = 0.9;
+    scene.environmentIntensity = 0.75;
     this._key = lights.key;
     this._fill = lights.fill;
     this._rim = lights.rim;
@@ -77,8 +83,20 @@ export class Knit3D {
     this._buildFabric();
     if (this._shadows) configureShadowCamera(this._key, this._size);
 
-    // front view BEFORE OrbitControls so it becomes the saved reset state
-    camera.position.set(0, 0, this._fitDist);
+    // Default view BEFORE OrbitControls so it becomes the saved reset state:
+    // a swatch lying on a table seen from a seated viewer (24° down, a touch
+    // off-axis), not a dead-on orthographic stare — head-on, loop relief
+    // collapses into a flat pattern; at an angle the over/under depth and
+    // the yarn's roundness read at first glance.
+    // Slightly inside the flat-on cover distance: tilted, the far edge
+    // foreshortens and would otherwise pull the swatch's border into frame.
+    const el = 24 * Math.PI / 180, az = 8 * Math.PI / 180;
+    const d0 = this._fitDist * 0.8;
+    camera.position.set(
+      d0 * Math.sin(az) * Math.cos(el),
+      -d0 * Math.sin(el),
+      d0 * Math.cos(az) * Math.cos(el),
+    );
     camera.lookAt(0, 0, 0);
 
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -106,6 +124,7 @@ export class Knit3D {
       // so a manual drag-around never lands on the same near-black view the
       // Back button used to produce.
       this._setLightSide(this.camera.position.z < 0);
+      this._syncBacking();
     });
 
     this._ro = new ResizeObserver(() => this.resize());
@@ -192,7 +211,7 @@ export class Knit3D {
 
     const { paths, floatAnchors } = buildYarnPaths({
       construction: con, sample: this.opts.sample, sampleBack: this.opts.sampleBack,
-      wales, courses, pitchY,
+      pattern: this.opts.pattern, wales, courses, pitchY,
     });
     // Real 3-thread fleece (see topology-builder.js): the binding+fleecy
     // yarn's floats already give the back real structural coverage, so the
@@ -209,17 +228,30 @@ export class Knit3D {
     const drapeAmount = Math.max(0.2, Math.min(
       0.72 - (density.scalar - 1) * 0.35 - (doubleBed ? 0.15 : 0), 0.75));
     applyDrape(paths, { amount: drapeAmount, wales, courses });
-    // floatAnchors were computed on the pre-drape grid and are not re-sampled
-    // through the same cloth relaxation paths/above just went through — drape's
-    // bulge is a small, smooth, low-frequency offset (see drape.js), so the
-    // pile sits very slightly off the now-draped binding yarn rather than
-    // exactly on it. Acceptable for where fuzz roots visually land; not
-    // claimed to be exact.
+    // Nap roots from the floats' real, post-drape positions.
+    const anchors = floatAnchors ? floatAnchorsFromPaths(paths) : null;
 
     const radius = yarnRadius(this.opts.countNe, this.opts.tf, density);
+    // The fleecy yarn is its own, much coarser count (e.g. 10-16 Ne behind a
+    // 30 Ne face): yarn diameter ∝ 1/√Ne, so it renders √(face/loop) thicker.
+    // Drawn at the face yarn's thickness it left the back thin and the face
+    // see-through.
+    const fleecyScale = this.opts.loopNe && this.opts.countNe
+      ? Math.max(1, Math.min(2.2, Math.sqrt(this.opts.countNe / this.opts.loopNe)))
+      : 1.37;
+    // Tie-in binder (fine filament, e.g. 75D ≈ 71 Ne) — √(face/binder) thinner.
+    const binderScale = this.opts.tieNe && this.opts.countNe
+      ? Math.max(0.35, Math.min(1, Math.sqrt(this.opts.countNe / this.opts.tieNe)))
+      : 0.65;
+    for (const p of paths) {
+      if (p.role === 'fleecy') p.radiusScale = fleecyScale;
+      else if (p.role === 'binder') p.radiusScale = binderScale;
+    }
+    this._fleecyRadius = radius * fleecyScale;
     const group = buildFabricMesh(paths, material, {
       radius, radialSegments: 10, shadows: this._shadows,  // rounder cross-section — a hexagonal tube facets badly now that zooming in close is possible
       fiberType: this.opts.fiberType,
+      twistPitch: twistPitch(radius, this.opts.twist),
     });
     this.group = group;
 
@@ -228,14 +260,28 @@ export class Knit3D {
     const box = new THREE.Box3().setFromObject(group);
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
+    this._addHairiness(group, radius);
     // Compute the pile's sizing ONCE — the backing plane must sit behind the
     // pile's full reach (fibres can extend well past the bare loop mesh), or
     // the "flip to back" view stares straight into an opaque backing instead
     // of the brushed nap (previously the backing only cleared the plain loop
     // geometry, so it silently occluded most/all of the pile from behind).
     const pileParams = this._pileParams(radius);
-    if (!skipFlatBacking) this._addBacking(group, center, size, radius, box, pileParams ? pileParams.maxReach : 0);
-    this._addPile(group, box, pileParams, floatAnchors);
+    // Fleece (nap path): the backing sits directly behind the floats and only
+    // shows in the As-Knit state — the dark yarn mass a real greige fleece's
+    // gaps show — and hands over to the nap's own solid root once brushed
+    // (see _syncBacking). It is inset (BACKING.pad < 1), so no slab edge.
+    const napPath = !!(anchors && anchors.length && pileParams);
+    this._backingYieldsToNap = napPath;
+    if (!skipFlatBacking || napPath) {
+      this._addBacking(group, center, size, radius, box, napPath ? 0 : (pileParams ? pileParams.maxReach : 0));
+    }
+    if (napPath) {
+      this._addNap(group, paths, anchors, pileParams);
+    } else {
+      this._addPile(group, box, pileParams, null);
+    }
+    this._syncBacking();
     this._addGrainline(group, box, size);
 
     // centre on the loops + fit so the fabric COVERS the frame (fills edge-to-edge)
@@ -287,9 +333,12 @@ export class Knit3D {
     const K = { far: 0.65, mid: 1.0, near: 1.4, ultra: 1.6 };
     const ns = m.userData.baseNormalScale * K[tier];
     m.normalScale.set(ns, ns);
-    const wantNear = tier === 'ultra';
+    const wantNear = tier === 'ultra' || tier === 'near';
     const tex = wantNear ? m.userData.normalNear : m.userData.normalFar;
+    const alb = wantNear ? m.userData.albedoNear : m.userData.albedoFar;
     if (tex && m.normalMap !== tex) { m.normalMap = tex; m.needsUpdate = true; }
+    if (alb && m.map !== alb) { m.map = alb; m.needsUpdate = true; }
+    if (this._hair) this._hair.mesh.visible = this._hairWanted();
   }
 
   // density multiplier from viewport — full on desktop, lighter on small/low-DPR
@@ -306,9 +355,18 @@ export class Knit3D {
     const sd = (this.opts.physics && typeof this.opts.physics.shadow_depth === 'number')
       ? this.opts.physics.shadow_depth : 0.1;
     const s = BACKING.shade * (1 - sd * 0.45);     // deeper cavities → darker body
-    const mat = new THREE.MeshStandardMaterial({ roughness: 0.96, metalness: 0.0, side: THREE.DoubleSide });
+    // transparent only so it can fade with view angle (_backingFade); it is
+    // drawn after the opaque yarn and still depth-tested, so it never shows
+    // through a loop in front of it.
+    const mat = new THREE.MeshStandardMaterial({ roughness: 0.96, metalness: 0.0, side: THREE.DoubleSide, transparent: true });
     mat.color.setRGB((d.r / 255) * s, (d.g / 255) * s, (d.b / 255) * s, THREE.SRGBColorSpace);
-    const geo = new THREE.PlaneGeometry(size.x * BACKING.pad, size.y * BACKING.pad);
+    // Inset by an absolute stitch margin, not a % of the swatch: the loop
+    // heads of the top course (and the selvedge loops) leave gaps up to a
+    // course deep, and any plane edge inside those gaps reads as a flat slab.
+    const geo = new THREE.PlaneGeometry(
+      Math.max(size.x * 0.5, size.x - 2 * BACKING.insetX),
+      Math.max(size.y * 0.5, size.y - 2 * BACKING.insetY),
+    );
     const plane = new THREE.Mesh(geo, mat);
     // Sit strictly behind the DEEPEST actual geometry — the loop mesh AND
     // (critically) the full pile reach, not just a small multiple of the
@@ -330,7 +388,7 @@ export class Knit3D {
     // convenience, not fabric structure, and needs to stay on the world-far
     // side in BOTH states. Remembered here so setView can re-mirror just
     // this one child and cancel the group rotation's effect on it alone.
-    this._backingFrontX = center.x;
+    this._backingCenter = center.clone();
     this._backingFrontZ = backZ;
   }
 
@@ -380,6 +438,53 @@ export class Knit3D {
     return { kind, isVelour, pileRadius, pileDensity, lengthScale, zOffset, maxReach };
   }
 
+  // Protruding fibre ends on the yarn surface (hairiness.js). Hidden until
+  // the camera is close enough to resolve them — at normal viewing distance
+  // each hair is well under a pixel wide and would only shimmer.
+  _addHairiness(group, radius) {
+    const tubes = group.userData.tubes || [];
+    const mat = this._material.clone();
+    mat.vertexColors = false;      // instanced fibres have no colour attribute (see _addPile)
+    mat.map = null;
+    mat.normalMap = null;
+    mat.color.lerp(new THREE.Color(1, 1, 1), 0.16);   // thin fibres catch light
+    mat.roughness = Math.min(1, mat.roughness + 0.08);
+    const hair = buildHairiness(tubes, mat, {
+      radius, fiberType: this.opts.fiberType || 'cotton', totalLength: group.userData.totalLength,
+      maxCount: this._shadows ? 14000 : 5000,       // lighter on the low-power tier
+    });
+    if (!hair) { mat.dispose(); return; }
+    if (this._shadows) hair.mesh.castShadow = false;
+    hair.mesh.visible = this._hairWanted();
+    group.add(hair.mesh);
+    this._hair = { mesh: hair.mesh, geometry: hair.geometry, material: mat };
+  }
+
+  _hairWanted() {
+    return (this._lodTier === 'near' || this._lodTier === 'ultra') &&
+      !(this._material && this._material.wireframe);
+  }
+
+  // Brushed fleece back: a dense shell-textured nap on the fleecy floats
+  // (nap.js). Registered as this._pile so the As-Knit / Finished toggle and
+  // wireframe mode show and hide it exactly as before.
+  _addNap(group, paths, anchors, pileParams) {
+    const points = [];
+    for (const p of paths) if (p.role === 'fleecy') for (const pt of p.points) points.push(pt);
+    if (!points.length) return;
+    this._napFibre = fibreGeometry();
+    const nap = buildNap({
+      points, anchors,
+      yarnRadius: this._fleecyRadius,
+      color: this._material.color,
+      napLength: this._fleecyRadius * 3.2 * pileParams.lengthScale,
+      fibreGeometry: this._napFibre,
+      shells: this._shadows ? 16 : 10,              // lighter on the low-power tier
+    });
+    group.add(nap.group);
+    this._pile = { mesh: nap.group, geometry: this._napFibre, dispose: nap.dispose, setColor: nap.setColor };
+  }
+
   _addPile(group, box, pileParams, floatAnchors) {
     if (!pileParams) return;
     const { kind, pileRadius, pileDensity, lengthScale, zOffset } = pileParams;
@@ -400,6 +505,14 @@ export class Knit3D {
     // own base colour. Reusing the exact same material made the pile blend
     // into the backing instead of reading as a distinct fuzzy surface.
     const pileMat = this._material.clone();
+    // The yarn material has vertexColors on (contact occlusion, fabric-mesh.js);
+    // instanced pile fibres carry no colour attribute, and WebGL's default for
+    // a missing attribute is black — every brushed fibre rendered black,
+    // whatever the dye. Same for the yarn-surface tiles, which are UV-mapped
+    // per yarn helix and mean nothing on a fibre cylinder.
+    pileMat.vertexColors = false;
+    pileMat.map = null;
+    pileMat.normalMap = null;
     pileMat.color.lerp(new THREE.Color(1, 1, 1), 0.32);
     pileMat.roughness = Math.min(1, this._material.roughness + 0.12);
     if (typeof pileMat.sheen === 'number') pileMat.sheen = Math.min(1, pileMat.sheen + 0.15);
@@ -473,6 +586,10 @@ export class Knit3D {
       setYarnColorHex(this._pileMaterial, hex);
       this._pileMaterial.color.lerp(new THREE.Color(1, 1, 1), 0.32);
     }
+    if (this._pile && this._pile.setColor) this._pile.setColor(this._material.color);
+    if (this._hair) {
+      this._hair.material.color.copy(this._material.color).lerp(new THREE.Color(1, 1, 1), 0.16);
+    }
   }
 
   // Lightbox / metamerism preview — re-tint the rig to a named illuminant
@@ -511,6 +628,28 @@ export class Knit3D {
     // the two looked identical. Hide it below the finished half of the
     // animation instead of just scaling the frame.
     if (this._pile && this._pile.mesh) this._pile.mesh.visible = t >= 0.5;
+    this._syncBacking();
+  }
+
+  _syncBacking() {
+    if (!this._backing || !this._backing.mesh) return;
+    const wire = !!(this._material && this._material.wireframe);
+    const napShown = this._backingYieldsToNap && this._pile && this._pile.mesh && this._pile.mesh.visible;
+    const k = this._backingFade();
+    this._backing.mat.opacity = k;
+    this._backing.mesh.visible = !wire && !napShown && k > 0.01;
+  }
+
+  // The backing only exists to darken the gaps between loops seen roughly
+  // face-on. Seen obliquely, the loops already overlap each other, and the
+  // plane — sitting behind them — shows up as a dark board under the cloth.
+  // Fade it out between ~45° and ~60° off the fabric normal.
+  _backingFade() {
+    if (!this.camera || !this.controls || !this._pivot) return 1;
+    const n = new THREE.Vector3(0, 0, 1).applyQuaternion(this._pivot.quaternion);
+    const v = this.camera.position.clone().sub(this.controls.target).normalize();
+    const t = Math.min(1, Math.max(0, (Math.abs(n.dot(v)) - 0.5) / 0.22));
+    return t * t * (3 - 2 * t);
   }
 
   // ROTATE THE FABRIC, not the camera. The camera moving to -z used to look
@@ -527,13 +666,18 @@ export class Knit3D {
     if (!this._pivot) return;
     const back = which === 'back';
     this._pivot.rotation.y = back ? Math.PI : 0;
-    // Cancel the rotation for the backing plane alone (see _addBacking) —
-    // negate the SAME two axes the rotation negates (x and z), so it lands
-    // back on the world-far side instead of flipping to the world-NEAR side
-    // and blowing out the view with a close-up of its own face.
-    if (this._backing && this._backing.mesh) {
-      this._backing.mesh.position.x = back ? -this._backingFrontX : this._backingFrontX;
-      this._backing.mesh.position.z = back ? -this._backingFrontZ : this._backingFrontZ;
+    // Keep the backing plane on the world-far side (see _addBacking). The
+    // group sits inside the pivot offset by -center, so a point at local
+    // (x, z) lands at pivot-space (x - cx, z - cz), which the 180° turn maps
+    // to world (cx - x, cz - z). Staying centred needs x = cx in BOTH states;
+    // keeping the plane's front-view world depth (backZ - cz) needs
+    // z = 2·cz - backZ when flipped. The old code mirrored x to -cx, which
+    // put the plane a whole swatch-width off-screen in every Back view —
+    // so every fabric's back read as see-through.
+    if (this._backing && this._backing.mesh && this._backingCenter) {
+      const c = this._backingCenter;
+      this._backing.mesh.position.x = c.x;
+      this._backing.mesh.position.z = back ? 2 * c.z - this._backingFrontZ : this._backingFrontZ;
     }
   }
 
@@ -573,6 +717,8 @@ export class Knit3D {
     if (this._pile && this._pile.mesh) {
       this._pile.mesh.visible = !on && (this._shrinkT == null || this._shrinkT >= 0.5);
     }
+    if (this._hair) this._hair.mesh.visible = this._hairWanted();
+    this._syncBacking();
     return on;
   }
 
@@ -602,7 +748,11 @@ export class Knit3D {
       const newFit = this._coverDistance(this._size);
       const dir = this.camera.position.clone().sub(this.controls.target);
       const len = dir.length() || 1;
-      dir.multiplyScalar(newFit / len);
+      // Keep the viewer's current zoom (as a fraction of the fit distance)
+      // instead of snapping back to the fit — the ResizeObserver fires once
+      // right after mount, which used to silently discard the default framing.
+      const ratio = len / (this._fitDist || len);
+      dir.multiplyScalar((newFit * ratio) / len);
       this.camera.position.copy(this.controls.target).add(dir);
       this.controls.minDistance = Math.max(0.6, newFit * 0.12);
       this.controls.maxDistance = newFit * 2.2;
@@ -621,7 +771,9 @@ export class Knit3D {
       this.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
     }
     if (this._backing) { this._backing.geo.dispose(); this._backing.mat.dispose(); }
-    if (this._pile) this._pile.geometry.dispose();
+    if (this._pile) { this._pile.geometry.dispose(); if (this._pile.dispose) this._pile.dispose(); }
+    if (this._pileMaterial) this._pileMaterial.dispose();
+    if (this._hair) this._hair.material.dispose();
     if (this._textures) this._textures.forEach((t) => t.dispose());
     if (this._material) this._material.dispose();
     if (this.renderer) {

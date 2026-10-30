@@ -1295,6 +1295,12 @@ class FabricVisualizer {
     const hasTM = grid.some(row => row.some(c => c === 'T' || c === 'M'));
     const hasM  = grid.some(row => row.some(c => c === 'M'));
     const out = { grid, rows: grid.length, cols: grid[0].length, hasTM, hasM };
+    // Which yarn each feed carries (e.g. fleece: plated / ground / fleece),
+    // row-aligned with `grid` — the 3D view needs it to knit the plated
+    // binder yarn behind the face on exactly the feeds that carry it.
+    if (Array.isArray(p.cam_arrangement) && p.cam_arrangement.length === grid.length) {
+      out.feedYarns = p.cam_arrangement.map((f) => (f && f.yarn ? String(f.yarn).toLowerCase() : null));
+    }
     const dial = p.pattern_dial;
     if (Array.isArray(dial) && dial.length && Array.isArray(dial[0]) && dial[0].length) {
       out.dial = dial; out.dialRows = dial.length; out.dialCols = dial[0].length;
@@ -2249,7 +2255,7 @@ class FabricVisualizer {
       loopNe: opts.loopNe, tieNe: opts.tieNe,
       tf: opts.tf, fiberType: opts.fiberType, sheen: opts.sheen, sample, sampleBack,
       physics: opts.physics, density: opts.density, twist: this._yarnTwist(),
-      shrinkage: opts.shrinkage,
+      shrinkage: opts.shrinkage, pattern: opts.pattern,
     };
 
     import('/assets/js/knit3d/index.js?v=20260608g').then(({ Knit3D, LIGHT_PRESETS, LIGHT_PRESET_ORDER }) => {

@@ -19,21 +19,27 @@ export const PITCH_X = 1.0;   // wale spacing
 export const PITCH_Y = 0.92;  // course spacing — loop height (~1.28) > pitch ⇒ ~0.36 overlap = intermesh
 
 // ── Knit needle-loop profile (local units) ──
+// Keyhole-shaped, as in a real jersey loop: narrow feet (squeezed through the
+// head of the loop below), legs widening to their maximum around mid-height
+// (where neighbouring wales' legs touch — a closed fabric, not a lattice),
+// then narrowing into a ROUND head that tucks behind the lower legs of the
+// loop above. The old profile kept widening all the way up into a flat head
+// ±0.46 wide, so neighbouring heads met edge to edge and every course read
+// as one straight horizontal rod across the face.
+//
+// Depth: feet sit back (behind the shoulders of the loop below), the legs
+// swing forward in front of that lower loop's head (the real over/under
+// intermesh), and the head drops back again behind the legs above. Only
+// the crown tip of each head peeks out in the V-notch of the loop above it,
+// which is exactly what a macro photo of a jersey face shows.
 export const LOOP = {
-  footHalf:  0.14,   // x of the two feet (loop bottom converges to a soft point)
-  legHalf:   0.30,   // x partway up the legs
-  headHalf:  0.46,   // x of the shoulders/head (wide top of the V — overlaps neighbours)
-  footY:    -0.58,   // y of the feet (loop bottom)
-  legY:     -0.16,   // y of the lower leg
-  shoulderY: 0.34,   // y where the legs turn into the head arch
-  headY:     0.70,   // y of the head crown (loop top)
-  // depth profile — legs forward (visible V), head centred, feet back
-  footZ:    -0.22,   // feet recede (back) → thread behind the head below
-  legZ:      0.26,   // legs are the FRONTMOST point (the knit "V" you see)
-  shoulderZ: 0.16,   // shoulders still forward
-  headZ:     0.00,   // head crown pulled back to centre (behind the legs)
-  sinkerY:  -0.66,   // sinker dips just below the feet
-  sinkerZ:  -0.12,   // sinker sits behind, with the feet
+  footHalf:     0.16,  footY:     -0.50, footZ:     -0.10,
+  lowLegHalf:   0.26,  lowLegY:   -0.18, lowLegZ:    0.20,
+  legHalf:      0.36,  legY:       0.18, legZ:       0.24,   // widest — touches the next wale
+  shoulderHalf: 0.32,  shoulderY:  0.48, shoulderZ:  0.10,
+  headHalf:     0.22,  headSideY:  0.68, headSideZ: -0.08,
+  headY:        0.80,  headZ:     -0.12,                     // crown, behind the legs above
+  sinkerY:     -0.62,  sinkerZ:   -0.20,                     // ∪ below the feet, at the back
 };
 
 // ── Tuck (held, not knocked over): a shallow cup that sits BEHIND the held loop ──
@@ -64,8 +70,13 @@ export const INTERLOCK_GAIT  = 0.5;   // back bed offset by half a wale (rib gai
 //    brushes into the raised nap — see topology-builder.js's fleece branch
 //    and knit-renderer.js `_addPile`, which samples pile fibres along them
 //    instead of scattering them over an unrelated flat plane. ──
-export const FLEECE_BIND_DEPTH = 0.55;  // how far back the binding+fleecy course sits
-export const FLEECE_TUCK_EVERY = 3;     // ties in every 3rd wale — the textbook 3-thread ratio
+// NEGATIVE: +z is toward the viewer (the technical face). At +0.55 the
+// fleecy yarn's tucks and floats were built IN FRONT of the face, laid across
+// it like a chain-link lattice, and the pile rooted on the wrong side.
+export const FLEECE_BIND_DEPTH = -0.30; // float layer, directly behind the face
+export const FLEECE_TUCK_Z     = -0.12; // tuck: caught into the back of the face loop
+export const FLEECE_BINDER_Z   = -0.16; // plated binder: same loops, one yarn-width behind the face
+export const FLEECE_TUCK_EVERY = 4;     // fallback only — the engine's real feed sequence wins
 
 // ── Pointelle / eyelet mesh (ধাপ ২ transfer stitch) ──
 // A hole is a transferred (omitted) loop. The yarn that would have formed it is
@@ -77,7 +88,9 @@ export const HOLE_PUSH_Z = 0.04;      // ring loops lift slightly (opens the eye
 
 // ── Opaque backing (gives the swatch body; valleys & eyelets read dark, not
 //    see-through). Sits just behind the loop heads. ──
-export const BACKING = { z: -0.05, shade: 0.42, pad: 1.2 };
+// The plane stays INSIDE the loop field (insets in stitch units) — any margin
+// beyond the loops shows as a flat dark slab around the swatch once tilted.
+export const BACKING = { z: -0.05, shade: 0.42, insetX: 0.7, insetY: 1.25 };
 
 // ── Planned imperfection (ধাপ ৪): subtle per-stitch deviation so the patch
 //    reads as real cloth, not a perfect CG lattice. Kept small on purpose. ──
