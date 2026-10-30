@@ -39,17 +39,27 @@ export function fibreGeometry() {
 export function buildHairiness(tubes, material, opts) {
   const factor = HAIRINESS[opts.fiberType] != null ? HAIRINESS[opts.fiberType] : 1.0;
   const perUnit = 3.2 * factor;                                 // hairs per unit of yarn
-  const count = Math.min(opts.maxCount || 14000, Math.round((opts.totalLength || 0) * perUnit));
-  if (count < 20 || !tubes.length) return null;
+  const base = Math.round((opts.totalLength || 0) * perUnit);   // natural (greige) count
+  const cap = opts.maxCount || 14000;
+  // Room for the hairiest finish (peach / brushed multiply the count).
+  const capacity = Math.min(cap, Math.round(base * (opts.maxMul || 1)));
+  if (base < 20 || !tubes.length || capacity < 20) return null;
 
   const geometry = fibreGeometry();
-  const mesh = new THREE.InstancedMesh(geometry, material, count);
+  const mesh = new THREE.InstancedMesh(geometry, material, capacity);
   const dummy = new THREE.Object3D();
   const up = new THREE.Vector3(0, 1, 0);
   const n = new THREE.Vector3(), t = new THREE.Vector3(), dir = new THREE.Vector3();
   const spin = new THREE.Quaternion();
   const total = tubes.reduce((s, g) => s + g.attributes.position.count, 0);
 
+  // `hairMul` scales how many fibres protrude (a finish raises or burns them
+  // off), `lenMul` how long they are (peach: a very short micro-fuzz).
+  const update = (hairMul, lenMul) => {
+    mesh.count = Math.max(0, Math.min(capacity, Math.round(base * hairMul)));
+    place(mesh.count, lenMul);
+  };
+  const place = (count, lenMul) => {
   for (let i = 0; i < count; i++) {
     // pick a surface vertex uniformly across all tubes
     let pick = Math.floor(hash2(i, 31) * total);
@@ -73,10 +83,14 @@ export function buildHairiness(tubes, material, opts) {
     dummy.quaternion.setFromUnitVectors(up, dir);
     spin.setFromAxisAngle(dir, hash2(i, 37) * Math.PI * 2);
     dummy.quaternion.premultiply(spin);
-    dummy.scale.setScalar(len);
+    // length only (the fibre's own axis is +y): a short peach fuzz is still
+    // made of normal-thickness fibres
+    dummy.scale.set(len, len * lenMul, len);
     dummy.updateMatrix();
     mesh.setMatrixAt(i, dummy.matrix);
   }
   mesh.instanceMatrix.needsUpdate = true;
-  return { mesh, geometry };
+  };
+  update(1, 1);
+  return { mesh, geometry, update };
 }

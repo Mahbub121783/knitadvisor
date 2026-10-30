@@ -89,12 +89,59 @@ const CONSTRUCTION_PHYSICS = {
 /**
  * Wash & Finishing Effects
  */
+// L_shift / S_shift are the finish's visual colour shift (CIELAB L, HSL S).
+// `process` is the matching process-loss key in catalog/production-data.js
+// (null where no loss data exists — those finishes affect the visual only).
 const FINISH_PHYSICS = {
-  none:          { L_shift: 0, S_shift: 0, texture_modifier: 'none', label: 'Regular Finish' },
-  enzyme_wash:   { L_shift: 3, S_shift: -5, texture_modifier: 'frosting', label: 'Enzyme Wash' },
-  vintage_wash:  { L_shift: 8, S_shift: -15, texture_modifier: 'faded', label: 'Vintage Wash' },
-  peach_finish:  { L_shift: 2, S_shift: -2, texture_modifier: 'micro_fuzz', label: 'Peach Finish' }
+  none:          { L_shift: 0,  S_shift: 0,   texture_modifier: 'none',       process: null,           label: 'Regular Finish' },
+  // Cellulase bio-polish: removes protruding fibre (cleaner), slight frosting.
+  enzyme_wash:   { L_shift: 3,  S_shift: -5,  texture_modifier: 'frosting',   process: 'garment_wash', label: 'Enzyme Wash' },
+  vintage_wash:  { L_shift: 8,  S_shift: -15, texture_modifier: 'faded',      process: 'garment_wash', label: 'Vintage Wash' },
+  // Emery sanding: a dense short micro-fuzz; the raised fibre ends scatter
+  // light, so the shade reads slightly lighter and softer.
+  peach_finish:  { L_shift: 2,  S_shift: -2,  texture_modifier: 'micro_fuzz', process: 'peach',        label: 'Peach Finish' },
+  // Raising (napping) on a non-pile fabric: longer, looser fibre than peach.
+  brushed:       { L_shift: 4,  S_shift: -6,  texture_modifier: 'fuzz',       process: 'brush',        label: 'Brushed / Raised' },
+  // Mercerised cotton swells to a rounder fibre: more lustre, deeper shade.
+  mercerized:    { L_shift: -4, S_shift: 6,   texture_modifier: 'lustre',     process: null,           label: 'Mercerized' },
+  // Singeing burns off the surface fibre: clean, slightly clearer shade.
+  singed:        { L_shift: -1, S_shift: 2,   texture_modifier: 'clean',      process: 'singe',        label: 'Singed' },
+  // Silicone softener: a smooth film, subtle sheen, very fluid hand.
+  silicone:      { L_shift: -1, S_shift: 2,   texture_modifier: 'silky',      process: null,           label: 'Silicone Softener' },
+  // Resin (crease-resist / stiff): crisp, matte, paper-like folds.
+  resin:         { L_shift: 1,  S_shift: -3,  texture_modifier: 'crisp',      process: null,           label: 'Resin / Stiff Finish' },
 };
+
+/**
+ * Which FINISH_PHYSICS entry applies. `surfaceFinish` (an explicit input) wins;
+ * otherwise keywords in the older free-form `finishingRoute` are read.
+ */
+function resolveFinishId(surfaceFinish, finishingRoute) {
+  const sf = String(surfaceFinish || '').toLowerCase().trim();
+  if (sf) {
+    if (FINISH_PHYSICS[sf]) return sf;
+    if (/peach|sued|emery/.test(sf)) return 'peach_finish';
+    if (/brush|rais|nap/.test(sf)) return 'brushed';
+    if (/vintage/.test(sf)) return 'vintage_wash';
+    if (/enzyme|bio/.test(sf)) return 'enzyme_wash';
+    if (/mercer/.test(sf)) return 'mercerized';
+    if (/singe/.test(sf)) return 'singed';
+    if (/silicon|softener/.test(sf)) return 'silicone';
+    if (/resin|stiff|crisp/.test(sf)) return 'resin';
+    return 'none';
+  }
+  const fr = String(finishingRoute || '').toLowerCase();
+  if (/vintage/.test(fr)) return 'vintage_wash';
+  if (/peach|sueded|brush/.test(fr)) return 'peach_finish';
+  if (/enzyme|garment\s*wash|wash|bio/.test(fr)) return 'enzyme_wash';
+  return 'none';
+}
+
+/** The process-loss key for a finish id, or null (see FINISH_PHYSICS). */
+function finishProcess(finishId) {
+  const f = FINISH_PHYSICS[finishId];
+  return f ? f.process : null;
+}
 
 /**
  * Illuminant (Metamerism) Approximations (Shift applied to CIELAB)
@@ -246,6 +293,7 @@ function applyFabricPhysics(baseHex, composition, constructionId = 'single_jerse
       roughness: Math.round(fiberData.roughness * 100) / 100,
       texture_type: structureData.texture_type,
       texture_modifier: finishData.texture_modifier,
+      finish_id: FINISH_PHYSICS[finishId.toLowerCase()] ? finishId.toLowerCase() : 'none',
       gamut_warning: gamutWarning
     },
     frontend_assets: {
@@ -266,5 +314,8 @@ module.exports = {
   CONSTRUCTION_PHYSICS,
   normalizeComposition,
   calculateFiberPhysics,
-  applyFabricPhysics
+  applyFabricPhysics,
+  FINISH_PHYSICS,
+  resolveFinishId,
+  finishProcess,
 };

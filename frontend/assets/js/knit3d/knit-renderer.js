@@ -13,11 +13,14 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 import { buildYarnPaths, floatAnchorsFromPaths, structureRepeat } from './topology-builder.js?v=20260608g';
-import { bakeStructure, clothGeometry, fibreSurfaceTexture, wavePhase } from './macro.js?v=20260608g';
+import { bakeStructure, clothGeometry, fibreSurfaceTexture, wavePhase, melangeMaterial } from './macro.js?v=20260608g';
 import { fabricBody } from './fabric-body.js?v=20260608g';
+import { hash2 } from './noise.js?v=20260608g';
 import { buildNap } from './nap.js?v=20260608g';
 import { fibreGeometry } from './hairiness.js?v=20260608g';
-import { createYarnMaterial, setYarnColorHex, twistPitch } from './yarn-material.js?v=20260608g';
+import { createYarnMaterial, setYarnColorHex, twistPitch, applyYarnLook } from './yarn-material.js?v=20260608g';
+import { finishedLook, greigeLook, GREIGE_HEX } from './finish-profile.js?v=20260608g';
+import { patchDye, melangeSplit } from './dye-shader.js?v=20260608g';
 import { buildFabricMesh, yarnRadius } from './fabric-mesh.js?v=20260608g';
 import { addStudioLighting, configureShadowCamera, applyLightPreset, DEFAULT_LIGHT_PRESET, buildStudioEnvironment } from './lighting.js?v=20260608g';
 import { buildPile } from './pile.js?v=20260608g';
@@ -159,7 +162,7 @@ export class Knit3D {
   }
 
   _buildFabric() {
-    const { material, textures } = createYarnMaterial({
+    const { material, melField, textures } = createYarnMaterial({
       dyed: this.opts.dyed,
       fiberType: this.opts.fiberType,
       physics: this.opts.physics,
@@ -167,6 +170,22 @@ export class Knit3D {
     });
     this._material = material;
     this._textures = textures;
+    this._melField = melField;
+
+    // Knitting → dyeing → finishing. The As-Knit state is the greige cloth
+    // off the machine: raw fibre colour (unless the yarn was coloured before
+    // knitting, as in a melange), natural hairiness, no finish. Finished =
+    // dyed by the real dyeing route, with the real finish (finish-profile.js).
+    const d = this.opts.dyed || { r: 120, g: 124, b: 134 };
+    this._dyeHex = '#' + [d.r, d.g, d.b].map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
+    this._melange = !!this.opts.melange;
+    this._rawHex = GREIGE_HEX[this.opts.fiberType] || GREIGE_HEX.cotton;
+    // A melange is spun from fibres coloured BEFORE knitting, so its greige
+    // already shows the mix; piece-dyed cloth comes off the machine raw.
+    this._greigeHex = this._melange ? null : this._rawHex;
+    this._finishLook = finishedLook(this.opts.physics && this.opts.physics.finish_id, this.opts.dyeMethod);
+    this._greigeLook = greigeLook();
+    this._dyeUniforms = [patchDye(material, { exposure: 'attr', melMode: 'threshold', melMap: melField })];
 
     // Size the patch to the viewport so the cloth FILLS the frame (no floating
     // square): build it landscape to match the canvas aspect, denser on big
@@ -332,6 +351,7 @@ export class Knit3D {
     this._size = size;
     this._fitDist = this._coverDistance(size);
     this._buildMacro({ con, density, pitchY, radius, center });
+    this._applyStage(true);
   }
 
   // ── Macro view (macro.js) ──────────────────────────────────────────────
@@ -359,14 +379,24 @@ export class Knit3D {
     });
     this._applyYarnScales(paths);
     const tmp = new THREE.MeshBasicMaterial();
+    const roleSeed = { fleecy: 3, binder: 5 };
     const tile = buildFabricMesh(paths, tmp, {
       radius, radialSegments: 8, shadows: false, fiberType: this.opts.fiberType,
       twistPitch: twistPitch(radius, this.opts.twist),
+      // per-course texture phase, periodic with the tile so it still tiles
+      uvPhase: (path) => {
+        const c = Math.floor(path.points[0].y / pitchY + 0.25);
+        const cm = ((c % tileCourses) + tileCourses) % tileCourses;
+        return hash2(cm, 13 + (roleSeed[path.role] || 0)) * 17;
+      },
     });
     const win = { x0: mW * rep.xPitch, y0: mC * pitchY, w: tileWales * rep.xPitch, h: tileCourses * pitchY };
-    const bake = bakeStructure(this.renderer, tile, win, 48);
-    tile.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
-    tmp.dispose();
+    // A melange keeps the tile so the fibre mix can be re-baked when the
+    // shade (and so the light-fibre fraction) changes.
+    const melMat = this._melange ? melangeMaterial(this._melField) : null;
+    const bake = bakeStructure(this.renderer, tile, win, 48, { melMaterial: melMat, keep: !!melMat });
+    const disposeTile = () => { tile.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); tmp.dispose(); };
+    if (!melMat) disposeTile();
 
     // Real size: one wale (rep.xPitch units) is 1/wpc cm.
     const cm = wpc * rep.xPitch;
@@ -401,18 +431,21 @@ export class Knit3D {
 
     const aniso = this.renderer.capabilities.getMaxAnisotropy();
     const y = this._material;
-    const peach = this.opts.physics && this.opts.physics.texture_modifier === 'micro_fuzz';
+    // Optics (roughness / sheen / relief) are set per state by _applyStage;
+    // the sheen rim is most of what a peached or raised surface looks like
+    // from a distance, where its micro-fuzz is far below a pixel.
     const clothMat = (maps) => {
       const m = new THREE.MeshPhysicalMaterial({
         color: y.color.clone(), map: maps.ao, normalMap: maps.normal,
-        normalScale: new THREE.Vector2(peach ? 0.75 : 1, peach ? 0.75 : 1),
+        normalScale: new THREE.Vector2(1, 1),
         roughness: y.roughness, metalness: 0,
-        // Sheen is the soft lit rim a fibrous surface gets at grazing angles;
-        // a peach (sanded) finish is mostly that rim.
-        sheen: peach ? 1 : y.sheen, sheenRoughness: peach ? 0.35 : y.sheenRoughness,
+        sheen: y.sheen, sheenRoughness: y.sheenRoughness,
         sheenColor: y.sheenColor.clone(),
+        // a fibre surface's coat is never mirror-sharp (the default 0 is)
+        clearcoatRoughness: y.clearcoatRoughness,
       });
       m.shadowSide = THREE.DoubleSide;
+      this._dyeUniforms.push(patchDye(m, { exposure: 'map', expMap: maps.exp, melMode: 'direct', melMap: maps.mel || null }));
       return m;
     };
     const faceMat = clothMat(bake.front);
@@ -469,6 +502,8 @@ export class Knit3D {
       group: macroGroup, front, back, edge, edgeMat, faceMat, backMat, napMat, napTex,
       napAlways: con.pile === 'loop',
       napLift: con.pile === 'loop' ? 1.45 : 1.6, napShade: this._napShade || null,
+      melMat, melF: -1, rebake: bake.rebake || null,
+      disposeTile: melMat ? () => { bake.release(); disposeTile(); } : null,
       targets: bake.targets, size: box.getSize(new THREE.Vector3()),
       viewW: 14 * cm,                            // default view: ~14 cm across
       fullW: 0.62 * S * cm * 2,                  // fully zoomed out: the whole piece
@@ -548,7 +583,8 @@ export class Knit3D {
     if (tier === this._lodTier) return;            // only on tier transition
     this._lodTier = tier;
     const K = { far: 0.65, mid: 1.0, near: 1.4, ultra: 1.6 };
-    const ns = m.userData.baseNormalScale * K[tier];
+    m.userData.lodK = K[tier];
+    const ns = m.userData.baseNormalScale * K[tier] * (m.userData.lookNormal || 1);
     m.normalScale.set(ns, ns);
     const wantNear = tier === 'ultra' || tier === 'near';
     const tex = wantNear ? m.userData.normalNear : m.userData.normalFar;
@@ -666,15 +702,19 @@ export class Knit3D {
     mat.normalMap = null;
     mat.color.lerp(new THREE.Color(1, 1, 1), 0.16);   // thin fibres catch light
     mat.roughness = Math.min(1, mat.roughness + 0.08);
+    const maxMul = Math.max(1, this._finishLook.hair);   // peach / brushed raise more fibre
     const hair = buildHairiness(tubes, mat, {
       radius, fiberType: this.opts.fiberType || 'cotton', totalLength: group.userData.totalLength,
-      maxCount: this._shadows ? 14000 : 5000,       // lighter on the low-power tier
+      maxMul,
+      // A raised finish is mostly fibre; each hair is a tiny 24-triangle
+      // tube, so the higher cap is cheap. Lighter on the low-power tier.
+      maxCount: (this._shadows ? 14000 : 5000) * maxMul,
     });
     if (!hair) { mat.dispose(); return; }
     if (this._shadows) hair.mesh.castShadow = false;
     hair.mesh.visible = this._hairWanted();
     group.add(hair.mesh);
-    this._hair = { mesh: hair.mesh, geometry: hair.geometry, material: mat };
+    this._hair = { mesh: hair.mesh, geometry: hair.geometry, material: mat, update: hair.update };
   }
 
   _hairWanted() {
@@ -796,8 +836,67 @@ export class Knit3D {
     this._grainline = { a1, a2, sprite };
   }
 
+  // The dyed shade (the visualizer's colour picker). Shown in the Finished
+  // state; As-Knit shows the greige colour instead (see _applyStage).
   setColor(hex) {
-    if (this._material) setYarnColorHex(this._material, hex);
+    this._dyeHex = hex;
+    this._applyStage(true);
+  }
+
+  // Apply the As-Knit or Finished state: colour, finish optics, dye effects,
+  // hairiness. `force` re-applies even if the state has not changed.
+  _applyStage(force) {
+    const finished = this._shrinkT == null || this._shrinkT >= 0.5;
+    if (!force && finished === this._stageFinished) return;
+    this._stageFinished = finished;
+    const look = finished ? this._finishLook : this._greigeLook;
+    const hex = finished || !this._greigeHex ? this._dyeHex : this._greigeHex;
+    const target = new THREE.Color(hex);
+    const mel = this._melange ? melangeSplit(target) : null;
+
+    this._paint(hex, mel);
+    applyYarnLook(this._material, look);
+
+    // Worn high points fade toward the undyed fibre showing through.
+    const fadeCol = target.clone().lerp(new THREE.Color(this._rawHex), 0.55);
+    for (const u of this._dyeUniforms) {
+      u.uFade.value = look.fade;
+      u.uFadeColor.value.copy(fadeCol);
+      u.uChalk.value = look.chalk;
+      u.uMel.value = mel ? 1 : 0;
+      if (mel) { u.uMelF.value = mel.f; u.uMelLight.value.copy(mel.light); }
+    }
+    if (this._hair && this._hair.update) this._hair.update(look.hair, look.hairLen);
+
+    const m = this._macro;
+    if (m) {
+      const b = this._material.userData.base;
+      for (const mat of [m.faceMat, m.backMat]) {
+        mat.roughness = Math.max(0.05, Math.min(1, b.roughness + look.rough));
+        // From a distance a raised / sanded surface is mostly its sheen rim.
+        mat.sheen = Math.max(0, Math.min(1, b.sheen + look.sheen * 1.4));
+        mat.sheenRoughness = look.sheenRough != null ? look.sheenRough : b.sheenRoughness;
+        mat.clearcoat = Math.max(0, Math.min(1, b.clearcoat + look.clearcoat));
+        mat.normalScale.set(look.normal, look.normal);
+        mat.sheenColor.copy(mel ? mel.dark : target).lerp(new THREE.Color(1, 1, 1), look.sheenTint);
+        if (look.lift) mat.color.lerp(new THREE.Color(1, 1, 1), look.lift);
+      }
+      if (mel && m.rebake && Math.abs(mel.f - m.melF) > 0.004) {
+        m.melMat.uniforms.uF.value = mel.f;
+        m.rebake('mel', m.melMat);
+        m.melF = mel.f;
+      }
+    }
+  }
+
+  // Set every material's colour from the shown shade (`hex`); a melange
+  // splits the yarn and the macro cloth into its dark fibre colour (the light
+  // fibres come from the dye shader) while everything else takes the mean.
+  _paint(hex, mel) {
+    if (this._material) {
+      setYarnColorHex(this._material, hex);
+      if (mel) this._material.color.copy(mel.dark);
+    }
     if (this._backing) {
       const n = parseInt(String(hex).replace('#', ''), 16);
       const s = this._backing.baseShade;   // keeps the shadow-depth darkening
@@ -813,19 +912,23 @@ export class Knit3D {
       setYarnColorHex(this._pileMaterial, hex);
       this._pileMaterial.color.lerp(new THREE.Color(1, 1, 1), 0.32);
     }
-    if (this._pile && this._pile.setColor) this._pile.setColor(this._material.color);
+    const mean = new THREE.Color(hex);
+    if (this._pile && this._pile.setColor) this._pile.setColor(mean);
     if (this._macro) {
       const m = this._macro;
-      for (const mat of [m.faceMat, m.backMat]) setYarnColorHex(mat, hex);
-      m.edgeMat.color.copy(this._material.color).multiplyScalar(0.78);
-      m.edgeMat.sheenColor.copy(this._material.color).lerp(new THREE.Color(1, 1, 1), 0.4);
+      for (const mat of [m.faceMat, m.backMat]) {
+        setYarnColorHex(mat, hex);
+        if (mel) mat.color.copy(mel.dark);
+      }
+      m.edgeMat.color.copy(mean).multiplyScalar(0.78);
+      m.edgeMat.sheenColor.copy(mean).lerp(new THREE.Color(1, 1, 1), 0.4);
       if (m.napMat) {
-        m.napMat.color.copy(this._material.color).lerp(new THREE.Color(1, 1, 1), m.napAlways ? 0.05 : 0.12).multiplyScalar(m.napLift);
-        m.napMat.sheenColor.copy(this._material.color).lerp(new THREE.Color(1, 1, 1), 0.45);
+        m.napMat.color.copy(mean).lerp(new THREE.Color(1, 1, 1), m.napAlways ? 0.05 : 0.12).multiplyScalar(m.napLift);
+        m.napMat.sheenColor.copy(mean).lerp(new THREE.Color(1, 1, 1), 0.45);
       }
     }
     if (this._hair) {
-      this._hair.material.color.copy(this._material.color).lerp(new THREE.Color(1, 1, 1), 0.16);
+      this._hair.material.color.copy(mean).lerp(new THREE.Color(1, 1, 1), 0.16);
     }
   }
 
@@ -867,6 +970,7 @@ export class Knit3D {
     if (this._pile && this._pile.mesh) this._pile.mesh.visible = t >= 0.5;
     this._syncBacking();
     this._syncMacroBack();
+    this._applyStage(false);
   }
 
   _syncBacking() {
@@ -1022,7 +1126,8 @@ export class Knit3D {
     if (this._macro) {
       const m = this._macro;
       m.front.geometry.dispose(); m.back.geometry.dispose(); m.edge.geometry.dispose();
-      [m.faceMat, m.backMat, m.edgeMat, m.napMat, m.napTex, m.napShade].forEach((x) => { if (x) x.dispose(); });
+      [m.faceMat, m.backMat, m.edgeMat, m.napMat, m.napTex, m.napShade, m.melMat].forEach((x) => { if (x) x.dispose(); });
+      if (m.disposeTile) m.disposeTile();
       m.targets.forEach((t) => t.dispose());
     }
     if (this._textures) this._textures.forEach((t) => t.dispose());

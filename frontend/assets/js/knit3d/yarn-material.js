@@ -183,13 +183,8 @@ export function createYarnMaterial(opts) {
   if (phys) {
     if (typeof phys.roughness === 'number') roughness = phys.roughness;
     if (typeof phys.specular_sheen === 'number') clearcoat = Math.max(clearcoat, phys.specular_sheen * 0.4);
-    switch (phys.texture_modifier) {
-      case 'micro_fuzz': sheen = Math.min(1, sheen + 0.25); roughness = Math.min(1, roughness + 0.06); bump *= 1.6; fuzz = 1.3; break; // peach finish
-      case 'frosting':   roughness = Math.min(1, roughness + 0.04); bump *= 1.2; break;                                            // enzyme wash
-      case 'faded':      sheen = Math.max(0, sheen - 0.2); break;                                                                  // vintage wash
-      case 'fuzz':       sheen = Math.min(1, sheen + 0.2); fuzz = 1.3; break;                                                       // fleece
-      default: break;
-    }
+    // Finish effects (peach, mercerise, …) are applied at runtime by
+    // applyYarnLook, because they switch off in the As-Knit (greige) state.
   }
 
   const material = new THREE.MeshPhysicalMaterial({
@@ -221,6 +216,65 @@ export function createYarnMaterial(opts) {
   material.userData.normalNear = near.normal;
   material.userData.albedoFar = far.albedo;
   material.userData.albedoNear = near.albedo;
+  // The unfinished optics, which applyYarnLook offsets from.
+  material.userData.base = {
+    roughness, sheen, clearcoat, sheenRoughness: material.sheenRoughness,
+  };
+  material.userData.lookNormal = 1;
 
-  return { material, textures: [far.normal, near.normal, far.albedo, near.albedo] };
+  // Melange fibre mask (dye-shader.js): one random value per fibre, along
+  // the same helix as the fibres in the albedo tile.
+  const melField = melangeField(256, (opts.twist && opts.twist.dir === 's') ? -1 : 1, synthetic);
+
+  return { material, melField, textures: [far.normal, near.normal, far.albedo, near.albedo, melField] };
+}
+
+/**
+ * Apply a finish look (finish-profile.js) on top of the unfinished optics.
+ * Safe to call repeatedly (As-Knit ↔ Finished).
+ */
+export function applyYarnLook(material, look) {
+  const b = material.userData.base;
+  if (!b || !look) return;
+  material.roughness = Math.max(0.05, Math.min(1, b.roughness + look.rough));
+  material.sheen = Math.max(0, Math.min(1, b.sheen + look.sheen));
+  material.clearcoat = Math.max(0, Math.min(1, b.clearcoat + look.clearcoat));
+  material.sheenRoughness = look.sheenRough != null ? look.sheenRough : b.sheenRoughness;
+  if (look.sheenTint != null) material.sheenColor.copy(material.color).lerp(new THREE.Color(1, 1, 1), look.sheenTint);
+  material.userData.lookNormal = look.normal;
+  const ns = material.userData.baseNormalScale * (material.userData.lodK || 1) * look.normal;
+  material.normalScale.set(ns, ns);
+}
+
+// Per-fibre random values for the melange mask, drawn as dense, fully
+// overlapping fibre strokes along the twist helix (one tile = one twist turn,
+// as in paintYarnTile). Unfiltered by mipmaps: an averaged value would no
+// longer be any fibre's value.
+function melangeField(size, dir, synthetic) {
+  const c = document.createElement('canvas'); c.width = c.height = size;
+  const ctx = c.getContext('2d');
+  const R = rng(65537);
+  ctx.fillStyle = '#808080'; ctx.fillRect(0, 0, size, size);
+  ctx.lineCap = 'round';
+  // A yarn cross-section holds ~100 fibres: on the visible half of the tile
+  // they are ~1-2 % of the circumference wide each.
+  const n = synthetic ? 2600 : 4200;
+  for (let k = 0; k < n; k++) {
+    const x0 = R() * size, y0 = R() * size;
+    const len = size * (synthetic ? 0.45 + R() * 0.45 : 0.12 + R() * 0.32);
+    const a = Math.PI / 4 + (R() - 0.5) * (synthetic ? 0.04 : 0.16) * Math.PI;
+    const x1 = x0 + dir * Math.cos(a) * len, y1 = y0 + Math.sin(a) * len;
+    const v = (R() * 256) | 0;
+    ctx.strokeStyle = `rgb(${v},${v},${v})`;
+    ctx.lineWidth = (size / 256) * (1.6 + R() * 1.6);
+    for (const ox of [-size, 0, size]) for (const oy of [-size, 0, size]) {
+      ctx.beginPath(); ctx.moveTo(x0 + ox, y0 + oy); ctx.lineTo(x1 + ox, y1 + oy); ctx.stroke();
+    }
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.NoColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.generateMipmaps = false;
+  t.minFilter = THREE.LinearFilter;
+  return t;
 }

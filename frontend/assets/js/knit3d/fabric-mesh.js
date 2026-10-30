@@ -66,10 +66,12 @@ function flattenCrossSection(geo, curve, tubular, radial, inPlane, through) {
 
 // Map u along each tube to ARC LENGTH in twist turns, so one texture tile is
 // one real helix turn of yarn (see yarn-material.js `twistPitch`).
-function arcLengthUVs(geo, curveLength, pitch) {
+// `phase` shifts each yarn's texture start, so neighbouring courses don't
+// line up the same fibres wale after wale (which reads as stripes).
+function arcLengthUVs(geo, curveLength, pitch, phase) {
   const uv = geo.attributes.uv;
   const k = curveLength / Math.max(1e-3, pitch);
-  for (let i = 0; i < uv.count; i++) uv.setX(i, uv.getX(i) * k);
+  for (let i = 0; i < uv.count; i++) uv.setX(i, uv.getX(i) * k + phase);
   uv.needsUpdate = true;
 }
 
@@ -172,6 +174,7 @@ function contactOcclusionColours(geo, g, radius, reach, loopSeed) {
   const count = geo.attributes.position.count;
   const variation = 1 + (hash2(loopSeed, 7) - 0.5) * 0.10;   // ±5% per course
   const col = new Float32Array(count * 3);
+  const expo = new Float32Array(count);   // how exposed a point is to wear (dye-shader.js fade)
   const { minX, minY, minZ, nx, ny, nz, cell, starts, sorted } = g;
   const invReach = 1 / reach;
   for (let v = 0; v < count; v++) {
@@ -203,8 +206,12 @@ function contactOcclusionColours(geo, g, radius, reach, loopSeed) {
     const ao = 1 - Math.min(0.78, occ * 0.24);
     const kk = ao * variation;
     col[o] = kk; col[o + 1] = kk; col[o + 2] = kk;
+    // Abrasion and washing reach the outermost yarn first, on either face:
+    // unoccluded AND facing out of the fabric plane.
+    expo[v] = (1 - Math.min(1, occ * 0.31)) * Math.sqrt(Math.abs(qz));
   }
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  geo.setAttribute('aExposure', new THREE.BufferAttribute(expo, 1));
 }
 
 export function buildFabricMesh(paths, material, opts = {}) {
@@ -238,7 +245,8 @@ export function buildFabricMesh(paths, material, opts = {}) {
     const geo = new THREE.TubeGeometry(curve, tubular, r, radial, false);
     flattenCrossSection(geo, curve, tubular, radial, 1.10, 0.84);
     if (slub) applySlub(geo, curve, tubular, radial, hash2(pi, 1));
-    arcLengthUVs(geo, length, pitch * (r / radius));   // same twist angle on a thicker yarn
+    const phase = opts.uvPhase ? opts.uvPhase(path, pi) : hash2(pi, 13) * 17;
+    arcLengthUVs(geo, length, pitch * (r / radius), phase);   // same twist angle on a thicker yarn
     geo.computeTangents();   // anisotropic specular runs along the yarn
     const samples = Math.max(8, Math.ceil(length / (radius * 0.8)));
     for (const p of curve.getSpacedPoints(samples)) axis.push(p.x, p.y, p.z);

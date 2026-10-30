@@ -997,6 +997,15 @@ class FabricVisualizer {
     return 'cotton';
   }
 
+  // Melange / heather / marl: a yarn spun from a mix of differently coloured
+  // fibres — from the shade choice or the resolved colour's name.
+  _isMelange() {
+    const inp = this.result.input || {};
+    const s = [inp.color_shade, inp.effective_shade, (this.result.color || {}).shade,
+      (this.result.color_resolved || {}).name].filter(Boolean).join(' ').toLowerCase();
+    return /melange|heather|marl/.test(s);
+  }
+
   _getSheenModel(fiberType) {
     if (['polyester', 'nylon', 'silk'].includes(fiberType)) return 'high_sheen';
     if (['modal', 'viscose', 'acrylic'].includes(fiberType)) return 'gradient';
@@ -2264,6 +2273,10 @@ class FabricVisualizer {
       physics: opts.physics, density: opts.density, twist: this._yarnTwist(),
       shrinkage: opts.shrinkage, pattern: opts.pattern,
       gsm: opts.gsm, elastanePct: (this.result.yarn || {}).elastane_pct || 0,
+      // Dyeing route (pigment / garment wash wear differently from reactive)
+      // and whether the yarn is a melange (fibres coloured before spinning).
+      dyeMethod: (this.result.wet_processing || {}).dyeing_method || null,
+      melange: this._isMelange(),
     };
 
     import('/assets/js/knit3d/index.js?v=20260608g').then(({ Knit3D, LIGHT_PRESETS, LIGHT_PRESET_ORDER }) => {

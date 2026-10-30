@@ -24,6 +24,8 @@
 // the interactive pull planned for later; here elastane just compacts and
 // stiffens the fabric slightly, which is what it does at rest.
 
+import { FINISH_LOOK } from './finish-profile.js?v=20260608g';
+
 // Apparent density (g/cm³) and bending stiffness per thickness (relative to
 // a single jersey) for each structure.
 const STRUCTURE = {
@@ -55,8 +57,8 @@ const FIBRE = {
   spandex:   { k: 0.50, rho: 0.80 },
 };
 
-// Finishes soften the hand (engine texture_modifier).
-const FINISH_K = { micro_fuzz: 0.80, frosting: 0.90, faded: 0.85, fuzz: 0.90 };
+// Finishes change the hand: bendK scales stiffness (silicone 0.65 … resin
+// 1.8), crease scales the fold radius (resin creases sharply, like paper).
 
 // K for a single jersey, chosen so a 160 GSM cotton jersey (t ≈ 0.53 mm)
 // lands on c ≈ 1.6 cm, a typical measured value.
@@ -85,7 +87,8 @@ export function fabricBody(o) {
   const s = STRUCTURE[kind];
   const f = FIBRE[o.fiberType] || FIBRE.cotton;
   const el = Math.max(0, Math.min(30, Number(o.elastanePct) || 0));
-  const finishK = FINISH_K[o.physics && o.physics.texture_modifier] || 1;
+  const fin = FINISH_LOOK[o.physics && o.physics.finish_id] || FINISH_LOOK.none;
+  const finishK = fin.bendK;
 
   const rho = s.rho * (0.85 + 0.15 * f.rho) * (1 + el * 0.012);   // g/cm³
   const tMm = gsm / (rho * 1000);
@@ -109,7 +112,7 @@ export function fabricBody(o) {
     bendingCm: cCm,
     // A fold turned back under its own weight bends with a radius of about a
     // third of the bending length, and never tighter than the cloth is thick.
-    foldRadiusCm: 0.32 * cCm + 0.1 * tMm,
+    foldRadiusCm: (0.32 * cCm) * fin.crease + 0.1 * tMm,
     napMm,
     // A cloth lying loose settles into waves a few bending lengths long.
     waveLenCm: 3.6 * cCm,

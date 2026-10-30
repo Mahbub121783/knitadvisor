@@ -37,7 +37,30 @@ function bakeTarget(w, h, aniso) {
  * The back pass looks along +z, so its image is already in the frame of a
  * sheet whose u runs along -x (see clothGeometry's back mesh).
  */
-export function bakeStructure(renderer, object, win, pxPerUnit) {
+// Exposure (fabric-mesh.js aExposure) as a grey value — where wear shows.
+const exposureMaterial = () => new THREE.ShaderMaterial({
+  side: THREE.DoubleSide,
+  vertexShader: 'attribute float aExposure; varying float vE; void main(){ vE = aExposure; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: 'varying float vE; void main(){ gl_FragColor = vec4(vE, vE, vE, 1.0); }',
+});
+
+// Melange: the per-fibre random field (yarn-material.js melangeField) read
+// through each yarn's own UVs and thresholded — 1 where a fibre is light.
+// Thresholding here (not in the cloth shader) lets the baked map's mipmaps
+// average to the true light fraction at a distance.
+export const melangeMaterial = (field) => new THREE.ShaderMaterial({
+  side: THREE.DoubleSide,
+  uniforms: { uField: { value: field }, uF: { value: 0.5 } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: 'uniform sampler2D uField; uniform float uF; varying vec2 vUv; void main(){ float l = texture2D(uField, vUv).r < uF ? 1.0 : 0.0; gl_FragColor = vec4(l, l, l, 1.0); }',
+});
+
+/**
+ * Bakes the passes of one structure repeat (see bakeStructure) and returns a
+ * `rebake(name, material, clear)` that re-renders one pass into the same
+ * textures — used when the melange fraction changes with the shade.
+ */
+export function bakeStructure(renderer, object, win, pxPerUnit, opts = {}) {
   const W = Math.max(64, Math.min(2048, Math.round(win.w * pxPerUnit)));
   const H = Math.max(64, Math.min(2048, Math.round(win.h * pxPerUnit)));
   const scene = new THREE.Scene();
@@ -46,17 +69,18 @@ export function bakeStructure(renderer, object, win, pxPerUnit) {
   const cam = new THREE.OrthographicCamera(-win.w / 2, win.w / 2, win.h / 2, -win.h / 2, 0.1, 100);
   const normalMat = new THREE.MeshNormalMaterial({ side: THREE.DoubleSide });
   const aoMat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
+  const expMat = exposureMaterial();
   const flat = new THREE.Color(0.5, 0.5, 1.0);
   const gap = new THREE.Color(0.1, 0.1, 0.1);
+  const black = new THREE.Color(0, 0, 0);
   const aniso = renderer.capabilities.getMaxAnisotropy();
 
-  const prevTarget = renderer.getRenderTarget();
-  const prevClear = renderer.getClearColor(new THREE.Color());
-  const prevAlpha = renderer.getClearAlpha();
   const targets = [];
-  const pass = (fromBack, mat, clear) => {
-    const t = bakeTarget(W, H, aniso);
-    targets.push(t);
+  const byName = {};
+  const render = (t, fromBack, mat, clear) => {
+    const prevTarget = renderer.getRenderTarget();
+    const prevClear = renderer.getClearColor(new THREE.Color());
+    const prevAlpha = renderer.getClearAlpha();
     cam.position.set(cx, cy, fromBack ? -50 : 50);
     cam.up.set(0, 1, 0);
     cam.lookAt(cx, cy, 0);
@@ -66,18 +90,39 @@ export function bakeStructure(renderer, object, win, pxPerUnit) {
     renderer.setClearColor(clear, 1);
     renderer.clear();
     renderer.render(scene, cam);
+    renderer.setRenderTarget(prevTarget);
+    renderer.setClearColor(prevClear, prevAlpha);
+  };
+  const pass = (name, fromBack, mat, clear) => {
+    const t = bakeTarget(W, H, aniso);
+    targets.push(t);
+    (byName[name] = byName[name] || {})[fromBack ? 'back' : 'front'] = t;
+    render(t, fromBack, mat, clear);
     return t.texture;
   };
-  const out = {
-    front: { normal: pass(false, normalMat, flat), ao: pass(false, aoMat, gap) },
-    back: { normal: pass(true, normalMat, flat), ao: pass(true, aoMat, gap) },
-    targets,
-  };
-  renderer.setRenderTarget(prevTarget);
-  renderer.setClearColor(prevClear, prevAlpha);
-  scene.remove(object);
+  const out = { front: {}, back: {}, targets };
+  for (const side of ['front', 'back']) {
+    const b = side === 'back';
+    out[side].normal = pass('normal', b, normalMat, flat);
+    out[side].ao = pass('ao', b, aoMat, gap);
+    out[side].exp = pass('exp', b, expMat, black);
+    if (opts.melMaterial) out[side].mel = pass('mel', b, opts.melMaterial, black);
+  }
   normalMat.dispose();
   aoMat.dispose();
+  expMat.dispose();
+
+  if (opts.keep) {
+    out.rebake = (name, mat, clear = black) => {
+      const t = byName[name];
+      if (!t) return;
+      render(t.front, false, mat, clear);
+      render(t.back, true, mat, clear);
+    };
+    out.release = () => { scene.remove(object); };
+  } else {
+    scene.remove(object);
+  }
   return out;
 }
 

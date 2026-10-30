@@ -732,6 +732,20 @@
                   </select>
                 </div>
                 <div class="form-group">
+                  <label class="form-label" for="surface-finish-input">Surface Finish <span class="text-dim">(look &amp; hand)</span></label>
+                  <select id="surface-finish-input" class="form-select">
+                    <option value="">— none —</option>
+                    <option value="peach_finish">Peach / Sueded</option>
+                    <option value="brushed">Brushed / Raised</option>
+                    <option value="enzyme_wash">Enzyme / Bio-wash</option>
+                    <option value="vintage_wash">Vintage Wash</option>
+                    <option value="silicone">Silicone Softener</option>
+                    <option value="mercerized">Mercerized</option>
+                    <option value="singed">Singed</option>
+                    <option value="resin">Resin / Stiff</option>
+                  </select>
+                </div>
+                <div class="form-group">
                   <label class="form-label" for="twist-input">Twist Multiplier (αe) <span class="text-dim">opt.</span></label>
                   <input type="number" id="twist-input" class="form-input" placeholder="auto 3.75" min="2.5" max="5.5" step="0.05">
                 </div>
@@ -1003,6 +1017,7 @@ const PREFILL_FIELD_MAP = {
   feeder_type: 'feeder-type-input',
   finishing_route: 'finishing-route-input',
   dyeing_method: 'dyeing-method-input',
+  surface_finish: 'surface-finish-input',
   twist_multiplier: 'twist-input',
   yarn_price_type: 'yarn-price-type',
   denier: 'denier-input',
@@ -1022,7 +1037,7 @@ const PREFILL_CHECKBOX_MAP = {
 const PREFILL_OPENS_OPTIONAL = [
   'dia', 'gauge', 'rpm', 'stitch_length', 'feeders', 'target_width',
   'fiber_grade', 'spinning_system', 'yarn_form', 'finishing_route',
-  'dyeing_method', 'twist_multiplier', 'yarn_price_type',
+  'dyeing_method', 'surface_finish', 'twist_multiplier', 'yarn_price_type',
 ];
 
 function applyPrefill(params) {
@@ -1664,6 +1679,7 @@ async function doCalculate() {
     feeder_type: document.getElementById('feeder-type-input').value || undefined,
     finishing_route: document.getElementById('finishing-route-input').value || undefined,
     dyeing_method: document.getElementById('dyeing-method-input').value || undefined,
+    surface_finish: document.getElementById('surface-finish-input').value || undefined,
     twist_multiplier: parseFloat(document.getElementById('twist-input').value) || undefined,
     yarn_price_type: document.getElementById('yarn-price-type').value || undefined,
     yarn_white: document.getElementById('yarn-white').checked || undefined,

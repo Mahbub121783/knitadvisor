@@ -74,7 +74,7 @@ const { matchFactory, recommendCountFromGSM } = require('./domain/factory-match'
 const { matchRiskAssessment } = require('./domain/risk-assessment');
 const { gaugeFromBulkData, estimateProcessLoss, greyRequirementForFinished } = require('./catalog/production-data');
 const { analyzeWetProcessing, greigeGsmTarget, resolveFamily } = require('./domain/wet-processing-engine');
-const { applyFabricPhysics } = require('./domain/fabric-physics');
+const { applyFabricPhysics, resolveFinishId, finishProcess } = require('./domain/fabric-physics');
 const { fibreAdvisory } = require('./domain/fibre-advisory');
 const { classifySource } = require('./domain/source-confidence');
 
@@ -91,7 +91,7 @@ function calculate(params) {
           color_input,
           target_width, yarn_type, twist_multiplier, finishing_route,
           fiber_grade, spinning_system, yarn_form, slub_thickness, slub_length_cm, slub_spacing_cm,
-          denier, filaments, elastane_denier, elastane_pct, dyeing_method,
+          denier, filaments, elastane_denier, elastane_pct, dyeing_method, surface_finish,
           light_source, illuminant, shade_depth_pct } = normalizeParams(params);
 
   if (!fabric) return { error: 'fabric is required', code: 'MISSING_FABRIC' };
@@ -216,12 +216,9 @@ function calculate(params) {
     else if (/2\s*[x×]\s*2|wide\s*rib/.test(fid)) constructionId = 'rib_2x2';
     else if (/rib/.test(fid)) constructionId = 'rib_1x1';
 
-    // map finishing_route → FINISH_PHYSICS key
-    const fr = (finishing_route || '').toString().toLowerCase();
-    let finishId = 'none';
-    if (/vintage/.test(fr)) finishId = 'vintage_wash';
-    else if (/peach|sueded|brush/.test(fr)) finishId = 'peach_finish';
-    else if (/enzyme|garment\s*wash|wash|bio/.test(fr)) finishId = 'enzyme_wash';
+    // surface_finish is the explicit choice; otherwise fall back to keywords
+    // in finishing_route (older saved inputs carried the finish there).
+    const finishId = resolveFinishId(surface_finish, finishing_route);
 
     const lightSource = (light_source || illuminant || 'D65');
     // use the already-parsed fibre map ({cotton:60,polyester:40}) so blends shift correctly
@@ -747,6 +744,7 @@ function calculate(params) {
     if (cat === 'fleece' || /fleece|terry/.test(fid)) procs.push('brush');
     if (finishing_route === 'garment_wash' || /wash/.test(finishing_route || '')) procs.push('garment_wash');
     if (finishing_route === 'peach' || /peach|sueded/.test(finishing_route || '')) procs.push('peach');
+    { const sp = surface_finish ? finishProcess(resolveFinishId(surface_finish, null)) : null; if (sp && !procs.includes(sp)) procs.push(sp); }
     processLoss = estimateProcessLoss(seg, procs);
     // Worked example: grey to book for 100 kg finished.
     processLoss.example_100kg = greyRequirementForFinished(100, seg, procs);
@@ -767,6 +765,7 @@ function calculate(params) {
     if (cat2 === 'fleece' || /fleece|terry/.test(fid2)) wpProcs.push('brush');
     if (finishing_route === 'garment_wash' || /wash/.test(finishing_route || '')) wpProcs.push('garment_wash');
     if (finishing_route === 'peach' || /peach|sueded/.test(finishing_route || '')) wpProcs.push('peach');
+    { const sp = surface_finish ? finishProcess(resolveFinishId(surface_finish, null)) : null; if (sp && !wpProcs.includes(sp)) wpProcs.push(sp); }
     wetProcessing = analyzeWetProcessing({
       fabric: fabricDef.id,
       category: fabricDef.category,
@@ -808,7 +807,8 @@ function calculate(params) {
       // The wet card is rendered for this calculation, so the advisory hands it
       // the topics they share instead of printing them twice.
       wet_card_present: !!(wetProcessing && wetProcessing.ok),
-      mercerised: /mercer/i.test(String(finishing_route || '')) || wpProcs.includes('mercerizing'),
+      mercerised: /mercer/i.test(String(finishing_route || '')) || wpProcs.includes('mercerizing')
+        || resolveFinishId(surface_finish, null) === 'mercerized',
     });
     if (fibreAdvice && fibreAdvice.ok) {
       const worst = fibreAdvice.findings[0];
@@ -1291,7 +1291,7 @@ const ENGINE_INPUTS = Object.freeze([
   'yarn_type', 'twist_multiplier', 'fiber_grade', 'spinning_system', 'yarn_form',
   'slub_thickness', 'slub_length_cm', 'slub_spacing_cm',
   // wet processing
-  'finishing_route', 'dyeing_method',
+  'finishing_route', 'dyeing_method', 'surface_finish',
   // costing
   'yarn_price_type', 'yarn_white', 'yarn_organic', 'yarn_organic_type',
   'yarn_ecovero', 'yarn_at_sight', 'feeder_type',
@@ -1343,6 +1343,11 @@ function normalizeParams(p) {
     elastane_pct: p.elastane_pct ? parseFloat(p.elastane_pct) : null,
     // Wet-processing critical path: dyeing method (reactive default)
     dyeing_method: p.dyeing_method ? String(p.dyeing_method).trim() : null,
+    // Surface finish (peach, brushed, enzyme, silicone, mercerized, singed,
+    // resin, vintage wash) — separate from finishing_route, which is the
+    // DIMENSIONAL route (relaxed / compacted / heat-set): a fabric can be
+    // both compacted and peached.
+    surface_finish: p.surface_finish ? String(p.surface_finish).trim().toLowerCase() : null,
     // Continuous dye-depth override (% OWF) — replaces the 6-tier shade
     // button with a real dye-concentration value when provided.
     shade_depth_pct: (p.shade_depth_pct !== undefined && p.shade_depth_pct !== null && p.shade_depth_pct !== '')
