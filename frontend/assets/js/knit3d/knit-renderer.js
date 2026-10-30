@@ -14,6 +14,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 import { buildYarnPaths, floatAnchorsFromPaths, structureRepeat } from './topology-builder.js?v=20260608g';
 import { bakeStructure, clothGeometry, fibreSurfaceTexture, wavePhase } from './macro.js?v=20260608g';
+import { fabricBody } from './fabric-body.js?v=20260608g';
 import { buildNap } from './nap.js?v=20260608g';
 import { fibreGeometry } from './hairiness.js?v=20260608g';
 import { createYarnMaterial, setYarnColorHex, twistPitch } from './yarn-material.js?v=20260608g';
@@ -173,6 +174,11 @@ export class Knit3D {
     // Real stitch density (GSM·gauge·loop-length) drives loop height + how many
     // stitches to show, so a tight 350gsm reads denser than a loose 150gsm.
     const con = this.opts.construction || {};
+    this.body = fabricBody({
+      gsm: this.opts.gsm, construction: con, fiberType: this.opts.fiberType,
+      elastanePct: this.opts.elastanePct, physics: this.opts.physics,
+      countNe: this.opts.countNe, loopNe: this.opts.loopNe,
+    });
     const DENSITY_DEFAULTS = { aspect: 1.22, scalar: 1, wpc: 9, tex: 20 };
     // A denier-based warp-knit fabric (tricot/spacer/...) has no real
     // wales/courses-per-cm to report, so the caller's density.aspect/scalar
@@ -366,20 +372,31 @@ export class Knit3D {
     const cm = wpc * rep.xPitch;
     const S = 24;                                // cloth edge, cm
     const scalar = Number.isFinite(density.scalar) ? density.scalar : 1;
-    const stiff = Math.max(0, Math.min(1.2, scalar - 0.7));
+    const body = this.body;
+    // The near-right corner is turned back over itself. The fold line stays
+    // 5.5 cm out from the dive point (origin) whatever the fabric, and the
+    // corner is placed so the flat flap always reaches 2.5 cm past the crest
+    // — a stiff fabric's wide crest then doesn't swallow the flap, and the
+    // flap's tip never reaches the origin, where the zoom hands over to the
+    // loop model of the FACE.
+    const FOLD_D = 5.5, FLAP = 2.5;
+    const cornerS = FOLD_D + Math.PI * body.foldRadiusCm + FLAP;     // along the fold normal
+    const a = cornerS / Math.SQRT2;                                   // corner at (a, -a)
     const geo = clothGeometry({
-      // The dive point (origin) sits off-centre so the near-right corner,
-      // turned back over itself, comes into the default view (camera looks
-      // from -y) without its flap reaching the origin.
-      minX: -0.7 * S * cm, maxX: 0.3 * S * cm, minY: -0.3 * S * cm, maxY: 0.7 * S * cm,
+      minX: -(S - a) * cm, maxX: a * cm, minY: -a * cm, maxY: (S - a) * cm,
       seg: 0.12 * cm,
       tileW: win.w, tileH: win.h, uOff: center.x - win.x0, vOff: center.y - win.y0,
+      // Fold radius, thickness and drape waves all come from the fabric
+      // body (fabric-body.js): GSM, structure, fibre and finish.
       fold: {
-        n: { x: Math.SQRT1_2, y: -Math.SQRT1_2 }, d0: 5.5 * cm,
-        r: (0.35 + 0.22 * stiff) * cm,
-        t: (0.08 + 0.06 * stiff) * cm,          // fabric thickness the flap lies at
+        n: { x: Math.SQRT1_2, y: -Math.SQRT1_2 }, d0: FOLD_D * cm,
+        r: body.foldRadiusCm * cm,
+        t: (body.thicknessMm / 10) * cm,
       },
-      wave: { amp: 0.2 * (1.25 - 0.3 * stiff) * cm, len: 7 * cm, flatR: 2.2 * cm, rampR: 5 * cm, phase: wavePhase(wpc * 7 + scalar) },
+      wave: {
+        amp: body.waveAmpCm * cm, len: body.waveLenCm * cm,
+        flatR: 2.2 * cm, rampR: 5 * cm, phase: wavePhase(wpc * 7 + scalar),
+      },
     });
 
     const aniso = this.renderer.capabilities.getMaxAnisotropy();
@@ -418,7 +435,8 @@ export class Knit3D {
       napMat = new THREE.MeshPhysicalMaterial({
         color: y.color.clone().lerp(new THREE.Color(1, 1, 1), kind === 'nap' ? 0.12 : 0.05).multiplyScalar(lift),
         map: surf.shade,
-        normalMap: napTex, normalScale: new THREE.Vector2(0.8, 0.8),
+        // a taller, loftier pile casts deeper relief
+        normalMap: napTex, normalScale: new THREE.Vector2(...Array(2).fill(Math.min(1.3, 0.5 + 0.3 * (body.napMm || 1)))),
         roughness: 1, metalness: 0,
         sheen: kind === 'nap' ? 1 : 0.6, sheenRoughness: kind === 'nap' ? 0.5 : 0.7,
         sheenColor: y.color.clone().lerp(new THREE.Color(1, 1, 1), 0.45),
@@ -426,19 +444,29 @@ export class Knit3D {
       napMat.shadowSide = THREE.DoubleSide;
     }
 
+    // The cut edge: the yarn mass seen end-on, a little darker and fully
+    // matte; on a pile fabric it carries the same fuzz as the back.
+    const edgeMat = new THREE.MeshPhysicalMaterial({
+      color: y.color.clone().multiplyScalar(0.78), roughness: 1, metalness: 0,
+      sheen: 1, sheenRoughness: 0.6, sheenColor: y.color.clone().lerp(new THREE.Color(1, 1, 1), 0.4),
+      side: THREE.DoubleSide,
+    });
+
     const front = new THREE.Mesh(geo.front, faceMat);
     const back = new THREE.Mesh(geo.back, backMat);
+    const edge = new THREE.Mesh(geo.edge, edgeMat);
     if (this._shadows) {
       front.castShadow = true; front.receiveShadow = true;
       back.receiveShadow = true;
+      edge.castShadow = true;
     }
     const macroGroup = new THREE.Group();
-    macroGroup.add(front, back);
+    macroGroup.add(front, back, edge);
     this._pivot.add(macroGroup);
 
     const box = new THREE.Box3().setFromObject(macroGroup);
     this._macro = {
-      group: macroGroup, front, back, faceMat, backMat, napMat, napTex,
+      group: macroGroup, front, back, edge, edgeMat, faceMat, backMat, napMat, napTex,
       napAlways: con.pile === 'loop',
       napLift: con.pile === 'loop' ? 1.45 : 1.6, napShade: this._napShade || null,
       targets: bake.targets, size: box.getSize(new THREE.Vector3()),
@@ -666,12 +694,22 @@ export class Knit3D {
       points, anchors,
       yarnRadius: this._fleecyRadius,
       color: this._material.color,
-      napLength: this._fleecyRadius * 3.2 * pileParams.lengthScale,
+      // The pile's real height above the knitted base (fabric-body.js), in
+      // loop-model units (one wale = 10/wpc mm) — a 400 GSM fleece's nap is
+      // ~2.3 mm, a light one under 1 mm.
+      napLength: this._napUnits(pileParams),
       fibreGeometry: this._napFibre,
       shells: this._shadows ? 16 : 10,              // lighter on the low-power tier
     });
     group.add(nap.group);
     this._pile = { mesh: nap.group, geometry: this._napFibre, dispose: nap.dispose, setColor: nap.setColor };
+  }
+
+  _napUnits(pileParams) {
+    const wpc = this.opts.density && this.opts.density.wpc;
+    const fallback = this._fleecyRadius * 3.2 * pileParams.lengthScale;
+    if (!(wpc > 0) || !this.body || !(this.body.napMm > 0)) return fallback;
+    return Math.max(fallback * 0.6, Math.min(this.body.napMm * wpc / 10, this._fleecyRadius * 14));
   }
 
   _addPile(group, box, pileParams, floatAnchors) {
@@ -779,6 +817,8 @@ export class Knit3D {
     if (this._macro) {
       const m = this._macro;
       for (const mat of [m.faceMat, m.backMat]) setYarnColorHex(mat, hex);
+      m.edgeMat.color.copy(this._material.color).multiplyScalar(0.78);
+      m.edgeMat.sheenColor.copy(this._material.color).lerp(new THREE.Color(1, 1, 1), 0.4);
       if (m.napMat) {
         m.napMat.color.copy(this._material.color).lerp(new THREE.Color(1, 1, 1), m.napAlways ? 0.05 : 0.12).multiplyScalar(m.napLift);
         m.napMat.sheenColor.copy(this._material.color).lerp(new THREE.Color(1, 1, 1), 0.45);
@@ -981,8 +1021,8 @@ export class Knit3D {
     if (this._hair) this._hair.material.dispose();
     if (this._macro) {
       const m = this._macro;
-      m.front.geometry.dispose(); m.back.geometry.dispose();
-      [m.faceMat, m.backMat, m.napMat, m.napTex, m.napShade].forEach((x) => { if (x) x.dispose(); });
+      m.front.geometry.dispose(); m.back.geometry.dispose(); m.edge.geometry.dispose();
+      [m.faceMat, m.backMat, m.edgeMat, m.napMat, m.napTex, m.napShade].forEach((x) => { if (x) x.dispose(); });
       m.targets.forEach((t) => t.dispose());
     }
     if (this._textures) this._textures.forEach((t) => t.dispose());

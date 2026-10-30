@@ -1337,8 +1337,13 @@ class FabricVisualizer {
     const d = opts.density;
     const pitch = d && d.wpc && d.cpc
       ? ` · ${(10 / d.wpc).toFixed(2)}×${(10 / d.cpc).toFixed(2)}mm/stitch` : '';
+    // Fabric body (3D view only): estimated thickness and bending length —
+    // labelled as estimates, the engine measures neither.
+    const body = this.activeTab === 'threed' && this._fabric3d && this._fabric3d.body;
+    const bodyTxt = body
+      ? ` · ≈${body.thicknessMm.toFixed(1)} mm thick, bending length ≈${body.bendingCm.toFixed(1)} cm (est.)` : '';
     info.textContent =
-      `Finished ${opts.construction.label} · ${opts.gsm} GSM · ${opts.countNe} Ne ${opts.fiberType} · TF ${typeof tf === 'number' ? tf.toFixed(1) : tf}${pitch} · ${colorName}`;
+      `Finished ${opts.construction.label} · ${opts.gsm} GSM · ${opts.countNe} Ne ${opts.fiberType} · TF ${typeof tf === 'number' ? tf.toFixed(1) : tf}${pitch} · ${colorName}${bodyTxt}`;
   }
 
   // ─────────────────────────────────────────────────────────
@@ -2258,6 +2263,7 @@ class FabricVisualizer {
       tf: opts.tf, fiberType: opts.fiberType, sheen: opts.sheen, sample, sampleBack,
       physics: opts.physics, density: opts.density, twist: this._yarnTwist(),
       shrinkage: opts.shrinkage, pattern: opts.pattern,
+      gsm: opts.gsm, elastanePct: (this.result.yarn || {}).elastane_pct || 0,
     };
 
     import('/assets/js/knit3d/index.js?v=20260608g').then(({ Knit3D, LIGHT_PRESETS, LIGHT_PRESET_ORDER }) => {

@@ -152,7 +152,9 @@ export function buildNap(p) {
   const napColor = p.color.clone().lerp(new THREE.Color(1, 1, 1), 0.12);
   const tinted = [];                       // [material, brightness] for setColor
   const SHELLS = p.shells || 16;
-  const lean = p.napLength * 0.45;                               // laid in the brushing direction (down the wale)
+  // laid slightly in the brushing direction (down the wale); capped so a tall
+  // pile stands up rather than being combed into long streaks
+  const lean = Math.min(p.napLength * 0.45, p.yarnRadius * 1.4);
   for (let s = 0; s < SHELLS; s++) {
     const f = (s + 1) / SHELLS;
     const shade = 0.5 + 0.5 * Math.pow(f, 0.6);
@@ -195,7 +197,9 @@ export function buildNap(p) {
         a.z - p.yarnRadius * 0.6,
       );
       dummy.quaternion.setFromUnitVectors(up, dir);
-      dummy.scale.setScalar(p.napLength * (0.8 + hash2(i, 55) * 1.4));
+      // A stray is one fibre: its size does not grow with pile height (a
+      // taller nap is more fibre, not fatter fibre) — the shells carry height.
+      dummy.scale.setScalar(Math.min(p.napLength, p.yarnRadius * 3.2) * (0.8 + hash2(i, 55) * 1.4));
       dummy.updateMatrix();
       mesh.setMatrixAt(i, dummy.matrix);
     }

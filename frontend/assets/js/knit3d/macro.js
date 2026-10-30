@@ -142,7 +142,7 @@ export function clothGeometry(p) {
           const e = s - L;
           X = bx - n.x * e;
           Y = by - n.y * e;
-          const rest = sheetZ(X, Y) + t;
+          const rest = sheetZ(X, Y) + t * 1.04;     // mid-surfaces one thickness apart
           Z = rest + (2 * r - rest) * (1 - smooth(0, 5 * r, e));
         }
       }
@@ -157,15 +157,58 @@ export function clothGeometry(p) {
       idxB.push(a, c, b, b, c, d);
     }
   }
-  const make = (uv, idx) => {
+
+  // The cloth has a real thickness t: the face surface sits t/2 out along the
+  // mid-surface normal, the back surface t/2 in, and a strip closes the cut
+  // edges. So a thick fleece folds round a fat, rounded crest and shows a
+  // visible edge, while a thin jersey folds into a sharp, thin one.
+  const mid = new THREE.BufferGeometry();
+  mid.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  mid.setIndex(idxF);
+  mid.computeVertexNormals();
+  const nrm = mid.attributes.normal.array;
+  const posF = new Float32Array(count * 3), posB = new Float32Array(count * 3);
+  for (let k = 0; k < count * 3; k++) {
+    posF[k] = pos[k] + nrm[k] * t * 0.5;
+    posB[k] = pos[k] - nrm[k] * t * 0.5;
+  }
+  mid.dispose();
+  const make = (p3, uv, idx) => {
     const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(pos.slice(), 3));
+    g.setAttribute('position', new THREE.BufferAttribute(p3, 3));
     g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
     g.setIndex(idx);
     g.computeVertexNormals();
     return g;
   };
-  return { front: make(uvF, idxF), back: make(uvB, idxB) };
+
+  // Edge strip round the perimeter (face edge → back edge).
+  const ring = [];
+  for (let i = 0; i <= nxs; i++) ring.push(i);
+  for (let j = 1; j <= nys; j++) ring.push(j * (nxs + 1) + nxs);
+  for (let i = nxs - 1; i >= 0; i--) ring.push(nys * (nxs + 1) + i);
+  for (let j = nys - 1; j >= 1; j--) ring.push(j * (nxs + 1));
+  const ep = new Float32Array(ring.length * 2 * 3);
+  const euv = new Float32Array(ring.length * 2 * 2);
+  ring.forEach((v, i) => {
+    for (let a = 0; a < 3; a++) {
+      ep[(i * 2) * 3 + a] = posF[v * 3 + a];
+      ep[(i * 2 + 1) * 3 + a] = posB[v * 3 + a];
+    }
+    euv[i * 4] = i; euv[i * 4 + 1] = 0; euv[i * 4 + 2] = i; euv[i * 4 + 3] = 1;
+  });
+  const eidx = [];
+  for (let i = 0; i < ring.length; i++) {
+    const a = i * 2, b = ((i + 1) % ring.length) * 2;
+    eidx.push(a, a + 1, b, b, a + 1, b + 1);
+  }
+  const edge = new THREE.BufferGeometry();
+  edge.setAttribute('position', new THREE.BufferAttribute(ep, 3));
+  edge.setAttribute('uv', new THREE.BufferAttribute(euv, 2));
+  edge.setIndex(eidx);
+  edge.computeVertexNormals();
+
+  return { front: make(posF, uvF, idxF), back: make(posB, uvB, idxB), edge };
 }
 
 // ── Surface fibre textures (finished backs) ─────────────────────────────────
