@@ -1319,6 +1319,31 @@ class FabricVisualizer {
     return out;
   }
 
+  // The engine's piqué analysis, as the 3D view uses it. Density comes from
+  // the engine too: it solves the courses from the requested GSM with the
+  // tucks' wale spread, where the generic Munden model here treats a piqué
+  // as plain jersey. Aspect is capped where the loop model's fixed loop
+  // shape would overlap three courses deep.
+  _piqueGeom() {
+    const q = this.result.pique;
+    if (!q || !q.geometry || !q.density) return null;
+    const g = q.geometry, dn = q.density;
+    const base = this._stitchDensity(this._detectConstruction());
+    const wpc = dn.wales_per_cm, cpc = dn.courses_per_cm;
+    const density = (wpc > 0 && cpc > 0)
+      ? { ...base, wpc, cpc, aspect: Math.max(0.9, Math.min(1.75, cpc / wpc)) }
+      : base;
+    return {
+      reliefD: g.relief_yarn_diameters,
+      lean: g.wale_lean,
+      alpha: g.course_compression_alpha,
+      showBack: q.selling_face === 'technical_back',
+      double: q.bed === 'double',
+      density,
+      cell: q.cell, reliefMm: g.relief_mm,
+    };
+  }
+
   // Yarn twist for the helix bump: direction (S/Z) + twist multiplier (TPI feel).
   _yarnTwist() {
     const y = this.result.yarn || {};
@@ -1351,8 +1376,11 @@ class FabricVisualizer {
     const body = this.activeTab === 'threed' && this._fabric3d && this._fabric3d.body;
     const bodyTxt = body
       ? ` · ≈${body.thicknessMm.toFixed(1)} mm thick, bending length ≈${body.bendingCm.toFixed(1)} cm (est.)` : '';
+    const pq = this.activeTab === 'threed' && this.result.pique;
+    const piqueTxt = pq && pq.cell
+      ? ` · ${pq.selling_face === 'technical_back' ? 'showing the selling face (technical back) · ' : ''}cell ${pq.cell.width_mm}×${pq.cell.height_mm} mm, ${pq.geometry.relief_mm} mm deep (est.)` : '';
     info.textContent =
-      `Finished ${opts.construction.label} · ${opts.gsm} GSM · ${opts.countNe} Ne ${opts.fiberType} · TF ${typeof tf === 'number' ? tf.toFixed(1) : tf}${pitch} · ${colorName}${bodyTxt}`;
+      `Finished ${opts.construction.label} · ${opts.gsm} GSM · ${opts.countNe} Ne ${opts.fiberType} · TF ${typeof tf === 'number' ? tf.toFixed(1) : tf}${pitch} · ${colorName}${bodyTxt}${piqueTxt}`;
   }
 
   // ─────────────────────────────────────────────────────────
@@ -1405,7 +1433,7 @@ class FabricVisualizer {
 
     // Double-knit / interlock family
     if (has('interlock'))
-      return { type: 'interlock', base: 'double', label: 'interlock', mesh: false, brush: false };
+      return { type: 'interlock', base: 'double', label: has('pique', 'piqué') ? (fabric.name || 'double piqué') : 'interlock', mesh: false, brush: false };
     if (has('pique', 'piqué', 'lacoste')) {
       let plabel = 'piqué';
       if (has('honeycomb')) plabel = 'honeycomb piqué';
@@ -2241,13 +2269,22 @@ class FabricVisualizer {
       return;
     }
 
+    // A piqué sold on its technical back (every single-bed piqué, and the
+    // double-bed Lacoste whose cells are on the dial side): the 3D view
+    // opens on that side and names the buttons for what they show.
+    const piqueRes = this.result.pique;
+    const sellBack = !!(piqueRes && piqueRes.selling_face === 'technical_back');
+
     // build stage: controls bar + mount point
     const stage = document.createElement('div');
     stage.className = 'ka3dgl-stage';
     stage.innerHTML = `
       <div class="ka3d-controls">
-        <button class="ka3d-btn" data-act="front">Front</button>
-        <button class="ka3d-btn" data-act="back">Back</button>
+        ${sellBack
+          ? `<button class="ka3d-btn" data-act="front" title="The technical back — the side this piqué is sold on">Selling face</button>
+        <button class="ka3d-btn" data-act="back" title="The technical face (inside of the garment)">Technical face</button>`
+          : `<button class="ka3d-btn" data-act="front">Front</button>
+        <button class="ka3d-btn" data-act="back">Back</button>`}
         <button class="ka3d-btn" data-act="reset" title="Reset view">⟳</button>
         <button class="ka3d-btn" data-act="wire" title="Show loop paths">Loops</button>
         <button class="ka3d-btn" data-act="light" title="Preview under a different lightbox illuminant">Light: D65</button>
@@ -2268,11 +2305,15 @@ class FabricVisualizer {
     // sample = cylinder (front bed); sampleBack = dial (back bed, for interlock).
     const sample = (w, c) => this._tokenAt(w, c, 'front', opts);
     const sampleBack = (w, c) => this._tokenAt(w, c, 'front', opts, 'dial');
+    const pique = this._piqueGeom();
     const glOpts = {
       dyed: this._dyedColor, construction: con, countNe: opts.countNe,
       loopNe: opts.loopNe, tieNe: opts.tieNe,
       tf: opts.tf, fiberType: opts.fiberType, sheen: opts.sheen, sample, sampleBack,
-      physics: opts.physics, density: opts.density, twist: this._yarnTwist(),
+      physics: opts.physics, density: pique ? pique.density : opts.density, twist: this._yarnTwist(),
+      // Piqué: held-loop elongation, cell relief, wale lean and which side is
+      // sold as the face — the engine's pique analysis (pique-engine.js).
+      pique,
       shrinkage: opts.shrinkage, pattern: opts.pattern,
       gsm: opts.gsm, elastanePct: (this.result.yarn || {}).elastane_pct || 0,
       // Dyeing route (pigment / garment wash wear differently from reactive)

@@ -42,6 +42,12 @@ export function patchDye(material, o = {}) {
     uMelMap: { value: o.melMap || null },
     uExpMap: { value: o.expMap || null },
     // cloth: { wales per tile, courses per tile, tile width in cm, irregularity amplitude }
+    // Cavity: baked surface height (macro.js) against its local mean over
+    // one structure repeat — cells, pits and the valleys between wales
+    // darken the way a real relief traps light. x = mip level of one
+    // repeat, y = strength.
+    uHeightMap: { value: o.cloth && o.cloth.height ? o.cloth.height : null },
+    uCavity: { value: new THREE.Vector2(o.cloth ? o.cloth.cavityLod || 5 : 5, o.cloth ? o.cloth.cavity || 0 : 0) },
     uClothBias: { value: o.cloth && o.cloth.bias != null ? o.cloth.bias : 1.0 },
     uCloth: { value: o.cloth ? new THREE.Vector4(o.cloth.wales, o.cloth.courses, o.cloth.tileCm, o.cloth.amp) : new THREE.Vector4() },
   };
@@ -57,7 +63,7 @@ export function patchDye(material, o = {}) {
     }
     const decl = [
       'uniform float uFade;', 'uniform vec3 uFadeColor;', 'uniform float uChalk;',
-      'uniform vec4 uCloth;', 'uniform float uClothBias;',
+      'uniform vec4 uCloth;', 'uniform float uClothBias;', 'uniform sampler2D uHeightMap;', 'uniform vec2 uCavity;',
       'uniform float uMel;', 'uniform float uMelF;', 'uniform vec3 uMelLight;', 'uniform sampler2D uMelMap;',
       exposure === 'attr' ? 'varying float vExposure;' : 'uniform sampler2D uExpMap;',
     ].join('\n');
@@ -96,6 +102,12 @@ export function patchDye(material, o = {}) {
           float n11 = fract(sin(dot(i0 + vec2(1.0, 1.0), vec2(127.1, 311.7))) * 43758.5453);
           float cloud = mix(mix(n00, n10, f0.x), mix(n01, n11, f0.x), f0.y) - 0.5;
           diffuseColor.rgb *= 1.0 + uCloth.w * (0.9 * course + 1.1 * cloud);
+          if (uCavity.y > 0.0) {
+            float hh = texture2D(uHeightMap, dyeUv).r;
+            float hl = textureLod(uHeightMap, dyeUv, uCavity.x).r;
+            float cav = clamp((hl - hh) * 2.2, -0.35, 1.0);
+            diffuseColor.rgb *= 1.0 - uCavity.y * (cav > 0.0 ? cav : 0.4 * cav);
+          }
         }` : ''}
         if (uMel > 0.5) diffuseColor.rgb = mix(diffuseColor.rgb, uMelLight * aoK, ${light});
         diffuseColor.rgb = mix(diffuseColor.rgb, uFadeColor * aoK, uFade * smoothstep(0.3, 0.95, ${expo}));

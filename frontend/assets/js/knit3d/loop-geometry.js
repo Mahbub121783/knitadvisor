@@ -9,6 +9,7 @@
 // `ctx` for every generator:
 //   { cx, cy }      world centre of this stitch (wale offset already applied)
 //   heldExtra       how many extra courses this loop is held (tuck/miss above)
+//   heldPitch       height added per held course (default one course pitch)
 //   zBase           bed depth offset (rib/interlock push wales fore/aft)
 //   mirror          true → reflect z (renders the technical BACK = a purl wale)
 //   jitter          {x,y,z} per-stitch deviation (planned imperfection)
@@ -41,7 +42,9 @@ function sinker(ctx) {
  * poking through a mesh / piqué).
  */
 export function knitLoop(ctx) {
-  const up = (ctx.heldExtra || 0) * 0.92;            // extra height per held course
+  // extra height per held course: one course pitch, or n*C*alpha for a
+  // pique (ctx.heldPitch, see topology-builder.js)
+  const up = (ctx.heldExtra || 0) * (ctx.heldPitch != null ? ctx.heldPitch : 0.92);
   const L = LOOP;
   const pts = [
     P(ctx, -L.footHalf,     L.footY,                L.footZ),
@@ -74,7 +77,7 @@ export function knitLoop(ctx) {
  * under an orthogonal camera.
  */
 export function purlLoop(ctx) {
-  const up = (ctx.heldExtra || 0) * 0.92;
+  const up = (ctx.heldExtra || 0) * (ctx.heldPitch != null ? ctx.heldPitch : 0.92);
   const L = LOOP;
   // Wide, low-but-tall-ENOUGH arc: a purl bump that stays small/far back
   // disappears entirely behind the neighbouring knit column's own wide,

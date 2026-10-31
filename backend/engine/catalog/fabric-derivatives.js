@@ -175,24 +175,29 @@ const FABRIC_DERIVATIVES = [
       courses_per_repeat: 4,
       wales_per_repeat: 4,
       beds: ['cylinder'],
+      // Jump / jumbo (waffle) pique: neighbouring needle PAIRS tuck together
+      // for two courses, then the other pair. Until 2026-10-31 this grid was
+      // K/T alternating every course - needle for needle the same structure
+      // as single_cross_tuck, one tuck per wale, nothing "double" about it
+      // and no way to give the heavier honeycomb the entry describes.
       pattern: [
-        ['K','T','K','T'],
-        ['T','K','T','K'],
-        ['K','T','K','T'],
-        ['T','K','T','K']
+        ['K','K','T','T'],
+        ['K','K','T','T'],
+        ['T','T','K','K'],
+        ['T','T','K','K']
       ],
       cam: [
-        { feed: 1, cylinder: 'K/T alternate', note: 'A=K, B=T' },
-        { feed: 2, cylinder: 'T/K alternate', note: 'A=T, B=K' },
-        { feed: 3, cylinder: 'K/T alternate', note: 'same as feed 1' },
-        { feed: 4, cylinder: 'T/K alternate', note: 'same as feed 2' }
+        { feed: 1, cylinder: 'K,K,T,T', note: 'Needles A,B knit; C,D tuck' },
+        { feed: 2, cylinder: 'K,K,T,T', note: 'Same as feed 1 - C,D held two courses' },
+        { feed: 3, cylinder: 'T,T,K,K', note: 'Needles A,B tuck; C,D knit' },
+        { feed: 4, cylinder: 'T,T,K,K', note: 'Same as feed 3 - A,B held two courses' }
       ],
       needle_arrangement: {
-        butt_pattern: 'ABAB',
-        description: 'Alternating long-short butt'
+        butt_pattern: 'AABB',
+        description: 'Two tracks, needles set in pairs'
       }
     },
-    appearance: 'Prominent honeycomb / waffle texture. Heavier and more textured than single pique.'
+    appearance: 'Large square waffle / jumbo honeycomb: pairs of needles tuck together for two courses. Heavier and more textured than single pique.'
   },
 
   {
@@ -1684,15 +1689,20 @@ const FABRIC_DERIVATIVES = [
       courses_per_repeat: 4,
       wales_per_repeat: 2,
       beds: ['cylinder', 'dial'],
+      // Dial needles split odd/even and knit on alternate feeds, so each
+      // dial loop is held over two courses and draws the cylinder wales in
+      // from behind - the face's bird's-eye cell. (Until 2026-10-31 the dial
+      // knitted every needle on every feed, which is plain rib/interlock
+      // behaviour and gave no cell at all.)
       pattern: {
-        C: [['K'],['M'],['K'],['M']],
-        D: [['K'],['K'],['K'],['K']]
+        C: [['K','K'],['M','M'],['K','K'],['M','M']],
+        D: [['K','M'],['M','K'],['M','K'],['K','M']]
       },
       cam: [
-        { feed: 1, cylinder: 'K', dial: 'K', note: '1x1 Rib knit' },
-        { feed: 2, cylinder: 'M', dial: 'K', note: 'Dial only knit' },
-        { feed: 3, cylinder: 'K', dial: 'K', note: '1x1 Rib knit' },
-        { feed: 4, cylinder: 'M', dial: 'K', note: 'Dial only knit' }
+        { feed: 1, cylinder: 'K', dial: 'odd K, even M', note: 'Cylinder knits; odd dial needles knit' },
+        { feed: 2, cylinder: 'M', dial: 'odd M, even K', note: 'Dial only; even dial needles knit' },
+        { feed: 3, cylinder: 'K', dial: 'odd M, even K', note: 'Cylinder knits; even dial needles knit' },
+        { feed: 4, cylinder: 'M', dial: 'odd K, even M', note: 'Dial only; odd dial needles knit' }
       ],
       needle_arrangement: {
         butt_pattern: 'ABAB',
@@ -1724,15 +1734,18 @@ const FABRIC_DERIVATIVES = [
       courses_per_repeat: 4,
       wales_per_repeat: 2,
       beds: ['cylinder', 'dial'],
+      // French (Rodier) double pique: like Swiss, but the dial TUCKS on the
+      // cylinder feeds - the tuck yarn pushes the cylinder loops forward into
+      // a raised, corded cell.
       pattern: {
-        C: [['K'],['K'],['K'],['K']],
-        D: [['K'],['M'],['K'],['M']]
+        C: [['K','K'],['M','M'],['K','K'],['M','M']],
+        D: [['T','M'],['K','M'],['M','T'],['M','K']]
       },
       cam: [
-        { feed: 1, cylinder: 'K', dial: 'K', note: '1x1 Rib knit' },
-        { feed: 2, cylinder: 'K', dial: 'M', note: 'Cylinder only knit' },
-        { feed: 3, cylinder: 'K', dial: 'K', note: '1x1 Rib knit' },
-        { feed: 4, cylinder: 'K', dial: 'M', note: 'Cylinder only knit' }
+        { feed: 1, cylinder: 'K', dial: 'odd T, even M', note: 'Cylinder knits; odd dial needles tuck' },
+        { feed: 2, cylinder: 'M', dial: 'odd K, even M', note: 'Dial only; odd dial needles knit' },
+        { feed: 3, cylinder: 'K', dial: 'odd M, even T', note: 'Cylinder knits; even dial needles tuck' },
+        { feed: 4, cylinder: 'M', dial: 'odd M, even K', note: 'Dial only; even dial needles knit' }
       ],
       needle_arrangement: {
         butt_pattern: 'ABAB',
@@ -2040,25 +2053,31 @@ const FABRIC_DERIVATIVES = [
       type: 'regression',
       a: -0.150, b: 60.0,
       source: 'ESTIMATED',
-      note: 'Double knit pique. More stable than single pique. Miss loops on back. Estimated from structure.'
+      note: 'Double knit pique. More stable than single pique. Dial tuck cells between plain interlock courses. Estimated from structure.'
     },
     ll_multiplier: 1.40,
-    ll_source: 'ESTIMATED — K/M (miss) combination reduces yarn use compared to K/T (tuck)',
+    ll_source: 'ESTIMATED — two dial tuck courses per 6 feeds over plain interlock',
     typical_gauge: 24,
     structure: {
       type: 'weft_knit',
       courses_per_repeat: 4,
-      wales_per_repeat: 4,
+      wales_per_repeat: 2,
       beds: ['cylinder', 'dial'],
+      // Six feeds on interlock gating: a dial tuck course, a plain interlock
+      // course (two feeds), the tuck course on the other dial needles, and a
+      // plain interlock course again. The grid carries one row per interlock
+      // course (each plain pair is one row), so 4 rows = 6 feeds.
       pattern: {
-        C: [['K','K','K','K'],['K','M','K','M'],['K','K','K','K'],['K','M','K','M']],
-        D: [['K','K','K','K'],['M','K','M','K'],['K','K','K','K'],['M','K','M','K']]
+        C: [['K','K'],['K','K'],['K','K'],['K','K']],
+        D: [['T','M'],['K','K'],['M','T'],['K','K']]
       },
       cam: [
-        { feed: 1, cylinder: 'K all', dial: 'K all', note: 'Course 1: full rib' },
-        { feed: 2, cylinder: 'K/M alternate', dial: 'M/K alternate', note: 'Course 2: miss on alternate' },
-        { feed: 3, cylinder: 'K all', dial: 'K all', note: 'Course 3: full rib' },
-        { feed: 4, cylinder: 'K/M alternate (offset)', dial: 'M/K alternate (offset)', note: 'Course 4: miss at offset wales' }
+        { feed: 1, cylinder: 'K all', dial: 'odd T', note: 'Tuck course on odd dial needles' },
+        { feed: 2, cylinder: 'K (long)', dial: 'K (short)', note: 'Plain interlock, first half' },
+        { feed: 3, cylinder: 'K (short)', dial: 'K (long)', note: 'Plain interlock, second half' },
+        { feed: 4, cylinder: 'K all', dial: 'even T', note: 'Tuck course on even dial needles' },
+        { feed: 5, cylinder: 'K (long)', dial: 'K (short)', note: 'Plain interlock, first half' },
+        { feed: 6, cylinder: 'K (short)', dial: 'K (long)', note: 'Plain interlock, second half' }
       ],
       needle_arrangement: {
         butt_pattern: 'Standard interlock ABAB',

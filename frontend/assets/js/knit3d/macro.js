@@ -44,6 +44,16 @@ const exposureMaterial = () => new THREE.ShaderMaterial({
   fragmentShader: 'varying float vE; void main(){ gl_FragColor = vec4(vE, vE, vE, 1.0); }',
 });
 
+// Height of the yarn surface above the cloth's back, 0..1 across the tile's
+// depth (`flip` for the back pass, which looks along +z). Where a gap goes
+// through the cloth the clear value (0) reads as the deepest point.
+const heightMaterial = (z0, z1, flip) => new THREE.ShaderMaterial({
+  side: THREE.DoubleSide,
+  uniforms: { uZ0: { value: z0 }, uZ1: { value: z1 }, uFlip: { value: flip ? 1 : 0 } },
+  vertexShader: 'varying float vZ; void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vZ = w.z; gl_Position = projectionMatrix * viewMatrix * w; }',
+  fragmentShader: 'uniform float uZ0; uniform float uZ1; uniform float uFlip; varying float vZ; void main(){ float h = clamp((vZ - uZ0) / max(1e-5, uZ1 - uZ0), 0.0, 1.0); h = mix(h, 1.0 - h, uFlip); gl_FragColor = vec4(h, h, h, 1.0); }',
+});
+
 // Melange: the per-fibre random field (yarn-material.js melangeField) read
 // through each yarn's own UVs and thresholded — 1 where a fibre is light.
 // Thresholding here (not in the cloth shader) lets the baked map's mipmaps
@@ -66,9 +76,13 @@ export function bakeStructure(renderer, object, win, pxPerUnit, opts = {}) {
   // tile repeat carries a seam in the distant mips — seen from a few
   // centimetres away as regular horizontal bands across the whole cloth.
   // (The camera still covers exactly one tile; pixels need not be square.)
+  // `opts.size` lets the caller pick sizes that give every stitch a
+  // power-of-two number of texels when the repeat itself is not a power of
+  // two (a 6-course Lacoste): 6 x 32 = 192 still halves exactly, stitch by
+  // stitch, down to one texel per stitch.
   const pot = (n) => Math.max(64, Math.min(2048, 2 ** Math.round(Math.log2(Math.max(1, n)))));
-  const W = pot(win.w * pxPerUnit);
-  const H = pot(win.h * pxPerUnit);
+  const W = opts.size ? opts.size.w : pot(win.w * pxPerUnit);
+  const H = opts.size ? opts.size.h : pot(win.h * pxPerUnit);
   const scene = new THREE.Scene();
   scene.add(object);
   const cx = win.x0 + win.w / 2, cy = win.y0 + win.h / 2;
@@ -76,6 +90,9 @@ export function bakeStructure(renderer, object, win, pxPerUnit, opts = {}) {
   const normalMat = new THREE.MeshNormalMaterial({ side: THREE.DoubleSide });
   const aoMat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
   const expMat = exposureMaterial();
+  const zBox = new THREE.Box3().setFromObject(object);
+  const hFront = heightMaterial(zBox.min.z, zBox.max.z, false);
+  const hBack = heightMaterial(zBox.min.z, zBox.max.z, true);
   const flat = new THREE.Color(0.5, 0.5, 1.0);
   const gap = new THREE.Color(0.3, 0.3, 0.3);
   const black = new THREE.Color(0, 0, 0);
@@ -112,11 +129,16 @@ export function bakeStructure(renderer, object, win, pxPerUnit, opts = {}) {
     out[side].normal = pass('normal', b, normalMat, flat);
     out[side].ao = pass('ao', b, aoMat, gap);
     out[side].exp = pass('exp', b, expMat, black);
+    out[side].height = pass('height', b, b ? hBack : hFront, black);
     if (opts.melMaterial) out[side].mel = pass('mel', b, opts.melMaterial, black);
   }
+  // depth of the tile's surface, scene units — scales the cavity shading
+  out.depth = zBox.max.z - zBox.min.z;
   normalMat.dispose();
   aoMat.dispose();
   expMat.dispose();
+  hFront.dispose();
+  hBack.dispose();
 
   if (opts.keep) {
     out.rebake = (name, mat, clear = black) => {

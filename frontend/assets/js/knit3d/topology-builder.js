@@ -19,7 +19,7 @@ import { stitchJitter } from './noise.js?v=20260608g';
 import { makePointelle, makePatternHoles } from './pointelle.js?v=20260608g';
 import { buildWarpPaths } from './warp-topology.js?v=20260608g';
 import {
-  PITCH_X, PITCH_Y, RIB_PITCH_SCALE, RIB_DEPTH,
+  PITCH_X, PITCH_Y, RIB_PITCH_SCALE, RIB_DEPTH, LOOP, TUCK,
   INTERLOCK_DEPTH, INTERLOCK_GAIT, JITTER, PATCH,
   FLEECE_BIND_DEPTH, FLEECE_TUCK_Z, FLEECE_TUCK_EVERY, FLEECE_BINDER_Z,
 } from './constants.js?v=20260608g';
@@ -40,6 +40,56 @@ function heldAbove(sample, w, c, courses) {
     if (isHoldToken(sample(w, cc))) n++; else break;
   }
   return n;
+}
+
+// ── Piqué deformation ─────────────────────────────────────────────────────
+// What the tucks do to the loops around them (numbers from the engine's
+// pique analysis, pique-engine.js):
+//   held loop  stretched up through its tuck courses: H0 + n·C·α
+//   held loop  drawn toward the technical face, half the cell depth
+//   knit loop  next to a tucking needle buckles toward the technical back,
+//              and leans sideways toward that needle — the zig-zag of a
+//              Lacoste wale and the walls of the honeycomb cell
+//   tuck loop  its crown 1.25 yarn diameters behind the held loop
+// `side` is +1 for a bed whose technical face looks at +z, -1 for the
+// mirrored (dial) bed.
+function piqueShape(token, w, c, ctx, p) {
+  const q = p.pique;
+  const side = p.baseMirror ? -1 : 1;
+  const half = q.relief * 0.5;
+  const hold = (ww, cc) => isHoldToken(p.sample(ww, cc));
+  if (token === 'tuck') {
+    // the default cup already sits (headZ - cupZ) behind a held crown
+    const extra = Math.max(0, 1.25 * q.d - (LOOP.headZ - TUCK.cupZ));
+    return { dz: side * (half - extra), dx: 0 };
+  }
+  if (token !== 'knit' && token !== 'purl') return { dz: 0, dx: 0 };
+  // Double knit: the two beds' loops are tied across the gap. Where the
+  // other bed knits beside this loop (its needles sit half a wale either
+  // side) the loop is drawn in toward it; where the other bed holds (miss
+  // or tuck — Swiss and French piqué's alternating dial) it is pushed out.
+  // That alternation is the bird's-eye cell of a double piqué's face.
+  let cross = 0;
+  if (p.other) {
+    const o = (ww) => (isHoldToken(p.other(ww, c)) ? 0 : 1);
+    const knitting = p.baseMirror ? o(w) + o(w + 1) : o(w - 1) + o(w);
+    cross = -side * half * 0.6 * (knitting - 1);
+  }
+  if (ctx.heldExtra > 0) return { dz: side * half + cross, dx: 0 };
+  const left = hold(w - 1, c) || hold(w - 1, c + 1);
+  const right = hold(w + 1, c) || hold(w + 1, c + 1);
+  const n = (left ? 1 : 0) + (right ? 1 : 0);
+  return {
+    dz: -side * half * Math.min(1, n * 0.65) + cross,
+    dx: q.lean * ((right ? 1 : 0) - (left ? 1 : 0)),
+  };
+}
+
+// Half a turn about the wale axis: the technical back faces +z. A rotation,
+// not a mirror, so the yarn twist keeps its hand.
+function turnOver(paths, wales) {
+  const X = (wales - 1) * PITCH_X;
+  for (const path of paths) for (const pt of path.points) { pt.x = X - pt.x; pt.z = -pt.z; }
 }
 
 // Build one course as a single continuous polyline (authored left→right).
@@ -69,6 +119,12 @@ function buildCourse(c, p) {
       jitter: jit,
       sinker: w < p.wales - 1,    // no trailing sinker off the last wale (selvedge)
     };
+    if (p.pique) {
+      ctx.heldPitch = (p.pitchY || PITCH_Y) * p.pique.alpha;
+      const s = piqueShape(token, w, c, ctx, p);
+      ctx.zBase += s.dz;
+      jit.x += s.dx;
+    }
     const stitch = stitchPoints(token, ctx);
     for (const pt of stitch) points.push(pt);
   }
@@ -157,6 +213,16 @@ export function buildYarnPaths(opts) {
   const sample = typeof opts.sample === 'function' ? opts.sample : () => 'knit';
   const pitchY = opts.pitchY || PITCH_Y;     // density-driven course spacing
   const paths = [];
+  // Piqué geometry in stitch units: cell depth from yarn diameters, lean
+  // from fractions of a wale (see piqueShape).
+  const pq = opts.pique;
+  const yd = 2 * (opts.yarnRadius || 0.15);
+  const piq = pq ? {
+    relief: (pq.reliefD || 0) * yd,
+    lean: (pq.lean || 0) * PITCH_X,
+    alpha: pq.alpha || 0.82,
+    d: yd,
+  } : null;
 
   // WARP knit (tricot / raschel / warp net) — own topology (guide-bar zig-zag).
   if (con.base === 'warp' || con.type === 'tricot') {
@@ -177,16 +243,23 @@ export function buildYarnPaths(opts) {
     // (sampleBack resolves to 'knit' too when there is no dial programme —
     // see fabric-visualizer.js `_tokenAt`'s `useDial` check).
     const sampleBack = typeof opts.sampleBack === 'function' ? opts.sampleBack : sample;
+    // A double-bed piqué's cylinder programme has its own misses and tucks
+    // (Swiss and French piqué rest the cylinder on alternate feeds); only a
+    // cylinder that knits every feed is forced to knit.
+    const cylProgramme = !!(opts.pattern && opts.pattern.hasTM);
     for (let c = 0; c < courses; c++) {
       paths.push(buildCourse(c, {
         wales, courses, sample, xPitch: PITCH_X, xOffset: 0, pitchY,
-        baseMirror: false, forceToken: 'knit', zBaseFor: () => INTERLOCK_DEPTH,
+        baseMirror: false, forceToken: cylProgramme ? null : 'knit', zBaseFor: () => INTERLOCK_DEPTH,
+        pique: piq, other: piq ? sampleBack : null,
       }));
       paths.push(buildCourse(c, {
         wales, courses, sample: sampleBack, xPitch: PITCH_X, xOffset: PITCH_X * INTERLOCK_GAIT, pitchY,
-        baseMirror: true, zBaseFor: () => -INTERLOCK_DEPTH,
+        baseMirror: true, zBaseFor: () => -INTERLOCK_DEPTH, pique: piq,
+        other: piq ? (cylProgramme ? sample : () => 'knit') : null,
       }));
     }
+    if (pq && pq.showBack) turnOver(paths, wales);
     return { paths };
   }
 
@@ -281,8 +354,11 @@ export function buildYarnPaths(opts) {
   for (let c = 0; c < courses; c++) {
     paths.push(buildCourse(c, {
       wales, courses, sample, xPitch: PITCH_X, xOffset: 0, pitchY,
-      baseMirror: false, zBaseFor: () => 0, holes,
+      baseMirror: false, zBaseFor: () => 0, holes, pique: piq,
     }));
   }
+  // A piqué sold on its technical back: turn the cloth over, so the default
+  // view, the macro bake's face and the loop model all show the cells.
+  if (pq && pq.showBack) turnOver(paths, wales);
   return { paths };
 }

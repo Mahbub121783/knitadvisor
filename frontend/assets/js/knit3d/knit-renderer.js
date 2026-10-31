@@ -500,7 +500,9 @@ export class Knit3D {
 
     // effective course spacing (loop height): taller when loose (low cpc/wpc)
     const ribComp = con.type === 'rib' ? 1 / RIB_PITCH_SCALE : 1;
-    const pitchY = PITCH_Y * (1 / Math.max(0.6, Math.min(density.aspect, 1.6)));
+    // A piqué's held loops pull its courses closer than a jersey's (the
+    // engine solves its courses from the GSM), so its cap is a little higher.
+    const pitchY = PITCH_Y * (1 / Math.max(0.6, Math.min(density.aspect, this.opts.pique ? 1.75 : 1.6)));
 
     // Stitch count that actually FILLS the frame, not a wide-shot of the whole
     // swatch: at the old baseCourses (40/30), the "cover" framing packed
@@ -524,9 +526,11 @@ export class Knit3D {
       wales = Math.max(14, Math.round(wales * k));
     }
 
+    const radius = yarnRadius(this.opts.countNe, this.opts.tf, density);
     const { paths, floatAnchors } = buildYarnPaths({
       construction: con, sample: this.opts.sample, sampleBack: this.opts.sampleBack,
       pattern: this.opts.pattern, wales, courses, pitchY,
+      pique: this.opts.pique, yarnRadius: radius,
     });
     // Real 3-thread fleece (see topology-builder.js): the binding+fleecy
     // yarn's floats already give the back real structural coverage, so the
@@ -546,7 +550,6 @@ export class Knit3D {
     // Nap roots from the floats' real, post-drape positions.
     const anchors = floatAnchors ? floatAnchorsFromPaths(paths) : null;
 
-    const radius = yarnRadius(this.opts.countNe, this.opts.tf, density);
     // The fleecy yarn is its own, much coarser count (e.g. 10-16 Ne behind a
     // 30 Ne face): yarn diameter ∝ 1/√Ne, so it renders √(face/loop) thicker.
     // Drawn at the face yarn's thickness it left the back thin and the face
@@ -664,6 +667,7 @@ export class Knit3D {
     const { paths } = buildYarnPaths({
       construction: con, sample: this.opts.sample, sampleBack: this.opts.sampleBack,
       pattern: this.opts.pattern, wales: tileWales + 2 * mW, courses: tileCourses + 2 * mC, pitchY,
+      pique: this.opts.pique, yarnRadius: radius,
       // Stitch irregularity repeats with the STRUCTURE, not the tile. Jitter
       // that repeats once per tile (~0.5 cm) survives every mip level as a
       // regular grid across the whole cloth — a ripstop look no knit has. The
@@ -688,7 +692,15 @@ export class Knit3D {
     // A melange keeps the tile so the fibre mix can be re-baked when the
     // shade (and so the light-fibre fraction) changes.
     const melMat = this._melange ? melangeMaterial(this._melField) : null;
-    const bake = bakeStructure(this.renderer, tile, win, 48, { melMaterial: melMat, keep: !!melMat });
+    // Texels per stitch: a power of two each way, so every mip level
+    // averages whole stitches whatever the repeat (see tileCount above).
+    const p2 = (v) => 2 ** Math.max(2, Math.round(Math.log2(Math.max(1, v))));
+    let tw = p2(48 * rep.xPitch), th = p2(48 * pitchY);
+    while (tileWales * tw > 2048 && tw > 4) tw /= 2;
+    while (tileCourses * th > 2048 && th > 4) th /= 2;
+    const bake = bakeStructure(this.renderer, tile, win, 48, {
+      melMaterial: melMat, keep: !!melMat, size: { w: tileWales * tw, h: tileCourses * th },
+    });
     const disposeTile = () => { tile.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); tmp.dispose(); };
     if (!melMat) disposeTile();
 
@@ -746,7 +758,13 @@ export class Knit3D {
       m.shadowSide = THREE.DoubleSide;
       this._dyeUniforms.push(patchDye(m, {
         exposure: 'map', expMap: maps.exp, melMode: 'direct', melMap: maps.mel || null,
-        cloth: { wales: tileWales, courses: tileCourses, tileCm: win.w / cm, amp: 0.05 },
+        cloth: {
+          wales: tileWales, courses: tileCourses, tileCm: win.w / cm, amp: 0.05,
+          // cavity over one structure repeat; a piqué's cell is the point
+          height: maps.height,
+          cavityLod: Math.log2(Math.max(2, Math.min(rep.wales * tw, rep.courses * th))),
+          cavity: this.opts.pique ? 0.55 : 0.3,
+        },
       }));
       return m;
     };

@@ -67,6 +67,7 @@ const {
 } = require('./formulas/warp-knit');
 
 const { getPattern: getEnginePattern } = require('./domain/pattern-engine');
+const { analyzePique } = require('./domain/pique-engine');
 const { analyzeCriticalPath } = require('./domain/critical-path');
 const { recommendMachine } = require('./domain/machine-optimizer');
 const { analyzeYarn, recommendYarnGrade } = require('./domain/yarn-engine');
@@ -948,6 +949,16 @@ function calculate(params) {
   const patternResult = getEnginePattern(fabricDef.id, gsm, gauge, composition);
   trace.push({ step: '6.3', action: 'generate_pattern', result: patternResult ? 'SUCCESS' : 'FAILED' });
 
+  // --- 6.3b Piqué structure (tuck geometry, cell relief, density at this GSM) ---
+  const piqueResult = patternResult ? analyzePique({
+    fabricId: fabricDef.id, gsm, gauge, countNe: tfResult && tfResult.basis ? tfResult.basis.count_ne : countResult.count_ne,
+    llMm: llResult ? llResult.ll_mm : null, tex: tfResult ? tfResult.tex : null,
+    tf: tfResult ? tfResult.value : null, composition, pattern: patternResult,
+  }) : null;
+  if (piqueResult) {
+    trace.push({ step: '6.3b', action: 'pique_structure', result: `relief ${piqueResult.geometry.relief_mm} mm, spread ${piqueResult.geometry.wale_spread}, ${piqueResult.density.wales_per_cm}w × ${piqueResult.density.courses_per_cm}c /cm` });
+  }
+
   // --- 6.4 Production Critical Path Analysis (CPA) ---
   // CPA always runs: when the user omits machine specs, fall back to the
   // OPTIMAL machine (single Dia × Gauge) so the analysis is never empty.
@@ -1226,6 +1237,8 @@ function calculate(params) {
     } : null,
 
     pattern: patternResult || null,
+    // Piqué fabrics only: what the tucks do to the cloth (pique-engine.js).
+    pique: piqueResult,
     critical_path: cpaResult || null,
 
     // Net-to-gross fabric consumption + full CMT/FOB estimate — null unless

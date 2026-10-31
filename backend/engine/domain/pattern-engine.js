@@ -83,19 +83,12 @@ class PatternEngine {
         ];
         dynamicNote = 'High GSM tuck-to-miss adaptation active. Secondary tuck loops replaced with miss loops to reduce fabric weight and stiffness, keeping the pique drapable.';
       } else if (fabricId === 'lacoste_single') {
-        structure.pattern = [
-          ['K', 'T'],
-          ['K', 'K'],
-          ['T', 'K'],
-          ['M', 'M']
-        ];
-        structure.cam = [
-          { feed: 1, cylinder: 'K/T', note: 'A needles knit, B needles tuck' },
-          { feed: 2, cylinder: 'K', note: 'All needles knit' },
-          { feed: 3, cylinder: 'T/K', note: 'A needles tuck, B needles knit' },
-          { feed: 4, cylinder: 'M', note: 'All needles miss (knit course converted to miss to reduce density and weight)' }
-        ];
-        dynamicNote = 'High GSM knit-to-miss adaptation active. Courses modified to introduce miss loops, stabilizing fabric and preventing boardy thickness.';
+        // No pattern change. This used to turn feed 4 into M,M — every needle
+        // missing — which is a feed that knits nothing: the machine would run
+        // a 3-feed repeat with every loop held for an extra course, not a
+        // lighter Lacoste. A heavy single Lacoste is made with a coarser
+        // count on the same 4-feed programme.
+        dynamicNote = 'Heavy single Lacoste: same 4-feed programme on a coarser count. The plain courses (feeds 2 and 4) keep the cells closed; expect smaller, flatter cells than a 180 GSM quality.';
       }
     }
 
