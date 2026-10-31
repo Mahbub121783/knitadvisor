@@ -41,7 +41,20 @@ ok(dbl.geometry.held_loop_elongation > single.geometry.held_loop_elongation, 'do
 ok(dbl.geometry.relief_mm > single.geometry.relief_mm, 'double Lacoste cell deeper than single');
 // Intermeshing geometry: a loop held one course is (1.41 + 1) / 1.41 tall.
 ok(Math.abs(single.geometry.held_loop_elongation - 1.71) < 0.01, `single Lacoste held loop 1.71x (${single.geometry.held_loop_elongation})`);
-ok(single.geometry.relief_mm > 0.25 && single.geometry.relief_mm < 0.5, `single Lacoste cell 0.25-0.5 mm deep (${single.geometry.relief_mm})`);
+ok(single.geometry.relief_mm > 0.1 && single.geometry.relief_mm < 0.35, `single Lacoste cell 0.1-0.35 mm deep (${single.geometry.relief_mm})`);
+// Buckling: a half-sine bow of a leg squeezed from H to H' = H/k has extra
+// arc length pi^2 a^2 / (4 H'); the relief must satisfy that exactly.
+{
+  const k = single.density.course_compression_vs_jersey;
+  const H = 1.41 * (2.585 / ANCHORS.jersey.Kc);           // lacoste_single 200: SL 2.585
+  const Hs = H / k, a = single.geometry.relief_buckle_mm;
+  const excess = (Math.PI ** 2 * a * a) / (4 * Hs);
+  ok(Math.abs(excess - (H - Hs)) / (H - Hs) < 0.05, `buckle amplitude closes the arc-length balance (${excess.toFixed(3)} vs ${(H - Hs).toFixed(3)} mm)`);
+}
+// Leave-one-out validation against the factory rows is reported, and good.
+const v = single.basis.validation;
+ok(v && v.rows >= 50 && v.width_error_median_pct < 6 && v.gsm_error_median_pct < 8,
+  `factory leave-one-out: width ${v && v.width_error_median_pct}% / GSM ${v && v.gsm_error_median_pct}% median error`);
 const polo = run('pique_single', 200).pique;
 
 // 3b. The factory records: piqué measurably wider and more course-packed

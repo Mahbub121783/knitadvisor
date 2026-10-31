@@ -91,7 +91,9 @@ export function fabricBody(o) {
   const finishK = fin.bendK;
 
   const rho = s.rho * (0.85 + 0.15 * f.rho) * (1 + el * 0.012);   // g/cm³
-  const tMm = gsm / (rho * 1000);
+  // A structure the engine models itself (piqué: knitted mass + bead height)
+  // passes its own thickness, so the page shows one number.
+  const tMm = o.thicknessMm > 0 ? o.thicknessMm : gsm / (rho * 1000);
   const t = tMm / 1000;                                             // m
   const K = K_JERSEY * s.k * f.k * finishK * (1 + el * 0.01);
   const B = K * t * t * t;                                          // N·m

@@ -2382,6 +2382,7 @@ function renderPique(q) {
       <div class="mt-4 text-sm">Yarn ${g.yarn_diameter_mm} mm (${g.fibre}), tightness factor ${g.tightness_factor}.${g.fibre_basis ? ` Fibre effect from ${g.fibre_basis}.` : ''}</div>
       <div class="mt-4 text-sm">${d.note}</div>
       ${q.basis ? `<div class="label mt-2">Measured on ${q.basis.factory_pique_rows} factory piqué and ${q.basis.factory_jersey_rows} jersey qualities: ${q.basis.measured}. Modelled: ${q.basis.modelled}.</div>` : ''}
+      ${q.basis && q.basis.validation ? `<div class="label mt-2">Checked against those ${q.basis.validation.rows} piqué rows (each predicted from the others): finished width within ${q.basis.validation.width_error_median_pct}% (median), finished GSM within ${q.basis.validation.gsm_error_median_pct}%.</div>` : ''}
     </div>
   </div>`;
   return html;

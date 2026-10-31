@@ -469,6 +469,7 @@ export class Knit3D {
       gsm: this.opts.gsm, construction: con, fiberType: this.opts.fiberType,
       elastanePct: this.opts.elastanePct, physics: this.opts.physics,
       countNe: this.opts.countNe, loopNe: this.opts.loopNe,
+      thicknessMm: this.opts.pique && this.opts.pique.thicknessMm,
     });
     const DENSITY_DEFAULTS = { aspect: 1.22, scalar: 1, wpc: 9, tex: 20 };
     // A denier-based warp-knit fabric (tricot/spacer/...) has no real

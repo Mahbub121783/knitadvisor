@@ -1343,6 +1343,8 @@ class FabricVisualizer {
       double: q.bed === 'double',
       density,
       cell: q.cell, reliefMm: g.relief_mm,
+      // one thickness everywhere: the engine's (knitted mass + bead height)
+      thicknessMm: q.behaviour && q.behaviour.thickness_mm,
     };
   }
 

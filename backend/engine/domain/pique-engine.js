@@ -50,11 +50,32 @@
  *    1.41 course pitches tall (its head overlaps the course above), so a loop
  *    held over n courses is (1.41 + n) / 1.41 times as tall.
  *
- * 4. Cell depth from buckling: a loop leg of height H squeezed into H / k
- *    (k = course compression) with its yarn length unchanged bows out like a
- *    pinned elastica, amplitude ≈ (2/π)·√(2·H·(H − H/k)). Compression comes
- *    from the GSM actually requested (mass balance), so a heavier quality at
- *    the same count and stitch length is genuinely deeper.
+ * 4. Cell depth from buckling: a loop leg of relaxed height H squeezed into
+ *    H' = H / k (k = course compression) with its yarn length unchanged bows
+ *    out of the plane. For a half-sine bow y = a·sin(πx/H') the extra arc
+ *    length is π²a²/(4H'), so a = (2/π)·√(H'·(H − H')). (The first version
+ *    of this file had 2H in place of H' under the root — √(2k) ≈ 1.7x too
+ *    deep. Caught by re-deriving it.) Compression comes from the GSM actually
+ *    requested (mass balance), so a heavier quality at the same count and
+ *    stitch length is genuinely deeper.
+ *
+ *    Each tuck after the first on the same needle adds one flattened yarn
+ *    layer (~0.7 d) to the cell — why a double Lacoste stands deeper than a
+ *    single one at the same count, stitch length and weight.
+ *
+ * 5. Thickness: the same bulk-density rule as the 3D view (fabric-body.js,
+ *    a jersey ~0.30 g/cm³, interlock ~0.33) for the knitted mass, plus the
+ *    cell relief the beads stand up by. One number, shown everywhere.
+ *
+ * VALIDATION (computed at load, leave-one-out over the factory piqué rows):
+ * predict each row's finished open width and finished GSM from its dia,
+ * gauge, count and stitch length with constants from the OTHER rows. On
+ * 2026-10-31: width median error 3.1 % (90 % within 8.3 %), GSM median 4.0 %
+ * (90 % within 13.6 %), no bias. Kw does not drift with count (r = -0.06) and
+ * a stitch-length term did not improve it — the constant holds.
+ * Caveat: SL is the greige stitch length and the yarn's tex is taken as spun;
+ * scouring and dyeing change the yarn's weight a few percent. That bias is
+ * the same for jersey and piqué, so their RATIOS (spread, packing) hold.
  *
  * Everything returned is an ESTIMATE and is labelled as one.
  */
@@ -67,7 +88,7 @@ const LOOP_HEIGHT_PITCHES = 1.41;  // knit loop height / course pitch (head over
 const I_REF = 0.5;                 // hold intensity the pooled factory piqué stands for
 const EYE_ARCMIN_M = 0.000291;     // 1 arc-minute per metre, in metres
 const TEXTURE_ARCMIN = 2;          // a low-contrast relief needs ~2' to read
-const DOUBLE_WIDTH_PER_NEEDLE = null; // filled from the interlock records below
+const RHO_JERSEY = 0.30, RHO_DOUBLE = 0.33;   // g/cm³, as fabric-body.js
 
 // ── Factory anchors ───────────────────────────────────────────────────────
 // Medians of Kw, Kc and finished width / machine circumference per family,
@@ -111,6 +132,34 @@ const ANCHORS = (() => {
     piqueCotton: summarise(rows('pique', false, 'cotton')),
     piqueCvc: summarise(rows('pique', false, 'cvc')),
     interlock: summarise(rows('interlock', false)),
+  };
+})();
+
+// Leave-one-out check of the piqué density model on its own records (see
+// VALIDATION above): returned with every analysis so the page can say how
+// well the model reproduces real cloth.
+const VALIDATION = (() => {
+  const rs = FACTORY_RECORDS
+    .filter(r => r.fab === 'pique' && !/lycra/.test(r.spin || ''))
+    .map(r => { const d = deriveRow(r); return d ? { ...d, r } : null; })
+    .filter(Boolean);
+  if (rs.length < 10) return null;
+  const errW = [], errG = [];
+  rs.forEach((d, i) => {
+    const others = rs.filter((_, j) => j !== i);
+    const Kw = median(others.map(o => o.Kw)), Kc = median(others.map(o => o.Kc));
+    const sl = d.r.sl / 10, tex = 590.5 / d.r.ne;
+    const wpcP = Kw / sl;
+    errW.push(Math.abs((Math.PI * d.r.dia * d.r.g) / (wpcP * 2.54) / d.r.fdia - 1));
+    errG.push(Math.abs((Kw * Kc * tex) / (10 * sl) / d.r.fgsm - 1));
+  });
+  const p = (a, f) => [...a].sort((x, y) => x - y)[Math.floor((a.length - 1) * f)];
+  return {
+    rows: rs.length,
+    width_error_median_pct: Math.round(p(errW, 0.5) * 1000) / 10,
+    width_error_p90_pct: Math.round(p(errW, 0.9) * 1000) / 10,
+    gsm_error_median_pct: Math.round(p(errG, 0.5) * 1000) / 10,
+    gsm_error_p90_pct: Math.round(p(errG, 0.9) * 1000) / 10,
   };
 })();
 
@@ -354,8 +403,15 @@ function analyzePique(p) {
   // where the second bed takes part of the squeeze).
   const H = LOOP_HEIGHT_PITCHES * (llMm / A_JERSEY.Kc);
   const k = clamp(double ? compressionExpected : compression, 1, 2.2);
-  let reliefMm = nHold > 0 ? (2 / Math.PI) * Math.sqrt(2 * H * (H - H / k)) : 0;
-  if (double) reliefMm *= 0.5;
+  const Hs = H / k;
+  // (double knit: the second bed takes half the squeeze — modelled)
+  const buckleMm = (nHold > 0 ? (2 / Math.PI) * Math.sqrt(Hs * (H - Hs)) : 0) * (double ? 0.5 : 1);
+  // Stacked tucks: with n tuck loops gathered on one needle behind the held
+  // loop, every tuck after the first is one more yarn layer in the cell —
+  // a flattened layer, ~0.7 of the round diameter (knitted yarn sits
+  // flattened, not round). One tuck takes the place a sinker loop would.
+  const stackMm = Math.max(0, nTuck - 1) * 0.7 * dMm;
+  const reliefMm = buckleMm + stackMm;
   const reliefD = reliefMm / dMm;
 
   // ── Cell size and how far away it still reads ──────────────────────────
@@ -381,8 +437,10 @@ function analyzePique(p) {
 
   // Curl relative to plain jersey: tucks lock the loops; a double knit does not curl.
   const curl = double ? 0 : clamp(1 - 1.2 * holdFrac, 0.15, 1);
-  // Thickness: one bed is about 2.2 yarn diameters, plus the cell relief.
-  const thicknessMm = (double ? 4 : 2.2) * dMm + reliefMm;
+  // Thickness: the knitted mass at the structure's bulk density, plus the
+  // height the beads stand up by.
+  const gsmT = p.gsm > 0 ? p.gsm : 200;
+  const thicknessMm = gsmT / ((double ? RHO_DOUBLE : RHO_JERSEY) * 1000) + reliefMm;
 
   return {
     fabric_id: p.fabricId,
@@ -407,6 +465,8 @@ function analyzePique(p) {
       held_loop_elongation: round(heldElong),
       relief_yarn_diameters: round(reliefD),
       relief_mm: round(reliefMm),
+      relief_buckle_mm: round(buckleMm),
+      relief_stack_mm: round(stackMm),
       wale_spread: round(spread),
       wale_lean: round(lean, 3),
       yarn_diameter_mm: round(dMm, 3),
@@ -442,11 +502,12 @@ function analyzePique(p) {
       factory_pique_rows: A_PIQUE.n,
       factory_jersey_rows: A_JERSEY.n,
       measured: 'wale spread and course packing of a typical piqué; CVC and lycra effects',
-      modelled: 'placement of each needle programme around that typical piqué; cell depth from loop buckling; double-bed values',
+      modelled: 'placement of each needle programme around that typical piqué; cell depth from loop buckling and stacked tucks; thickness; curl; double-bed values',
+      validation: VALIDATION,
     },
     appearance: fam.look,
     estimate: true,
   };
 }
 
-module.exports = { analyzePique, isPique, tuckStats, PIQUE_FAMILY, ANCHORS };
+module.exports = { analyzePique, isPique, tuckStats, PIQUE_FAMILY, ANCHORS, VALIDATION };
