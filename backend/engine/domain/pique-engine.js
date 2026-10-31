@@ -83,6 +83,7 @@
 'use strict';
 
 const { FACTORY_RECORDS } = require('../catalog/factory-dataset');
+const { TIGHTNESS_LIMITS } = require('../formulas');
 
 const LOOP_HEIGHT_PITCHES = 1.41;  // knit loop height / course pitch (head overlaps the course above)
 const I_REF = 0.5;                 // hold intensity the pooled factory piqué stands for
@@ -163,6 +164,37 @@ const VALIDATION = (() => {
   };
 })();
 
+// ── How the factory makes a heavier piqué ──────────────────────────────────
+// Across its piqué rows, finished GSM rises with BOTH a tighter knit (TF up)
+// and denser course packing (Kc up) — not with count alone. Linear fits
+// over the rows, each clamped to the range the rows actually cover (5th-95th
+// percentile) so the solver never extrapolates a trend past its data:
+//     Kc ≈ 4.49 + 0.0154·GSM      TF ≈ 15.3 + 0.0159·GSM      (2026-10-31)
+const PIQUE_TRENDS = (() => {
+  const rs = FACTORY_RECORDS
+    .filter(r => r.fab === 'pique' && !/lycra/.test(r.spin || '') && r.fgsm < 1000)
+    .map(r => { const d = deriveRow(r); return d ? { gsm: r.fgsm, Kc: d.Kc, TF: Math.sqrt(590.5 / r.ne) / (r.sl / 10) } : null; })
+    .filter(Boolean);
+  if (rs.length < 20) return null;
+  const fit = (key) => {
+    const n = rs.length, mx = rs.reduce((a, r) => a + r.gsm, 0) / n, my = rs.reduce((a, r) => a + r[key], 0) / n;
+    let sxy = 0, sxx = 0;
+    rs.forEach(r => { sxy += (r.gsm - mx) * (r[key] - my); sxx += (r.gsm - mx) ** 2; });
+    const b = sxy / sxx, a = my - b * mx;
+    const sorted = rs.map(r => r[key]).sort((x, y) => x - y);
+    const lo = sorted[Math.floor((n - 1) * 0.05)], hi = sorted[Math.floor((n - 1) * 0.95)];
+    return { a, b, lo, hi, at: (g) => clamp(a + b * g, lo, hi) };
+  };
+  const g = rs.map(r => r.gsm).sort((x, y) => x - y);
+  return { Kc: fit('Kc'), TF: fit('TF'), rows: rs.length, gsmMin: g[0], gsmMax: g[g.length - 1] };
+})();
+
+// Coarsest count a gauge can run. The needle hook and trick must pass the
+// yarn, so the usable count scales with gauge squared: Ne_min = 20·(G/24)².
+// The records agree: coarsest counts run are Ne 12 on 20G (formula 13.9),
+// Ne 20 on 24G, Ne 26-28 on 28G (formula 27.2).
+const coarsestCount = (gauge) => 20 * (gauge / 24) ** 2;
+
 // Fallbacks only if the dataset ever ships without these families.
 const A_JERSEY = ANCHORS.jersey || { n: 0, Kw: 3.81, Kc: 5.19 };
 const A_PIQUE = ANCHORS.pique || { n: 0, Kw: 2.92, Kc: 7.44, gsm: [186, 210] };
@@ -188,6 +220,20 @@ function fibreEffect(fibre, elastane) {
     basis += ` + lycra piqué records (${ANCHORS.piqueLycra.n})`;
   }
   return { spread, pack, basis };
+}
+
+// Structure placement shared by the analysis and the recipe solver: how far
+// this needle programme spreads and packs relative to the factory's typical
+// piqué (hold intensity, see header §2).
+function placement(fam, cyl, dial) {
+  const double = fam.bed === 'double';
+  const active = double ? [cyl, dial].filter(s => s && (s.tucks || s.misses)) : [cyl];
+  const nHold = Math.max(0, ...active.map(s => s.n_hold));
+  const holdFrac = active.length
+    ? active.reduce((a, s) => a + s.tuck_fraction + s.miss_fraction, 0) / (double ? 2 : 1)
+    : 0;
+  const intensity = holdFrac * (1 + 0.5 * Math.max(0, nHold - 1));
+  return { active, nHold, holdFrac, intensity, rel: Math.sqrt(intensity / I_REF) };
 }
 
 // Every piqué in the catalogue. `face` is the side sold as the face.
@@ -365,7 +411,9 @@ function analyzePique(p) {
 
   // ── Spread and expected compression (factory anchor, placed by structure) ─
   let spread = (1 + (SPREAD_REF - 1) * rel) * fx.spread;
-  let compressionExpected = (1 + (COMPRESSION_REF - 1) * rel) * fx.pack;
+  // the factory packs a heavier piqué tighter (PIQUE_TRENDS.Kc)
+  const packRef = PIQUE_TRENDS && p.gsm > 0 ? PIQUE_TRENDS.Kc.at(p.gsm) / A_JERSEY.Kc : COMPRESSION_REF;
+  let compressionExpected = (1 + (packRef - 1) * rel) * fx.pack;
   if (double) {
     // the second bed holds the wales; no double-piqué records to say how much
     spread = 1 + (spread - 1) * 0.4;
@@ -392,7 +440,11 @@ function analyzePique(p) {
   const compression = double ? null : cpc / cpcJersey;
   // How far this GSM/count/SL sits from what the factory runs for this
   // structure. Outside ±15 % the quality is unusual for its stitch length.
-  const deviation = double ? null : compression / compressionExpected - 1;
+  // Judged against the MEASURED typical piqué packing at this weight (not
+  // the modelled per-programme expectation), so the flag means "unlike what
+  // the factory runs", never "unlike my own model".
+  const measuredPack = packRef * fx.pack;
+  const deviation = double ? null : compression / measuredPack - 1;
   const plausible = double ? true : Math.abs(deviation) <= 0.15;
 
   // ── Held loop and cell depth ───────────────────────────────────────────
@@ -480,6 +532,7 @@ function analyzePique(p) {
       stitches_per_cm2: Math.round(wpc * cpc * (double ? 2 : 1)),
       course_compression_vs_jersey: compression == null ? null : round(compression),
       expected_compression: double ? null : round(compressionExpected),
+      factory_compression: double ? null : round(measuredPack),
       plausible,
       note: double
         ? 'Courses solved from the requested GSM; width from the needle pitch.'
@@ -510,4 +563,125 @@ function analyzePique(p) {
   };
 }
 
-module.exports = { analyzePique, isPique, tuckStats, PIQUE_FAMILY, ANCHORS, VALIDATION };
+/**
+ * Count and stitch length for a single-bed piqué at a finished GSM — solved,
+ * not looked up. Two relations, both measured on the factory piqué rows:
+ *
+ *   mass balance   GSM = Kw · Kc · tex / (10 · SL)       (validated ±4 %)
+ *   tightness      TF  = √tex / SL                       (as the factory runs it at that GSM)
+ *
+ * give √tex = 10 · GSM / (Kw · Kc · TF). The count is moved to a spun count
+ * (`standardCounts`) and the stitch length re-solved at that count so the
+ * GSM still closes. Then the gauge is checked: if the count is coarser than the
+ * gauge can run, the heaviest GSM this gauge can make is reported and the
+ * gauge that can make the asked GSM is named.
+ *
+ * Constants are the measured typical piqué (see structureConstants);
+ * composition enters through the CVC / lycra records.
+ */
+// Constants for the recipe: the MEASURED typical piqué (rel = 1), with the
+// measured fibre effects. The per-programme placement is deliberately left
+// out here: it is a model, and the factory's own count/SL rows are for
+// "piqué" without a programme, so letting an unmeasured structure term move a
+// yarn count would claim more than the data holds.
+function structureConstants(fabricId, composition, pattern) {
+  const fam = PIQUE_FAMILY[fabricId];
+  if (!fam || fam.bed !== 'single' || !PIQUE_TRENDS) return null;
+  const fx = fibreEffect(fibreClass(composition), !!(composition && composition.has_elastane));
+  const KwS = A_JERSEY.Kw / (SPREAD_REF * fx.spread);
+  const KcAt = (g) => PIQUE_TRENDS.Kc.at(g) * fx.pack;
+  // A programme with MISS cells (the heavy polo piqué's tuck-to-miss
+  // variant) draws only a float about one needle pitch long there instead
+  // of a stitch length: yarn per needle per feed = SL·(1 − m) + m/wpc, and
+  // with wpc = Kw/SL that is SL·(1 − m·(1 − 1/Kw)).
+  const st = tuckStats(pattern && pattern.pattern_cylinder);
+  const m = st ? st.miss_fraction : 0;
+  const yarnFactor = 1 - m * (1 - 1 / KwS);
+  return { KwS, KcAt, yarnFactor };
+}
+
+function solvePiqueRecipe({ fabricId, gsm, gauge, composition, pattern, standardCounts }) {
+  if (!(gsm > 0)) return null;
+  const k = structureConstants(fabricId, composition, pattern);
+  if (!k) return null;
+  const { KwS, yarnFactor } = k;
+  const KcAt = (g) => k.KcAt(g) * yarnFactor;   // mass per course per needle, misses included
+  const lim = TIGHTNESS_LIMITS.pique || { ideal_min: 17, ideal_max: 19.5, min: 14, max: 22 };
+  const tfAt = (g) => clamp(PIQUE_TRENDS.TF.at(g), lim.ideal_min, lim.ideal_max);
+
+  const tfTarget = tfAt(gsm);
+  const sqrtTex = (10 * gsm) / (KwS * KcAt(gsm) * tfTarget);
+  const neExact = 590.5 / (sqrtTex * sqrtTex);
+  // Of the spun counts either side, take the one whose re-solved stitch
+  // length lands nearest the target tightness — not simply the nearest
+  // count, which can push a knit outside its tightness band.
+  const atCount = (ne) => {
+    const tex = 590.5 / ne;
+    const slCm = (KwS * KcAt(gsm) * tex) / (10 * gsm);
+    return { ne, slCm, tf: Math.sqrt(tex) / slCm };
+  };
+  const list = Array.isArray(standardCounts) && standardCounts.length ? standardCounts : null;
+  const cands = list
+    ? [Math.max(...list.filter(c => c <= neExact), list[0]), Math.min(...list.filter(c => c >= neExact), list[list.length - 1])]
+    : [Math.floor(neExact), Math.ceil(neExact)];
+  const best = cands.map(atCount).sort((a, b) => Math.abs(a.tf - tfTarget) - Math.abs(b.tf - tfTarget))[0];
+  const ne = best.ne, slCm = best.slCm, tf = best.tf;
+
+  // Gauge: coarsest count it can pass; the heaviest piqué it can make at the
+  // top of the ideal tightness band; and the gauge the asked GSM needs.
+  const g = gauge > 0 ? gauge : 24;
+  const neMin = coarsestCount(g);
+  const gsmMaxAt = (gg) => {
+    const texMax = 590.5 / coarsestCount(gg);
+    let m = gsm;
+    for (let i = 0; i < 8; i++) m = (KwS * KcAt(m) * lim.ideal_max * Math.sqrt(texMax)) / 10;
+    return m;
+  };
+  const gsmMax = gsmMaxAt(g);
+  // the count must pass the needle AND the weight must be reachable inside
+  // the tightness band
+  const gaugeOk = ne >= neMin - 0.5 && gsm <= gsmMax * 1.02;
+  let suggested = null;
+  if (!gaugeOk) {
+    for (const gg of [22, 20, 18, 16, 14]) {
+      if (gg < g && ne >= coarsestCount(gg) - 0.5) { suggested = gg; break; }
+    }
+  }
+  return {
+    count_exact: round(neExact, 1),
+    count_ne: ne,
+    sl_mm: round(slCm * 10, 3),
+    tightness_factor: round(tf, 1),
+    tf_target: round(tfTarget, 1),
+    tf_band: [lim.ideal_min, lim.ideal_max],
+    kw: round(KwS, 3),
+    kc: round(KcAt(gsm), 3),
+    gauge: {
+      gauge: g,
+      coarsest_count: round(neMin, 1),
+      ok: gaugeOk,
+      max_gsm: Math.round(gsmMax),
+      suggested_gauge: suggested,
+    },
+    within_factory_range: gsm >= PIQUE_TRENDS.gsmMin && gsm <= PIQUE_TRENDS.gsmMax,
+  };
+}
+
+/**
+ * Finished GSM a count + stitch length would actually give on this piqué
+ * (the same validated mass balance), to test a recipe from anywhere else.
+ */
+function piqueGsmFor({ fabricId, countNe, slMm, composition, pattern, gsmHint }) {
+  if (!(countNe > 0) || !(slMm > 0)) return null;
+  const k = structureConstants(fabricId, composition, pattern);
+  if (!k) return null;
+  const tex = 590.5 / countNe, slCm = slMm / 10;
+  let m = gsmHint || 200;
+  for (let i = 0; i < 8; i++) m = (k.KwS * k.KcAt(m) * k.yarnFactor * tex) / (10 * slCm);
+  return m;
+}
+
+module.exports = {
+  analyzePique, isPique, tuckStats, PIQUE_FAMILY, ANCHORS, VALIDATION,
+  PIQUE_TRENDS, solvePiqueRecipe, piqueGsmFor, coarsestCount,
+};

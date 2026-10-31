@@ -2365,6 +2365,19 @@ function renderPique(q) {
     ${tile('Thickness', `≈${b.thickness_mm} mm`, q.bed === 'single' ? `curl ${Math.round(b.curl_vs_jersey * 100)}% of jersey` : 'no edge curl')}
     ${tile('GSM fit', fit.position === 'n/a' ? '—' : fit.position.charAt(0).toUpperCase() + fit.position.slice(1), common.length ? `most piqué runs ${common[0]}–${common[1]} GSM` : '', fitCls)}
   </div>`;
+  // Count / stitch length for this weight: solved from the finished-GSM
+  // balance (single-bed piqué), with the factory table's recipe beside it.
+  const rc = q.recipe;
+  if (rc) {
+    const gz = rc.gauge || {};
+    const tbl = rc.table;
+    html += `<div class="card-sm" style="margin-bottom:10px;">
+      <div class="label">Count &amp; stitch length for this weight</div>
+      <div class="mt-4 text-sm"><b>${rc.count_ne}/1 at ${rc.sl_mm} mm</b> (TF ${rc.tightness_factor}, target ${rc.tf_target}) — solved from the finished-GSM balance with the factory's measured piqué constants (Kw ${rc.kw}, Kc ${rc.kc}).</div>
+      ${tbl ? `<div class="mt-4 text-sm">Factory table recipe: ${tbl.count_ne}/1 at ${tbl.sl_mm} mm → would finish at about ${tbl.finishes_at_gsm} GSM (${tbl.deviation_pct > 0 ? '+' : ''}${tbl.deviation_pct}%).</div>` : ''}
+      <div class="mt-4 text-sm ${gz.ok ? '' : 'text-amber'}">${gz.gauge}G runs down to about ${gz.coarsest_count}/1; heaviest piqué it makes ≈ ${gz.max_gsm} GSM.${gz.ok ? '' : ` This weight needs ${gz.suggested_gauge ? gz.suggested_gauge + 'G' : 'a coarser gauge'}.`}</div>
+    </div>`;
+  }
   html += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;">
     <div class="card-sm">
       <div class="label">Feeder notation (${q.notation.feeds} feeds, ${q.notation.repeat.wales} × ${q.notation.repeat.courses} repeat)</div>

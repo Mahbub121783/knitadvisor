@@ -49,6 +49,10 @@ const TIERS = {
     rank: 3, label: 'Derived from published table', badge: 'derived',
     note: 'Regression-fitted from a published industry lookup table rather than a formula printed directly for this structure. Grounded in real reference data, one step removed from it.',
   },
+  factory_model: {
+    rank: 4, label: 'Factory-calibrated model', badge: 'derived',
+    note: 'Solved from the finished-GSM mass balance with constants measured on the real factory records for this fabric family, and checked against those records (each predicted from the others). Not a single matched record — a model that reproduces them.',
+  },
   factory_interpolated: {
     rank: 4, label: 'Factory data (interpolated)', badge: 'verified',
     note: 'Real factory samples bracket this exact GSM on both sides; this value is interpolated between two measured points.',
@@ -101,6 +105,7 @@ function classifySource(rawSource, opts = {}) {
   else if (s === 'FACTORY_INTERPOLATED') key = 'factory_interpolated';
   else if (s === 'FACTORY_EXTRAPOLATED') key = 'factory_extrapolated';
   else if (s === 'FACTORY_NEAREST') key = 'factory_nearest';
+  else if (s === 'FACTORY_MODEL') key = 'factory_model';
   else if (s === 'FACTORY_KNOWLEDGE' || /factory/i.test(s) || /knitting master file/i.test(s)) key = 'factory_data';
   else key = null;
 

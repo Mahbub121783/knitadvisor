@@ -67,7 +67,7 @@ const {
 } = require('./formulas/warp-knit');
 
 const { getPattern: getEnginePattern } = require('./domain/pattern-engine');
-const { analyzePique } = require('./domain/pique-engine');
+const { analyzePique, isPique, solvePiqueRecipe, piqueGsmFor } = require('./domain/pique-engine');
 const { analyzeCriticalPath } = require('./domain/critical-path');
 const { recommendMachine } = require('./domain/machine-optimizer');
 const { analyzeYarn, recommendYarnGrade } = require('./domain/yarn-engine');
@@ -280,6 +280,54 @@ function calculate(params) {
     const bucket = FAB_BUCKET_ALIAS[fabric];
     if (bucket && bucket !== fabric) factoryLookup.family_alias = bucket;
     trace.push({ step: '1.8', action: 'factory_lookup', result: factoryLookup });
+  }
+
+  // --- 1.9. Piqué recipe check (single-bed piqué) ---
+  // The factory count table is keyed on TARGET GSM, and some of its rows
+  // finished far from target (a 260 target knitted in Ne 30 that finished at
+  // 210), so above ~230 GSM it hands back a count/SL that cannot weigh what
+  // was asked — e.g. Ne 24 at 260 GSM, finer than its own Ne 22 at 240. The
+  // piqué engine solves count and SL from the finished-GSM mass balance and
+  // the tightness the factory runs at that weight (pique-engine.js
+  // solvePiqueRecipe, validated on the same records to ±4 % median finished
+  // GSM). The table's recipes run ~5-10 % light of the finished GSM they are
+  // looked up by — the rows' own finished/target ratio is 0.95 — so the
+  // solved recipe is used for every single-bed piqué, and the table recipe is
+  // reported beside it with the GSM it would actually finish at.
+  let piqueRecipe = null;
+  if (isPique(fabricDef.id) && fabricDef.category !== 'warp_knit') {
+    const piquePattern = getEnginePattern(fabricDef.id, gsm, gauge, composition);
+    piqueRecipe = solvePiqueRecipe({
+      fabricId: fabricDef.id, gsm, gauge, composition: parsedComp, pattern: piquePattern,
+      standardCounts: STANDARD_COUNTS,
+    });
+    if (piqueRecipe && factoryLookup && factoryLookup.count_ne && factoryLookup.sl) {
+      const gsmAt = piqueGsmFor({
+        fabricId: fabricDef.id, countNe: factoryLookup.count_ne, slMm: factoryLookup.sl,
+        composition: parsedComp, pattern: piquePattern, gsmHint: gsm,
+      });
+      const deviation = gsmAt / gsm - 1;
+      piqueRecipe.table = {
+        count_ne: factoryLookup.count_ne, sl_mm: factoryLookup.sl, source: factoryLookup.source,
+        finishes_at_gsm: Math.round(gsmAt), deviation_pct: Math.round(deviation * 1000) / 10,
+      };
+      {
+        factoryLookup = {
+          ...factoryLookup,
+          count_ne: piqueRecipe.count_ne,
+          count_display: `${piqueRecipe.count_ne}/1`,
+          sl: piqueRecipe.sl_mm,
+          source: 'FACTORY_MODEL',
+          interpolated: false,
+        };
+        piqueRecipe.applied = true;
+        if (Math.abs(deviation) > 0.10) warnings.push(`Piqué recipe: the factory table's ${piqueRecipe.table.count_ne}/1 at ${piqueRecipe.table.sl_mm} mm would finish at about ${piqueRecipe.table.finishes_at_gsm} GSM, not ${gsm}. Solved instead from the finished-GSM balance and the tightness the factory runs at this weight: ${piqueRecipe.count_ne}/1 at ${piqueRecipe.sl_mm} mm (TF ${piqueRecipe.tightness_factor}).`);
+      }
+      trace.push({ step: '1.9', action: 'pique_recipe', result: `table ${piqueRecipe.table.count_ne}/1 @ ${piqueRecipe.table.sl_mm} mm → ~${piqueRecipe.table.finishes_at_gsm} GSM (${piqueRecipe.table.deviation_pct}%); solved ${piqueRecipe.count_ne}/1 @ ${piqueRecipe.sl_mm} mm${piqueRecipe.applied ? ' — APPLIED' : ''}` });
+    }
+    if (piqueRecipe && !piqueRecipe.gauge.ok) {
+      warnings.push(`Piqué on ${piqueRecipe.gauge.gauge}G: ${gsm} GSM needs about ${piqueRecipe.count_ne}/1, coarser than ${piqueRecipe.gauge.gauge}G runs (≈${piqueRecipe.gauge.coarsest_count}/1 and coarser is not practical); the heaviest this gauge makes is about ${piqueRecipe.gauge.max_gsm} GSM.${piqueRecipe.gauge.suggested_gauge ? ` Use ${piqueRecipe.gauge.suggested_gauge}G for this weight.` : ''}`);
+    }
   }
 
   // --- 2. Calculate yarn count (with composition modifiers) ---
@@ -953,8 +1001,9 @@ function calculate(params) {
   const piqueResult = patternResult ? analyzePique({
     fabricId: fabricDef.id, gsm, gauge, countNe: tfResult && tfResult.basis ? tfResult.basis.count_ne : countResult.count_ne,
     llMm: llResult ? llResult.ll_mm : null, tex: tfResult ? tfResult.tex : null,
-    tf: tfResult ? tfResult.value : null, composition, pattern: patternResult,
+    tf: tfResult ? tfResult.value : null, composition: parsedComp, pattern: patternResult,
   }) : null;
+  if (piqueResult && piqueRecipe) piqueResult.recipe = piqueRecipe;
   if (piqueResult) {
     trace.push({ step: '6.3b', action: 'pique_structure', result: `relief ${piqueResult.geometry.relief_mm} mm, spread ${piqueResult.geometry.wale_spread}, ${piqueResult.density.wales_per_cm}w × ${piqueResult.density.courses_per_cm}c /cm` });
   }
@@ -1721,9 +1770,10 @@ function standardCountWarning(exactNe, rounded) {
          `The inputs are likely out of range — treat this count as unusable rather than rounded.`;
 }
 
+const STANDARD_COUNTS = [6, 7, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 40, 44, 50, 60, 80];
 function roundToStandardCount(countNe) {
   if (!countNe) return countNe;
-  const standardCounts = [6, 7, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 40, 44, 50, 60, 80];
+  const standardCounts = STANDARD_COUNTS;
   let closest = standardCounts[0];
   let minDiff = Math.abs(countNe - closest);
   for (let i = 1; i < standardCounts.length; i++) {

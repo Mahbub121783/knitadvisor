@@ -66,22 +66,17 @@ class PatternEngine {
       }
     }
 
-    // --- 3. Single Pique & Single Lacoste: Tuck-to-Miss weight reduction ---
+    // --- 3. Single Pique & Single Lacoste at high GSM: notes only (no programme change) ---
     if (gsm && gsm > 220) {
       if (fabricId === 'pique_single') {
-        structure.pattern = [
-          ['K', 'T'],
-          ['K', 'M'],
-          ['T', 'K'],
-          ['M', 'K']
-        ];
-        structure.cam = [
-          { feed: 1, cylinder: 'K/T', note: 'Odd needles knit, even needles tuck' },
-          { feed: 2, cylinder: 'K/M', note: 'Odd needles knit, even needles miss (tuck loop converted to miss to prevent stiff boardy fabric)' },
-          { feed: 3, cylinder: 'T/K', note: 'Odd needles tuck, even needles knit' },
-          { feed: 4, cylinder: 'M/K', note: 'Odd needles miss, even needles knit (tuck loop converted to miss to prevent stiff boardy fabric)' }
-        ];
-        dynamicNote = 'High GSM tuck-to-miss adaptation active. Secondary tuck loops replaced with miss loops to reduce fabric weight and stiffness, keeping the pique drapable.';
+        // No pattern change. This used to swap the second tuck of each pair
+        // for a MISS above 220 GSM "to reduce weight" — a weight-reducing
+        // change applied exactly when a heavier fabric was asked for. Run
+        // through the finished-GSM mass balance (pique-engine.js) it forces
+        // about Ne 14 at 240 GSM, which a 24G machine cannot knit, while the
+        // factory records show 240-260 GSM piqué made on 24G in Ne 20-22 at
+        // SL 2.7-2.8 — the standard programme on a coarser count.
+        dynamicNote = 'Heavy polo piqué: same 4-feed programme (K,T / K,T / T,K / T,K) on a coarser count and a slightly tighter knit, as the factory records run it. Two stacked tucks of coarse yarn load the needle hook — keep the tuck cam and take-down settings in check.';
       } else if (fabricId === 'lacoste_single') {
         // No pattern change. This used to turn feed 4 into M,M — every needle
         // missing — which is a feed that knits nothing: the machine would run

@@ -59,15 +59,17 @@ try {
 }
 
 // ----------------------------------------------------------------
-// TEST CASE 3: Single Pique Tuck-to-Miss weight reduction
+// TEST CASE 3: Heavy Single Pique keeps its programme
+// (the old tuck-to-miss swap cut weight exactly when more was asked for, and
+//  contradicted the factory records — see pattern-engine.js)
 // ----------------------------------------------------------------
 try {
-  console.log("\n--- Test Case 3: Single Pique Tuck-to-Miss Adaptation (High GSM) ---");
+  console.log("\n--- Test Case 3: Heavy Single Pique keeps the K,T/K,T/T,K/T,K programme ---");
   const pattern = getPattern('pique_single', 240, 24, '100% Cotton');
-  
-  assert(pattern.pattern_cylinder[1][1] === 'M', "Second course tuck loop converted to Miss ('M') loop");
-  assert(pattern.pattern_cylinder[3][0] === 'M', "Fourth course tuck loop converted to Miss ('M') loop");
-  assert(pattern.structure_note.includes("tuck-to-miss adaptation active"), "Structure note mentions tuck-to-miss activation");
+
+  assert(JSON.stringify(pattern.pattern_cylinder) === JSON.stringify([['K','T'],['K','T'],['T','K'],['T','K']]), "240 GSM polo pique keeps its 4-feed tuck programme");
+  assert(!pattern.pattern_cylinder.some(r => r.includes('M')), "No miss cells introduced at high GSM");
+  assert(pattern.structure_note.includes("coarser count"), "Structure note explains heavy pique is made on a coarser count");
 } catch (err) {
   console.error("Test Case 3 failed with error:", err);
   failedTests++;

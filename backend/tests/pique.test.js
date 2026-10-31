@@ -46,7 +46,7 @@ ok(single.geometry.relief_mm > 0.1 && single.geometry.relief_mm < 0.35, `single 
 // arc length pi^2 a^2 / (4 H'); the relief must satisfy that exactly.
 {
   const k = single.density.course_compression_vs_jersey;
-  const H = 1.41 * (2.585 / ANCHORS.jersey.Kc);           // lacoste_single 200: SL 2.585
+  const H = 1.41 * (run('lacoste_single', 200).loop_length.value_mm / ANCHORS.jersey.Kc);
   const Hs = H / k, a = single.geometry.relief_buckle_mm;
   const excess = (Math.PI ** 2 * a * a) / (4 * Hs);
   ok(Math.abs(excess - (H - Hs)) / (H - Hs) < 0.05, `buckle amplitude closes the arc-length balance (${excess.toFixed(3)} vs ${(H - Hs).toFixed(3)} mm)`);
@@ -66,7 +66,7 @@ ok(spreadRef > 1.15 && spreadRef < 1.45, `measured wale spread ${spreadRef.toFix
 ok(packRef > 1.25 && packRef < 1.6, `measured course packing ${packRef.toFixed(2)}`);
 // The reference-intensity structure (double Lacoste, I = 0.5) sits on them.
 ok(Math.abs(dbl.geometry.wale_spread - spreadRef) < 0.02, `double Lacoste spread = measured typical (${dbl.geometry.wale_spread})`);
-ok(Math.abs(dbl.density.expected_compression - packRef) < 0.02, `double Lacoste packing = measured typical (${dbl.density.expected_compression})`);
+ok(Math.abs(dbl.density.expected_compression - dbl.density.factory_compression) < 0.02, `double Lacoste packing = measured typical at its weight (${dbl.density.expected_compression} vs ${dbl.density.factory_compression})`);
 
 // 4. More tucks per repeat spread the wales wider.
 ok(polo.geometry.wale_spread > single.geometry.wale_spread, 'polo pique spreads wider than single Lacoste');
@@ -119,7 +119,29 @@ const at = (gsm) => analyzePique({ fabricId: 'lacoste_single', gsm, countNe: 26,
 ok(at(215).geometry.relief_mm > at(185).geometry.relief_mm, 'heavier at same count/SL: deeper cell');
 ok(!at(320).density.plausible, 'an unreachable GSM for the count/SL is flagged');
 
-// 11. No source attributions reach the API.
+// 11. Count / stitch length for a single-bed pique: solved from the
+//     finished-GSM balance, checked against what the factory ran.
+{
+  const counts = [160, 180, 200, 220, 240, 260].map(g => run('lacoste_single', g).yarn.count_ne);
+  ok(counts.every((c, i) => i === 0 || c <= counts[i - 1]), `count never gets finer as GSM rises (${counts.join(', ')})`);
+  const r200 = run('pique_single', 200), r240 = run('pique_single', 240);
+  ok(r200.yarn.count_ne >= 22 && r200.yarn.count_ne <= 26, `200 GSM: ${r200.yarn.count_ne}/1 (factory rows at ~200 finished: median 24/1)`);
+  ok(r240.yarn.count_ne >= 20 && r240.yarn.count_ne <= 22, `240 GSM: ${r240.yarn.count_ne}/1 (factory rows at 240-259: 20-22/1)`);
+  const rc = r240.pique.recipe;
+  ok(rc && rc.applied && r240.yarn.source === 'FACTORY_MODEL', 'solved recipe used, labelled as the factory-calibrated model');
+  ok(rc.tightness_factor >= 17 && rc.tightness_factor <= 20, `recipe tightness in band (TF ${rc.tightness_factor})`);
+  const heavy = run('pique_single', 280);
+  ok(heavy.pique.recipe.gauge.ok === false && heavy.pique.recipe.gauge.suggested_gauge === 22, '280 GSM on 24G: gauge limit flagged, 22G suggested');
+  ok(heavy.warnings.some(w => /22G/.test(w)), 'gauge advice reaches the warnings');
+  ok(run('pique_single', 280, { gauge: 20 }).pique.recipe.gauge.ok, '280 GSM on 20G: within range');
+}
+
+// 12. Composition reaches the analysis (it used to receive the raw text and
+//     read every blend as cotton).
+ok(/cvc/.test(run('lacoste_single', 200, { composition: '60% Cotton 40% Polyester' }).pique.geometry.fibre), 'CVC composition reaches the pique analysis');
+ok(/elastane/.test(run('lacoste_single', 200, { composition: '95% Cotton 5% Elastane' }).pique.geometry.fibre), 'elastane reaches the pique analysis');
+
+// 13. No source attributions reach the API.
 ok(!/spencer|leaf|sha et|http/i.test(JSON.stringify(single)), 'no source names or links in the pique output');
 
 if (failed) {
