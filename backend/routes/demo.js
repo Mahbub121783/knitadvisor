@@ -1,0 +1,120 @@
+/**
+ * POST /api/demo/calculate — the home page's live sample calculator.
+ *
+ * Public (no account), so it is fenced three ways:
+ *   - inputs are whitelisted: eight constructions, four compositions, a
+ *     shade list, the finishing / dyeing / surface-finish options, GSM and
+ *     gauge clamped to sane ranges. Anything else is refused, so the demo can
+ *     never become an unmetered copy of the full calculator.
+ *   - the answer is trimmed: no costing breakdown, garment costing, formula
+ *     trace or factory records — the price per kg is shown, the working
+ *     behind it stays in the signed-in calculator.
+ *   - a shared rate limit (database-counted, every worker sees one count)
+ *     and an in-process cache of recent answers: dragging a slider back and
+ *     forth over the same values costs nothing.
+ */
+'use strict';
+
+const express = require('express');
+const { calculate } = require('../engine/index');
+const { createRateLimiter } = require('../middleware/rate-limiter');
+
+const router = express.Router();
+
+const FABRICS = new Set([
+  'single_jersey', 'rib_1x1', 'rib_2x2', 'interlock',
+  'lacoste_single', 'pique_single', 'french_terry', 'fleece_3_thread',
+]);
+const COMPOSITIONS = new Set([
+  '100% Cotton', '60% Cotton 40% Polyester', '95% Cotton 5% Elastane', '100% Polyester',
+]);
+const SHADE = /^(1[1-9]-\d{4}|Jet Black)$/;     // TCX codes, plus the one name the page uses
+const FINISHING = new Set(['greige', 'tubular_relaxed', 'compacted', 'heat_set']);
+const DYEING = new Set(['reactive', 'pigment', 'disperse', 'garment_wash']);
+const SURFACE = new Set(['peach_finish', 'brushed', 'enzyme_wash', 'silicone', 'mercerized', 'resin']);
+
+const demoLimiter = createRateLimiter({
+  name: 'demo_calculate',
+  max: 120,
+  windowMs: 10 * 60 * 1000,
+  message: 'The live sample is busy — please wait a few minutes, or sign in to use the full calculator.',
+});
+
+const cache = new Map();          // key → trimmed result, newest last
+const CACHE_MAX = 400;
+
+function readInputs(b) {
+  const fabric = String(b.fabric || '');
+  if (!FABRICS.has(fabric)) return { error: 'This construction is not in the live sample.' };
+  const gsm = Math.round(Number(b.gsm));
+  if (!(gsm >= 100 && gsm <= 420)) return { error: 'GSM must be between 100 and 420 in the live sample.' };
+  const p = { fabric, gsm, efficiency: 85 };
+  if (b.composition) {
+    if (!COMPOSITIONS.has(b.composition)) return { error: 'Unknown composition.' };
+    p.composition = b.composition;
+  }
+  if (b.color_input) {
+    if (!SHADE.test(String(b.color_input))) return { error: 'Unknown shade.' };
+    p.color_input = String(b.color_input);
+  }
+  if (b.gauge) {
+    const g = Math.round(Number(b.gauge));
+    if (!(g >= 14 && g <= 32)) return { error: 'Gauge must be between 14 and 32.' };
+    p.gauge = g;
+  }
+  for (const [k, set] of [['finishing_route', FINISHING], ['dyeing_method', DYEING], ['surface_finish', SURFACE]]) {
+    if (b[k]) {
+      if (!set.has(b[k])) return { error: `Unknown ${k.replace(/_/g, ' ')}.` };
+      p[k] = b[k];
+    }
+  }
+  return { p };
+}
+
+// What the page and its 3D view read; nothing more.
+function trim(r) {
+  const out = { ...r };
+  const c = r.costing;
+  out.costing = c ? {
+    total_per_kg_usd: c.total_per_kg_usd,
+    yarn_price_provenance: c.yarn_price_provenance ? { as_of: c.yarn_price_provenance.as_of || null } : null,
+  } : null;
+  out.garment_costing = null;
+  out.formula_trace = [];
+  out.critical_path = null;
+  out.factory_reference = null;
+  if (out.factory_prediction) out.factory_prediction = { ...out.factory_prediction, nearest_records: undefined };
+  out.demo = true;
+  return out;
+}
+
+router.post('/calculate', demoLimiter, (req, res) => {
+  const { p, error } = readInputs(req.body || {});
+  if (error) return res.status(400).json({ success: false, error });
+
+  const key = JSON.stringify(p);
+  if (cache.has(key)) {
+    const hit = cache.get(key);
+    cache.delete(key);
+    cache.set(key, hit);
+    return res.json(hit);
+  }
+  try {
+    const t0 = Date.now();
+    const result = calculate(p);
+    if (!result || result.success === false) {
+      return res.status(400).json({ success: false, error: (result && result.error) || 'Could not calculate this fabric.' });
+    }
+    const out = trim(result);
+    out.response_ms = Date.now() - t0;
+    cache.set(key, out);
+    if (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value);
+    res.json(out);
+  } catch (err) {
+    console.error('[demo] calculate failed:', err.message);
+    res.status(500).json({ success: false, error: 'Could not calculate this fabric.' });
+  }
+});
+
+module.exports = router;
+module.exports.readInputs = readInputs;

@@ -31,6 +31,7 @@ const searchRoutes = require('./routes/search');
 const assistantRoutes = require('./routes/assistant');
 const rfqRoutes = require('./routes/rfq');
 const authRoutes = require('./routes/auth');
+const demoRoutes = require('./routes/demo');
 const accountRoutes = require('./routes/account');
 const rateLimiter = require('./middleware/rate-limiter');
 const { createRateLimiter } = require('./middleware/rate-limiter');
@@ -201,6 +202,8 @@ app.use('/api', rateLimiter);
 // knowledge, search) stay public.
 app.use('/api/auth', authRoutes);
 app.use('/api/account', accountRoutes);
+// The home page's live sample: public, whitelisted, rate-limited (routes/demo.js).
+app.use('/api/demo', demoRoutes);
 
 // API routes
 app.use('/api', apiRoutes);

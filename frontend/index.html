@@ -11,6 +11,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <link rel="preload" as="image" href="assets/img/landing/hero-jersey-loops.webp">
+<script type="importmap">
+{ "imports": { "three": "/assets/js/vendor/three.module.js", "three/addons/controls/OrbitControls.js": "/assets/js/vendor/OrbitControls.js" } }
+</script>
 <style>
   :root{
     --bg:#FBFBFA; --bg-alt:#F2F2EF; --card:#FFFFFF; --ink:#111316;
@@ -120,6 +123,58 @@
   .section-head h2{margin-top:14px;font-size:clamp(26px,3.2vw,38px);}
   .section-head p{font-size:16px;max-width:56ch;}
   .bg-alt{background:var(--bg-alt);}
+
+
+  /* ---------- live lab ---------- */
+  .lab{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);border:1px solid var(--border);border-radius:6px;background:var(--card);overflow:hidden;}
+  @media (max-width:980px){ .lab{grid-template-columns:1fr;} }
+  .lab-ctl{padding:22px 22px 26px;border-right:1px solid var(--border);display:flex;flex-direction:column;gap:20px;}
+  @media (max-width:980px){ .lab-ctl{border-right:none;border-bottom:1px solid var(--border);} }
+  .lab .lbl{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;font-weight:500;color:var(--text);margin-bottom:8px;}
+  .lab .lbl .val{font-family:'IBM Plex Mono',monospace;color:var(--accent);font-size:13px;}
+  .lab select{width:100%;padding:9px 10px;border:1px solid var(--border-strong);border-radius:4px;background:var(--bg);color:var(--text);font:inherit;font-size:13.5px;}
+  .lab select:focus-visible,.lab input:focus-visible{outline:2px solid var(--accent);outline-offset:1px;}
+  .lab input[type=range]{width:100%;accent-color:var(--accent);}
+  .lab .scale{display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-faint);margin-top:2px;}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;}
+  .chip{padding:6px 10px;font-size:12.5px;border:1px solid var(--border-strong);background:transparent;color:var(--text-soft);border-radius:4px;cursor:pointer;}
+  .chip:hover{border-color:var(--text);color:var(--text);}
+  .chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--bg);}
+  .chip:focus-visible,.sw:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+  .sws{display:flex;flex-wrap:wrap;gap:8px;}
+  .sw{width:26px;height:26px;border-radius:4px;border:1px solid var(--border-strong);cursor:pointer;padding:0;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08);}
+  .sw[aria-pressed="true"]{outline:2px solid var(--ink);outline-offset:2px;}
+  .lab-main{display:flex;flex-direction:column;min-width:0;}
+  .lab-view{position:relative;background:var(--bg-alt);}
+  #labViz .viz-tab-bar,#labViz .viz-toolbar,#labViz .viz-info,#labViz .viz-legend{display:none !important;}
+  #labViz .viz-panel{display:none !important;}
+  #labViz .viz-panel[data-panel="threed"]{display:block !important;}
+  #labViz .viz-canvas-wrap{background:transparent;border:none;padding:0;overflow:visible;}
+  #labViz .ka3dgl-stage{padding:0;gap:0;}
+  #labViz .ka3dgl-mount{max-width:none;border-radius:0;}
+  #labViz .ka3d-controls{padding:10px 12px;justify-content:flex-start;width:100%;border-bottom:1px solid var(--border);background:var(--card);}
+  #labViz .ka3d-btn{background:transparent;color:var(--text-soft);border:1px solid var(--border-strong);border-radius:4px;font-family:'IBM Plex Mono',monospace;font-weight:500;}
+  #labViz .ka3d-btn:hover{border-color:var(--text);color:var(--text);}
+  #labViz .ka3d-btn.active{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);}
+  #labViz .ka3d-hint{color:var(--text-faint);}
+  #labViz .ka3dgl-loading{display:none;}
+  .lab-busy{position:absolute;top:56px;right:12px;z-index:3;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-soft);background:var(--card);border:1px solid var(--border);border-radius:4px;padding:4px 8px;opacity:0;transition:opacity .15s;pointer-events:none;}
+  .lab-busy.on{opacity:1;}
+  .lab-msg{padding:80px 24px;text-align:center;font-size:14px;color:var(--text-soft);}
+  .lab-read{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-top:1px solid var(--border);}
+  @media (max-width:760px){ .lab-read{grid-template-columns:repeat(2,minmax(0,1fr));} }
+  .rd{padding:14px 16px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);}
+  .rd:nth-child(4n){border-right:none;}
+  @media (max-width:760px){ .rd:nth-child(4n){border-right:1px solid var(--border);} .rd:nth-child(2n){border-right:none;} }
+  .rd .k{font-size:11.5px;color:var(--text-faint);}
+  .rd .v{margin-top:3px;font-family:'IBM Plex Mono',monospace;font-size:19px;color:var(--ink);letter-spacing:-0.01em;transition:color .3s;}
+  .rd .v small{font-size:12px;color:var(--text-faint);margin-left:4px;}
+  .rd .d{margin-top:2px;min-height:15px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-faint);}
+  .rd .d.up{color:#B5651D;} .rd .d.down{color:var(--accent);}
+  .rd.flash .v{color:var(--accent);}
+  .lab-notes{padding:14px 18px;background:var(--bg-alt);border-top:1px solid var(--border);font-size:13px;color:var(--text-soft);display:flex;flex-direction:column;gap:6px;min-height:20px;}
+  .lab-notes b{color:var(--ink);font-weight:500;}
+  .lab-foot{padding:12px 18px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;font-size:12.5px;color:var(--text-faint);}
 
   /* sample output: a datasheet */
   .sheet{display:grid;grid-template-columns:minmax(0,0.8fr) minmax(0,1.2fr);border:1px solid var(--border);border-radius:6px;background:var(--card);overflow:hidden;}
@@ -258,6 +313,7 @@
       <span class="brand-name">KnitAdvisor</span>
     </a>
     <nav class="primary" id="primaryNav" aria-label="Primary">
+      <a href="#lab">Live sample</a>
       <a href="#output">Output</a>
       <a href="#engine">Engine</a>
       <a href="#visualizer">Visualizer</a>
@@ -293,7 +349,7 @@
       <p class="sub">Enter GSM, composition and structure. KnitAdvisor solves count, stitch length, gauge, production and price per kilogram together, shows the working behind every figure, and renders the cloth down to its loops.</p>
       <div class="hero-cta">
         <button type="button" class="btn btn-primary" id="heroPrimaryBtn">Create free account</button>
-        <a href="#output" class="btn">See a sample output <span class="arr" aria-hidden="true">&darr;</span></a>
+        <a href="#lab" class="btn">Try it live <span class="arr" aria-hidden="true">&darr;</span></a>
       </div>
       <div class="facts">
         <div class="fact"><b>70</b><span>knit constructions</span></div>
@@ -319,6 +375,91 @@
     </div>
   </div>
 </div>
+
+<!-- LIVE LAB -->
+<section id="lab" style="padding-top:72px;">
+  <div class="wrap">
+    <div class="section-head">
+      <div>
+        <p class="eyebrow"><span class="n">00</span>Live sample</p>
+        <h2>Change the fabric. Watch the numbers and the cloth move.</h2>
+      </div>
+      <p>This is the real engine, not an animation: pick a construction, weight, fibre, shade and finish, and yarn count, stitch length, machine, shrinkage and price per kilogram are recalculated, and the 3D cloth is rebuilt from them.</p>
+    </div>
+    <div class="lab">
+      <div class="lab-ctl">
+        <div>
+          <div class="lbl"><span>Construction</span></div>
+          <div class="chips" id="labFabric" role="group" aria-label="Construction"></div>
+        </div>
+        <div>
+          <div class="lbl"><span>Finished weight</span><span class="val" id="labGsmVal">180 g/m&sup2;</span></div>
+          <input type="range" id="labGsm" min="120" max="320" step="5" value="180" aria-label="Finished weight in grams per square metre">
+          <div class="scale"><span>120</span><span>320</span></div>
+        </div>
+        <div>
+          <div class="lbl"><span>Composition</span></div>
+          <select id="labComp" aria-label="Composition">
+            <option value="100% Cotton">100% cotton</option>
+            <option value="60% Cotton 40% Polyester">60/40 cotton&ndash;polyester (CVC)</option>
+            <option value="95% Cotton 5% Elastane">95/5 cotton&ndash;elastane</option>
+            <option value="100% Polyester">100% polyester</option>
+          </select>
+        </div>
+        <div>
+          <div class="lbl"><span>Shade</span><span class="val" id="labShadeVal"></span></div>
+          <div class="sws" id="labShades" role="group" aria-label="Shade"></div>
+        </div>
+        <div>
+          <div class="lbl"><span>Gauge</span><span class="val" id="labGaugeVal">auto</span></div>
+          <div class="chips" id="labGauge" role="group" aria-label="Gauge"></div>
+        </div>
+        <div>
+          <div class="lbl"><span>Dyeing</span></div>
+          <select id="labDye" aria-label="Dyeing method">
+            <option value="reactive">Reactive (exhaust)</option>
+            <option value="pigment">Pigment</option>
+            <option value="disperse">Disperse (polyester / CVC)</option>
+            <option value="garment_wash">Garment wash</option>
+          </select>
+        </div>
+        <div>
+          <div class="lbl"><span>Finishing route</span></div>
+          <select id="labFin" aria-label="Finishing route">
+            <option value="compacted">Open-width compacted</option>
+            <option value="tubular_relaxed">Tubular relaxed</option>
+            <option value="greige">Greige (unfinished)</option>
+            <option value="heat_set">Heat-set (synthetics)</option>
+          </select>
+        </div>
+        <div>
+          <div class="lbl"><span>Surface finish</span></div>
+          <select id="labSurf" aria-label="Surface finish">
+            <option value="">None</option>
+            <option value="peach_finish">Peach / sueded</option>
+            <option value="brushed">Brushed</option>
+            <option value="enzyme_wash">Enzyme wash</option>
+            <option value="silicone">Silicone softener</option>
+            <option value="mercerized">Mercerised</option>
+            <option value="resin">Resin (stiff)</option>
+          </select>
+        </div>
+      </div>
+      <div class="lab-main">
+        <div class="lab-view" id="labView">
+          <div class="lab-busy" id="labBusy">calculating&hellip;</div>
+          <div id="labViz"></div>
+        </div>
+        <div class="lab-read" id="labRead"></div>
+        <div class="lab-notes" id="labNotes" aria-live="polite"></div>
+        <div class="lab-foot">
+          <span>Drag to orbit, scroll to zoom to the loops. Handle lifts and folds the cloth; Stretch test pulls it.</span>
+          <button type="button" class="btn btn-primary btn-sm" id="labCta">Calculate this fabric</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
 
 <!-- SAMPLE OUTPUT -->
 <section id="output">
@@ -606,6 +747,7 @@
 </div>
 
 <script src="assets/js/password-toggle.js?v=20260922a"></script>
+<script src="assets/js/fabric-visualizer.js?v=20260608g"></script>
 <script>
 (function(){
   "use strict";
@@ -1218,6 +1360,216 @@
       }
     });
   render();
+
+
+  /* ---------- live lab: real engine + real 3D viewer ---------- */
+  var LAB_FABRICS = [
+    ['single_jersey', 'Single jersey'], ['rib_1x1', '1×1 rib'], ['rib_2x2', '2×2 rib'], ['interlock', 'Interlock'],
+    ['lacoste_single', 'Single Lacoste'], ['pique_single', 'Polo piqué'], ['french_terry', 'French terry'], ['fleece_3_thread', '3-thread fleece']
+  ];
+  var LAB_SHADES = [
+    ['11-0601', 'Snow White'], ['11-0908', 'Ecru'], ['13-0858', 'Lemon'], ['16-1546', 'Living Coral'], ['18-1664', 'True Red'],
+    ['19-1543', 'Scarlet Sage'], ['17-5641', 'Bright Green'], ['14-4122', 'Placid Blue'], ['19-4052', 'Classic Blue'],
+    ['19-3832', 'Navy Blue'], ['19-4020', 'Dark Denim'], ['19-0303', 'Kombu Green'], ['Jet Black', 'Jet Black']
+  ];
+  var LAB_SHADE_HEX = { '11-0601': '#F2F0EB', '11-0908': '#EFE1CE', '13-0858': '#FFD700', '16-1546': '#FF6F61', '18-1664': '#BF1932',
+    '19-1543': '#841020', '17-5641': '#00A838', '14-4122': '#8CADD0', '19-4052': '#0F4C81', '19-3832': '#2B2E43', '19-4020': '#36454F',
+    '19-0303': '#3A403C', 'Jet Black': '#121212' };
+  var lab = { fabric: 'single_jersey', gsm: 180, comp: '100% Cotton', shade: '19-4052', gauge: 0, dye: 'reactive', fin: 'compacted', surf: '' };
+  var labPrev = null, labBase = null, labSeq = 0, labTimer = null, labViz = null, labVisible = false, labDirty = true;
+
+  function labChips(id, items, key, onPick){
+    var box = $(id);
+    box.innerHTML = '';
+    items.forEach(function(it){
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'chip'; b.textContent = it[1];
+      b.setAttribute('data-v', String(it[0]));
+      b.setAttribute('aria-pressed', String(lab[key]) === String(it[0]) ? 'true' : 'false');
+      b.addEventListener('click', function(){
+        lab[key] = it[0];
+        Array.prototype.forEach.call(box.children, function(c){ c.setAttribute('aria-pressed', c === b ? 'true' : 'false'); });
+        if (onPick) onPick();
+        labQueue();
+      });
+      box.appendChild(b);
+    });
+  }
+  labChips('labFabric', LAB_FABRICS, 'fabric');
+  labChips('labGauge', [[0, 'Auto'], [18, '18G'], [20, '20G'], [22, '22G'], [24, '24G'], [28, '28G']], 'gauge', function(){
+    $('labGaugeVal').textContent = lab.gauge ? lab.gauge + ' needles/in' : 'auto';
+  });
+  (function(){
+    var box = $('labShades');
+    LAB_SHADES.forEach(function(sh){
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'sw'; b.style.background = LAB_SHADE_HEX[sh[0]];
+      b.setAttribute('aria-label', sh[1]); b.title = sh[1];
+      b.setAttribute('aria-pressed', sh[0] === lab.shade ? 'true' : 'false');
+      b.addEventListener('click', function(){
+        lab.shade = sh[0];
+        Array.prototype.forEach.call(box.children, function(c){ c.setAttribute('aria-pressed', c === b ? 'true' : 'false'); });
+        $('labShadeVal').textContent = sh[1];
+        labQueue();
+      });
+      box.appendChild(b);
+    });
+    $('labShadeVal').textContent = 'Classic Blue';
+  })();
+  $('labGsm').addEventListener('input', function(){
+    lab.gsm = parseInt($('labGsm').value, 10);
+    $('labGsmVal').textContent = lab.gsm + ' g/m²';
+    labQueue();
+  });
+  [['labComp', 'comp'], ['labDye', 'dye'], ['labFin', 'fin'], ['labSurf', 'surf']].forEach(function(pr){
+    $(pr[0]).addEventListener('change', function(){ lab[pr[1]] = $(pr[0]).value; labQueue(); });
+  });
+  $('labCta').addEventListener('click', primaryAction);
+
+  function labBody(){
+    var b = { fabric: lab.fabric, gsm: lab.gsm, composition: lab.comp, color_input: lab.shade,
+              dyeing_method: lab.dye, finishing_route: lab.fin };
+    if (lab.gauge) b.gauge = lab.gauge;
+    if (lab.surf) b.surface_finish = lab.surf;
+    return b;
+  }
+
+  function fmt(n, d){ return (typeof n === 'number' && isFinite(n)) ? n.toFixed(d) : '—'; }
+  function labFigures(r){
+    var opt = (r.machine && r.machine.optimal) || {};
+    var q = r.quality_prediction || {}, sh = q.shrinkage || {};
+    var wet = r.wet_processing || {}, grey = (wet.greige || {}).grey_gsm_target;
+    var pc = r.physical_constraints || {};
+    var body = r.pique ? null : null;
+    return [
+      { id: 'count', k: 'Yarn count', v: (r.yarn && r.yarn.count_ne) ? r.yarn.count_ne + '/1' : '—', u: 'Ne', n: r.yarn && r.yarn.count_ne, d: 0, inv: true },
+      { id: 'sl', k: 'Stitch length', v: fmt(r.loop_length && r.loop_length.value_mm, 2), u: 'mm', n: r.loop_length && r.loop_length.value_mm, d: 2 },
+      { id: 'tf', k: 'Tightness factor', v: fmt(pc.tightness_factor, 1), u: '', n: pc.tightness_factor, d: 1 },
+      { id: 'gauge', k: 'Machine', v: opt.optimal_dia ? opt.optimal_dia + '″ × ' + opt.optimal_gauge + 'G' : '—', u: '', n: opt.optimal_gauge, d: 0 },
+      { id: 'grey', k: 'Grey weight to knit', v: grey ? Math.round(grey) : '—', u: 'g/m²', n: grey, d: 0 },
+      { id: 'shr', k: 'Shrinkage L / W', v: (sh.lengthwise_pct != null) ? sh.lengthwise_pct + ' / ' + sh.widthwise_pct + '%' : '—', u: '', n: sh.lengthwise_pct != null ? sh.lengthwise_pct : null, d: 1, label: 'length' },
+      { id: 'loss', k: 'Process loss', v: fmt(r.process_loss && r.process_loss.loss_pct, 1), u: '%', n: r.process_loss && r.process_loss.loss_pct, d: 1 },
+      { id: 'price', k: 'Fabric price', v: r.costing ? 'US$ ' + fmt(r.costing.total_per_kg_usd, 2) : '—', u: '/kg', n: r.costing && r.costing.total_per_kg_usd, d: 2 }
+    ];
+  }
+  function renderReadout(r){
+    var figs = labFigures(r);
+    var prevMap = labPrev || {};
+    var grid = $('labRead');
+    if (!grid.children.length) {
+      grid.innerHTML = figs.map(function(f){
+        return '<div class="rd" id="rd-' + f.id + '"><div class="k">' + esc(f.k) + '</div><div class="v"></div><div class="d"></div></div>';
+      }).join('');
+    }
+    var next = {};
+    figs.forEach(function(f){
+      next[f.id] = f.n;
+      var el = $('rd-' + f.id);
+      var v = el.querySelector('.v'), d = el.querySelector('.d');
+      var changed = v.getAttribute('data-raw') !== String(f.v);
+      v.innerHTML = esc(f.v) + (f.u ? '<small>' + esc(f.u) + '</small>' : '');
+      v.setAttribute('data-raw', String(f.v));
+      var delta = '';
+      var cls = '';
+      if (typeof f.n === 'number' && typeof prevMap[f.id] === 'number') {
+        var diff = f.n - prevMap[f.id];
+        if (Number(Math.abs(diff).toFixed(f.d)) > 0) {
+          delta = (diff > 0 ? '▲ ' : '▼ ') + Math.abs(diff).toFixed(f.d) + (f.label ? ' ' + f.label : '') + ' vs previous';
+          cls = diff > 0 ? 'up' : 'down';
+        }
+      }
+      d.textContent = delta; d.className = 'd ' + cls;
+      if (changed) { el.classList.add('flash'); setTimeout(function(){ el.classList.remove('flash'); }, 450); }
+    });
+    labPrev = next;
+  }
+  function renderNotes(r){
+    var notes = [];
+    var wet = r.wet_processing || {};
+    if (r.pique && r.pique.geometry) {
+      var g = r.pique.geometry, c = r.pique.cell || {};
+      notes.push('<span><b>Piqué cell</b> ' + esc(c.width_mm) + ' × ' + esc(c.height_mm) + ' mm, ' + esc(g.relief_mm) + ' mm deep; held loop ' + esc(g.held_loop_elongation) + '× its height; wales ' + esc(Math.round((g.wale_spread - 1) * 100)) + '% wider than jersey.</span>');
+    }
+    var sbs = r.sl_by_shade;
+    if (sbs && sbs.rows) {
+      var dark = sbs.rows.filter(function(x){ return x.shade === 'dark_navy'; })[0];
+      var light = sbs.rows.filter(function(x){ return x.shade === 'white_melange'; })[0];
+      if (dark && light) notes.push('<span><b>Shade changes the knitting</b> dark shades are knit at ' + esc(dark.sl_mm) + ' mm and light ones at ' + esc(light.sl_mm) + ' mm, so both finish at the same weight (grey ' + esc(dark.grey_gsm) + ' vs ' + esc(light.grey_gsm) + ' g/m²).</span>');
+    }
+    var fin = ((r.quality_prediction || {}).shrinkage || {}).finishing_route;
+    if (fin && fin.label) notes.push('<span><b>Finishing</b> ' + esc(fin.label) + ' sets the dimensional change you see above.</span>');
+    $('labNotes').innerHTML = notes.join('') || '<span>&nbsp;</span>';
+  }
+
+  function labMessage(txt){
+    $('labViz').innerHTML = '<div class="lab-msg">' + esc(txt) + '</div>';
+  }
+
+  function labBuildViewer(result){
+    if (typeof FabricVisualizer === 'undefined') { labMessage('The 3D viewer could not be loaded.'); return; }
+    if (labViz) { try { labViz.destroy(); } catch (e) {} labViz = null; }
+    var host = $('labViz');
+    var fv = new FabricVisualizer(result, host);
+    labViz = fv;
+    fv.init().then(function(){
+      if (fv !== labViz) return;
+      fv.switchTab('threed');
+    }).catch(function(){ if (fv === labViz) labMessage('The 3D view is not available on this device.'); });
+  }
+
+  function labRun(){
+    labDirty = false;
+    var seq = ++labSeq;
+    $('labBusy').classList.add('on');
+    postJSON('/api/demo/calculate', labBody()).then(function(r){
+      if (seq !== labSeq) return;
+      $('labBusy').classList.remove('on');
+      if (!r.ok || !r.data || r.data.success === false) {
+        var msg = (r.data && r.data.error) || 'Could not calculate this fabric.';
+        if (r.status === 429) msg = 'The live sample is busy — sign in to use the full calculator.';
+        labMessage(msg);
+        return;
+      }
+      var res = r.data;
+      renderReadout(res);
+      renderNotes(res);
+      // Building the cloth is a few seconds of main-thread work. Let the new
+      // figures paint and say what is happening first, then build — and skip
+      // the build if the visitor has already moved on to another setting.
+      $('labBusy').textContent = 'building 3D cloth…';
+      $('labBusy').classList.add('on');
+      requestAnimationFrame(function(){
+        requestAnimationFrame(function(){
+          if (seq !== labSeq) return;
+          labBuildViewer(res);
+          $('labBusy').classList.remove('on');
+          $('labBusy').textContent = 'calculating…';
+        });
+      });
+    }).catch(function(err){
+      if (seq !== labSeq) return;
+      $('labBusy').classList.remove('on');
+      if (window.console) console.error('[lab]', err && err.stack || err);
+      labMessage('Could not reach the server.');
+    });
+  }
+  // A burst of slider / chip changes becomes one calculation, and nothing is
+  // calculated until the lab has been on screen (a visitor who never scrolls
+  // down costs no request and builds no WebGL context).
+  function labQueue(){
+    labDirty = true;
+    clearTimeout(labTimer);
+    if (!labVisible) return;
+    labTimer = setTimeout(labRun, 450);
+  }
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver(function(entries){
+      labVisible = entries[0].isIntersecting;
+      if (labVisible && labDirty) labRun();
+    }, { rootMargin: '200px 0px' }).observe($('lab'));
+  } else {
+    labVisible = true; labRun();
+  }
 
   /* ---------- visualizer gallery ---------- */
   // Captured from the 3D viewer; the figures are the engine's own output for
