@@ -9,7 +9,10 @@
  */
 
 const { calculate } = require('../engine/index');
-const { analyzePique, tuckStats, PIQUE_FAMILY, ANCHORS } = require('../engine/domain/pique-engine');
+const piqueEngine = require('../engine/domain/pique-engine');
+const { analyzePique, tuckStats, PIQUE_FAMILY } = piqueEngine;
+// live view: the model is rebuilt when the reference snapshot is replaced
+const anchors = () => piqueEngine.ANCHORS;
 
 let failed = 0;
 const ok = (cond, msg) => {
@@ -46,7 +49,7 @@ ok(single.geometry.relief_mm > 0.1 && single.geometry.relief_mm < 0.35, `single 
 // arc length pi^2 a^2 / (4 H'); the relief must satisfy that exactly.
 {
   const k = single.density.course_compression_vs_jersey;
-  const H = 1.41 * (run('lacoste_single', 200).loop_length.value_mm / ANCHORS.jersey.Kc);
+  const H = 1.41 * (run('lacoste_single', 200).loop_length.value_mm / anchors().jersey.Kc);
   const Hs = H / k, a = single.geometry.relief_buckle_mm;
   const excess = (Math.PI ** 2 * a * a) / (4 * Hs);
   ok(Math.abs(excess - (H - Hs)) / (H - Hs) < 0.05, `buckle amplitude closes the arc-length balance (${excess.toFixed(3)} vs ${(H - Hs).toFixed(3)} mm)`);
@@ -59,9 +62,9 @@ const polo = run('pique_single', 200).pique;
 
 // 3b. The factory records: piqué measurably wider and more course-packed
 //     than jersey at the same stitch length, with enough rows to mean it.
-ok(ANCHORS.pique.n >= 50 && ANCHORS.jersey.n >= 500, `factory rows: ${ANCHORS.pique.n} piqué, ${ANCHORS.jersey.n} jersey`);
-const spreadRef = ANCHORS.jersey.Kw / ANCHORS.pique.Kw;
-const packRef = ANCHORS.pique.Kc / ANCHORS.jersey.Kc;
+ok(anchors().pique.n >= 50 && anchors().jersey.n >= 500, `factory rows: ${anchors().pique.n} piqué, ${anchors().jersey.n} jersey`);
+const spreadRef = anchors().jersey.Kw / anchors().pique.Kw;
+const packRef = anchors().pique.Kc / anchors().jersey.Kc;
 ok(spreadRef > 1.15 && spreadRef < 1.45, `measured wale spread ${spreadRef.toFixed(2)}`);
 ok(packRef > 1.25 && packRef < 1.6, `measured course packing ${packRef.toFixed(2)}`);
 // The reference-intensity structure (double Lacoste, I = 0.5) sits on them.
@@ -141,7 +144,31 @@ ok(!at(320).density.plausible, 'an unreachable GSM for the count/SL is flagged')
 ok(/cvc/.test(run('lacoste_single', 200, { composition: '60% Cotton 40% Polyester' }).pique.geometry.fibre), 'CVC composition reaches the pique analysis');
 ok(/elastane/.test(run('lacoste_single', 200, { composition: '95% Cotton 5% Elastane' }).pique.geometry.fibre), 'elastane reaches the pique analysis');
 
-// 13. No source attributions reach the API.
+// 13. The factory data comes from the reference layer's snapshot (database
+//     at boot, files as the fallback) — read live, never captured at require
+//     time. Swap the snapshot and the models follow; restore it and they
+//     come back.
+{
+  const reference = require('../engine/reference');
+  const { matchFactory } = require('../engine/domain/factory-match');
+  const realGet = reference.get;
+  const base = realGet();
+  const kwBefore = anchors().pique.Kw;
+  const lengthened = base.factoryRecords.map(r => (r.fab === 'pique' ? { ...r, sl: r.sl * 1.1 } : r));
+  reference.get = () => ({ ...base, factoryRecords: lengthened });
+  try {
+    ok(Math.abs(anchors().pique.Kw / kwBefore - 1.1) < 0.01, `pique model follows the snapshot (Kw ${kwBefore.toFixed(3)} -> ${anchors().pique.Kw.toFixed(3)} when every pique SL is 10% longer)`);
+    reference.get = () => ({ ...base, factoryRecords: base.factoryRecords.slice(0, 300) });
+    const m = matchFactory({ fabric: 'single_jersey', count_ne: 30, gsm: 180 });
+    ok(m.ok === false || m.dataset_size === 300, `factory match reads the same snapshot (dataset_size ${m.dataset_size})`);
+  } finally {
+    reference.get = realGet;
+  }
+  ok(Math.abs(anchors().pique.Kw - kwBefore) < 1e-9, 'restoring the snapshot restores the model');
+  ok(base.factoryRecords.length === 2201 || base.factoryRecords.length > 2000, `snapshot carries the factory records (${base.factoryRecords.length})`);
+}
+
+// 14. No source attributions reach the API.
 ok(!/spencer|leaf|sha et|http/i.test(JSON.stringify(single)), 'no source names or links in the pique output');
 
 if (failed) {

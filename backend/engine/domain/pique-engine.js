@@ -82,7 +82,6 @@
 
 'use strict';
 
-const { FACTORY_RECORDS } = require('../catalog/factory-dataset');
 const { TIGHTNESS_LIMITS } = require('../formulas');
 
 const LOOP_HEIGHT_PITCHES = 1.41;  // knit loop height / course pitch (head overlaps the course above)
@@ -113,7 +112,7 @@ function deriveRow(r) {
   return { Kw: wpc * slCm, Kc: cpc * slCm, widthRatio, gauge: r.g, fgsm: r.fgsm, comp: r.comp };
 }
 
-const ANCHORS = (() => {
+const buildAnchors = (FACTORY_RECORDS) => {
   const rows = (fab, lycra, comp) => FACTORY_RECORDS
     .filter(r => r.fab === fab && /lycra/.test(r.spin || '') === lycra && (!comp || r.comp === comp))
     .map(deriveRow).filter(Boolean);
@@ -134,12 +133,12 @@ const ANCHORS = (() => {
     piqueCvc: summarise(rows('pique', false, 'cvc')),
     interlock: summarise(rows('interlock', false)),
   };
-})();
+};
 
 // Leave-one-out check of the piqué density model on its own records (see
 // VALIDATION above): returned with every analysis so the page can say how
 // well the model reproduces real cloth.
-const VALIDATION = (() => {
+const buildValidation = (FACTORY_RECORDS) => {
   const rs = FACTORY_RECORDS
     .filter(r => r.fab === 'pique' && !/lycra/.test(r.spin || ''))
     .map(r => { const d = deriveRow(r); return d ? { ...d, r } : null; })
@@ -162,7 +161,7 @@ const VALIDATION = (() => {
     gsm_error_median_pct: Math.round(p(errG, 0.5) * 1000) / 10,
     gsm_error_p90_pct: Math.round(p(errG, 0.9) * 1000) / 10,
   };
-})();
+};
 
 // ── How the factory makes a heavier piqué ──────────────────────────────────
 // Across its piqué rows, finished GSM rises with BOTH a tighter knit (TF up)
@@ -170,7 +169,7 @@ const VALIDATION = (() => {
 // over the rows, each clamped to the range the rows actually cover (5th-95th
 // percentile) so the solver never extrapolates a trend past its data:
 //     Kc ≈ 4.49 + 0.0154·GSM      TF ≈ 15.3 + 0.0159·GSM      (2026-10-31)
-const PIQUE_TRENDS = (() => {
+const buildTrends = (FACTORY_RECORDS) => {
   const rs = FACTORY_RECORDS
     .filter(r => r.fab === 'pique' && !/lycra/.test(r.spin || '') && r.fgsm < 1000)
     .map(r => { const d = deriveRow(r); return d ? { gsm: r.fgsm, Kc: d.Kc, TF: Math.sqrt(590.5 / r.ne) / (r.sl / 10) } : null; })
@@ -187,7 +186,7 @@ const PIQUE_TRENDS = (() => {
   };
   const g = rs.map(r => r.gsm).sort((x, y) => x - y);
   return { Kc: fit('Kc'), TF: fit('TF'), rows: rs.length, gsmMin: g[0], gsmMax: g[g.length - 1] };
-})();
+};
 
 // Coarsest count a gauge can run. The needle hook and trick must pass the
 // yarn, so the usable count scales with gauge squared: Ne_min = 20·(G/24)².
@@ -195,15 +194,41 @@ const PIQUE_TRENDS = (() => {
 // Ne 20 on 24G, Ne 26-28 on 28G (formula 27.2).
 const coarsestCount = (gauge) => 20 * (gauge / 24) ** 2;
 
+// ── The model, built from whichever records are live ──────────────────────
+// The records come from the reference layer's snapshot (engine/reference):
+// PostgreSQL when the database was reachable at boot, the repo's JSON files
+// otherwise — the same source the rest of the engine reads, so a data import
+// (admin panel → reload) changes the piqué model along with everything else.
+// The model is rebuilt whenever the snapshot is replaced (it is cached by the
+// identity of the records array), and never captured at module load: boot
+// loads the snapshot AFTER this module is required.
+//
 // Fallbacks only if the dataset ever ships without these families.
-const A_JERSEY = ANCHORS.jersey || { n: 0, Kw: 3.81, Kc: 5.19 };
-const A_PIQUE = ANCHORS.pique || { n: 0, Kw: 2.92, Kc: 7.44, gsm: [186, 210] };
-const SPREAD_REF = A_JERSEY.Kw / A_PIQUE.Kw;           // ~1.30, measured
-const COMPRESSION_REF = A_PIQUE.Kc / A_JERSEY.Kc;       // ~1.43, measured
+function buildModel(records) {
+  const ANCHORS = buildAnchors(records);
+  const A_JERSEY = ANCHORS.jersey || { n: 0, Kw: 3.81, Kc: 5.19 };
+  const A_PIQUE = ANCHORS.pique || { n: 0, Kw: 2.92, Kc: 7.44, gsm: [186, 210] };
+  return {
+    records: records.length,
+    ANCHORS, A_JERSEY, A_PIQUE,
+    SPREAD_REF: A_JERSEY.Kw / A_PIQUE.Kw,          // ~1.30, measured
+    COMPRESSION_REF: A_PIQUE.Kc / A_JERSEY.Kc,     // ~1.43, measured
+    VALIDATION: buildValidation(records),
+    PIQUE_TRENDS: buildTrends(records),
+  };
+}
+
+let _model = null, _modelFor = null;
+function model() {
+  const records = require('../reference').get().factoryRecords;
+  if (_modelFor !== records) { _model = buildModel(records); _modelFor = records; }
+  return _model;
+}
 
 // Fibre effect on a piqué, read from the records where they hold enough rows
 // (cotton vs CVC); anything else falls back to cotton and says so.
 function fibreEffect(fibre, elastane) {
+  const { ANCHORS, A_PIQUE } = model();
   let spread = 1, pack = 1, basis = 'cotton piqué records';
   const cot = ANCHORS.piqueCotton, cvc = ANCHORS.piqueCvc;
   const polyBlend = fibre === 'polyester' || fibre === 'cvc' || fibre === 'pc';
@@ -379,6 +404,7 @@ function fibreClass(composition) {
  * @returns analysis object, or null for a fabric that is not a piqué
  */
 function analyzePique(p) {
+  const { ANCHORS, A_JERSEY, A_PIQUE, SPREAD_REF, COMPRESSION_REF, VALIDATION, PIQUE_TRENDS } = model();
   const fam = PIQUE_FAMILY[p.fabricId];
   if (!fam) return null;
   const pat = p.pattern || {};
@@ -585,6 +611,7 @@ function analyzePique(p) {
 // "piqué" without a programme, so letting an unmeasured structure term move a
 // yarn count would claim more than the data holds.
 function structureConstants(fabricId, composition, pattern) {
+  const { A_JERSEY, SPREAD_REF, PIQUE_TRENDS } = model();
   const fam = PIQUE_FAMILY[fabricId];
   if (!fam || fam.bed !== 'single' || !PIQUE_TRENDS) return null;
   const fx = fibreEffect(fibreClass(composition), !!(composition && composition.has_elastane));
@@ -601,6 +628,7 @@ function structureConstants(fabricId, composition, pattern) {
 }
 
 function solvePiqueRecipe({ fabricId, gsm, gauge, composition, pattern, standardCounts }) {
+  const { PIQUE_TRENDS } = model();
   if (!(gsm > 0)) return null;
   const k = structureConstants(fabricId, composition, pattern);
   if (!k) return null;
@@ -682,6 +710,10 @@ function piqueGsmFor({ fabricId, countNe, slMm, composition, pattern, gsmHint })
 }
 
 module.exports = {
-  analyzePique, isPique, tuckStats, PIQUE_FAMILY, ANCHORS, VALIDATION,
-  PIQUE_TRENDS, solvePiqueRecipe, piqueGsmFor, coarsestCount,
+  analyzePique, isPique, tuckStats, PIQUE_FAMILY, solvePiqueRecipe, piqueGsmFor, coarsestCount,
+  buildModel, model,
+  // live views of the current model (rebuilt when the snapshot is replaced)
+  get ANCHORS() { return model().ANCHORS; },
+  get VALIDATION() { return model().VALIDATION; },
+  get PIQUE_TRENDS() { return model().PIQUE_TRENDS; },
 };

@@ -19,9 +19,13 @@
 
 'use strict';
 
-const { FACTORY_RECORDS, FAB_ALIAS } = require('../catalog/factory-dataset');
+const { FAB_ALIAS } = require('../catalog/factory-dataset');
 
-const TOTAL_RECORDS = FACTORY_RECORDS.length;
+// The records come from the reference layer's snapshot (PostgreSQL, or the
+// repo's JSON when the database was unreachable at boot) — read per call, not
+// captured at require time: boot loads the snapshot after this module loads,
+// and an admin reload replaces it.
+const records = () => require('../reference').get().factoryRecords;
 
 // Colour segment → ordinal (for distance) and dye GSM-gain direction.
 const SEG_ORD = { light: 0, medium: 1, dark: 2 };
@@ -47,7 +51,7 @@ function matchFactory(q, k = 4) {
   const comp = ['cotton','cvc','pc','modal','viscose'].includes(q.comp) ? q.comp : 'cotton';
 
   // Score every record in the same fabric category.
-  const pool = FACTORY_RECORDS.filter(r => r.fab === fabKey);
+  const pool = records().filter(r => r.fab === fabKey);
   if (pool.length === 0) return { ok: false, reason: 'no_fabric_records' };
 
   const scored = pool.map(r => {
@@ -108,8 +112,8 @@ function matchFactory(q, k = 4) {
       grey_gsm: r.gsm, color: r.seg, sl_mm: r.sl, finished_gsm: r.fgsm, finished_dia_in: r.fdia,
       distance: parseFloat(dist.toFixed(2)),
     })),
-    dataset_size: TOTAL_RECORDS,
-    source: `Factory ERP R&D Master File (${TOTAL_RECORDS.toLocaleString()} greige→finish records, 2022)`,
+    dataset_size: records().length,
+    source: `Factory ERP R&D Master File (${records().length.toLocaleString()} greige→finish records, 2022)`,
   };
 }
 
@@ -120,7 +124,7 @@ function matchFactory(q, k = 4) {
 function recommendCountFromGSM(fabric, gsm, comp = 'cotton') {
   const fabKey = FAB_ALIAS[(fabric || '').toLowerCase()] || null;
   if (!fabKey || !gsm) return null;
-  const pool = FACTORY_RECORDS.filter(r => r.fab === fabKey);
+  const pool = records().filter(r => r.fab === fabKey);
   if (!pool.length) return null;
   // Weight by GSM closeness + fibrbuyer-ref.
   const scored = pool.map(r => ({
