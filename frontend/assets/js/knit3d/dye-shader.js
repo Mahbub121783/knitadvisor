@@ -48,6 +48,13 @@ export function patchDye(material, o = {}) {
     // repeat, y = strength.
     uHeightMap: { value: o.cloth && o.cloth.height ? o.cloth.height : null },
     uCavity: { value: new THREE.Vector2(o.cloth ? o.cloth.cavityLod || 5 : 5, o.cloth ? o.cloth.cavity || 0 : 0) },
+    // Relief slope: the same height map's gradient at the scale of one
+    // structure repeat — the domed bead of a piqué cell, which the yarn-scale
+    // normal map averages away at any distance. x = tile depth, y/z = tile
+    // width/height (scene units, so the slope is a true slope), w = strength.
+    uRelief: { value: o.cloth && o.cloth.relief
+      ? new THREE.Vector4(o.cloth.relief.depth, o.cloth.relief.w, o.cloth.relief.h, o.cloth.relief.strength)
+      : new THREE.Vector4(0, 1, 1, 0) },
     uClothBias: { value: o.cloth && o.cloth.bias != null ? o.cloth.bias : 1.0 },
     uCloth: { value: o.cloth ? new THREE.Vector4(o.cloth.wales, o.cloth.courses, o.cloth.tileCm, o.cloth.amp) : new THREE.Vector4() },
   };
@@ -63,7 +70,7 @@ export function patchDye(material, o = {}) {
     }
     const decl = [
       'uniform float uFade;', 'uniform vec3 uFadeColor;', 'uniform float uChalk;',
-      'uniform vec4 uCloth;', 'uniform float uClothBias;', 'uniform sampler2D uHeightMap;', 'uniform vec2 uCavity;',
+      'uniform vec4 uCloth;', 'uniform float uClothBias;', 'uniform sampler2D uHeightMap;', 'uniform vec2 uCavity;', 'uniform vec4 uRelief;',
       'uniform float uMel;', 'uniform float uMelF;', 'uniform vec3 uMelLight;', 'uniform sampler2D uMelMap;',
       exposure === 'attr' ? 'varying float vExposure;' : 'uniform sampler2D uExpMap;',
     ].join('\n');
@@ -135,7 +142,20 @@ export function patchDye(material, o = {}) {
             return 0.0;
           #endif
         }`)
-        .replace('#include <normal_fragment_maps>', ShaderChunk.normal_fragment_maps.split('texture2D( normalMap, vNormalMapUv )').join('texture2D( normalMap, vNormalMapUv, clothBias() )'))
+        .replace('#include <normal_fragment_maps>', ShaderChunk.normal_fragment_maps
+          .split('texture2D( normalMap, vNormalMapUv )').join('texture2D( normalMap, vNormalMapUv, clothBias() )')
+          .replace('mapN.xy *= normalScale;', `mapN.xy *= normalScale;
+          #ifdef USE_MAP
+          if (uRelief.w > 0.0) {
+            // central differences one texel apart at the repeat's mip level
+            float lodC = max(0.0, uCavity.x - 1.0);
+            vec2 e = exp2(lodC) / vec2(textureSize(uHeightMap, 0));
+            float hx = textureLod(uHeightMap, vMapUv + vec2(e.x, 0.0), lodC).r - textureLod(uHeightMap, vMapUv - vec2(e.x, 0.0), lodC).r;
+            float hy = textureLod(uHeightMap, vMapUv + vec2(0.0, e.y), lodC).r - textureLod(uHeightMap, vMapUv - vec2(0.0, e.y), lodC).r;
+            vec2 slope = vec2(hx / (2.0 * e.x * uRelief.y), hy / (2.0 * e.y * uRelief.z)) * uRelief.x;
+            mapN.xy -= slope * uRelief.w;
+          }
+          #endif`))
         .replace('#include <map_fragment>', ShaderChunk.map_fragment.replace('texture2D( map, vMapUv )', 'texture2D( map, vMapUv, clothBias() * 0.5 )'));
       shader.fragmentShader = shader.fragmentShader.replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
       #ifdef USE_NORMALMAP_TANGENTSPACE

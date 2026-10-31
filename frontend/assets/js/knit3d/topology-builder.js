@@ -45,12 +45,12 @@ function heldAbove(sample, w, c, courses) {
 // ── Piqué deformation ─────────────────────────────────────────────────────
 // What the tucks do to the loops around them (numbers from the engine's
 // pique analysis, pique-engine.js):
-//   held loop  stretched up through its tuck courses: H0 + n·C·α
+//   held loop  stretched up through its tuck courses: H0 + n·C
 //   held loop  drawn toward the technical face, half the cell depth
 //   knit loop  next to a tucking needle buckles toward the technical back,
 //              and leans sideways toward that needle — the zig-zag of a
 //              Lacoste wale and the walls of the honeycomb cell
-//   tuck loop  its crown 1.25 yarn diameters behind the held loop
+//   tuck loop  an arch whose crown lies one yarn diameter behind the held loop
 // `side` is +1 for a bed whose technical face looks at +z, -1 for the
 // mirrored (dial) bed.
 function piqueShape(token, w, c, ctx, p) {
@@ -59,8 +59,10 @@ function piqueShape(token, w, c, ctx, p) {
   const half = q.relief * 0.5;
   const hold = (ww, cc) => isHoldToken(p.sample(ww, cc));
   if (token === 'tuck') {
-    // the default cup already sits (headZ - cupZ) behind a held crown
-    const extra = Math.max(0, 1.25 * q.d - (LOOP.headZ - TUCK.cupZ));
+    // Tuck crown and held loop lie on the same needle, one against the
+    // other: centres one yarn diameter apart. The arch as authored sits
+    // (headZ - cupZ) behind a held crown; push it back the rest of the way.
+    const extra = Math.max(0, q.d - (LOOP.headZ - TUCK.cupZ));
     return { dz: side * (half - extra), dx: 0 };
   }
   if (token !== 'knit' && token !== 'purl') return { dz: 0, dx: 0 };
@@ -121,6 +123,8 @@ function buildCourse(c, p) {
     };
     if (p.pique) {
       ctx.heldPitch = (p.pitchY || PITCH_Y) * p.pique.alpha;
+      ctx.yScale = p.pique.yScale;
+      ctx.tuckArch = true;
       const s = piqueShape(token, w, c, ctx, p);
       ctx.zBase += s.dz;
       jit.x += s.dx;
@@ -220,8 +224,12 @@ export function buildYarnPaths(opts) {
   const piq = pq ? {
     relief: (pq.reliefD || 0) * yd,
     lean: (pq.lean || 0) * PITCH_X,
-    alpha: pq.alpha || 0.82,
+    alpha: pq.alpha != null ? pq.alpha : 1,
     d: yd,
+    // Loops shortened to the packed course pitch, against a jersey's
+    // (PITCH_Y / 1.3 at a jersey's course/wale ratio): the same yarn, held
+    // between courses that sit ~1.4x closer.
+    yScale: Math.max(0.45, Math.min(1, pitchY / (PITCH_Y / 1.3))),
   } : null;
 
   // WARP knit (tricot / raschel / warp net) — own topology (guide-bar zig-zag).

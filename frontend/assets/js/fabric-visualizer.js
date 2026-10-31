@@ -1320,10 +1320,11 @@ class FabricVisualizer {
   }
 
   // The engine's piqué analysis, as the 3D view uses it. Density comes from
-  // the engine too: it solves the courses from the requested GSM with the
-  // tucks' wale spread, where the generic Munden model here treats a piqué
-  // as plain jersey. Aspect is capped where the loop model's fixed loop
-  // shape would overlap three courses deep.
+  // the engine too: wales from the factory records' spread, courses solved
+  // from the requested GSM — a piqué packs ~1.4x the courses of a jersey,
+  // which the generic model here (built for plain jersey) cannot know. The
+  // loop model shortens its loops to match (topology-builder.js), so the
+  // real course density can be drawn.
   _piqueGeom() {
     const q = this.result.pique;
     if (!q || !q.geometry || !q.density) return null;
@@ -1331,12 +1332,13 @@ class FabricVisualizer {
     const base = this._stitchDensity(this._detectConstruction());
     const wpc = dn.wales_per_cm, cpc = dn.courses_per_cm;
     const density = (wpc > 0 && cpc > 0)
-      ? { ...base, wpc, cpc, aspect: Math.max(0.9, Math.min(1.75, cpc / wpc)) }
+      ? { ...base, wpc, cpc, aspect: Math.max(0.9, Math.min(3.2, cpc / wpc)) }
       : base;
     return {
       reliefD: g.relief_yarn_diameters,
       lean: g.wale_lean,
-      alpha: g.course_compression_alpha,
+      // held loops reach up n of the (already packed) course pitches
+      alpha: 1,
       showBack: q.selling_face === 'technical_back',
       double: q.bed === 'double',
       density,

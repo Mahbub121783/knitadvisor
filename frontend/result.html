@@ -2352,16 +2352,18 @@ function renderPique(q) {
   const cyl = rowsOf(q.notation.cylinder);
   const dial = q.notation.dial ? rowsOf(q.notation.dial) : null;
   const notation = cyl.map((r, i) => dial ? `${r} &nbsp;|&nbsp; dial ${dial[i] ? dial[i].replace(/^F\d+: /, '') : '—'}` : r).join('<br>');
-  const fitCls = fit.position === 'typical' ? 'text-green' : 'text-amber';
+  const fitCls = fit.position === 'typical' ? 'text-green' : fit.position === 'n/a' ? '' : 'text-amber';
+  // fit.typical: results saved before 2026-10-31 (history) carry the old shape
+  const common = fit.common_finished || fit.typical || [];
   let html = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:8px;margin-bottom:14px;">
     ${tile('Selling face', face, q.bed === 'single' ? 'single bed — tucks show on the back' : 'double bed — does not curl', 'text-blue')}
     ${tile('Cell size', `${c.width_mm} × ${c.height_mm} mm`, `reads as texture up to ≈${c.readable_up_to_m} m`, 'text-green')}
     ${tile('Cell depth', `${g.relief_mm} mm`, `${g.relief_yarn_diameters} yarn diameters`, 'text-purple')}
     ${tile('Held loop', `${g.held_loop_elongation}× height`, `${q.tuck.consecutive_holds} course${q.tuck.consecutive_holds === 1 ? '' : 's'} held`, 'text-amber')}
     ${tile('Wale spread', `${g.wale_spread}×`, `${b.width_vs_jersey_pct}% wider than plain ${q.bed === 'single' ? 'jersey' : 'double knit'}`)}
-    ${tile('Density', `${d.wales_per_cm} w × ${d.courses_per_cm} c /cm`, d.course_compression_vs_jersey != null ? `courses ${d.course_compression_vs_jersey}× jersey` : 'solved from the GSM')}
+    ${tile('Density', `${d.wales_per_cm} w × ${d.courses_per_cm} c /cm`, d.course_compression_vs_jersey != null ? `courses ${d.course_compression_vs_jersey}× jersey${d.expected_compression ? ` (factory ≈${d.expected_compression}×)` : ''}` : 'solved from the GSM', d.plausible ? '' : 'text-amber')}
     ${tile('Thickness', `≈${b.thickness_mm} mm`, q.bed === 'single' ? `curl ${Math.round(b.curl_vs_jersey * 100)}% of jersey` : 'no edge curl')}
-    ${tile('GSM fit', fit.position.charAt(0).toUpperCase() + fit.position.slice(1), `usual ${fit.typical[0]}–${fit.typical[1]} GSM`, fitCls)}
+    ${tile('GSM fit', fit.position === 'n/a' ? '—' : fit.position.charAt(0).toUpperCase() + fit.position.slice(1), common.length ? `most piqué runs ${common[0]}–${common[1]} GSM` : '', fitCls)}
   </div>`;
   html += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;">
     <div class="card-sm">
@@ -2377,8 +2379,9 @@ function renderPique(q) {
     </div>
     <div class="card-sm">
       <div class="label">What drives it here</div>
-      <div class="mt-4 text-sm">Yarn ${g.yarn_diameter_mm} mm (${g.fibre}), tightness factor ${g.tightness_factor}: tightness ×${g.tightness_effect}, fibre ×${g.fibre_effect} on the cell depth.</div>
-      ${d.plausible ? '' : `<div class="mt-4 text-sm text-amber">${d.note}</div>`}
+      <div class="mt-4 text-sm">Yarn ${g.yarn_diameter_mm} mm (${g.fibre}), tightness factor ${g.tightness_factor}.${g.fibre_basis ? ` Fibre effect from ${g.fibre_basis}.` : ''}</div>
+      <div class="mt-4 text-sm">${d.note}</div>
+      ${q.basis ? `<div class="label mt-2">Measured on ${q.basis.factory_pique_rows} factory piqué and ${q.basis.factory_jersey_rows} jersey qualities: ${q.basis.measured}. Modelled: ${q.basis.modelled}.</div>` : ''}
     </div>
   </div>`;
   return html;

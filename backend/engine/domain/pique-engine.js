@@ -3,117 +3,212 @@
  * ====================================
  *
  * What makes a piqué a piqué is not its weight or its count, which the main
- * engine already answers, but what its tuck stitches do to the cloth: a
- * needle that tucks keeps its old loop, so that loop is HELD and stretched up
- * through the tuck courses; the tuck loop sits behind it; the extra yarn
- * buckles the neighbouring knit loops out of the plane while the taut held
- * loop is drawn in. On a single-bed piqué that buckling is the honeycomb
- * cell, and it shows on the TECHNICAL BACK — which is why the back is the
- * side sold as the face.
+ * engine already answers, but what its tuck stitches do to the cloth. A
+ * needle that tucks keeps its old loop: that loop is HELD and has to reach up
+ * through the tuck courses to the course where it is finally knitted, with
+ * no more yarn than any other loop — so it is pulled taut and narrow, robbing
+ * yarn from its neighbours. The tuck loop is never drawn through; it lies
+ * open on the technical back. The result, measured on real cloth:
  *
- * This module turns the needle programme (pattern_cylinder / pattern_dial)
- * plus the fabric actually being made (GSM, count, stitch length, tightness,
- * fibre) into that geometry, in numbers the 3D view builds from and the
- * result page shows:
+ *   - the wales spread apart (a piqué comes off the same machine wider)
+ *   - the courses pack together (more courses per cm at the same stitch
+ *     length)
+ *   - the neighbouring knit loops, squeezed between the packed courses with
+ *     the same yarn length, buckle out of the plane: those buckles are the
+ *     beads of the cell, on the technical back, which is why the back is the
+ *     side sold as the face.
  *
- *   held loop   H_held = H0 + n_tuck · C · α,  α ≈ 0.82 (course compression)
- *               n_tuck = consecutive tuck courses above a knit loop
- *   relief      cell depth in yarn diameters, ≈ 1.25 + 1.25 · n_tuck — the
- *               tuck crown sits 1.25 d behind the held loop, and every further
- *               tuck course adds about as much again; scaled by tightness
- *               (a tight fabric has no room to buckle) and by fibre
- *   wale spread tucks push wales apart: 1 + 0.68 · tuck fraction (+0.03 per
- *               extra consecutive tuck)
- *   density     wales from the Munden wale constant and the spread; courses
- *               from MASS BALANCE at the requested GSM, so the cell geometry
- *               is the one that actually weighs what was asked for
+ * HOW THE NUMBERS ARE GROUNDED
  *
- * Calibration (internal, not shown on the site): the held-loop, relief and
- * spread relations above reproduce the published parameter sets for single
- * Lacoste (1.75 / 0.42 mm / 1.18), double Lacoste (2.45 / 0.68 mm / 1.28) and
- * polo piqué (2.40 / 0.62 mm / 1.34) within ~10 % at a 26-30 Ne cotton —
- * Spencer, Knitting Technology (2001); Sha et al. (2015); Leaf et al. (2018).
- * Everything here is an ESTIMATE from structure and is labelled as such.
+ * 1. Spread and compression come from the factory R&D records
+ *    (factory-dataset.js: greige→finish rows from a Bangladesh knitting
+ *    floor, with machine dia, gauge, stitch length, count and the FINISHED
+ *    open width and GSM). For each row: wales/cm = needles / finished width,
+ *    courses/cm from mass balance at the finished GSM. Their Munden-type
+ *    constants (Kw = wpc·SL, Kc = cpc·SL), computed here at load time:
+ *
+ *        family         Kw     Kc     (medians, non-lycra)
+ *        single jersey  3.81   5.19   ~1,100 rows
+ *        piqué          2.92   7.44   ~100 rows
+ *
+ *    → piqué wales ~30 % wider, courses ~43 % denser than jersey at the
+ *    same stitch length, with a tight spread (IQR ±3 %) and almost no drift
+ *    with GSM or tightness. CVC piqué packs ~9 % more courses than cotton;
+ *    lycra piqué spreads less and packs more. All of that is read from the
+ *    records, not assumed.
+ *
+ * 2. The records call every quality "piqué"; they do not say which needle
+ *    programme. So that measured value is the anchor for a TYPICAL piqué,
+ *    and each programme is placed around it by its hold intensity
+ *        I = held-course fraction × (1 + 0.5 · (consecutive holds − 1))
+ *    against the reference I = 0.5 (midway between single Lacoste and polo
+ *    piqué, the two qualities a polo floor mostly runs), with a square root
+ *    because wales can only spread so far. That placement is a MODEL; the
+ *    anchor is DATA.
+ *
+ * 3. Held loop elongation from intermeshing geometry: a knit loop is about
+ *    1.41 course pitches tall (its head overlaps the course above), so a loop
+ *    held over n courses is (1.41 + n) / 1.41 times as tall.
+ *
+ * 4. Cell depth from buckling: a loop leg of height H squeezed into H / k
+ *    (k = course compression) with its yarn length unchanged bows out like a
+ *    pinned elastica, amplitude ≈ (2/π)·√(2·H·(H − H/k)). Compression comes
+ *    from the GSM actually requested (mass balance), so a heavier quality at
+ *    the same count and stitch length is genuinely deeper.
+ *
+ * Everything returned is an ESTIMATE and is labelled as one.
  */
 
 'use strict';
 
-const ALPHA_COMP = 0.82;           // course compression factor in H_held
-const KW_SINGLE = 4.1, KC_SINGLE = 5.0;   // Munden (cotton, dry-relaxed) — same constants the 3D view uses
-const TF_REF = 18;                 // middle of the piqué family's ideal TF band (17-19.5)
+const { FACTORY_RECORDS } = require('../catalog/factory-dataset');
+
+const LOOP_HEIGHT_PITCHES = 1.41;  // knit loop height / course pitch (head overlaps the course above)
+const I_REF = 0.5;                 // hold intensity the pooled factory piqué stands for
 const EYE_ARCMIN_M = 0.000291;     // 1 arc-minute per metre, in metres
 const TEXTURE_ARCMIN = 2;          // a low-contrast relief needs ~2' to read
+const DOUBLE_WIDTH_PER_NEEDLE = null; // filled from the interlock records below
 
-// Every piqué in the catalogue. `face` is the side sold as the face. Ranges
-// are where each structure is normally made; outside them it is still made,
-// it just reads differently (see gsmFit).
+// ── Factory anchors ───────────────────────────────────────────────────────
+// Medians of Kw, Kc and finished width / machine circumference per family,
+// lycra and non-lycra apart, by fibre class. Rows whose finished width is not
+// a plausible open width (0.4-1.6 x circumference: tube widths, typos) are
+// left out.
+function median(a) {
+  if (!a.length) return null;
+  const s = [...a].sort((x, y) => x - y);
+  return s[Math.floor((s.length - 1) / 2)];
+}
+
+function deriveRow(r) {
+  if (!(r.dia > 0 && r.g > 0 && r.fdia > 0 && r.sl > 0 && r.ne > 0 && r.fgsm > 0)) return null;
+  const circ = Math.PI * r.dia;
+  const widthRatio = r.fdia / circ;
+  if (widthRatio < 0.4 || widthRatio > 1.6) return null;
+  const wpc = (circ * r.g) / (r.fdia * 2.54);
+  const slCm = r.sl / 10;
+  const cpc = (r.fgsm * 10) / (wpc * slCm * (590.5 / r.ne));
+  return { Kw: wpc * slCm, Kc: cpc * slCm, widthRatio, gauge: r.g, fgsm: r.fgsm, comp: r.comp };
+}
+
+const ANCHORS = (() => {
+  const rows = (fab, lycra, comp) => FACTORY_RECORDS
+    .filter(r => r.fab === fab && /lycra/.test(r.spin || '') === lycra && (!comp || r.comp === comp))
+    .map(deriveRow).filter(Boolean);
+  const summarise = (rs) => rs.length ? {
+    n: rs.length,
+    Kw: median(rs.map(d => d.Kw)),
+    Kc: median(rs.map(d => d.Kc)),
+    widthPerNeedle: median(rs.map(d => d.widthRatio / d.gauge)),
+    gsm: [rs.map(d => d.fgsm).sort((a, b) => a - b)[Math.floor(rs.length * 0.25)],
+          rs.map(d => d.fgsm).sort((a, b) => a - b)[Math.floor(rs.length * 0.75)]],
+  } : null;
+  return {
+    jersey: summarise(rows('single_jersey', false)),
+    jerseyLycra: summarise(rows('single_jersey', true)),
+    pique: summarise(rows('pique', false)),
+    piqueLycra: summarise(rows('pique', true)),
+    piqueCotton: summarise(rows('pique', false, 'cotton')),
+    piqueCvc: summarise(rows('pique', false, 'cvc')),
+    interlock: summarise(rows('interlock', false)),
+  };
+})();
+
+// Fallbacks only if the dataset ever ships without these families.
+const A_JERSEY = ANCHORS.jersey || { n: 0, Kw: 3.81, Kc: 5.19 };
+const A_PIQUE = ANCHORS.pique || { n: 0, Kw: 2.92, Kc: 7.44, gsm: [186, 210] };
+const SPREAD_REF = A_JERSEY.Kw / A_PIQUE.Kw;           // ~1.30, measured
+const COMPRESSION_REF = A_PIQUE.Kc / A_JERSEY.Kc;       // ~1.43, measured
+
+// Fibre effect on a piqué, read from the records where they hold enough rows
+// (cotton vs CVC); anything else falls back to cotton and says so.
+function fibreEffect(fibre, elastane) {
+  let spread = 1, pack = 1, basis = 'cotton piqué records';
+  const cot = ANCHORS.piqueCotton, cvc = ANCHORS.piqueCvc;
+  const polyBlend = fibre === 'polyester' || fibre === 'cvc' || fibre === 'pc';
+  if (polyBlend && cvc && cot && cvc.n >= 8) {
+    spread = cot.Kw / cvc.Kw;
+    pack = cvc.Kc / cot.Kc;
+    basis = `CVC piqué records (${cvc.n})`;
+  } else if (fibre !== 'cotton') {
+    basis = `no ${fibre} piqué in the records — cotton values used`;
+  }
+  if (elastane && ANCHORS.piqueLycra && ANCHORS.piqueLycra.n >= 8) {
+    spread *= A_PIQUE.Kw / ANCHORS.piqueLycra.Kw;
+    pack *= ANCHORS.piqueLycra.Kc / A_PIQUE.Kc;
+    basis += ` + lycra piqué records (${ANCHORS.piqueLycra.n})`;
+  }
+  return { spread, pack, basis };
+}
+
+// Every piqué in the catalogue. `face` is the side sold as the face.
 const PIQUE_FAMILY = {
   lacoste_single: {
-    bed: 'single', face: 'technical_back', gsm: [160, 190],
+    bed: 'single', face: 'technical_back',
     aka: ['Single Lacoste', 'Single Piqué (4-feed)'],
     look: {
-      close: 'Small diamond cells: one tuck per wale per repeat, each cell closed by a plain course.',
-      distance: 'Fine, even diamond mesh; light, soft drape.',
+      close: 'Small staggered cells: one tuck per wale per repeat, each row of cells closed by a plain course.',
+      distance: 'Fine, even pebble; soft drape.',
     },
   },
   lacoste_double: {
-    bed: 'single', face: 'technical_back', gsm: [200, 230],
+    bed: 'single', face: 'technical_back',
     aka: ['Double Lacoste', '6-feed Piqué'],
     look: {
-      close: 'Deep hexagonal cells: two tucks stacked in each wale before the plain course.',
-      distance: 'Honeycomb readable from across a room; firm, structured drape.',
+      close: 'Deeper cells: two tucks stacked in each wale before the plain course.',
+      distance: 'Bolder honeycomb; firmer, more structured drape.',
     },
   },
   pique_single: {
-    bed: 'single', face: 'technical_back', gsm: [210, 240],
+    bed: 'single', face: 'technical_back',
     aka: ['Polo Piqué', 'Double Piqué (4-feed, US)'],
     look: {
-      close: 'Wide, flat cells: two stacked tucks, no plain course, so wales spread sideways.',
-      distance: 'The classic polo-shirt grain; heavier body.',
+      close: 'Two stacked tucks and no plain course: wales spread wide, cells in straight rows of beads.',
+      distance: 'The classic polo-shirt grain.',
     },
   },
   pique_double: {
-    bed: 'single', face: 'technical_back', gsm: [220, 300],
+    bed: 'single', face: 'technical_back',
     aka: ['Jump Piqué', 'Jumbo / Waffle Piqué'],
     look: {
       close: 'Pairs of neighbouring needles tuck together for two courses: large square cells.',
-      distance: 'Bold geometric waffle; sweatshirt and heavy polo look.',
+      distance: 'Bold geometric waffle.',
     },
   },
   single_cross_tuck: {
-    bed: 'single', face: 'technical_back', gsm: [140, 190],
+    bed: 'single', face: 'technical_back',
     aka: ['Cross Tuck', 'Micro Piqué', 'Baby Thermal'],
     look: {
       close: 'Alternate needles tuck on every course: a fine pebble / micro-mesh.',
-      distance: 'Near-smooth; activewear and sports-jersey drape.',
+      distance: 'Near-smooth with a fine grain.',
     },
   },
   swiss_double_pique: {
-    bed: 'double', face: 'technical_face', gsm: [240, 290],
+    bed: 'double', face: 'technical_face',
     aka: ['Swiss Double Piqué'],
     look: {
-      close: 'Dial loops pull the cylinder wales from behind: tight bird\'s-eye cells on the face.',
+      close: 'Dial loops held on alternate feeds pull the cylinder wales in from behind: small, tight cells on the face.',
       distance: 'Crisp, structured, does not curl.',
     },
   },
   french_double_pique: {
-    bed: 'double', face: 'technical_face', gsm: [240, 290],
+    bed: 'double', face: 'technical_face',
     aka: ['French Double Piqué', 'Rodier Piqué'],
     look: {
-      close: 'Dial tucks push the cylinder loops forward: raised, corded blister cells.',
-      distance: 'Corded honeycomb relief on a stable double knit.',
+      close: 'Dial tucks push the cylinder loops forward: raised, corded cells.',
+      distance: 'Corded relief on a stable double knit.',
     },
   },
   texipique: {
-    bed: 'double', face: 'technical_face', gsm: [220, 300],
+    bed: 'double', face: 'technical_face',
     aka: ['Texipiqué'],
     look: {
-      close: 'Tuck courses between plain interlock courses: wider, puffier cells than Swiss piqué.',
-      distance: 'Premium knit-blazer and jacket surface.',
+      close: 'Tuck courses between plain interlock courses: wider, softer cells.',
+      distance: 'Even, quiet texture on a stable double knit.',
     },
   },
   lacoste_pique: {
-    bed: 'double', face: 'technical_back', gsm: [190, 260],
+    bed: 'double', face: 'technical_back',
     aka: ['Double-bed Lacoste'],
     look: {
       close: 'Dial tucks on alternate needles: cells on the dial side, plain cylinder side.',
@@ -121,20 +216,13 @@ const PIQUE_FAMILY = {
     },
   },
   pique_interlock: {
-    bed: 'double', face: 'technical_face', gsm: [220, 320],
+    bed: 'double', face: 'technical_face',
     aka: ['Interlock Piqué', 'Cross-tuck Interlock'],
     look: {
       close: 'Tuck cells on both beds in turn: texture on both sides.',
-      distance: 'Even piqué hand on both faces; stable and wide.',
+      distance: 'Even piqué hand on both faces; stable.',
     },
   },
-};
-
-// How each fibre holds a buckled cell. Spun staple fibre with high friction
-// keeps the cell sharp; a smooth or limp fibre lets it relax flatter.
-const FIBRE_RELIEF = {
-  cotton: 1.0, wool: 1.1, linen: 1.05, hemp: 1.05, acrylic: 1.0,
-  polyester: 0.88, nylon: 0.85, viscose: 0.85, modal: 0.85, lyocell: 0.9, silk: 0.85,
 };
 
 const round = (v, d = 2) => Math.round(v * 10 ** d) / 10 ** d;
@@ -144,24 +232,26 @@ function isPique(fabricId) {
   return Object.prototype.hasOwnProperty.call(PIQUE_FAMILY, fabricId);
 }
 
-// Per-grid tuck statistics. n_tuck is the longest run of consecutive tucks in
-// any one wale, read cyclically (the repeat wraps).
+// Per-grid statistics. n_tuck / n_hold: longest run of consecutive tucks /
+// holds (tuck or miss) in any one wale, read cyclically (the repeat wraps).
 function tuckStats(grid) {
   if (!Array.isArray(grid) || !grid.length || !Array.isArray(grid[0])) return null;
   const rows = grid.length, cols = grid[0].length;
-  let tucks = 0, misses = 0, nTuck = 0, held = 0;
+  const isHold = (t) => t === 'T' || t === 'M';
+  let tucks = 0, misses = 0, nTuck = 0, nHold = 0, held = 0;
   for (let w = 0; w < cols; w++) {
     for (let c = 0; c < rows; c++) {
       const t = grid[c][w];
       if (t === 'T') tucks++;
       if (t === 'M') misses++;
-      // a knit loop with at least one hold course directly above it is held
-      if (t === 'K' && (grid[(c + 1) % rows][w] === 'T' || grid[(c + 1) % rows][w] === 'M')) held++;
+      if (t === 'K' && isHold(grid[(c + 1) % rows][w])) held++;
     }
     for (let start = 0; start < rows; start++) {
-      let run = 0;
-      while (run < rows && grid[(start + run) % rows][w] === 'T') run++;
-      nTuck = Math.max(nTuck, run);
+      let rt = 0, rh = 0;
+      while (rt < rows && grid[(start + rt) % rows][w] === 'T') rt++;
+      while (rh < rows && isHold(grid[(start + rh) % rows][w])) rh++;
+      nTuck = Math.max(nTuck, rt);
+      nHold = Math.max(nHold, rh);
     }
   }
   const cells = rows * cols;
@@ -170,13 +260,16 @@ function tuckStats(grid) {
     tuck_fraction: tucks / cells,
     miss_fraction: misses / cells,
     n_tuck: nTuck,
+    n_hold: nHold,
     held_loops: held,
     plain_courses: grid.filter(r => r.every(t => t === 'K')).length,
   };
 }
 
-function dominantFibre(composition) {
+function fibreClass(composition) {
   const fibers = (composition && composition.fibers) || {};
+  const cot = fibers.cotton || 0, pes = fibers.polyester || 0;
+  if (cot > 0 && pes > 0) return cot >= pes ? 'cvc' : 'pc';
   let best = 'cotton', pct = -1;
   for (const [f, p] of Object.entries(fibers)) {
     if (f === 'elastane' || f === 'spandex') continue;
@@ -200,102 +293,96 @@ function analyzePique(p) {
   if (!cyl) return null;
   const double = fam.bed === 'double';
 
-  // The bed that carries the piqué cell: for a double-bed piqué whichever bed
-  // tucks or misses; both when both do.
-  const active = double
-    ? [cyl, dial].filter(s => s && (s.tucks || s.misses))
-    : [cyl];
+  // The bed(s) that carry the cell.
+  const active = double ? [cyl, dial].filter(s => s && (s.tucks || s.misses)) : [cyl];
   const nTuck = Math.max(0, ...active.map(s => s.n_tuck));
-  // A held course (tuck OR miss above) — miss holds a loop just like a tuck
-  // does, it just leaves a float instead of a tuck loop behind it.
+  const nHold = Math.max(0, ...active.map(s => s.n_hold));
   const holdFrac = active.length
     ? active.reduce((a, s) => a + s.tuck_fraction + s.miss_fraction, 0) / (double ? 2 : 1)
     : 0;
-  const nHold = Math.max(nTuck, ...active.map(s => {
-    // longest consecutive hold (T or M) run, for elongation
-    const g = s === cyl ? C : D;
-    let best = 0;
-    for (let w = 0; w < s.cols; w++) {
-      for (let st = 0; st < s.rows; st++) {
-        let run = 0;
-        while (run < s.rows && (g[(st + run) % s.rows][w] === 'T' || g[(st + run) % s.rows][w] === 'M')) run++;
-        best = Math.max(best, run);
-      }
-    }
-    return best;
-  }));
+  const intensity = holdFrac * (1 + 0.5 * Math.max(0, nHold - 1));
+  const rel = Math.sqrt(intensity / I_REF);
 
-  // ── Fibre and elastane ─────────────────────────────────────────────────
-  const fibre = dominantFibre(p.composition);
-  const elastane = !!(p.composition && p.composition.has_elastane);
-  let fibreK = FIBRE_RELIEF[fibre] != null ? FIBRE_RELIEF[fibre] : 1.0;
-  if (elastane) fibreK *= 1.12;      // elastane draws the cell in: deeper, smaller
-
-  // ── Yarn and tightness ─────────────────────────────────────────────────
+  // ── Yarn ───────────────────────────────────────────────────────────────
   const countNe = p.countNe > 0 ? p.countNe : 30;
   const dMm = 0.907 / Math.sqrt(countNe);                 // 1 / (28 √Ne) inch
   const llMm = p.llMm > 0 ? p.llMm : 2.6;
+  const llCm = llMm / 10;
   const tex = p.tex > 0 ? p.tex : 590.5 / countNe;
-  const tf = p.tf > 0 ? p.tf : Math.sqrt(tex) / (llMm / 10);
-  // A tight fabric has no room to buckle; a slack one buckles further.
-  const tightK = clamp(Math.sqrt(TF_REF / tf), 0.75, 1.25);
+  const tf = p.tf > 0 ? p.tf : Math.sqrt(tex) / llCm;
+  const fibre = fibreClass(p.composition);
+  const elastane = !!(p.composition && p.composition.has_elastane);
+  const fx = fibreEffect(fibre, elastane);
 
-  // ── Geometry ───────────────────────────────────────────────────────────
-  const heldElong = 1 + nHold * ALPHA_COMP * 0.92;        // H_held / H0 with C ≈ 0.92 H0
-  const reliefD = (nTuck > 0 ? 1.25 + 1.25 * nTuck : 0.9 * nHold) * tightK * fibreK * (double ? 0.6 : 1);
-  const reliefMm = reliefD * dMm;
-  let spread = 1 + 0.68 * holdFrac + 0.03 * Math.max(0, nTuck - 1);
-  if (double) spread = 1 + (spread - 1) * 0.4;            // the second bed holds the wales
-  if (elastane) spread = 1 + (spread - 1) * 0.6;
-  // Sideways lean of the knit wales toward a tucking neighbour — the wale
-  // zig-zag of a Lacoste face — as a fraction of one wale.
-  const lean = clamp((spread - 1) * 0.5, 0, 0.2);
+  // ── Spread and expected compression (factory anchor, placed by structure) ─
+  let spread = (1 + (SPREAD_REF - 1) * rel) * fx.spread;
+  let compressionExpected = (1 + (COMPRESSION_REF - 1) * rel) * fx.pack;
+  if (double) {
+    // the second bed holds the wales; no double-piqué records to say how much
+    spread = 1 + (spread - 1) * 0.4;
+    compressionExpected = 1 + (compressionExpected - 1) * 0.4;
+  }
+  const lean = clamp((spread - 1) * 0.5, 0, 0.2);        // wale zig-zag, fraction of a wale
 
   // ── Density at the requested GSM ───────────────────────────────────────
-  const llCm = llMm / 10;
-  // Single bed: Munden's wale constant. A double knit's width is set by the
-  // needle pitch, not the loop (each face shows one bed's needles, relaxed
-  // ~1.55x closer than on the machine) — Munden's single-jersey constants
-  // overstate its wales by nearly double.
+  // Single bed: wales from the factory jersey constant and the spread.
+  // Double bed: width is set by the needle pitch (interlock records give
+  // the finished width per needle).
   const gauge = p.gauge > 0 ? p.gauge : 24;
+  const il = ANCHORS.interlock;
   const wpc = double
-    ? (gauge / 2.54) * 1.55 / spread
-    : (KW_SINGLE / llCm) / spread;
-  const cpcJersey = KC_SINGLE / llCm;
+    ? (il && il.widthPerNeedle ? 1 / (il.widthPerNeedle * 2.54) : (gauge / 2.54) * 1.64) / spread
+    : (A_JERSEY.Kw / llCm) / spread;
   // Mass balance: GSM = rows/cm · wales/cm · (yarn per needle per row,
   // summed over beds) · tex / 10. A knit or tuck draws one stitch length; a
   // miss leaves only a float about one needle pitch long.
   const yarnPerRow = (s) => (s ? (1 - s.miss_fraction) * llCm + s.miss_fraction / wpc : 0);
   const yarnRow = yarnPerRow(cyl) + (double ? yarnPerRow(dial || cyl) : 0);
-  const cpc = p.gsm > 0 ? (p.gsm * 10) / (wpc * yarnRow * tex) : cpcJersey;
-  // Against plain jersey at the same stitch length. Not meaningful for a
-  // double knit (no single-jersey reference), so not judged there.
+  const cpcJersey = A_JERSEY.Kc / llCm;
+  const cpc = p.gsm > 0 ? (p.gsm * 10) / (wpc * yarnRow * tex) : cpcJersey * compressionExpected;
   const compression = double ? null : cpc / cpcJersey;
-  const plausible = double ? true : compression > 0.85 && compression < 1.7;
-  const beds = double ? 2 : 1;
+  // How far this GSM/count/SL sits from what the factory runs for this
+  // structure. Outside ±15 % the quality is unusual for its stitch length.
+  const deviation = double ? null : compression / compressionExpected - 1;
+  const plausible = double ? true : Math.abs(deviation) <= 0.15;
+
+  // ── Held loop and cell depth ───────────────────────────────────────────
+  const heldElong = (LOOP_HEIGHT_PITCHES + nHold) / LOOP_HEIGHT_PITCHES;
+  // Buckling of the squeezed knit loops (mm). Relaxed loop height from the
+  // jersey course pitch at this stitch length; compression from the GSM
+  // asked for (single bed), or the structure's expectation (double bed,
+  // where the second bed takes part of the squeeze).
+  const H = LOOP_HEIGHT_PITCHES * (llMm / A_JERSEY.Kc);
+  const k = clamp(double ? compressionExpected : compression, 1, 2.2);
+  let reliefMm = nHold > 0 ? (2 / Math.PI) * Math.sqrt(2 * H * (H - H / k)) : 0;
+  if (double) reliefMm *= 0.5;
+  const reliefD = reliefMm / dMm;
 
   // ── Cell size and how far away it still reads ──────────────────────────
-  const cellW = (cyl.cols / wpc) * 10;                    // mm, one repeat across
-  const cellH = (Math.max(cyl.rows, dial ? dial.rows : 0) / cpc) * 10;
-  const cellMm = Math.min(cellW, cellH);
-  const visibleM = cellMm / 1000 / (EYE_ARCMIN_M * TEXTURE_ARCMIN);
+  const repW = Math.max(cyl.cols, dial ? dial.cols : 0);
+  const repC = Math.max(cyl.rows, dial ? dial.rows : 0);
+  const cellW = (repW / wpc) * 10;
+  const cellH = (repC / cpc) * 10;
+  const visibleM = Math.min(cellW, cellH) / 1000 / (EYE_ARCMIN_M * TEXTURE_ARCMIN);
 
-  // ── GSM position ───────────────────────────────────────────────────────
-  const [lo, hi] = fam.gsm;
-  let gsmPos = 'typical', gsmNote = 'Within the weight this structure is normally made at.';
-  if (p.gsm && p.gsm < lo * 0.95) {
+  // ── GSM position against what the factory runs (single-bed piqué) ─────
+  const common = A_PIQUE.gsm;
+  let gsmPos = 'typical', gsmNote = `Within the range most piqué is run at (${common[0]}–${common[1]} GSM finished).`;
+  if (double) {
+    gsmNote = 'No double-piqué rows in the factory records to compare the weight against.';
+    gsmPos = 'n/a';
+  } else if (p.gsm && p.gsm < common[0] * 0.92) {
     gsmPos = 'light';
-    gsmNote = 'Lighter than usual: finer yarn and smaller, shallower cells; the piqué reads more as a texture than a cell.';
-  } else if (p.gsm && p.gsm > hi * 1.05) {
+    gsmNote = `Lighter than most piqué runs (${common[0]}–${common[1]} GSM): finer yarn, smaller cells.`;
+  } else if (p.gsm && p.gsm > common[1] * 1.08) {
     gsmPos = 'heavy';
-    gsmNote = 'Heavier than usual: coarser yarn, bigger but more packed cells; firmer hand, relief flattens slightly.';
+    gsmNote = `Heavier than most piqué runs (${common[0]}–${common[1]} GSM): coarser yarn, larger, firmer cells.`;
   }
 
-  // Curl relative to plain jersey. Tucks lock the loops; a double knit does not curl.
+  // Curl relative to plain jersey: tucks lock the loops; a double knit does not curl.
   const curl = double ? 0 : clamp(1 - 1.2 * holdFrac, 0.15, 1);
-
-  // Thickness: one bed is about 2 yarn diameters, plus the cell relief.
-  const thicknessMm = (double ? 4 : 2.2) * dMm + reliefMm * (double ? 0.5 : 1);
+  // Thickness: one bed is about 2.2 yarn diameters, plus the cell relief.
+  const thicknessMm = (double ? 4 : 2.2) * dMm + reliefMm;
 
   return {
     fabric_id: p.fabricId,
@@ -306,52 +393,60 @@ function analyzePique(p) {
       cylinder: C,
       dial: Array.isArray(D) ? D : null,
       feeds: cyl.rows,
-      repeat: { wales: Math.max(cyl.cols, dial ? dial.cols : 0), courses: Math.max(cyl.rows, dial ? dial.rows : 0) },
+      repeat: { wales: repW, courses: repC },
     },
     tuck: {
       tuck_fraction: round(holdFrac, 3),
       consecutive_tucks: nTuck,
       consecutive_holds: nHold,
+      hold_intensity: round(intensity, 3),
       held_loops_per_repeat: active.reduce((a, s) => a + s.held_loops, 0),
       plain_courses_per_repeat: cyl.plain_courses,
     },
     geometry: {
       held_loop_elongation: round(heldElong),
-      course_compression_alpha: ALPHA_COMP,
       relief_yarn_diameters: round(reliefD),
       relief_mm: round(reliefMm),
       wale_spread: round(spread),
       wale_lean: round(lean, 3),
       yarn_diameter_mm: round(dMm, 3),
       tightness_factor: round(tf, 1),
-      tightness_effect: round(tightK),
       fibre: fibre + (elastane ? ' + elastane' : ''),
-      fibre_effect: round(fibreK),
+      fibre_basis: fx.basis,
     },
     density: {
       wales_per_cm: round(wpc, 1),
       courses_per_cm: round(cpc, 1),
-      stitches_per_cm2: Math.round(wpc * cpc * beds),
+      stitches_per_cm2: Math.round(wpc * cpc * (double ? 2 : 1)),
       course_compression_vs_jersey: compression == null ? null : round(compression),
+      expected_compression: double ? null : round(compressionExpected),
       plausible,
-      note: plausible
-        ? 'Courses solved from the requested GSM at this count and stitch length.'
-        : 'The requested GSM needs an unusual course density for this structure at this count and stitch length — check the yarn or stitch length.',
+      note: double
+        ? 'Courses solved from the requested GSM; width from the needle pitch.'
+        : plausible
+          ? 'Courses solved from the requested GSM; in line with what the factory runs for this structure.'
+          : `At this count and stitch length the requested GSM needs ${Math.round(Math.abs(deviation) * 100)}% ${deviation > 0 ? 'more' : 'fewer'} courses than the factory's piqué normally packs — check the yarn count or stitch length.`,
     },
     cell: {
       width_mm: round(cellW),
       height_mm: round(cellH),
       readable_up_to_m: round(visibleM, 1),
     },
-    gsm_fit: { typical: fam.gsm, position: gsmPos, note: gsmNote },
+    gsm_fit: { common_finished: common, position: gsmPos, note: gsmNote },
     behaviour: {
       curl_vs_jersey: round(curl),
       width_vs_jersey_pct: Math.round((spread - 1) * 100),
       thickness_mm: round(thicknessMm),
+    },
+    basis: {
+      factory_pique_rows: A_PIQUE.n,
+      factory_jersey_rows: A_JERSEY.n,
+      measured: 'wale spread and course packing of a typical piqué; CVC and lycra effects',
+      modelled: 'placement of each needle programme around that typical piqué; cell depth from loop buckling; double-bed values',
     },
     appearance: fam.look,
     estimate: true,
   };
 }
 
-module.exports = { analyzePique, isPique, tuckStats, PIQUE_FAMILY };
+module.exports = { analyzePique, isPique, tuckStats, PIQUE_FAMILY, ANCHORS };

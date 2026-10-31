@@ -500,9 +500,10 @@ export class Knit3D {
 
     // effective course spacing (loop height): taller when loose (low cpc/wpc)
     const ribComp = con.type === 'rib' ? 1 / RIB_PITCH_SCALE : 1;
-    // A piqué's held loops pull its courses closer than a jersey's (the
-    // engine solves its courses from the GSM), so its cap is a little higher.
-    const pitchY = PITCH_Y * (1 / Math.max(0.6, Math.min(density.aspect, this.opts.pique ? 1.75 : 1.6)));
+    // A piqué packs ~1.4x a jersey's courses (factory records; the engine
+    // solves them from the GSM) and its loops are shortened to match
+    // (topology-builder.js yScale), so its course density is not capped.
+    const pitchY = PITCH_Y * (1 / Math.max(0.6, Math.min(density.aspect, this.opts.pique ? 3.2 : 1.6)));
 
     // Stitch count that actually FILLS the frame, not a wide-shot of the whole
     // swatch: at the old baseCourses (40/30), the "cover" framing packed
@@ -764,6 +765,9 @@ export class Knit3D {
           height: maps.height,
           cavityLod: Math.log2(Math.max(2, Math.min(rep.wales * tw, rep.courses * th))),
           cavity: this.opts.pique ? 0.55 : 0.3,
+          // cell-scale slope: a piqué's beads; other knits keep the yarn-scale
+          // normal map only
+          relief: this.opts.pique ? { depth: bake.depth, w: win.w, h: win.h, strength: 1 } : null,
         },
       }));
       return m;

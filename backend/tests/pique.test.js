@@ -1,14 +1,15 @@
 /**
  * Piqué structure engine (engine/domain/pique-engine.js).
  *
- * Pins the physics a viewer relies on: stacking tucks deepens the cell,
- * tucks spread the wales, the heavier quality weighs what was asked for, the
- * single-bed piqués are sold on the technical back, and no catalogue piqué
- * collapses into another one's needle programme.
+ * Pins the physics a viewer relies on: the factory records really do show a
+ * piqué wider and more course-packed than jersey, the typical structure lands
+ * on those measured values, stacking tucks deepens the cell, the density
+ * weighs what was asked for, single-bed piqués are sold on the technical
+ * back, and no catalogue piqué collapses into another one's needle programme.
  */
 
 const { calculate } = require('../engine/index');
-const { analyzePique, tuckStats, PIQUE_FAMILY } = require('../engine/domain/pique-engine');
+const { analyzePique, tuckStats, PIQUE_FAMILY, ANCHORS } = require('../engine/domain/pique-engine');
 
 let failed = 0;
 const ok = (cond, msg) => {
@@ -38,18 +39,27 @@ const single = run('lacoste_single', 200).pique;
 const dbl = run('lacoste_double', 200).pique;
 ok(dbl.geometry.held_loop_elongation > single.geometry.held_loop_elongation, 'double Lacoste held loop longer than single');
 ok(dbl.geometry.relief_mm > single.geometry.relief_mm, 'double Lacoste cell deeper than single');
-// Calibrated against the published parameter sets (within ~15 %)
-ok(Math.abs(single.geometry.held_loop_elongation - 1.75) < 0.2, `single Lacoste elongation ≈ 1.75 (${single.geometry.held_loop_elongation})`);
-ok(Math.abs(single.geometry.wale_spread - 1.18) < 0.05, `single Lacoste wale spread ≈ 1.18 (${single.geometry.wale_spread})`);
-ok(single.geometry.relief_mm > 0.3 && single.geometry.relief_mm < 0.55, `single Lacoste relief ≈ 0.42 mm (${single.geometry.relief_mm})`);
+// Intermeshing geometry: a loop held one course is (1.41 + 1) / 1.41 tall.
+ok(Math.abs(single.geometry.held_loop_elongation - 1.71) < 0.01, `single Lacoste held loop 1.71x (${single.geometry.held_loop_elongation})`);
+ok(single.geometry.relief_mm > 0.25 && single.geometry.relief_mm < 0.5, `single Lacoste cell 0.25-0.5 mm deep (${single.geometry.relief_mm})`);
 const polo = run('pique_single', 200).pique;
-ok(Math.abs(polo.geometry.wale_spread - 1.34) < 0.06, `polo pique wale spread ≈ 1.34 (${polo.geometry.wale_spread})`);
+
+// 3b. The factory records: piqué measurably wider and more course-packed
+//     than jersey at the same stitch length, with enough rows to mean it.
+ok(ANCHORS.pique.n >= 50 && ANCHORS.jersey.n >= 500, `factory rows: ${ANCHORS.pique.n} piqué, ${ANCHORS.jersey.n} jersey`);
+const spreadRef = ANCHORS.jersey.Kw / ANCHORS.pique.Kw;
+const packRef = ANCHORS.pique.Kc / ANCHORS.jersey.Kc;
+ok(spreadRef > 1.15 && spreadRef < 1.45, `measured wale spread ${spreadRef.toFixed(2)}`);
+ok(packRef > 1.25 && packRef < 1.6, `measured course packing ${packRef.toFixed(2)}`);
+// The reference-intensity structure (double Lacoste, I = 0.5) sits on them.
+ok(Math.abs(dbl.geometry.wale_spread - spreadRef) < 0.02, `double Lacoste spread = measured typical (${dbl.geometry.wale_spread})`);
+ok(Math.abs(dbl.density.expected_compression - packRef) < 0.02, `double Lacoste packing = measured typical (${dbl.density.expected_compression})`);
 
 // 4. More tucks per repeat spread the wales wider.
 ok(polo.geometry.wale_spread > single.geometry.wale_spread, 'polo pique spreads wider than single Lacoste');
 
 // 5. Density closes the mass balance at the requested GSM (single bed).
-for (const gsm of [170, 200, 230]) {
+for (const gsm of [180, 200, 220]) {
   const r = run('lacoste_single', gsm);
   const q = r.pique;
   const tex = r.physical_constraints.tex;
@@ -78,20 +88,23 @@ const fr = run('french_double_pique', 260).pique;
 ok(sw.tuck.consecutive_holds >= 2 && sw.tuck.consecutive_tucks === 0, 'Swiss: dial loops held by misses, no tucks');
 ok(fr.tuck.consecutive_tucks >= 1, 'French: dial tucks');
 
-// 9. Fibre: a smooth filament relaxes the cell; elastane deepens it.
+// 9. Fibre, from the records: CVC packs more courses than cotton; lycra
+//    spreads less.
 const cot = analyzePique({ fabricId: 'lacoste_single', gsm: 200, countNe: 26, llMm: 2.6, tf: 18,
   composition: { fibers: { cotton: 100 } }, pattern: { pattern_cylinder: [['K', 'T'], ['K', 'K'], ['T', 'K'], ['K', 'K']] } });
 const pes = analyzePique({ fabricId: 'lacoste_single', gsm: 200, countNe: 26, llMm: 2.6, tf: 18,
   composition: { fibers: { polyester: 100 } }, pattern: { pattern_cylinder: [['K', 'T'], ['K', 'K'], ['T', 'K'], ['K', 'K']] } });
 const ela = analyzePique({ fabricId: 'lacoste_single', gsm: 200, countNe: 26, llMm: 2.6, tf: 18,
   composition: { fibers: { cotton: 95, elastane: 5 }, has_elastane: true }, pattern: { pattern_cylinder: [['K', 'T'], ['K', 'K'], ['T', 'K'], ['K', 'K']] } });
-ok(pes.geometry.relief_mm < cot.geometry.relief_mm, 'polyester cell shallower than cotton');
-ok(ela.geometry.relief_mm > cot.geometry.relief_mm && ela.geometry.wale_spread < cot.geometry.wale_spread, 'elastane: deeper, narrower cell');
+ok(pes.density.expected_compression > cot.density.expected_compression, 'polyester-rich piqué packs more courses (CVC records)');
+ok(ela.geometry.wale_spread < cot.geometry.wale_spread, 'lycra piqué spreads less (lycra records)');
 
-// 10. Tightness: a tighter fabric buckles less.
-const tight = analyzePique({ fabricId: 'lacoste_single', gsm: 200, countNe: 26, llMm: 2.6, tf: 21,
+// 10. GSM: at the same count and stitch length a heavier quality packs more
+//     courses, and its squeezed loops buckle deeper.
+const at = (gsm) => analyzePique({ fabricId: 'lacoste_single', gsm, countNe: 26, llMm: 2.6,
   composition: { fibers: { cotton: 100 } }, pattern: { pattern_cylinder: [['K', 'T'], ['K', 'K'], ['T', 'K'], ['K', 'K']] } });
-ok(tight.geometry.relief_mm < cot.geometry.relief_mm, 'higher tightness factor, shallower cell');
+ok(at(215).geometry.relief_mm > at(185).geometry.relief_mm, 'heavier at same count/SL: deeper cell');
+ok(!at(320).density.plausible, 'an unreachable GSM for the count/SL is flagged');
 
 // 11. No source attributions reach the API.
 ok(!/spencer|leaf|sha et|http/i.test(JSON.stringify(single)), 'no source names or links in the pique output');

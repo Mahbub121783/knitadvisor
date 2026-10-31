@@ -19,11 +19,13 @@ import * as THREE from 'three';
 import { PITCH_X, LOOP, TUCK, MISS, TRANSFER_Z } from './constants.js?v=20260608g';
 
 // Build a local point, applying mirror (z), jitter and the world centre.
+// `yScale` shortens the loop where courses are packed tighter than a
+// jersey's (a piqué: same yarn, squeezed between packed courses).
 function P(ctx, lx, ly, lz) {
   const z = (ctx.mirror ? -lz : lz) + ctx.zBase;
   return new THREE.Vector3(
     ctx.cx + lx + ctx.jitter.x,
-    ctx.cy + ly + ctx.jitter.y,
+    ctx.cy + ly * (ctx.yScale || 1) + ctx.jitter.y,
     z + ctx.jitter.z,
   );
 }
@@ -44,7 +46,7 @@ function sinker(ctx) {
 export function knitLoop(ctx) {
   // extra height per held course: one course pitch, or n*C*alpha for a
   // pique (ctx.heldPitch, see topology-builder.js)
-  const up = (ctx.heldExtra || 0) * (ctx.heldPitch != null ? ctx.heldPitch : 0.92);
+  const up = (ctx.heldExtra || 0) * (ctx.heldPitch != null ? ctx.heldPitch : 0.92) / (ctx.yScale || 1);
   const L = LOOP;
   const pts = [
     P(ctx, -L.footHalf,     L.footY,                L.footZ),
@@ -77,7 +79,7 @@ export function knitLoop(ctx) {
  * under an orthogonal camera.
  */
 export function purlLoop(ctx) {
-  const up = (ctx.heldExtra || 0) * (ctx.heldPitch != null ? ctx.heldPitch : 0.92);
+  const up = (ctx.heldExtra || 0) * (ctx.heldPitch != null ? ctx.heldPitch : 0.92) / (ctx.yScale || 1);
   const L = LOOP;
   // Wide, low-but-tall-ENOUGH arc: a purl bump that stays small/far back
   // disappears entirely behind the neighbouring knit column's own wide,
@@ -112,12 +114,35 @@ export function purlLoop(ctx) {
  */
 export function tuckCup(ctx) {
   const T = TUCK, L = LOOP;
+  if (ctx.tuckArch) return tuckArch(ctx);
   const pts = [
     P(ctx, -L.footHalf, L.footY,  L.footZ),
     P(ctx, -T.sideX,    T.sideY,  T.sideZ),
     P(ctx,  0,          T.cupY,   T.cupZ),
     P(ctx,  T.sideX,    T.sideY,  T.sideZ),
     P(ctx,  L.footHalf, L.footY,  L.footZ),
+  ];
+  if (ctx.sinker) pts.push(sinker(ctx));
+  return pts;
+}
+
+/**
+ * Tuck loop as it lies in a piqué: never drawn through, its crown is carried
+ * up and caught inside the head of the next knitted loop, so it stands as a
+ * narrow arch (∩) from its own course's sinkers up to about head height,
+ * BEHIND the held loop it shares the needle with (the caller sets how far
+ * behind). Seen from the technical back it is the open arch over each cell.
+ */
+function tuckArch(ctx) {
+  const L = LOOP, z = -0.18;
+  const pts = [
+    P(ctx, -L.footHalf, L.footY, L.footZ),
+    P(ctx, -0.27, 0.05, z),
+    P(ctx, -0.22, 0.45, z),
+    P(ctx, 0, 0.70, z - 0.04),
+    P(ctx, 0.22, 0.45, z),
+    P(ctx, 0.27, 0.05, z),
+    P(ctx, L.footHalf, L.footY, L.footZ),
   ];
   if (ctx.sinker) pts.push(sinker(ctx));
   return pts;
