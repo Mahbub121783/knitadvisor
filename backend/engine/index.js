@@ -982,6 +982,20 @@ function calculate(params) {
     gsm,
     garment_weight_g: params.garment_weight_g || null,
     country: params.country || 'bangladesh',
+    // the stage model reads the process the rest of the engine already solved
+    fabric_family: fabricDef.category === 'woven' ? 'woven' : 'knit',
+    shade: (colorResult && colorResult.shade) || effectiveShade || null,
+    dyeing_method: (wetProcessing && wetProcessing.ok && wetProcessing.dyeing_method) || dyeing_method || null,
+    process_route: (wetProcessing && wetProcessing.ok && wetProcessing.process_route) || [],
+    process_loss_pct: processLoss ? processLoss.loss_pct : null,
+    spinning_system: spinning_system || (yarnExpertise ? yarnExpertise.spinning_system : null),
+    finishing: finishing_route || null,
+    surface: surface_finish || null,
+    boiler_fuel: params.boiler_fuel || null,
+    transport: params.transport || null,
+    thread_g: params.thread_g, polybag_g: params.polybag_g, cut_waste_pct: params.cut_waste_pct,
+    primary: params.primary || null,
+    recycled_method: params.recycled_method || null,
   });
   if (carbonResult.success) {
     trace.push({

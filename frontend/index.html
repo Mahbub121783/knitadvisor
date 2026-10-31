@@ -487,6 +487,7 @@
   .cbar i{display:block;height:100%;transition:width .6s cubic-bezier(.2,.7,.2,1);} .cbar .f{background:var(--good);} .cbar .p{background:var(--accent);}
   .clegend{display:flex;justify-content:space-between;gap:0.75rem;flex-wrap:wrap;margin-top:0.6rem;font-size:0.8125rem;color:var(--text-soft);}
   .clegend b{font-family:'IBM Plex Mono',monospace;color:var(--ink);font-weight:500;}
+  .cstages{justify-content:flex-start;gap:0.35rem 1.1rem;} .cbar i:not(:first-child){border-left:2px solid #fff;}
   .clegend .k{display:inline-block;width:0.6rem;height:0.6rem;border-radius:50%;margin-right:0.4rem;} .clegend .k.f{background:var(--good);} .clegend .k.p{background:var(--accent);}
   .ccmp{padding:1.1rem 1.3rem 1.3rem;display:grid;gap:0.55rem;}
   .ccmp h4{font-size:0.8125rem;font-weight:600;letter-spacing:0;color:var(--ink);margin-bottom:0.15rem;}
@@ -811,10 +812,10 @@
         <h2>Know the carbon in every kilo of cloth.</h2>
         <p>Choose a composition and see what the fibre and the mill energy add up to &mdash; computed by the same engine, from the same specification, in the same click.</p>
         <ul class="cfacts">
-          <li><svg aria-hidden="true"><use href="#i-check"/></svg><span><b>Fibre production</b> weighted by composition, with organic and recycled variants recognised from the name.</span></li>
-          <li><svg aria-hidden="true"><use href="#i-check"/></svg><span><b>Knitting, dyeing and finishing energy</b> converted through the grid emission factor.</span></li>
+          <li><svg aria-hidden="true"><use href="#i-check"/></svg><span><b>Stage by stage:</b> fibre, spinning, knitting or weaving, dyeing and finishing, each charged on the mass that actually passes through it.</span></li>
+          <li><svg aria-hidden="true"><use href="#i-check"/></svg><span><b>Wet processing from physics:</b> the heat to warm each bath, the water each dryer evaporates, the boiler and the grid behind them.</span></li>
           <li><svg aria-hidden="true"><use href="#i-check"/></svg><span><b>Per kg, per m&sup2; and per garment</b> in the calculator, against a conventional-cotton baseline.</span></li>
-          <li><svg aria-hidden="true"><use href="#i-check"/></svg><span><b>Honest about its limits.</b> A screening estimate, not a certified LCA &mdash; fibres without a sourced figure are flagged, never guessed.</span></li>
+          <li><svg aria-hidden="true"><use href="#i-check"/></svg><span><b>A range, not a false point.</b> Every uncertain input carries low, central and high values, and the answer shows which one it hangs on. Your own meter data replaces the model where you have it.</span></li>
         </ul>
       </div>
       <div class="ccard rv" style="--d:.1s">
@@ -823,7 +824,7 @@
           <div><div class="lbl"><span>Fabric weight</span><span class="val" id="cGsmV">180 g/m&sup2;</span></div><input type="range" id="cGsm" min="100" max="420" step="5" value="180" aria-label="Fabric GSM"></div>
         </div>
         <div id="cBody"><div class="cmsg">Calculating&hellip;</div></div>
-        <div class="cfoot"><span>Cradle-to-fabric, Bangladesh grid. A screening estimate, not a certified LCA.</span><a id="cMore">Per-garment totals &amp; sources &rarr;</a></div>
+        <div class="cfoot"><span>Cradle-to-gate, Bangladesh grid, gas boiler. A screening estimate, not a certified LCA.</span><a id="cMore">Full breakdown, physics and sensitivity &rarr;</a></div>
       </div>
     </div>
   </div>
@@ -2217,12 +2218,16 @@
       var rows = COMPS.filter(function(c){ return data[c]; }).map(function(c){
         return '<div class="crow' + (c === cur ? ' cur' : '') + '"><span>' + SHORT[c] + '</span><span class="tr"><i style="width:' + (data[c].total / max * 100).toFixed(1) + '%"></i></span><span class="v">' + f2(data[c].total) + '</span></div>';
       }).join('');
-      var parts = d.fibers.map(function(f){ return f.pct + '% ' + f.fiber + (f.variant ? ' (' + f.variant + ')' : '') + ' ' + f2(f.co2e); }).join(' · ');
+      var PAL = ['#2E8F6B', '#0F4C81', '#7A5BC7', '#B5651D', '#C2477F'];
+      var st = d.stages || [];
+      var bar = st.map(function(x, i){ return '<i title="' + x.name + '" style="width:' + x.share_pct + '%;background:' + PAL[i % PAL.length] + '"></i>'; }).join('');
+      var leg = st.map(function(x, i){ return '<span><span class="k" style="background:' + PAL[i % PAL.length] + '"></span>' + x.name + ' <b>' + f2(x.co2e) + '</b></span>'; }).join('');
+      var rng = d.range ? 'Likely range <b>' + d.range.p5.toFixed(1) + ' &ndash; ' + d.range.p95.toFixed(1) + '</b> kg CO&#8322;e per kg once the published spread of every input is counted.' : '';
       cBody.innerHTML =
         '<div class="cbig"><div class="n">' + f2(d.total) + '</div><div class="u"><b>kg CO&#8322;e per kg of fabric</b>' + f2(perM2) + ' kg CO&#8322;e per m&sup2; at ' + gsm + ' g/m&sup2;</div><span class="cdelta ' + dcls + '">' + dtxt + '</span></div>' +
-        '<div class="csplit"><div class="cbar" role="img" aria-label="Fibre ' + fPct.toFixed(0) + ' percent, processing energy ' + (100 - fPct).toFixed(0) + ' percent"><i class="f" style="width:' + fPct.toFixed(1) + '%"></i><i class="p" style="width:' + (100 - fPct).toFixed(1) + '%"></i></div>' +
-        '<div class="clegend"><span><span class="k f"></span>Fibre production <b>' + f2(d.fiber) + '</b></span><span><span class="k p"></span>Knit, dye and finish energy <b>' + f2(d.processing) + '</b></span></div>' +
-        '<div class="clegend" style="margin-top:.35rem"><span>' + parts + '</span></div></div>' +
+        '<div class="csplit"><div class="cbar" role="img" aria-label="Emissions by stage">' + bar + '</div>' +
+        '<div class="clegend cstages">' + leg + '</div>' +
+        '<div class="clegend" style="margin-top:.5rem"><span>' + rng + '</span></div></div>' +
         '<div class="ccmp"><h4>Same weight, other compositions &mdash; kg CO&#8322;e per kg</h4>' + rows + '</div>';
     }
   }

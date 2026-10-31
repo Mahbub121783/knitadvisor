@@ -1567,7 +1567,7 @@
          by 5-30x for the same fiber depending on methodology, so this is
          presented as an indicative, sourced estimate with its own
          confidence tags and a prominent scope disclosure — never a bare
-         precise-looking number. See carbon-footprint-factors.js. -->
+         precise-looking number. See carbon-model.js. -->
     <div class="result-section anim-in hidden" id="sec-carbon">
       <div class="result-section-title">
         <div class="rst-icon" style="background:rgba(74,222,128,.1); color:#4ade80;">🌱</div>
@@ -1576,36 +1576,54 @@
       </div>
 
       <div class="info-box text-xs" style="font-size:10px; line-height:1.6; margin-bottom:12px;">
-        <strong>Screening-level estimate, not a certified LCA.</strong> Fiber-production figures are triangulated from published LCA literature, which disagrees with itself substantially across studies and methodologies — every figure below carries its own confidence note. Covers fiber production + knitting/dyeing/finishing energy only; excludes transport, use-phase and end-of-life.
+        <strong>Screening-level estimate, not a certified LCA.</strong> Built stage by stage &mdash; fibre, spinning, knitting or weaving, wet processing, finishing &mdash; with the mass lost at each stage, the heat to warm each bath, the water each dryer evaporates, and the boiler and grid behind them. Every uncertain input is a range, and the range is shown. Excludes use phase and end of life.
       </div>
 
       <div class="cost-headline">
         <div>
-          <div class="ch-lbl">Total, per kg of fabric</div>
+          <div class="ch-lbl">Total, per kg of finished fabric</div>
           <div class="ch-val" id="carbon-total-val">&#8212;</div>
-          <div class="ch-sub">kg CO2e &middot; fiber production + processing energy</div>
+          <div class="ch-sub" id="carbon-sub">kg CO2e</div>
         </div>
       </div>
+      <div id="carbon-range" style="margin:6px 0 10px; font-size:10.5px; color:var(--t3); line-height:1.6;"></div>
 
       <div class="result-row">
         <span class="result-key">vs. conventional 100% cotton baseline</span>
         <span class="result-val" id="carbon-vs-baseline">&#8212;</span>
+      </div>
+      <div class="result-row" id="carbon-m2-row">
+        <span class="result-key">Per m&sup2; of fabric</span>
+        <span class="result-val white" id="carbon-m2">&#8212;</span>
       </div>
       <div class="result-row hidden" id="carbon-per-garment-row">
         <span class="result-key">Per garment</span>
         <span class="result-val white" id="carbon-per-garment">&#8212;</span>
       </div>
 
-      <div class="result-section-label" style="margin-top:12px;">Fiber Production
-        <span style="font-weight:400;color:var(--t3);">&#8212; composition-weighted</span></div>
+      <div class="result-section-label" style="margin-top:12px;">Where it comes from</div>
+      <div id="carbon-stagebar" style="display:flex;height:10px;border-radius:99px;overflow:hidden;background:var(--line3);margin:4px 0 8px;"></div>
+      <div id="carbon-stages"></div>
+
+      <div class="result-section-label" style="margin-top:12px;">Fibre production
+        <span style="font-weight:400;color:var(--t3);">&#8212; composition-weighted, per kg of fibre</span></div>
       <div id="carbon-fiber-breakdown"></div>
 
-      <div class="result-section-label" style="margin-top:10px;">Processing Energy</div>
-      <div class="result-row">
-        <span class="result-key">Knitting + dyeing + finishing</span>
-        <span class="result-val white" id="carbon-processing-val">&#8212;</span>
-      </div>
-      <div class="text-xs text-dim" id="carbon-processing-note" style="font-size:9.5px; margin-top:4px;"></div>
+      <div class="result-section-label" style="margin-top:12px;">Mass balance
+        <span style="font-weight:400;color:var(--t3);">&#8212; what 1 kg of finished fabric starts as</span></div>
+      <div id="carbon-mass" style="font-size:11px;color:var(--t2);line-height:1.7;"></div>
+
+      <div class="result-section-label" style="margin-top:12px;">Wet processing, from physics</div>
+      <div id="carbon-wet" style="font-size:11px;color:var(--t2);line-height:1.7;"></div>
+
+      <div class="result-section-label" style="margin-top:12px;">What the answer depends on
+        <span style="font-weight:400;color:var(--t3);">&#8212; each driver moved alone, low to high</span></div>
+      <div id="carbon-tornado"></div>
+      <div id="carbon-fuels" style="font-size:10.5px;color:var(--t3);margin-top:6px;line-height:1.6;"></div>
+
+      <div class="result-section-label" style="margin-top:12px;">How much of it is measured</div>
+      <div id="carbon-quality" style="font-size:10.5px;color:var(--t3);line-height:1.7;"></div>
+      <div id="carbon-notmodelled" style="font-size:10px;color:var(--t3);margin-top:8px;line-height:1.6;"></div>
 
       <div id="carbon-warnings" style="margin-top:10px; font-size:10px; color:#fbbf24; line-height:1.6;"></div>
     </div>
@@ -3320,52 +3338,76 @@ function renderQuality(q) {
    ============================================================ */
 function renderCarbonFootprint(c) {
   const esc = (x) => String(x == null ? '' : x).replace(/[&<>]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]));
-  const sec = document.getElementById('sec-carbon');
+  const $ = (id) => document.getElementById(id);
+  const sec = $('sec-carbon');
   if (!c) { sec.classList.add('hidden'); syncStages(); return; }
   sec.classList.remove('hidden');
+  const tierCol = { PRIMARY: '#4ade80', SOURCED: '#60a5fa', MODELLED: '#fbbf24', DERIVED: '#a78bfa', ESTIMATED: '#fbbf24' };
+  const tierTag = (t) => `<span style="font-size:9px;padding:1px 6px;border-radius:99px;border:1px solid ${tierCol[t] || '#888'};color:${tierCol[t] || '#888'};margin-left:6px;">${esc(t)}</span>`;
 
-  document.getElementById('carbon-total-val').textContent = `${fmt(c.total_co2e_per_kg_fabric, 2)}`;
+  $('carbon-total-val').textContent = fmt(c.total_co2e_per_kg_fabric, 2);
+  $('carbon-sub').textContent = 'kg CO2e per kg · ' + (c.engine ? 'model ' + c.engine.factor_set : '');
+  const g = c.range;
+  $('carbon-range').innerHTML = g ? `Likely range <b style="color:var(--t1)">${fmt(g.p5, 1)} &ndash; ${fmt(g.p95, 1)}</b> (P5&ndash;P95 of ${g.monte_carlo_runs} runs, median ${fmt(g.p50, 1)}). Every input at its extreme: ${fmt(g.low, 1)} &ndash; ${fmt(g.high, 1)}.`
+    + (c.alternative_dataset ? ` On a second, independent set of fibre factors: <b style="color:var(--t1)">${fmt(c.alternative_dataset.total_co2e_per_kg_fabric, 1)}</b>.` : '') : '';
 
-  const vs = c.vs_conventional_cotton_baseline;
-  const vsEl = document.getElementById('carbon-vs-baseline');
-  if (vs && vs.direction === 'equal') {
-    vsEl.textContent = 'same (this is the baseline)';
-    vsEl.className = 'result-val white';
-  } else if (vs) {
-    vsEl.textContent = `${vs.direction === 'lower' ? '↓' : '↑'} ${fmt(Math.abs(vs.pct_difference), 1)}% ${vs.direction}`;
-    vsEl.className = 'result-val ' + (vs.direction === 'lower' ? 'green' : 'amber');
-  }
+  const vs = c.vs_conventional_cotton_baseline, vsEl = $('carbon-vs-baseline');
+  if (vs && vs.direction === 'equal') { vsEl.textContent = 'same (this is the baseline)'; vsEl.className = 'result-val white'; }
+  else if (vs) { vsEl.textContent = `${vs.direction === 'lower' ? '↓' : '↑'} ${fmt(Math.abs(vs.pct_difference), 1)}% ${vs.direction}`; vsEl.className = 'result-val ' + (vs.direction === 'lower' ? 'green' : 'amber'); }
+  $('carbon-m2').textContent = `${fmt(c.total_co2e_per_m2_fabric, 3)} kg CO2e`;
 
-  const gRow = document.getElementById('carbon-per-garment-row');
+  const gRow = $('carbon-per-garment-row');
   if (c.per_garment) {
     gRow.classList.remove('hidden');
-    document.getElementById('carbon-per-garment').textContent = `${fmt(c.per_garment.total_co2e_kg, 3)} kg CO2e (${c.per_garment.garment_weight_g}g garment)`;
-  } else {
-    gRow.classList.add('hidden');
-  }
+    const pg = c.per_garment;
+    $('carbon-per-garment').textContent = `${fmt(pg.total_co2e_kg, 3)} kg CO2e (${pg.garment_weight_g} g garment, ${fmt(pg.cut_waste_pct, 1)}% cutting waste)`;
+  } else gRow.classList.add('hidden');
 
-  const fiberEl = document.getElementById('carbon-fiber-breakdown');
-  fiberEl.innerHTML = c.fiber_breakdown.map(f => {
-    if (!f.modeled) {
-      return `<div class="result-row"><span class="result-key">${esc(f.fiber)} (${esc(f.pct)}%)</span><span class="result-val" style="color:#fb923c;">not modeled</span></div>`;
-    }
+  const palette = ['#4ade80', '#60a5fa', '#a78bfa', '#fbbf24', '#fb923c', '#f472b6'];
+  $('carbon-stagebar').innerHTML = (c.stages || []).map((s, i) => `<i title="${esc(s.name)}" style="display:block;height:100%;width:${s.share_pct}%;background:${palette[i % palette.length]}"></i>`).join('');
+  $('carbon-stages').innerHTML = (c.stages || []).map((s, i) => `
+    <div class="result-row">
+      <span class="result-key"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${palette[i % palette.length]};margin-right:6px;"></span>${esc(s.name)}${tierTag(s.data_tier)}<br><span style="font-size:9.5px;color:var(--t3);margin-left:14px;">${esc(s.scope)}</span></span>
+      <span class="result-val white">${fmt(s.co2e_per_kg_fabric, 2)} <span style="color:var(--t3)">(${fmt(s.share_pct, 0)}%)</span></span>
+    </div>`).join('');
+
+  $('carbon-fiber-breakdown').innerHTML = c.fiber_breakdown.map(f => {
+    if (!f.modeled) return `<div class="result-row"><span class="result-key">${esc(f.fiber)} (${esc(f.pct)}%)</span><span class="result-val" style="color:#fb923c;">not modeled</span></div>`;
     const variantTag = f.variant ? ` <span style="opacity:.7;">(${esc(f.variant)})</span>` : '';
-    return `
-      <div class="result-row">
-        <span class="result-key">${esc(f.fiber)} (${esc(f.pct)}%)${variantTag}</span>
-        <span class="result-val white">${fmt(f.co2e_per_kg_fiber, 2)} kg CO2e/kg &middot; ${esc(f.confidence)}</span>
-      </div>`;
+    return `<div class="result-row"><span class="result-key">${esc(f.fiber)} (${esc(f.pct)}%)${variantTag}</span><span class="result-val white">${fmt(f.co2e_per_kg_fiber, 2)} kg CO2e/kg${tierTag(f.confidence)}</span></div>`;
   }).join('');
 
-  document.getElementById('carbon-processing-val').textContent =
-    `${fmt(c.processing.co2e_per_kg_fabric, 2)} kg CO2e/kg (${c.processing.energy_kwh_per_kg} kWh/kg × ${c.processing.grid_emission_factor_kg_co2_per_kwh} kg CO2/kWh grid factor)`;
-  document.getElementById('carbon-processing-note').textContent = c.processing.grid_factor_source;
+  const mb = c.mass_balance;
+  $('carbon-mass').innerHTML = mb ? `1 kg finished fabric &larr; <b>${fmt(mb.per_kg_finished.grey_fabric_kg, 3)}</b> kg grey fabric (${fmt(mb.wet_processing_loss_pct, 1)}% lost in wet processing) &larr; <b>${fmt(mb.per_kg_finished.yarn_kg, 3)}</b> kg yarn (${fmt(mb.formation_loss_pct, 1)}% lost at formation) &larr; <b>${fmt(mb.per_kg_finished.fibre_kg, 3)}</b> kg fibre (${fmt(mb.spinning_waste_pct, 1)}% spinning waste, ${esc(String(mb.spinning_system).replace('_', ' '))}).` : '';
 
-  const warnEl = document.getElementById('carbon-warnings');
-  warnEl.innerHTML = (c.warnings && c.warnings.length)
-    ? c.warnings.map(w => `<div>&#9888; ${esc(w)}</div>`).join('')
-    : '';
+  const w = c.wet_processing;
+  if (w) {
+    const baths = (w.baths || []).map(b => `${esc(b.bath)} ${b.temp_c}&deg;C`).join(' &middot; ');
+    $('carbon-wet').innerHTML =
+      `${esc(w.dyeing_class)} dyeing, ${esc(w.shade_class)} shade, liquor ratio 1:${fmt(w.liquor_ratio, 0)}.<br>` +
+      `Baths: ${baths}.<br>` +
+      `Heating the baths takes <b>${fmt(w.bath_heat_kwh_th_per_kg, 2)} kWh</b> of heat per kg (L &times; 4.186 kJ/kg&middot;K &times; &Delta;T). Drying evaporates <b>${fmt(w.water_evaporated_kg_per_kg, 2)} kg</b> of water per kg (2257 kJ/kg &divide; ${fmt(w.drying_efficiency * 100, 0)}% dryer efficiency) = <b>${fmt(w.drying_heat_kwh_th_per_kg, 2)} kWh</b>.<br>` +
+      `Steam from a ${fmt(w.boiler_efficiency * 100, 0)}% efficient boiler burning ${esc(String(w.fuel).replace('_', ' '))}, with a ${fmt((w.plant_overhead - 1) * 100, 0)}% allowance for distribution and idle losses. Stenter electricity ${fmt(w.stenter_kwh_per_kg, 2)} kWh/kg at this GSM.` +
+      `<br>Electricity: <b>${fmt(c.processing.electricity_kwh_per_kg, 1)} kWh</b> at ${fmt(c.processing.grid_emission_factor_kg_co2_per_kwh, 3)} kg CO2/kWh &middot; fuel: <b>${fmt(c.processing.fuel_kwh_per_kg, 1)} kWh</b>.` +
+      `<div style="font-size:9.5px;color:var(--t3);margin-top:4px;">${esc(c.processing.grid_factor_source)}</div>`;
+  }
 
+  const sens = (c.sensitivity && c.sensitivity.drivers) || [];
+  const maxSwing = Math.max.apply(null, sens.map(d => d.swing).concat([0.01]));
+  $('carbon-tornado').innerHTML = sens.map(d => `
+    <div style="display:grid;grid-template-columns:minmax(120px,38%) 1fr 70px;gap:8px;align-items:center;font-size:10.5px;padding:3px 0;">
+      <span style="color:var(--t2)">${esc(d.driver)}</span>
+      <span style="height:7px;background:var(--line3);border-radius:99px;overflow:hidden;"><i style="display:block;height:100%;width:${(d.swing / maxSwing * 100).toFixed(0)}%;background:linear-gradient(90deg,#4ade80,#fbbf24);"></i></span>
+      <span class="mono" style="text-align:right;color:var(--t1)">&plusmn;${fmt(d.swing / 2, 1)}</span>
+    </div>`).join('');
+  const f = c.sensitivity && c.sensitivity.boiler_fuel;
+  $('carbon-fuels').innerHTML = f ? `Boiler fuel changes the total: ${Object.keys(f).map(k => `${k.replace('_', ' ')} ${fmt(f[k], 2)}`).join(' &middot; ')}.` : '';
+
+  const q = (c.data_quality && c.data_quality.share_of_total_by_tier_pct) || {};
+  $('carbon-quality').innerHTML = Object.keys(q).map(k => `${tierTag(k)} ${fmt(q[k], 0)}%`).join(' ') + '<div style="margin-top:4px;">PRIMARY is your own meter data &middot; SOURCED is a published figure &middot; MODELLED is a typical-practice figure with a stated range. The share is of the total emissions.</div>';
+  $('carbon-notmodelled').innerHTML = c.not_modelled ? '<b>Not modelled:</b> ' + c.not_modelled.map(esc).join('; ') + '.' : '';
+
+  $('carbon-warnings').innerHTML = (c.warnings && c.warnings.length) ? c.warnings.map(x => `<div>&#9888; ${esc(x)}</div>`).join('') : '';
   syncStages();
 }
 

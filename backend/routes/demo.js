@@ -107,6 +107,8 @@ function trim(r) {
     fiber: c.fiber_co2e_per_kg_fabric,
     processing: c.processing.co2e_per_kg_fabric,
     vs_cotton_pct: c.vs_conventional_cotton_baseline.pct_difference,
+    range: { p5: c.range.p5, p95: c.range.p95 },
+    stages: c.stages.map(x => ({ id: x.id, name: x.name, co2e: x.co2e_per_kg_fabric, share_pct: x.share_pct })),
     fibers: c.fiber_breakdown.filter(f => f.modeled).map(f => ({ fiber: f.fiber, pct: f.pct, variant: f.variant, co2e: f.contribution_co2e_per_kg_fabric })),
     unmodeled: c.fiber_breakdown.some(f => !f.modeled),
   } : null;
