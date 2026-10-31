@@ -90,6 +90,18 @@ export class ClothSim {
     this.bA = Int32Array.from(ba); this.bB = Int32Array.from(bb); this.bC = Int32Array.from(bc);
     // E = (B/2h²)|Δ²|² per strip  →  stiffness B/h², compliance h²/B (SI h)
     this.bAlpha = (hM * hM) / Math.max(1e-12, mech.B);
+    // Rest curvature = the curvature of the starting pose. A cloth that
+    // starts with a rounded fold keeps it when it is woken and handled — a
+    // crease is memory in the cloth, not just a shape it was placed in. With
+    // a flat rest every bend relaxed to zero on the first touch and the
+    // fold simply unrolled.
+    const init = this.init, nb = ba.length;
+    this.bR = new Float32Array(nb * 3);
+    for (let c = 0; c < nb; c++) {
+      for (let k = 0; k < 3; k++) {
+        this.bR[c * 3 + k] = init[ba[c] * 3 + k] - 2 * init[bb[c] * 3 + k] + init[bc[c] * 3 + k];
+      }
+    }
   }
 
   // ── State ───────────────────────────────────────────────────────────────
@@ -255,7 +267,7 @@ export class ClothSim {
   }
 
   _solveBending(dt2) {
-    const { x, w, bA, bB, bC } = this;
+    const { x, w, bA, bB, bC, bR } = this;
     const at = this.bAlpha / dt2;
     for (let c = 0; c < bA.length; c++) {
       const a = bA[c], b = bB[c], d = bC[c];
@@ -264,7 +276,7 @@ export class ClothSim {
       if (wa + wb + wd === 0) continue;
       const oa = a * 3, ob = b * 3, od = d * 3;
       for (let k = 0; k < 3; k++) {
-        const C = x[oa + k] - 2 * x[ob + k] + x[od + k];
+        const C = x[oa + k] - 2 * x[ob + k] + x[od + k] - bR[c * 3 + k];
         const l = -C / den;
         x[oa + k] += wa * l; x[ob + k] -= 2 * wb * l; x[od + k] += wd * l;
       }
