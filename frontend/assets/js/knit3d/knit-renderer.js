@@ -34,6 +34,9 @@ import { applyDrape } from './drape.js?v=20260608g';
 import { BACKING, PITCH_Y, RIB_PITCH_SCALE } from './constants.js?v=20260608g';
 
 const VIEW_HEIGHT = 380;
+// The viewer's height: its container's own when the page gives it one (the
+// home page's live lab sizes it to the screen), else the fixed default.
+const viewH = (el) => (el && el.clientHeight >= 200 ? el.clientHeight : VIEW_HEIGHT);
 
 export class Knit3D {
   constructor() {
@@ -47,7 +50,7 @@ export class Knit3D {
     this.opts = opts || {};
 
     const W = container.clientWidth || 460;
-    const H = VIEW_HEIGHT;
+    const H = viewH(container);
 
     // Real shadows (microfiber self-shadowing) on capable viewports; disabled on
     // the low-LOD tier (small / low-DPR) to stay smooth.
@@ -1426,7 +1429,7 @@ export class Knit3D {
   // the live view via the same resize() path used on every window resize.
   captureHiRes(scale = 3) {
     if (!this.renderer || !this.camera || !this.container) return null;
-    const W = this.container.clientWidth || 460, H = VIEW_HEIGHT;
+    const W = this.container.clientWidth || 460, H = viewH(this.container);
     this.renderer.setSize(W * scale, H * scale, false);
     this.renderer.render(this.scene, this.camera);
     const url = this.renderer.domElement.toDataURL('image/png');
@@ -1437,7 +1440,7 @@ export class Knit3D {
   resize() {
     if (!this.renderer || !this.container) return;
     const W = this.container.clientWidth || 460;
-    const H = VIEW_HEIGHT;
+    const H = viewH(this.container);
     this.renderer.setSize(W, H);
     this.camera.aspect = W / H;
     this.camera.updateProjectionMatrix();

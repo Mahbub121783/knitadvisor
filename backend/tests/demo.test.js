@@ -2,7 +2,7 @@
  * Home-page live sample (routes/demo.js): the whitelist holds, and a valid
  * request is answered by the real engine with the costing breakdown trimmed.
  */
-const { readInputs } = require('../routes/demo');
+const { readInputs, trim } = require('../routes/demo');
 const { calculate } = require('../engine/index');
 
 let failed = 0;
@@ -24,6 +24,17 @@ ok(!('garment_weight_g' in readInputs({ fabric: 'single_jersey', gsm: 180, garme
 for (const f of ['single_jersey', 'rib_1x1', 'rib_2x2', 'interlock', 'lacoste_single', 'pique_single', 'french_terry', 'fleece_3_thread']) {
   const r = calculate({ fabric: f, gsm: 220, efficiency: 85 });
   ok(r && r.success !== false && r.yarn && r.yarn.count_ne > 0, `${f} calculates (${r.yarn && r.yarn.count_ne}/1)`);
+}
+// the public answer carries nothing from the locked set
+{
+  const full = calculate({ fabric: 'pique_single', gsm: 240, color_input: '19-4052', efficiency: 85 });
+  const t = trim(full);
+  const text = JSON.stringify(t);
+  ok(t.costing === undefined && t.process_loss === undefined && t.garment_costing === undefined, 'no costing or process loss in the public answer');
+  ok(t.warnings === undefined && t.formula_trace === undefined && t.critical_path === undefined, 'no warnings, trace or critical path');
+  ok(!/grey_gsm|grey_gsm_target|total_per_kg/.test(text), 'no grey weights or price figures anywhere in the payload');
+  ok(Array.isArray(t.locked) && ['grey', 'loss', 'price'].every(k => t.locked.includes(k)), 'locked list tells the page what is held back');
+  ok(t.yarn && t.loop_length && t.machine && t.physical_constraints && t.quality_prediction.shrinkage && t.pique, 'the figures the lab shows are still there');
 }
 if (failed) { console.error(`\n${failed} demo test(s) failed`); process.exit(1); }
 console.log('\nAll demo tests passed.');

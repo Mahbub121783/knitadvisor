@@ -89,7 +89,7 @@ h1, h2, h3 { text-wrap: balance; }
   position: relative;
 }
 .ka-brand { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; color: var(--t1); flex: none; }
-.ka-brand svg { width: 20px; height: 20px; }
+.ka-brand img { height: 28px; width: auto; display: block; }
 .ka-brand b { font-weight: 800; font-size: 16px; letter-spacing: -0.01em; }
 .ka-nav { display: flex; align-items: center; gap: 4px; flex: 1; }
 .ka-link, .ka-dd-btn {

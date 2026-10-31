@@ -29,7 +29,7 @@
   var CALC_PAGES = ['app.html', 'result.html'];
   var TOOL_PAGES = TOOLS.map(function (t) { return t.href.slice(1); });
 
-  var LOGO = '<svg viewBox="0 0 26 26" fill="none" aria-hidden="true"><path d="M3 13c0-4 3-7 7-7M3 13c0 4 3 7 7 7M3 13h20M13 6c4 0 7 3 7 7s-3 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
+  var LOGO = '<img src="/assets/img/logo-ka-320.png" alt="" width="46" height="28">';
   var CARET = '<svg viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M1.5 3.5L5 7l3.5-3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
   function esc(s) {

@@ -2,264 +2,285 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>KnitAdvisor — Knit Fabric Engineering</title>
-<link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<meta name="description" content="Specify a knit fabric by GSM, composition and structure. KnitAdvisor solves yarn count, stitch length, machine, production and cost, and renders the cloth down to its loops — calibrated on real greige-to-finish factory records.">
-<meta name="theme-color" content="#FBFBFA">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="icon" href="/favicon-48.png" type="image/png" sizes="48x48">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="description" content="Specify a knit fabric by GSM, composition and structure. KnitAdvisor solves yarn count, stitch length, machine and shrinkage, and renders the cloth in 3D down to its loops — calibrated on real greige-to-finish factory records.">
+<meta name="theme-color" content="#FFFFFF">
+<meta name="color-scheme" content="light">
+<meta property="og:title" content="KnitAdvisor — Knit Fabric Engineering">
+<meta property="og:description" content="Specify the fabric. Get the yarn, the machine and the cost — and see the cloth in 3D.">
+<meta property="og:image" content="/assets/img/landing/hero-jersey-loops.webp">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <link rel="preload" as="image" href="assets/img/landing/hero-jersey-loops.webp">
 <script type="importmap">
 { "imports": { "three": "/assets/js/vendor/three.module.js", "three/addons/controls/OrbitControls.js": "/assets/js/vendor/OrbitControls.js" } }
 </script>
 <style>
   :root{
-    --bg:#FBFBFA; --bg-alt:#F2F2EF; --card:#FFFFFF; --ink:#111316;
-    --text:#16181B; --text-soft:#4B5159; --text-faint:#80868E;
-    --border:#E2E2DE; --border-strong:#CBCBC6;
-    --accent:#0F4C81; --accent-hover:#0A3A63; --on-accent:#FFFFFF; --accent-soft:#E7EEF5;
-    --good:#1E7A54; --danger:#B23B3B;
-    --shadow:0 1px 2px rgba(17,19,22,0.05), 0 12px 32px -18px rgba(17,19,22,0.18);
-  }
-  @media (prefers-color-scheme: dark){
-    :root:not([data-theme="light"]){
-      --bg:#0E1013; --bg-alt:#13161A; --card:#171A1F; --ink:#F2F3F5;
-      --text:#ECEDEF; --text-soft:#AEB3BA; --text-faint:#767C85;
-      --border:#23272D; --border-strong:#353A41;
-      --accent:#7FA8D9; --accent-hover:#9BBCE3; --on-accent:#0B0D10; --accent-soft:#18222E;
-      --good:#49B58B; --danger:#E27D7D;
-      --shadow:0 1px 2px rgba(0,0,0,0.4);
-    }
-  }
-  :root[data-theme="dark"]{
-    --bg:#0E1013; --bg-alt:#13161A; --card:#171A1F; --ink:#F2F3F5;
-    --text:#ECEDEF; --text-soft:#AEB3BA; --text-faint:#767C85;
-    --border:#23272D; --border-strong:#353A41;
-    --accent:#7FA8D9; --accent-hover:#9BBCE3; --on-accent:#0B0D10; --accent-soft:#18222E;
-    --good:#49B58B; --danger:#E27D7D;
-    --shadow:0 1px 2px rgba(0,0,0,0.4);
+    color-scheme:light;
+    --bg:#FFFFFF; --soft:#F5F5F7; --mute:#ECECEF; --card:#FFFFFF;
+    --ink:#0B0B0C; --text:#1D1D1F; --text-soft:#4E4E55; --text-faint:#86868B;
+    --border:#E6E6EA; --border-strong:#D2D2D7;
+    --accent:#0F4C81; --accent-hover:#0A3A63; --accent-soft:#E8F0F8; --on-accent:#FFFFFF;
+    --good:#1E7A54; --danger:#B23B3B; --warm:#B5651D;
+    --gut:clamp(1rem,3.6vw,3.25rem);
+    --r-s:0.5rem; --r-m:0.9rem; --r-l:1.5rem; --r-xl:2rem;
+    --bg-alt:#F5F5F7; --shadow:0 1px 2px rgba(11,11,12,.04), 0 18px 48px -24px rgba(11,11,12,.22);
+    --header-h:4.25rem;
   }
   *{box-sizing:border-box;}
-  html{scroll-behavior:smooth;scroll-padding-top:72px;}
-  body{margin:0;background:var(--bg);color:var(--text);font-family:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',sans-serif;font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased;}
-  h1,h2,h3,h4{font-weight:600;letter-spacing:-0.015em;text-wrap:balance;line-height:1.12;margin:0;color:var(--ink);}
-  p{margin:0;color:var(--text-soft);}
+  html{font-size:clamp(14px,0.22vw + 12.6px,19px);scroll-behavior:smooth;scroll-padding-top:calc(var(--header-h) + 1rem);-webkit-text-size-adjust:100%;text-size-adjust:100%;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:1rem;line-height:1.55;-webkit-font-smoothing:antialiased;overflow-x:hidden;padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right);}
+  h1,h2,h3,h4{font-weight:700;letter-spacing:-0.03em;text-wrap:balance;line-height:1.06;margin:0;color:var(--ink);}
+  p{margin:0;color:var(--text-soft);text-wrap:pretty;}
   a{color:inherit;}
   button{font-family:inherit;}
   ul{margin:0;padding:0;list-style:none;}
   img{max-width:100%;display:block;}
   [hidden]{display:none !important;}
   .mono{font-family:'IBM Plex Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;}
-  .wrap{max-width:1200px;margin-inline:auto;padding-inline:32px;}
-  @media (max-width:640px){ .wrap{padding-inline:16px;} }
-  .eyebrow{font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:12px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-faint);}
-  .eyebrow .n{color:var(--accent);margin-right:10px;}
+  .wrap{width:min(100% - 2 * var(--gut), 88rem);margin-inline:auto;}
+  .kicker{font-size:0.8125rem;font-weight:600;letter-spacing:0.02em;color:var(--accent);}
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;}
 
-  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:11px 20px;border-radius:4px;font-size:14.5px;font-weight:500;text-decoration:none;cursor:pointer;border:1px solid var(--border-strong);background:transparent;color:var(--text);line-height:1.2;}
-  .btn:hover{border-color:var(--text);}
-  .btn:focus-visible,.gal-tab:focus-visible,.avatar-btn:focus-visible,.tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
-  .btn-primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent);}
-  .btn-primary:hover{background:var(--accent-hover);border-color:var(--accent-hover);}
-  .btn-sm{padding:8px 14px;font-size:13.5px;}
-  .btn .arr{font-family:'IBM Plex Mono',monospace;}
+  /* ---------- buttons: black pills ---------- */
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:0.5rem;min-height:2.75rem;padding:0.6rem 1.35rem;border-radius:999px;font-size:0.9375rem;font-weight:600;text-decoration:none;cursor:pointer;border:1.5px solid var(--ink);background:transparent;color:var(--ink);line-height:1.1;transition:background .15s,color .15s,border-color .15s,transform .15s;}
+  .btn:hover{background:var(--ink);color:#fff;}
+  .btn:active{transform:scale(.98);}
+  .btn:focus-visible,.chip:focus-visible,.sw:focus-visible,.tabbtn:focus-visible,.nav-toggle:focus-visible,.avatar-btn:focus-visible,.tab:focus-visible,.card-link:focus-visible{outline:2px solid var(--accent);outline-offset:3px;}
+  .btn-primary{background:var(--ink);color:#fff;}
+  .btn-primary:hover{background:#2B2B2F;border-color:#2B2B2F;}
+  .btn-lg{min-height:3.25rem;padding:0.75rem 1.9rem;font-size:1.0625rem;}
+  .btn-sm{min-height:2.375rem;padding:0.4rem 1.1rem;font-size:0.875rem;}
+  .btn-text{border:none;background:none;padding:0.5rem 0.75rem;min-height:2.75rem;color:var(--text);font-weight:500;}
+  .btn-text:hover{background:var(--soft);color:var(--ink);}
 
   /* ---------- header ---------- */
-  header.appbar{position:sticky;top:0;z-index:40;background:color-mix(in srgb, var(--bg) 92%, transparent);backdrop-filter:saturate(1.4) blur(10px);-webkit-backdrop-filter:saturate(1.4) blur(10px);border-bottom:1px solid var(--border);}
-  .appbar-row{display:flex;align-items:center;justify-content:space-between;height:64px;gap:16px;position:relative;}
-  .brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--ink);}
-  .brand svg{width:22px;height:22px;flex:none;}
-  .brand-name{font-weight:600;font-size:16.5px;letter-spacing:-0.01em;}
-  nav.primary{display:flex;align-items:center;gap:30px;}
-  nav.primary a{font-size:14px;color:var(--text-soft);text-decoration:none;}
-  nav.primary a:hover{color:var(--ink);}
-  .user-block{display:flex;align-items:center;gap:12px;}
+  header.appbar{position:sticky;top:0;z-index:40;background:rgba(255,255,255,.86);backdrop-filter:saturate(1.6) blur(14px);-webkit-backdrop-filter:saturate(1.6) blur(14px);border-bottom:1px solid transparent;transition:border-color .2s;}
+  header.appbar.stuck{border-bottom-color:var(--border);}
+  .appbar-row{display:flex;align-items:center;justify-content:space-between;height:var(--header-h);gap:1rem;position:relative;}
+  .brand{display:flex;align-items:center;gap:0.65rem;text-decoration:none;color:var(--ink);flex:none;}
+  .brand img{height:1.9rem;width:auto;}
+  .brand-name{font-weight:700;font-size:1.0625rem;letter-spacing:-0.02em;}
+  nav.primary{display:flex;align-items:center;gap:0.25rem;}
+  nav.primary a{font-size:0.9375rem;font-weight:500;color:var(--text);text-decoration:none;padding:0.5rem 0.9rem;border-radius:999px;}
+  nav.primary a:hover{background:var(--soft);}
+  .user-block{display:flex;align-items:center;gap:0.5rem;flex:none;}
   .user-wrap{position:relative;}
-  .avatar-btn{width:32px;height:32px;border-radius:50%;background:var(--ink);color:var(--bg);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;border:none;cursor:pointer;}
-  #userMenu{position:absolute;top:calc(100% + 8px);right:0;background:var(--card);border:1px solid var(--border);border-radius:6px;box-shadow:var(--shadow);min-width:220px;padding:6px;z-index:50;}
-  #userMenu .who{padding:9px 10px;border-bottom:1px solid var(--border);margin-bottom:4px;}
-  #userMenu .who b{display:block;font-size:13px;font-weight:600;}
-  #userMenu .who span{font-size:11.5px;color:var(--text-faint);word-break:break-all;}
-  #userMenu a,#userMenu button{display:block;width:100%;text-align:left;background:none;border:none;padding:9px 10px;font-size:13.5px;color:var(--text);border-radius:4px;cursor:pointer;text-decoration:none;}
-  #userMenu a:hover,#userMenu button:hover{background:var(--bg-alt);}
-  .nav-toggle{display:none;background:none;border:1px solid var(--border-strong);color:var(--text);border-radius:4px;padding:7px 10px;cursor:pointer;}
-  @media (max-width:860px){
-    nav.primary{display:none;position:absolute;top:100%;left:-16px;right:-16px;background:var(--bg);border-bottom:1px solid var(--border);flex-direction:column;align-items:stretch;padding:4px 16px 14px;gap:0;}
+  .avatar-btn{width:2.5rem;height:2.5rem;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-size:0.8125rem;font-weight:600;border:none;cursor:pointer;}
+  #userMenu{position:absolute;top:calc(100% + 0.5rem);right:0;background:var(--card);border:1px solid var(--border);border-radius:var(--r-m);box-shadow:var(--shadow);min-width:14rem;padding:0.4rem;z-index:50;}
+  #userMenu .who{padding:0.6rem 0.7rem;border-bottom:1px solid var(--border);margin-bottom:0.3rem;}
+  #userMenu .who b{display:block;font-size:0.875rem;font-weight:600;}
+  #userMenu .who span{font-size:0.75rem;color:var(--text-faint);word-break:break-all;}
+  #userMenu a,#userMenu button{display:block;width:100%;text-align:left;background:none;border:none;padding:0.65rem 0.7rem;font-size:0.9rem;color:var(--text);border-radius:var(--r-s);cursor:pointer;text-decoration:none;min-height:2.5rem;}
+  #userMenu a:hover,#userMenu button:hover{background:var(--soft);}
+  .nav-toggle{display:none;background:none;border:none;color:var(--ink);border-radius:var(--r-s);width:2.75rem;height:2.75rem;cursor:pointer;align-items:center;justify-content:center;}
+  .nav-toggle span,.nav-toggle span::before,.nav-toggle span::after{display:block;width:1.25rem;height:2px;background:currentColor;border-radius:2px;position:relative;transition:transform .2s,background .2s;}
+  .nav-toggle span::before,.nav-toggle span::after{content:"";position:absolute;left:0;}
+  .nav-toggle span::before{top:-0.4rem;} .nav-toggle span::after{top:0.4rem;}
+  .nav-toggle[aria-expanded="true"] span{background:transparent;}
+  .nav-toggle[aria-expanded="true"] span::before{top:0;transform:rotate(45deg);}
+  .nav-toggle[aria-expanded="true"] span::after{top:0;transform:rotate(-45deg);}
+  @media (max-width:60rem){
+    nav.primary{display:none;position:absolute;top:100%;left:calc(-1 * var(--gut));right:calc(-1 * var(--gut));background:#fff;border-bottom:1px solid var(--border);flex-direction:column;align-items:stretch;padding:0.5rem var(--gut) 1rem;gap:0;box-shadow:0 24px 40px -28px rgba(0,0,0,.3);}
     nav.primary.open{display:flex;}
-    nav.primary a{padding:12px 0;border-bottom:1px solid var(--border);}
+    nav.primary a{padding:0.95rem 0.25rem;border-radius:0;border-bottom:1px solid var(--border);font-size:1.0625rem;}
+    nav.primary a:hover{background:none;}
     .nav-toggle{display:inline-flex;}
+    .brand-name{display:none;}
   }
+  @media (min-width:40rem) and (max-width:60rem){ .brand-name{display:inline;} }
 
   /* ---------- hero ---------- */
-  .hero{padding-block:72px 64px;border-bottom:1px solid var(--border);}
-  .hero-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.08fr);gap:64px;align-items:center;}
-  @media (max-width:980px){ .hero-grid{grid-template-columns:1fr;gap:40px;} .hero{padding-block:48px;} }
-  .hero h1{margin-top:20px;font-size:clamp(34px,4.6vw,56px);font-weight:600;letter-spacing:-0.025em;}
-  .hero .sub{margin-top:20px;max-width:50ch;font-size:17px;line-height:1.6;}
-  .hero-cta{display:flex;gap:12px;margin-top:32px;flex-wrap:wrap;}
-  .facts{margin-top:48px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-top:1px solid var(--border);}
-  .fact{padding:16px 16px 0 0;}
-  .fact + .fact{padding-left:16px;border-left:1px solid var(--border);}
-  .fact b{display:block;font-family:'IBM Plex Mono',monospace;font-size:22px;font-weight:500;color:var(--ink);letter-spacing:-0.01em;}
-  .fact span{display:block;margin-top:2px;font-size:12.5px;color:var(--text-faint);line-height:1.4;}
-  @media (max-width:560px){ .facts{grid-template-columns:repeat(2,minmax(0,1fr));} .fact:nth-child(3){padding-left:0;border-left:none;} .fact:nth-child(n+3){border-top:1px solid var(--border);margin-top:16px;} }
-
-  .plate{position:relative;border:1px solid var(--border);border-radius:6px;overflow:hidden;background:var(--bg-alt);box-shadow:var(--shadow);}
-  .plate img{width:100%;height:auto;aspect-ratio:1120/760;object-fit:cover;}
-  .plate-legend{position:absolute;left:16px;bottom:16px;right:16px;max-width:320px;background:color-mix(in srgb, var(--card) 94%, transparent);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border:1px solid var(--border);border-radius:4px;padding:12px 14px;}
-  .plate-legend .t{font-size:12.5px;font-weight:600;color:var(--ink);}
-  .plate-legend dl{margin:8px 0 0;display:grid;grid-template-columns:auto 1fr;gap:3px 14px;font-size:12px;}
-  .plate-legend dt{color:var(--text-faint);}
-  .plate-legend dd{margin:0;color:var(--text);font-family:'IBM Plex Mono',monospace;text-align:right;}
-  .plate-note{margin-top:10px;font-size:12px;color:var(--text-faint);}
-  @media (max-width:640px){ .plate-legend{position:static;max-width:none;border:none;border-top:1px solid var(--border);border-radius:0;backdrop-filter:none;-webkit-backdrop-filter:none;background:var(--card);} }
+  .hero{padding-block:clamp(2.5rem,7vw,6rem) 0;text-align:center;}
+  .hero h1{font-size:clamp(2.35rem,6.2vw,5.4rem);letter-spacing:-0.045em;line-height:1.02;max-width:16ch;margin-inline:auto;}
+  .hero .sub{margin:clamp(1rem,2vw,1.6rem) auto 0;max-width:46ch;font-size:clamp(1.0625rem,1.4vw,1.35rem);line-height:1.5;}
+  .hero-cta{display:flex;gap:0.75rem;justify-content:center;margin-top:clamp(1.5rem,3vw,2.4rem);flex-wrap:wrap;}
+  .stages{display:flex;justify-content:center;flex-wrap:wrap;gap:0.4rem 0.5rem;margin-top:clamp(2rem,4vw,3.4rem);}
+  .stage{display:inline-flex;align-items:center;gap:0.5rem;padding:0.45rem 0.95rem;border-radius:999px;background:var(--soft);font-size:0.875rem;font-weight:500;color:var(--text);}
+  .stage i{font-style:normal;font-family:'IBM Plex Mono',monospace;font-size:0.75rem;color:var(--text-faint);}
+  .hero-visual{position:relative;margin-top:clamp(2rem,4.5vw,3.6rem);border-radius:var(--r-xl);overflow:hidden;background:var(--soft);aspect-ratio:21/9;box-shadow:var(--shadow);}
+  .hero-visual img{width:100%;height:100%;object-fit:cover;}
+  @media (max-width:48rem){ .hero-visual{aspect-ratio:4/3;border-radius:var(--r-l);} }
+  .float{position:absolute;background:rgba(255,255,255,.92);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.7);border-radius:var(--r-m);padding:0.7rem 0.95rem;text-align:left;box-shadow:0 12px 32px -14px rgba(0,0,0,.3);}
+  .float .k{font-size:0.6875rem;color:var(--text-faint);letter-spacing:0.02em;}
+  .float .v{font-family:'IBM Plex Mono',monospace;font-size:1.125rem;color:var(--ink);font-weight:500;margin-top:0.1rem;}
+  .float.f1{left:clamp(0.75rem,3vw,2.5rem);top:clamp(0.75rem,3vw,2.5rem);}
+  .float.f2{right:clamp(0.75rem,3vw,2.5rem);top:38%;}
+  .float.f3{left:clamp(0.75rem,3vw,2.5rem);bottom:clamp(0.75rem,3vw,2.5rem);}
+  @media (max-width:48rem){ .float.f2{display:none;} .float .v{font-size:1rem;} }
+  .hero-note{margin-top:0.75rem;font-size:0.8125rem;color:var(--text-faint);}
 
   /* ---------- sections ---------- */
-  section{padding-block:96px;border-bottom:1px solid var(--border);}
-  @media (max-width:640px){ section{padding-block:64px;} }
-  .section-head{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:32px 64px;align-items:end;margin-bottom:48px;}
-  @media (max-width:860px){ .section-head{grid-template-columns:1fr;} }
-  .section-head h2{margin-top:14px;font-size:clamp(26px,3.2vw,38px);}
-  .section-head p{font-size:16px;max-width:56ch;}
-  .bg-alt{background:var(--bg-alt);}
-
+  section{padding-block:clamp(4rem,9vw,8rem);}
+  .sec-head{text-align:center;margin-bottom:clamp(2rem,4.5vw,3.6rem);}
+  .sec-head h2{font-size:clamp(2rem,4.6vw,3.9rem);letter-spacing:-0.04em;max-width:20ch;margin-inline:auto;}
+  .sec-head p{margin:1rem auto 0;max-width:52ch;font-size:clamp(1rem,1.25vw,1.2rem);}
+  .sec-head .kicker{display:block;margin-bottom:0.9rem;}
+  .soft{background:var(--soft);}
 
   /* ---------- live lab ---------- */
-  .lab{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);border:1px solid var(--border);border-radius:6px;background:var(--card);overflow:hidden;}
-  @media (max-width:980px){ .lab{grid-template-columns:1fr;} }
-  .lab-ctl{padding:22px 22px 26px;border-right:1px solid var(--border);display:flex;flex-direction:column;gap:20px;}
-  @media (max-width:980px){ .lab-ctl{border-right:none;border-bottom:1px solid var(--border);} }
-  .lab .lbl{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;font-weight:500;color:var(--text);margin-bottom:8px;}
-  .lab .lbl .val{font-family:'IBM Plex Mono',monospace;color:var(--accent);font-size:13px;}
-  .lab select{width:100%;padding:9px 10px;border:1px solid var(--border-strong);border-radius:4px;background:var(--bg);color:var(--text);font:inherit;font-size:13.5px;}
-  .lab select:focus-visible,.lab input:focus-visible{outline:2px solid var(--accent);outline-offset:1px;}
-  .lab input[type=range]{width:100%;accent-color:var(--accent);}
-  .lab .scale{display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-faint);margin-top:2px;}
-  .chips{display:flex;flex-wrap:wrap;gap:6px;}
-  .chip{padding:6px 10px;font-size:12.5px;border:1px solid var(--border-strong);background:transparent;color:var(--text-soft);border-radius:4px;cursor:pointer;}
-  .chip:hover{border-color:var(--text);color:var(--text);}
-  .chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--bg);}
-  .chip:focus-visible,.sw:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
-  .sws{display:flex;flex-wrap:wrap;gap:8px;}
-  .sw{width:26px;height:26px;border-radius:4px;border:1px solid var(--border-strong);cursor:pointer;padding:0;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08);}
+  .lab{display:grid;grid-template-columns:minmax(17rem,21rem) minmax(0,1fr);border:1px solid var(--border);border-radius:var(--r-xl);background:var(--card);overflow:hidden;box-shadow:var(--shadow);}
+  @media (max-width:68rem){ .lab{grid-template-columns:1fr;} }
+  .lab-ctl{padding:1.5rem;border-right:1px solid var(--border);display:grid;gap:1.2rem;align-content:start;background:#FCFCFD;}
+  @media (max-width:68rem){ .lab-ctl{border-right:none;border-bottom:1px solid var(--border);grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:1.25rem 1.5rem;} .lab-ctl .full{grid-column:1/-1;} }
+  .lab .lbl{display:flex;justify-content:space-between;align-items:baseline;font-size:0.8125rem;font-weight:600;color:var(--ink);margin-bottom:0.5rem;}
+  .lab .lbl .val{font-family:'IBM Plex Mono',monospace;color:var(--accent);font-size:0.8125rem;font-weight:500;}
+  .lab select{width:100%;min-height:2.75rem;padding:0.55rem 2rem 0.55rem 0.8rem;border:1.5px solid var(--border-strong);border-radius:var(--r-m);background:#fff;color:var(--text);font:inherit;font-size:0.9375rem;}
+  .lab select:focus-visible,.lab input:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+  .lab input[type=range]{width:100%;accent-color:var(--ink);min-height:1.75rem;}
+  .lab .scale{display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:0.6875rem;color:var(--text-faint);}
+  .chips{display:flex;flex-wrap:wrap;gap:0.4rem;}
+  .chip{min-height:2.375rem;padding:0.4rem 0.8rem;font-size:0.8125rem;font-weight:500;border:1.5px solid var(--border-strong);background:#fff;color:var(--text);border-radius:999px;cursor:pointer;transition:all .12s;}
+  .chip:hover{border-color:var(--ink);}
+  .chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:#fff;}
+  .sws{display:flex;flex-wrap:wrap;gap:0.5rem;}
+  .sw{width:2.1rem;height:2.1rem;border-radius:50%;border:1px solid var(--border-strong);cursor:pointer;padding:0;box-shadow:inset 0 0 0 2px #fff;}
   .sw[aria-pressed="true"]{outline:2px solid var(--ink);outline-offset:2px;}
   .lab-main{display:flex;flex-direction:column;min-width:0;}
-  .lab-view{position:relative;background:var(--bg-alt);}
+  .lab-view{position:relative;background:linear-gradient(180deg,#F7F7F9,#EFEFF2);}
   #labViz .viz-tab-bar,#labViz .viz-toolbar,#labViz .viz-info,#labViz .viz-legend{display:none !important;}
   #labViz .viz-panel{display:none !important;}
   #labViz .viz-panel[data-panel="threed"]{display:block !important;}
   #labViz .viz-canvas-wrap{background:transparent;border:none;padding:0;overflow:visible;}
-  #labViz .ka3dgl-stage{padding:0;gap:0;}
-  #labViz .ka3dgl-mount{max-width:none;border-radius:0;}
-  #labViz .ka3d-controls{padding:10px 12px;justify-content:flex-start;width:100%;border-bottom:1px solid var(--border);background:var(--card);}
-  #labViz .ka3d-btn{background:transparent;color:var(--text-soft);border:1px solid var(--border-strong);border-radius:4px;font-family:'IBM Plex Mono',monospace;font-weight:500;}
-  #labViz .ka3d-btn:hover{border-color:var(--text);color:var(--text);}
-  #labViz .ka3d-btn.active{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);}
-  #labViz .ka3d-hint{color:var(--text-faint);}
+  #labViz .ka3dgl-stage{padding:0;gap:0;width:100%;}
+  #labViz .ka3dgl-mount{width:100%;max-width:none;height:clamp(19rem,40vw,36rem);border-radius:0;background:transparent;}
+  #labViz .ka3d-controls{padding:0.65rem 0.8rem;justify-content:flex-start;width:100%;background:rgba(255,255,255,.9);border-bottom:1px solid var(--border);gap:0.35rem;}
+  #labViz .ka3d-btn{background:#fff;color:var(--text);border:1.5px solid var(--border-strong);border-radius:999px;font:500 0.75rem/1 'IBM Plex Mono',monospace;padding:0.5rem 0.8rem;min-height:2.125rem;}
+  #labViz .ka3d-btn:hover{border-color:var(--ink);color:var(--ink);}
+  #labViz .ka3d-btn.active{background:var(--ink);border-color:var(--ink);color:#fff;}
+  #labViz .ka3d-hint{display:none;}
   #labViz .ka3dgl-loading{display:none;}
-  .lab-busy{position:absolute;top:56px;right:12px;z-index:3;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-soft);background:var(--card);border:1px solid var(--border);border-radius:4px;padding:4px 8px;opacity:0;transition:opacity .15s;pointer-events:none;}
+  .lab-busy{position:absolute;top:3.75rem;right:0.75rem;z-index:3;font-family:'IBM Plex Mono',monospace;font-size:0.6875rem;color:#fff;background:var(--ink);border-radius:999px;padding:0.35rem 0.75rem;opacity:0;transition:opacity .15s;pointer-events:none;}
   .lab-busy.on{opacity:1;}
-  .lab-msg{padding:80px 24px;text-align:center;font-size:14px;color:var(--text-soft);}
+  .lab-msg{padding:5rem 1.5rem;text-align:center;font-size:0.9375rem;color:var(--text-soft);}
   .lab-read{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-top:1px solid var(--border);}
-  @media (max-width:760px){ .lab-read{grid-template-columns:repeat(2,minmax(0,1fr));} }
-  .rd{padding:14px 16px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);}
+  @media (max-width:60rem){ .lab-read{grid-template-columns:repeat(2,minmax(0,1fr));} }
+  .rd{padding:1rem 1.1rem;border-right:1px solid var(--border);border-bottom:1px solid var(--border);position:relative;min-width:0;}
   .rd:nth-child(4n){border-right:none;}
-  @media (max-width:760px){ .rd:nth-child(4n){border-right:1px solid var(--border);} .rd:nth-child(2n){border-right:none;} }
-  .rd .k{font-size:11.5px;color:var(--text-faint);}
-  .rd .v{margin-top:3px;font-family:'IBM Plex Mono',monospace;font-size:19px;color:var(--ink);letter-spacing:-0.01em;transition:color .3s;}
-  .rd .v small{font-size:12px;color:var(--text-faint);margin-left:4px;}
-  .rd .d{margin-top:2px;min-height:15px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-faint);}
-  .rd .d.up{color:#B5651D;} .rd .d.down{color:var(--accent);}
+  @media (max-width:60rem){ .rd:nth-child(4n){border-right:1px solid var(--border);} .rd:nth-child(2n){border-right:none;} }
+  .rd .k{font-size:0.75rem;color:var(--text-faint);}
+  .rd .v{margin-top:0.2rem;font-family:'IBM Plex Mono',monospace;font-size:clamp(1.05rem,1.5vw,1.4rem);color:var(--ink);letter-spacing:-0.02em;transition:color .3s;overflow-wrap:anywhere;}
+  .rd .v small{font-size:0.75rem;color:var(--text-faint);margin-left:0.25rem;}
+  .rd .d{margin-top:0.15rem;min-height:1rem;font-family:'IBM Plex Mono',monospace;font-size:0.6875rem;color:var(--text-faint);}
+  .rd .d.up{color:var(--warm);} .rd .d.down{color:var(--accent);}
   .rd.flash .v{color:var(--accent);}
-  .lab-notes{padding:14px 18px;background:var(--bg-alt);border-top:1px solid var(--border);font-size:13px;color:var(--text-soft);display:flex;flex-direction:column;gap:6px;min-height:20px;}
-  .lab-notes b{color:var(--ink);font-weight:500;}
-  .lab-foot{padding:12px 18px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;font-size:12.5px;color:var(--text-faint);}
+  .rd.locked{background:repeating-linear-gradient(135deg,#FAFAFB 0 0.5rem,#F4F4F6 0.5rem 1rem);cursor:pointer;}
+  .rd.locked .v{color:transparent;text-shadow:0 0 0.55rem rgba(11,11,12,.55);user-select:none;display:flex;align-items:center;gap:0.5rem;}
+  .rd.locked .lockbadge{position:absolute;right:0.8rem;top:0.8rem;display:inline-flex;align-items:center;gap:0.3rem;font-size:0.6875rem;font-weight:600;color:var(--ink);background:#fff;border:1px solid var(--border-strong);border-radius:999px;padding:0.2rem 0.55rem;}
+  .rd.locked .lockbadge svg{width:0.7rem;height:0.7rem;}
+  .rd.locked .d{color:var(--accent);font-family:'Inter',sans-serif;font-size:0.75rem;font-weight:500;}
+  .lab-notes{padding:1rem 1.25rem;background:var(--soft);border-top:1px solid var(--border);font-size:0.875rem;color:var(--text-soft);display:grid;gap:0.45rem;min-height:1.25rem;}
+  .lab-notes b{color:var(--ink);font-weight:600;}
+  .lab-foot{padding:0.9rem 1.25rem;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:0.75rem 1rem;flex-wrap:wrap;font-size:0.8125rem;color:var(--text-faint);}
 
-  /* sample output: a datasheet */
-  .sheet{display:grid;grid-template-columns:minmax(0,0.8fr) minmax(0,1.2fr);border:1px solid var(--border);border-radius:6px;background:var(--card);overflow:hidden;}
-  @media (max-width:860px){ .sheet{grid-template-columns:1fr;} }
-  .sheet-col{padding:28px 28px 24px;}
-  .sheet-col + .sheet-col{border-left:1px solid var(--border);}
-  @media (max-width:860px){ .sheet-col + .sheet-col{border-left:none;border-top:1px solid var(--border);} }
-  .sheet-col h3{font-size:13px;font-family:'IBM Plex Mono',monospace;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-faint);}
-  .rows{margin-top:16px;}
-  .row{display:flex;justify-content:space-between;gap:16px;padding:11px 0;border-bottom:1px solid var(--border);font-size:14px;}
-  .row:last-child{border-bottom:none;}
-  .row .k{color:var(--text-soft);}
-  .row .v{font-family:'IBM Plex Mono',monospace;color:var(--ink);text-align:right;}
-  .row .v small{color:var(--text-faint);font-size:12px;margin-left:6px;}
-  .sheet-foot{grid-column:1 / -1;padding:14px 28px;border-top:1px solid var(--border);background:var(--bg-alt);font-size:12.5px;color:var(--text-faint);display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;}
+  @media (pointer:coarse){
+    .sw{width:2.75rem;height:2.75rem;}
+    .lab input[type=range]{height:2.75rem;}
+    .chip{min-height:2.75rem;padding:0.5rem 1rem;}
+    #labViz .ka3d-btn{min-height:2.75rem;padding:0.55rem 0.95rem;}
+  }
+  /* ---------- bento ---------- */
+  .bento{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:clamp(0.75rem,1.4vw,1.25rem);}
+  .tile{background:var(--soft);border-radius:var(--r-xl);padding:clamp(1.25rem,2.6vw,2.4rem);overflow:hidden;position:relative;display:flex;flex-direction:column;gap:1rem;min-width:0;}
+  .tile.w7{grid-column:span 7;} .tile.w5{grid-column:span 5;} .tile.w6{grid-column:span 6;} .tile.w4{grid-column:span 4;} .tile.w8{grid-column:span 8;}
+  @media (max-width:64rem){ .tile.w7,.tile.w5,.tile.w6,.tile.w4,.tile.w8{grid-column:span 12;} }
+  @media (min-width:40rem) and (max-width:64rem){ .tile.w4{grid-column:span 6;} }
+  .tile h3{font-size:clamp(1.4rem,2.4vw,2.1rem);letter-spacing:-0.035em;}
+  .tile p{font-size:1rem;max-width:42ch;}
+  .tile .kicker{margin-bottom:-0.35rem;}
+  .tile.dark{background:var(--ink);} .tile.dark h3{color:#fff;} .tile.dark p{color:#B6B6BD;} .tile.dark .kicker{color:#9DB9D6;}
+  .tile .shot{border-radius:var(--r-l);overflow:hidden;background:var(--mute);margin-top:auto;}
+  .tile .shot img{width:100%;height:auto;aspect-ratio:1120/760;object-fit:cover;}
+  .sheetmini{margin-top:auto;background:#fff;border-radius:var(--r-l);padding:0.4rem 1.1rem;border:1px solid var(--border);}
+  .sm-row{display:flex;justify-content:space-between;gap:1rem;padding:0.7rem 0;border-bottom:1px solid var(--border);font-size:0.9rem;}
+  .sm-row:last-child{border-bottom:none;}
+  .sm-row .k{color:var(--text-soft);} .sm-row .v{font-family:'IBM Plex Mono',monospace;color:var(--ink);text-align:right;}
+  .sm-row.lk .v{color:transparent;text-shadow:0 0 0.5rem rgba(11,11,12,.55);user-select:none;}
+  .sm-row.lk .k::after{content:"  sign in to view";font-size:0.6875rem;color:var(--accent);font-weight:600;}
+  .shadecmp{margin-top:auto;flex:1;display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;min-height:9rem;max-height:15rem;}
+  .shadebox{border-radius:var(--r-l);padding:1.1rem;color:#fff;min-height:7.5rem;display:flex;flex-direction:column;justify-content:space-between;}
+  .shadebox.lt{background:#EFE1CE;color:var(--ink);} .shadebox.dk{background:#2B2E43;}
+  .shadebox .n{font-size:0.8125rem;opacity:.85;} .shadebox .big{font-family:'IBM Plex Mono',monospace;font-size:1.65rem;letter-spacing:-0.03em;} .shadebox .big small{font-size:0.8125rem;opacity:.7;margin-left:0.25rem;}
+  .tile .note{font-size:0.8125rem;color:var(--text-faint);}
+  .tile.dark .note{color:#8E8E96;}
 
-  /* capabilities */
-  .caps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-top:1px solid var(--border);border-left:1px solid var(--border);}
-  @media (max-width:900px){ .caps{grid-template-columns:repeat(2,minmax(0,1fr));} }
-  @media (max-width:560px){ .caps{grid-template-columns:1fr;} }
-  .cap{padding:28px 26px 30px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);background:var(--bg);}
-  .cap .idx{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--accent);}
-  .cap h3{margin-top:14px;font-size:17px;}
-  .cap p{margin-top:8px;font-size:14px;}
-  .cap .out{margin-top:16px;font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text-faint);}
+  /* ---------- library ---------- */
+  .lib{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:clamp(0.75rem,1.4vw,1.25rem);}
+  @media (max-width:64rem){ .lib{grid-template-columns:repeat(2,minmax(0,1fr));} }
+  @media (max-width:30rem){ .lib{grid-template-columns:1fr;} }
+  .card-link{display:flex;flex-direction:column;text-align:left;background:#fff;border:1px solid var(--border);border-radius:var(--r-l);overflow:hidden;cursor:pointer;padding:0;transition:transform .2s,box-shadow .2s;color:inherit;font:inherit;}
+  .card-link:hover{transform:translateY(-4px);box-shadow:var(--shadow);}
+  .card-link img{width:100%;height:auto;aspect-ratio:1120/760;object-fit:cover;background:var(--mute);}
+  .card-link .cb{padding:1rem 1.1rem 1.2rem;display:grid;gap:0.2rem;}
+  .card-link .cb b{font-size:1.0625rem;font-weight:650;letter-spacing:-0.02em;color:var(--ink);}
+  .card-link .cb span{font-family:'IBM Plex Mono',monospace;font-size:0.75rem;color:var(--text-faint);}
+  .card-link .cb em{font-style:normal;font-size:0.8125rem;color:var(--accent);font-weight:600;margin-top:0.35rem;}
 
-  /* visualizer gallery */
-  .gal-tabs{display:flex;gap:28px;border-bottom:1px solid var(--border);margin-bottom:24px;overflow-x:auto;scrollbar-width:none;}
-  .gal-tabs::-webkit-scrollbar{display:none;}
-  .gal-tab{background:none;border:none;padding:0 0 12px;font-size:14.5px;color:var(--text-soft);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap;}
-  .gal-tab:hover{color:var(--ink);}
-  .gal-tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent);font-weight:500;}
-  .gal{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;}
-  @media (max-width:760px){ .gal{grid-template-columns:1fr;} }
-  .gal figure{margin:0;border:1px solid var(--border);border-radius:6px;overflow:hidden;background:var(--bg-alt);}
-  .gal img{width:100%;height:auto;aspect-ratio:1120/760;object-fit:cover;}
-  .gal figcaption{padding:10px 14px;border-top:1px solid var(--border);background:var(--card);font-size:12.5px;color:var(--text-faint);display:flex;justify-content:space-between;gap:12px;}
-  .gal figcaption b{color:var(--text);font-weight:500;}
-  .gal-spec{margin-top:18px;display:flex;flex-wrap:wrap;gap:8px 28px;font-size:13px;color:var(--text-soft);}
-  .gal-spec span b{font-family:'IBM Plex Mono',monospace;font-weight:500;color:var(--ink);margin-left:6px;}
-  .gal-foot{margin-top:28px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;}
-  .gal-foot p{font-size:13.5px;max-width:62ch;}
+  /* ---------- tools ---------- */
+  .tools{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:clamp(0.75rem,1.4vw,1.25rem);}
+  @media (max-width:64rem){ .tools{grid-template-columns:repeat(2,minmax(0,1fr));} }
+  @media (max-width:36rem){ .tools{grid-template-columns:1fr;} }
+  .tool{display:flex;flex-direction:column;gap:0.35rem;padding:1.4rem 1.5rem;background:#fff;border:1px solid var(--border);border-radius:var(--r-l);text-decoration:none;transition:border-color .15s,transform .15s;}
+  .tool:hover{border-color:var(--ink);transform:translateY(-2px);}
+  .tool b{font-size:1.0625rem;color:var(--ink);letter-spacing:-0.02em;}
+  .tool span{font-size:0.875rem;color:var(--text-soft);}
+  .tool i{font-style:normal;font-size:0.8125rem;font-weight:600;color:var(--accent);margin-top:0.4rem;}
 
-  /* method */
-  .method{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:48px;}
-  @media (max-width:860px){ .method{grid-template-columns:1fr;gap:32px;} }
-  .method .big{font-family:'IBM Plex Mono',monospace;font-size:40px;font-weight:500;color:var(--ink);letter-spacing:-0.02em;line-height:1;}
-  .method h3{margin-top:16px;font-size:17px;}
-  .method p{margin-top:8px;font-size:14.5px;}
+  /* ---------- method ---------- */
+  .stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:clamp(1.5rem,4vw,4rem);text-align:left;}
+  @media (max-width:56rem){ .stats{grid-template-columns:1fr;gap:2rem;} }
+  .stats .big{font-size:clamp(2.6rem,6vw,5rem);font-weight:700;letter-spacing:-0.05em;color:var(--ink);line-height:1;}
+  .stats h3{font-size:1.25rem;margin-top:1rem;letter-spacing:-0.02em;}
+  .stats p{margin-top:0.5rem;font-size:1rem;max-width:36ch;}
 
-  /* workflow */
-  .steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-top:1px solid var(--ink);}
-  @media (max-width:860px){ .steps{grid-template-columns:1fr 1fr;} }
-  @media (max-width:520px){ .steps{grid-template-columns:1fr;} }
-  .step{padding:22px 24px 0 0;}
-  .step .idx{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text-faint);}
-  .step h3{font-size:16px;margin-top:10px;}
-  .step p{font-size:14px;margin-top:6px;}
+  /* ---------- plans ---------- */
+  .plan-note{font-size:0.9375rem;color:var(--text-soft);text-align:center;max-width:60ch;margin:-1.5rem auto 2.25rem;}
+  .plan-note b{color:var(--ink);}
+  .plans{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:clamp(0.75rem,1.4vw,1.25rem);align-items:stretch;}
+  @media (max-width:60rem){ .plans{grid-template-columns:1fr;max-width:34rem;margin-inline:auto;} }
+  .plan{background:#fff;border:1px solid var(--border);border-radius:var(--r-xl);padding:clamp(1.4rem,2.4vw,2.2rem);display:flex;flex-direction:column;gap:1.2rem;}
+  .plan.featured{background:var(--ink);border-color:var(--ink);}
+  .plan.featured h3,.plan.featured .price{color:#fff;} .plan.featured p,.plan.featured li{color:#C4C4CA;}
+  .plan.featured .btn{background:#fff;color:var(--ink);border-color:#fff;} .plan.featured .btn:hover{background:#E8E8EC;}
+  .plan h3{font-size:1.5rem;letter-spacing:-0.03em;}
+  .plan .tagline{font-size:0.9375rem;margin-top:0.4rem;}
+  .plan .price{font-size:1.6rem;font-weight:700;letter-spacing:-0.03em;color:var(--ink);}
+  .plan ul{display:grid;gap:0.7rem;flex:1;align-content:start;padding-top:1.2rem;border-top:1px solid var(--border);}
+  .plan.featured ul{border-top-color:#35353A;}
+  .plan li{font-size:0.9375rem;color:var(--text-soft);padding-left:1.5rem;position:relative;line-height:1.45;}
+  .plan li::before{content:"";position:absolute;left:0.1rem;top:0.45rem;width:0.7rem;height:0.38rem;border-left:2px solid var(--good);border-bottom:2px solid var(--good);transform:rotate(-45deg);}
+  .plan.featured li::before{border-color:#7BD3AE;}
+  .link-btn{display:block;margin-top:0.75rem;background:none;border:none;padding:0.4rem 0;font-size:0.875rem;color:var(--accent);cursor:pointer;font-family:inherit;text-align:left;min-height:2.25rem;}
+  .link-btn:hover{text-decoration:underline;}
+  .plan .link-btn{margin-top:-0.4rem;text-align:center;}
 
-  /* plans */
-  .plan-note{font-size:14px;color:var(--text-soft);border-left:2px solid var(--accent);padding:2px 0 2px 16px;margin-bottom:32px;max-width:80ch;}
-  .plan-note b{color:var(--ink);font-weight:600;}
-  .plans{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;}
-  @media (max-width:860px){ .plans{grid-template-columns:1fr;} }
-  .plan{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:28px 26px;display:flex;flex-direction:column;gap:18px;}
-  .plan.featured{border-color:var(--ink);}
-  .plan h3{font-size:18px;}
-  .plan .tagline{font-size:14px;margin-top:6px;}
-  .plan .price{font-family:'IBM Plex Mono',monospace;font-size:20px;color:var(--ink);}
-  .plan ul{display:flex;flex-direction:column;gap:10px;flex:1;border-top:1px solid var(--border);padding-top:18px;}
-  .plan li{font-size:14px;color:var(--text-soft);padding-left:20px;position:relative;line-height:1.5;}
-  .plan li::before{content:"";position:absolute;left:0;top:10px;width:10px;height:1px;background:var(--text-faint);}
+  /* ---------- closing CTA ---------- */
+  .closing{text-align:center;}
+  .closing h2{font-size:clamp(2.2rem,5.4vw,4.6rem);letter-spacing:-0.045em;max-width:15ch;margin-inline:auto;}
+  .closing p{margin:1.1rem auto 0;max-width:44ch;font-size:clamp(1.0625rem,1.35vw,1.3rem);}
+  .closing .hero-cta{margin-top:2rem;}
 
-  /* footer */
-  footer.appfoot{background:var(--bg-alt);padding-block:56px 28px;}
-  .foot-grid{display:grid;grid-template-columns:1.4fr repeat(3,1fr);gap:32px;}
-  @media (max-width:860px){ .foot-grid{grid-template-columns:1fr 1fr;} }
-  @media (max-width:520px){ .foot-grid{grid-template-columns:1fr;} }
-  .foot-col h4{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:500;margin-bottom:14px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-faint);}
-  .foot-col ul{display:flex;flex-direction:column;gap:10px;}
-  .foot-col a{font-size:14px;color:var(--text-soft);text-decoration:none;}
-  .foot-col a:hover{color:var(--ink);}
-  .foot-brand p{margin-top:12px;font-size:13.5px;max-width:34ch;}
-  .foot-bottom{margin-top:48px;padding-top:20px;border-top:1px solid var(--border);display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--text-faint);}
+  /* ---------- footer ---------- */
+  footer.appfoot{border-top:1px solid var(--border);padding-block:clamp(2.5rem,5vw,4.5rem) 1.5rem;background:#fff;}
+  .foot-grid{display:grid;grid-template-columns:1.5fr repeat(3,1fr);gap:2rem;}
+  @media (max-width:60rem){ .foot-grid{grid-template-columns:1fr 1fr;} .foot-brand{grid-column:1/-1;} }
+  @media (max-width:30rem){ .foot-grid{grid-template-columns:1fr;} }
+  .foot-col h4{font-size:0.8125rem;font-weight:600;margin-bottom:1rem;letter-spacing:0;color:var(--ink);}
+  .foot-col ul{display:grid;gap:0.2rem;}
+  .foot-col a{display:inline-block;padding:0.3rem 0;font-size:0.9375rem;color:var(--text-soft);text-decoration:none;}
+  .foot-col a:hover{color:var(--ink);text-decoration:underline;}
+  .foot-brand p{margin-top:1rem;font-size:0.9375rem;max-width:34ch;}
+  .foot-brand img{height:2.6rem;width:auto;}
+  .foot-bottom{margin-top:clamp(2rem,4vw,3.5rem);padding-top:1.25rem;border-top:1px solid var(--border);display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;font-size:0.8125rem;color:var(--text-faint);}
 
+  /* ---------- auth modal ---------- */
   /* ---------- auth modal ---------- */
   .login-overlay{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;}
   .login-backdrop{position:absolute;inset:0;background:rgba(10,12,16,0.55);}
@@ -301,30 +322,32 @@
   .login-submit[disabled]{opacity:.65;cursor:default;}
   .login-foot{margin-top:16px;padding-top:14px;border-top:1px solid var(--border);font-size:12px;color:var(--text-faint);text-align:center;line-height:1.5;}
 
+
   @media (prefers-reduced-motion: reduce){ html{scroll-behavior:auto;} *{transition:none !important;} }
 </style>
 </head>
 <body>
 
-<header class="appbar">
+<header class="appbar" id="appbar">
   <div class="wrap appbar-row">
     <a class="brand" href="#top" aria-label="KnitAdvisor home">
-      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 19V8.5C4 6 6 4 8.5 4S13 6 13 8.5V19M11 19V8.5C11 6 13 4 15.5 4S20 6 20 8.5V19" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+      <img src="assets/img/logo-ka-320.png" width="50" height="30" alt="">
       <span class="brand-name">KnitAdvisor</span>
     </a>
     <nav class="primary" id="primaryNav" aria-label="Primary">
       <a href="#lab">Live sample</a>
-      <a href="#output">Output</a>
       <a href="#engine">Engine</a>
-      <a href="#visualizer">Visualizer</a>
+      <a href="#library">Constructions</a>
+      <a href="#tools">Tools</a>
       <a href="#method">Method</a>
       <a href="#plans">Plans</a>
     </nav>
     <div class="user-block">
-      <div id="signedOutBlock" hidden>
-        <button type="button" class="btn btn-primary btn-sm" id="headerSignInBtn">Sign in</button>
+      <div id="signedOutBlock" hidden style="display:flex;align-items:center;gap:0.25rem;">
+        <button type="button" class="btn btn-text" id="headerSignInBtn">Sign in</button>
+        <button type="button" class="btn btn-primary btn-sm" id="headerStartBtn">Start for free</button>
       </div>
-      <div id="signedInBlock" hidden style="display:flex;align-items:center;gap:12px;">
+      <div id="signedInBlock" hidden style="display:flex;align-items:center;gap:0.5rem;">
         <a class="btn btn-primary btn-sm" href="/app.html">Open calculator</a>
         <div class="user-wrap">
           <button type="button" class="avatar-btn" id="userMenuBtn" aria-haspopup="true" aria-expanded="false" aria-label="Account menu">--</button>
@@ -335,60 +358,49 @@
           </div>
         </div>
       </div>
-      <button type="button" class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">&#9776;</button>
+      <button type="button" class="nav-toggle" id="navToggle" aria-label="Menu" aria-expanded="false" aria-controls="primaryNav"><span></span></button>
     </div>
   </div>
 </header>
 
+<main id="top">
 <!-- HERO -->
-<div class="hero" id="top">
-  <div class="wrap hero-grid">
-    <div>
-      <p class="eyebrow">Knit fabric engineering</p>
-      <h1>Specify the fabric. Get the yarn, the machine and the cost.</h1>
-      <p class="sub">Enter GSM, composition and structure. KnitAdvisor solves count, stitch length, gauge, production and price per kilogram together, shows the working behind every figure, and renders the cloth down to its loops.</p>
-      <div class="hero-cta">
-        <button type="button" class="btn btn-primary" id="heroPrimaryBtn">Create free account</button>
-        <a href="#lab" class="btn">Try it live <span class="arr" aria-hidden="true">&darr;</span></a>
-      </div>
-      <div class="facts">
-        <div class="fact"><b>70</b><span>knit constructions</span></div>
-        <div class="fact"><b>24</b><span>woven qualities</span></div>
-        <div class="fact"><b>2,201</b><span>factory greige&rarr;finish records</span></div>
-        <div class="fact"><b>Live</b><span>yarn market prices</span></div>
-      </div>
+<div class="hero">
+  <div class="wrap">
+    <h1>Knit fabric engineering, built for real cloth.</h1>
+    <p class="sub">Specify GSM, composition and structure. KnitAdvisor solves yarn count, stitch length and machine, and shows the finished fabric in 3D, down to the loop.</p>
+    <div class="hero-cta">
+      <button type="button" class="btn btn-primary btn-lg" id="heroPrimaryBtn">Start for free</button>
+      <a href="#lab" class="btn btn-lg">Try it live</a>
     </div>
-    <div>
-      <div class="plate">
-        <img src="assets/img/landing/hero-jersey-loops.webp" width="1120" height="760" alt="Single jersey face rendered by the KnitAdvisor engine: interlocking loops of twisted cotton yarn with fibre ends, in Classic Blue">
-        <div class="plate-legend">
-          <div class="t">Single jersey, technical face</div>
-          <dl>
-            <dt>Weight</dt><dd>180 g/m²</dd>
-            <dt>Yarn</dt><dd>26/1 Ne cotton</dd>
-            <dt>Stitch length</dt><dd>2.90 mm</dd>
-            <dt>Shade</dt><dd>19-4052 TCX</dd>
-          </dl>
-        </div>
-      </div>
-      <p class="plate-note">Rendered by the KnitAdvisor 3D engine from the calculated construction &mdash; not a photograph.</p>
+    <div class="stages" aria-label="Workflow">
+      <span class="stage"><i>01</i>Specify</span>
+      <span class="stage"><i>02</i>Solve</span>
+      <span class="stage"><i>03</i>Visualise</span>
+      <span class="stage"><i>04</i>Cost</span>
+      <span class="stage"><i>05</i>Export</span>
     </div>
+    <div class="hero-visual">
+      <img src="assets/img/landing/hero-jersey-loops.webp" width="1120" height="760" alt="Single jersey rendered by the KnitAdvisor engine: interlocking loops of twisted cotton yarn with fibre ends, in Classic Blue" fetchpriority="high">
+      <div class="float f1"><div class="k">Yarn</div><div class="v">26/1 Ne cotton</div></div>
+      <div class="float f2"><div class="k">Stitch length</div><div class="v">2.90 mm</div></div>
+      <div class="float f3"><div class="k">Single jersey · 180 g/m² · 19-4052 TCX</div><div class="v">Machine 30&Prime; &times; 22G</div></div>
+    </div>
+    <p class="hero-note">Rendered by the KnitAdvisor 3D engine from the calculated construction &mdash; not a photograph.</p>
   </div>
 </div>
 
 <!-- LIVE LAB -->
-<section id="lab" style="padding-top:72px;">
+<section id="lab">
   <div class="wrap">
-    <div class="section-head">
-      <div>
-        <p class="eyebrow"><span class="n">00</span>Live sample</p>
-        <h2>Change the fabric. Watch the numbers and the cloth move.</h2>
-      </div>
-      <p>This is the real engine, not an animation: pick a construction, weight, fibre, shade and finish, and yarn count, stitch length, machine, shrinkage and price per kilogram are recalculated, and the 3D cloth is rebuilt from them.</p>
+    <div class="sec-head">
+      <span class="kicker">Live sample</span>
+      <h2>Change the fabric. Watch the numbers and the cloth move.</h2>
+      <p>The real engine, not an animation: set construction, weight, fibre, shade and finish and the specification is recalculated and the 3D cloth rebuilt from it.</p>
     </div>
     <div class="lab">
       <div class="lab-ctl">
-        <div>
+        <div class="full">
           <div class="lbl"><span>Construction</span></div>
           <div class="chips" id="labFabric" role="group" aria-label="Construction"></div>
         </div>
@@ -406,11 +418,11 @@
             <option value="100% Polyester">100% polyester</option>
           </select>
         </div>
-        <div>
+        <div class="full">
           <div class="lbl"><span>Shade</span><span class="val" id="labShadeVal"></span></div>
           <div class="sws" id="labShades" role="group" aria-label="Shade"></div>
         </div>
-        <div>
+        <div class="full">
           <div class="lbl"><span>Gauge</span><span class="val" id="labGaugeVal">auto</span></div>
           <div class="chips" id="labGauge" role="group" aria-label="Gauge"></div>
         </div>
@@ -448,7 +460,7 @@
       <div class="lab-main">
         <div class="lab-view" id="labView">
           <div class="lab-busy" id="labBusy">calculating&hellip;</div>
-          <div id="labViz"></div>
+          <div id="labViz"><div class="lab-msg">The 3D cloth loads when this section comes into view.</div></div>
         </div>
         <div class="lab-read" id="labRead"></div>
         <div class="lab-notes" id="labNotes" aria-live="polite"></div>
@@ -461,143 +473,108 @@
   </div>
 </section>
 
-<!-- SAMPLE OUTPUT -->
-<section id="output">
+<!-- ENGINE (bento) -->
+<section id="engine" class="soft">
   <div class="wrap">
-    <div class="section-head">
-      <div>
-        <p class="eyebrow"><span class="n">01</span>Sample output</p>
-        <h2>One input. A full fabric specification.</h2>
-      </div>
-      <p>The figures below are the engine&rsquo;s own answer for a common knit &mdash; not a mock-up. Each one opens to its formula trace in the calculator.</p>
+    <div class="sec-head">
+      <span class="kicker">The engine</span>
+      <h2>One input. Every answer on the floor.</h2>
+      <p>Yarn, machine, process and cost are solved from the same specification, so changing one moves the others &mdash; the way it does in a mill.</p>
     </div>
-    <div class="sheet">
-      <div class="sheet-col">
-        <h3>Input</h3>
-        <div class="rows">
-          <div class="row"><span class="k">Structure</span><span class="v">Single jersey</span></div>
-          <div class="row"><span class="k">Finished weight</span><span class="v">180 g/m²</span></div>
-          <div class="row"><span class="k">Composition</span><span class="v">100% cotton</span></div>
-          <div class="row"><span class="k">Shade</span><span class="v">19-4052 TCX</span></div>
+    <div class="bento">
+      <div class="tile w7" style="background:#fff;">
+        <span class="kicker">Specification</span>
+        <h3>From a weight to a working recipe.</h3>
+        <p>Count, stitch length, tightness and machine for 70 knit constructions, each with the formula behind it.</p>
+        <div class="sheetmini">
+          <div class="sm-row"><span class="k">Yarn count</span><span class="v">26/1 Ne</span></div>
+          <div class="sm-row"><span class="k">Stitch length</span><span class="v">2.90 mm</span></div>
+          <div class="sm-row"><span class="k">Machine</span><span class="v">30&Prime; &times; 22G</span></div>
+          <div class="sm-row"><span class="k">Shrinkage, compacted</span><span class="v">L 6% &middot; W 7%</span></div>
+          <div class="sm-row lk"><span class="k">Fabric price</span><span class="v">US$ 0.00 /kg</span></div>
         </div>
+        <p class="note">Single jersey, 180 g/m&sup2;, 100% cotton. Costing is part of the signed-in calculator.</p>
       </div>
-      <div class="sheet-col">
-        <h3>Engine output</h3>
-        <div class="rows">
-          <div class="row"><span class="k">Yarn count</span><span class="v">26/1 Ne<small>combed cotton</small></span></div>
-          <div class="row"><span class="k">Stitch length</span><span class="v">2.90 mm</span></div>
-          <div class="row"><span class="k">Tightness factor</span><span class="v">16.3</span></div>
-          <div class="row"><span class="k">Machine</span><span class="v">30&Prime; &times; 22G<small>optimal</small></span></div>
-          <div class="row"><span class="k">Shrinkage, compacted</span><span class="v">L 6% &middot; W 7%</span></div>
-          <div class="row"><span class="k">Fabric price</span><span class="v">US$ 5.62 /kg<small>live yarn price</small></span></div>
+      <div class="tile dark w5">
+        <span class="kicker">3D cloth</span>
+        <h3>See it before you knit it.</h3>
+        <p>The finished piece with its weight, drape and finish &mdash; then down to the single loop and the fibres.</p>
+        <div class="shot"><img src="assets/img/landing/rib-cloth.webp" width="1120" height="760" alt="1&times;1 rib cloth with a corner folded back, rendered by the KnitAdvisor engine" loading="lazy"></div>
+      </div>
+      <div class="tile w5">
+        <span class="kicker">Shade-aware</span>
+        <h3>Dark and light are knitted differently.</h3>
+        <p>Dyeing adds mass to dark shades, so the engine sets a different stitch length for each. Both finish at the same weight.</p>
+        <div class="shadecmp">
+          <div class="shadebox lt"><span class="n">Ecru</span><span class="big">2.82<small>mm</small></span></div>
+          <div class="shadebox dk"><span class="n">Navy</span><span class="big">2.90<small>mm</small></span></div>
         </div>
+        <p class="note">Single jersey, 180 g/m&sup2; &mdash; stitch length by shade.</p>
       </div>
-      <div class="sheet-foot"><span>Engine output, 1 November 2026.</span><span>Price follows the live yarn market and the shade&rsquo;s dyeing recipe.</span></div>
+      <div class="tile w7" style="background:#fff;">
+        <span class="kicker">Structure</span>
+        <h3>Tuck and miss, as the machine knits them.</h3>
+        <p>Needle programmes laid out feeder by feeder &mdash; and for piqu&eacute;, the cell the tucks make and the side it is sold on.</p>
+        <div class="shot"><img src="assets/img/landing/pique-loops.webp" width="1120" height="760" alt="Polo piqu&eacute; loop structure rendered by the KnitAdvisor engine" loading="lazy"></div>
+      </div>
     </div>
   </div>
 </section>
 
-<!-- ENGINE -->
-<section id="engine" class="bg-alt">
+<!-- LIBRARY -->
+<section id="library">
   <div class="wrap">
-    <div class="section-head">
-      <div>
-        <p class="eyebrow"><span class="n">02</span>Engine</p>
-        <h2>Everything the floor needs, solved together.</h2>
-      </div>
-      <p>Yarn, machine, process and cost are calculated from the same inputs, so a change to one moves the others &mdash; the way it does on a real knitting floor.</p>
+    <div class="sec-head">
+      <span class="kicker">Start faster</span>
+      <h2>Pick a construction and open it in the lab.</h2>
+      <p>Each card is a real calculation rendered by the engine. Choose one to load it into the live sample above.</p>
     </div>
-    <div class="caps">
-      <div class="cap"><span class="idx">2.1</span><h3>Yarn and stitch length</h3><p>Count in Ne, tex and denier, stitch length and tightness for 70 knit constructions, with the formula behind each value.</p><p class="out">count &middot; SL &middot; TF</p></div>
-      <div class="cap"><span class="idx">2.2</span><h3>Machine and production</h3><p>Gauge, diameter, feeders and needles resolved together; kilograms per hour, shift and day once speed and efficiency are set.</p><p class="out">gauge &middot; dia &middot; kg/shift</p></div>
-      <div class="cap"><span class="idx">2.3</span><h3>Cost per kilogram</h3><p>Fabric price from live yarn quotes and the shade&rsquo;s dyeing recipe; garment CMT and FOB with consumption and cutting loss.</p><p class="out">US$/kg &middot; CMT &middot; FOB</p></div>
-      <div class="cap"><span class="idx">2.4</span><h3>Quality and fibre advisory</h3><p>Shrinkage and spirality predicted by finishing route; composition and process mismatches flagged before machine time is booked.</p><p class="out">L/W shrinkage &middot; risk flags</p></div>
-      <div class="cap"><span class="idx">2.5</span><h3>Needle programme</h3><p>Knit, tuck and miss laid out feeder by feeder with the cam arrangement &mdash; and, for piqu&eacute;, the cell it makes and the side it is sold on.</p><p class="out">K/T/M &middot; cams &middot; cell geometry</p></div>
-      <div class="cap"><span class="idx">2.6</span><h3>Tech pack, quotes and carbon</h3><p>Export a fabric tech pack PDF, take buyer quote requests at a frozen reference price, and see a screening-level carbon estimate.</p><p class="out">PDF &middot; RFQ &middot; kg CO&#8322;e</p></div>
-    </div>
+    <div class="lib" id="lib"></div>
   </div>
 </section>
 
-<!-- VISUALIZER -->
-<section id="visualizer">
+<!-- TOOLS -->
+<section id="tools" class="soft">
   <div class="wrap">
-    <div class="section-head">
-      <div>
-        <p class="eyebrow"><span class="n">03</span>Visualizer</p>
-        <h2>The cloth, from arm&rsquo;s length to the single loop.</h2>
-      </div>
-      <p>Every calculation comes with a 3D view built from its own numbers: the finished piece with its weight and drape, and the yarn path of the actual construction when you zoom in.</p>
+    <div class="sec-head">
+      <span class="kicker">More than a calculator</span>
+      <h2>The tools a mill actually reaches for.</h2>
     </div>
-    <div class="gal-tabs" role="tablist" aria-label="Construction" id="galTabs">
-      <button type="button" class="gal-tab" role="tab" aria-selected="true" data-k="jersey">Single jersey</button>
-      <button type="button" class="gal-tab" role="tab" aria-selected="false" data-k="rib">1&times;1 rib</button>
-      <button type="button" class="gal-tab" role="tab" aria-selected="false" data-k="interlock">Interlock</button>
-      <button type="button" class="gal-tab" role="tab" aria-selected="false" data-k="pique">Polo piqu&eacute;</button>
-    </div>
-    <div class="gal" id="gal">
-      <figure>
-        <img id="galCloth" src="assets/img/landing/jersey-cloth.webp" width="1120" height="760" alt="" loading="lazy">
-        <figcaption><span><b>Finished piece</b></span><span>table view</span></figcaption>
-      </figure>
-      <figure>
-        <img id="galLoops" src="assets/img/landing/jersey-loops.webp" width="1120" height="760" alt="" loading="lazy">
-        <figcaption><span><b>Loop structure</b></span><span>zoomed in</span></figcaption>
-      </figure>
-    </div>
-    <div class="gal-spec" id="galSpec"></div>
-    <div class="gal-foot">
-      <p>Real-time, in the browser: handle the cloth, run a stretch test, and switch between as-knit and finished. Images on this page are captured from that viewer.</p>
-      <button type="button" class="btn btn-primary" id="vizCtaBtn">Calculate this fabric</button>
+    <div class="tools">
+      <a class="tool" href="patterns.html"><b>Pattern catalogue</b><span>Knit, tuck and miss programmes with cam arrangements.</span><i>Open &rarr;</i></a>
+      <a class="tool" href="dyeing.html"><b>Dyeing recipes</b><span>Recipes, process flow and costing by shade and fibre.</span><i>Open &rarr;</i></a>
+      <a class="tool" href="converter.html"><b>Unit converter</b><span>Count systems, GSM, loop length and the rest.</span><i>Open &rarr;</i></a>
+      <a class="tool" href="diagnostics.html"><b>Fault diagnostics</b><span>From a symptom on the fabric to its likely cause.</span><i>Open &rarr;</i></a>
+      <a class="tool" href="academy.html"><b>Knitting academy</b><span>Glossary, formation cycles and quizzes for students.</span><i>Open &rarr;</i></a>
+      <a class="tool" href="rfq.html"><b>Quotes for buyers</b><span>Request and track quotes at a frozen reference price.</span><i>Open &rarr;</i></a>
     </div>
   </div>
 </section>
 
 <!-- METHOD -->
-<section id="method" class="bg-alt">
+<section id="method">
   <div class="wrap">
-    <div class="section-head">
-      <div>
-        <p class="eyebrow"><span class="n">04</span>Method</p>
-        <h2>Calibrated on real cloth, not on brochures.</h2>
-      </div>
-      <p>The engine&rsquo;s constants come from production records of a knitting floor &mdash; machine, yarn, stitch length and the finished width and weight that came off it.</p>
+    <div class="sec-head">
+      <span class="kicker">Method</span>
+      <h2>Calibrated on real cloth, not on brochures.</h2>
+      <p>The engine&rsquo;s constants come from production records of a knitting floor: machine, yarn, stitch length, and the finished width and weight that came off it.</p>
     </div>
-    <div class="method">
-      <div><div class="big">2,201</div><h3>Greige-to-finish records</h3><p>Each pairs what was set on the machine with what the finished fabric measured. Structure constants, count curves and tightness bands are read from them.</p></div>
-      <div><div class="big">&plusmn;4%</div><h3>Checked against the floor</h3><p>Predicting each piqu&eacute; record&rsquo;s finished weight from the other records lands within 4% at the median, and the check is redone whenever the records change.</p></div>
-      <div><div class="big">Labelled</div><h3>Measured or modelled, said plainly</h3><p>Every figure carries its source: factory data, a published relation, or a model. Where a value is an estimate, the page says so.</p></div>
-    </div>
-  </div>
-</section>
-
-<!-- WORKFLOW -->
-<section id="workflow">
-  <div class="wrap">
-    <div class="section-head">
-      <div>
-        <p class="eyebrow"><span class="n">05</span>Workflow</p>
-        <h2>From specification to the floor.</h2>
-      </div>
-    </div>
-    <div class="steps">
-      <div class="step"><span class="idx">STEP 1</span><h3>Enter the spec</h3><p>GSM, composition and structure &mdash; or describe the fabric in one sentence.</p></div>
-      <div class="step"><span class="idx">STEP 2</span><h3>Read the solution</h3><p>Yarn, machine, process, quality and cost, each with its formula trace.</p></div>
-      <div class="step"><span class="idx">STEP 3</span><h3>Check the cloth</h3><p>Inspect the construction and shade in 3D and clear the risk flags.</p></div>
-      <div class="step"><span class="idx">STEP 4</span><h3>Send it out</h3><p>Export the tech pack PDF, or quote a buyer at a frozen reference price.</p></div>
+    <div class="stats">
+      <div><div class="big">2,201</div><h3>Greige-to-finish records</h3><p>Each pairs what was set on the machine with what the finished fabric measured.</p></div>
+      <div><div class="big">&plusmn;4%</div><h3>Checked against the floor</h3><p>Each piqu&eacute; record&rsquo;s finished weight, predicted from the other records, lands within 4% at the median.</p></div>
+      <div><div class="big">70</div><h3>Knit constructions</h3><p>Every figure says where it comes from: factory data, a published relation, or a model.</p></div>
     </div>
   </div>
 </section>
 
 <!-- PLANS -->
-<section id="plans" class="bg-alt">
+<section id="plans" class="soft">
   <div class="wrap">
-    <div class="section-head">
-      <div>
-        <p class="eyebrow"><span class="n">06</span>Plans</p>
-        <h2>For the mill floor and the buying desk.</h2>
-      </div>
+    <div class="sec-head">
+      <span class="kicker">Plans</span>
+      <h2>For the mill floor and the buying desk.</h2>
     </div>
-    <p class="plan-note"><b>Today:</b> every free account gets 5 engine requests a day. Students can verify once for 30 a day, free for a year. Paid plans with seat management are being finalised &mdash; create an account and tell us which plan fits.</p>
+    <p class="plan-note"><b>Today:</b> every free account gets 5 engine requests a day. Students verify once for 30 a day, free for a year. Paid plans are being finalised &mdash; create an account and tell us which fits.</p>
     <div class="plans">
       <div class="plan">
         <div><h3>Floor</h3><p class="tagline">For individuals and students learning the engine.</p></div>
@@ -609,7 +586,7 @@
           <li>Students: 30 requests a day, free for one year</li>
         </ul>
         <button type="button" class="btn" data-plan="floor">Create free account</button>
-        <button type="button" class="link-btn" id="planStudentLink" style="margin-top:-6px;">I&rsquo;m a student &mdash; verify now</button>
+        <button type="button" class="link-btn" id="planStudentLink">I&rsquo;m a student &mdash; verify now</button>
       </div>
       <div class="plan featured">
         <div><h3>Mill</h3><p class="tagline">For production and planning teams costing and running fabric.</p></div>
@@ -620,7 +597,7 @@
           <li>Live yarn pricing and dyeing recipe costing</li>
           <li>Tech pack PDF export</li>
         </ul>
-        <button type="button" class="btn btn-primary" data-plan="mill">Request Mill access</button>
+        <button type="button" class="btn" data-plan="mill">Request Mill access</button>
       </div>
       <div class="plan">
         <div><h3>Buying House</h3><p class="tagline">For sourcing teams comparing mills and quoting buyers.</p></div>
@@ -637,19 +614,29 @@
   </div>
 </section>
 
+<!-- CLOSING -->
+<section class="closing">
+  <div class="wrap">
+    <h2>Get started today.</h2>
+    <p>Create a free account and run your first fabric in under a minute.</p>
+    <div class="hero-cta">
+      <button type="button" class="btn btn-primary btn-lg" id="closeCtaBtn">Start for free</button>
+      <a href="#lab" class="btn btn-lg">Try the live sample</a>
+    </div>
+  </div>
+</section>
+</main>
+
 <footer class="appfoot">
   <div class="wrap">
     <div class="foot-grid">
       <div class="foot-brand">
-        <div class="brand">
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 19V8.5C4 6 6 4 8.5 4S13 6 13 8.5V19M11 19V8.5C11 6 13 4 15.5 4S20 6 20 8.5V19" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
-          <span class="brand-name">KnitAdvisor</span>
-        </div>
+        <img src="assets/img/logo-ka-320.png" width="68" height="41" alt="KnitAdvisor">
         <p>Knit fabric engineering for knitting mills, buying houses and textile students.</p>
       </div>
       <div class="foot-col">
         <h4>Product</h4>
-        <ul><li><a href="#output">Sample output</a></li><li><a href="#engine">Engine</a></li><li><a href="#visualizer">Visualizer</a></li><li><a href="#method">Method</a></li><li><a href="#plans">Plans</a></li></ul>
+        <ul><li><a href="#lab">Live sample</a></li><li><a href="#engine">Engine</a></li><li><a href="#library">Constructions</a></li><li><a href="#method">Method</a></li><li><a href="#plans">Plans</a></li></ul>
       </div>
       <div class="foot-col">
         <h4>Tools</h4>
@@ -790,19 +777,20 @@
   }
   function render(){
     $('signedOutBlock').hidden = !!user;
+    $('signedOutBlock').style.display = user ? 'none' : 'flex';
     $('signedInBlock').hidden = !user;
     $('signedInBlock').style.display = user ? 'flex' : 'none';
     var hero = $('heroPrimaryBtn');
-    var viz = $('vizCtaBtn');
+    var viz = null;
     if (user) {
       $('userMenuBtn').textContent = initials(user);
       $('userMenuName').textContent = user.full_name || 'Signed in';
       $('userMenuEmail').textContent = user.username ? '@' + user.username + ' · ' + user.email : user.email;
       hero.textContent = 'Open the calculator';
-      viz.textContent = 'Open the calculator';
+      if (viz) viz.textContent = 'Open the calculator';
     } else {
-      hero.textContent = 'Create free account';
-      viz.textContent = 'Calculate this fabric';
+      hero.textContent = 'Start for free';
+      if (viz) viz.textContent = 'Calculate this fabric';
     }
   }
 
@@ -1314,7 +1302,6 @@
     openAuth('signup', null);
   }
   $('heroPrimaryBtn').addEventListener('click', primaryAction);
-  $('vizCtaBtn').addEventListener('click', primaryAction);
   Array.prototype.forEach.call(document.querySelectorAll('[data-plan]'), function(btn){
     btn.addEventListener('click', function(){
       if (user) { window.location.href = '/app.html'; return; }
@@ -1376,7 +1363,8 @@
     '19-1543': '#841020', '17-5641': '#00A838', '14-4122': '#8CADD0', '19-4052': '#0F4C81', '19-3832': '#2B2E43', '19-4020': '#36454F',
     '19-0303': '#3A403C', 'Jet Black': '#121212' };
   var lab = { fabric: 'single_jersey', gsm: 180, comp: '100% Cotton', shade: '19-4052', gauge: 0, dye: 'reactive', fin: 'compacted', surf: '' };
-  var labPrev = null, labBase = null, labSeq = 0, labTimer = null, labViz = null, labVisible = false, labDirty = true;
+  var labPrev = null, labSeq = 0, labTimer = null, labViz = null, labVisible = false, labDirty = true;
+  var LOCK_ICON = '<svg viewBox="0 0 12 12" fill="none" aria-hidden="true"><rect x="2" y="5.2" width="8" height="5.6" rx="1.2" stroke="currentColor" stroke-width="1.3"/><path d="M4 5V3.6a2 2 0 0 1 4 0V5" stroke="currentColor" stroke-width="1.3"/></svg>';
 
   function labChips(id, items, key, onPick){
     var box = $(id);
@@ -1394,6 +1382,10 @@
       });
       box.appendChild(b);
     });
+  }
+  function labSelectFabric(id){
+    lab.fabric = id;
+    Array.prototype.forEach.call($('labFabric').children, function(c){ c.setAttribute('aria-pressed', c.getAttribute('data-v') === id ? 'true' : 'false'); });
   }
   labChips('labFabric', LAB_FABRICS, 'fabric');
   labChips('labGauge', [[0, 'Auto'], [18, '18G'], [20, '20G'], [22, '22G'], [24, '24G'], [28, '28G']], 'gauge', function(){
@@ -1435,21 +1427,21 @@
   }
 
   function fmt(n, d){ return (typeof n === 'number' && isFinite(n)) ? n.toFixed(d) : '—'; }
+  // `lock` marks the figures held back for signed-in users; the server does
+  // not send them (routes/demo.js), so nothing here is hiding a real value.
   function labFigures(r){
     var opt = (r.machine && r.machine.optimal) || {};
-    var q = r.quality_prediction || {}, sh = q.shrinkage || {};
-    var wet = r.wet_processing || {}, grey = (wet.greige || {}).grey_gsm_target;
+    var sh = ((r.quality_prediction || {}).shrinkage) || {};
     var pc = r.physical_constraints || {};
-    var body = r.pique ? null : null;
     return [
-      { id: 'count', k: 'Yarn count', v: (r.yarn && r.yarn.count_ne) ? r.yarn.count_ne + '/1' : '—', u: 'Ne', n: r.yarn && r.yarn.count_ne, d: 0, inv: true },
+      { id: 'count', k: 'Yarn count', v: (r.yarn && r.yarn.count_ne) ? r.yarn.count_ne + '/1' : '—', u: 'Ne', n: r.yarn && r.yarn.count_ne, d: 0 },
       { id: 'sl', k: 'Stitch length', v: fmt(r.loop_length && r.loop_length.value_mm, 2), u: 'mm', n: r.loop_length && r.loop_length.value_mm, d: 2 },
       { id: 'tf', k: 'Tightness factor', v: fmt(pc.tightness_factor, 1), u: '', n: pc.tightness_factor, d: 1 },
       { id: 'gauge', k: 'Machine', v: opt.optimal_dia ? opt.optimal_dia + '″ × ' + opt.optimal_gauge + 'G' : '—', u: '', n: opt.optimal_gauge, d: 0 },
-      { id: 'grey', k: 'Grey weight to knit', v: grey ? Math.round(grey) : '—', u: 'g/m²', n: grey, d: 0 },
+      { id: 'grey', k: 'Grey weight to knit', lock: true },
       { id: 'shr', k: 'Shrinkage L / W', v: (sh.lengthwise_pct != null) ? sh.lengthwise_pct + ' / ' + sh.widthwise_pct + '%' : '—', u: '', n: sh.lengthwise_pct != null ? sh.lengthwise_pct : null, d: 1, label: 'length' },
-      { id: 'loss', k: 'Process loss', v: fmt(r.process_loss && r.process_loss.loss_pct, 1), u: '%', n: r.process_loss && r.process_loss.loss_pct, d: 1 },
-      { id: 'price', k: 'Fabric price', v: r.costing ? 'US$ ' + fmt(r.costing.total_per_kg_usd, 2) : '—', u: '/kg', n: r.costing && r.costing.total_per_kg_usd, d: 2 }
+      { id: 'loss', k: 'Process loss', lock: true },
+      { id: 'price', k: 'Fabric price', lock: true }
     ];
   }
   function renderReadout(r){
@@ -1458,19 +1450,27 @@
     var grid = $('labRead');
     if (!grid.children.length) {
       grid.innerHTML = figs.map(function(f){
+        if (f.lock) {
+          return '<div class="rd locked" id="rd-' + f.id + '" role="button" tabindex="0" aria-label="' + esc(f.k) + ' — sign in to view">' +
+            '<span class="lockbadge">' + LOCK_ICON + 'Sign in</span><div class="k">' + esc(f.k) + '</div><div class="v">0.00 kg</div><div class="d">Sign in to view</div></div>';
+        }
         return '<div class="rd" id="rd-' + f.id + '"><div class="k">' + esc(f.k) + '</div><div class="v"></div><div class="d"></div></div>';
       }).join('');
+      Array.prototype.forEach.call(grid.querySelectorAll('.locked'), function(el){
+        el.addEventListener('click', function(){ openAuth('signup', null); });
+        el.addEventListener('keydown', function(e){ if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openAuth('signup', null); } });
+      });
     }
     var next = {};
     figs.forEach(function(f){
+      if (f.lock) return;
       next[f.id] = f.n;
       var el = $('rd-' + f.id);
       var v = el.querySelector('.v'), d = el.querySelector('.d');
       var changed = v.getAttribute('data-raw') !== String(f.v);
       v.innerHTML = esc(f.v) + (f.u ? '<small>' + esc(f.u) + '</small>' : '');
       v.setAttribute('data-raw', String(f.v));
-      var delta = '';
-      var cls = '';
+      var delta = '', cls = '';
       if (typeof f.n === 'number' && typeof prevMap[f.id] === 'number') {
         var diff = f.n - prevMap[f.id];
         if (Number(Math.abs(diff).toFixed(f.d)) > 0) {
@@ -1485,7 +1485,6 @@
   }
   function renderNotes(r){
     var notes = [];
-    var wet = r.wet_processing || {};
     if (r.pique && r.pique.geometry) {
       var g = r.pique.geometry, c = r.pique.cell || {};
       notes.push('<span><b>Piqué cell</b> ' + esc(c.width_mm) + ' × ' + esc(c.height_mm) + ' mm, ' + esc(g.relief_mm) + ' mm deep; held loop ' + esc(g.held_loop_elongation) + '× its height; wales ' + esc(Math.round((g.wale_spread - 1) * 100)) + '% wider than jersey.</span>');
@@ -1494,22 +1493,19 @@
     if (sbs && sbs.rows) {
       var dark = sbs.rows.filter(function(x){ return x.shade === 'dark_navy'; })[0];
       var light = sbs.rows.filter(function(x){ return x.shade === 'white_melange'; })[0];
-      if (dark && light) notes.push('<span><b>Shade changes the knitting</b> dark shades are knit at ' + esc(dark.sl_mm) + ' mm and light ones at ' + esc(light.sl_mm) + ' mm, so both finish at the same weight (grey ' + esc(dark.grey_gsm) + ' vs ' + esc(light.grey_gsm) + ' g/m²).</span>');
+      if (dark && light) notes.push('<span><b>Shade changes the knitting</b> dark shades are knit at ' + esc(dark.sl_mm) + ' mm and light ones at ' + esc(light.sl_mm) + ' mm, so both finish at the same weight.</span>');
     }
-    var fin = ((r.quality_prediction || {}).shrinkage || {}).finishing_route;
-    if (fin && fin.label) notes.push('<span><b>Finishing</b> ' + esc(fin.label) + ' sets the dimensional change you see above.</span>');
+    var fin = (((r.quality_prediction || {}).shrinkage) || {}).finishing_route;
+    if (fin && fin.label) notes.push('<span><b>Finishing</b> ' + esc(fin.label) + ' sets the dimensional change above.</span>');
     $('labNotes').innerHTML = notes.join('') || '<span>&nbsp;</span>';
   }
 
-  function labMessage(txt){
-    $('labViz').innerHTML = '<div class="lab-msg">' + esc(txt) + '</div>';
-  }
+  function labMessage(txt){ $('labViz').innerHTML = '<div class="lab-msg">' + esc(txt) + '</div>'; }
 
   function labBuildViewer(result){
     if (typeof FabricVisualizer === 'undefined') { labMessage('The 3D viewer could not be loaded.'); return; }
     if (labViz) { try { labViz.destroy(); } catch (e) {} labViz = null; }
-    var host = $('labViz');
-    var fv = new FabricVisualizer(result, host);
+    var fv = new FabricVisualizer(result, $('labViz'));
     labViz = fv;
     fv.init().then(function(){
       if (fv !== labViz) return;
@@ -1520,11 +1516,12 @@
   function labRun(){
     labDirty = false;
     var seq = ++labSeq;
+    $('labBusy').textContent = 'calculating…';
     $('labBusy').classList.add('on');
     postJSON('/api/demo/calculate', labBody()).then(function(r){
       if (seq !== labSeq) return;
-      $('labBusy').classList.remove('on');
       if (!r.ok || !r.data || r.data.success === false) {
+        $('labBusy').classList.remove('on');
         var msg = (r.data && r.data.error) || 'Could not calculate this fabric.';
         if (r.status === 429) msg = 'The live sample is busy — sign in to use the full calculator.';
         labMessage(msg);
@@ -1533,17 +1530,15 @@
       var res = r.data;
       renderReadout(res);
       renderNotes(res);
-      // Building the cloth is a few seconds of main-thread work. Let the new
+      // Building the cloth is a few seconds of main-thread work: let the new
       // figures paint and say what is happening first, then build — and skip
-      // the build if the visitor has already moved on to another setting.
+      // it if the visitor has already moved on to another setting.
       $('labBusy').textContent = 'building 3D cloth…';
-      $('labBusy').classList.add('on');
       requestAnimationFrame(function(){
         requestAnimationFrame(function(){
           if (seq !== labSeq) return;
           labBuildViewer(res);
           $('labBusy').classList.remove('on');
-          $('labBusy').textContent = 'calculating…';
         });
       });
     }).catch(function(err){
@@ -1571,49 +1566,40 @@
     labVisible = true; labRun();
   }
 
-  /* ---------- visualizer gallery ---------- */
-  // Captured from the 3D viewer; the figures are the engine's own output for
-  // the construction shown (see the alt text and the spec line).
-  var GALLERY = {
-    jersey:    { name: 'Single jersey', gsm: 180, count: '26/1', sl: '2.90', shade: 'Classic Blue 19-4052',
-                 alt: 'single jersey' },
-    rib:       { name: '1×1 rib', gsm: 220, count: '32/1', sl: '2.77', shade: 'Dark Denim 19-4020',
-                 alt: '1×1 rib' },
-    interlock: { name: 'Interlock', gsm: 220, count: '36/1', sl: '2.88', shade: 'Ecru 11-0908',
-                 alt: 'interlock' },
-    pique:     { name: 'Polo piqué, selling face', gsm: 200, count: '24/1', sl: '2.78', shade: 'Scarlet Sage 19-1543',
-                 alt: 'polo piqué technical back' }
-  };
-  var galTabs = $('galTabs');
-  function showGallery(k){
-    var g = GALLERY[k];
-    if (!g) return;
-    Array.prototype.forEach.call(galTabs.children, function(t){ t.setAttribute('aria-selected', t.getAttribute('data-k') === k ? 'true' : 'false'); });
-    $('galCloth').src = 'assets/img/landing/' + k + '-cloth.webp';
-    $('galCloth').alt = 'Finished piece of ' + g.alt + ' lying on a table with one corner folded back, rendered by the KnitAdvisor engine';
-    $('galLoops').src = 'assets/img/landing/' + k + '-loops.webp';
-    $('galLoops').alt = 'Close-up of the ' + g.alt + ' loop structure, rendered by the KnitAdvisor engine';
-    $('galSpec').innerHTML =
-      '<span>Construction<b>' + esc(g.name) + '</b></span>' +
-      '<span>Weight<b>' + g.gsm + ' g/m²</b></span>' +
-      '<span>Yarn<b>' + g.count + ' Ne</b></span>' +
-      '<span>Stitch length<b>' + g.sl + ' mm</b></span>' +
-      '<span>Shade<b>' + esc(g.shade) + '</b></span>';
-  }
-  galTabs.addEventListener('click', function(e){
-    var t = e.target.closest('[data-k]');
-    if (t) showGallery(t.getAttribute('data-k'));
+  /* ---------- construction library: cards that load the lab ---------- */
+  var LIB = [
+    { k: 'jersey', id: 'single_jersey', gsm: 180, shade: '19-4052', name: 'Single jersey', spec: '180 g/m² · 26/1 Ne · SL 2.90 mm', alt: 'single jersey' },
+    { k: 'rib', id: 'rib_1x1', gsm: 220, shade: '19-4020', name: '1×1 rib', spec: '220 g/m² · 32/1 Ne · SL 2.77 mm', alt: '1×1 rib' },
+    { k: 'interlock', id: 'interlock', gsm: 220, shade: '11-0908', name: 'Interlock', spec: '220 g/m² · 36/1 Ne · SL 2.88 mm', alt: 'interlock' },
+    { k: 'pique', id: 'pique_single', gsm: 200, shade: '19-1543', name: 'Polo piqué', spec: '200 g/m² · 24/1 Ne · SL 2.78 mm', alt: 'polo piqué' }
+  ];
+  $('lib').innerHTML = LIB.map(function(c, i){
+    return '<button type="button" class="card-link" data-i="' + i + '">' +
+      '<img src="assets/img/landing/' + c.k + '-cloth.webp" width="1120" height="760" loading="lazy" alt="' + esc(c.name) + ' cloth rendered by the KnitAdvisor engine">' +
+      '<span class="cb"><b>' + esc(c.name) + '</b><span>' + esc(c.spec) + '</span><em>Open in the live sample &rarr;</em></span></button>';
+  }).join('');
+  $('lib').addEventListener('click', function(e){
+    var b = e.target.closest('[data-i]');
+    if (!b) return;
+    var c = LIB[+b.getAttribute('data-i')];
+    lab.gsm = c.gsm; lab.shade = c.shade; lab.comp = '100% Cotton';
+    labSelectFabric(c.id);
+    $('labGsm').value = c.gsm; $('labGsmVal').textContent = c.gsm + ' g/m²'; $('labComp').value = lab.comp;
+    Array.prototype.forEach.call($('labShades').children, function(s){ s.setAttribute('aria-pressed', s.getAttribute('aria-label') === (LAB_SHADES.filter(function(x){ return x[0] === c.shade; })[0] || [])[1] ? 'true' : 'false'); });
+    $('labShadeVal').textContent = (LAB_SHADES.filter(function(x){ return x[0] === c.shade; })[0] || [, ''])[1];
+    document.getElementById('lab').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    labDirty = true;
+    clearTimeout(labTimer);
+    labTimer = setTimeout(function(){ labVisible = true; labRun(); }, 500);
   });
-  galTabs.addEventListener('keydown', function(e){
-    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
-    var tabs = Array.prototype.slice.call(galTabs.children);
-    var i = tabs.indexOf(document.activeElement);
-    if (i < 0) return;
-    var n = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
-    n.focus();
-    showGallery(n.getAttribute('data-k'));
-  });
-  showGallery('jersey');
+
+  /* ---------- header: border once scrolled; second CTAs ---------- */
+  var bar = $('appbar');
+  function onScroll(){ bar.classList.toggle('stuck', window.scrollY > 8); }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+  $('closeCtaBtn').addEventListener('click', primaryAction);
+  $('headerStartBtn').addEventListener('click', primaryAction);
 })();
 </script>
 </body>

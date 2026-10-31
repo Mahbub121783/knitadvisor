@@ -71,20 +71,36 @@ function readInputs(b) {
   return { p };
 }
 
-// What the page and its 3D view read; nothing more.
+// What the page and its 3D view read; nothing more. An ALLOW-list: a field
+// the engine gains later stays out of the public answer until it is added
+// here on purpose. Held back for signed-in users (and said so to the page in
+// `locked`): price per kg, process loss, the grey weight to knit, the
+// per-shade grey weights, warnings (they quote those weights), and every
+// other costing, production, advisory and factory-record block.
+const KEEP = [
+  'success', 'fabric', 'input', 'composition', 'color_resolved', 'fabric_physics',
+  'yarn', 'loop_length', 'machine', 'physical_constraints', 'grammage', 'pattern', 'pique',
+];
+const LOCKED = ['grey', 'loss', 'price'];
+
 function trim(r) {
-  const out = { ...r };
-  const c = r.costing;
-  out.costing = c ? {
-    total_per_kg_usd: c.total_per_kg_usd,
-    yarn_price_provenance: c.yarn_price_provenance ? { as_of: c.yarn_price_provenance.as_of || null } : null,
-  } : null;
-  out.garment_costing = null;
-  out.formula_trace = [];
-  out.critical_path = null;
-  out.factory_reference = null;
-  if (out.factory_prediction) out.factory_prediction = { ...out.factory_prediction, nearest_records: undefined };
+  const out = {};
+  for (const k of KEEP) if (r[k] !== undefined) out[k] = r[k];
+  // the 3D view reads shrinkage; the rest of the quality block stays home
+  const q = r.quality_prediction || {};
+  out.quality_prediction = { shrinkage: q.shrinkage || null };
+  // ...and the dyeing method name
+  out.wet_processing = { dyeing_method: (r.wet_processing || {}).dyeing_method || null };
+  // stitch length by shade without the grey weights beside it
+  const sbs = r.sl_by_shade;
+  out.sl_by_shade = sbs && sbs.rows
+    ? { rows: sbs.rows.map(x => ({ shade: x.shade, sl_mm: x.sl_mm })) }
+    : null;
+  // the shade name the 3D view reads — without the grey-weight note beside it
+  const col = r.color || {};
+  out.color = { shade: col.shade || null, sl_factor: col.sl_factor, sl_direction: col.sl_direction };
   out.demo = true;
+  out.locked = LOCKED;
   return out;
 }
 
@@ -118,3 +134,4 @@ router.post('/calculate', demoLimiter, (req, res) => {
 
 module.exports = router;
 module.exports.readInputs = readInputs;
+module.exports.trim = trim;
