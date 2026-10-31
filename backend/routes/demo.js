@@ -99,6 +99,17 @@ function trim(r) {
   // the shade name the 3D view reads — without the grey-weight note beside it
   const col = r.color || {};
   out.color = { shade: col.shade || null, sl_factor: col.sl_factor, sl_direction: col.sl_direction };
+  // carbon: the headline split only. Per-m2, per-garment, factor sources and
+  // warnings stay with the signed-in calculator.
+  const c = r.carbon_footprint;
+  out.carbon = c ? {
+    total: c.total_co2e_per_kg_fabric,
+    fiber: c.fiber_co2e_per_kg_fabric,
+    processing: c.processing.co2e_per_kg_fabric,
+    vs_cotton_pct: c.vs_conventional_cotton_baseline.pct_difference,
+    fibers: c.fiber_breakdown.filter(f => f.modeled).map(f => ({ fiber: f.fiber, pct: f.pct, variant: f.variant, co2e: f.contribution_co2e_per_kg_fabric })),
+    unmodeled: c.fiber_breakdown.some(f => !f.modeled),
+  } : null;
   out.demo = true;
   out.locked = LOCKED;
   return out;

@@ -34,6 +34,7 @@ for (const f of ['single_jersey', 'rib_1x1', 'rib_2x2', 'interlock', 'lacoste_si
   ok(t.warnings === undefined && t.formula_trace === undefined && t.critical_path === undefined, 'no warnings, trace or critical path');
   ok(!/grey_gsm|grey_gsm_target|total_per_kg/.test(text), 'no grey weights or price figures anywhere in the payload');
   ok(Array.isArray(t.locked) && ['grey', 'loss', 'price'].every(k => t.locked.includes(k)), 'locked list tells the page what is held back');
+  ok(t.carbon && t.carbon.total > 0 && !/per_garment|total_co2e_per_m2|warnings|source_note/.test(JSON.stringify(t.carbon)), 'carbon headline is public, its detail is not');
   ok(t.yarn && t.loop_length && t.machine && t.physical_constraints && t.quality_prediction.shrinkage && t.pique, 'the figures the lab shows are still there');
 }
 if (failed) { console.error(`\n${failed} demo test(s) failed`); process.exit(1); }
