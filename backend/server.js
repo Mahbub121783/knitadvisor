@@ -244,12 +244,8 @@ if (process.env.EMERGENCY_ROUTES === 'enabled') {
   app.use('/emergency', require('./routes/emergency'));
 }
 
-// Every page now declares <link rel="icon" href="/favicon.svg">, so browsers
-// that honour it never ask for /favicon.ico. Safari and various crawlers ask
-// anyway, and without this the request falls through to the SPA 404 handler and
-// gets 12 KB of 404.html in reply to a request for an icon — which is what put
-// a red "favicon.ico 404" in the console. 204 answers it honestly and cheaply.
-app.get('/favicon.ico', (req, res) => res.status(204).end());
+// /favicon.ico is the real KA icon file in frontend/ (static serving below);
+// every page also declares the PNG icons explicitly.
 
 // Static frontend (served by Express in dev, Apache in production)
 // IMPORTANT: HTML must never be heuristically cached, otherwise a stale
