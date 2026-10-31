@@ -61,8 +61,14 @@ export const melangeMaterial = (field) => new THREE.ShaderMaterial({
  * textures — used when the melange fraction changes with the shade.
  */
 export function bakeStructure(renderer, object, win, pxPerUnit, opts = {}) {
-  const W = Math.max(64, Math.min(2048, Math.round(win.w * pxPerUnit)));
-  const H = Math.max(64, Math.min(2048, Math.round(win.h * pxPerUnit)));
+  // Power-of-two sizes: each mip level then halves exactly and stays a whole
+  // tile. A size like 290 halves to 145 and then 72, dropping a row, so every
+  // tile repeat carries a seam in the distant mips — seen from a few
+  // centimetres away as regular horizontal bands across the whole cloth.
+  // (The camera still covers exactly one tile; pixels need not be square.)
+  const pot = (n) => Math.max(64, Math.min(2048, 2 ** Math.round(Math.log2(Math.max(1, n)))));
+  const W = pot(win.w * pxPerUnit);
+  const H = pot(win.h * pxPerUnit);
   const scene = new THREE.Scene();
   scene.add(object);
   const cx = win.x0 + win.w / 2, cy = win.y0 + win.h / 2;
@@ -71,7 +77,7 @@ export function bakeStructure(renderer, object, win, pxPerUnit, opts = {}) {
   const aoMat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
   const expMat = exposureMaterial();
   const flat = new THREE.Color(0.5, 0.5, 1.0);
-  const gap = new THREE.Color(0.1, 0.1, 0.1);
+  const gap = new THREE.Color(0.3, 0.3, 0.3);
   const black = new THREE.Color(0, 0, 0);
   const aniso = renderer.capabilities.getMaxAnisotropy();
 

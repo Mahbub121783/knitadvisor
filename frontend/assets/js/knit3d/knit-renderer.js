@@ -645,15 +645,31 @@ export class Knit3D {
     // Tile: a whole number of repeats, at least ~6 units each way, with a
     // margin of whole repeats around it so every yarn in the tile has its
     // real neighbours (crossings, occlusion) on all sides.
+    //
+    // The repeat count is a power of two whenever the repeat itself is, so
+    // the power-of-two bake (macro.js) gives every stitch a whole power-of-two
+    // number of texels: each mip level then averages whole stitches. With
+    // 6 wales in 256 texels (42.7 each) the mips beat against the stitch and
+    // the whole cloth shows a false grid at the tile period.
     const TILE_MIN = 6;
-    const tileWales = Math.min(32, rep.wales * Math.max(1, Math.ceil(TILE_MIN / (rep.wales * rep.xPitch))));
-    const tileCourses = Math.min(32, rep.courses * Math.max(1, Math.ceil(TILE_MIN / (rep.courses * pitchY))));
+    const isPot = (n) => (n & (n - 1)) === 0;
+    const tileCount = (r, pitch) => {
+      const k = Math.max(1, Math.ceil(TILE_MIN / (r * pitch)));
+      return Math.min(32, r * (isPot(r) ? 2 ** Math.ceil(Math.log2(k)) : k));
+    };
+    const tileWales = tileCount(rep.wales, rep.xPitch);
+    const tileCourses = tileCount(rep.courses, pitchY);
     const mW = rep.wales * Math.ceil(2 / rep.wales);
     const mC = rep.courses * Math.ceil(2 / rep.courses);
     const { paths } = buildYarnPaths({
       construction: con, sample: this.opts.sample, sampleBack: this.opts.sampleBack,
       pattern: this.opts.pattern, wales: tileWales + 2 * mW, courses: tileCourses + 2 * mC, pitchY,
-      jitterPeriod: { w: tileWales, c: tileCourses },
+      // Stitch irregularity repeats with the STRUCTURE, not the tile. Jitter
+      // that repeats once per tile (~0.5 cm) survives every mip level as a
+      // regular grid across the whole cloth — a ripstop look no knit has. The
+      // irregularity a real knit shows at a distance is added in the cloth
+      // shader instead (dye-shader.js, uCloth), where it never repeats.
+      jitterPeriod: { w: rep.wales, c: rep.courses },
     });
     this._applyYarnScales(paths);
     const tmp = new THREE.MeshBasicMaterial();
@@ -661,10 +677,10 @@ export class Knit3D {
     const tile = buildFabricMesh(paths, tmp, {
       radius, radialSegments: 8, shadows: false, fiberType: this.opts.fiberType,
       twistPitch: twistPitch(radius, this.opts.twist),
-      // per-course texture phase, periodic with the tile so it still tiles
+      // per-course texture phase, periodic with the structure (see jitterPeriod)
       uvPhase: (path) => {
         const c = Math.floor(path.points[0].y / pitchY + 0.25);
-        const cm = ((c % tileCourses) + tileCourses) % tileCourses;
+        const cm = ((c % rep.courses) + rep.courses) % rep.courses;
         return hash2(cm, 13 + (roleSeed[path.role] || 0)) * 17;
       },
     });
@@ -728,7 +744,10 @@ export class Knit3D {
         clearcoatRoughness: y.clearcoatRoughness,
       });
       m.shadowSide = THREE.DoubleSide;
-      this._dyeUniforms.push(patchDye(m, { exposure: 'map', expMap: maps.exp, melMode: 'direct', melMap: maps.mel || null }));
+      this._dyeUniforms.push(patchDye(m, {
+        exposure: 'map', expMap: maps.exp, melMode: 'direct', melMap: maps.mel || null,
+        cloth: { wales: tileWales, courses: tileCourses, tileCm: win.w / cm, amp: 0.05 },
+      }));
       return m;
     };
     const faceMat = clothMat(bake.front);
