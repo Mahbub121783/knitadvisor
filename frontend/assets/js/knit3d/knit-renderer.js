@@ -13,8 +13,9 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 import { buildYarnPaths, floatAnchorsFromPaths, structureRepeat } from './topology-builder.js?v=20260608g';
-import { bakeStructure, clothGeometry, fibreSurfaceTexture, wavePhase, melangeMaterial } from './macro.js?v=20260608g';
-import { fabricBody } from './fabric-body.js?v=20260608g';
+import { bakeStructure, ClothSurface, fibreSurfaceTexture, wavePhase, melangeMaterial } from './macro.js?v=20260608g';
+import { ClothSim } from './cloth-physics.js?v=20260608g';
+import { fabricBody, fabricMechanics } from './fabric-body.js?v=20260608g';
 import { hash2 } from './noise.js?v=20260608g';
 import { buildNap } from './nap.js?v=20260608g';
 import { fibreGeometry } from './hairiness.js?v=20260608g';
@@ -151,14 +152,285 @@ export class Knit3D {
 
     this._ro = new ResizeObserver(() => this.resize());
     this._ro.observe(container);
+    if (this._macro) this._initHandling();
 
     const tick = () => {
       if (this._disposed) return;
+      this._stepCloth();
       controls.update();
       renderer.render(scene, camera);
       this._raf = requestAnimationFrame(tick);
     };
     tick();
+  }
+
+  // ── Handling the cloth (cloth-physics.js) ───────────────────────────────
+  // With "Handle" on, dragging the cloth lifts, pulls or folds it (Shift
+  // slides it along the table); right-drag still orbits. The simulation is
+  // created on first use and sleeps whenever the cloth is still.
+  _initHandling() {
+    const el = this.renderer.domElement;
+    this._handle = false;
+    this._raycaster = new THREE.Raycaster();
+    const ndcOf = (e) => {
+      const r = el.getBoundingClientRect();
+      return { x: ((e.clientX - r.left) / r.width) * 2 - 1, y: -((e.clientY - r.top) / r.height) * 2 + 1, px: e.clientX - r.left, py: e.clientY - r.top, w: r.width, h: r.height };
+    };
+    this._onDown = (e) => {
+      if (!this._canHandle() || e.button !== 0) return;
+      const pick = this._pick(ndcOf(e));
+      if (pick < 0) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      el.setPointerCapture(e.pointerId);
+      this._startGrab(pick, ndcOf(e), e.shiftKey);
+      el.style.cursor = 'grabbing';
+    };
+    this._onMove = (e) => {
+      if (this._grab) { this._moveGrab(ndcOf(e)); return; }
+      if (!this._canHandle() || e.buttons) return;
+      el.style.cursor = this._pick(ndcOf(e)) >= 0 ? 'grab' : '';
+    };
+    this._onUp = (e) => {
+      if (!this._grab) return;
+      try { el.releasePointerCapture(e.pointerId); } catch (_) { /* already released */ }
+      this._endGrab();
+      el.style.cursor = this._canHandle() ? 'grab' : '';
+    };
+    // capture phase: decide before OrbitControls sees the press
+    el.addEventListener('pointerdown', this._onDown, true);
+    el.addEventListener('pointermove', this._onMove);
+    el.addEventListener('pointerup', this._onUp);
+    el.addEventListener('pointercancel', this._onUp);
+    el.addEventListener('contextmenu', (e) => { if (this._handle) e.preventDefault(); });
+  }
+
+  get hasCloth() { return !!this._macro; }
+
+  /** Toggle cloth handling; returns the new state. */
+  toggleHandle() {
+    this._handle = !this._handle;
+    if (this.controls) {
+      // right-drag orbits while handling (left drags the cloth)
+      this.controls.mouseButtons.RIGHT = this._handle ? THREE.MOUSE.ROTATE : THREE.MOUSE.PAN;
+    }
+    if (!this._handle) this.renderer.domElement.style.cursor = '';
+    return this._handle;
+  }
+
+  // Only the face-up cloth, seen from above, in the macro view.
+  _canHandle() {
+    return this._handle && this._macro && this._mode === 'macro' && !this._stretch &&
+      this._pivot.rotation.y === 0;
+  }
+
+  _ensureSim() {
+    if (this._sim) return this._sim;
+    const m = this._macro;
+    const { flat, init } = m.cloth.simGrids();
+    const mech = fabricMechanics({
+      gsm: this.opts.gsm, construction: this.opts.construction, fiberType: this.opts.fiberType,
+      elastanePct: this.opts.elastanePct, physics: this.opts.physics, tf: this.opts.tf,
+      fibreRecovery1: this.opts.fibreRecovery1,
+    }, this.body);
+    this._mech = mech;
+    this._sim = new ClothSim({
+      nx: m.cloth.snx, ny: m.cloth.sny, h: m.cloth.sh, unit: m.cm * 100,
+      init, flat, mech, substeps: this._shadows ? 24 : 16,
+    });
+    return this._sim;
+  }
+
+  // Nearest particle under the pointer (within ~20 px), front-most layer.
+  _pick(ndc) {
+    const m = this._macro;
+    const pts = this._sim ? this._sim.x : (this._simInit || (this._simInit = m.cloth.simGrids().init));
+    const M = new THREE.Matrix4().multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse).multiply(m.group.matrixWorld);
+    const e = M.elements;
+    const r2 = Math.pow(20 / (ndc.w * 0.5), 2);
+    let best = -1, bestZ = Infinity, bestD = Infinity;
+    for (let p = 0, n = pts.length / 3; p < n; p++) {
+      const x = pts[p * 3], y = pts[p * 3 + 1], z = pts[p * 3 + 2];
+      const w = e[3] * x + e[7] * y + e[11] * z + e[15];
+      if (w <= 0) continue;
+      const sx = (e[0] * x + e[4] * y + e[8] * z + e[12]) / w;
+      const sy = (e[1] * x + e[5] * y + e[9] * z + e[13]) / w;
+      const dx = sx - ndc.x, dy = (sy - ndc.y) * (ndc.h / ndc.w);
+      const d = dx * dx + dy * dy;
+      if (d > r2) continue;
+      const sz = (e[2] * x + e[6] * y + e[10] * z + e[14]) / w;
+      // prefer the nearer layer; within a layer, the closer particle
+      if (sz < bestZ - 1e-4 || (Math.abs(sz - bestZ) <= 1e-4 && d < bestD)) { best = p; bestZ = sz; bestD = d; }
+    }
+    return best;
+  }
+
+  _startGrab(p, ndc, slide) {
+    const sim = this._ensureSim();
+    const { nx, ny } = sim;
+    const ip = p % nx, jp = (p / nx) | 0;
+    // a fingertip-sized grip (~1.2 cm each way), not a single point: the
+    // lifted weight spreads over it, as it does in a real pinch
+    const r = Math.max(1, Math.round(1.2 * this._macro.cm / sim.h));
+    const idx = [];
+    for (let j = Math.max(0, jp - r); j <= Math.min(ny - 1, jp + r); j++) {
+      for (let i = Math.max(0, ip - r); i <= Math.min(nx - 1, ip + r); i++) idx.push(j * nx + i);
+    }
+    const o = [sim.x[p * 3], sim.x[p * 3 + 1], sim.x[p * 3 + 2]];
+    const g = sim.pin(idx, o, p);
+    g.held = true;
+    // Drag plane through the grabbed point: facing the camera (lift and
+    // fold), or the table's own plane with Shift (slide).
+    const mw = this._macro.group.matrixWorld;
+    const pw = new THREE.Vector3(...o).applyMatrix4(mw);
+    const nrm = slide
+      ? new THREE.Vector3(0, 0, 1).transformDirection(mw)
+      : this.camera.getWorldDirection(new THREE.Vector3()).negate();
+    this._grab = { g, plane: new THREE.Plane().setFromNormalAndCoplanarPoint(nrm, pw) };
+    this.controls.enabled = false;
+  }
+
+  _moveGrab(ndc) {
+    const gr = this._grab;
+    this._raycaster.setFromCamera(new THREE.Vector2(ndc.x, ndc.y), this.camera);
+    const hit = this._raycaster.ray.intersectPlane(gr.plane, new THREE.Vector3());
+    if (!hit) return;
+    const local = this._macro.group.worldToLocal(hit);
+    gr.g.goal = [local.x, local.y, Math.max(0, local.z)];
+    this._sim.wake();
+  }
+
+  _endGrab() {
+    this._sim.unpin(this._grab.g);
+    this._grab = null;
+    this.controls.enabled = true;
+  }
+
+  _stepCloth() {
+    const sim = this._sim;
+    if (this._stretch) this._stretchTick();
+    if (!sim || !sim.step()) { this._followTarget(); return; }
+    this._macro.cloth.setFromSim(sim.x);
+    this._syncAnchor();
+    this._followTarget();
+  }
+
+  // Loop model rides the cloth at the dive point (the origin of the flat
+  // layout): moved, tilted and stretched with it.
+  _syncAnchor() {
+    const sim = this._sim, a = this._anchor;
+    if (!sim || !a) return;
+    const c = this._macro.cloth;
+    const fi = (0 - c.p.minX) / c.sh, fj = (0 - c.p.minY) / c.sh;
+    const i0 = Math.max(0, Math.min(c.snx - 2, Math.floor(fi))), j0 = Math.max(0, Math.min(c.sny - 2, Math.floor(fj)));
+    const fx = fi - i0, fy = fj - j0, nx = c.snx, X = sim.x;
+    const P = (i, j) => new THREE.Vector3(X[(j * nx + i) * 3], X[(j * nx + i) * 3 + 1], X[(j * nx + i) * 3 + 2]);
+    const p00 = P(i0, j0), p10 = P(i0 + 1, j0), p01 = P(i0, j0 + 1), p11 = P(i0 + 1, j0 + 1);
+    const pos = p00.clone().multiplyScalar((1 - fx) * (1 - fy)).addScaledVector(p10, fx * (1 - fy))
+      .addScaledVector(p01, (1 - fx) * fy).addScaledVector(p11, fx * fy);
+    const du = p10.clone().sub(p00).multiplyScalar(1 - fy).addScaledVector(p11.clone().sub(p01), fy);
+    const dv = p01.clone().sub(p00).multiplyScalar(1 - fx).addScaledVector(p11.clone().sub(p10), fx);
+    const sx = du.length() / c.sh, sy = dv.length() / c.sh;
+    const t = du.clone().normalize();
+    const n = du.clone().cross(dv).normalize();
+    const b = n.clone().cross(t);
+    a.position.copy(pos);
+    a.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(t, b, n));
+    a.scale.set(sx, sy, 1);
+    this._anchorMoved = true;
+  }
+
+  // Keep the orbit / zoom centre on the cloth's dive point once it settles,
+  // so zooming in still lands on the loops wherever the cloth went.
+  _followTarget() {
+    if (!this._anchorMoved || !this.controls || this._grab) return;
+    const goal = this._anchor.getWorldPosition(new THREE.Vector3());
+    const tgt = this.controls.target;
+    const d = goal.distanceTo(tgt);
+    if (d < 1e-3) { this._anchorMoved = !!(this._sim && !this._sim.asleep); return; }
+    const delta = goal.sub(tgt).multiplyScalar(Math.min(1, 0.12 + (d < 0.05 ? 1 : 0)));
+    tgt.add(delta);
+    this.camera.position.add(delta);
+  }
+
+  /** Back to the laid-out cloth (authored pose), sleeping. */
+  resetCloth() {
+    this._stretch = null;
+    if (this._stretchUi) this._stretchUi.style.display = 'none';
+    if (this._grab) this._endGrab();
+    if (this._sim) this._sim.reset();
+    if (this._macro) this._macro.cloth.setAuthored();
+    if (this._anchor) { this._anchor.position.set(0, 0, 0); this._anchor.quaternion.identity(); this._anchor.scale.set(1, 1, 1); }
+    this._anchorMoved = false;
+  }
+
+  // ── Stretch test ──────────────────────────────────────────────────────
+  // Lay the cloth flat, clamp its two side edges, pull across the width to
+  // the stretch the fabric reaches at the standard load (fabricMechanics),
+  // hold, release the moving clamp, and let it recover. The growth that
+  // remains is the (estimated) unrecovered part. Zoom in during or after it
+  // and the loops are stretched with the cloth.
+  stretchTest() {
+    if (!this._macro) return;
+    if (this._grab) this._endGrab();
+    const sim = this._ensureSim();
+    sim.reset(sim.flat);
+    this._macro.cloth.setFromSim(sim.x);
+    const mech = this._mech;
+    sim.muTable = 0;                                // slides freely between the clamps
+    sim.limX = Math.max(0.03, mech.stretchX * 1.35);
+    const { nx, ny } = sim;
+    const left = [], right = [];
+    for (let j = 0; j < ny; j++) { left.push(j * nx); right.push(j * nx + nx - 1); }
+    const gl = sim.pin(left, [sim.x[0], sim.x[1], sim.x[2]]);
+    const r0 = [sim.x[(nx - 1) * 3], sim.x[(nx - 1) * 3 + 1], sim.x[(nx - 1) * 3 + 2]];
+    const gr = sim.pin(right, r0);
+    gl.held = gr.held = true;
+    const W = (nx - 1) * sim.h;
+    this._stretch = { t0: performance.now(), gl, gr, r0, W, phase: 'pull' };
+    this._showStretch(`Pulling across the width… (estimate)`);
+  }
+
+  _stretchTick() {
+    const st = this._stretch, sim = this._sim, mech = this._mech;
+    const t = (performance.now() - st.t0) / 1000;
+    const ease = (u) => u * u * (3 - 2 * u);
+    if (st.phase === 'pull') {
+      const u = Math.min(1, t / 1.4);
+      st.gr.goal = [st.r0[0] + st.W * mech.stretchX * ease(u), st.r0[1], st.r0[2]];
+      this._showStretch(`Stretch ${Math.round(mech.stretchX * 100 * ease(u))}% across the width at the standard load (estimate)`);
+      if (t > 2.4) {
+        // release: what does not recover stays as growth (longer rest length)
+        st.phase = 'recover';
+        const growth = mech.stretchX * (1 - mech.recovery);
+        const diag = Math.sqrt(((1 + growth) * (1 + growth) + 1) / 2);
+        for (let c = 0; c < sim.dK.length; c++) {
+          if (sim.dK[c] === 0) sim.dL[c] = sim.dL0[c] * (1 + growth);
+          else if (sim.dK[c] === 2) sim.dL[c] = sim.dL0[c] * diag;
+        }
+        sim.unpin(st.gr);
+        st.t1 = t;
+      }
+    } else if (st.phase === 'recover' && t - st.t1 > 2.5) {
+      sim.unpin(st.gl);
+      sim.muTable = mech.frictionTable;
+      st.phase = 'done';
+      this._showStretch(`Stretched ${Math.round(mech.stretchX * 100)}% across the width · recovered ${Math.round(mech.recovery * 100)}% · ${(mech.stretchX * (1 - mech.recovery) * 100).toFixed(1)}% growth remains (estimate — ⟳ to reset)`);
+      this._stretch = null;
+    }
+  }
+
+  _showStretch(text) {
+    if (!this._stretchUi) {
+      const d = document.createElement('div');
+      d.style.cssText = 'position:absolute;left:10px;bottom:10px;max-width:calc(100% - 20px);padding:5px 9px;border-radius:7px;' +
+        'background:rgba(15,18,24,.72);color:#fff;font:11px/1.35 var(--mono,monospace);pointer-events:none;';
+      if (getComputedStyle(this.container).position === 'static') this.container.style.position = 'relative';
+      this.container.appendChild(d);
+      this._stretchUi = d;
+    }
+    this._stretchUi.textContent = text;
+    this._stretchUi.style.display = '';
   }
 
   _buildFabric() {
@@ -344,7 +616,13 @@ export class Knit3D {
     // before), so the PIVOT's own local origin — the thing rotation.y
     // actually turns around — now coincides with the fabric's visual centre.
     const pivot = new THREE.Group();
-    pivot.add(group);
+    // The loop model rides on the cloth at the dive point: when the cloth is
+    // moved, folded or stretched, the anchor carries the loops with it —
+    // stretched loops included (see _syncAnchor). Identity at rest.
+    const anchor = new THREE.Group();
+    anchor.add(group);
+    pivot.add(anchor);
+    this._anchor = anchor;
     this._pivot = pivot;
     this.scene.add(pivot);
 
@@ -412,9 +690,14 @@ export class Knit3D {
     const FOLD_D = 5.5, FLAP = 2.5;
     const cornerS = FOLD_D + Math.PI * body.foldRadiusCm + FLAP;     // along the fold normal
     const a = cornerS / Math.SQRT2;                                   // corner at (a, -a)
-    const geo = clothGeometry({
+    const geo = new ClothSurface({
       minX: -(S - a) * cm, maxX: a * cm, minY: -a * cm, maxY: (S - a) * cm,
       seg: 0.12 * cm,
+      // Simulation spacing. Coarser grids with more substeps hold a lifted
+      // cloth far better than fine grids with few: position-based stretch
+      // error grows with (substep time)^2 x (links)^2. Folds tighter than
+      // about one spacing are rounded off; the authored pose is exact.
+      simH: (this._shadows ? 0.75 : 0.9) * cm,
       tileW: win.w, tileH: win.h, uOff: center.x - win.x0, vOff: center.y - win.y0,
       // Fold radius, thickness and drape waves all come from the fabric
       // body (fabric-body.js): GSM, structure, fibre and finish.
@@ -493,13 +776,29 @@ export class Knit3D {
       back.receiveShadow = true;
       edge.castShadow = true;
     }
+    // The cloth moves under the simulation, so its bounds are not fixed.
+    front.frustumCulled = back.frustumCulled = edge.frustumCulled = false;
     const macroGroup = new THREE.Group();
     macroGroup.add(front, back, edge);
     this._pivot.add(macroGroup);
 
+    // The table: invisible except for the cloth's shadow on it, which is
+    // what shows a lifted or folded cloth standing off the surface.
+    let table = null;
+    if (this._shadows) {
+      table = new THREE.Mesh(
+        new THREE.PlaneGeometry(S * cm * 4, S * cm * 4),
+        new THREE.ShadowMaterial({ opacity: 0.22 }),
+      );
+      table.position.z = -(body.thicknessMm / 10) * cm * 0.5 - 0.02 * cm;
+      table.receiveShadow = true;
+      macroGroup.add(table);
+    }
+
     const box = new THREE.Box3().setFromObject(macroGroup);
     this._macro = {
       group: macroGroup, front, back, edge, edgeMat, faceMat, backMat, napMat, napTex,
+      cloth: geo, table, cm,
       napAlways: con.pile === 'loop',
       napLift: con.pile === 'loop' ? 1.45 : 1.6, napShade: this._napShade || null,
       melMat, melF: -1, rebake: bake.rebake || null,
@@ -1008,6 +1307,9 @@ export class Knit3D {
     if (!this._pivot) return;
     const back = which === 'back';
     this._pivot.rotation.y = back ? Math.PI : 0;
+    // the table is under the cloth: seen from below it is not there
+    if (this._macro && this._macro.table) this._macro.table.visible = !back;
+    if (back && this._grab) this._endGrab();
     // Keep the backing plane on the world-far side (see _addBacking). The
     // group sits inside the pivot offset by -center, so a point at local
     // (x, z) lands at pivot-space (x - cx, z - cz), which the 180° turn maps
@@ -1041,6 +1343,7 @@ export class Knit3D {
   }
 
   resetView() {
+    this.resetCloth();
     if (this.controls) this.controls.reset();
     this.setView('front');
     this._setLightSide(false);   // reset() always returns to the saved FRONT state
@@ -1128,7 +1431,17 @@ export class Knit3D {
       m.front.geometry.dispose(); m.back.geometry.dispose(); m.edge.geometry.dispose();
       [m.faceMat, m.backMat, m.edgeMat, m.napMat, m.napTex, m.napShade, m.melMat].forEach((x) => { if (x) x.dispose(); });
       if (m.disposeTile) m.disposeTile();
+      m.cloth.dispose();
+      if (m.table) { m.table.geometry.dispose(); m.table.material.dispose(); }
       m.targets.forEach((t) => t.dispose());
+    }
+    if (this._stretchUi) this._stretchUi.remove();
+    if (this.renderer && this._onDown) {
+      const el = this.renderer.domElement;
+      el.removeEventListener('pointerdown', this._onDown, true);
+      el.removeEventListener('pointermove', this._onMove);
+      el.removeEventListener('pointerup', this._onUp);
+      el.removeEventListener('pointercancel', this._onUp);
     }
     if (this._textures) this._textures.forEach((t) => t.dispose());
     if (this._material) this._material.dispose();

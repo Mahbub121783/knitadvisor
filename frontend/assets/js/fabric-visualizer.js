@@ -2252,6 +2252,8 @@ class FabricVisualizer {
         <button class="ka3d-btn" data-act="wire" title="Show loop paths">Loops</button>
         <button class="ka3d-btn" data-act="light" title="Preview under a different lightbox illuminant">Light: D65</button>
         ${opts.shrinkage ? `<button class="ka3d-btn" data-act="shrink" title="Animate to the computed finished-fabric shrinkage">${this._shrinkT >= 0.5 ? 'Show: Finished' : 'Show: As-Knit'}</button>` : ''}
+        <button class="ka3d-btn" data-act="handle" title="Drag the cloth to lift, pull and fold it — Shift slides it on the table; right-drag still orbits">Handle</button>
+        <button class="ka3d-btn" data-act="stretch" title="Pull the cloth across its width at a standard load, then release it (estimated stretch and recovery)">Stretch test</button>
         <span class="ka3d-hint" style="margin-left:6px">Drag to orbit · scroll in to the loops and fibres</span>
       </div>
       <div class="ka3dgl-mount"></div>
@@ -2277,6 +2279,9 @@ class FabricVisualizer {
       // and whether the yarn is a melange (fibres coloured before spinning).
       dyeMethod: (this.result.wet_processing || {}).dyeing_method || null,
       melange: this._isMelange(),
+      // the fibre's own recovery from 1 % strain (Morton & Hearle, via the
+      // engine) — feeds the stretch test's estimated recovery
+      fibreRecovery1: ((((this.result.yarn || {}).expertise || {}).elastic_recovery || {}).from_1pct || {}).recovery,
     };
 
     import('/assets/js/knit3d/index.js?v=20260608g').then(({ Knit3D, LIGHT_PRESETS, LIGHT_PRESET_ORDER }) => {
@@ -2285,6 +2290,11 @@ class FabricVisualizer {
       this._fabric3d = new Knit3D();
       this._fabric3d.mount(mount, glOpts);
       loading.remove();
+      // Handling and the stretch test need the macro cloth (structures with
+      // a fixed repeat); hide them where it does not exist.
+      if (!this._fabric3d.hasCloth) {
+        stage.querySelectorAll('[data-act="handle"],[data-act="stretch"]').forEach((b) => { b.style.display = 'none'; });
+      }
       // Same shared this._shrinkT as the 2D view — sync the mesh AND the
       // button label to whatever state the user left it in, rather than
       // silently reverting to as-knit every time this tab is rebuilt.
@@ -2319,6 +2329,8 @@ class FabricVisualizer {
         else if (act === 'back') this._fabric3d.setView('back');
         else if (act === 'reset') this._fabric3d.resetView();
         else if (act === 'wire') e.target.classList.toggle('active', this._fabric3d.toggleWire());
+        else if (act === 'handle') e.target.classList.toggle('active', this._fabric3d.toggleHandle());
+        else if (act === 'stretch') this._fabric3d.stretchTest();
         else if (act === 'light') {
           lightIdx = (lightIdx + 1) % LIGHT_PRESET_ORDER.length;
           const key = LIGHT_PRESET_ORDER[lightIdx];

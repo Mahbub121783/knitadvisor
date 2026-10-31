@@ -132,129 +132,233 @@ const smooth = (a, b, x) => {
   return t * t * (3 - 2 * t);
 };
 
-/**
- * A piece of cloth lying on a table, one corner turned back over itself so
- * the technical back shows on the flap (a page-curl round a cylinder of
- * radius r — the fold's softness). Gentle undulations everywhere except a
- * flat zone round the origin, where the zoom hands over to the loop model.
- * UVs are fixed on the flat rest shape, so the texture follows the fold.
- *
- * Returns two geometries over the same surface: `front` faces +z at rest
- * (face texture), `back` has reversed winding and mirrored u (back texture).
- */
-export function clothGeometry(p) {
-  const nxs = Math.max(8, Math.round((p.maxX - p.minX) / p.seg));
-  const nys = Math.max(8, Math.round((p.maxY - p.minY) / p.seg));
-  const count = (nxs + 1) * (nys + 1);
-  const pos = new Float32Array(count * 3);
-  const uvF = new Float32Array(count * 2);
-  const uvB = new Float32Array(count * 2);
-  const { n, d0, r, t } = p.fold;
-  const L = Math.PI * r;
-  const w = p.wave;
-  // Undulation of the sheet lying on the table, flat round the origin and
-  // flat right at the fold line.
-  const sheetZ = (x, y) => {
-    const s = x * n.x + y * n.y - d0;
-    const mask = smooth(w.flatR, w.rampR, Math.hypot(x, y)) * smooth(0, 4 * r, -s);
-    return w.amp * mask * (
-      0.6 * Math.sin((x * 0.55 + y * 0.83) * (2 * Math.PI / w.len) + w.phase) +
-      0.4 * Math.sin((x * -0.71 + y * 0.70) * (2 * Math.PI / (w.len * 0.62)) + w.phase * 1.7));
-  };
-  for (let j = 0; j <= nys; j++) {
-    for (let i = 0; i <= nxs; i++) {
-      const k = j * (nxs + 1) + i;
-      const x = p.minX + (p.maxX - p.minX) * (i / nxs);
-      const y = p.minY + (p.maxY - p.minY) * (j / nys);
-      const u = (x + p.uOff) / p.tileW, v = (y + p.vOff) / p.tileH;
-      uvF[k * 2] = u; uvF[k * 2 + 1] = v;
-      uvB[k * 2] = -u; uvB[k * 2 + 1] = v;
-      const s = x * n.x + y * n.y - d0;
-      let X = x, Y = y, Z;
-      if (s <= 0) {
-        Z = sheetZ(x, y);
-      } else {
-        const bx = x - n.x * s, by = y - n.y * s;
-        if (s < L) {
-          const th = s / r;
-          X = bx + n.x * r * Math.sin(th);
-          Y = by + n.y * r * Math.sin(th);
-          Z = r * (1 - Math.cos(th));
-        } else {
-          // Past the crest the flap settles down onto the cloth beneath it,
-          // one fabric thickness above whatever shape that cloth has —
-          // a soft fold, not a page held up in the air.
-          const e = s - L;
-          X = bx - n.x * e;
-          Y = by - n.y * e;
-          const rest = sheetZ(X, Y) + t * 1.04;     // mid-surfaces one thickness apart
-          Z = rest + (2 * r - rest) * (1 - smooth(0, 5 * r, e));
-        }
-      }
-      pos[k * 3] = X; pos[k * 3 + 1] = Y; pos[k * 3 + 2] = Z;
-    }
-  }
-  const idxF = [], idxB = [];
-  for (let j = 0; j < nys; j++) {
-    for (let i = 0; i < nxs; i++) {
-      const a = j * (nxs + 1) + i, b = a + 1, c = a + nxs + 1, d = c + 1;
-      idxF.push(a, b, c, b, d, c);
-      idxB.push(a, c, b, b, c, d);
-    }
-  }
-
-  // The cloth has a real thickness t: the face surface sits t/2 out along the
-  // mid-surface normal, the back surface t/2 in, and a strip closes the cut
-  // edges. So a thick fleece folds round a fat, rounded crest and shows a
-  // visible edge, while a thin jersey folds into a sharp, thin one.
-  const mid = new THREE.BufferGeometry();
-  mid.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  mid.setIndex(idxF);
-  mid.computeVertexNormals();
-  const nrm = mid.attributes.normal.array;
-  const posF = new Float32Array(count * 3), posB = new Float32Array(count * 3);
-  for (let k = 0; k < count * 3; k++) {
-    posF[k] = pos[k] + nrm[k] * t * 0.5;
-    posB[k] = pos[k] - nrm[k] * t * 0.5;
-  }
-  mid.dispose();
-  const make = (p3, uv, idx) => {
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(p3, 3));
-    g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-    g.setIndex(idx);
-    g.computeVertexNormals();
-    return g;
-  };
-
-  // Edge strip round the perimeter (face edge → back edge).
-  const ring = [];
-  for (let i = 0; i <= nxs; i++) ring.push(i);
-  for (let j = 1; j <= nys; j++) ring.push(j * (nxs + 1) + nxs);
-  for (let i = nxs - 1; i >= 0; i--) ring.push(nys * (nxs + 1) + i);
-  for (let j = nys - 1; j >= 1; j--) ring.push(j * (nxs + 1));
-  const ep = new Float32Array(ring.length * 2 * 3);
-  const euv = new Float32Array(ring.length * 2 * 2);
-  ring.forEach((v, i) => {
-    for (let a = 0; a < 3; a++) {
-      ep[(i * 2) * 3 + a] = posF[v * 3 + a];
-      ep[(i * 2 + 1) * 3 + a] = posB[v * 3 + a];
-    }
-    euv[i * 4] = i; euv[i * 4 + 1] = 0; euv[i * 4 + 2] = i; euv[i * 4 + 3] = 1;
-  });
-  const eidx = [];
-  for (let i = 0; i < ring.length; i++) {
-    const a = i * 2, b = ((i + 1) % ring.length) * 2;
-    eidx.push(a, a + 1, b, b, a + 1, b + 1);
-  }
-  const edge = new THREE.BufferGeometry();
-  edge.setAttribute('position', new THREE.BufferAttribute(ep, 3));
-  edge.setAttribute('uv', new THREE.BufferAttribute(euv, 2));
-  edge.setIndex(eidx);
-  edge.computeVertexNormals();
-
-  return { front: make(posF, uvF, idxF), back: make(posB, uvB, idxB), edge };
+// Catmull-Rom weights for a fractional position t in [0,1).
+function crWeights(t) {
+  const t2 = t * t, t3 = t2 * t;
+  return [(-t3 + 2 * t2 - t) / 2, (3 * t3 - 5 * t2 + 2) / 2, (-3 * t3 + 4 * t2 + t) / 2, (t3 - t2) / 2];
 }
+
+/**
+ * A piece of cloth lying on a table (mid-surface on z = 0), one corner turned
+ * back over itself so the back shows on the flap — a page curl round a
+ * cylinder of radius r (the fold's softness), the flap settling one fabric
+ * thickness above the cloth beneath. Ripples rise from the table except in a
+ * flat zone round the origin, where the zoom hands over to the loop model.
+ *
+ * Two sources for its shape:
+ *   - authored (the pose above): the default, costs nothing per frame
+ *   - a simulation grid (cloth-physics.js), interpolated up to the render
+ *     resolution with Catmull-Rom splines, so folds stay round between
+ *     particles
+ * UVs are fixed on the flat layout, so the texture follows every fold and
+ * stretch. The front surface faces +z at rest (face texture); the back has
+ * reversed winding and mirrored u (back texture); the edge strip closes the
+ * cut edge.
+ */
+export class ClothSurface {
+  constructor(p) {
+    this.p = p;
+    // Simulation grid: spacing p.simH, covering the sheet exactly; the
+    // render grid subdivides each sim cell k times.
+    const W = p.maxX - p.minX, H = p.maxY - p.minY;
+    this.snx = Math.max(8, Math.round(W / p.simH) + 1);
+    this.sh = W / (this.snx - 1);
+    this.sny = Math.max(8, Math.round(H / this.sh) + 1);
+    this.k = Math.max(2, Math.min(5, Math.round(this.sh / p.seg)));
+    this.rnx = (this.snx - 1) * this.k + 1;
+    this.rny = (this.sny - 1) * this.k + 1;
+    const rc = this.rnx * this.rny;
+    this.mid = new Float32Array(rc * 3);
+    this.nrm = new Float32Array(rc * 3);
+    this.rest = new Float32Array(rc * 2);          // flat layout of each render vertex
+
+    const uvF = new Float32Array(rc * 2), uvB = new Float32Array(rc * 2);
+    const Hs = (this.sny - 1) * this.sh;
+    for (let j = 0; j < this.rny; j++) {
+      for (let i = 0; i < this.rnx; i++) {
+        const k = j * this.rnx + i;
+        const x = p.minX + W * (i / (this.rnx - 1)), y = p.minY + Hs * (j / (this.rny - 1));
+        this.rest[k * 2] = x; this.rest[k * 2 + 1] = y;
+        const u = (x + p.uOff) / p.tileW, v = (y + p.vOff) / p.tileH;
+        uvF[k * 2] = u; uvF[k * 2 + 1] = v; uvB[k * 2] = -u; uvB[k * 2 + 1] = v;
+      }
+    }
+    const idxF = [], idxB = [];
+    for (let j = 0; j < this.rny - 1; j++) {
+      for (let i = 0; i < this.rnx - 1; i++) {
+        const a = j * this.rnx + i, b = a + 1, c = a + this.rnx, d = c + 1;
+        idxF.push(a, b, c, b, d, c);
+        idxB.push(a, c, b, b, c, d);
+      }
+    }
+    const mk = (uv, idx) => {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(rc * 3), 3));
+      g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(rc * 3), 3));
+      g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+      g.setIndex(idx);
+      return g;
+    };
+    this.front = mk(uvF, idxF);
+    this.back = mk(uvB, idxB);
+
+    // Edge strip round the perimeter (face edge to back edge).
+    const ring = [];
+    for (let i = 0; i < this.rnx; i++) ring.push(i);
+    for (let j = 1; j < this.rny; j++) ring.push(j * this.rnx + this.rnx - 1);
+    for (let i = this.rnx - 2; i >= 0; i--) ring.push((this.rny - 1) * this.rnx + i);
+    for (let j = this.rny - 2; j >= 1; j--) ring.push(j * this.rnx);
+    this.ring = ring;
+    const euv = new Float32Array(ring.length * 4);
+    ring.forEach((v, i) => { euv[i * 4] = i; euv[i * 4 + 2] = i; euv[i * 4 + 3] = 1; });
+    const eidx = [];
+    for (let i = 0; i < ring.length; i++) {
+      const a = i * 2, b = ((i + 1) % ring.length) * 2;
+      eidx.push(a, a + 1, b, b, a + 1, b + 1);
+    }
+    this.edge = new THREE.BufferGeometry();
+    this.edge.setAttribute('position', new THREE.BufferAttribute(new Float32Array(ring.length * 6), 3));
+    this.edge.setAttribute('uv', new THREE.BufferAttribute(euv, 2));
+    this.edge.setIndex(eidx);
+
+    // Separable interpolation scratch: sim rows to render columns.
+    this._rowTmp = new Float32Array(this.sny * this.rnx * 3);
+    this._wts = [];
+    for (let s = 0; s < this.k; s++) this._wts.push(crWeights(s / this.k));
+
+    this.setAuthored();
+  }
+
+  /** The authored pose: mid-surface point for a flat-layout (x, y). */
+  poseAt(x, y) {
+    const { n, d0, r, t } = this.p.fold;
+    const w = this.p.wave;
+    const L = Math.PI * r;
+    const sheetZ = (sx, sy) => {
+      const s = sx * n.x + sy * n.y - d0;
+      const mask = smooth(w.flatR, w.rampR, Math.hypot(sx, sy)) * smooth(0, 4 * r, -s);
+      // ripples RISE from the table; the cloth rests on it everywhere else
+      return w.amp * mask * 0.5 * (1 +
+        0.6 * Math.sin((sx * 0.55 + sy * 0.83) * (2 * Math.PI / w.len) + w.phase) +
+        0.4 * Math.sin((sx * -0.71 + sy * 0.70) * (2 * Math.PI / (w.len * 0.62)) + w.phase * 1.7));
+    };
+    const s = x * n.x + y * n.y - d0;
+    if (s <= 0) return [x, y, sheetZ(x, y)];
+    const bx = x - n.x * s, by = y - n.y * s;
+    if (s < L) {
+      const th = s / r;
+      return [bx + n.x * r * Math.sin(th), by + n.y * r * Math.sin(th), r * (1 - Math.cos(th))];
+    }
+    // Past the crest the flap settles onto the cloth beneath it, mid-surfaces
+    // one thickness apart: a soft fold, not a page held up in the air.
+    const e = s - L;
+    const X = bx - n.x * e, Y = by - n.y * e;
+    const restZ = sheetZ(X, Y) + t * 1.04;
+    return [X, Y, restZ + (2 * r - restZ) * (1 - smooth(0, 5 * r, e))];
+  }
+
+  /** Flat layout and authored pose sampled on the simulation grid. */
+  simGrids() {
+    const n = this.snx * this.sny;
+    const flat = new Float32Array(n * 3), init = new Float32Array(n * 3);
+    for (let j = 0; j < this.sny; j++) {
+      for (let i = 0; i < this.snx; i++) {
+        const k = j * this.snx + i;
+        const x = this.p.minX + i * this.sh, y = this.p.minY + j * this.sh;
+        flat[k * 3] = x; flat[k * 3 + 1] = y;
+        const q = this.poseAt(x, y);
+        init[k * 3] = q[0]; init[k * 3 + 1] = q[1]; init[k * 3 + 2] = q[2];
+      }
+    }
+    return { flat, init };
+  }
+
+  setAuthored() {
+    for (let k = 0; k < this.rnx * this.rny; k++) {
+      const q = this.poseAt(this.rest[k * 2], this.rest[k * 2 + 1]);
+      this.mid[k * 3] = q[0]; this.mid[k * 3 + 1] = q[1]; this.mid[k * 3 + 2] = q[2];
+    }
+    this._write();
+  }
+
+  /** Render surface from simulation positions (snx x sny x 3). */
+  setFromSim(xs) {
+    const { snx, sny, rnx, rny, k } = this;
+    const row = this._rowTmp, mid = this.mid, wts = this._wts;
+    const at = (n, i) => Math.max(0, Math.min(n - 1, i));
+    const last = [0, 0, 1, 0];
+    // along x, per sim row
+    for (let j = 0; j < sny; j++) {
+      for (let i = 0; i < rnx; i++) {
+        const c = Math.min(snx - 2, Math.floor(i / k)), s = i - c * k;
+        const wv = s >= k ? last : wts[s];
+        const o = (j * rnx + i) * 3;
+        let ax = 0, ay = 0, az = 0;
+        for (let m = 0; m < 4; m++) {
+          const src = (j * snx + at(snx, c - 1 + m)) * 3, wm = wv[m];
+          ax += xs[src] * wm; ay += xs[src + 1] * wm; az += xs[src + 2] * wm;
+        }
+        row[o] = ax; row[o + 1] = ay; row[o + 2] = az;
+      }
+    }
+    // along y
+    for (let j = 0; j < rny; j++) {
+      const c = Math.min(sny - 2, Math.floor(j / k)), s = j - c * k;
+      const wv = s >= k ? last : wts[s];
+      for (let i = 0; i < rnx; i++) {
+        const o = (j * rnx + i) * 3;
+        let ax = 0, ay = 0, az = 0;
+        for (let m = 0; m < 4; m++) {
+          const src = (at(sny, c - 1 + m) * rnx + i) * 3, wm = wv[m];
+          ax += row[src] * wm; ay += row[src + 1] * wm; az += row[src + 2] * wm;
+        }
+        mid[o] = ax; mid[o + 1] = ay; mid[o + 2] = az;
+      }
+    }
+    this._write();
+  }
+
+  // Normals by central differences on the render grid; face and back
+  // surfaces one half-thickness either side of the mid-surface.
+  _write() {
+    const { rnx, rny, mid, nrm } = this;
+    const t = this.p.fold.t;
+    const fp = this.front.attributes.position.array, fn = this.front.attributes.normal.array;
+    const bp = this.back.attributes.position.array, bn = this.back.attributes.normal.array;
+    for (let j = 0; j < rny; j++) {
+      for (let i = 0; i < rnx; i++) {
+        const o = (j * rnx + i) * 3;
+        const ia = (j * rnx + Math.max(0, i - 1)) * 3, ib = (j * rnx + Math.min(rnx - 1, i + 1)) * 3;
+        const ja = (Math.max(0, j - 1) * rnx + i) * 3, jb = (Math.min(rny - 1, j + 1) * rnx + i) * 3;
+        const ux = mid[ib] - mid[ia], uy = mid[ib + 1] - mid[ia + 1], uz = mid[ib + 2] - mid[ia + 2];
+        const vx = mid[jb] - mid[ja], vy = mid[jb + 1] - mid[ja + 1], vz = mid[jb + 2] - mid[ja + 2];
+        let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+        const l = Math.hypot(nx, ny, nz) || 1;
+        nx /= l; ny /= l; nz /= l;
+        nrm[o] = nx; nrm[o + 1] = ny; nrm[o + 2] = nz;
+        fp[o] = mid[o] + nx * t * 0.5; fp[o + 1] = mid[o + 1] + ny * t * 0.5; fp[o + 2] = mid[o + 2] + nz * t * 0.5;
+        bp[o] = mid[o] - nx * t * 0.5; bp[o + 1] = mid[o + 1] - ny * t * 0.5; bp[o + 2] = mid[o + 2] - nz * t * 0.5;
+        fn[o] = nx; fn[o + 1] = ny; fn[o + 2] = nz;
+        bn[o] = -nx; bn[o + 1] = -ny; bn[o + 2] = -nz;
+      }
+    }
+    const ep = this.edge.attributes.position.array;
+    const ring = this.ring;
+    for (let i = 0; i < ring.length; i++) {
+      const v = ring[i] * 3;
+      for (let a = 0; a < 3; a++) { ep[i * 6 + a] = fp[v + a]; ep[i * 6 + 3 + a] = bp[v + a]; }
+    }
+    for (const g of [this.front, this.back]) {
+      g.attributes.position.needsUpdate = true;
+      g.attributes.normal.needsUpdate = true;
+    }
+    this.edge.attributes.position.needsUpdate = true;
+    this.edge.computeVertexNormals();
+  }
+
+  dispose() { this.front.dispose(); this.back.dispose(); this.edge.dispose(); }
+}
+
 
 // ── Surface fibre textures (finished backs) ─────────────────────────────────
 function rng(seed) {

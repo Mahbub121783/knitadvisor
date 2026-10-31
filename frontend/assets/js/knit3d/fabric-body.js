@@ -120,3 +120,81 @@ export function fabricBody(o) {
     softness: Math.max(0, Math.min(1, 1 - (cCm - 1.2) / 2)),          // 1 = very soft
   };
 }
+
+// ── Mechanics for the interactive cloth (cloth-physics.js) ─────────────────
+// Stretch at a standard load and immediate recovery, per structure — again
+// ESTIMATES, labelled as such wherever shown. The load is a 17.8 N (4 lbf)
+// pull on a 7.6 cm (3 in) strip, the usual knit stretch-test load.
+const F_STD = 17.8 / 0.076;                          // N per metre of width
+
+// Width-wise stretch at that load for a medium-tight cotton fabric, and the
+// lengthwise stretch as a fraction of it. A rib opens its purl wales and
+// stretches furthest across; a warp knit and a fleece (the fleecy yarn
+// holds the back) least.
+const STRETCH = {
+  jersey: 0.45, rib: 0.9, interlock: 0.35, pique: 0.38, waffle: 0.45,
+  terry: 0.30, fleece: 0.28, velour: 0.30, mesh: 0.40, warp: 0.25,
+};
+const LENGTH_RATIO = { rib: 0.35, warp: 0.6 };
+
+// Fibre recovery from 1 % strain (%), used when the engine reports none
+// (its own value, from Morton & Hearle, wins — see fabricMechanics).
+const FIBRE_RECOVERY_1PCT = {
+  cotton: 91, linen: 84, hemp: 84, viscose: 82, modal: 85, wool: 99, silk: 92,
+  polyester: 97, nylon: 99, acrylic: 95, spandex: 99,
+};
+
+// Layer-on-layer friction: fibre surface first, then the finish and any pile.
+const FRICTION = {
+  cotton: 0.55, linen: 0.6, hemp: 0.6, viscose: 0.45, modal: 0.45, wool: 0.65,
+  silk: 0.25, polyester: 0.4, nylon: 0.35, acrylic: 0.5, spandex: 0.5,
+};
+const FINISH_FRICTION = {
+  peach_finish: 0.3, brushed: 0.35, enzyme_wash: 0.05, vintage_wash: 0.05,
+  silicone: -0.25, mercerized: -0.1, singed: -0.05, resin: 0.05,
+};
+
+/**
+ * @param {object} o    same inputs as fabricBody, plus tf (tightness factor)
+ *                      and fibreRecovery1 (engine's fibre recovery from 1 %)
+ * @param {object} body fabricBody(o)
+ */
+export function fabricMechanics(o, body) {
+  const kind = body.kind;
+  const tf = Number(o.tf) || 14;
+  const el = Math.max(0, Math.min(30, Number(o.elastanePct) || 0));
+  const gsm = Math.max(60, Math.min(700, Number(o.gsm) || 180));
+
+  // A tighter knit (higher tightness factor) has less loop slack to open.
+  const tight = Math.pow(15 / Math.max(8, Math.min(22, tf)), 0.7);
+  const elGain = 1 + Math.min(1.2, 0.15 * el);
+  const stretchX = (STRETCH[kind] || 0.45) * tight * elGain;
+  const stretchY = stretchX * (LENGTH_RATIO[kind] || 0.5);
+
+  // Immediate recovery after release. Most of a knit's stretch is loop
+  // deformation, which springs back against inter-yarn friction; the fibre's
+  // own recovery sets how much of the rest stays as growth. Elastane pulls
+  // the loops back almost completely.
+  const r1 = Number.isFinite(o.fibreRecovery1)
+    ? o.fibreRecovery1 : (FIBRE_RECOVERY_1PCT[o.fiberType] || 91);
+  const loss = (0.10 + 1.1 * (1 - r1 / 100)) * Math.max(0.15, 1 - el / 6);
+  const recovery = Math.max(0.5, Math.min(0.99, 1 - loss));
+
+  const finishId = o.physics && o.physics.finish_id;
+  let mu = (FRICTION[o.fiberType] || 0.5) + (FINISH_FRICTION[finishId] || 0);
+  if (kind === 'fleece' || kind === 'velour' || kind === 'terry') mu += 0.25;   // pile grips
+  mu = Math.max(0.15, Math.min(1, mu));
+
+  const W = (gsm / 1000) * 9.81;                                     // N/m²
+  const c = body.bendingCm / 100;                                    // m
+  return {
+    stretchX, stretchY, recovery,
+    E2Dx: F_STD / stretchX, E2Dy: F_STD / stretchY,                  // N/m (secant)
+    G2D: 0.12 * F_STD / stretchX,                                    // knits shear easily
+    B: W * c * c * c,                                                // N·m, from the bending length
+    massPerArea: gsm / 1000,                                         // kg/m²
+    thicknessM: body.thicknessMm / 1000,
+    frictionSelf: mu,
+    frictionTable: Math.max(0.2, Math.min(0.9, mu * 0.9)),
+  };
+}
