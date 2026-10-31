@@ -23,6 +23,10 @@ import { createYarnMaterial, setYarnColorHex, twistPitch, applyYarnLook } from '
 import { finishedLook, greigeLook, GREIGE_HEX } from './finish-profile.js?v=20260608g';
 import { patchDye, melangeSplit } from './dye-shader.js?v=20260608g';
 import { buildFabricMesh, yarnRadius } from './fabric-mesh.js?v=20260608g';
+// Yarn in a piqué is drawn thicker against its (spread) wale pitch: the held
+// loops are pulled flat and the tuck arches fill the sideways gaps a jersey
+// does not have, so the cloth reads as dense as it is.
+const PIQUE_YARN_FILL = 1.35;
 import { addStudioLighting, configureShadowCamera, applyLightPreset, DEFAULT_LIGHT_PRESET, buildStudioEnvironment } from './lighting.js?v=20260608g';
 import { buildPile } from './pile.js?v=20260608g';
 import { buildHairiness } from './hairiness.js?v=20260608g';
@@ -528,7 +532,7 @@ export class Knit3D {
       wales = Math.max(14, Math.round(wales * k));
     }
 
-    const radius = yarnRadius(this.opts.countNe, this.opts.tf, density);
+    const radius = yarnRadius(this.opts.countNe, this.opts.tf, density) * (this.opts.pique ? PIQUE_YARN_FILL : 1);
     const { paths, floatAnchors } = buildYarnPaths({
       construction: con, sample: this.opts.sample, sampleBack: this.opts.sampleBack,
       pattern: this.opts.pattern, wales, courses, pitchY,
