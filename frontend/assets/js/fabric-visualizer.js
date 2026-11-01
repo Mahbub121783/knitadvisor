@@ -66,6 +66,10 @@ class FabricVisualizer {
       try { this._fabric3d.dispose(); } catch (_) {}
       this._fabric3d = null;
     }
+    if (this.activeTab === 'realistic' && tabName !== 'realistic' && this._photo3d) {
+      try { this._photo3d.dispose(); } catch (_) {}
+      this._photo3d = null;
+    }
     this.activeTab = tabName;
 
     this.container.querySelectorAll('.viz-tab').forEach(btn => {
@@ -87,6 +91,10 @@ class FabricVisualizer {
       this._download(this._fabric3d.renderer.domElement.toDataURL('image/png'), 'threed');
       return;
     }
+    if (this.activeTab === 'realistic' && this._photo3d) {
+      const url = this._photo3d.captureHiRes(1);
+      if (url) { this._download(url, 'realistic'); return; }
+    }
     const canvas = this.canvases[this.activeTab] || this.canvases.realistic || this.canvases.stitch;
     if (!canvas) return;
     this._download(canvas.toDataURL('image/png'), this.activeTab);
@@ -102,6 +110,10 @@ class FabricVisualizer {
     if (this.activeTab === 'threed' && this._fabric3d && typeof this._fabric3d.captureHiRes === 'function') {
       const url = this._fabric3d.captureHiRes(SCALE);
       if (url) { this._download(url, 'threed-hd'); return; }
+    }
+    if (this.activeTab === 'realistic' && this._photo3d) {
+      const url = this._photo3d.captureHiRes(SCALE);
+      if (url) { this._download(url, 'realistic-hd'); return; }
     }
     if (this.activeTab === 'realistic') {
       const W = 560, H = 380;
@@ -146,6 +158,7 @@ class FabricVisualizer {
       this._threeHandlers = null;
     }
     if (this._fabric3d) { try { this._fabric3d.dispose(); } catch (_) {} this._fabric3d = null; }
+    if (this._photo3d) { try { this._photo3d.dispose(); } catch (_) {} this._photo3d = null; }
   }
 
   // ─────────────────────────────────────────────────────────
@@ -1045,6 +1058,153 @@ class FabricVisualizer {
   // gauge/stitch-density → loop size, TF → tightness (ground show-through).
   // ─────────────────────────────────────────────────────────
 
+  // ── Realistic tab: a photograph of the swatch, rendered ────────────────
+  // The same physically based engine as the 3D view (knit3d), set up as a
+  // macro photograph: the cloth lies flat under a studio light, the camera
+  // looks straight down through a long lens. Every input that changes how
+  // a real swatch looks goes into it — the yarn's own geometry (count,
+  // loop length, structure, twist), the fibre's optics (lustre, sheen,
+  // hairiness), the spinning system, a melange's fibre mix, the dye route
+  // and the finish (peach, brushed, mercerised, enzyme…). Zooming in goes
+  // down to the loops and fibres. The painted 2D swatch stays as the
+  // fallback where WebGL is missing.
+  _photoSupported(con) {
+    const T = ['jersey', 'rib', 'interlock', 'pique', 'terry', 'plush', 'fleece', 'mesh', 'spacer', 'tricot'];
+    try {
+      if (!(window.WebGLRenderingContext && document.createElement('canvas').getContext('webgl2'))) return false;
+    } catch (_) { return false; }
+    return T.includes(con.type);
+  }
+
+  _renderRealisticPhoto(wrap, opts) {
+    const con = opts.construction;
+    const piqueRes = this.result.pique;
+    const sellBack = !!(piqueRes && piqueRes.selling_face === 'technical_back');
+    const holder = document.createElement('div');
+    holder.className = 'ka-loupe';
+    holder.innerHTML = `
+      <div class="ka-loupe-bar">
+        <button class="ka-loupe-btn ka-loupe-side active" data-act="front">${sellBack ? 'Selling face' : 'Front'}</button>
+        <button class="ka-loupe-btn ka-loupe-side" data-act="back">${sellBack ? 'Technical face' : 'Back'}</button>
+        <button class="ka-loupe-btn" data-act="out">–</button>
+        <span class="ka-loupe-zoom">4 cm</span>
+        <button class="ka-loupe-btn" data-act="in">+</button>
+        <button class="ka-loupe-btn" data-act="reset" title="Back to the whole swatch">Fit</button>
+        ${opts.shrinkage ? `<button class="ka-loupe-btn" data-act="shrink" title="Greige off the machine, or dyed and finished">${this._shrinkT >= 0.5 ? 'Show: Finished' : 'Show: As-Knit'}</button>` : ''}
+        <button class="ka-loupe-btn" data-act="light" title="View under a different lightbox illuminant">Light: D65</button>
+        <span class="ka-loupe-tip">Drag to move · scroll to zoom, down to the loops and fibres</span>
+      </div>
+      <div class="ka-photo-stage" style="position:relative;width:100%;max-width:560px;margin:0 auto;">
+        <div class="ka-photo-mount" style="width:100%;height:380px;border-radius:10px;overflow:hidden;background:#d9dbe0;"></div>
+        <div style="position:absolute;inset:0;border-radius:10px;pointer-events:none;background:radial-gradient(ellipse at 38% 32%,rgba(255,255,255,.05),rgba(0,0,0,0) 45%,rgba(0,0,0,.16) 100%);"></div>
+        <div class="ka-photo-scale" style="position:absolute;left:12px;bottom:12px;font:600 10px var(--mono,monospace);color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.6);pointer-events:none;">
+          <div class="ka-photo-bar" style="height:3px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.5);border-radius:2px;margin-bottom:3px;"></div><span></span></div>
+        <div class="ka-photo-loading" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:11px var(--mono,monospace);color:#556;">Rendering the swatch…</div>
+      </div>`;
+    wrap.appendChild(holder);
+    this._injectLoupeCss();
+    const mount = holder.querySelector('.ka-photo-mount');
+    const zoomEl = holder.querySelector('.ka-loupe-zoom');
+    const barEl = holder.querySelector('.ka-photo-bar');
+    const barLab = holder.querySelector('.ka-photo-scale span');
+
+    const sample = (w, c) => this._tokenAt(w, c, 'front', opts);
+    const sampleBack = (w, c) => this._tokenAt(w, c, 'front', opts, 'dial');
+    const pique = this._piqueGeom();
+    const glOpts = {
+      photo: true,
+      dyed: this._dyedColor, construction: con, countNe: opts.countNe,
+      loopNe: opts.loopNe, tieNe: opts.tieNe, plush: opts.plush, loopback: opts.loopback,
+      tf: opts.tf, fiberType: opts.fiberType, sheen: opts.sheen, sample, sampleBack,
+      physics: opts.physics, density: pique ? pique.density : opts.density, twist: this._yarnTwist(),
+      pique, shrinkage: opts.shrinkage, pattern: opts.pattern,
+      gsm: opts.gsm, elastanePct: (this.result.yarn || {}).elastane_pct || 0,
+      dyeMethod: (this.result.wet_processing || {}).dyeing_method || null,
+      melange: this._isMelange(),
+      yarnLook: this._yarnLook(),
+    };
+    const fail = () => { holder.remove(); this._photoFailed = true; this._renderRealisticView(); };
+    import('/assets/js/knit3d/index.js?v=20260608g').then(({ Knit3D, LIGHT_PRESETS, LIGHT_PRESET_ORDER }) => {
+      if (this._destroyed || this.activeTab !== 'realistic') return;
+      if (this._photo3d) { try { this._photo3d.dispose(); } catch (_) {} }
+      const k = new Knit3D();
+      try { k.mount(mount, glOpts); } catch (e) { try { k.dispose(); } catch (_) {} fail(); return; }
+      this._photo3d = k;
+      if (!k._macro) { k.dispose(); this._photo3d = null; fail(); return; }
+      holder.querySelector('.ka-photo-loading').remove();
+      k.previewShrink(this._shrinkT);
+      // scale bar + zoom label follow the camera
+      const NICE = [0.1, 0.2, 0.5, 1, 2, 5, 10];
+      const sync = () => {
+        const ppc = k.pxPerCm();
+        if (!ppc) return;
+        const W = mount.clientWidth || 560;
+        const across = W / ppc;
+        zoomEl.textContent = across >= 1 ? `${across.toFixed(across < 3 ? 1 : 0)} cm` : `${(across * 10).toFixed(1)} mm`;
+        const want = 90 / ppc;
+        const cm = NICE.reduce((a, b) => (Math.abs(b - want) < Math.abs(a - want) ? b : a));
+        barEl.style.width = `${Math.round(cm * ppc)}px`;
+        barLab.textContent = cm >= 1 ? `${cm} cm` : `${Math.round(cm * 10)} mm`;
+      };
+      k.controls.addEventListener('change', sync);
+      sync();
+      const zoomBy = (f) => {
+        const c = k.controls, t = c.target;
+        const d = k.camera.position.clone().sub(t);
+        const len = Math.max(c.minDistance, Math.min(c.maxDistance, d.length() * f));
+        k.camera.position.copy(t).addScaledVector(d.normalize(), len);
+        c.update();
+      };
+      let lightIdx = 0;
+      const lightBtn = holder.querySelector('[data-act="light"]');
+      holder.querySelector('.ka-loupe-bar').addEventListener('click', (e) => {
+        const act = e.target.getAttribute('data-act'); if (!act) return;
+        if (act === 'front' || act === 'back') {
+          k.setView(act);
+          holder.querySelectorAll('.ka-loupe-side').forEach((b) => b.classList.toggle('active', b === e.target));
+        } else if (act === 'in') zoomBy(0.6);
+        else if (act === 'out') zoomBy(1.6);
+        else if (act === 'reset') { k.controls.reset(); sync(); }
+        else if (act === 'light') {
+          lightIdx = (lightIdx + 1) % LIGHT_PRESET_ORDER.length;
+          const key = LIGHT_PRESET_ORDER[lightIdx];
+          k.setLightPreset(key);
+          lightBtn.textContent = `Light: ${LIGHT_PRESETS[key].label.split(' ')[0]}`;
+        } else if (act === 'shrink') {
+          const going = this._shrinkT < 0.5;
+          this._shrinkT = going ? 1 : 0;
+          k.previewShrink(this._shrinkT);
+          e.target.textContent = going ? 'Show: Finished' : 'Show: As-Knit';
+          e.target.classList.toggle('active', going);
+        }
+      });
+      this._updateInfoLine(opts);
+    }).catch(fail);
+  }
+
+  // What the spinning system does to a yarn's surface, from the engine's
+  // yarn analysis: open-end is bulky, hairy and matt; compact is smooth
+  // with few protruding fibres and more lustre; vortex sits lowest of all
+  // on hairiness. Uster hairiness H (a ring yarn is ~5-6) scales it.
+  _yarnLook() {
+    const ex = (this.result.yarn || {}).expertise || {};
+    const sys = ((ex.spinning_system || {}).key || '').toLowerCase();
+    const H = (ex.properties || {}).hairiness_h;
+    const SYS = {
+      open_end: { hair: 1.35, gloss: 0.8, bulk: 1.08 },
+      rotor:    { hair: 1.35, gloss: 0.8, bulk: 1.08 },
+      carded:   { hair: 1.2, gloss: 0.9, bulk: 1.03 },
+      combed:   { hair: 1.0, gloss: 1.0, bulk: 1.0 },
+      compact:  { hair: 0.6, gloss: 1.15, bulk: 0.97 },
+      vortex:   { hair: 0.45, gloss: 1.05, bulk: 0.98 },
+      airjet:   { hair: 0.45, gloss: 1.05, bulk: 0.98 },
+    };
+    const k = Object.keys(SYS).find((x) => sys.includes(x));
+    const base = k ? SYS[k] : { hair: 1, gloss: 1, bulk: 1 };
+    const hScale = Number.isFinite(H) ? Math.max(0.5, Math.min(1.6, H / 5.5)) : 1;
+    return { system: k || null, hair: base.hair * hScale, gloss: base.gloss, bulk: base.bulk, slub: !!((ex.slub || {}).active || (ex.slub && ex.slub.ok)) };
+  }
+
   // ── Flat realistic face (front), high-detail, construction-aware ──
   _renderRealisticView() {
     const wrap = this.container.querySelector('.viz-canvas-wrap[data-wrap="realistic"]');
@@ -1053,6 +1213,10 @@ class FabricVisualizer {
 
     const W = 560, H = 380, SS = 2;       // SS = supersample for crispness
     const opts = this._faceOpts();
+    if (!this._photoFailed && this._photoSupported(opts.construction)) {
+      this._renderRealisticPhoto(wrap, opts);
+      return;
+    }
     this._loupe = this._loupe || { zoom: 1, fu: 0.5, fv: 0.5, side: 'front' };
     if (!this._loupe.side) this._loupe.side = 'front';
     const MIN = 1, MAX = 9;
@@ -2367,6 +2531,7 @@ class FabricVisualizer {
       // the engine's load-extension curves per direction (stretch-engine.js):
       // drive the manual stretch test
       stretch: this.result.stretch || null,
+      yarnLook: this._yarnLook(),
     };
 
     import('/assets/js/knit3d/index.js?v=20260608g').then(({ Knit3D, LIGHT_PRESETS, LIGHT_PRESET_ORDER }) => {
@@ -3198,6 +3363,7 @@ class FabricVisualizer {
         this._computeDyedColor();
         // update the live view in place (3D updates the yarn material instantly)
         if (this.activeTab === 'threed' && this._fabric3d) this._fabric3d.setColor(colorInput.value);
+        else if (this.activeTab === 'realistic' && this._photo3d) this._photo3d.setColor(colorInput.value);
         else if (this.activeTab === 'realistic') this._renderRealisticView();
         else this._renderActiveTab();
       });

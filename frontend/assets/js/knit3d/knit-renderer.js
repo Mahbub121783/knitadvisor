@@ -88,11 +88,21 @@ export class Knit3D {
     // fabric when a free orbit carries the CAMERA past the edge, so whichever
     // side faces it gets the strong key light instead of the rim's leftover
     // intensity aimed the wrong way.
+    if (this.opts.photo) {
+      // a photographer's raking key: lower over the swatch so every loop
+      // throws its own small shadow and the texture reads as relief
+      this._key.position.set(-4.2, 5.2, 4.2);
+      this._hemi.intensity *= 0.8;
+    }
     this._lightBaseZ = { key: this._key.position.z, fill: this._fill.position.z, rim: this._rim.position.z };
     this._keyDir = this._key.position.clone().normalize();
     this._showingBack = false;
 
-    const camera = new THREE.PerspectiveCamera(40, W / H, 0.1, 200);
+    // Photo mode (the Realistic tab): a macro lens straight over a swatch
+    // lying flat — long focal length, so the cloth is seen as a photograph
+    // of it is, not with a wide-angle's stretched foreground.
+    this._photo = !!this.opts.photo;
+    const camera = new THREE.PerspectiveCamera(this._photo ? 20 : 40, W / H, 0.1, 200);
     this.camera = camera;
 
     this._buildFabric();
@@ -112,8 +122,8 @@ export class Knit3D {
     // foreshortens and would otherwise pull the swatch's border into frame.
     // With a macro view, the default is the whole cloth at ~14 cm across —
     // how a fabric is actually first looked at; zooming in reaches the loops.
-    const el = 24 * Math.PI / 180, az = 8 * Math.PI / 180;
-    const d0 = this._macro ? this._distForWidth(this._macro.viewW) : this._fitDist * 0.8;
+    const el = (this._photo ? 3 : 24) * Math.PI / 180, az = (this._photo ? 0 : 8) * Math.PI / 180;
+    const d0 = this._macro ? this._distForWidth(this._photo ? this._macro.photoW : this._macro.viewW) : this._fitDist * 0.8;
     camera.position.set(
       d0 * Math.sin(az) * Math.cos(el),
       -d0 * Math.sin(el),
@@ -129,8 +139,18 @@ export class Knit3D {
     // tier in _applyLod below), not just the loop shapes — floored so a very
     // small/low-LOD patch can never let the camera clip through the yarn.
     controls.minDistance = Math.max(0.6, this._fitDist * 0.12);
-    controls.maxDistance = this._macro ? this._distForWidth(this._macro.fullW) : this._fitDist * 2.2;
-    if (this._macro) {
+    controls.maxDistance = this._macro ? this._distForWidth(this._photo ? this._macro.photoMaxW : this._macro.fullW) : this._fitDist * 2.2;
+    if (this._photo) {
+      // a photograph: no orbit — drag pans across the swatch, the wheel
+      // zooms to the point under the cursor, down to the loops
+      controls.enableRotate = false;
+      controls.enablePan = true;
+      controls.screenSpacePanning = true;
+      controls.zoomToCursor = true;
+      controls.zoomSpeed = 1.6;
+      controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+      controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN };
+    } else if (this._macro) {
       // ~25x of zoom range (whole cloth → single fibres): faster wheel steps,
       // and no panning — the zoom always dives into the point where the
       // loop model sits.
@@ -147,6 +167,7 @@ export class Knit3D {
     // (cheap material-tier swap — only touched on tier transitions)
     this._lodTier = 'mid';
     controls.addEventListener('change', () => {
+      if (this._photo) this._photoFollow();
       this._applyMode();
       this._applyLod();
       // Free-orbiting (not just the Front/Back buttons) can carry the camera
@@ -936,6 +957,15 @@ export class Knit3D {
       physics: this.opts.physics,
       twist: this.opts.twist,
     });
+    // spinning system: a compact yarn's aligned surface reads glossier, an
+    // open-end yarn's wrapped, hairy one matt (_yarnLook in the visualizer)
+    const gloss = (this.opts.yarnLook || {}).gloss || 1;
+    if (gloss !== 1 && material.userData.base) {
+      const b = material.userData.base;
+      b.roughness = Math.max(0.05, Math.min(1, b.roughness / gloss));
+      b.clearcoat = Math.max(0, Math.min(1, b.clearcoat * gloss));
+      material.roughness = b.roughness; material.clearcoat = b.clearcoat;
+    }
     this._material = material;
     this._textures = textures;
     this._melField = melField;
@@ -1028,7 +1058,7 @@ export class Knit3D {
     // A fleece face is knitted long (≈4.5 mm on 20G) with a binder plated
     // behind it: the soft, bulky face yarn spreads and closes the cloth, so it
     // is drawn fuller than a compact cylinder — or the face reads as a net.
-    const radius = yarnRadius(this.opts.countNe, this.opts.tf, density)
+    const radius = yarnRadius(this.opts.countNe, this.opts.tf, density) * ((this.opts.yarnLook || {}).bulk || 1)
       * (this.opts.pique ? PIQUE_YARN_FILL : isFleece3Thread ? FLEECE_YARN_FILL : 1);
     const { paths, floatAnchors } = buildYarnPaths({
       construction: con, sample: this.opts.sample, sampleBack: this.opts.sampleBack,
@@ -1245,12 +1275,13 @@ export class Knit3D {
       // Fold radius, thickness and drape waves all come from the fabric
       // body (fabric-body.js): GSM, structure, fibre and finish.
       fold: {
-        n: { x: Math.SQRT1_2, y: -Math.SQRT1_2 }, d0: FOLD_D * cm,
+        // photo: no turned-back corner, the swatch lies flat
+        n: { x: Math.SQRT1_2, y: -Math.SQRT1_2 }, d0: (this.opts.photo ? 1e4 : FOLD_D) * cm,
         r: body.foldRadiusCm * cm,
         t: (body.thicknessMm / 10) * cm,
       },
       wave: {
-        amp: body.waveAmpCm * cm, len: body.waveLenCm * cm,
+        amp: body.waveAmpCm * cm * (this.opts.photo ? 0.3 : 1), len: body.waveLenCm * cm,
         flatR: 2.2 * cm, rampR: 5 * cm, phase: wavePhase(wpc * 7 + scalar),
       },
     });
@@ -1274,7 +1305,8 @@ export class Knit3D {
       this._dyeUniforms.push(patchDye(m, {
         exposure: 'map', expMap: maps.exp, melMode: 'direct', melMap: maps.mel || null,
         cloth: {
-          wales: tileWales, courses: tileCourses, tileCm: win.w / cm, amp: 0.05,
+          // a photograph shows the yarn's own unevenness a little more
+          wales: tileWales, courses: tileCourses, tileCm: win.w / cm, amp: this.opts.photo ? 0.075 : 0.05,
           // cavity over one structure repeat; a piqué's cell is the point
           height: maps.height,
           cavityLod: Math.log2(Math.max(2, Math.min(rep.wales * tw, rep.courses * th))),
@@ -1368,9 +1400,52 @@ export class Knit3D {
       // the face's baked height: where gaps open under stretch (_setHoles)
       heightFront: bake.front.height,
       viewW: 14 * cm,                            // default view: ~14 cm across
+      photoW: 4 * cm, photoMaxW: 14 * cm,        // photo: a 4 cm swatch shot, out to 14 cm
+      bounds: { minX: -(S - a) * cm, maxX: a * cm, minY: -a * cm, maxY: (S - a) * cm },
+      repSnap: { x: rep.wales * rep.xPitch, y: rep.courses * pitchY },
       fullW: 0.62 * S * cm * 2,                  // fully zoomed out: the whole piece
     };
     this._syncMacroBack();
+  }
+
+  // ── Photo mode helpers ──────────────────────────────────────────────────
+  // Panning keeps the view on the swatch, and the loop model (a patch of a
+  // couple of centimetres) is carried to wherever the viewer zooms in —
+  // moved by whole structure repeats, so the loops land exactly where the
+  // baked texture had them.
+  _photoFollow() {
+    const m = this._macro, c = this.controls;
+    if (!m || !c) return;
+    const b = m.bounds, mg = 3 * m.cm;
+    const t = c.target;
+    const cx = Math.max(b.minX + mg, Math.min(b.maxX - mg, t.x));
+    const cy = Math.max(b.minY + mg, Math.min(b.maxY - mg, t.y));
+    if (cx !== t.x || cy !== t.y) {
+      const d = new THREE.Vector3(cx - t.x, cy - t.y, 0);
+      t.add(d); this.camera.position.add(d);
+    }
+    this._photoAnchor();
+  }
+
+  _photoAnchor() {
+    const m = this._macro, a = this._anchor;
+    if (!m || !a || !this._pivot) return;
+    const local = this._pivot.worldToLocal(this.controls.target.clone());
+    const sx = m.repSnap.x, sy = m.repSnap.y;
+    const nx = Math.round(local.x / sx) * sx, ny = Math.round(local.y / sy) * sy;
+    if (Math.abs(nx - a.position.x) > 1e-6 || Math.abs(ny - a.position.y) > 1e-6) {
+      a.position.set(nx, ny, 0);
+      if (this._backing && this._backing.mesh) this._syncBacking();
+    }
+  }
+
+  /** Pixels per centimetre of cloth at the centre of the view (photo scale bar). */
+  pxPerCm() {
+    if (!this._macro || !this.controls || !this.container) return null;
+    const d = this.controls.getDistance();
+    const h = 2 * d * Math.tan((this.camera.fov * Math.PI / 180) / 2);
+    const H = this.renderer.domElement.clientHeight || 380;
+    return (H / h) * this._macro.cm;
   }
 
   // Camera distance at which `width` scene units span the viewport.
@@ -1573,7 +1648,7 @@ export class Knit3D {
     const maxMul = Math.max(1, this._finishLook.hair);   // peach / brushed raise more fibre
     const hair = buildHairiness(tubes, mat, {
       radius, fiberType: this.opts.fiberType || 'cotton', totalLength: group.userData.totalLength,
-      maxMul,
+      maxMul, amount: (this.opts.yarnLook || {}).hair || 1,
       // A raised finish is mostly fibre; each hair is a tiny 24-triangle
       // tube, so the higher cap is cheap. Lighter on the low-power tier.
       maxCount: (this._shadows ? 14000 : 5000) * maxMul,
@@ -1726,6 +1801,7 @@ export class Knit3D {
     group.add(sprite);
 
     this._grainline = { a1, a2, sprite };
+    if (this.opts.photo) [a1, a2, sprite].forEach((o) => { o.visible = false; });
   }
 
   // The dyed shade (the visualizer's colour picker). Shown in the Finished
@@ -2002,7 +2078,7 @@ export class Knit3D {
       dir.multiplyScalar((newFit * ratio) / len);
       this.camera.position.copy(this.controls.target).add(dir);
       this.controls.minDistance = Math.max(0.6, newFit * 0.12);
-      this.controls.maxDistance = this._macro ? this._distForWidth(this._macro.fullW) : newFit * 2.2;
+      this.controls.maxDistance = this._macro ? this._distForWidth(this._photo ? this._macro.photoMaxW : this._macro.fullW) : newFit * 2.2;
       this._fitDist = newFit;
       this.controls.update();
     }

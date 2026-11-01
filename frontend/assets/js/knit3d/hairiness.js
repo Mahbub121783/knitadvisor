@@ -37,7 +37,8 @@ export function fibreGeometry() {
  * @param {object} opts { radius, fiberType, totalLength }
  */
 export function buildHairiness(tubes, material, opts) {
-  const factor = HAIRINESS[opts.fiberType] != null ? HAIRINESS[opts.fiberType] : 1.0;
+  // the spinning system's own hairiness (open-end hairy, compact clean)
+  const factor = (HAIRINESS[opts.fiberType] != null ? HAIRINESS[opts.fiberType] : 1.0) * (opts.amount || 1);
   const perUnit = 3.2 * factor;                                 // hairs per unit of yarn
   const base = Math.round((opts.totalLength || 0) * perUnit);   // natural (greige) count
   const cap = opts.maxCount || 14000;
