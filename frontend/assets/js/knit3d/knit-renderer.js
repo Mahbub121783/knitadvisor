@@ -228,7 +228,7 @@ export class Knit3D {
 
   // Only the face-up cloth, seen from above, in the macro view.
   _canHandle() {
-    return this._handle && this._macro && this._mode === 'macro' && !this._stretch &&
+    return this._handle && this._macro && this._mode === 'macro' && !this._stretch && !this._man &&
       this._pivot.rotation.y === 0;
   }
 
@@ -317,8 +317,10 @@ export class Knit3D {
   _stepCloth() {
     const sim = this._sim;
     if (this._stretch) this._stretchTick();
+    if (this._man) this._manTick();
     if (!sim || !sim.step()) { this._followTarget(); return; }
     this._macro.cloth.setFromSim(sim.x);
+    if (this._bench) this._updateBench();
     this._syncAnchor();
     this._followTarget();
   }
@@ -344,7 +346,9 @@ export class Knit3D {
     const b = n.clone().cross(t);
     a.position.copy(pos);
     a.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(t, b, n));
-    a.scale.set(sx, sy, 1);
+    // loops already rebuilt at a stretch (_microStretch) carry that part
+    const mb = this._microBuilt || { sx: 1, sy: 1 };
+    a.scale.set(sx / mb.sx, sy / mb.sy, 1);
     this._anchorMoved = true;
   }
 
@@ -352,6 +356,9 @@ export class Knit3D {
   // so zooming in still lands on the loops wherever the cloth went.
   _followTarget() {
     if (!this._anchorMoved || !this.controls || this._grab) return;
+    // during a stretch test the view frames the whole sheet; only once the
+    // viewer zooms in does it slide back to the loops' dive point
+    if (this._man && this.controls.getDistance() > this._fitDist * 1.6) return;
     const goal = this._anchor.getWorldPosition(new THREE.Vector3());
     const tgt = this.controls.target;
     const d = goal.distanceTo(tgt);
@@ -364,6 +371,7 @@ export class Knit3D {
   /** Back to the laid-out cloth (authored pose), sleeping. */
   resetCloth() {
     this._stretch = null;
+    if (this._man) this.stretchEnd();
     if (this._stretchUi) this._stretchUi.style.display = 'none';
     if (this._grab) this._endGrab();
     if (this._sim) this._sim.reset();
@@ -439,6 +447,486 @@ export class Knit3D {
     }
     this._stretchUi.textContent = text;
     this._stretchUi.style.display = '';
+  }
+
+  // ── Manual stretch, driven by the engine's load–extension curve ─────────
+  // stretchBegin(dir) lays the cloth flat and clamps two opposite edges;
+  // stretchTo(pct) moves one clamp. The engine's curve (stretch-engine.js)
+  // says, for every local strain, how far the cloth narrows across the pull
+  // and how far the wales lean. Those go into the rest lengths of the
+  // simulation link by link, so the hourglass neck, the bowed courses and
+  // the grain line bending between the clamps (which hold it straight) all
+  // come out of the cloth itself. Gaps open by the curve's open area.
+  // stretchRelease(hold) lets go of the moving clamp: what the curve says
+  // stays (growth) stays in the rest lengths.
+
+  get hasStretchModel() { return !!(this._macro && this.opts.stretch && this.opts.stretch.directions); }
+
+  // linear interpolation of one field of the curve at strain ePct
+  _sAt(key, ePct, curve) {
+    const c = curve || (this._man && this._man.curve);
+    if (!c || !c.length) return 0;
+    if (ePct <= c[0].e) return c[0][key];
+    for (let i = 1; i < c.length; i++) {
+      if (c[i].e >= ePct) {
+        const a = c[i - 1], b = c[i];
+        const t = (ePct - a.e) / Math.max(1e-9, b.e - a.e);
+        return typeof a[key] === 'number' ? a[key] + (b[key] - a[key]) * t : (t < 0.5 ? a[key] : b[key]);
+      }
+    }
+    return c[c.length - 1][key];
+  }
+
+  stretchBegin(dir, onUpdate) {
+    if (!this.hasStretchModel) return false;
+    if (this._grab) this._endGrab();
+    this._stretch = null;
+    if (this._stretchUi) this._stretchUi.style.display = 'none';
+    if (this._man) this._clearMan(false);
+    const sim = this._ensureSim();
+    sim.reset(sim.flat);
+    this._macro.cloth.setFromSim(sim.x);
+    const key = dir === 'length' ? 'length' : 'width';
+    const D = this.opts.stretch.directions[key];
+    const brk = (D.break_pct || 100) / 100;
+    sim.muTable = 0;                                  // slides freely between the clamps
+    sim.limX = sim.limY = Math.max(0.1, brk * 1.4 + 0.15);
+    sim.flatZ = sim.thick * 0.5;                      // pressed flat on the table
+    // steer shear firmly while the lattice is being bent
+    if (!sim.dA0) sim.dA0 = Float32Array.from(sim.dA);
+    for (let c = 0; c < sim.dK.length; c++) if (sim.dK[c] === 2) sim.dA[c] = sim.dA0[c] * 0.25;
+    // laid flat for the test: no remembered fold or ripple to spring back to
+    if (!sim.bR0) sim.bR0 = Float32Array.from(sim.bR);
+    sim.bR.fill(0);
+    const { nx, ny } = sim;
+    const A = [], B = [];
+    if (key === 'width') for (let j = 0; j < ny; j++) { A.push(j * nx); B.push(j * nx + nx - 1); }
+    else for (let i = 0; i < nx; i++) { A.push(i); B.push((ny - 1) * nx + i); }
+    const at = (p) => [sim.x[p * 3], sim.x[p * 3 + 1], sim.x[p * 3 + 2]];
+    const ga = sim.pin(A, at(A[0]));
+    const b0 = at(B[0]);
+    const gb = sim.pin(B, b0);
+    ga.held = gb.held = true;
+    this._man = {
+      dir: key, D, curve: D.curve, brk, ga, gb, b0,
+      span: (key === 'width' ? nx - 1 : ny - 1) * sim.h,
+      eGoal: 0, eCur: 0, phase: 'pull', still: 0, onUpdate,
+      tan0: Math.tan((D.curve[0].skew || 0) * Math.PI / 180),
+    };
+    this._buildBench();
+    this._setHoles(0);
+    this._frameStretch(true);
+    this._emitMan();
+    return true;
+  }
+
+  /** Move the clamp to `pct` % stretch (0 … break). */
+  stretchTo(pct) {
+    const m = this._man;
+    if (!m) return;
+    if (m.phase !== 'pull') {
+      // a fresh pull from the laid-flat cloth
+      const cb = m.onUpdate, dir = m.dir;
+      this.stretchBegin(dir, cb);
+    }
+    this._man.eGoal = Math.max(0, Math.min(this._man.brk, pct / 100));
+    this._man.still = 0;
+    this._sim.wake();
+  }
+
+  /**
+   * Let go of the moving clamp. hold: 'quick' (a few seconds at the
+   * stretch) or '2h' (held two hours, as the ASTM D2594 growth test).
+   */
+  stretchRelease(hold = 'quick') {
+    const m = this._man;
+    if (!m || m.phase !== 'pull' || m.eCur <= 0.001) return;
+    const sim = this._sim;
+    const e = m.eCur * 100;
+    const g = this._sAt(hold === '2h' ? 'g60' : 'g', e);
+    m.release = {
+      e, hold, g, g1h: this._sAt(hold === '2h' ? 'g1h' : 'g1hq', e), gw: this._sAt('gw', e),
+      rec: e > 0 ? Math.max(0, (1 - g / e) * 100) : 100,
+    };
+    // What stays: the growth along the pull, with the same share of the
+    // narrowing and of the extra lean. The moving jaw rides back (as the
+    // tester's crosshead does) until the cloth goes slack at the growth, and
+    // only then lets go — let go at full stretch, the sheet snapped back and
+    // rucked up.
+    const k = e > 0 ? g / e : 0;
+    m.rest = {
+      perp: (this._sAt('perp', e) / 100) * k,
+      gam: (Math.tan(this._sAt('skew', e) * Math.PI / 180) - m.tan0) * k,
+    };
+    m.phase = 'recover';
+    m.tPrev = null;
+    m.t1 = performance.now();
+    m.still = 0;
+    this._emitMan();
+  }
+
+  /** Back to the plain cloth (no clamps, no growth). */
+  stretchEnd() {
+    if (!this._man) return;
+    this._clearMan(true);
+  }
+
+  _clearMan(resetSim) {
+    const sim = this._sim;
+    if (resetSim && this._man && this._man.view && this.controls) {
+      this.camera.position.copy(this._man.view.pos);
+      this.controls.target.copy(this._man.view.tgt);
+      this.controls.update();
+    }
+    if (sim) {
+      if (sim.dA0) sim.dA.set(sim.dA0);
+      if (sim.bR0) sim.bR.set(sim.bR0);
+      sim.dL.set(sim.dL0);
+      sim.groups = [];
+      sim.w.fill(1 / sim.mass);
+      sim.muTable = this._mech ? this._mech.frictionTable : sim.muTable;
+      sim.flatZ = null;
+      if (resetSim) {
+        sim.reset();
+        this._macro.cloth.setAuthored();
+      }
+    }
+    this._man = null;
+    this._pendingMicro = null;
+    this._setHoles(0);
+    if (this._bench) this._bench.group.visible = false;
+    this._microStretch(null);
+  }
+
+  _emitMan(eShown) {
+    const m = this._man;
+    if (!m || !m.onUpdate) return;
+    const e = eShown != null ? eShown : m.eCur * 100;
+    const row = {};
+    for (const k of ['t', 'f5', 'open', 'skew', 'perp', 'ys', 'g', 'g60', 'g1h', 'gw', 'rec']) row[k] = this._sAt(k, e);
+    row.stage = this._sAt('stage', e);
+    if (m.phase === 'done' && m.rest) {
+      // what is left once it has come back: the kept share of the narrowing and lean
+      row.perp = m.rest.perp * 100;
+      row.skew = Math.atan(m.tan0 + m.rest.gam) * 180 / Math.PI;
+    }
+    try { m.onUpdate({ phase: m.phase, dir: m.dir, e, goal: m.eGoal * 100, ...row, release: m.release || null }); } catch (_) { /* panel gone */ }
+  }
+
+  // Rest lengths for a uniform state: stretch `ex` along the pull, `perp`
+  // across it, wales leaning by `gam` more than at rest.
+  _setRest(dir, along, perp, gam) {
+    const sim = this._sim, { nx, ny, h } = sim;
+    const Cn = ny * (nx - 1), Wn = nx * (ny - 1);
+    const sx = dir === 'width' ? 1 + along : 1 + perp;
+    const sy = dir === 'width' ? 1 + perp : 1 + along;
+    for (let c = 0; c < Cn; c++) sim.dL[c] = h * sx;
+    for (let c = Cn; c < Cn + Wn; c++) sim.dL[c] = h * sy * Math.sqrt(1 + gam * gam);
+    const d1 = h * Math.hypot(sx + gam * sy, sy), d2 = h * Math.hypot(gam * sy - sx, sy);
+    for (let c = Cn + Wn; c < sim.dL.length; c += 2) { sim.dL[c] = d1; sim.dL[c + 1] = d2; }
+  }
+
+  // Keep the whole clamped sheet in view: on the first pull the camera backs
+  // off to see it with room to grow; every frame it pans with the sheet's
+  // middle (the viewer's own zoom is kept).
+  _frameStretch(first) {
+    const m = this._man, sim = this._sim, mac = this._macro;
+    if (!m || !sim || !this.controls) return;
+    const { nx, ny } = sim;
+    const X = sim.x;
+    const ids = [0, nx - 1, (ny - 1) * nx, ny * nx - 1];
+    const c = new THREE.Vector3();
+    for (const p of ids) c.add(new THREE.Vector3(X[p * 3], X[p * 3 + 1], X[p * 3 + 2]));
+    c.multiplyScalar(0.25).applyMatrix4(mac.group.matrixWorld);
+    const t = this.controls.target;
+    if (first) {
+      m.view = { pos: this.camera.position.clone(), tgt: t.clone() };
+      const sheet = (nx - 1) * sim.h;
+      const want = this._distForWidth(sheet * (m.dir === 'width' ? 1 + Math.min(1.6, m.brk) * 0.75 : 1.15));
+      const dir = this.camera.position.clone().sub(t).normalize();
+      // look at where the middle will be half-way through the pull
+      if (m.dir === 'width') c.x += sheet * Math.min(1.6, m.brk) * 0.25; else c.y += sheet * Math.min(1.6, m.brk) * 0.25;
+      t.copy(c);
+      this.camera.position.copy(c).addScaledVector(dir, Math.min(want, this.controls.maxDistance));
+      this.controls.update();
+      return;
+    }
+    // zoomed in on the loops: _followTarget has the view
+    if (this.controls.getDistance() <= this._fitDist * 1.6) return;
+    const d = c.sub(t);
+    if (d.lengthSq() < 1e-6) return;
+    d.multiplyScalar(0.08);
+    t.add(d);
+    this.camera.position.add(d);
+  }
+
+  // Per frame while pulling: move the clamp, then set every cross link and
+  // diagonal from the strain the cloth actually has around it.
+  _manTick() {
+    const m = this._man, sim = this._sim;
+    if (!m || !sim) return;
+    if (m.phase !== 'done') this._frameStretch(false);
+    if (m.phase === 'pull') {
+      const now = performance.now();
+      const dt = Math.min(0.1, (now - (m.tPrev || now)) / 1000) || 1 / 60;
+      m.tPrev = now;
+      const de = m.eGoal - m.eCur;
+      const step = Math.min(Math.abs(de), 0.75 * dt);           // ≤ 75 %/s, a hand's pull
+      m.eCur += Math.sign(de) * step;
+      const off = m.span * m.eCur;
+      m.gb.goal = m.dir === 'width' ? [m.b0[0] + off, m.b0[1], m.b0[2]] : [m.b0[0], m.b0[1] + off, m.b0[2]];
+      this._coupleStretch();
+      this._setHoles(m.eCur * 100);
+      if (Math.abs(de) < 1e-4) {
+        if (++m.still === 24) this._microStretchAt(m.eCur * 100);
+      } else m.still = 0;
+      if (Math.abs(de) > 1e-4 || m.still < 2) this._emitMan();
+    } else if (m.phase === 'recover') {
+      const now = performance.now();
+      const dt = Math.min(0.1, (now - (m.tPrev || now)) / 1000) || 1 / 60;
+      m.tPrev = now;
+      const g = m.release.g / 100;
+      if (m.gb) {
+        // the jaw comes back at ~90 %/s, easing in to where the cloth goes slack
+        const de = g - m.eCur;
+        m.eCur += Math.sign(de) * Math.min(Math.abs(de), Math.max(0.05, Math.abs(de) * 3) * dt);
+        const off = m.span * m.eCur;
+        m.gb.goal = m.dir === 'width' ? [m.b0[0] + off, m.b0[1], m.b0[2]] : [m.b0[0], m.b0[1] + off, m.b0[2]];
+        // on the way back the narrowing and lean undo toward what stays
+        const u = (m.eCur - g) / Math.max(1e-6, m.release.e / 100 - g);
+        this._coupleStretch(u);
+        this._setHoles(m.eCur * 100);
+        this._emitMan(m.eCur * 100);
+        if (Math.abs(de) < 1e-3) {
+          this._setRest(m.dir, g, m.rest.perp, m.rest.gam);
+          sim.unpin(m.gb); sim.unpin(m.ga);
+          m.gb = m.ga = null;
+          sim.muTable = this._mech.frictionTable;
+          m.t1 = now;
+        }
+        return;
+      }
+      const t = (now - m.t1) / 1000;
+      if (t > 0.8) {
+        m.phase = 'done';
+        this._setHoles(g * 100);
+        this._microStretchAt(g * 100, true);
+        this._emitMan(g * 100);
+      }
+    }
+  }
+
+  // The cloth's state at the clamp strain, link by link. The clamp jaws hold
+  // the cloth: no narrowing or lean at a jaw, the full amount a few cells
+  // in — the elastic sheet spreads the difference, which is the neck and the
+  // bowed lines. (Driving each link from its own measured strain instead fed
+  // back on itself and folded the sheet.)
+  // u (returning only): 1 = the loading state at this strain, 0 = what stays.
+  _coupleStretch(u) {
+    const m = this._man, sim = this._sim;
+    if (m.coupledAt === m.eCur) return;
+    m.coupledAt = m.eCur;
+    const { nx, ny, h } = sim;
+    const Cn = ny * (nx - 1), Wn = nx * (ny - 1);
+    const ep = m.eCur * 100, e = m.eCur;
+    let perp0 = this._sAt('perp', ep) / 100;
+    let gam0 = Math.tan(this._sAt('skew', ep) * Math.PI / 180) - m.tan0;
+    if (u != null && m.rest) {
+      const w = Math.max(0, Math.min(1, u));
+      perp0 = m.rest.perp + (perp0 - m.rest.perp) * w;
+      gam0 = m.rest.gam + (gam0 - m.rest.gam) * w;
+    }
+    const RAMP = 4;
+    const jaw = (k, n) => { const t = Math.min(1, Math.min(k, n - 1 - k) / RAMP); return t * t * (3 - 2 * t); };
+    const W = m.dir === 'width';
+    if (W) {
+      for (let j = 0; j < ny - 1; j++) {
+        for (let i = 0; i < nx; i++) {
+          const f = jaw(i, nx), g = gam0 * f;
+          sim.dL[Cn + j * nx + i] = h * (1 + perp0 * f) * Math.sqrt(1 + g * g);
+        }
+      }
+    } else {
+      for (let j = 0; j < ny; j++) {
+        const f = jaw(j, ny);
+        for (let i = 0; i < nx - 1; i++) sim.dL[j * (nx - 1) + i] = h * (1 + perp0 * f);
+      }
+    }
+    for (let j = 0; j < ny - 1; j++) {
+      for (let i = 0; i < nx - 1; i++) {
+        const f = W ? jaw(i + 0.5, nx) : jaw(j + 0.5, ny);
+        const g = gam0 * f;
+        const sx = W ? 1 + e : 1 + perp0 * f;
+        const sy = W ? 1 + perp0 * f : 1 + e;
+        const c = Cn + Wn + 2 * (j * (nx - 1) + i);
+        sim.dL[c] = h * Math.hypot(sx + g * sy, sy);
+        sim.dL[c + 1] = h * Math.hypot(g * sy - sx, sy);
+      }
+    }
+  }
+
+  // ── Gaps: the face's baked height, cut where the cloth has opened ───────
+  // The fraction of the tile cut away is the curve's open area above the
+  // rest (the cloth as drawn is the cloth at rest). The deepest points of the
+  // face — the hollows between the legs and the holes already there — go
+  // first, which is where light comes through a stretched knit.
+  _holeQuantiles() {
+    if (this._holeQ !== undefined) return this._holeQ;
+    this._holeQ = null;
+    const tex = this._macro && this._macro.heightFront;
+    if (!tex) return null;
+    try {
+      const S = 128;
+      const rt = new THREE.WebGLRenderTarget(S, S);
+      this._holeRT = rt;
+      const scene = new THREE.Scene();
+      const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+      const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.MeshBasicMaterial({ map: tex, toneMapped: false }));
+      scene.add(quad);
+      const prev = this.renderer.getRenderTarget();
+      this.renderer.setRenderTarget(rt);
+      this.renderer.render(scene, cam);
+      const px = new Uint8Array(S * S * 4);
+      this.renderer.readRenderTargetPixels(rt, 0, 0, S, S, px);
+      this.renderer.setRenderTarget(prev);
+      quad.geometry.dispose(); quad.material.dispose();
+      const v = new Float32Array(S * S);
+      for (let i = 0; i < S * S; i++) v[i] = px[i * 4] / 255;
+      v.sort();
+      this._holeQ = { v, base: v.findIndex((h) => h > 0.02) / v.length };
+    } catch (_) { this._holeQ = null; }
+    return this._holeQ;
+  }
+
+  _setHoles(ePct) {
+    const m = this._macro;
+    if (!m) return;
+    let thr = 0, frac = 0;
+    const man = this._man;
+    if (man && ePct > 0) {
+      const open = this._sAt('open', ePct, man.curve), open0 = man.curve[0].open;
+      const f = Math.max(0, (open - open0) / 100);
+      const Q = f > 0.002 ? this._holeQuantiles() : null;
+      if (Q) {
+        frac = Math.min(0.97, Q.base * Math.min(1, f / 0.03) + f);
+        thr = Q.v[Math.min(Q.v.length - 1, Math.floor(frac * Q.v.length))] + 1e-3;
+      }
+    }
+    for (const [mat, flip] of [[m.faceMat, 0], [m.backMat, 1], [m.napMat, 1]]) {
+      const u = mat && mat.dyeUniforms;
+      if (!u || !u.uHole) continue;
+      u.uHole.value.set(thr, flip, frac, 0);
+      if (!u.uHoleMap.value) u.uHoleMap.value = m.heightFront;
+    }
+  }
+
+  // ── Benchmarks: chalk lines on the cloth, as a tester marks them ────────
+  // Three wale lines (the grain) and three course lines through the middle
+  // of the view, riding the cloth: they show the neck, the bow and the lean.
+  _buildBench() {
+    const m = this._macro;
+    if (!m) return;
+    const c = m.cloth;
+    if (!this._bench) {
+      const mat = new THREE.LineBasicMaterial({ color: 0xe11d48, transparent: true, opacity: 0.95 });
+      const group = new THREE.Group();
+      const W = c.p.maxX - c.p.minX, H = (c.sny - 1) * c.sh;
+      const col = (x) => Math.max(0, Math.min(c.rnx - 1, Math.round((x - c.p.minX) / W * (c.rnx - 1))));
+      const row = (y) => Math.max(0, Math.min(c.rny - 1, Math.round((y - c.p.minY) / H * (c.rny - 1))));
+      // centred on the middle of the sheet, 4 cm apart
+      const cx = (c.p.minX + c.p.maxX) / 2, cy = c.p.minY + H / 2, step = 4 * m.cm;
+      const lines = [];
+      const mk = (kind, idx) => {
+        const n = kind === 'col' ? c.rny : c.rnx;
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
+        const l = new THREE.Line(g, mat);
+        l.frustumCulled = false;
+        l.userData = { kind, idx, n };
+        lines.push(l); group.add(l);
+      };
+      for (const k of [-1, 0, 1]) { mk('col', col(cx + k * step)); mk('row', row(cy + k * step)); }
+      m.group.add(group);
+      this._bench = { group, lines, mat };
+    }
+    this._bench.group.visible = true;
+    this._updateBench();
+  }
+
+  _updateBench() {
+    const b = this._bench, m = this._macro;
+    if (!b || !b.group.visible || !m) return;
+    const c = m.cloth, mid = c.mid, nrm = c.nrm, lift = c.p.fold.t * 0.5 + 0.02 * m.cm;
+    for (const l of b.lines) {
+      const { kind, idx, n } = l.userData;
+      const a = l.geometry.attributes.position.array;
+      for (let k = 0; k < n; k++) {
+        const v = (kind === 'col' ? k * c.rnx + idx : idx * c.rnx + k) * 3;
+        a[k * 3] = mid[v] + nrm[v] * lift;
+        a[k * 3 + 1] = mid[v + 1] + nrm[v + 1] * lift;
+        a[k * 3 + 2] = mid[v + 2] + nrm[v + 2] * lift;
+      }
+      l.geometry.attributes.position.needsUpdate = true;
+    }
+  }
+
+  // ── The loop model, rebuilt stretched ───────────────────────────────────
+  // Scaling the loop model would scale the yarn with it (fat stretched
+  // yarn, same gaps). Instead its paths are moved to the stretched state
+  // and re-tubed at the yarn's own (slightly thinned) radius, so zooming in
+  // shows the loops opened and the light through them.
+  _microStretchAt(ePct, settled) {
+    const m = this._man;
+    if (!m) return;
+    const perp = this._sAt('perp', ePct, m.curve) / 100;
+    const gam = Math.tan(this._sAt('skew', ePct, m.curve) * Math.PI / 180) - m.tan0;
+    const stage = this._sAt('stage', ePct, m.curve);
+    const thin = stage === 'loops' ? 1 : stage === 'tightening' ? 0.95 : 0.88;
+    // only rebuilt when the loops are actually on screen
+    if (this._mode !== 'micro') { this._pendingMicro = { ePct, settled }; return; }
+    this._pendingMicro = null;
+    const e = ePct / 100;
+    this._microStretch(m.dir === 'width'
+      ? { sx: 1 + e, sy: 1 + perp, gam, thin }
+      : { sx: 1 + perp, sy: 1 + e, gam, thin }, settled);
+  }
+
+  _microStretch(st) {
+    const src = this._microSrc, group = this.group;
+    if (!src || !group) return;
+    if (this._microKids) {
+      for (const k of this._microKids) { group.remove(k); if (k.geometry) k.geometry.dispose(); }
+      this._microKids = null;
+    }
+    const t0 = performance.now();
+    if (!st || (Math.abs(st.sx - 1) < 0.01 && Math.abs(st.sy - 1) < 0.01 && Math.abs(st.gam) < 0.005)) {
+      // back to the knitted loops and everything that rides on them
+      if (this._microHidden) { for (const [o, v] of this._microHidden) o.visible = v; this._microHidden = null; }
+      this._microBuilt = null;
+      this._syncBacking();
+      if (this._hair) this._hair.mesh.visible = this._hairWanted();
+      return;
+    }
+    if (!this._microHidden) {
+      this._microHidden = group.children.map((o) => [o, o.visible]);
+      for (const o of group.children) o.visible = false;
+    }
+    const c = src.center;
+    const paths = src.paths.map((p) => ({
+      ...p,
+      points: p.points.map((v) => {
+        const dx = v.x - c.x, dy = v.y - c.y;
+        return new THREE.Vector3(c.x + dx * st.sx + st.gam * dy * st.sy, c.y + dy * st.sy, v.z);
+      }),
+    }));
+    const built = buildFabricMesh(paths, this._material, { ...src.meshOpts, radius: src.radius * st.thin });
+    const kids = [...built.children];
+    for (const k of kids) { built.remove(k); group.add(k); }
+    this._microKids = kids;
+    this._microBuilt = { sx: st.sx, sy: st.sy };
+    this._microMs = performance.now() - t0;
+    if (this._backing && this._backing.mesh) this._backing.mesh.visible = false;
+    if (this._sim) this._syncAnchor();
   }
 
   _buildFabric() {
@@ -593,6 +1081,13 @@ export class Knit3D {
       twistPitch: twistPitch(radius, this.opts.twist),
     });
     this.group = group;
+    // What the manual stretch rebuilds the loops from (_microStretch): the
+    // draped paths, the yarn radius, and which children are yarn.
+    this._microSrc = {
+      paths, radius,
+      meshOpts: { radius, radialSegments: 10, shadows: this._shadows, fiberType: this.opts.fiberType, twistPitch: twistPitch(radius, this.opts.twist) },
+      kids: [...group.children],
+    };
 
     // measure the loops, then add an opaque backing so the swatch has body and
     // the valleys / eyelets read as dark shadow instead of see-through gaps.
@@ -625,6 +1120,7 @@ export class Knit3D {
 
     // centre on the loops + fit so the fabric COVERS the frame (fills edge-to-edge)
     group.position.sub(center);
+    this._microSrc.center = center.clone();
 
     // setView('back') needs to spin the fabric 180° around its own visual
     // centre — but `group`'s own local origin is nowhere near that centre
@@ -869,6 +1365,8 @@ export class Knit3D {
       melMat, melF: -1, rebake: bake.rebake || null,
       disposeTile: melMat ? () => { bake.release(); disposeTile(); } : null,
       targets: bake.targets, size: box.getSize(new THREE.Vector3()),
+      // the face's baked height: where gaps open under stretch (_setHoles)
+      heightFront: bake.front.height,
       viewW: 14 * cm,                            // default view: ~14 cm across
       fullW: 0.62 * S * cm * 2,                  // fully zoomed out: the whole piece
     };
@@ -901,6 +1399,7 @@ export class Knit3D {
     const mode = micro ? 'micro' : 'macro';
     if (mode === this._mode) return;
     this._mode = mode;
+    if (micro && this._pendingMicro && this._man) { const p = this._pendingMicro; this._microStretchAt(p.ePct, p.settled); }
     this.group.visible = micro;
     this._macro.group.visible = !micro;
     this.camera.near = micro ? 0.1 : 1.0;
@@ -1088,7 +1587,7 @@ export class Knit3D {
 
   _hairWanted() {
     return (this._lodTier === 'near' || this._lodTier === 'ultra') &&
-      !(this._material && this._material.wireframe);
+      !(this._material && this._material.wireframe) && !this._microBuilt;
   }
 
   // Brushed fleece back: a dense shell-textured nap on the fleecy floats
@@ -1369,6 +1868,7 @@ export class Knit3D {
 
   _syncBacking() {
     if (!this._backing || !this._backing.mesh) return;
+    if (this._microBuilt) { this._backing.mesh.visible = false; return; }
     const wire = !!(this._material && this._material.wireframe);
     const napShown = this._backingYieldsToNap && this._pile && this._pile.mesh && this._pile.mesh.visible;
     const k = this._backingFade();
@@ -1531,6 +2031,8 @@ export class Knit3D {
       m.targets.forEach((t) => t.dispose());
     }
     if (this._stretchUi) this._stretchUi.remove();
+    if (this._bench) { this._bench.lines.forEach((l) => { l.geometry.dispose(); }); this._bench.mat.dispose(); }
+    if (this._holeRT) this._holeRT.dispose();
     if (this.renderer && this._onDown) {
       const el = this.renderer.domElement;
       el.removeEventListener('pointerdown', this._onDown, true);

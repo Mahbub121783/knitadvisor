@@ -57,6 +57,13 @@ export function patchDye(material, o = {}) {
       : new THREE.Vector4(0, 1, 1, 0) },
     uClothBias: { value: o.cloth && o.cloth.bias != null ? o.cloth.bias : 1.0 },
     uCloth: { value: o.cloth ? new THREE.Vector4(o.cloth.wales, o.cloth.courses, o.cloth.tileCm, o.cloth.amp) : new THREE.Vector4() },
+    // Gaps under stretch (knit-renderer _setHoles): x = height threshold on
+    // the FACE's baked height (0 = closed), y = 1 on the back sheet, whose u
+    // runs mirrored. Cut where the face is deeper than the threshold.
+    // z = the open fraction itself: where a texel is under a pixel the cut
+    // map aliases, so far away the same fraction is cut as a fine dither.
+    uHole: { value: new THREE.Vector4(0, 0, 0, 0) },
+    uHoleMap: { value: null },
   };
   const cloth = !!o.cloth;
   // Not in userData: Material.clone() JSON-copies userData.
@@ -70,7 +77,7 @@ export function patchDye(material, o = {}) {
     }
     const decl = [
       'uniform float uFade;', 'uniform vec3 uFadeColor;', 'uniform float uChalk;',
-      'uniform vec4 uCloth;', 'uniform float uClothBias;', 'uniform sampler2D uHeightMap;', 'uniform vec2 uCavity;', 'uniform vec4 uRelief;',
+      'uniform vec4 uCloth;', 'uniform float uClothBias;', 'uniform vec4 uHole;', 'uniform sampler2D uHoleMap;', 'uniform sampler2D uHeightMap;', 'uniform vec2 uCavity;', 'uniform vec4 uRelief;',
       'uniform float uMel;', 'uniform float uMelF;', 'uniform vec3 uMelLight;', 'uniform sampler2D uMelMap;',
       exposure === 'attr' ? 'varying float vExposure;' : 'uniform sampler2D uExpMap;',
     ].join('\n');
@@ -90,7 +97,18 @@ export function patchDye(material, o = {}) {
         #else
           vec2 dyeUv = vec2(0.0);
         #endif
+        float holeTint = 0.0;
         ${cloth ? `
+        if (uHole.x > 0.0) {
+          vec2 hUv = uHole.y > 0.5 ? vec2(-dyeUv.x, dyeUv.y) : dyeUv;
+          vec2 hg = hUv * vec2(textureSize(uHoleMap, 0));
+          float far = smoothstep(1.5, 4.0, max(length(dFdx(hg)), length(dFdy(hg))));
+          bool nearCut = textureLod(uHoleMap, hUv, 0.0).r < uHole.x;
+          // up close the gaps are cut; far off they are finer than a pixel
+          // and read as the light behind coming through
+          if (nearCut && far < 0.5) discard;
+          holeTint = far * uHole.z * 0.9;
+        }
         // Yarn irregularity: no real yarn is even, so a knit is never one flat
         // shade. Each course is knitted from a slightly different stretch of
         // yarn (count CV), which shows as faint course-wise shade steps, and
@@ -120,6 +138,7 @@ export function patchDye(material, o = {}) {
         diffuseColor.rgb = mix(diffuseColor.rgb, uFadeColor * aoK, uFade * smoothstep(0.3, 0.95, ${expo}));
         float dyeLum = dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722));
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(dyeLum * 1.06), uChalk);
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.7), holeTint);
       }`);
     if (cloth) {
       // Normal-variance roughness (Toksvig): far away, a mipmap averages the

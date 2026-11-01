@@ -70,6 +70,7 @@ const { getPattern: getEnginePattern } = require('./domain/pattern-engine');
 const { analyzePique, isPique, solvePiqueRecipe, piqueGsmFor } = require('./domain/pique-engine');
 const { analyzeFleece, isFleeceFamily } = require('./domain/fleece-engine');
 const { analyzePlushTerry, isPlushTerry } = require('./domain/terry-engine');
+const { analyzeStretch } = require('./domain/stretch-engine');
 const { loopbackPattern } = require('./domain/terry-loops');
 const { analyzeCriticalPath } = require('./domain/critical-path');
 const { recommendMachine } = require('./domain/machine-optimizer');
@@ -857,6 +858,30 @@ function calculate(params) {
   }
   trace.push({ step: '6.1', action: 'quality_prediction', shrinkage: qualityResult.shrinkage, spirality: qualityResult.spirality });
 
+  // --- 6.1c Stretch, recovery, grain under load and gaping (stretch-engine.js)
+  let stretchResult = null;
+  try {
+    const fibersForStretch = parsedComp ? parsedComp.fibers : { cotton: 100 };
+    stretchResult = analyzeStretch({
+      fabricId: fabricDef.id,
+      category: fabricDef.category,
+      gsm,
+      loopMm: llResult && llResult.ll_mm > 0 && !llResult.is_course_length ? llResult.ll_mm : null,
+      countNe: countResult.count_ne || null,
+      tex: tfResult ? tfResult.tex : null,
+      yarnDiaMm: yarnExpertise ? yarnExpertise.diameter_mm : null,
+      fibers: fibersForStretch,
+      elastanePct: parsedComp ? parsedComp.elastane_pct || 0 : 0,
+      lycraDenier: compModifiers ? compModifiers.lycra_denier : null,
+      feedType: compModifiers ? compModifiers.feed_type : null,
+      rkm: yarnExpertise && yarnExpertise.properties ? yarnExpertise.properties.tenacity_rkm : null,
+      spiralityPct: qualityResult.spirality ? qualityResult.spirality.predicted_pct : 0,
+    });
+    trace.push({ step: '6.1c', action: 'stretch', result: `${stretchResult.kind}: width jams at ${stretchResult.directions.width.jam_pct}%, length at ${stretchResult.directions.length.jam_pct}%` });
+  } catch (e) {
+    warnings.push('Stretch model unavailable for this fabric.');
+  }
+
   // --- 6.1b Finished width prediction (grey open width × width shrinkage) ---
   // Gives a specific FINISHED dia/width instead of a range, per factory request.
   if (optimalMachine && optimalMachine.ok && optimalMachine.dia && optimalMachine.dia.open_width_in) {
@@ -1435,6 +1460,9 @@ function calculate(params) {
     pattern: patternResult || null,
     // Piqué fabrics only: what the tucks do to the cloth (pique-engine.js).
     pique: piqueResult,
+    // Stretch and recovery per direction, grain under load, open area — the
+    // load–extension curve the 3D stretch test plays (stretch-engine.js).
+    stretch: stretchResult,
     critical_path: cpaResult || null,
 
     // Net-to-gross fabric consumption + full CMT/FOB estimate — null unless

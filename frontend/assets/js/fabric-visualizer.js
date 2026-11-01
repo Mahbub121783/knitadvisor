@@ -2364,6 +2364,9 @@ class FabricVisualizer {
       // the fibre's own recovery from 1 % strain (Morton & Hearle, via the
       // engine) — feeds the stretch test's estimated recovery
       fibreRecovery1: ((((this.result.yarn || {}).expertise || {}).elastic_recovery || {}).from_1pct || {}).recovery,
+      // the engine's load-extension curves per direction (stretch-engine.js):
+      // drive the manual stretch test
+      stretch: this.result.stretch || null,
     };
 
     import('/assets/js/knit3d/index.js?v=20260608g').then(({ Knit3D, LIGHT_PRESETS, LIGHT_PRESET_ORDER }) => {
@@ -2409,10 +2412,13 @@ class FabricVisualizer {
         const act = e.target.getAttribute('data-act'); if (!act) return;
         if (act === 'front') this._fabric3d.setView('front');
         else if (act === 'back') this._fabric3d.setView('back');
-        else if (act === 'reset') this._fabric3d.resetView();
+        else if (act === 'reset') { this._fabric3d.resetView(); if (this._kst) this._kst.restart(); }
         else if (act === 'wire') e.target.classList.toggle('active', this._fabric3d.toggleWire());
         else if (act === 'handle') e.target.classList.toggle('active', this._fabric3d.toggleHandle());
-        else if (act === 'stretch') this._fabric3d.stretchTest();
+        else if (act === 'stretch') {
+          if (this._fabric3d.hasStretchModel) this._toggleStretchPanel(stage, e.target);
+          else this._fabric3d.stretchTest();
+        }
         else if (act === 'light') {
           lightIdx = (lightIdx + 1) % LIGHT_PRESET_ORDER.length;
           const key = LIGHT_PRESET_ORDER[lightIdx];
@@ -2430,6 +2436,183 @@ class FabricVisualizer {
       // engine unavailable → graceful fallback
       this._renderCubeFallback();
     });
+  }
+
+  // ── Manual stretch test panel (3D view) ────────────────────────────────
+  // Pick a direction and a stretch; the cloth is clamped and pulled to it,
+  // and the engine's curve (stretch-engine.js) says what that costs: the
+  // force, the stage the loops are in, how far the cloth narrows, how the
+  // grain line leans and how much light comes through. Release shows what
+  // comes back and what stays.
+  _toggleStretchPanel(stage, btn) {
+    if (this._kst) {
+      this._kst.el.remove();
+      this._kst = null;
+      btn.classList.remove('active');
+      this._fabric3d.resetCloth();
+      return;
+    }
+    btn.classList.add('active');
+    const S = this.result.stretch;
+    const el = document.createElement('div');
+    el.className = 'kst';
+    el.innerHTML = `
+      <div class="kst-row">
+        <span class="kst-lab">Pull</span>
+        <span class="kst-seg" data-k="dir"><button data-v="width" class="on">Across width</button><button data-v="length">Along length</button></span>
+        <span class="kst-lab">Hold</span>
+        <span class="kst-seg" data-k="hold"><button data-v="quick" class="on">A few seconds</button><button data-v="2h" title="Held stretched for two hours, as the ASTM D2594 growth test">2 hours</button></span>
+      </div>
+      <div class="kst-row"><span class="kst-big">0%</span>
+        <button class="ka3d-btn" data-x="release" title="Let go of the moving clamp and watch it come back">Release</button>
+        <button class="ka3d-btn" data-x="zero">Back to 0</button>
+        <span class="kst-lab" style="margin-left:auto">${S.kind_label}</span></div>
+      <div class="kst-slider"><input type="range" min="0" max="100" step="0.5" value="0" aria-label="Stretch percent"><div class="kst-mks"></div></div>
+      <div class="kst-stage loops">Drag the slider to pull the cloth.</div>
+      <div class="kst-grid"></div>
+      <div class="kst-rel" hidden></div>
+      <div class="kst-chart"></div>
+      <div class="kst-note"></div>`;
+    stage.appendChild(el);
+    const st = { dir: 'width', hold: 'quick', last: null };
+    const $ = (q) => el.querySelector(q);
+    const slider = $('input[type=range]');
+    const D = () => S.directions[st.dir];
+    const STAGE = {
+      loops: 'Loops reshaping — easy stretch, and it comes back',
+      tightening: 'Loops straightening, yarn sliding at the crossings — part of this stays as growth',
+      jammed: 'Loops jammed — the yarn itself is stretching now; the load climbs steeply',
+      damage: 'Yarn past its yield — growth that will not come back, gaps opening',
+      break: 'At the breaking point — yarns start to snap',
+    };
+    const fmt = (v, d = 1) => (v == null || !isFinite(v) ? '—' : Number(v).toFixed(d));
+    const kgfLoop = (t) => t * 2 * 0.125 / 9.81;
+
+    const marks = () => {
+      const d = D(), max = d.break_pct;
+      slider.max = String(max);
+      const list = [];
+      if (d.standard.loose.stretch_pct != null) list.push([d.standard.loose.stretch_pct, 'loose fit', 'std', 'Stretch at the ASTM D2594 loose-fitting load (2.27 kgf)']);
+      if (d.standard.form.stretch_pct != null) list.push([d.standard.form.stretch_pct, 'body fit', 'std', 'Stretch at the ASTM D2594 form-fitting load (4.54 kgf)']);
+      if (d.gape_onset_pct != null) list.push([d.gape_onset_pct, 'gaps', 'warn', 'Light starts to show through']);
+      list.push([d.jam_pct, 'jam', 'warn', 'Loops fully straightened — the yarn stretches from here']);
+      list.push([d.break_pct, 'break', 'bad', 'Yarns start to break']);
+      list.sort((a, b) => a[0] - b[0]);
+      // labels that would overlap drop to a second line
+      let lastX = -100, two = false;
+      $('.kst-mks').innerHTML = list.map(([v, t, c, title]) => {
+        const x = Math.max(0, Math.min(100, v / max * 100));
+        const low = x - lastX < 12;
+        if (!low) lastX = x; else two = true;
+        return `<span class="kst-mk ${c}" style="left:${x}%;top:${low ? 34 : 22}px" title="${title}">${t}</span>`;
+      }).join('');
+      $('.kst-slider').style.paddingBottom = two ? '36px' : '22px';
+    };
+
+    const chart = (s) => {
+      const d = D(), c = d.curve, max = d.break_pct;
+      const W = 520, H = 130, L = 34, B = 18, T = 6, R = 6;
+      const formT = 4.54 * 9.81 / (2 * 0.125);
+      const jamRow = c.find((r) => r.e >= d.jam_pct) || c[c.length - 1];
+      const yMax = Math.max(formT * 2.2, jamRow.t * 1.3);
+      const X = (e) => L + (e / max) * (W - L - R);
+      const Y = (t) => H - B - Math.min(1, t / yMax) * (H - B - T);
+      const col = { loops: '#10b98122', tightening: '#f59e0b22', jammed: '#f9731622', damage: '#ef444422', break: '#ef444433' };
+      let bands = '', i0 = 0;
+      for (let i = 1; i <= c.length; i++) {
+        if (i === c.length || c[i].stage !== c[i0].stage) {
+          const x0 = X(c[i0].e), x1 = X(i === c.length ? max : c[i].e);
+          bands += `<rect x="${x0}" y="${T}" width="${Math.max(0, x1 - x0)}" height="${H - B - T}" fill="${col[c[i0].stage]}"/>`;
+          i0 = i;
+        }
+      }
+      const pts = c.map((r) => `${X(r.e).toFixed(1)},${Y(r.t).toFixed(1)}`).join(' ');
+      // loose-fit label at the left, body-fit at the right: the two lines sit close
+      const hl = [[2.27, 'loose', false], [4.54, 'body', true]].map(([kg, t, right]) => {
+        const y = Y(kg * 9.81 / (2 * 0.125));
+        return `<line x1="${L}" x2="${W - R}" y1="${y}" y2="${y}" stroke="#2563eb" stroke-dasharray="3 3" stroke-width="1" opacity=".55"/><text x="${right ? W - R - 2 : L + 4}" y="${y - 3}" text-anchor="${right ? 'end' : 'start'}" font-size="9" fill="#2563eb">${t}-fit load</text>`;
+      }).join('');
+      let marker = '';
+      if (s) {
+        marker = `<circle cx="${X(s.e)}" cy="${Y(s.t)}" r="4.5" fill="#2563eb" stroke="#fff" stroke-width="1.5"/>`;
+        if (s.release) {
+          const gx = X(s.release.g);
+          marker = `<circle cx="${X(s.release.e)}" cy="${Y(c.find((r) => r.e >= s.release.e - 1e-6)?.t ?? s.t)}" r="3.5" fill="none" stroke="#2563eb" stroke-width="1.5"/>` + marker;
+          marker += `<line x1="${X(s.release.e)}" x2="${gx}" y1="${H - B - 4}" y2="${H - B - 4}" stroke="#047857" stroke-width="2" marker-end="url(#kstArr)"/>`
+            + `<text x="${gx + 3}" y="${H - B - 8}" font-size="9" fill="#047857">stays ${fmt(s.release.g)}%</text>`;
+        }
+      }
+      const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => `<text x="${X(f * max)}" y="${H - 5}" font-size="9" text-anchor="middle" fill="#778">${Math.round(f * max)}%</text>`).join('');
+      $('.kst-chart').innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Load against stretch">
+        <defs><marker id="kstArr" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#047857"/></marker></defs>
+        ${bands}<line x1="${L}" x2="${L}" y1="${T}" y2="${H - B}" stroke="#ccd"/><line x1="${L}" x2="${W - R}" y1="${H - B}" y2="${H - B}" stroke="#ccd"/>
+        <text x="4" y="${T + 8}" font-size="9" fill="#778">load</text>${hl}
+        <polyline points="${pts}" fill="none" stroke="#1d2433" stroke-width="1.8"/>${marker}${ticks}</svg>`;
+    };
+
+    const render = (s) => {
+      st.last = s;
+      const d = D();
+      const sg = $('.kst-stage');
+      if (s.release) {
+        const r = s.release;
+        $('.kst-big').textContent = `${fmt(s.e, s.e < 10 ? 1 : 0)}%`;
+        sg.className = 'kst-stage loops';
+        sg.textContent = s.phase === 'done'
+          ? `Let go at ${fmt(r.e)}% — the cloth came back to ${fmt(r.g)}% longer than it started (growth). Move the slider to pull again.`
+          : `Let go at ${fmt(r.e)}% — coming back…`;
+      } else {
+        $('.kst-big').textContent = `${fmt(s.e, s.e < 10 ? 1 : 0)}%`;
+        sg.className = `kst-stage ${s.stage}`;
+        sg.textContent = s.e < 0.2 ? 'Drag the slider to pull the cloth.' : STAGE[s.stage] || '';
+      }
+      const rest = d.curve[0];
+      const dSkew = s.skew - rest.skew;
+      const openUp = s.open - rest.open;
+      $('.kst-grid').innerHTML = `
+        ${s.release ? '' : `<div><b>${fmt(s.f5)} N</b><span>on a 5 cm strip · ${fmt(kgfLoop(s.t), 2)} kgf on the D2594 loop</span></div>`}
+        <div><b>${fmt(s.perp)}%</b><span>${st.dir === 'width' ? 'shorter along the length' : 'narrower across the width'} (the loops borrow yarn)</span></div>
+        <div><b style="color:${s.skew > 2.86 ? '#dc2626' : 'inherit'}">${fmt(s.skew, 2)}°</b><span>grain line lean${Math.abs(dSkew) > 0.05 ? ` (${dSkew > 0 ? '+' : ''}${fmt(dSkew, 2)}° from rest)` : ''} · limit 2.86° (5 %)</span></div>
+        <div><b style="color:${openUp >= 8 ? '#dc2626' : 'inherit'}">${fmt(s.open)}%</b><span>open area (${fmt(rest.open)}% at rest)${openUp >= 8 ? ' — shows through' : ''}</span></div>
+        <div><b>${fmt(s.ys, 2)}%</b><span>strain in the yarn itself</span></div>
+        ${s.release ? '' : `<div><b>${fmt(s.rec)}%</b><span>of the stretch would come back if let go now</span></div>`}`;
+      const rel = $('.kst-rel');
+      if (s.release) {
+        const r = s.release;
+        rel.hidden = false;
+        rel.innerHTML = `<b>Released from ${fmt(r.e)}%</b>${r.hold === '2h' ? ' after a 2-hour hold' : ''}:
+          recovered <b>${fmt(r.rec)}%</b> of the stretch · growth <b>${fmt(r.g)}%</b> a minute later,
+          <b>${fmt(r.g1h)}%</b> after an hour's rest, <b>${fmt(r.gw)}%</b> after a wash${s.phase === 'done' ? '' : ' …'}`;
+      } else rel.hidden = true;
+      chart(s);
+    };
+
+    const begin = () => {
+      marks();
+      slider.value = '0';
+      this._fabric3d.stretchBegin(st.dir, render);
+    };
+    el.addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      const seg = b.closest('.kst-seg');
+      if (seg) {
+        seg.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
+        st[seg.dataset.k] = b.dataset.v;
+        if (seg.dataset.k === 'dir') begin();
+        return;
+      }
+      if (b.dataset.x === 'release') this._fabric3d.stretchRelease(st.hold);
+      if (b.dataset.x === 'zero') begin();
+    });
+    slider.addEventListener('input', () => this._fabric3d.stretchTo(Number(slider.value)));
+    const g = (S.directions.width.standard || {}).growth;
+    const po = S.po_spec || {};
+    $('.kst-note').innerHTML = `Pulled between two clamps on the table; the red lines are chalk benchmarks — watch them neck, bow and lean.
+      ${g ? `ASTM D2594 growth (held 2 h at ${fmt(g.held_at_pct)}% across): ${fmt(g.after_60s_pct)}% after 1 min, ${fmt(g.after_1h_pct)}% after 1 h. ` : ''}
+      Test to ${po.standard || 'ASTM D2594'}. Curve from loop geometry, yarn strength and measured fibre recovery; jam point, friction set and gaps are modelled.`;
+    this._kst = { el, restart: begin };
+    begin();
   }
 
   _renderCubeFallback() {
@@ -2620,7 +2803,30 @@ class FabricVisualizer {
     .ka3d-edge-b{bottom:0;left:0;width:460px;height:var(--thick);
       transform:rotateX(90deg) translateZ(calc(-160px + var(--thick)/2));transform-origin:bottom;
       background:linear-gradient(90deg,rgba(255,255,255,.05),rgba(0,0,0,.5));}
-    .ka3d-hint{font:10px var(--mono,monospace);color:var(--t3,#778);}`;
+    .ka3d-hint{font:10px var(--mono,monospace);color:var(--t3,#778);}
+    .kst{width:100%;max-width:560px;border:1px solid rgba(0,0,0,.10);border-radius:12px;padding:10px 12px;background:var(--s1,#fff);
+      font:12px/1.4 var(--sans,system-ui,sans-serif);color:var(--t1,#1d2433);box-sizing:border-box;}
+    .kst-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:8px;}
+    .kst-lab{font:600 10px var(--mono,monospace);color:var(--t3,#778);text-transform:uppercase;letter-spacing:.04em;}
+    .kst-seg{display:inline-flex;border:1px solid rgba(0,0,0,.14);border-radius:7px;overflow:hidden;}
+    .kst-seg button{font:600 11px var(--mono,monospace);padding:5px 9px;border:0;background:#fff;color:#444;cursor:pointer;}
+    .kst-seg button.on{background:#eaf1ff;color:#2563eb;}
+    .kst-big{font:700 22px/1 var(--mono,monospace);color:#2563eb;min-width:74px;}
+    .kst-slider{position:relative;padding:2px 0 22px;}
+    .kst-slider input{width:100%;accent-color:#2563eb;margin:0;}
+    .kst-mk{position:absolute;top:22px;transform:translateX(-50%);font:600 9px var(--mono,monospace);color:var(--t3,#778);white-space:nowrap;}
+    .kst-mk::before{content:'';position:absolute;left:50%;top:-6px;width:1px;height:5px;background:currentColor;}
+    .kst-mk.bad{color:#dc2626;} .kst-mk.warn{color:#d97706;} .kst-mk.std{color:#2563eb;}
+    .kst-stage{padding:6px 9px;border-radius:8px;font-weight:600;margin-bottom:8px;}
+    .kst-stage.loops{background:#ecfdf5;color:#047857;} .kst-stage.tightening{background:#fffbeb;color:#b45309;}
+    .kst-stage.jammed{background:#fff7ed;color:#c2410c;} .kst-stage.damage,.kst-stage.break{background:#fef2f2;color:#b91c1c;}
+    .kst-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px 12px;margin-bottom:8px;}
+    .kst-grid div{display:flex;flex-direction:column;}
+    .kst-grid b{font:700 14px var(--mono,monospace);}
+    .kst-grid span{font-size:10.5px;color:var(--t3,#778);}
+    .kst-rel{border-top:1px dashed rgba(0,0,0,.14);padding-top:8px;margin-bottom:6px;}
+    .kst svg{width:100%;height:auto;display:block;}
+    .kst-note{font-size:10.5px;color:var(--t3,#778);margin-top:6px;}`;
     const style = document.createElement('style');
     style.id = 'ka3d-style';
     style.textContent = css;

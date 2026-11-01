@@ -112,6 +112,7 @@ export class ClothSim {
     this.v.fill(0);
     this.dL.set(this.dL0);
     this.limX = this.limY = 0.03;
+    this.flatZ = null;
     this.muTable = this.mech.frictionTable;
     this.groups = [];
     this.w.fill(1 / this.mass);
@@ -285,9 +286,14 @@ export class ClothSim {
 
   _solveTable() {
     const { x, n, w } = this;
+    // flatZ: a cloth pressed flat on the table (the stretch test) — it may
+    // not lift more than that, so its in-plane compression cannot buckle up
+    const top = this.flatZ != null ? this.flatZ : Infinity;
     for (let p = 0; p < n; p++) {
       if (w[p] === 0) continue;
-      if (x[p * 3 + 2] < 0) x[p * 3 + 2] = 0;
+      const o = p * 3 + 2;
+      if (x[o] < 0) x[o] = 0;
+      else if (x[o] > top) x[o] = top;
     }
   }
 
