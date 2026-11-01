@@ -1247,6 +1247,8 @@ class FabricVisualizer {
       // and the thickness it computed (terry-engine.js) — the 3D loops are
       // built to these, not to a generic pile.
       plush: this._plushGeom(),
+      // Loopback terry: the derived loop height (fleece-engine loop block)
+      loopback: (this.result.fleece && this.result.fleece.loop) ? { heightMm: this.result.fleece.loop.loop_height_mm } : null,
     };
   }
 
@@ -1453,6 +1455,7 @@ class FabricVisualizer {
         type: 'plush', base: 'single', label: cut ? 'velour' : (id === 'velour_plush' ? 'plush' : 'plush terry'),
         mesh: false, brush: cut, pile: cut ? 'velour' : 'plush', cut,
         every: plush && plush.variant.pile_every === 2 ? 2 : 1,
+        arrangement: plush && plush.variant.arrangement ? plush.variant.arrangement : 'full',
       };
     }
     // French terry's catalogue name says "Inlay Fleece", but it is the
@@ -2343,7 +2346,7 @@ class FabricVisualizer {
     const pique = this._piqueGeom();
     const glOpts = {
       dyed: this._dyedColor, construction: con, countNe: opts.countNe,
-      loopNe: opts.loopNe, tieNe: opts.tieNe, plush: opts.plush,
+      loopNe: opts.loopNe, tieNe: opts.tieNe, plush: opts.plush, loopback: opts.loopback,
       tf: opts.tf, fiberType: opts.fiberType, sheen: opts.sheen, sample, sampleBack,
       physics: opts.physics, density: pique ? pique.density : opts.density, twist: this._yarnTwist(),
       // Piqué: held-loop elongation, cell relief, wale lean and which side is

@@ -45,6 +45,7 @@
 
 const reference = require('../reference');
 const fleece = require('./fleece-engine');
+const { PLUSH_SIZES, PLUSH_ARRANGEMENTS } = require('./terry-loops');
 
 const TERRY_IDS = ['terry_fabric', 'velour_plush'];
 const isPlushTerry = (id) => TERRY_IDS.includes(id);
@@ -145,7 +146,14 @@ function analyzePlushTerry(p) {
   const cellKey = CELLULOSIC.find(k => shares[k]) || 'cotton';
   const allPoly = P >= 0.95 || (P + E >= 0.99 && !CELLULOSIC.some(k => shares[k]));
   const cut = v.cut && p.cut !== false;
-  const every = +p.pileEvery === 2 ? 2 : 1;
+  // loop layout: which needle positions carry a pile loop (terry-loops.js);
+  // `every` = 1/share, so a selected position's extra 2h is spread over 1/φ
+  const arrKey = PLUSH_ARRANGEMENTS[p.loopArrangement] ? p.loopArrangement : (+p.pileEvery === 2 ? 'alternate' : 'full');
+  const arrangement = PLUSH_ARRANGEMENTS[arrKey];
+  const every = 1 / arrangement.phi;
+  // loop size preset → sinker height, unless a height is given
+  const sizeKey = PLUSH_SIZES[p.loopSize] ? p.loopSize : null;
+  const givenH = +p.pileHeightMm > 0 ? +p.pileHeightMm : (sizeKey ? PLUSH_SIZES[sizeKey].h : null);
   const warnings = [];
 
   const wpc = M.wpcPerG * G;
@@ -167,19 +175,19 @@ function analyzePlushTerry(p) {
   // ---- the balance for any pile yarn and sinker height ----
   const cutNominal = +p.cutHeightMm > 0 ? +p.cutHeightMm : (P >= 0.5 ? 1.2 : 1.5);   // MODELLED
   const cutAt = (h) => (cut ? Math.min(cutNominal, h - 0.3) : h);
-  const geom = (pileTex, h) => {
+  const geom = (pileTex, h, ev = every) => {
     const lg = Math.sqrt(ground.tex + pileTex) / M.tf;                 // mm, plated bundle at the measured TF
     const cpc = M.kc * 10 / lg;
     const c = cutAt(h);
-    const lpKnit = lg + 2 * h / every;                                  // as knitted
-    const lpFin = lg + 2 * c / every;                                   // after shearing (velour)
+    const lpKnit = lg + 2 * h / ev;                                     // as knitted
+    const lpFin = lg + 2 * c / ev;                                      // after shearing (velour)
     const gsmOf = (lp) => cpc * wpc * (lg * ground.tex + lp * pileTex) / 100 / (1 - E);
     return { lg, cpc, c, lpKnit, lpFin, gsmFin: gsmOf(lpFin), gsmGrey: gsmOf(lpKnit) };
   };
-  const solvePileTex = (h) => {
+  const solvePileTex = (h, ev = every) => {
     let tex = 25;
     for (let i = 0; i < 30; i++) {
-      const g = geom(tex, h);
+      const g = geom(tex, h, ev);
       const need = gsm * (1 - E) * 100 / (g.cpc * wpc);                 // Σ l·tex per needle-course
       const t2 = Math.max(3, (need - g.lg * ground.tex) / g.lpFin);
       if (Math.abs(t2 - tex) < 1e-4) { tex = t2; break; }
@@ -217,13 +225,13 @@ function analyzePlushTerry(p) {
   if (+p.pileNe > 0 || +p.pileDenier > 0) {
     const ch = +p.pileDenier > 0 ? { den: +p.pileDenier } : { ne: +p.pileNe };
     const hx = solveHeight(texOfChoice(ch));
-    const h = +p.pileHeightMm > 0 ? +p.pileHeightMm : snap(hx, SINKERS);
+    const h = givenH || snap(hx, SINKERS);
     pick = { h, choice: ch, exact_tex: null };
-    basis = +p.pileHeightMm > 0 ? 'given pile yarn and sinker' : 'given pile yarn — sinker solved from the balance';
-  } else if (+p.pileHeightMm > 0) {
-    const h = +p.pileHeightMm, tex = solvePileTex(h);
+    basis = givenH ? 'given pile yarn and sinker' : 'given pile yarn — sinker solved from the balance';
+  } else if (givenH) {
+    const h = givenH, tex = solvePileTex(h);
     pick = { h, choice: pileLabelOf(tex), exact_tex: tex };
-    basis = 'given sinker — pile yarn solved from the balance';
+    basis = sizeKey && !(+p.pileHeightMm > 0) ? `${PLUSH_SIZES[sizeKey].label} (${h} mm sinker) — pile yarn solved from the balance` : 'given sinker — pile yarn solved from the balance';
   } else {
     const score = (r) => Math.abs(Math.log((r.exact_tex) / (ground.tex * ratioPref))) + 0.45 * Math.abs(r.h - hPref)
       + (Math.abs(r.gsm - gsm) / gsm > 0.06 ? 1 : 0);
@@ -316,7 +324,7 @@ function analyzePlushTerry(p) {
   if (E > 0) risks.push({ topic: 'Elastane', level: 'process', note: 'Elastane is plated with the ground yarn, never in the pile; heat-set before dyeing.' });
 
   // ---- route ----
-  const route = [`Knit (plush machine, ${r1(h)} mm sinker${every === 2 ? ', 1:1 pile selection' : ''})`];
+  const route = [`Knit (plush machine, ${r1(h)} mm sinker${arrKey !== 'full' ? `, ${arrangement.label.toLowerCase()} pile selection` : ''})`];
   if (P >= 0.15 || E > 0) route.push('Heat-set');
   if (cut) route.push('Shear grey (cut the loops open)');
   route.push('Scour / bleach', P >= 0.5 ? 'Disperse dye (HT)' : (P >= 0.15 ? 'Disperse + reactive dye (two-bath)' : 'Reactive dye'));
@@ -336,7 +344,26 @@ function analyzePlushTerry(p) {
 
   return {
     ok: true,
-    variant: { id: p.fabricId, name: cut ? v.name : (v.kind === 'velour' ? 'Plush (uncut loops)' : v.name), kind: v.kind, cut, pile_every: every },
+    variant: { id: p.fabricId, name: cut ? v.name : (v.kind === 'velour' ? 'Plush (uncut loops)' : v.name), kind: v.kind, cut, pile_every: Math.round(every), arrangement: arrKey },
+    loop: (() => {
+      // every size at this layout, and every layout at this sinker, for the
+      // same ground yarn and GSM
+      const sizes = Object.entries(PLUSH_SIZES).map(([k, z]) => {
+        const tex = solvePileTex(z.h), ch = pileLabelOf(tex);
+        return { key: k, label: z.label, sinker_mm: z.h, pile: ch.den ? `${ch.den}D` : `${ch.ne}/1`, pile_ne_exact: pileFilament ? null : r1(neOfTex(tex)) };
+      });
+      const arrangements = Object.entries(PLUSH_ARRANGEMENTS).map(([k, a]) => {
+        const ev = 1 / a.phi, tex = solvePileTex(h, ev), ch = pileLabelOf(tex), gg = geom(texOfChoice(ch), h, ev);
+        return { key: k, label: a.label, loop_share: Math.round(a.phi * 100), pile: ch.den ? `${ch.den}D` : `${ch.ne}/1`, loops_per_cm2: r1(gg.cpc * wpc * a.phi) };
+      });
+      return {
+        size: { key: sizeKey || 'custom', label: sizeKey ? PLUSH_SIZES[sizeKey].label : `${r2(h)} mm sinker`, sinker_mm: r2(h) },
+        arrangement: { key: arrKey, label: arrangement.label, loop_share_pct: Math.round(arrangement.phi * 100), look: arrangement.look },
+        loop_height_mm: r2(cut ? g.c : h), loops_per_cm2: r1(loopsPerCm2),
+        sizes, arrangements,
+        basis: 'A selected needle adds 2h of pile yarn; loop height = sinker height (velour: the cut height). Arrangements other than full plush need pile selection on the machine.',
+      };
+    })(),
     yarns,
     declaration: `Ground ${ground.label} · Pile ${pileLabel}`,
     pile: {
@@ -348,7 +375,9 @@ function analyzePlushTerry(p) {
       options: table.filter(r => r.exact_tex > 3 && (!cut || r.h >= cutNominal + 0.3 - 1e-9)).map(r => ({ sinker_mm: r.h, pile: r.choice.den ? `${r.choice.den}D` : `${r.choice.ne}/1`, gsm: r1(r.gsm), lint_pct: r.lint == null ? null : r1(r.lint * 100) })),
     },
     mass_balance: {
-      formula: 'GSM = cpc × wpc × (l_ground·tex_ground + l_pile·tex_pile) / 100;  l_pile = l_ground + 2h',
+      formula: arrKey === 'full'
+        ? 'GSM = cpc × wpc × (l_ground·tex_ground + l_pile·tex_pile) / 100;  l_pile = l_ground + 2h'
+        : `GSM = cpc × wpc × (l_ground·tex_ground + l_pile·tex_pile) / 100;  l_pile = l_ground + 2h × ${Math.round(arrangement.phi * 100)}% (needles with a loop)`,
       ground_sl_mm: r2(g.lg), pile_sl_mm: r2(g.lpKnit), tightness_factor: r3(M.tf),
       wales_per_cm: r2(wpc), courses_per_cm: r2(g.cpc), kc: r3(M.kc), gauge: G,
       gsm_target: gsm, gsm_at_chosen_counts: r1(g.gsmFin), deviation_pct: r1((g.gsmFin - gsm) / gsm * 100),

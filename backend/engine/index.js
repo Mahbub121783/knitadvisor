@@ -70,6 +70,7 @@ const { getPattern: getEnginePattern } = require('./domain/pattern-engine');
 const { analyzePique, isPique, solvePiqueRecipe, piqueGsmFor } = require('./domain/pique-engine');
 const { analyzeFleece, isFleeceFamily } = require('./domain/fleece-engine');
 const { analyzePlushTerry, isPlushTerry } = require('./domain/terry-engine');
+const { loopbackPattern } = require('./domain/terry-loops');
 const { analyzeCriticalPath } = require('./domain/critical-path');
 const { recommendMachine } = require('./domain/machine-optimizer');
 const { analyzeYarn, recommendYarnGrade } = require('./domain/yarn-engine');
@@ -433,6 +434,7 @@ function calculate(params) {
     fleeceResult = analyzeFleece({
       fabricId: fabricDef.id, gsm, gauge: gauge || 20, composition: parsedComp, rawComposition: composition,
       faceNe: countResult.count_ne, faceSlMm: llResult && llResult.ll_mm > 0 ? llResult.ll_mm : null,
+      loopSize: params.loop_size, loopLengthMm: params.loop_length_mm, loopArrangement: params.loop_arrangement,
       brushing: { passes: params.brush_passes, sheared: !!params.sheared, sides: params.brush_sides,
         brushed: /brush|raise/i.test(String(surface_finish || '')) },
     });
@@ -470,6 +472,7 @@ function calculate(params) {
       pileNe: params.pile_count, pileDenier: params.pile_denier,
       pileHeightMm: params.pile_height_mm || params.sinker_height_mm,
       pileEvery: params.pile_every, cutHeightMm: params.cut_height_mm,
+      loopSize: params.loop_size, loopArrangement: params.loop_arrangement,
       cut: params.velour_cut === false || params.velour_cut === 'false' ? false : undefined,
     });
     if (terryResult) {
@@ -1125,7 +1128,14 @@ function calculate(params) {
   }
 
   // --- 6.3 Dynamic Pattern & Structural Adaptation ---
-  const patternResult = getEnginePattern(fabricDef.id, gsm, gauge, composition);
+  let patternResult = getEnginePattern(fabricDef.id, gsm, gauge, composition);
+  // Loopback terry: the machine programme IS the loop layout the terry engine
+  // chose (tuck repeat and tuck sequence) — the 2-D chart and the 3-D loops
+  // both read it from here.
+  if (patternResult && fleeceResult && fleeceResult.loop) {
+    patternResult = { ...patternResult, ...loopbackPattern(fleeceResult.loop.arrangement.key),
+      structure_note: `${fleeceResult.loop.arrangement.label}: ${fleeceResult.loop.arrangement.look}` };
+  }
   trace.push({ step: '6.3', action: 'generate_pattern', result: patternResult ? 'SUCCESS' : 'FAILED' });
 
   // --- 6.3b Piqué structure (tuck geometry, cell relief, density at this GSM) ---
@@ -1500,6 +1510,13 @@ const ENGINE_INPUTS = Object.freeze([
   'country',
   // warp knit
   'denier', 'filaments', 'elastane_denier', 'elastane_pct',
+  // pile and loop fabrics (terry, plush, velour, fleece): loop size and layout,
+  // sinker height, brushing — read by the fleece and terry engines; they
+  // were never forwarded by the API before this list carried them
+  'loop_size', 'loop_arrangement', 'loop_length_mm',
+  'pile_height_mm', 'pile_every', 'cut_height_mm', 'velour_cut',
+  'ground_count', 'pile_count', 'ground_denier', 'pile_denier',
+  'brush_passes', 'brush_sides', 'sheared',
   // garment CMT costing + fabric consumption (all optional — garment_costing
   // stays null in the response unless both garment_weight_g and garment_type
   // are present)

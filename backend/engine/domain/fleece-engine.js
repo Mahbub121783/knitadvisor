@@ -54,6 +54,7 @@
 'use strict';
 
 const reference = require('../reference');
+const { LOOPBACK_SIZES, LOOPBACK_ARRANGEMENTS, loopbackSize, loopbackGeometry } = require('./terry-loops');
 
 const FLEECE_IDS = ['fleece_2_thread', 'fleece_3_thread', 'fleece_diagonal', 'french_terry'];
 const isFleeceFamily = (id) => FLEECE_IDS.includes(id);
@@ -265,7 +266,11 @@ function analyzeFleece(p) {
   const faceFromTrend = D.faceFit.a + D.faceFit.b * gsm;
   if (!faceNe) faceNe = snap(v.yarns === 2 ? Math.max(20, faceFromTrend - 6) : faceFromTrend, STD_FACE);
   let faceSl = +p.faceSlMm > 0 ? +p.faceSlMm : (v.faceSl20 ? v.faceSl20 * 20 / G : (D.slFit.a + D.slFit.b * faceNe) * 20 / G);
-  const loopSl = v.loopLen20 * 20 / G;
+  // loopback terry is named by its loops: the sinker sets their size (loop
+  // length per needle), the tuck sequence their layout (terry-loops.js)
+  const loopSize = isTerry ? loopbackSize(p.loopSize, p.loopLengthMm, G) : null;
+  const arrKey = isTerry && LOOPBACK_ARRANGEMENTS[p.loopArrangement] ? p.loopArrangement : 'standard';
+  const loopSl = isTerry ? loopSize.l : v.loopLen20 * 20 / G;
 
   // ---- binder ----
   let binder = null;
@@ -375,7 +380,10 @@ function analyzeFleece(p) {
   const bulk = 1.25;                                                   // MODELLED: knitted yarn is fuller than a compact cylinder
   const loopD = dia(loopNe / ply) * Math.sqrt(ply);
   const binderD = binder ? (binder.filament ? 0.0119 * Math.sqrt(binder.tex) * 1.05 : dia(binder.ne)) : 0;
-  const t0 = bulk * (2 * dia(faceNe) + binderD + 2 * loopD) + (v.kind === 'terry' ? 0.35 * loopSl : 0);
+  // loopback: the loops stand above the loop-yarn layer, mostly pressed flat
+  // under a thickness gauge (0.25 of their height, MODELLED)
+  const loopGeom = isTerry ? loopbackGeometry({ n: LOOPBACK_ARRANGEMENTS[arrKey].n, l: loopSl, G, wpc, cpc }) : null;
+  const t0 = bulk * (2 * dia(faceNe) + binderD + 2 * loopD) + (isTerry ? 0.25 * loopGeom.loop_height_mm : 0);
   const tB = t0 + b.pile_mm * 0.7;                                      // the nap compresses under the gauge foot
   const rhoFibre = Object.entries(actual).reduce((s, [k, x]) => s + x * (FIBRE[k] || FIBRE.cotton).rho, 0);
   const kFibre = Object.entries(actual).reduce((s, [k, x]) => s + x * (FIBRE[k] || FIBRE.cotton).k, 0);
@@ -396,7 +404,38 @@ function analyzeFleece(p) {
   if (b.passes && poly >= 0.5 && !b.sheared) risks.push({ topic: 'Pilling', level: 'high', note: 'A raised polyester nap pills. Shear it, or use a low-pill polyester.' });
   else if (b.passes) risks.push({ topic: 'Pilling and shedding', level: poly > 0.1 ? 'medium' : 'medium', note: 'The raised fibre is loose by design; expect 3-3.5 on a pilling test after brushing and some lint on first washes.' });
   if (b.passes && (shares.cotton || 0) >= 0.7) risks.push({ topic: 'Nap after washing', level: 'watch', note: 'A cotton nap lays down and looks thin after the first washes. A light shear and a softener help it stand.' });
-  if (v.kind === 'terry') risks.push({ topic: 'Loop snagging', level: 'watch', note: 'Long back loops catch on Velcro and jewellery; keep the sinker loop as short as the weight allows.' });
+  let loop = null;
+  if (isTerry) {
+    // what each loop size and each layout would do at this GSM, face and binder
+    const need = gsm * (1 - elastane) * 100 / (cpc * wpc);
+    const ref = loopbackGeometry({ n: 4, l: 1.55 * 20 / G, G, wpc, cpc });
+    const snagIdx = (g) => (ref.snag_area > 0 ? g.snag_area / ref.snag_area : 1);
+    const arr = LOOPBACK_ARRANGEMENTS[arrKey];
+    const sizes = Object.entries(LOOPBACK_SIZES).map(([k, z]) => {
+      const l = z.l20 * 20 / G;
+      const exact = neOfTex(Math.max(5, (need - faceMass - binderMass) / l));
+      const g = loopbackGeometry({ n: arr.n, l, G, wpc, cpc });
+      return { key: k, label: z.label, loop_length_mm: r2(l), loop_ne: snap(exact, STD_LOOP), loop_ne_exact: r1(exact), loop_height_mm: g.loop_height_mm };
+    });
+    const arrangements = Object.entries(LOOPBACK_ARRANGEMENTS).map(([k, a]) => {
+      const g = loopbackGeometry({ n: a.n, l: loopSl, G, wpc, cpc });
+      return { key: k, label: a.label, tuck_repeat: a.n, sequence: a.seq.map(t => t + 1), loop_height_mm: g.loop_height_mm, float_mm: g.float_mm, loops_per_cm2: g.loops_per_cm2, snag_index: r2(snagIdx(g)) };
+    });
+    const snag = snagIdx(loopGeom);
+    loop = {
+      size: { key: loopSize.key, label: loopSize.label, length_per_needle_mm: r2(loopSl) },
+      arrangement: { key: arrKey, label: arr.label, tuck_repeat: arr.n, sequence: arr.seq.map(t => t + 1), look: arr.look, face: arr.face },
+      ...loopGeom, snag_area: undefined, snag_index: r2(snag),
+      sizes, arrangements,
+      formula: 'h = √(3/16 · (L² − S²)),  L = n · loop length per needle,  S = n · needle pitch',
+      basis: 'DERIVED from the loop yarn length and the float span; the size presets are MODELLED around the measured 1.55 mm (record 47)',
+    };
+    if (loopGeom.taut) warnings.push(`At ${r2(loopSl)} mm per needle the loop yarn is no longer than the needle pitch (${r2(pitch)} mm): the floats lie taut and no loop forms. Raise the sinker.`);
+    risks.push({ topic: 'Loop snagging', level: snag > 1.4 ? 'high' : snag > 1.05 ? 'watch' : 'low',
+      note: `${r2(loopGeom.loop_height_mm)} mm loops over ${r2(loopGeom.float_mm)} mm floats — ${r1(snag)}× the snag exposure of a standard 1:3 terry. ${snag > 1.05 ? 'They catch on Velcro and jewellery; a smaller loop or a shorter float holds better.' : 'Short, tight loops hold well.'}` });
+    risks.push({ topic: 'Face', level: arrKey === 'straight' || arrKey === 'micro' ? 'watch' : 'low', note: arr.face });
+    if (arrKey === 'micro' && texOfNe(loopNe) > 2.2 * faceTex) risks.push({ topic: 'Loop grin-through', level: 'watch', note: `Tied every second needle, a loop yarn ${r1(texOfNe(loopNe) / faceTex)}× the face weight can show through the face. Use a finer loop yarn or the 1:3 layout.` });
+  }
   risks.push({ topic: 'Width loss in brushing', level: 'process', note: b.passes ? 'Raising pulls the cloth in. Dry it on the stenter about 15-18% wider than finish before brushing, then set the width on the second stenter.' : 'Not brushed — width is set on the stenter and compactor.' });
   if (elastane > 0) risks.push({ topic: 'Elastane', level: 'process', note: 'Elastane is plated with the face yarn, never in the loop yarn; heat-set before dyeing.' });
 
@@ -447,6 +486,7 @@ function analyzeFleece(p) {
       pile_height_mm: r2(b.pile_mm), basis: 'MODELLED: 3.5% of the loop yarn per pass; pile from staple length and passes',
     } : null,
     thermal: { unbrushed: before, brushed: after, note: 'Still air held in the cloth does the insulating; brushing roughly doubles the air it holds.' },
+    loop,
     risks,
     process_route: route,
     warnings,

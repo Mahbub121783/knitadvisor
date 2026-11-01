@@ -191,14 +191,22 @@ function ihash(x, y, salt) {
 // in height and each leaning its own way — a terry pile never stands in
 // rows. Cut (velour): the loops are sheared open, so only a short stub of
 // yarn is modelled and the cut fibre is drawn as a pile on top of it.
-function plushLoops(course, c, wales, height, every, cut) {
+// which needle positions carry a pile loop (terry-loops.js PLUSH_ARRANGEMENTS)
+const PLUSH_SELECT = {
+  full: () => true,
+  alternate: (w) => w % 2 === 0,
+  checker: (w, c) => (w + c) % 2 === 0,
+  diagonal: (w, c) => (w + c) % 3 === 0,
+};
+function plushLoops(course, c, wales, height, every, cut, arrangement) {
+  const selected = PLUSH_SELECT[arrangement] || (every === 2 ? PLUSH_SELECT.alternate : PLUSH_SELECT.full);
   const pts = course.points, st = course.starts;
   const out = [], starts = [], floatIdx = [];
   for (let w = 0; w < wales; w++) {
     const end = w + 1 < st.length ? st[w + 1] : pts.length;
     const seg = pts.slice(st[w], end);
     starts.push(out.length);
-    if (w >= wales - 1 || w % every !== 0 || seg.length < 3) { for (const p of seg) out.push(p); continue; }
+    if (w >= wales - 1 || !selected(w, c) || seg.length < 3) { for (const p of seg) out.push(p); continue; }
     for (let i = 0; i < seg.length - 1; i++) out.push(seg[i]);     // the needle loop, without its sinker
     const a = seg[seg.length - 2], b = pts[st[w + 1]];
     // per-loop variation; repeats with the structure tile when baking
@@ -268,7 +276,10 @@ export function structureRepeat(con, pattern) {
   const pc = (pattern && pattern.cols) || 1, pr = (pattern && pattern.rows) || 1;
   // the loops' own irregularity repeats over 16 × 16 stitches (~1.5 cm), long
   // enough that the baked tile does not read as a check from a distance
-  if (con.type === 'plush') return { wales: 16, courses: 16, xPitch: PITCH_X };
+  if (con.type === 'plush') {
+    const r = con.arrangement === 'diagonal' ? 12 : 16;      // a whole number of 1-in-3 steps
+    return { wales: r, courses: r, xPitch: PITCH_X };
+  }
   if ((con.type === 'fleece' && con.pile === 'brush') || con.type === 'terry') {
     const feeds = fleeceFeeds(pattern);
     const faces = feeds.filter(f => f.face).length || 1;
@@ -395,7 +406,7 @@ export function buildYarnPaths(opts) {
         baseMirror: false, zBaseFor: () => FLEECE_BINDER_Z,
       });
       pile.role = 'fleecy';
-      plushLoops(pile, c, wales, height, every, !!con.cut);
+      plushLoops(pile, c, wales, height, every, !!con.cut, con.arrangement);
       out.push(pile);
     }
     return { paths: out, floatAnchors: !!con.cut };
@@ -451,7 +462,7 @@ export function buildYarnPaths(opts) {
       });
       for (const p of course.points) p.y += lift;
       if (loopBack) {
-        loopArcs(course, (w) => tokenAt(w), wales, opts.loopHeight || LOOPBACK_HEIGHT);
+        loopArcs(course, (w) => tokenAt(w), wales, opts.loopHeight != null ? opts.loopHeight : LOOPBACK_HEIGHT);
         course.role = 'fleecy';
         backPaths.push(course);
         continue;

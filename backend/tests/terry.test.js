@@ -110,4 +110,46 @@ const FT = (gsm, extra = {}) => analyzeFleece({ fabricId: 'french_terry', gsm, g
   console.log('  Engine: plush SL from the terry model, no compactor; velour sheared + disperse; loopback compacted');
 }
 
+// 9. loops: size and layout name the terry
+{
+  const { ENGINE_INPUTS } = require('../engine');
+  for (const k of ['loop_size', 'loop_arrangement', 'pile_height_mm', 'velour_cut']) assert(ENGINE_INPUTS.includes(k), `${k} is forwarded by the API`);
+  const std = FT(280).loop;
+  assert(Math.abs(std.loop_height_mm - 1.54) < 0.05, `standard 1:3, 1.55 mm on 20G: h = √(3/16·(L²−S²)) ≈ 1.54 mm (got ${std.loop_height_mm})`);
+  const sizes = std.sizes.map(z => z.loop_ne);
+  for (let i = 1; i < sizes.length; i++) assert(sizes[i] >= sizes[i - 1], `bigger loops need a finer loop yarn at the same GSM: ${sizes.join(' → ')}`);
+  const hs = std.sizes.map(z => z.loop_height_mm);
+  for (let i = 1; i < hs.length; i++) assert(hs[i] > hs[i - 1], 'bigger loop size, taller loop');
+  const a = Object.fromEntries(std.arrangements.map(x => [x.key, x]));
+  assert(a.micro.loop_height_mm < a.standard.loop_height_mm && a.micro.loops_per_cm2 > 1.9 * a.standard.loops_per_cm2 && a.micro.snag_index < 0.5, '1:1 ties: smaller, twice as many, safer loops');
+  assert(a.open.snag_index > 1.5, 'a 1:5 long float snags most');
+  const taut = FT(280, { loopLengthMm: 1.2 });
+  assert(taut.loop.taut && taut.warnings.some(w => /no loop forms/.test(w)), 'loop yarn shorter than the needle pitch: no loop');
+  const big = FT(280, { loopSize: 'large', loopArrangement: 'diagonal' });
+  assert(big.loop.size.key === 'large' && big.loop.arrangement.key === 'diagonal');
+  assert(big.risks.some(r => r.topic === 'Loop snagging' && r.level !== 'low'), 'large loops are flagged for snagging');
+  // the machine programme follows the layout
+  const r = calculate({ fabric: 'french_terry', gsm: 280, composition: '100% Cotton', efficiency: 85, loop_arrangement: 'diagonal', loop_size: 'large' });
+  const fleecy = r.pattern.pattern_cylinder.filter(row => row.includes('T')).map(row => row.indexOf('T'));
+  assert.deepStrictEqual(fleecy, [3, 2, 1, 0], `diagonal: the tuck steps one needle per loop feed (${fleecy})`);
+  assert(r.pattern.cam_arrangement.length === r.pattern.pattern_cylinder.length);
+  assert(r.fleece.yarns.find(y => y.role === 'loop').sl_mm === 1.8, 'large loop: 1.8 mm per needle');
+  console.log(`  Loopback loops: sizes ${hs.join('/')} mm high → loop ${sizes.join('/')} Ne; 1:1 ${a.micro.loop_height_mm} mm, 1:5 snag ${a.open.snag_index}×`);
+}
+
+// 10. plush layouts: fewer loop positions → coarser pile for the same GSM
+{
+  const full = PT('terry_fabric', 450, '100% Cotton', { pileHeightMm: 2.5 });
+  const chk = PT('terry_fabric', 450, '100% Cotton', { pileHeightMm: 2.5, loopArrangement: 'checker' });
+  const dia = PT('terry_fabric', 450, '100% Cotton', { pileHeightMm: 2.5, loopArrangement: 'diagonal' });
+  const ne = (x) => x.yarns.find(y => y.role === 'pile').ne;
+  assert(ne(chk) < ne(full) && ne(dia) <= ne(chk), `pile coarsens as loops thin out: ${ne(full)} → ${ne(chk)} → ${ne(dia)}`);
+  assert(Math.abs(chk.pile.loops_per_cm2 / full.pile.loops_per_cm2 - 0.5) < 0.12, 'checker: about half the loops');
+  const p = chk.yarns.find(y => y.role === 'pile'), g = chk.yarns.find(y => y.role === 'ground');
+  assert(Math.abs(p.sl_mm - (g.sl_mm + 2 * 2.5 * 0.5)) < 0.02, 'pile per needle = ground + 2h × loop share');
+  const jumbo = PT('terry_fabric', 450, '100% Cotton', { loopSize: 'jumbo' });
+  assert(jumbo.pile.sinker_height_mm === 3, 'jumbo preset: 3 mm sinker');
+  console.log(`  Plush layouts at 2.5 mm: full ${ne(full)}/1, checker ${ne(chk)}/1, diagonal ${ne(dia)}/1 pile`);
+}
+
 console.log('\nAll terry tests passed.');

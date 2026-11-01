@@ -1116,9 +1116,13 @@ export class Knit3D {
   // engine's sinker height; a velour is modelled as the short stub of yarn
   // left under its cut pile.
   _plushLoopUnits(con, density) {
+    const wpc = density && density.wpc > 0 ? density.wpc : 10.7;
+    // loopback terry: the engine's derived loop height
+    if (con && con.type === 'terry' && this.opts.loopback && this.opts.loopback.heightMm != null) {
+      return Math.max(0.15, Math.min(4.5, this.opts.loopback.heightMm * wpc / 10));
+    }
     if (!con || con.type !== 'plush') return null;
     const p = this.opts.plush || {};
-    const wpc = density && density.wpc > 0 ? density.wpc : 10.7;
     if (con.cut) return Math.max(0.25, 0.3 * (p.finishedMm || 1.5) * wpc / 10);
     return Math.max(0.8, Math.min(4.5, (p.heightMm || 2) * wpc / 10));
   }

@@ -481,6 +481,38 @@
             <option value="">— Select fabric type —</option>
           </select>
           <div id="fabric-info" class="text-xs text-dim mt-4" style="min-height:16px;"></div>
+            <!-- TERRY / PLUSH / VELOUR LOOP INPUTS (hidden for other fabrics) -->
+            <div id="loop-panel" class="hidden" style="border:1px solid var(--line2); border-radius:10px; padding:12px; margin-top:10px;">
+              <div class="optional-label" style="margin-bottom: 8px;">Loops <span class="text-dim">(terry is named by its loops)</span></div>
+              <div class="optional-row">
+                <div class="inp-group">
+                  <label for="loop-size-input">Loop size</label>
+                  <select id="loop-size-input" class="form-select">
+                    <option value="">Auto (from GSM)</option>
+                    <option value="micro">Micro (baby terry)</option>
+                    <option value="small">Small</option>
+                    <option value="standard">Standard</option>
+                    <option value="large">Large</option>
+                    <option value="jumbo">Jumbo</option>
+                  </select>
+                </div>
+                <div class="inp-group">
+                  <label for="loop-arr-input">Loop layout</label>
+                  <select id="loop-arr-input" class="form-select"></select>
+                </div>
+              </div>
+              <div class="optional-row" id="velour-cut-row">
+                <div class="inp-group">
+                  <label for="velour-cut-input">Pile</label>
+                  <select id="velour-cut-input" class="form-select">
+                    <option value="">Cut and sheared (velour)</option>
+                    <option value="false">Uncut loops (plush)</option>
+                  </select>
+                </div>
+              </div>
+              <div class="info-box mt-12" id="loop-hint" style="font-size:10px; line-height:1.6;"></div>
+            </div>
+
         </div>
 
         <!-- Precise Color — COLOR ENGINE (optional, drives realistic visualization) -->
@@ -1028,6 +1060,9 @@ const PREFILL_FIELD_MAP = {
   elastane_denier: 'elastane-denier-input',
   elastane_pct: 'elastane-pct-input',
   shade_depth_pct: 'depth-number',
+  loop_size: 'loop-size-input',
+  loop_arrangement: 'loop-arr-input',
+  velour_cut: 'velour-cut-input',
 };
 const PREFILL_CHECKBOX_MAP = {
   yarn_white: 'yarn-white',
@@ -1067,6 +1102,8 @@ function applyPrefill(params) {
   });
 
   onFabricChange();
+  // the layout list is rebuilt per fabric, so set it after the rebuild
+  if (params.loop_arrangement) document.getElementById('loop-arr-input').value = params.loop_arrangement;
 
   // Composition chip active-state (mirrors setComp()) — chip values live inline in
   // their onclick handlers, so match against that rather than a data attribute.
@@ -1196,6 +1233,39 @@ function populateFabricSelect(fabrics, category = 'all') {
 /* ============================================================
    FABRIC CHANGE HANDLER
    ============================================================ */
+// Loop layouts by kind of terry (backend: engine/domain/terry-loops.js)
+const LOOP_LAYOUTS = {
+  loopback: [
+    ['', 'Standard (1:3 half-drop)'], ['straight', 'Straight (1:3, vertical lines)'],
+    ['diagonal', 'Diagonal (one needle per feed)'], ['zigzag', 'Zig-zag (step and return)'],
+    ['micro', '1:1 (tie every second needle)'], ['open', 'Long float (1:5)'],
+  ],
+  plush: [
+    ['', 'Full plush (every needle)'], ['alternate', '1:1 stripe (every second needle)'],
+    ['checker', 'Checker (alternate, shifting)'], ['diagonal', 'Diagonal (1 in 3)'],
+  ],
+};
+const LOOP_FABRICS = { french_terry: 'loopback', terry_fabric: 'plush', velour_plush: 'plush' };
+function loopPanelOn() {
+  const p = document.getElementById('loop-panel');
+  return p && !p.classList.contains('hidden');
+}
+function syncLoopPanel(fabricId) {
+  const panel = document.getElementById('loop-panel');
+  if (!panel) return;
+  const kind = LOOP_FABRICS[fabricId];
+  if (!kind) { panel.classList.add('hidden'); return; }
+  panel.classList.remove('hidden');
+  const sel = document.getElementById('loop-arr-input');
+  const keep = sel.value;
+  sel.innerHTML = LOOP_LAYOUTS[kind].map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
+  if (LOOP_LAYOUTS[kind].some(([v]) => v === keep)) sel.value = keep;
+  document.getElementById('velour-cut-row').classList.toggle('hidden', fabricId !== 'velour_plush');
+  document.getElementById('loop-hint').textContent = kind === 'loopback'
+    ? 'Loop size is the sinker setting (loop yarn per needle); the layout is where the loop yarn tucks from feed to feed. Both change the back, the loop count and the snag risk.'
+    : 'Loop size is the sinker height; the layout is which needles carry a pile loop. Fewer loops need a coarser pile yarn for the same GSM.';
+}
+
 function onFabricChange() {
   const select = document.getElementById('fabric-select');
   const info = document.getElementById('fabric-info');
@@ -1205,6 +1275,7 @@ function onFabricChange() {
 
   const fabric = allFabrics.find(f => f.id === fabricId);
   if (!fabric) { info.textContent = ''; return; }
+  syncLoopPanel(fabricId);
 
   const parts = [];
   if (fabric.gsm_range) parts.push(`GSM: ${fabric.gsm_range[0]}–${fabric.gsm_range[1]}`);
@@ -1694,6 +1765,10 @@ async function doCalculate() {
     filaments: parseInt(document.getElementById('filaments-input').value) || undefined,
     elastane_denier: parseFloat(document.getElementById('elastane-denier-input').value) || undefined,
     elastane_pct: parseFloat(document.getElementById('elastane-pct-input').value) || undefined,
+    // Terry / plush / velour loops (only sent while the loop panel is shown)
+    loop_size: loopPanelOn() ? (document.getElementById('loop-size-input').value || undefined) : undefined,
+    loop_arrangement: loopPanelOn() ? (document.getElementById('loop-arr-input').value || undefined) : undefined,
+    velour_cut: loopPanelOn() && document.getElementById('velour-cut-input').value === 'false' ? false : undefined,
   };
 
   // Remove undefined keys
