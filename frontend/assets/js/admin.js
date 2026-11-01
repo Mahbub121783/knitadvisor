@@ -177,8 +177,8 @@ function switchTab(tabId) {
 // materialized-view rollups (mv_daily_query_stats / mv_fabric_popularity)
 // instead of the old client-side count over the last 100 raw log rows.
 const STATUS_COLOR = {
-  pending: '#E0A64A', under_review: '#E0A64A', quoted: '#5B9DF5',
-  accepted: '#49B58B', rejected: '#E06A6A', expired: '#7B818A',
+  pending: '#9A5B00', under_review: '#9A5B00', quoted: '#1857C4',
+  accepted: '#1E7A54', rejected: '#B23B3B', expired: '#6A717A',
 };
 
 // Named distinctly from the validation tab's fmtPct() further down this file
@@ -232,14 +232,14 @@ function renderChart(series) {
     const showLabel = n <= 10 || i % Math.ceil(n / 7) === 0;
     return '<g class="chart-bar-group">' +
       '<title>' + esc(d.date) + ': ' + esc(d.total) + ' queries, ' + esc(d.cache_hits) + ' from cache</title>' +
-      '<rect class="bar-total" x="' + x + '" y="' + yTotal + '" width="' + barW + '" height="' + Math.max(0, missH) + '" fill="#3A4A63" rx="2"/>' +
-      '<rect x="' + x + '" y="' + yHit + '" width="' + barW + '" height="' + Math.max(0, hitH) + '" fill="#5B9DF5" rx="2"/>' +
+      '<rect class="bar-total" x="' + x + '" y="' + yTotal + '" width="' + barW + '" height="' + Math.max(0, missH) + '" fill="#C9D3E6" rx="2"/>' +
+      '<rect x="' + x + '" y="' + yHit + '" width="' + barW + '" height="' + Math.max(0, hitH) + '" fill="#1857C4" rx="2"/>' +
       (showLabel ? '<text class="chart-axis-label" x="' + (x + barW / 2) + '" y="' + (H - 2) + '" text-anchor="middle">' + esc(dateShort) + '</text>' : '') +
       '</g>';
   }).join('');
 
   el.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="chart-wrap" style="width:100%;height:150px;display:block;">' + bars + '</svg>' +
-    '<div class="chart-legend"><span><i style="background:#5B9DF5;"></i>From cache</span><span><i style="background:#3A4A63;"></i>Computed fresh</span></div>';
+    '<div class="chart-legend"><span><i style="background:#1857C4;"></i>From cache</span><span><i style="background:#C9D3E6;"></i>Computed fresh</span></div>';
 
   const totalSum = series.reduce(function (a, d) { return a + d.total; }, 0);
   document.getElementById('ov-chart-sub').textContent = totalSum.toLocaleString() + ' total over ' + n + ' days';
@@ -501,7 +501,7 @@ function buildProviderCard(p) {
     : `<span class="key-current-value" style="color:var(--t4);">No key configured</span>`;
 
   const cooldownHtml = isCooldown
-    ? `<div style="display:flex;align-items:center;gap:6px;padding:7px 10px;background:rgba(255,68,68,.08);border:1px solid rgba(255,68,68,.2);border-radius:var(--rad-sm);">
+    ? `<div style="display:flex;align-items:center;gap:6px;padding:7px 10px;background:rgba(178,59,59,.07);border:1px solid rgba(178,59,59,.25);border-radius:var(--rad-sm);">
          <span style="color:var(--a3);font-size:10px;">⏱ Cooldown until ${new Date(p.cooldown_until).toLocaleTimeString()}</span>
          <button class="btn btn-xs prov-clear-cooldown" style="border:none;background:transparent;color:var(--a2);cursor:pointer;padding:0;">Clear</button>
        </div>` : '';
@@ -511,7 +511,7 @@ function buildProviderCard(p) {
 
   const displayName = p.display_name || p.provider_name.toUpperCase();
   const typeBadge = p.provider_type && p.provider_type !== p.provider_name
-    ? `<span style="font-size:9px;padding:1px 6px;border-radius:3px;background:rgba(108,142,255,.1);color:var(--a2);border:1px solid rgba(108,142,255,.2);margin-left:4px;">${p.provider_type.toUpperCase()}</span>`
+    ? `<span style="font-size:9px;padding:1px 6px;border-radius:3px;background:rgba(74,91,208,.1);color:var(--a2);border:1px solid rgba(74,91,208,.3);margin-left:4px;">${p.provider_type.toUpperCase()}</span>`
     : '';
   const avgMs = p.avg_response_ms ? `<span style="font-size:9px;color:var(--t4);">${p.avg_response_ms}ms avg</span>` : '';
 
@@ -1693,17 +1693,17 @@ async function saveRfqDetail() {
 // only that would put a green tick over a year-old price.
 
 const PRICE_AGE_TONE = {
-  current:      { c: '#4ade80', label: 'current' },
-  recent:       { c: '#fbbf24', label: 'recent' },
-  stale:        { c: '#fb923c', label: 'stale' },
-  'out of date': { c: '#ff4d6d', label: 'out of date' },
+  current:      { c: '#1E7A54', label: 'current' },
+  recent:       { c: '#9A5B00', label: 'recent' },
+  stale:        { c: '#B25A0E', label: 'stale' },
+  'out of date': { c: '#B23B3B', label: 'out of date' },
   unknown:      { c: 'var(--t3)', label: 'unknown' },
 };
 
 function priceMsg(html, tone) {
   const el = document.getElementById('prices-msg');
   if (!html) { el.classList.add('hidden'); el.innerHTML = ''; return; }
-  const c = tone === 'bad' ? '#ff4d6d' : tone === 'warn' ? '#fbbf24' : '#4ade80';
+  const c = tone === 'bad' ? '#B23B3B' : tone === 'warn' ? '#9A5B00' : '#1E7A54';
   el.classList.remove('hidden');
   el.innerHTML = `<div style="border:1px solid ${c}55;background:${c}12;border-radius:8px;` +
     `padding:10px 12px;font-size:11px;line-height:1.6;color:var(--t1);">${html}</div>`;
@@ -1748,7 +1748,7 @@ async function loadYarnPrices() {
       // them the same colour is how a source nobody set up gets mistaken for a
       // source that is down.
       const live = s.configured && s.quotes > 0;
-      const c = live ? '#4ade80' : s.configured ? '#fb923c' : 'var(--t3)';
+      const c = live ? '#1E7A54' : s.configured ? '#B25A0E' : 'var(--t3)';
       const state = live ? `${s.quotes} quotes`
                   : s.configured ? 'connected, no data' : 'not connected';
       const countries = (s.countries || []).map(x =>
@@ -1770,7 +1770,7 @@ async function loadYarnPrices() {
     tb.innerHTML = (d.quotes || []).map(q => {
       const ref = q.reference_price;
       const gap = q.reference_gap_pct;
-      const gapColor = gap == null ? 'var(--t3)' : Math.abs(gap) >= 5 ? '#fb923c' : 'var(--t2)';
+      const gapColor = gap == null ? 'var(--t3)' : Math.abs(gap) >= 5 ? '#B25A0E' : 'var(--t2)';
       return `<tr>
         <td style="font-size:10px;">${esc(q.label)}</td>
         <td>${q.count_ne || '—'}</td>
@@ -1786,7 +1786,7 @@ async function loadYarnPrices() {
     sb.innerHTML = (d.syncs || []).map(x => `<tr>
       <td style="font-size:10px;">${new Date(x.started_at).toLocaleString()}</td>
       <td style="font-size:10px;color:var(--t3);">${esc(x.trigger)}</td>
-      <td style="font-size:10px;color:${x.ok ? '#4ade80' : '#ff4d6d'};">${x.ok ? 'ok' : esc((x.error || 'failed').slice(0, 90))}</td>
+      <td style="font-size:10px;color:${x.ok ? '#1E7A54' : '#B23B3B'};">${x.ok ? 'ok' : esc((x.error || 'failed').slice(0, 90))}</td>
       <td>${x.rows_stored}</td>
       <td>${x.rows_rejected}</td>
       <td style="font-size:10px;color:var(--t3);">${x.newest_quote ? String(x.newest_quote).slice(0, 10) : '—'}</td>
@@ -1828,7 +1828,7 @@ async function updateYarnPrices() {
 function dyeingPriceMsg(html, tone) {
   const el = document.getElementById('dyeing-prices-msg');
   if (!html) { el.classList.add('hidden'); el.innerHTML = ''; return; }
-  const c = tone === 'bad' ? '#ff4d6d' : tone === 'warn' ? '#fbbf24' : '#4ade80';
+  const c = tone === 'bad' ? '#B23B3B' : tone === 'warn' ? '#9A5B00' : '#1E7A54';
   el.classList.remove('hidden');
   el.innerHTML = `<div style="border:1px solid ${c}55;background:${c}12;border-radius:8px;` +
     `padding:10px 12px;font-size:11px;line-height:1.6;color:var(--t1);">${html}</div>`;
@@ -1907,7 +1907,7 @@ let valFabricListLoaded = false;
 function valMsg(html, tone) {
   const el = document.getElementById('val-msg');
   if (!html) { el.classList.add('hidden'); el.innerHTML = ''; return; }
-  const c = tone === 'bad' ? '#ff4d6d' : tone === 'warn' ? '#fbbf24' : '#4ade80';
+  const c = tone === 'bad' ? '#B23B3B' : tone === 'warn' ? '#9A5B00' : '#1E7A54';
   el.classList.remove('hidden');
   el.innerHTML = `<div style="border:1px solid ${c}55;background:${c}12;border-radius:8px;` +
     `padding:10px 12px;font-size:11px;line-height:1.6;color:var(--t1);">${html}</div>`;
@@ -1916,7 +1916,7 @@ function valMsg(html, tone) {
 function fmtPct(v) {
   if (v == null) return '<span style="color:var(--t3);">—</span>';
   const sign = v > 0 ? '+' : '';
-  const color = Math.abs(v) <= 5 ? 'var(--a1)' : Math.abs(v) <= 15 ? '#fbbf24' : '#ff4d6d';
+  const color = Math.abs(v) <= 5 ? 'var(--a1)' : Math.abs(v) <= 15 ? '#9A5B00' : '#B23B3B';
   return `<span style="color:${color};">${sign}${v}%</span>`;
 }
 
@@ -1973,7 +1973,7 @@ async function loadValidationRecords(page = 1) {
         tr.innerHTML = `
           <td style="font-size:11px;">${esc(r.fabric_id)}</td>
           <td>${r.target_gsm ?? '—'}</td>
-          <td colspan="4" style="color:#ff4d6d;font-size:10px;">Spec no longer calculates: ${esc(r.calc_error)}</td>
+          <td colspan="4" style="color:#B23B3B;font-size:10px;">Spec no longer calculates: ${esc(r.calc_error)}</td>
           <td style="font-size:10px;">${esc(r.mill_name || '')} ${esc(r.order_ref || '')}</td>
           <td><button class="btn btn-ghost btn-xs val-del">Delete</button></td>
         `;
@@ -2313,3 +2313,35 @@ document.addEventListener('DOMContentLoaded', async () => {
     showLogin();
   }
 });
+
+
+// ── RESPONSIVE TABLES ──────────────────────────────────────
+// Every table is built by a loader after the page has loaded, so labels come
+// from a MutationObserver: each cell takes its column's header text as a
+// data-label. On a phone the CSS turns each row into a small card that shows
+// that label beside the value (nothing is hidden or cut off); on wider screens
+// the labels are simply unused.
+(function () {
+  function label(table) {
+    const heads = Array.from(table.querySelectorAll('thead th')).map(function (th) { return th.textContent.trim(); });
+    if (!heads.length) return;
+    table.querySelectorAll('tbody tr').forEach(function (tr) {
+      let col = 0;
+      Array.from(tr.children).forEach(function (td) {
+        const span = parseInt(td.getAttribute('colspan') || '1', 10);
+        if (span > 1) { td.setAttribute('data-wide', ''); col += span; return; }
+        if (!td.hasAttribute('data-label') && heads[col]) td.setAttribute('data-label', heads[col]);
+        col += 1;
+      });
+    });
+  }
+  let queued = false;
+  function run() {
+    queued = false;
+    document.querySelectorAll('.tbl-wrap table').forEach(label);
+  }
+  new MutationObserver(function () {
+    if (!queued) { queued = true; requestAnimationFrame(run); }
+  }).observe(document.documentElement, { childList: true, subtree: true });
+  document.addEventListener('DOMContentLoaded', run);
+})();
