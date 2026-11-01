@@ -956,6 +956,7 @@ export class Knit3D {
       fiberType: this.opts.fiberType,
       physics: this.opts.physics,
       twist: this.opts.twist,
+      filament: (this.opts.yarnLook || {}).filament,
     });
     // spinning system: a compact yarn's aligned surface reads glossier, an
     // open-end yarn's wrapped, hairy one matt (_yarnLook in the visualizer)
@@ -1109,13 +1110,14 @@ export class Knit3D {
       radius, radialSegments: 10, shadows: this._shadows,  // rounder cross-section — a hexagonal tube facets badly now that zooming in close is possible
       fiberType: this.opts.fiberType,
       twistPitch: twistPitch(radius, this.opts.twist),
+      ...this._slubOpts(),
     });
     this.group = group;
     // What the manual stretch rebuilds the loops from (_microStretch): the
     // draped paths, the yarn radius, and which children are yarn.
     this._microSrc = {
       paths, radius,
-      meshOpts: { radius, radialSegments: 10, shadows: this._shadows, fiberType: this.opts.fiberType, twistPitch: twistPitch(radius, this.opts.twist) },
+      meshOpts: { radius, radialSegments: 10, shadows: this._shadows, fiberType: this.opts.fiberType, twistPitch: twistPitch(radius, this.opts.twist), ...this._slubOpts() },
       kids: [...group.children],
     };
 
@@ -1637,6 +1639,15 @@ export class Knit3D {
   // Protruding fibre ends on the yarn surface (hairiness.js). Hidden until
   // the camera is close enough to resolve them — at normal viewing distance
   // each hair is well under a pixel wide and would only shimmer.
+  // Thick-and-thin of the yarn: a slub yarn on purpose, an open-end or carded
+  // one by its irregularity, a compact one hardly at all; none on a filament.
+  _slubOpts() {
+    const L = this.opts.yarnLook || {};
+    if (L.filament) return { filament: true, slubAmp: 0 };
+    const u = Number.isFinite(L.uneven) ? Math.max(0.6, Math.min(1.8, L.uneven / 10)) : 1;
+    return L.slub ? { forceSlub: true, slubAmp: 3.2 * u } : { slubAmp: u };
+  }
+
   _addHairiness(group, radius) {
     const tubes = group.userData.tubes || [];
     const mat = this._material.clone();
@@ -1648,7 +1659,7 @@ export class Knit3D {
     const maxMul = Math.max(1, this._finishLook.hair);   // peach / brushed raise more fibre
     const hair = buildHairiness(tubes, mat, {
       radius, fiberType: this.opts.fiberType || 'cotton', totalLength: group.userData.totalLength,
-      maxMul, amount: (this.opts.yarnLook || {}).hair || 1,
+      maxMul, amount: (this.opts.yarnLook || {}).hair || 1, abs: (this.opts.yarnLook || {}).hairAbs,
       // A raised finish is mostly fibre; each hair is a tiny 24-triangle
       // tube, so the higher cap is cheap. Lighter on the low-power tier.
       maxCount: (this._shadows ? 14000 : 5000) * maxMul,

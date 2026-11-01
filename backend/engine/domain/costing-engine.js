@@ -570,7 +570,12 @@ function autoDetectYarnType(parsedComp, countNe, options = {}) {
   if (modal >= 90) return { key: 'viscose_regular', label: 'Modal — priced as Viscose/Rayon (no dedicated market quote)' };
   // Pure Cotton
   if (cotton >= 90) {
-    if (countNe >= 20) {
+    // The spinning system chosen on the form decides carded or combed price,
+    // not just the count.
+    const spinChoice = String(options.spinning_system || '');
+    const combedByChoice = /combed|compact|siro|vortex/.test(spinChoice);
+    const cardedByChoice = /carded|open_end/.test(spinChoice);
+    if (combedByChoice || (!cardedByChoice && countNe >= 20)) {
       if (isWhite) return { key: 'combed_white', label: SM_PRICE_MATRIX.combed_white.label };
       return { key: 'combed_regular', label: SM_PRICE_MATRIX.combed_regular.label };
     }
@@ -605,6 +610,7 @@ function calculateCost(params) {
     slub:        !!(params.slub),
     ecovero:     !!(params.ecovero),
     siro:        !!(params.siro),
+    spinning_system: params.spinning_system || null,
     us_origin:   !!(params.us_origin),
   };
 

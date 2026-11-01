@@ -224,6 +224,8 @@ const YARN_STRUCTURE_TORQUE = {
   single_combed:   0.85,  // combed = more parallel fibres, slightly less snarl
   single_compact:  0.60,  // compact spinning removes hairiness & torque
   single_open_end: 0.65,  // rotor yarn — lower twist liveliness than ring
+  single_siro:     0.55,  // siro: two strands in one — pseudo-plied, lower torque
+  single_siro_compact: 0.42,
   single_vortex:   0.32,  // air-jet/vortex — near torque-free, minimal spirality
   ply_2:           0.22,  // 2-ply balances S/Z torque → almost no spirality
   ply_2_compact:   0.15,
@@ -325,7 +327,7 @@ const ELASTANE_MODIFIER = (elastane_pct) => {
 // PILLING RESISTANCE PREDICTOR
 // Source: Doğu & Çeven (2018) — Fibres & Textiles in Eastern Europe
 // ============================================================
-function predictPilling(fabricId, parsedComp, gsm, countNe) {
+function predictPilling(fabricId, parsedComp, gsm, countNe, yarnChar) {
   const fibers = parsedComp ? parsedComp.fibers : { cotton: 100 };
   const cottonPct = fibers.cotton || 0;
   const polyPct = fibers.polyester || 0;
@@ -336,8 +338,11 @@ function predictPilling(fabricId, parsedComp, gsm, countNe) {
   // Pilling score (0–5, 5 = best resistance)
   let score = 3.0; // baseline cotton
 
-  // Polyester blending increases pilling risk
-  if (polyPct > 0) score -= (polyPct / 100) * 1.5;
+  // Polyester blending increases pilling risk — only a spun (staple)
+  // polyester: a continuous filament has no fibre ends to form a pill.
+  if (polyPct > 0) score -= (polyPct / 100) * 1.5 * (yarnChar && yarnChar.filament_only ? 0.1 : (yarnChar && yarnChar.polyester && yarnChar.polyester.form !== 'staple' ? 0.35 : 1));
+  // The yarn itself: compact, siro and air-jet resist; carded and open-end do not
+  if (yarnChar && Number.isFinite(yarnChar.pilling_delta)) score += yarnChar.pilling_delta;
   // Fine counts pill more (shorter fibers)
   if (countNe > 36) score -= 0.5;
   else if (countNe > 30) score -= 0.2;
@@ -567,7 +572,7 @@ function predictQuality(params) {
     : 'LOW — Within acceptable limits (≤3%)';
 
   // --- PILLING ---
-  const pilling = predictPilling(fabricId, parsedComp, gsm, countNe);
+  const pilling = predictPilling(fabricId, parsedComp, gsm, countNe, params.yarn_character);
 
   // --- BURSTING STRENGTH ---
   const bursting = predictBurstingStrength(fabricId, parsedComp, gsm, tf);

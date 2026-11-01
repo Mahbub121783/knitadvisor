@@ -12,22 +12,22 @@ import { hash2 } from './noise.js?v=20260608g';
 const NATURAL = new Set(['cotton', 'linen', 'hemp', 'wool', 'viscose', 'modal', 'acrylic']);
 
 // Thickness profile along a yarn (0..1): low-freq slubs + rare sharp neps.
-function slubProfile(t, phase) {
+function slubProfile(t, phase, amp = 1) {
   const s = Math.sin((t * 7.3 + phase) * Math.PI * 2) * 0.55
           + Math.sin((t * 13.1 + phase * 1.7) * Math.PI * 2) * 0.30;
-  let v = s * 0.11;                                   // ±~11% slub
+  let v = s * 0.11 * amp;                             // ±~11% slub (more on an uneven or slub yarn)
   const np = Math.sin((t * 41.0 + phase * 3.1) * Math.PI * 2);
   if (np > 0.95) v += 0.5 * (np - 0.95);             // occasional nep bump
   return v;
 }
 
 // Displace each tube ring outward by the slub profile (stable per path).
-function applySlub(geo, curve, tubular, radial, phase) {
+function applySlub(geo, curve, tubular, radial, phase, amp = 1) {
   const pos = geo.attributes.position;
   const c = new THREE.Vector3();
   for (let i = 0; i <= tubular; i++) {
     curve.getPointAt(i / tubular, c);
-    const scale = 1 + slubProfile(i / tubular, phase);
+    const scale = 1 + slubProfile(i / tubular, phase, amp);
     for (let j = 0; j <= radial; j++) {
       const idx = i * (radial + 1) + j;
       const x = pos.getX(idx), y = pos.getY(idx), z = pos.getZ(idx);
@@ -220,7 +220,8 @@ export function buildFabricMesh(paths, material, opts = {}) {
   const shadows = !!opts.shadows;
   const pitch = opts.twistPitch || radius * 15;
   // slub/nep only for natural fibres, and only on the capable (shadow) tier
-  const slub = shadows && NATURAL.has(opts.fiberType || 'cotton');
+  const slubAmp = opts.slubAmp != null ? opts.slubAmp : 1;
+  const slub = shadows && (opts.forceSlub || (NATURAL.has(opts.fiberType || 'cotton') && !opts.filament));
   const group = new THREE.Group();
   const cap = new THREE.SphereGeometry(radius * 0.96, 8, 6);
   // Caps take the same vertex-colour path as the yarn (white = no change), or
@@ -244,7 +245,7 @@ export function buildFabricMesh(paths, material, opts = {}) {
     const r = radius * (path.radiusScale || 1);
     const geo = new THREE.TubeGeometry(curve, tubular, r, radial, false);
     flattenCrossSection(geo, curve, tubular, radial, 1.10, 0.84);
-    if (slub) applySlub(geo, curve, tubular, radial, hash2(pi, 1));
+    if (slub) applySlub(geo, curve, tubular, radial, hash2(pi, 1), slubAmp);
     const phase = opts.uvPhase ? opts.uvPhase(path, pi) : hash2(pi, 13) * 17;
     arcLengthUVs(geo, length, pitch * (r / radius), phase);   // same twist angle on a thicker yarn
     geo.computeTangents();   // anisotropic specular runs along the yarn

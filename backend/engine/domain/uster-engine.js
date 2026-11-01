@@ -37,6 +37,8 @@ const INDEX_OF_IRREGULARITY = {
   carded:   1.58,
   open_end: 1.50,
   vortex:   1.45,
+  siro:     1.34,
+  siro_compact: 1.24,
 };
 
 // Uster Hairiness (H) base by system at a reference 30s; scaled by count.
@@ -46,6 +48,8 @@ const HAIRINESS_BASE = {
   carded:   6.4,
   open_end: 5.0,
   vortex:   3.0,
+  siro:     3.7,
+  siro_compact: 2.9,
 };
 
 // Micronaire (numeric) by fibre grade for fibre-fineness → fibre count.

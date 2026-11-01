@@ -38,7 +38,11 @@ export function fibreGeometry() {
  */
 export function buildHairiness(tubes, material, opts) {
   // the spinning system's own hairiness (open-end hairy, compact clean)
-  const factor = (HAIRINESS[opts.fiberType] != null ? HAIRINESS[opts.fiberType] : 1.0) * (opts.amount || 1);
+  // `abs` = the engine's own hairiness for this yarn (spinning system x
+  // fibre x polyester form, yarn-character.js), relative to a combed ring
+  // cotton; without it, the fibre-type table
+  const factor = opts.abs != null ? opts.abs
+    : (HAIRINESS[opts.fiberType] != null ? HAIRINESS[opts.fiberType] : 1.0) * (opts.amount || 1);
   const perUnit = 3.2 * factor;                                 // hairs per unit of yarn
   const base = Math.round((opts.totalLength || 0) * perUnit);   // natural (greige) count
   const cap = opts.maxCount || 14000;

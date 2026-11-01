@@ -170,7 +170,9 @@ export function setYarnColorHex(material, hex) {
 export function createYarnMaterial(opts) {
   const fiber = opts.fiberType || 'cotton';
   const f = FIBER[fiber] || FIBER.cotton;
-  const synthetic = SMOOTH.has(fiber);
+  // A polyester SPUN from staple is a fibre-ended yarn, not a smooth filament:
+  // the engine says which (yarn-character.js)
+  const synthetic = opts.filament != null ? !!opts.filament : SMOOTH.has(fiber);
   const phys = opts.physics || null;
 
   let roughness = f.roughness;

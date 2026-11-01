@@ -1196,22 +1196,17 @@ class FabricVisualizer {
   // with few protruding fibres and more lustre; vortex sits lowest of all
   // on hairiness. Uster hairiness H (a ring yarn is ~5-6) scales it.
   _yarnLook() {
-    const ex = (this.result.yarn || {}).expertise || {};
-    const sys = ((ex.spinning_system || {}).key || '').toLowerCase();
-    const H = (ex.properties || {}).hairiness_h;
-    const SYS = {
-      open_end: { hair: 1.35, gloss: 0.8, bulk: 1.08 },
-      rotor:    { hair: 1.35, gloss: 0.8, bulk: 1.08 },
-      carded:   { hair: 1.2, gloss: 0.9, bulk: 1.03 },
-      combed:   { hair: 1.0, gloss: 1.0, bulk: 1.0 },
-      compact:  { hair: 0.6, gloss: 1.15, bulk: 0.97 },
-      vortex:   { hair: 0.45, gloss: 1.05, bulk: 0.98 },
-      airjet:   { hair: 0.45, gloss: 1.05, bulk: 0.98 },
-    };
-    const k = Object.keys(SYS).find((x) => sys.includes(x));
-    const base = k ? SYS[k] : { hair: 1, gloss: 1, bulk: 1 };
-    const hScale = Number.isFinite(H) ? Math.max(0.5, Math.min(1.6, H / 5.5)) : 1;
-    return { system: k || null, hair: base.hair * hScale, gloss: base.gloss, bulk: base.bulk, slub: !!((ex.slub || {}).active || (ex.slub && ex.slub.ok)) };
+    // From the engine (yarn-character.js): spinning system x fibre x yarn form
+    // x polyester form and lustre, as the yarn is really drawn.
+    const y = this.result.yarn || {};
+    const ex = y.expertise || {};
+    const ch = y.character || ex.character || null;
+    const U = (ex.properties || {}).evenness_u_pct;
+    if (ch && ch.look) {
+      const l = ch.look;
+      return { system: (ch.system || {}).key || null, hair: 1, hairAbs: l.hairAbs, gloss: l.gloss, bulk: l.bulk, ply: l.ply, slub: !!l.slub, filament: !!l.filament, dty: !!l.dty, lustre: l.lustre, uneven: Number.isFinite(U) ? U : undefined };
+    }
+    return { system: ((ex.spinning_system || {}).key) || null, hair: 1, gloss: 1, bulk: 1, slub: false, uneven: Number.isFinite(U) ? U : undefined };
   }
 
   // ── Flat realistic face (front), high-detail, construction-aware ──

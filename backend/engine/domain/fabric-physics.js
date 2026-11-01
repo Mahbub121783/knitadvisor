@@ -191,7 +191,7 @@ function normalizeComposition(composition) {
 /**
  * Calculates weighted average of fiber properties based on composition.
  */
-function calculateFiberPhysics(compositionArray) {
+function calculateFiberPhysics(compositionArray, yarn) {
   let L_shift = 0;
   let S_shift = 0;
   let sheen = 0;
@@ -199,7 +199,11 @@ function calculateFiberPhysics(compositionArray) {
   let names = [];
 
   for (const comp of compositionArray) {
-    const fiber = FIBER_PHYSICS[comp.id];
+    const base = FIBER_PHYSICS[comp.id];
+    // the YARN's own optics (yarn-character.js): a polyester's lustre and form
+    // decide how much of its sheen reaches the eye
+    const ov = yarn && yarn.fibre && yarn.fibre[comp.id];
+    const fiber = ov ? { ...base, sheen: ov.sheen, roughness: ov.roughness } : base;
     L_shift += fiber.L_shift * comp.weight;
     S_shift += fiber.S_shift * comp.weight;
     sheen += fiber.sheen * comp.weight;
@@ -207,6 +211,7 @@ function calculateFiberPhysics(compositionArray) {
     names.push(`${Math.round(comp.weight * 100)}% ${fiber.name}`);
   }
 
+  if (yarn && Number.isFinite(yarn.l_shift)) L_shift += yarn.l_shift;
   return { L_shift, S_shift, sheen, roughness, label: names.join(' / ') };
 }
 
@@ -220,7 +225,7 @@ function calculateFiberPhysics(compositionArray) {
  * @param {string} lightSource e.g., 'D65', 'F11', 'A'
  * @returns {object} Highly advanced visual payload for frontend rendering
  */
-function applyFabricPhysics(baseHex, composition, constructionId = 'single_jersey', finishId = 'none', lightSource = 'D65') {
+function applyFabricPhysics(baseHex, composition, constructionId = 'single_jersey', finishId = 'none', lightSource = 'D65', yarn = null) {
   // 1. Get Base Color Data
   const rgb = colorEngine.hexToRgb(baseHex);
   if (!rgb) return null;
@@ -229,7 +234,7 @@ function applyFabricPhysics(baseHex, composition, constructionId = 'single_jerse
 
   // 2. Fetch Physics Properties
   const compNorm = normalizeComposition(composition);
-  const fiberData = calculateFiberPhysics(compNorm);
+  const fiberData = calculateFiberPhysics(compNorm, yarn);
   const structureData = CONSTRUCTION_PHYSICS[constructionId.toLowerCase()] || CONSTRUCTION_PHYSICS['single_jersey'];
   const finishData = FINISH_PHYSICS[finishId.toLowerCase()] || FINISH_PHYSICS['none'];
   const lightData = ILLUMINANT_PHYSICS[lightSource.toUpperCase()] || ILLUMINANT_PHYSICS['D65'];

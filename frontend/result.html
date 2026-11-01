@@ -388,7 +388,31 @@
       color: var(--t2);
       margin-top: 8px;
     }
-  </style>
+  
+    /* Yarn character card */
+    .yc-card { margin-top: 12px; border: 1px solid rgba(24,87,196,.2); background: var(--bg2); border-radius: 10px; padding: 14px; }
+    .yc-title { font-family: var(--head); font-size: 17px; font-weight: 800; color: var(--t1); line-height: 1.3; }
+    .yc-sub { font-size: 12px; color: var(--t3); margin: 2px 0 10px; }
+    .yc-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(130px, 46%), 1fr)); gap: 8px; margin-bottom: 10px; }
+    .yc-tile { background: var(--bg3); border: 1px solid var(--line2); border-radius: 8px; padding: 9px 10px; min-width: 0; }
+    .yc-tile b { display: block; font-family: var(--head); font-size: 17px; font-weight: 800; color: var(--t1); }
+    .yc-tile b.up { color: #1E7A54; } .yc-tile b.down { color: #B23B3B; }
+    .yc-tile span { font-size: 10.5px; color: var(--t3); text-transform: uppercase; letter-spacing: .4px; }
+    .yc-poly { border: 1px solid var(--line2); background: var(--bg3); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; font-size: 12.5px; line-height: 1.55; color: var(--t2); }
+    .yc-poly b { color: var(--t1); }
+    .yc-shine { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+    .yc-shine i { display: block; flex: 1; height: 8px; border-radius: 99px; background: linear-gradient(90deg, #cfd3d8, #1857C4); position: relative; }
+    .yc-shine i em { position: absolute; top: -3px; width: 4px; height: 14px; border-radius: 2px; background: var(--t1); transform: translateX(-2px); }
+    .yc-row { display: grid; grid-template-columns: 92px 1fr; gap: 8px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 12.5px; line-height: 1.55; color: var(--t2); }
+    .yc-row:first-child { border-top: none; }
+    .yc-row .k { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--t3); padding-top: 2px; }
+    .yc-row.good .k::before, .yc-row.warn .k::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+    .yc-row.good .k::before { background: #1E7A54; } .yc-row.warn .k::before { background: #9A5B00; }
+    .yc-ul { margin: 6px 0 0 18px; padding: 0; font-size: 12.5px; line-height: 1.6; color: var(--t2); }
+    .yc-warn { margin-top: 10px; padding: 9px 12px; border-radius: 8px; background: rgba(154,91,0,.08); border: 1px solid rgba(154,91,0,.3); color: #7a4800; font-size: 12.5px; line-height: 1.55; }
+    .yc-foot { margin-top: 10px; font-size: 10.5px; color: var(--t3); line-height: 1.55; }
+    @media (max-width: 520px) { .yc-row { grid-template-columns: 1fr; gap: 2px; } }
+    </style>
   <link rel="stylesheet" href="assets/css/theme-v2.css?v=20260922a">
   <script src="assets/js/app-shell.js?v=20260922a" defer></script>
 </head>
@@ -829,6 +853,22 @@
       <div id="multi-yarn-section" class="hidden">
         <div class="result-section-label">Multi-yarn Breakdown</div>
         <div id="multi-yarn-rows"></div>
+      </div>
+
+      <!-- YARN CHARACTER (the kind of yarn: spinning system, form, polyester) -->
+      <div id="yarn-character-block" class="hidden yc-card">
+        <div class="result-section-label" style="margin-top:0; color:var(--a1);">Your Yarn</div>
+        <div class="yc-title" id="yc-title">—</div>
+        <div class="yc-sub" id="yc-sub"></div>
+        <div class="yc-tiles" id="yc-tiles"></div>
+        <div id="yc-poly" class="yc-poly hidden"></div>
+        <div class="yc-list" id="yc-effects"></div>
+        <div id="yc-process-wrap" class="hidden">
+          <div class="result-section-label" style="margin-top:12px;">What this yarn asks of the dyehouse</div>
+          <ul class="yc-ul" id="yc-process"></ul>
+        </div>
+        <div id="yc-warn" class="yc-warn hidden"></div>
+        <div class="yc-foot">Strength, evenness, hairiness and twist torque come from the spinning-system tables; lustre by polyester type, bulk and the handle, knitting and finishing notes are modelled. Change the yarn type on the calculator and every view updates.</div>
       </div>
 
       <!-- YARN EXPERTISE (grade, spinning system, strength, evenness) -->
@@ -3967,7 +4007,55 @@ function renderYarn(yarn) {
   }
 
   // — Yarn Expertise —
+  renderYarnCharacter(yarn.character || (yarn.expertise && yarn.expertise.character) || null);
   renderYarnExpertise(yarn.expertise, yarn.recommendation);
+}
+
+
+function renderYarnCharacter(ch) {
+  const block = document.getElementById('yarn-character-block');
+  if (!ch) { block.classList.add('hidden'); return; }
+  block.classList.remove('hidden');
+  const esc2 = (t) => String(t == null ? '' : t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  const name = ch.filament_only
+    ? ((ch.polyester || {}).form_label || 'Filament') + ' yarn'
+    : `${ch.system.label}${ch.form.key !== 'single' ? ' · ' + ch.form.label : ''}`;
+  document.getElementById('yc-title').textContent = name;
+  document.getElementById('yc-sub').textContent = ch.filament_only
+    ? 'Continuous filament: not spun, so the spinning system does not apply.'
+    : 'Against a combed ring-spun single yarn (the reference).';
+
+  const rel = ch.relative_to_combed_ring || {};
+  const sgn = (v) => (v > 0 ? '+' : '') + v + '%';
+  const tile = (val, lbl, good) => `<div class="yc-tile"><b class="${good == null ? '' : good ? 'up' : 'down'}">${val}</b><span>${lbl}</span></div>`;
+  let tiles = '';
+  if (rel.strength_pct != null) tiles += tile(sgn(rel.strength_pct), 'Strength', rel.strength_pct >= 0);
+  tiles += tile(sgn(rel.hairiness_pct), 'Hairiness', rel.hairiness_pct <= 0);
+  tiles += tile(esc2(ch.lustre.class), 'Shine', null);
+  if (rel.spirality_pct != null && rel.spirality_pct !== 0) tiles += tile(sgn(rel.spirality_pct), 'Twist torque', rel.spirality_pct <= 0);
+  if (rel.cost_pct != null) tiles += tile(rel.cost_pct === 0 ? 'same' : sgn(rel.cost_pct), 'Yarn cost', rel.cost_pct <= 0);
+  document.getElementById('yc-tiles').innerHTML = tiles;
+
+  const pEl = document.getElementById('yc-poly');
+  if (ch.polyester) {
+    const p = ch.polyester;
+    pEl.classList.remove('hidden');
+    pEl.innerHTML = `<b>${p.share}% polyester</b> &mdash; ${esc2(p.form_label)}, ${esc2(p.lustre_label)}${p.assumed_form || p.assumed_lustre ? ' <span style="color:var(--t3)">(' + [p.assumed_form ? 'form assumed' : '', p.assumed_lustre ? 'lustre assumed' : ''].filter(Boolean).join(', ') + ')</span>' : ''}.
+      <div class="yc-shine"><span style="font-size:11px;color:var(--t3)">matt</span><i><em style="left:${Math.round(ch.lustre.index * 100)}%"></em></i><span style="font-size:11px;color:var(--t3)">glassy</span></div>`;
+  } else pEl.classList.add('hidden');
+
+  document.getElementById('yc-effects').innerHTML = (ch.effects || []).map(e =>
+    `<div class="yc-row ${e.kind === 'good' ? 'good' : e.kind === 'warn' ? 'warn' : ''}"><div class="k">${esc2(e.area)}</div><div>${esc2(e.text)}</div></div>`).join('');
+
+  const pw = document.getElementById('yc-process-wrap');
+  if (ch.process && ch.process.length) {
+    pw.classList.remove('hidden');
+    document.getElementById('yc-process').innerHTML = ch.process.map(t => `<li>${esc2(t)}</li>`).join('');
+  } else pw.classList.add('hidden');
+
+  const w = document.getElementById('yc-warn');
+  if (ch.warnings && ch.warnings.length) { w.classList.remove('hidden'); w.innerHTML = ch.warnings.map(esc2).join('<br>'); }
+  else w.classList.add('hidden');
 }
 
 function renderYarnExpertise(e, rec) {

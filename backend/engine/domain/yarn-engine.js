@@ -36,6 +36,7 @@
 'use strict';
 
 const { usterProfile } = require('./uster-engine');
+const { yarnCharacter } = require('./yarn-character');
 
 // ============================================================
 // 1. FIBER GRADE TAXONOMY  (cotton quality hierarchy + sustainability labels)
@@ -122,6 +123,16 @@ const SPINNING_SYSTEMS = {
     label: 'Open-End (Rotor)', rkm: 13, u_pct: 11.0, hairiness_idx: 0.70, torque_idx: 0.65,
     count_min: 6, count_max: 30, cost_idx: 0.70,
     note: 'Rotor spun — bulkier, weaker (~-20% vs ring) but cheap & fast. Denim, fleece, sweat. Lower torque → less spirality.',
+  },
+  siro: {
+    label: 'Siro-spun (ring)', rkm: 20, u_pct: 9.3, hairiness_idx: 0.58, torque_idx: 0.55,
+    count_min: 20, count_max: 80, cost_idx: 1.10,
+    note: 'Two rovings drafted side by side and twisted into one yarn on a ring frame: about 10% stronger and 25-30% less hairy than ordinary ring, with a pseudo-plied, lower-torque structure. A single yarn with ply-like behaviour.',
+  },
+  siro_compact: {
+    label: 'Siro-compact', rkm: 21.5, u_pct: 8.8, hairiness_idx: 0.40, torque_idx: 0.45,
+    count_min: 30, count_max: 120, cost_idx: 1.28,
+    note: 'Siro spinning with a compacting zone: the cleanest, strongest ring-frame yarn. Premium fine knits and shirting.',
   },
   vortex: {
     label: 'Air-Jet / Vortex (MVS)', rkm: 15, u_pct: 10.5, hairiness_idx: 0.30, torque_idx: 0.32,
@@ -2278,7 +2289,18 @@ function analyzeYarn(args = {}) {
   const spin = SPINNING_SYSTEMS[spinKey];
 
   const phys = blendPhysical(fibers);
-  const diameter_mm = yarnDiameterMm(countNe, phys.density);
+  const form0 = (args.yarn_form || 'single').toLowerCase().replace('ply_2', 'ply2');
+  // What the KIND of yarn does (hairiness, bulk, lustre, polyester form):
+  // see yarn-character.js. Its bulk sets the yarn's real size.
+  const character = yarnCharacter({
+    spinKey, spin, form: form0, fibers, countNe, gradeKey,
+    poly_form: args.poly_form, poly_lustre: args.poly_lustre,
+    spinning_system: args.spinning_system, is_warp_knit: args.is_warp_knit,
+  });
+  const diameter_mm = (() => {
+    const d = yarnDiameterMm(countNe, phys.density);
+    return d == null ? d : parseFloat((d * character.bulk).toFixed(4));
+  })();
   const tex = neToTex(countNe);
 
   // Spinning limit check — can this grade+system reach this count?
@@ -2293,7 +2315,8 @@ function analyzeYarn(args = {}) {
   }
 
   // Tenacity (RKM) — system base × fibre-blend strength × grade strength.
-  const rkm = parseFloat((spin.rkm * phys.rkm_idx * grade.strength_idx).toFixed(1));
+  // a continuous filament is far stronger and more even than any spun yarn
+  const rkm = parseFloat((spin.rkm * phys.rkm_idx * grade.strength_idx * (character.filament_only ? 1.6 : 1)).toFixed(1));
   // CSP (count-strength product, approx) — calibrated so combed 30s ≈ 2430.
   // CSP = lea-strength(lbf) × Ne; here proxied from RKM. Real value is count-
   // dependent, so treat as an indicative band, not a lab figure.
@@ -2312,6 +2335,8 @@ function analyzeYarn(args = {}) {
             : spinKey === 'carded'  ? 'single_carded'
             : spinKey === 'open_end'? 'single_open_end'
             : spinKey === 'vortex'  ? 'single_vortex'
+            : spinKey === 'siro'    ? 'single_siro'
+            : spinKey === 'siro_compact' ? 'single_siro_compact'
             : 'single_combed';
   }
 
@@ -2335,7 +2360,8 @@ function analyzeYarn(args = {}) {
     grade_key: gradeKey,
   });
   // Prefer Uster's count-grounded U% over the flat system value.
-  const u_final = (uster && uster.ok && uster.u_pct != null) ? uster.u_pct : u_pct;
+  const u_final = character.filament_only ? 1.4
+    : (uster && uster.ok && uster.u_pct != null) ? uster.u_pct : u_pct;
   if (uster && uster.ok && uster.fibre_count_flag) {
     spinWarning = spinWarning ? spinWarning : uster.fibre_count_flag;
   }
@@ -2355,7 +2381,7 @@ function analyzeYarn(args = {}) {
       csp,
       evenness_u_pct: u_final,
       evenness_rating: u_final <= 9.5 ? 'Excellent' : u_final <= 11 ? 'Good' : u_final <= 13 ? 'Average' : 'Poor',
-      hairiness_h: uster && uster.ok ? uster.hairiness_h : null,
+      hairiness_h: character.filament_only ? 0.2 : (uster && uster.ok && uster.hairiness_h != null ? parseFloat((uster.hairiness_h * (character.hair_factor / Math.max(0.05, (spin.hairiness_idx / 0.8)))).toFixed(2)) : null),
       hairiness_idx: spin.hairiness_idx,
       torque_idx: parseFloat(torque.toFixed(2)),
       pilling_tendency,
@@ -2372,6 +2398,7 @@ function analyzeYarn(args = {}) {
     spinnable,
     spinning_limit: { min: minCount, max: maxCount },
     quality_engine_yarn_type: formKey,   // feeds spirality torque model
+    character,
     slub,
     warnings: spinWarning ? [spinWarning] : [],
     test_standards: 'Strength ASTM D2256/D1907 · Evenness Uster (ASTM D1425) · CSP ASTM D1578',

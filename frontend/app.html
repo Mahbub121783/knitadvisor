@@ -369,7 +369,21 @@
     .main-content {
       padding: 16px 0 32px;
     }
-  </style>
+  
+    /* Yarn type panel */
+    .yp-sub { font-size: 12px; color: var(--t3); margin: 2px 0 10px; line-height: 1.5; }
+    .yp-row-label { font-size: 10.5px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: var(--t3); margin: 10px 0 6px; }
+    .yp-chips { margin-top: 0; }
+    .yp-poly { margin-top: 4px; padding: 10px 12px; border: 1px solid var(--line2); border-radius: 10px; background: var(--bg3); }
+    .yp-poly .yp-row-label { margin-top: 0; }
+    .yp-hint { margin-top: 10px; font-size: 12px; line-height: 1.55; color: var(--t2); min-height: 18px; }
+    .yp-hint b { color: var(--t1); }
+    .yp-hint .yp-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+    .yp-hint .yp-tag { font-size: 11px; padding: 3px 9px; border-radius: 99px; border: 1px solid var(--line2); background: var(--bg2); color: var(--t2); }
+    .yp-hint .yp-tag.good { color: #1E7A54; border-color: rgba(30,122,84,.35); background: rgba(30,122,84,.07); }
+    .yp-hint .yp-tag.warn { color: #9A5B00; border-color: rgba(154,91,0,.35); background: rgba(154,91,0,.07); }
+    @media (max-width: 640px) { .yp-chips .comp-chip { padding: 8px 12px; } }
+    </style>
   <link rel="stylesheet" href="assets/css/theme-v2.css?v=20260922a">
   <script src="assets/js/app-shell.js?v=20260922a" defer></script>
 </head>
@@ -463,6 +477,55 @@
             <button class="comp-chip" onclick="setComp('55% Cotton 40% Polyester 5% Elastane', this)">Ctn+Poly+Lycra</button>
             <button class="comp-chip" onclick="setComp('100% Polyester', this)">100% Polyester</button>
           </div>
+        </div>
+
+
+        <!-- Yarn Type — how the yarn is spun and what it is made of -->
+        <div class="form-group mb-16" id="yarn-panel">
+          <label class="form-label" style="color:var(--t1)">Yarn type <span class="badge badge-gray" style="margin-left:6px">OPTIONAL</span></label>
+          <div class="yp-sub">How it is spun decides strength, hairiness, shine, handle, cost and pilling &mdash; and how the fabric looks in every view.</div>
+
+          <div class="yp-row-label">Spinning</div>
+          <div class="comp-chips yp-chips" data-yp="spinning">
+            <button type="button" class="comp-chip active" data-v="">Auto</button>
+            <button type="button" class="comp-chip" data-v="carded">Carded</button>
+            <button type="button" class="comp-chip" data-v="combed">Combed</button>
+            <button type="button" class="comp-chip" data-v="compact">Compact</button>
+            <button type="button" class="comp-chip" data-v="siro">Siro</button>
+            <button type="button" class="comp-chip" data-v="siro_compact">Siro-compact</button>
+            <button type="button" class="comp-chip" data-v="open_end">Open-end</button>
+            <button type="button" class="comp-chip" data-v="vortex">Air-jet</button>
+          </div>
+
+          <div class="yp-row-label">Yarn form</div>
+          <div class="comp-chips yp-chips" data-yp="form">
+            <button type="button" class="comp-chip active" data-v="">Single</button>
+            <button type="button" class="comp-chip" data-v="ply2">2-ply</button>
+            <button type="button" class="comp-chip" data-v="slub">Slub</button>
+            <button type="button" class="comp-chip" data-v="core_spun">Core-spun</button>
+          </div>
+
+          <div id="poly-panel" class="yp-poly hidden">
+            <div class="yp-row-label">Polyester <span class="text-dim">(shine and surface)</span></div>
+            <div class="comp-chips yp-chips" data-yp="poly_form">
+              <button type="button" class="comp-chip active" data-v="">Auto</button>
+              <button type="button" class="comp-chip" data-v="staple">Spun staple</button>
+              <button type="button" class="comp-chip" data-v="dty">Textured (DTY)</button>
+              <button type="button" class="comp-chip" data-v="fdy">Flat filament (FDY)</button>
+            </div>
+            <div class="comp-chips yp-chips" data-yp="poly_lustre" style="margin-top:6px;">
+              <button type="button" class="comp-chip active" data-v="">Lustre: auto</button>
+              <button type="button" class="comp-chip" data-v="bright">Bright</button>
+              <button type="button" class="comp-chip" data-v="semi_dull">Semi-dull</button>
+              <button type="button" class="comp-chip" data-v="full_dull">Full-dull</button>
+            </div>
+          </div>
+
+          <input type="hidden" id="spinning-input" value="">
+          <input type="hidden" id="yarn-form-input" value="">
+          <input type="hidden" id="poly-form-input" value="">
+          <input type="hidden" id="poly-lustre-input" value="">
+          <div class="yp-hint" id="yarn-hint" aria-live="polite"></div>
         </div>
 
         <!-- Fabric Type -->
@@ -656,26 +719,6 @@
                     <option value="organic">Organic Cotton (GOTS)</option>
                     <option value="cmia">Cotton made in Africa</option>
                     <option value="recycled">Recycled Cotton</option>
-                  </select>
-                </div>
-                <div class="form-group">
-                  <label class="form-label" for="spinning-input">Spinning System</label>
-                  <select id="spinning-input" class="form-select">
-                    <option value="">— auto (by count) —</option>
-                    <option value="compact">Compact (finest, strongest)</option>
-                    <option value="combed">Combed Ring</option>
-                    <option value="carded">Carded Ring</option>
-                    <option value="open_end">Open-End / Rotor</option>
-                    <option value="vortex">Air-Jet / Vortex (low spiral)</option>
-                  </select>
-                </div>
-                <div class="form-group">
-                  <label class="form-label" for="yarn-form-input">Yarn Form</label>
-                  <select id="yarn-form-input" class="form-select">
-                    <option value="">— Single —</option>
-                    <option value="ply2">2-Ply (torque-balanced)</option>
-                    <option value="slub">Slub / Fancy</option>
-                    <option value="core_spun">Core-Spun (lycra core)</option>
                   </select>
                 </div>
                 <div class="form-group">
@@ -1049,6 +1092,8 @@ const PREFILL_FIELD_MAP = {
   fiber_grade: 'fiber-grade-input',
   spinning_system: 'spinning-input',
   yarn_form: 'yarn-form-input',
+  poly_form: 'poly-form-input',
+  poly_lustre: 'poly-lustre-input',
   feeder_type: 'feeder-type-input',
   finishing_route: 'finishing-route-input',
   dyeing_method: 'dyeing-method-input',
@@ -1101,6 +1146,7 @@ function applyPrefill(params) {
     if (el) el.checked = !!params[key];
   });
 
+  syncYarnPanel(true);
   onFabricChange();
   // the layout list is rebuilt per fabric, so set it after the rebuild
   if (params.loop_arrangement) document.getElementById('loop-arr-input').value = params.loop_arrangement;
@@ -1108,7 +1154,7 @@ function applyPrefill(params) {
   // Composition chip active-state (mirrors setComp()) — chip values live inline in
   // their onclick handlers, so match against that rather than a data attribute.
   if (params.composition) {
-    document.querySelectorAll('.comp-chip').forEach(c => {
+    document.querySelectorAll('#comp-chips .comp-chip').forEach(c => {
       const m = (c.getAttribute('onclick') || '').match(/setComp\('([^']*)'/);
       c.classList.toggle('active', !!m && m[1] === params.composition);
     });
@@ -1492,10 +1538,86 @@ function setGSM(val) {
 /* ============================================================
    COMPOSITION & COLOR CHIPS
    ============================================================ */
+
+// ── Yarn type panel ─────────────────────────────────────────
+const YARN_NOTES = {
+  spinning: {
+    '': ['Chosen by count: combed ring for 20s and finer, carded for coarser.', []],
+    carded: ['<b>Carded ring.</b> Full, warm, a little coarse; the cheapest ring yarn.', [['−11% strength', 'warn'], ['25% hairier', 'warn'], ['pills sooner', 'warn'], ['cheapest ring', 'good']]],
+    combed: ['<b>Combed ring.</b> The standard for quality knits: strong, clean and even.', [['the reference', ''], ['strong, even', 'good']]],
+    compact: ['<b>Compact.</b> Smooth, crisp and very clean; the fibres are condensed before twist.', [['+11% strength', 'good'], ['30% less hair', 'good'], ['pills less', 'good'], ['+20% cost', 'warn']]],
+    siro: ['<b>Siro.</b> Two rovings twisted into one yarn: stronger, smoother, and far less spirality.', [['+11% strength', 'good'], ['28% less hair', 'good'], ['−35% twist torque', 'good'], ['+10% cost', 'warn']]],
+    siro_compact: ['<b>Siro-compact.</b> The cleanest, strongest ring-frame yarn. Premium fine knits.', [['+19% strength', 'good'], ['50% less hair', 'good'], ['−47% twist torque', 'good'], ['+28% cost', 'warn']]],
+    open_end: ['<b>Open-end (rotor).</b> Bulky, dry and economical. Best for sweat, fleece and coarse counts.', [['−28% strength', 'warn'], ['bulkier', ''], ['much lint', 'warn'], ['−30% cost', 'good']]],
+    vortex: ['<b>Air-jet (vortex).</b> Crisp and quick-drying, with very little hair and almost no spirality.', [['−17% strength', 'warn'], ['63% less hair', 'good'], ['−62% twist torque', 'good'], ['pills least', 'good']]],
+  },
+  form: {
+    '': ['', []],
+    ply2: ['<b>2-ply.</b> Torque is balanced: almost no spirality, a rounder, stronger yarn that costs more.', [['−74% spirality', 'good'], ['firmer hand', ''], ['pills less', 'good']]],
+    slub: ['<b>Slub.</b> Thick-and-thin by design; a mottled, hand-spun look.', [['+$0.30/kg', 'warn']]],
+    core_spun: ['<b>Core-spun.</b> An elastane core wrapped in fibre: stretch with a cotton face.', []],
+  },
+  poly_form: {
+    '': ['', []],
+    staple: ['<b>Spun staple polyester.</b> Cut fibre spun like cotton: soft and matt-ish, but it pills.', [['hairy', ''], ['pills', 'warn']]],
+    dty: ['<b>Textured (DTY).</b> Crimped filament: bulky, soft, a gentle sheen.', [['bulky', ''], ['no pills', 'good']]],
+    fdy: ['<b>Flat filament (FDY).</b> Smooth, strong and glassy: the shiny polyester.', [['shiny', 'good'], ['no hair', 'good'], ['no pills', 'good']]],
+  },
+  poly_lustre: {
+    '': ['', []],
+    bright: ['<b>Bright.</b> No delustrant: a sharp, glassy shine that shows every irregularity.', [['glassy shine', 'good'], ['looks deeper', '']]],
+    semi_dull: ['<b>Semi-dull.</b> A soft, natural-looking sheen. The usual choice.', []],
+    full_dull: ['<b>Full-dull.</b> Cotton-like and flat; looks lighter and chalkier in dark shades.', [['flat, matt', ''], ['looks lighter', '']]],
+  },
+};
+
+function polyPresent() {
+  const c = (document.getElementById('comp-input').value || '').toLowerCase();
+  return /poly|pes\b|pet\b|terylene|dacron|\bpc\b|\bcvc\b|polyest/.test(c);
+}
+
+function yarnHintHtml() {
+  const g = (k) => document.getElementById(({ spinning: 'spinning-input', form: 'yarn-form-input', poly_form: 'poly-form-input', poly_lustre: 'poly-lustre-input' })[k]).value;
+  const parts = [['spinning', g('spinning')], ['form', g('form')]];
+  if (polyPresent()) parts.push(['poly_form', g('poly_form')], ['poly_lustre', g('poly_lustre')]);
+  let html = '';
+  for (const [k, v] of parts) {
+    const n = (YARN_NOTES[k] || {})[v];
+    if (!n || !n[0]) continue;
+    html += `<div style="margin-bottom:8px;">${n[0]}${n[1].length ? `<div class="yp-tags">${n[1].map(([t, c]) => `<span class="yp-tag ${c}">${t}</span>`).join('')}</div>` : ''}</div>`;
+  }
+  return html || `<span class="text-dim">${YARN_NOTES.spinning[''][0]}</span>`;
+}
+
+function syncYarnPanel(fromPrefill) {
+  const poly = polyPresent();
+  document.getElementById('poly-panel').classList.toggle('hidden', !poly);
+  const ids = { spinning: 'spinning-input', form: 'yarn-form-input', poly_form: 'poly-form-input', poly_lustre: 'poly-lustre-input' };
+  document.querySelectorAll('.yp-chips').forEach(g => {
+    const cur = document.getElementById(ids[g.dataset.yp]).value;
+    g.querySelectorAll('.comp-chip').forEach(b => b.classList.toggle('active', b.dataset.v === cur));
+  });
+  document.getElementById('yarn-hint').innerHTML = yarnHintHtml();
+}
+
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('.yp-chips .comp-chip');
+  if (!b) return;
+  const ids = { spinning: 'spinning-input', form: 'yarn-form-input', poly_form: 'poly-form-input', poly_lustre: 'poly-lustre-input' };
+  document.getElementById(ids[b.parentElement.dataset.yp]).value = b.dataset.v;
+  syncYarnPanel();
+});
+document.addEventListener('DOMContentLoaded', () => {
+  const c = document.getElementById('comp-input');
+  if (c) c.addEventListener('input', () => syncYarnPanel());
+  syncYarnPanel();
+});
+
 function setComp(val, btn) {
   document.getElementById('comp-input').value = val;
-  document.querySelectorAll('.comp-chip').forEach(c => c.classList.remove('active'));
+  document.querySelectorAll('#comp-chips .comp-chip').forEach(c => c.classList.remove('active'));
   if (btn) btn.classList.add('active');
+  syncYarnPanel();
 }
 
 const SHADE_HINTS = {
@@ -1750,6 +1872,8 @@ async function doCalculate() {
     fiber_grade: document.getElementById('fiber-grade-input').value || undefined,
     spinning_system: document.getElementById('spinning-input').value || undefined,
     yarn_form: document.getElementById('yarn-form-input').value || undefined,
+    poly_form: polyPresent() ? (document.getElementById('poly-form-input').value || undefined) : undefined,
+    poly_lustre: polyPresent() ? (document.getElementById('poly-lustre-input').value || undefined) : undefined,
     feeder_type: document.getElementById('feeder-type-input').value || undefined,
     finishing_route: document.getElementById('finishing-route-input').value || undefined,
     dyeing_method: document.getElementById('dyeing-method-input').value || undefined,

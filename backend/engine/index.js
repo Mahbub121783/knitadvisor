@@ -71,10 +71,11 @@ const { analyzePique, isPique, solvePiqueRecipe, piqueGsmFor } = require('./doma
 const { analyzeFleece, isFleeceFamily } = require('./domain/fleece-engine');
 const { analyzePlushTerry, isPlushTerry } = require('./domain/terry-engine');
 const { analyzeStretch } = require('./domain/stretch-engine');
+const { yarnCharacter } = require('./domain/yarn-character');
 const { loopbackPattern } = require('./domain/terry-loops');
 const { analyzeCriticalPath } = require('./domain/critical-path');
 const { recommendMachine } = require('./domain/machine-optimizer');
-const { analyzeYarn, recommendYarnGrade } = require('./domain/yarn-engine');
+const { analyzeYarn, recommendYarnGrade, SPINNING_SYSTEMS } = require('./domain/yarn-engine');
 const { matchFactory, recommendCountFromGSM } = require('./domain/factory-match');
 const { matchRiskAssessment } = require('./domain/risk-assessment');
 const { gaugeFromBulkData, estimateProcessLoss, greyRequirementForFinished } = require('./catalog/production-data');
@@ -96,6 +97,7 @@ function calculate(params) {
           color_input,
           target_width, yarn_type, twist_multiplier, finishing_route,
           fiber_grade, spinning_system, yarn_form, slub_thickness, slub_length_cm, slub_spacing_cm,
+          poly_form, poly_lustre,
           denier, filaments, elastane_denier, elastane_pct, dyeing_method, surface_finish,
           light_source, illuminant, shade_depth_pct } = normalizeParams(params);
 
@@ -200,6 +202,7 @@ function calculate(params) {
   // (drives the 3D/2D visualization material + colour). Always attached so the
   // viewer can use sheen/roughness/shadow even in shade-only mode.
   let fabricPhysics = null;
+  let physicsArgs = null;
   {
     const SHADE_HEX = {
       black: '#1a1a1a', dark_navy: '#1f2d5c', dark: '#1f2d5c', navy: '#1f2d5c',
@@ -228,8 +231,9 @@ function calculate(params) {
     const lightSource = (light_source || illuminant || 'D65');
     // use the already-parsed fibre map ({cotton:60,polyester:40}) so blends shift correctly
     const compForPhysics = (parsedComp && parsedComp.fibers) ? parsedComp.fibers : composition;
+    physicsArgs = [baseHex, compForPhysics, constructionId, finishId, lightSource];
     try {
-      fabricPhysics = applyFabricPhysics(baseHex, compForPhysics, constructionId, finishId, lightSource);
+      fabricPhysics = applyFabricPhysics(...physicsArgs);
     } catch (_) { fabricPhysics = null; }
   }
 
@@ -348,6 +352,7 @@ function calculate(params) {
       fiber_grade,
       spinning_system,
       yarn_form,
+      poly_form, poly_lustre,
       slub: { slub_thickness, slub_length_cm, slub_spacing_cm },
     });
     yarnRecommendation = recommendYarnGrade(countResult.count_ne, fabricDef.category);
@@ -359,6 +364,18 @@ function calculate(params) {
     if (yarnExpertise.warnings && yarnExpertise.warnings.length) {
       yarnExpertise.warnings.forEach(w => warnings.push(w));
     }
+  }
+
+  // The YARN's own optics (yarn-character.js): lustre by polyester type and
+  // form, and how hairy it is, decide the sheen and lightness of the dyed
+  // cloth. A warp knit has no yarn analysis, so its character comes direct.
+  let yarnChar = yarnExpertise ? yarnExpertise.character : null;
+  if (!yarnChar && fabricDef.category === 'warp_knit') {
+    yarnChar = yarnCharacter({ spinKey: 'combed', spin: SPINNING_SYSTEMS.combed, form: 'single',
+      fibers: parsedComp ? parsedComp.fibers : { cotton: 100 }, poly_form: poly_form, poly_lustre: poly_lustre, is_warp_knit: true });
+  }
+  if (yarnChar && physicsArgs) {
+    try { fabricPhysics = applyFabricPhysics(...physicsArgs, { fibre: yarnChar.optics.fibre, l_shift: yarnChar.optics.l_shift }); } catch (_) { /* keep the plain physics */ }
   }
 
   // --- 3. Calculate loop length (skip for warp knit, use course length instead) ---
@@ -844,6 +861,7 @@ function calculate(params) {
     // v2.0 dominant-driver inputs — fall back to the yarn engine's detected
     // spinning-system torque bucket when the user didn't explicitly pick one.
     yarn_type: yarn_type || (yarnExpertise ? yarnExpertise.quality_engine_yarn_type : null),
+    yarn_character: yarnChar,
     twist_multiplier,
     finishing_route,
     // Real matched production job's measured shrinkage overrides the formula
@@ -957,6 +975,8 @@ function calculate(params) {
     else if (fleeceResult ? fleeceResult.variant.brushed : (cat2 === 'fleece' || /fleece/.test(fid2))) wpProcs.push('brush');
     else if (fleeceResult) wpProcs.push('no_brush');
     if (params.sheared) wpProcs.push('shear');
+    // a hairy yarn (carded) is singed before dyeing for a clean face
+    if (yarnChar && !yarnChar.filament_only && yarnChar.hair_factor > 1.15 && !wpProcs.includes('singe')) wpProcs.push('singe');
     if (finishing_route === 'garment_wash' || /wash/.test(finishing_route || '')) wpProcs.push('garment_wash');
     if (finishing_route === 'peach' || /peach|sueded/.test(finishing_route || '')) wpProcs.push('peach');
     { const sp = surface_finish ? finishProcess(resolveFinishId(surface_finish, null)) : null; if (sp && !wpProcs.includes(sp)) wpProcs.push(sp); }
@@ -1058,7 +1078,8 @@ function calculate(params) {
     organic: !!params.yarn_organic,
     organic_type: params.yarn_organic_type || 'gots',
     slub: !!params.yarn_slub || (yarn_form === 'slub'),
-    siro: !!params.yarn_siro,
+    siro: !!params.yarn_siro || /siro/.test(spinning_system || ''),
+    spinning_system: spinning_system || null,
     ecovero: !!params.yarn_ecovero,
     at_sight: !!params.yarn_at_sight,
     yarn_form,
@@ -1311,6 +1332,8 @@ function calculate(params) {
       filaments_input: (fabricDef.category === 'warp_knit') ? (filaments || 34) : null,
       // Yarn Expertise Engine output
       expertise: yarnExpertise,
+      // the KIND of yarn: spinning system, form, polyester lustre (yarn-character.js)
+      character: yarnChar,
       recommendation: yarnRecommendation,
     },
     
@@ -1527,6 +1550,8 @@ const ENGINE_INPUTS = Object.freeze([
   // yarn
   'yarn_type', 'twist_multiplier', 'fiber_grade', 'spinning_system', 'yarn_form',
   'slub_thickness', 'slub_length_cm', 'slub_spacing_cm',
+  // polyester: spun staple / textured / flat filament, and bright / semi-dull / full-dull
+  'poly_form', 'poly_lustre',
   // wet processing
   'finishing_route', 'dyeing_method', 'surface_finish',
   // costing
@@ -1577,6 +1602,8 @@ function normalizeParams(p) {
     fiber_grade: p.fiber_grade ? String(p.fiber_grade).trim() : null,
     spinning_system: p.spinning_system ? String(p.spinning_system).trim() : null,
     yarn_form: p.yarn_form ? String(p.yarn_form).trim() : null,
+    poly_form: p.poly_form ? String(p.poly_form).trim() : null,
+    poly_lustre: p.poly_lustre ? String(p.poly_lustre).trim() : null,
     slub_thickness: p.slub_thickness ? parseFloat(p.slub_thickness) : null,
     slub_length_cm: p.slub_length_cm ? parseFloat(p.slub_length_cm) : null,
     slub_spacing_cm: p.slub_spacing_cm ? parseFloat(p.slub_spacing_cm) : null,
