@@ -135,6 +135,47 @@ function buildCourse(c, p) {
   return { points, starts };
 }
 
+// Loop height of an unraised terry back, in wale units (one wale ≈ 0.85 mm
+// at 20G, so ≈ 1 mm): the sinker sets it, the engine's loop yarn length per
+// needle carries it.
+const LOOPBACK_HEIGHT = 1.7;
+
+// Turn a loop yarn's straight floats into standing loops. Each run of missed
+// needles between two tucks is re-drawn as a dense arc that rises off the
+// back (−z), sags toward the knitting direction and leans a little — loops
+// never stand in a perfect row. The tucks themselves stay where they are,
+// caught into the back of the face loops.
+function loopArcs(course, tokenAt, wales, height) {
+  const pts = course.points, st = course.starts;
+  const seg = (w) => pts.slice(st[w], w + 1 < st.length ? st[w + 1] : pts.length);
+  const out = [], starts = [];
+  let w = 0;
+  while (w < wales) {
+    if (tokenAt(w) !== 'miss') { starts.push(out.length); for (const p of seg(w)) out.push(p); w++; continue; }
+    let e = w;
+    while (e + 1 < wales && tokenAt(e + 1) === 'miss') e++;
+    const a = seg(w)[0], lastSeg = seg(e), b = lastSeg[lastSeg.length - 1];
+    const n = Math.max(8, (e - w + 1) * 7);
+    const h = height * (0.85 + 0.3 * frac(Math.sin((w + 1) * 12.9898 + (a.y || 0) * 78.233) * 43758.5453));
+    const lean = (frac(Math.sin((w + 3) * 4.1414 + (a.y || 0) * 9.31) * 1e4) - 0.5) * 0.25;
+    for (let i = 0; i < n; i++) {
+      if (i % 7 === 0) starts.push(out.length);
+      const t = (i + 0.5) / n;
+      const arc = Math.sin(Math.PI * t);
+      const p = a.clone ? a.clone() : { ...a };
+      p.x = a.x + (b.x - a.x) * t + lean * arc * h * 0.5;
+      p.y = a.y + (b.y - a.y) * t - 0.34 * h * Math.pow(arc, 1.6);
+      p.z = a.z + (b.z - a.z) * t - h * Math.pow(arc, 0.85);
+      out.push(p);
+    }
+    for (let k = starts.length; k < e + 1; k++) starts.push(out.length - 1);
+    w = e + 1;
+  }
+  course.points = out;
+  course.starts = starts.slice(0, wales);
+}
+const frac = (x) => x - Math.floor(x);
+
 // The machine's feed sequence for a fleece, from the engine's real cylinder
 // programme (pattern_cylinder): an all-K row is a FACE/ground feed, a row
 // with T/M is a FLEECY feed (that yarn tucks where the row says T and floats
@@ -165,7 +206,7 @@ function fleeceFeeds(pattern) {
 export function structureRepeat(con, pattern) {
   if (!con || con.base === 'warp' || con.type === 'tricot' || con.type === 'mesh' || con.type === 'spacer') return null;
   const pc = (pattern && pattern.cols) || 1, pr = (pattern && pattern.rows) || 1;
-  if (con.type === 'fleece' && con.pile === 'brush') {
+  if ((con.type === 'fleece' && con.pile === 'brush') || con.type === 'terry') {
     const feeds = fleeceFeeds(pattern);
     const faces = feeds.filter(f => f.face).length || 1;
     const w = feeds.reduce((acc, f) => (f.fleecy ? lcm(acc, f.fleecy.length) : acc), 1);
@@ -277,7 +318,12 @@ export function buildYarnPaths(opts) {
   // the BACK of a face loop where it tucks, floating across the technical
   // back everywhere else. Those floats are what brushing raises into the nap,
   // so the pile is rooted on them (floatAnchors → knit-renderer.js _addPile).
-  if (con.type === 'fleece' && con.pile === 'brush') {
+  // Loopback (french terry) is the same knitting as a fleece — the loop yarn
+  // tucks and floats on the back — but it is never raised: the floats are fed
+  // long (the sinker sets the loop height), so each one stands off the back
+  // as a small loop. That loop field IS the terry back.
+  const loopBack = con.type === 'terry';
+  if ((con.type === 'fleece' && con.pile === 'brush') || loopBack) {
     const wales = opts.wales || PATCH.wales;
     const courses = opts.courses || PATCH.courses;
     const feeds = fleeceFeeds(opts.pattern);
@@ -315,6 +361,12 @@ export function buildYarnPaths(opts) {
         baseMirror: false, zBaseFor: (tok) => (tok === 'tuck' ? FLEECE_TUCK_Z : FLEECE_BIND_DEPTH),
       });
       for (const p of course.points) p.y += lift;
+      if (loopBack) {
+        loopArcs(course, (w) => tokenAt(w), wales, opts.loopHeight || LOOPBACK_HEIGHT);
+        course.role = 'fleecy';
+        backPaths.push(course);
+        continue;
+      }
       // Remember where each float's two mid points sit in this path, so the
       // renderer can root the nap on the floats AFTER the drape pass has
       // moved them (see floatAnchorsFromPaths).
@@ -325,7 +377,7 @@ export function buildYarnPaths(opts) {
       }
       backPaths.push(course);
     }
-    return { paths: facePaths.concat(backPaths), floatAnchors: true };
+    return { paths: facePaths.concat(backPaths), floatAnchors: !loopBack };
   }
 
   if (con.type === 'rib') {

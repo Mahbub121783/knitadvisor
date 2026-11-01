@@ -1428,6 +1428,10 @@ class FabricVisualizer {
     // _stitchDensity()'s Munden-constant choice, so mislabeling it 'double' here
     // silently pulls in rib/interlock's tighter packing constants (Kc/Kw, GSM
     // reference) for these single-bed structures.
+    // French terry's catalogue name says "Inlay Fleece", but it is the
+    // UNRAISED loopback — test it before the fleece branch.
+    if (id === 'french_terry' || has('french terry', 'loopback', 'loop back'))
+      return { type: 'terry', base: 'single', label: 'french terry', mesh: false, brush: false, pile: 'loop' };
     if (has('fleece', 'polar'))
       return { type: 'fleece', base: 'single', label: 'fleece', mesh: false, brush: true, pile: 'brush' };
     if (has('terry', 'french terry', 'loop knit', 'loopback'))

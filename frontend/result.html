@@ -1225,6 +1225,16 @@
       <div id="pique-body"></div>
     </div>
 
+    <!-- ===== FLEECE / LOOPBACK TERRY (fleece-engine.js) ===== -->
+    <div class="result-section anim-in hidden" id="sec-fleece">
+      <div class="result-section-title">
+        <div class="rst-icon purple">&#9729;</div>
+        <div class="rst-title-text" id="fleece-title">Fleece Construction</div>
+        <span class="badge badge-amber" style="margin-left:auto">Mass balance + factory data</span>
+      </div>
+      <div id="fleece-body"></div>
+    </div>
+
     <!-- ===== PRODUCTION (conditional) ===== -->
     <div class="prod-section anim-in hidden" id="sec-production">
       <div class="result-section-title">
@@ -2326,6 +2336,13 @@ function renderResult(r, params) {
     document.getElementById('pique-body').innerHTML = renderPique(r.pique);
   }
 
+  // — Fleece / loopback terry —
+  if (r.fleece && r.fleece.ok) {
+    document.getElementById('sec-fleece').classList.remove('hidden');
+    document.getElementById('fleece-title').textContent = r.fleece.variant.kind === 'terry' ? 'Loopback Terry Construction' : 'Fleece Construction';
+    document.getElementById('fleece-body').innerHTML = renderFleece(r.fleece);
+  }
+
   // — Fabric Visualization —
   requestAnimationFrame(() => {
     const vizBody = document.getElementById('viz-section-body');
@@ -2417,6 +2434,74 @@ function renderPique(q) {
       <div class="mt-4 text-sm">${d.note}</div>
       ${q.basis ? `<div class="label mt-2">Measured on ${q.basis.factory_pique_rows} factory piqué and ${q.basis.factory_jersey_rows} jersey qualities: ${q.basis.measured}. Modelled: ${q.basis.modelled}.</div>` : ''}
       ${q.basis && q.basis.validation ? `<div class="label mt-2">Checked against those ${q.basis.validation.rows} piqué rows (each predicted from the others): finished width within ${q.basis.validation.width_error_median_pct}% (median), finished GSM within ${q.basis.validation.gsm_error_median_pct}%.</div>` : ''}
+    </div>
+  </div>`;
+  return html;
+}
+
+function renderFleece(f) {
+  const esc = (x) => String(x == null ? '' : x).replace(/[&<>]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]));
+  const tile = (label, value, sub, cls = '') => `<div class="card-sm">
+      <div class="label">${label}</div>
+      <div class="value-sm mt-4 ${cls}">${value}</div>
+      ${sub ? `<div class="label mt-2">${sub}</div>` : ''}
+    </div>`;
+  const mb = f.mass_balance, g = f.gauge_check, b = f.brushing, th = f.thermal;
+  const fin = th.brushed || th.unbrushed;
+  const roleName = { face: 'Face (knit)', binder: 'Binder (tie-in)', loop: 'Loop (fleecy)', elastane: 'Elastane' };
+  const roleCol = { face: '#60a5fa', binder: '#a78bfa', loop: '#4ade80', elastane: '#fbbf24' };
+  let html = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:8px;margin-bottom:14px;">
+    ${tile('Construction', esc(f.variant.name), `${f.variant.yarn_system} yarns · loop tucks 1 in ${f.variant.tuck_repeat}`, 'text-blue')}
+    ${tile('Density', `${mb.wales_per_cm} w × ${mb.courses_per_cm} c /cm`, `${mb.gauge}G · Kc ${mb.kc}`)}
+    ${tile('GSM with these counts', `${mb.gsm_at_chosen_counts}`, `target ${mb.gsm_target} (${mb.deviation_pct > 0 ? '+' : ''}${mb.deviation_pct}%)`, Math.abs(mb.deviation_pct) <= 4 ? 'text-green' : 'text-amber')}
+    ${b ? tile('Before brushing', `${mb.gsm_before_brushing} g/m²`, `brushing takes ${b.fabric_mass_removed_pct}% as lint`, 'text-amber') : tile('Back', 'Loopback', 'not raised — the loops stay', 'text-amber')}
+    ${tile('Thickness', `${fin.thickness_mm} mm`, th.brushed ? `${th.unbrushed.thickness_mm} mm before brushing` : 'loop back included', 'text-purple')}
+    ${tile('Warmth', `${fin.clo} clo`, `${fin.porosity_pct}% air · R ${fin.r_m2k_w} m²K/W`, 'text-green')}
+  </div>`;
+  html += `<div class="card-sm" style="margin-bottom:10px;">
+    <div class="label">Yarn plan — what each feed carries</div>
+    <div style="display:flex;height:9px;border-radius:99px;overflow:hidden;margin:8px 0 6px;background:var(--line3);">${f.yarns.map(y => `<i title="${esc(roleName[y.role])}" style="display:block;width:${y.share_pct}%;background:${roleCol[y.role]}"></i>`).join('')}</div>
+    <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11.5px;">
+      <tr style="color:var(--t3);text-align:left"><th style="padding:4px 6px">Yarn</th><th style="padding:4px 6px">Count / type</th><th style="padding:4px 6px">Length per needle</th><th style="padding:4px 6px">Share of weight</th><th style="padding:4px 6px">Basis</th></tr>
+      ${f.yarns.map(y => `<tr style="border-top:1px solid var(--line3)">
+        <td style="padding:5px 6px;white-space:nowrap"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${roleCol[y.role]};margin-right:6px"></span>${roleName[y.role]}</td>
+        <td style="padding:5px 6px"><b>${esc(y.label)}</b>${y.exact_ne ? `<br><span style="color:var(--t3)">balance asks ${y.exact_ne} Ne</span>` : ''}</td>
+        <td style="padding:5px 6px" class="mono">${y.sl_mm != null ? y.sl_mm + ' mm' : '—'}${y.sl_for_exact_gsm_mm ? `<br><span style="color:var(--t3)">${y.sl_for_exact_gsm_mm} mm hits ${mb.gsm_target} exactly</span>` : ''}</td>
+        <td style="padding:5px 6px" class="mono">${y.share_pct}%</td>
+        <td style="padding:5px 6px;color:var(--t3)">${esc(y.basis || '')}</td></tr>`).join('')}
+    </table></div>
+    <div class="label mt-2">${esc(mb.formula)} — every needle in every face course carries one length of each yarn, so the loop yarn is what closes the balance. A heavier fleece needs a coarser loop yarn.</div>
+  </div>`;
+  html += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;">
+    <div class="card-sm">
+      <div class="label">Fibre content</div>
+      <div class="mt-4 text-sm">Declared <b>${esc(f.composition.declared)}</b> → built <b>${esc(f.composition.achieved)}</b>.</div>
+      <div class="mt-4 text-sm">Loop yarn blend: <b>${esc(f.composition.loop_yarn_blend)}</b>${f.composition.loop_polyester_needed_pct > 0 ? ` (the balance asks ${f.composition.loop_polyester_needed_pct}% polyester in it)` : ''}.</div>
+    </div>
+    <div class="card-sm">
+      <div class="label">Machine</div>
+      <div class="mt-4 text-sm ${g.ok ? '' : 'text-amber'}">${g.gauge}G: knitting yarns up to ${g.knit_limit_tex} tex (heaviest here ${g.knit_load_tex}); loop yarn down to ${g.loop_ne_min} Ne (here ${g.loop_ne}).${g.ok ? ' Runs.' : ` Use ${g.suggested_gauge ? g.suggested_gauge + 'G' : 'a coarser gauge'}.`}</div>
+      ${g.factory_practice ? `<div class="label mt-2">Factory practice: ${esc(g.factory_practice)}.</div>` : ''}
+    </div>
+    ${b ? `<div class="card-sm">
+      <div class="label">Brushing</div>
+      <div class="mt-4 text-sm">${b.passes} passes on the ${b.sides === 'both' ? 'both sides' : 'back'}${b.sheared ? ', sheared' : ''}: ${b.loop_yarn_removed_pct}% of the loop yarn torn out (${b.fabric_mass_removed_pct}% of the cloth), nap about <b>${b.pile_height_mm} mm</b>.</div>
+      <div class="mt-4 text-sm">Warmth ${th.unbrushed.clo} → <b>${th.brushed.clo} clo</b>: the nap holds still air (${th.brushed.porosity_pct}% of the volume).</div>
+      <div class="label mt-2">${esc(b.basis)}</div>
+    </div>` : ''}
+    <div class="card-sm">
+      <div class="label">Process route</div>
+      <div class="mt-4 text-sm">${f.process_route.map(esc).join(' → ')}</div>
+    </div>
+    <div class="card-sm">
+      <div class="label">Watch for</div>
+      ${f.risks.map(r => `<div class="mt-4 text-sm"><b>${esc(r.topic)}.</b> ${esc(r.note)}</div>`).join('')}
+    </div>
+    <div class="card-sm">
+      <div class="label">How it is grounded</div>
+      <div class="mt-4 text-sm">${f.calibration.factory_rows} factory fleece qualities (wales ≈ ${f.calibration.wales_per_cm_per_gauge} × gauge per cm; face ${esc(f.calibration.face_count_trend)}) and ${f.calibration.anchors.length} full order specifications fix the yarn lengths and Kc.</div>
+      ${f.calibration.leave_one_out && f.calibration.leave_one_out.length ? `<div class="mt-4 text-sm">Each order predicted from the other: ${f.calibration.leave_one_out.map(l => `${l.gsm} → ${l.predicted} GSM (${l.error_pct > 0 ? '+' : ''}${l.error_pct}%)`).join(', ')}.</div>` : ''}
+      <div class="label mt-2">Brushing loss, pile height and the gauge limits are modelled; the rest is measured or derived.</div>
     </div>
   </div>`;
   return html;

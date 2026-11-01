@@ -94,7 +94,10 @@ export function bakeStructure(renderer, object, win, pxPerUnit, opts = {}) {
   const hFront = heightMaterial(zBox.min.z, zBox.max.z, false);
   const hBack = heightMaterial(zBox.min.z, zBox.max.z, true);
   const flat = new THREE.Color(0.5, 0.5, 1.0);
-  const gap = new THREE.Color(0.3, 0.3, 0.3);
+  // what a hole through the tile reads as: dark on an open knit, but a
+  // fleece or terry has a whole yarn layer behind its face (opts.gap)
+  const gv = opts.gap != null ? opts.gap : 0.3;
+  const gap = new THREE.Color(gv, gv, gv);
   const black = new THREE.Color(0, 0, 0);
   const aniso = renderer.capabilities.getMaxAnisotropy();
 
@@ -400,36 +403,48 @@ function rng(seed) {
  *   'loops' — an uncut loop pile (french-terry back): small yarn loops
  */
 export function fibreSurfaceTexture(kind, aniso) {
-  const size = 256;
+  // A raised fibre is ~15-25 µm across: at 1024 px over the ~1.6 cm nap tile
+  // one pixel is ~16 µm, so a fibre can be drawn at its real width. At the old
+  // 256 px every fibre was ~100 µm — a field of scratches, not a nap.
+  const size = kind === 'nap' ? 1024 : 256;
   const c = document.createElement('canvas'); c.width = c.height = size;
   const ctx = c.getContext('2d');
   ctx.fillStyle = '#808080'; ctx.fillRect(0, 0, size, size);
   ctx.lineCap = 'round';
   const R = rng(kind === 'nap' ? 9173 : 3307);
   const wrap = (fn) => { for (const ox of [-size, 0, size]) for (const oy of [-size, 0, size]) fn(ox, oy); };
+  // only the copies that can touch the tile (a full 3x3 wrap of 20k fibres is slow)
+  const wrapNear = (x0, y0, r, fn) => {
+    for (const ox of [-size, 0, size]) for (const oy of [-size, 0, size]) {
+      if (x0 + ox + r < 0 || x0 + ox - r > size || y0 + oy + r < 0 || y0 + oy - r > size) continue;
+      fn(ox, oy);
+    }
+  };
   if (kind === 'nap') {
     // Raised fibre doesn't stand evenly: it curls and clumps into soft
     // pebbles a couple of millimetres across (the tile is ~1.6 cm), which is
     // what gives a brushed back its mottled, velvety look from a distance.
-    for (let k = 0; k < 150; k++) {
-      const x0 = R() * size, y0 = R() * size, rad = 7 + R() * 9;
-      wrap((ox, oy) => {
+    for (let k = 0; k < 170; k++) {
+      const x0 = R() * size, y0 = R() * size, rad = 28 + R() * 40;
+      wrapNear(x0, y0, rad, (ox, oy) => {
         const g = ctx.createRadialGradient(x0 + ox, y0 + oy, 0, x0 + ox, y0 + oy, rad);
-        g.addColorStop(0, 'rgba(215,215,215,0.75)');
+        g.addColorStop(0, 'rgba(200,200,200,0.55)');
         g.addColorStop(1, 'rgba(128,128,128,0)');
         ctx.fillStyle = g;
         ctx.beginPath(); ctx.arc(x0 + ox, y0 + oy, rad, 0, Math.PI * 2); ctx.fill();
       });
     }
-    for (let k = 0; k < 2600; k++) {
-      const x0 = R() * size, y0 = R() * size, a = R() * Math.PI * 2;
-      const len = 5 + R() * 16, bend = (R() - 0.5) * 12;
+    // fine curled fibres, most combed along the raising direction
+    for (let k = 0; k < 22000; k++) {
+      const x0 = R() * size, y0 = R() * size;
+      const a = R() < 0.5 ? Math.PI / 2 + (R() - 0.5) * 1.2 : R() * Math.PI * 2;
+      const len = 18 + Math.pow(R(), 1.5) * 75, bend = (R() - 0.5) * len * 0.8;
       const x2 = x0 + Math.cos(a) * len, y2 = y0 + Math.sin(a) * len;
       const qx = (x0 + x2) / 2 - Math.sin(a) * bend, qy = (y0 + y2) / 2 + Math.cos(a) * bend;
-      const v = 70 + (R() * 150 | 0);
-      ctx.strokeStyle = `rgba(${v},${v},${v},0.55)`;
-      ctx.lineWidth = 1 + R() * 1.8;
-      wrap((ox, oy) => { ctx.beginPath(); ctx.moveTo(x0 + ox, y0 + oy); ctx.quadraticCurveTo(qx + ox, qy + oy, x2 + ox, y2 + oy); ctx.stroke(); });
+      const v = 80 + (R() * 150 | 0);
+      ctx.strokeStyle = `rgba(${v},${v},${v},0.4)`;
+      ctx.lineWidth = 0.7 + R() * 0.8;
+      wrapNear(x0, y0, len + Math.abs(bend), (ox, oy) => { ctx.beginPath(); ctx.moveTo(x0 + ox, y0 + oy); ctx.quadraticCurveTo(qx + ox, qy + oy, x2 + ox, y2 + oy); ctx.stroke(); });
     }
   } else {
     // Uncut loops ~1-2 mm across on a dark ground (the tile is ~2.4 cm), in
@@ -458,7 +473,7 @@ export function fibreSurfaceTexture(kind, aniso) {
   const out = document.createElement('canvas'); out.width = out.height = size;
   const octx = out.getContext('2d');
   const img = octx.createImageData(size, size);
-  const strength = kind === 'nap' ? 2.0 : 3.0;
+  const strength = kind === 'nap' ? 3.0 : 3.0;
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const dx = (Hf(x - 1, y) - Hf(x + 1, y)) * strength;

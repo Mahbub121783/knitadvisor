@@ -78,22 +78,41 @@ const SHRINKAGE_BASE = {
     tencel:      { length: 6.0,  width: 2.5 },
   },
   fleece_3_thread: {
-    cotton:      { length: 7.0,  width: 1.0 },
-    cvc:         { length: 5.5,  width: 0.8 },
-    tencel:      { length: 7.0,  width: 0.5 },
-    bamboo:      { length: 7.0,  width: 0.9 },
+    // Relaxed potential of a raised fleece. Four real fleece/terry orders
+    // (risk records 6, 33, 37, 47 — cotton and CVC, 310-500 GSM) all carry
+    // the same tested spec, L -6 ±1 % and W -8 ±2 %: the width that the
+    // stenter stretched out for brushing comes back in the wash, so width
+    // shrinks MORE than length — the old W 0.8-1.0 % had it backwards.
+    cotton:      { length: 6.0,  width: 8.5 },
+    cvc:         { length: 5.5,  width: 8.0 },
+    pc:          { length: 4.0,  width: 5.0 },
+    polyester:   { length: 2.5,  width: 3.0 },
+    viscose:     { length: 7.5,  width: 9.5 },
+    tencel:      { length: 7.5,  width: 9.0 },
+    bamboo:      { length: 7.0,  width: 9.0 },
   },
   fleece_2_thread: {
-    cotton:      { length: 7.2,  width: 1.2 },
-    cvc:         { length: 5.8,  width: 1.0 },
-    tencel:      { length: 7.2,  width: 0.7 },
-    bamboo:      { length: 5.5,  width: 0.9 },
+    // Relaxed potential of a raised fleece. Four real fleece/terry orders
+    // (risk records 6, 33, 37, 47 — cotton and CVC, 310-500 GSM) all carry
+    // the same tested spec, L -6 ±1 % and W -8 ±2 %: the width that the
+    // stenter stretched out for brushing comes back in the wash, so width
+    // shrinks MORE than length — the old W 0.8-1.0 % had it backwards.
+    cotton:      { length: 6.0,  width: 8.5 },
+    cvc:         { length: 5.5,  width: 8.0 },
+    pc:          { length: 4.0,  width: 5.0 },
+    polyester:   { length: 2.5,  width: 3.0 },
+    viscose:     { length: 7.5,  width: 9.5 },
+    tencel:      { length: 7.5,  width: 9.0 },
+    bamboo:      { length: 7.0,  width: 9.0 },
   },
-  french_terry: {
-    cotton:      { length: 6.5,  width: 2.0 },
-    cvc:         { length: 5.0,  width: 1.8 },
-    tencel:      { length: 7.0,  width: 1.5 },
-    bamboo:      { length: 6.0,  width: 1.8 },
+  french_terry: { // loopback terry: not raised, so less stretched-out width than a fleece
+    cotton:      { length: 6.0,  width: 7.0 },
+    cvc:         { length: 5.5,  width: 6.5 },
+    pc:          { length: 4.0,  width: 4.5 },
+    polyester:   { length: 2.5,  width: 2.5 },
+    viscose:     { length: 7.5,  width: 8.5 },
+    tencel:      { length: 7.5,  width: 8.0 },
+    bamboo:      { length: 7.0,  width: 8.0 },
   },
   pique_single: {
     cotton:      { length: 5.5,  width: 4.0 },
@@ -129,17 +148,18 @@ const SHRINKAGE_BASE = {
     cvc:         { length: 4.5,  width: 3.2 },
     pc:          { length: 3.0,  width: 2.5 },
   },
-  terry: { // ESTIMATED — toweling terry: loose supplementary pile loops shrink
-    // more lengthwise than a plain structure but the pile itself absorbs most
-    // of the width relaxation, similar order to the fleece family.
-    cotton:      { length: 7.5,  width: 3.0 },
-    cvc:         { length: 6.0,  width: 2.5 },
+  terry: { // toweling and loopback terry (risk records 33, 47: L -6, W -8 spec)
+    cotton:      { length: 6.0,  width: 8.0 },
+    cvc:         { length: 5.5,  width: 7.5 },
+    pc:          { length: 4.0,  width: 4.5 },
   },
-  fleece: { // ESTIMATED — french_terry's numbers, generalized to the family
-    cotton:      { length: 6.5,  width: 2.0 },
-    cvc:         { length: 5.0,  width: 1.8 },
-    tencel:      { length: 7.0,  width: 1.5 },
-    bamboo:      { length: 6.0,  width: 1.8 },
+  fleece: { // family fallback = 3-thread fleece (risk records 6, 37)
+    cotton:      { length: 6.0,  width: 8.5 },
+    cvc:         { length: 5.5,  width: 8.0 },
+    pc:          { length: 4.0,  width: 5.0 },
+    polyester:   { length: 2.5,  width: 3.0 },
+    tencel:      { length: 7.5,  width: 9.0 },
+    bamboo:      { length: 7.0,  width: 9.0 },
   },
   waffle: { // ESTIMATED — tuck-stitch structure, more dimensionally stable
     // widthwise than plain jersey but not as locked-down as pique.
@@ -235,6 +255,11 @@ const FINISHING_ROUTE = {
   heat_set:        { length_factor: 0.12, width_factor: 0.45, spirality_factor: 0.20, label: 'Heat-set (synthetic-rich)' },
 };
 const DEFAULT_FINISHING_ROUTE = 'compacted'; // most knit fabric is delivered compacted
+// Pile fabrics (fleece, terry) go stenter → brush → stenter → compactor, but
+// a thick, raised cloth cannot be compacted the way a plain jersey can: the
+// compactor barely reaches it. Factored so the real orders' tested L -6 / W -8
+// comes out of the relaxed potential above.
+FINISHING_ROUTE.pile = { length_factor: 0.85, width_factor: 0.85, spirality_factor: 0.35, label: 'Pile fabric (stenter → brush → stenter → compact)' };
 
 // ============================================================
 // v2.0 — MODEL CONFIDENCE BANDS (±, from source regression std. error)
@@ -426,7 +451,8 @@ function predictQuality(params) {
   const yarnStructure = YARN_STRUCTURE_TORQUE[params.yarn_type] != null ? params.yarn_type : DEFAULT_YARN_STRUCTURE;
   const torqueFactor  = YARN_STRUCTURE_TORQUE[yarnStructure];
   const twistAlpha    = estimateTwistAlpha(params.twist_multiplier);
-  const finishKey     = FINISHING_ROUTE[params.finishing_route] ? params.finishing_route : DEFAULT_FINISHING_ROUTE;
+  const finishKey     = FINISHING_ROUTE[params.finishing_route] ? params.finishing_route
+    : ((family === 'fleece' || family === 'terry') ? 'pile' : DEFAULT_FINISHING_ROUTE);
   const route         = FINISHING_ROUTE[finishKey];
   const routeLenF     = route.length_factor;
   const routeWidF     = route.width_factor;

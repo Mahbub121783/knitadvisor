@@ -343,7 +343,8 @@ const MACHINE_STAGES = [
   {
     key: 'raising', name: 'Brushing / Raising', cat: 'finishing',
     purpose: 'Raise surface fibres → soft fleece pile or peach hand. Fleece/terry/peach only.',
-    when: (c) => c.fam === 'fleece' || c.fam === 'terry' || c.brush || c.peach,
+    // a loopback terry is NOT raised — only a fleece (or a brushed/peached finish) is
+    when: (c) => c.brush || c.peach,
     problems: [
       { problem: 'Uneven pile / direction streak', cause: 'Worn wire rollers, uneven tension', solution: 'Calibrate raising rollers, multi-pass low intensity, even direction', remedy: 'Re-raise lightly' },
       { problem: 'Pile shedding', cause: 'Loose low-twist loop yarn over-raised', solution: 'Optimise loop yarn twist; gentle raise', remedy: 'Reduce passes' },
@@ -680,12 +681,26 @@ function processRoute(method, ctx) {
     seq.push('Pigment Print (pad/print)', 'Dry-Cure (150–160°C)');
   } else if (m === 'discharge') {
     seq.push('Dye dischargeable ground', 'Discharge Print', 'Steam', 'Wash-off');
+  } else if (m === 'disperse') {
+    seq.push('Disperse Dye (HT 130°C)', 'Reduction Clearing');
+    if (ctx.cellulosicPart) seq.push('Reactive Dye (exhaust, cellulosic part)', 'Soaping / Wash-off');
   } else {
-    seq.push(m === 'disperse' ? 'Disperse Dye (HT 130°C)' : 'Reactive Dye (exhaust)', 'Soaping / Wash-off');
-    if (m === 'disperse') seq.push('Reduction Clearing');
+    // A cotton/polyester blend dyed in a real shade needs the polyester dyed
+    // too (two-bath: disperse first, then reactive) or it shows white.
+    if (ctx.cvc && ctx.shade !== 'white_melange' && ctx.shade !== 'melange') seq.push('Disperse Dye (polyester part, HT 130°C)', 'Reduction Clearing');
+    seq.push('Reactive Dye (exhaust)', 'Soaping / Wash-off');
   }
-  if (ctx.fam === 'fleece' || ctx.fam === 'terry' || ctx.brush) seq.push('Brushing / Raising');
-  seq.push('Hydro-extract / Dry (Stenter + softener + anti-skew)');
+  if (ctx.brush) {
+    // Raising needs DRY cloth, held wider than finish (raising pulls it in),
+    // then a second stenter sets the width and the softener.
+    seq.push('Hydro-extract / Slit');
+    seq.push('Stenter dry (15–18% over finish width)');
+    seq.push('Brushing / Raising');
+    if (ctx.shear) seq.push('Shearing');
+    seq.push('Stenter finish (softener, width set)');
+  } else {
+    seq.push('Hydro-extract / Dry (Stenter + softener + anti-skew)');
+  }
   seq.push('Compacting (shrinkage-to-spec)');
   if (ctx.fam === 'pique' || ctx.fam === 'interlock' || ctx.calender) seq.push('Calendering');
   if (m === 'garment_wash') seq.push('→ Garment make → Garment Wash (enzyme/stone/acid)');
@@ -715,7 +730,11 @@ function analyzeWetProcessing(args) {
 
   const fam = resolveFamily(fabric, category);
   const sh = normShade(shade);
-  const me = normMethod(dyeing_method);
+  // No method given: the fibre decides — a polyester-rich cloth takes disperse
+  // dye, not reactive (reactive dye has nothing to bond to on polyester).
+  const polyPct = fibers.polyester || 0;
+  let me = normMethod(dyeing_method || (polyPct >= 50 ? 'disperse' : 'reactive'));
+  if (me === 'reactive' && polyPct >= 70) me = 'disperse';
 
   // Build a relevance context for stage/structure filtering.
   const ctx = {
@@ -725,7 +744,9 @@ function analyzeWetProcessing(args) {
     cvc: (fibers.polyester || 0) >= 15 && (fibers.cotton || 0) >= 50,
     synthetic: (fibers.polyester || 0) >= 30,
     lycra: (fibers.elastane || fibers.spandex || fibers.lycra || 0) > 0,
-    brush: processes.includes('brush') || fam === 'fleece',
+    brush: processes.includes('brush') || (fam === 'fleece' && !processes.includes('no_brush')),
+    shear: processes.includes('shear'),
+    cellulosicPart: ((fibers.cotton || 0) + (fibers.viscose || 0) + (fibers.modal || 0) + (fibers.tencel || 0)) >= 15,
     peach: processes.includes('peach'),
     singe: processes.includes('singe') || me === 'pigment' || me === 'discharge',
     calender: processes.includes('calender'),

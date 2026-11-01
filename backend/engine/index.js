@@ -68,6 +68,7 @@ const {
 
 const { getPattern: getEnginePattern } = require('./domain/pattern-engine');
 const { analyzePique, isPique, solvePiqueRecipe, piqueGsmFor } = require('./domain/pique-engine');
+const { analyzeFleece, isFleeceFamily } = require('./domain/fleece-engine');
 const { analyzeCriticalPath } = require('./domain/critical-path');
 const { recommendMachine } = require('./domain/machine-optimizer');
 const { analyzeYarn, recommendYarnGrade } = require('./domain/yarn-engine');
@@ -422,8 +423,46 @@ function calculate(params) {
     }
   }
 
+  // --- 3.05 Fleece / loopback terry: the three-yarn plan from the mass balance ---
+  // The face count and stitch length are the engine's own (factory) answer; the
+  // fleece engine adds the binder, solves the loop yarn that closes the
+  // finished-GSM balance, and checks what fibre each yarn must be.
+  let fleeceResult = null;
+  if (isFleeceFamily(fabricDef.id)) {
+    fleeceResult = analyzeFleece({
+      fabricId: fabricDef.id, gsm, gauge: gauge || 20, composition: parsedComp, rawComposition: composition,
+      faceNe: countResult.count_ne, faceSlMm: llResult && llResult.ll_mm > 0 ? llResult.ll_mm : null,
+      brushing: { passes: params.brush_passes, sheared: !!params.sheared, sides: params.brush_sides,
+        brushed: /brush|raise/i.test(String(surface_finish || '')) },
+    });
+    if (fleeceResult) {
+      const face = fleeceResult.yarns.find(y => y.role === 'face');
+      const loop = fleeceResult.yarns.find(y => y.role === 'loop');
+      const binder = fleeceResult.yarns.find(y => y.role === 'binder');
+      // the face yarn's own fibre (not the whole fabric's), plus the plated elastane
+      const ePct = parsedComp && parsedComp.elastane_pct ? parsedComp.elastane_pct : 0;
+      const faceFibre = face.composition;
+      const faceDecl = generateYarnDeclaration(parseComposition(faceFibre), face.ne, faceFibre)
+        + (ePct > 0 ? ` + ${ePct <= 3 ? 20 : ePct <= 8 ? 40 : 70}D Elastane (plated with face)` : '');
+      countResult.count_display = `Ground: ${faceDecl}`
+        + ` + Loop: ${loop.label}`
+        + (binder ? (/filament/.test(binder.label) ? ` + Binder ${Math.round(binder.tex * 9)}D` : ` + Binder: ${binder.label.replace(/ \(same as face\)/, '')}`) : '');
+      countResult.yarn2_ne = loop.ne;
+      countResult.yarn2_display = `Loop: ${loop.label}`;
+      countResult.binder_denier = binder && /filament/.test(binder.label) ? Math.round(binder.tex * 9) : null;
+      countResult.source = countResult.source || 'FLEECE_MODEL';
+      fleeceResult.warnings.forEach(w => warnings.push(`Fleece: ${w}`));
+      trace.push({ step: '3.05', action: 'fleece_plan', result: `${fleeceResult.declaration} · ${fleeceResult.mass_balance.courses_per_cm}c × ${fleeceResult.mass_balance.wales_per_cm}w /cm → ${fleeceResult.mass_balance.gsm_at_chosen_counts} GSM`, formula: fleeceResult.mass_balance.formula });
+    }
+  }
+
   // --- 3.1 Yarn Consumption (Dynamic Weight %) ---
-  const consumptionResult = calculateConsumption(fabric, countResult);
+  const consumptionResult = fleeceResult ? {
+    source: 'Fleece mass balance (fleece-engine.js)',
+    method: 'per-needle yarn length × tex',
+    percentages: Object.fromEntries(fleeceResult.yarns.map(y => [
+      y.role === 'face' ? 'face_ground_pct' : y.role === 'loop' ? 'fleece_loop_pct' : y.role === 'binder' ? 'tie_in_binder_pct' : 'elastane_pct', y.share_pct])),
+  } : calculateConsumption(fabric, countResult);
   if (consumptionResult) {
     trace.push({ step: 3.1, action: 'yarn_consumption', result: consumptionResult.percentages });
   }
@@ -659,6 +698,21 @@ function calculate(params) {
           source: 'Knitting Master File (5000+ bookings).',
         };
       }
+      if (fleeceResult) {
+        const g = fleeceResult.gauge_check;
+        const fg = g.ok ? g.gauge : (g.suggested_gauge || g.gauge);
+        const theory = optimalMachine.optimal_gauge;
+        const d = optimalMachine.optimal_dia || 30;
+        optimalMachine.optimal_gauge = fg;
+        if (optimalMachine.gauge) optimalMachine.gauge.optimal_gauge = fg;
+        if (optimalMachine.dia) optimalMachine.dia.needles = Math.round(Math.PI * d * fg / 2) * 2;
+        optimalMachine.summary = `USE ${d}" Dia × ${fg} GG fleece machine — ${Math.round(Math.PI * d * fg / 2) * 2} needles.`;
+        optimalMachine.bulk_data_gauge = {
+          factory_gauge: fg, theory_gauge: theory, family: 'fleece', agrees: theory === fg,
+          note: `A fleece is gauged by its yarns, not by the single-jersey cover factor (${theory} GG): face and binder must each clear the hook and the coarse loop yarn must tuck. ${g.factory_practice ? 'Factory practice: ' + g.factory_practice + '.' : ''}`,
+          source: 'Factory fleece records + fleece engine gauge check.',
+        };
+      }
       trace.push({
         step: '4.1',
         action: 'optimal_machine',
@@ -790,7 +844,7 @@ function calculate(params) {
     const procs = [];
     const cat = fabricDef.category || '';
     const fid = fabricDef.id || '';
-    if (cat === 'fleece' || /fleece|terry/.test(fid)) procs.push('brush');
+    if (fleeceResult ? fleeceResult.variant.brushed : (cat === 'fleece' || /fleece/.test(fid))) procs.push('brush');
     if (finishing_route === 'garment_wash' || /wash/.test(finishing_route || '')) procs.push('garment_wash');
     if (finishing_route === 'peach' || /peach|sueded/.test(finishing_route || '')) procs.push('peach');
     { const sp = surface_finish ? finishProcess(resolveFinishId(surface_finish, null)) : null; if (sp && !procs.includes(sp)) procs.push(sp); }
@@ -811,7 +865,9 @@ function calculate(params) {
     const wpProcs = [];
     const cat2 = fabricDef.category || '';
     const fid2 = fabricDef.id || '';
-    if (cat2 === 'fleece' || /fleece|terry/.test(fid2)) wpProcs.push('brush');
+    if (fleeceResult ? fleeceResult.variant.brushed : (cat2 === 'fleece' || /fleece/.test(fid2))) wpProcs.push('brush');
+    else if (fleeceResult) wpProcs.push('no_brush');
+    if (params.sheared) wpProcs.push('shear');
     if (finishing_route === 'garment_wash' || /wash/.test(finishing_route || '')) wpProcs.push('garment_wash');
     if (finishing_route === 'peach' || /peach|sueded/.test(finishing_route || '')) wpProcs.push('peach');
     { const sp = surface_finish ? finishProcess(resolveFinishId(surface_finish, null)) : null; if (sp && !wpProcs.includes(sp)) wpProcs.push(sp); }
@@ -1164,6 +1220,9 @@ function calculate(params) {
     
     yarn_consumption: consumptionResult || null,
     fleece_performance: fleecePerformanceResult || null,
+    // Fleece and loopback terry: yarn plan, mass balance, composition, gauge,
+    // brushing, warmth and route (fleece-engine.js).
+    fleece: fleeceResult,
 
     loop_length: {
       value_mm: llResult.ll_mm,

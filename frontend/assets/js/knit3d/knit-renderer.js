@@ -26,6 +26,7 @@ import { buildFabricMesh, yarnRadius } from './fabric-mesh.js?v=20260608g';
 // Yarn in a piqué is drawn thicker against its (spread) wale pitch: the held
 // loops are pulled flat and the tuck arches fill the sideways gaps a jersey
 // does not have, so the cloth reads as dense as it is.
+const FLEECE_YARN_FILL = 1.3;
 const PIQUE_YARN_FILL = 1.35;
 import { addStudioLighting, configureShadowCamera, applyLightPreset, DEFAULT_LIGHT_PRESET, buildStudioEnvironment } from './lighting.js?v=20260608g';
 import { buildPile } from './pile.js?v=20260608g';
@@ -499,7 +500,7 @@ export class Knit3D {
     // row alongside the face course — same point-count order as interlock's
     // two beds, so both the stitch-count cap and the base density below
     // treat it the same way.
-    const isFleece3Thread = con.type === 'fleece' && con.pile === 'brush';
+    const isFleece3Thread = (con.type === 'fleece' && con.pile === 'brush') || con.type === 'terry';
     // The binding+fleecy course doubles the path count the same way
     // interlock's second bed does, so it needs the same cap treatment —
     // a lighter cap here let the stitch grid grow enough to stall the main
@@ -535,7 +536,11 @@ export class Knit3D {
       wales = Math.max(14, Math.round(wales * k));
     }
 
-    const radius = yarnRadius(this.opts.countNe, this.opts.tf, density) * (this.opts.pique ? PIQUE_YARN_FILL : 1);
+    // A fleece face is knitted long (≈4.5 mm on 20G) with a binder plated
+    // behind it: the soft, bulky face yarn spreads and closes the cloth, so it
+    // is drawn fuller than a compact cylinder — or the face reads as a net.
+    const radius = yarnRadius(this.opts.countNe, this.opts.tf, density)
+      * (this.opts.pique ? PIQUE_YARN_FILL : isFleece3Thread ? FLEECE_YARN_FILL : 1);
     const { paths, floatAnchors } = buildYarnPaths({
       construction: con, sample: this.opts.sample, sampleBack: this.opts.sampleBack,
       pattern: this.opts.pattern, wales, courses, pitchY,
@@ -563,8 +568,11 @@ export class Knit3D {
     // 30 Ne face): yarn diameter ∝ 1/√Ne, so it renders √(face/loop) thicker.
     // Drawn at the face yarn's thickness it left the back thin and the face
     // see-through.
+    // A loop yarn is spun soft (low twist, for raising) and blooms in
+    // finishing — fuller than its count's compact diameter, so never thinner
+    // than ~1.15× the face yarn even when the counts match.
     const fleecyScale = this.opts.loopNe && this.opts.countNe
-      ? Math.max(1, Math.min(2.2, Math.sqrt(this.opts.countNe / this.opts.loopNe)))
+      ? Math.max(1.15, Math.min(2.2, 1.12 * Math.sqrt(this.opts.countNe / this.opts.loopNe)))
       : 1.37;
     // Tie-in binder (fine filament, e.g. 75D ≈ 71 Ne) — √(face/binder) thinner.
     const binderScale = this.opts.tieNe && this.opts.countNe
@@ -709,6 +717,7 @@ export class Knit3D {
     while (tileCourses * th > 2048 && th > 4) th /= 2;
     const bake = bakeStructure(this.renderer, tile, win, 48, {
       melMaterial: melMat, keep: !!melMat, size: { w: tileWales * tw, h: tileCourses * th },
+      gap: (con.type === 'fleece' || con.type === 'terry') ? 0.6 : 0.3,
     });
     const disposeTile = () => { tile.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); tmp.dispose(); };
     if (!melMat) disposeTile();
@@ -772,7 +781,7 @@ export class Knit3D {
           // cavity over one structure repeat; a piqué's cell is the point
           height: maps.height,
           cavityLod: Math.log2(Math.max(2, Math.min(rep.wales * tw, rep.courses * th))),
-          cavity: this.opts.pique ? 0.55 : 0.3,
+          cavity: this.opts.pique ? 0.55 : (con.type === 'fleece' || con.type === 'terry') ? 0.14 : 0.3,
           // cell-scale slope: a piqué's beads; other knits keep the yarn-scale
           // normal map only
           relief: this.opts.pique ? { depth: bake.depth, w: win.w, h: win.h, strength: 1 } : null,
@@ -787,7 +796,7 @@ export class Knit3D {
     // (fleece / velour) appears with the "Finished" state; a loop-pile back
     // (french terry) is knitted that way, so it is always there.
     let napMat = null, napTex = null;
-    if (con.pile === 'brush' || con.pile === 'velour' || con.pile === 'loop') {
+    if (con.pile === 'brush' || con.pile === 'velour' || (con.pile === 'loop' && con.type !== 'terry')) {
       const kind = con.pile === 'loop' ? 'loops' : 'nap';
       const surf = fibreSurfaceTexture(kind, aniso);
       napTex = surf.normal;
@@ -848,7 +857,7 @@ export class Knit3D {
     this._macro = {
       group: macroGroup, front, back, edge, edgeMat, faceMat, backMat, napMat, napTex,
       cloth: geo, table, cm,
-      napAlways: con.pile === 'loop',
+      napAlways: con.pile === 'loop' && con.type !== 'terry',
       napLift: con.pile === 'loop' ? 1.45 : 1.6, napShade: this._napShade || null,
       melMat, melF: -1, rebake: bake.rebake || null,
       disposeTile: melMat ? () => { bake.release(); disposeTile(); } : null,
@@ -999,6 +1008,9 @@ export class Knit3D {
   _pileParams(radius) {
     const con = this.opts.construction || {};
     if (!con.brush && con.pile !== 'loop') return null;
+    // the loopback terry back is real loop-yarn geometry now (topology-builder
+    // loopArcs), not a decorative pile
+    if (con.type === 'terry') return null;
     const kind = con.pile === 'loop' ? 'loop' : 'brush';
     const isVelour = con.pile === 'velour';
 
@@ -1087,7 +1099,7 @@ export class Knit3D {
       // ~2.3 mm, a light one under 1 mm.
       napLength: this._napUnits(pileParams),
       fibreGeometry: this._napFibre,
-      shells: this._shadows ? 16 : 10,              // lighter on the low-power tier
+      shells: this._shadows ? 24 : 12,              // lighter on the low-power tier
     });
     group.add(nap.group);
     this._pile = { mesh: nap.group, geometry: this._napFibre, dispose: nap.dispose, setColor: nap.setColor };
