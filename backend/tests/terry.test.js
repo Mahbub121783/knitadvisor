@@ -152,4 +152,26 @@ const FT = (gsm, extra = {}) => analyzeFleece({ fabricId: 'french_terry', gsm, g
   console.log(`  Plush layouts at 2.5 mm: full ${ne(full)}/1, checker ${ne(chk)}/1, diagonal ${ne(dia)}/1 pile`);
 }
 
+// 11. the back you see: scale, twill, grain, pebble, rib, open
+{
+  const back = (x) => FT(280, x).loop.back;
+  assert.strictEqual(back({}).texture, 'scale', 'standard 1:3 loopback has the classic scale back');
+  assert.strictEqual(back({ loopArrangement: 'diagonal' }).texture, 'twill', 'diagonal layout: twill ribs');
+  assert.strictEqual(back({ loopArrangement: 'zigzag' }).texture, 'twill');
+  assert.strictEqual(back({ loopArrangement: 'micro' }).texture, 'pebble', '1:1: pebble');
+  assert.strictEqual(back({ loopArrangement: 'straight' }).texture, 'rib');
+  assert.strictEqual(back({ loopSize: 'micro' }).texture, 'grain', 'micro loops lie flat as grain');
+  assert.strictEqual(back({ loopSize: 'large' }).texture, 'open', 'large loops stand open');
+  const s = back({});
+  assert(s.lie_deg >= 40 && s.lie_deg <= 70 && s.standing_height_mm < FT(280).loop.loop_height_mm, 'loops lie over: they stand lower than their arc height');
+  assert(s.slant_deg > 0, 'a singles loop yarn slants its loops');
+  assert(s.back_lift > 0 && s.back_lift < 0.2, 'the back reads a little lighter than the face');
+  // a two-ply loop yarn (a very heavy terry needs one) stands square
+  const heavy = FT(560).loop.back;
+  if (FT(560).yarns.find(y => y.role === 'loop').ply > 1) assert.strictEqual(heavy.slant_deg, 0, 'balanced two-ply loop yarn: no slant');
+  const cover = [240, 300, 360].map(g => FT(g).loop.back.loop_cover_pct);
+  assert(cover[2] > cover[0], `a heavier terry's coarser loop yarn covers more of the back: ${cover.join(' → ')}%`);
+  console.log(`  Back: standard ${s.label}, lie ${s.lie_deg}°, slant ${s.slant_deg}°, cover ${cover.join('/')}% for 240/300/360 GSM`);
+}
+
 console.log('\nAll terry tests passed.');

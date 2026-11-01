@@ -545,7 +545,7 @@ export class Knit3D {
     const { paths, floatAnchors } = buildYarnPaths({
       construction: con, sample: this.opts.sample, sampleBack: this.opts.sampleBack,
       pattern: this.opts.pattern, wales, courses, pitchY,
-      pique: this.opts.pique, yarnRadius: radius, loopHeight: this._plushLoopUnits(con, density),
+      pique: this.opts.pique, yarnRadius: radius, loopHeight: this._plushLoopUnits(con, density), ...this._loopShape(con),
     });
     // Real 3-thread fleece (see topology-builder.js): the binding+fleecy
     // yarn's floats already give the back real structural coverage, so the
@@ -685,7 +685,7 @@ export class Knit3D {
     const { paths } = buildYarnPaths({
       construction: con, sample: this.opts.sample, sampleBack: this.opts.sampleBack,
       pattern: this.opts.pattern, wales: tileWales + 2 * mW, courses: tileCourses + 2 * mC, pitchY,
-      pique: this.opts.pique, yarnRadius: radius, loopHeight: this._plushLoopUnits(con, density),
+      pique: this.opts.pique, yarnRadius: radius, loopHeight: this._plushLoopUnits(con, density), ...this._loopShape(con),
       // Stitch irregularity repeats with the STRUCTURE, not the tile. Jitter
       // that repeats once per tile (~0.5 cm) survives every mip level as a
       // regular grid across the whole cloth — a ripstop look no knit has. The
@@ -792,6 +792,9 @@ export class Knit3D {
     };
     const faceMat = clothMat(bake.front);
     const backMat = clothMat(bake.back);
+    // a loopback back reads lighter than its face (soft, hairy loop yarn)
+    const backLift = con.type === 'terry' && this.opts.loopback ? (this.opts.loopback.backLift || 0) : 0;
+    if (backLift) backMat.color.lerp(new THREE.Color(1, 1, 1), backLift);
 
     // Finished backs whose structure is hidden under fibre: a brushed nap
     // (fleece / velour) appears with the "Finished" state; a loop-pile back
@@ -858,7 +861,7 @@ export class Knit3D {
 
     const box = new THREE.Box3().setFromObject(macroGroup);
     this._macro = {
-      group: macroGroup, front, back, edge, edgeMat, faceMat, backMat, napMat, napTex,
+      group: macroGroup, front, back, edge, edgeMat, faceMat, backMat, napMat, napTex, backLift,
       cloth: geo, table, cm,
       // a loop pile is knitted that way: there from the start
       napAlways: (con.pile === 'loop' && con.type !== 'terry') || con.pile === 'plush',
@@ -1115,6 +1118,14 @@ export class Knit3D {
   // Plush loop height in loop-model units (one wale = 10/wpc mm), from the
   // engine's sinker height; a velour is modelled as the short stub of yarn
   // left under its cut pile.
+  // Loopback terry: how the loops lie and slant, and how much lighter the
+  // soft loop yarn reads (the engine's back appearance, terry-loops.js)
+  _loopShape(con) {
+    const lb = this.opts.loopback;
+    if (!con || con.type !== 'terry' || !lb) return {};
+    return { loopShape: { lie: lb.lieDeg, slant: lb.slantDeg }, loopShade: 1 + (lb.backLift || 0) };
+  }
+
   _plushLoopUnits(con, density) {
     const wpc = density && density.wpc > 0 ? density.wpc : 10.7;
     // loopback terry: the engine's derived loop height
@@ -1302,6 +1313,7 @@ export class Knit3D {
         setYarnColorHex(mat, hex);
         if (mel) mat.color.copy(mel.dark);
       }
+      if (m.backLift) m.backMat.color.lerp(new THREE.Color(1, 1, 1), m.backLift);
       m.edgeMat.color.copy(mean).multiplyScalar(0.78);
       m.edgeMat.sheenColor.copy(mean).lerp(new THREE.Color(1, 1, 1), 0.4);
       if (m.napMat) {

@@ -145,10 +145,16 @@ const LOOPBACK_HEIGHT = 1.7;
 // back (−z), sags toward the knitting direction and leans a little — loops
 // never stand in a perfect row. The tucks themselves stay where they are,
 // caught into the back of the face loops.
-function loopArcs(course, tokenAt, wales, height) {
+function loopArcs(course, tokenAt, wales, height, shape = {}, c = 0) {
   const pts = course.points, st = course.starts;
   const seg = (w) => pts.slice(st[w], w + 1 < st.length ? st[w + 1] : pts.length);
   const out = [], starts = [];
+  // Real loopback loops lie over (`lie`, degrees from upright, toward the
+  // course below) and, from a singles loop yarn's twist, all slant the same
+  // way in the cloth plane (`slant`) — the slanted grains and scales of a
+  // French terry back, not upright arches. Engine: terry-loops.js loopbackBack.
+  const lie = ((shape.lie != null ? shape.lie : 55) * Math.PI) / 180;
+  const slant = Math.tan(((shape.slant != null ? shape.slant : 0) * Math.PI) / 180);
   let w = 0;
   while (w < wales) {
     if (tokenAt(w) !== 'miss') { starts.push(out.length); for (const p of seg(w)) out.push(p); w++; continue; }
@@ -156,16 +162,29 @@ function loopArcs(course, tokenAt, wales, height) {
     while (e + 1 < wales && tokenAt(e + 1) === 'miss') e++;
     const a = seg(w)[0], lastSeg = seg(e), b = lastSeg[lastSeg.length - 1];
     const n = Math.max(8, (e - w + 1) * 7);
-    const h = height * (0.85 + 0.3 * frac(Math.sin((w + 1) * 12.9898 + (a.y || 0) * 78.233) * 43758.5453));
-    const lean = (frac(Math.sin((w + 3) * 4.1414 + (a.y || 0) * 9.31) * 1e4) - 0.5) * 0.25;
+    // per-loop variation, periodic with the structure tile when baking
+    const kw = jitterPeriod ? w % jitterPeriod.w : w, kc = jitterPeriod ? c % jitterPeriod.c : c;
+    const h = height * (0.82 + 0.36 * ihash(kw, kc, 11));
+    const lieK = lie + (ihash(kw, kc, 12) - 0.5) * 0.25;
+    const sl = slant + (ihash(kw, kc, 13) - 0.5) * 0.12;
+    const up = Math.cos(lieK), over = Math.sin(lieK);
+    // the loop falls over partly sideways, toward the way the yarn's twist
+    // turns it: a slant of 25° in the cloth lays it ~55° off straight-down,
+    // which turns each loop into the slanted grain of a French terry back
+    const phi = Math.min(1.3, 2.2 * Math.atan(sl));
+    const sx = Math.sin(phi), sy = Math.cos(phi);
+    const xm = (a.x + b.x) / 2;
     for (let i = 0; i < n; i++) {
       if (i % 7 === 0) starts.push(out.length);
       const t = (i + 0.5) / n;
       const arc = Math.sin(Math.PI * t);
       const p = a.clone ? a.clone() : { ...a };
-      p.x = a.x + (b.x - a.x) * t + lean * arc * h * 0.5;
-      p.y = a.y + (b.y - a.y) * t - 0.34 * h * Math.pow(arc, 1.6);
-      p.z = a.z + (b.z - a.z) * t - h * Math.pow(arc, 0.85);
+      const x = a.x + (b.x - a.x) * t;
+      // a loop is a little rounder than its float: its legs bow apart (Ω)
+      const fall = over * h * Math.pow(arc, 0.9);
+      p.x = x + (t - 0.5) * 0.35 * arc * h + sx * fall * Math.pow(arc, 0.4);
+      p.y = a.y + (b.y - a.y) * t - sy * fall + 0.5 * sl * (x - xm) * Math.pow(arc, 0.7);
+      p.z = a.z + (b.z - a.z) * t - up * h * Math.pow(arc, 0.85);
       out.push(p);
     }
     for (let k = starts.length; k < e + 1; k++) starts.push(out.length - 1);
@@ -462,8 +481,9 @@ export function buildYarnPaths(opts) {
       });
       for (const p of course.points) p.y += lift;
       if (loopBack) {
-        loopArcs(course, (w) => tokenAt(w), wales, opts.loopHeight != null ? opts.loopHeight : LOOPBACK_HEIGHT);
+        loopArcs(course, (w) => tokenAt(w), wales, opts.loopHeight != null ? opts.loopHeight : LOOPBACK_HEIGHT, opts.loopShape || {}, c);
         course.role = 'fleecy';
+        course.shade = opts.loopShade || 1;
         backPaths.push(course);
         continue;
       }

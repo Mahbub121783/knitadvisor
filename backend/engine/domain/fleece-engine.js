@@ -54,7 +54,7 @@
 'use strict';
 
 const reference = require('../reference');
-const { LOOPBACK_SIZES, LOOPBACK_ARRANGEMENTS, loopbackSize, loopbackGeometry } = require('./terry-loops');
+const { LOOPBACK_SIZES, LOOPBACK_ARRANGEMENTS, loopbackSize, loopbackGeometry, loopbackBack } = require('./terry-loops');
 
 const FLEECE_IDS = ['fleece_2_thread', 'fleece_3_thread', 'fleece_diagonal', 'french_terry'];
 const isFleeceFamily = (id) => FLEECE_IDS.includes(id);
@@ -427,6 +427,7 @@ function analyzeFleece(p) {
       arrangement: { key: arrKey, label: arr.label, tuck_repeat: arr.n, sequence: arr.seq.map(t => t + 1), look: arr.look, face: arr.face },
       ...loopGeom, snag_area: undefined, snag_index: r2(snag),
       sizes, arrangements,
+      back: loopbackBack({ arrKey, h: loopGeom.loop_height_mm, S: loopGeom.float_mm, l: loopSl, G, cpc, loopNe, ply, binderFilament: !!(binder && binder.filament) }),
       formula: 'h = √(3/16 · (L² − S²)),  L = n · loop length per needle,  S = n · needle pitch',
       basis: 'DERIVED from the loop yarn length and the float span; the size presets are MODELLED around the measured 1.55 mm (record 47)',
     };

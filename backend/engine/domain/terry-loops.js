@@ -110,6 +110,63 @@ function loopbackPattern(arrKey) {
   };
 }
 
+/**
+ * What the loop back LOOKS like — the thing a buyer recognises a terry by.
+ *
+ * Real loopback loops do not stand up as arches: under the course tension and
+ * their own weight they lie over (MODELLED: 40° from upright for a short loop
+ * to ~70° for a tall one), so what shows is a field of slanted grains or
+ * scales, not rings. A singles loop yarn carries twist torque, so every loop
+ * turns the same way and the grains all slant one way (~25°, MODELLED); in a
+ * half-drop layout the slanted grains line up into a fine diagonal. A
+ * diagonal tuck layout makes that line the structure itself — a strong twill.
+ * A two-ply (balanced) loop yarn has no torque: its loops stand square.
+ *
+ * Classes by loop aspect a = h / S (loop height over float span):
+ *   a < 0.22  flat grain   — floats barely raised, smooth low back
+ *   a < 0.40  scale        — loops lying over like fish scales (the classic)
+ *   a ≥ 0.40  open loop    — tall loops, a loopy, towel-like back
+ * Layout overrides the look where it dominates: straight = rib-look columns,
+ * diagonal / zig-zag = twill ribs, 1:1 = fine pebble.
+ *
+ * Loop-yarn cover of the back (DERIVED): each needle carries l of loop yarn,
+ * of spread width d (1.3 × compact diameter for a soft, low-twist yarn,
+ * MODELLED), over a cell of p × course pitch:  cover = l·d·cpc / (10·p).
+ */
+function loopbackBack({ arrKey, h, S, l, G, cpc, loopNe, ply, binderFilament }) {
+  const p = 25.4 / G;
+  const a = S > 0 ? h / S : 0;
+  const lie = Math.max(40, Math.min(70, 40 + 75 * a));               // degrees from upright
+  const stand = h * Math.cos(lie * Math.PI / 180);
+  const twisted = ply > 1;
+  const slant = twisted ? 0 : 25;
+  const d = 1.3 * (0.907 / Math.sqrt(loopNe / (ply || 1))) * Math.sqrt(ply || 1);
+  const cover = l * d * cpc / (10 * p);
+  let key, label, text;
+  if (arrKey === 'straight') { key = 'rib'; label = 'Rib-look (vertical loop columns)'; text = 'The loops stack in columns down the fabric, so the back reads as fine vertical ribs.'; }
+  else if (arrKey === 'diagonal' || arrKey === 'zigzag') { key = 'twill'; label = arrKey === 'zigzag' ? 'Herringbone (chevron ribs)' : 'Twill (diagonal ribs)'; text = 'The tie point steps across the needles feed by feed, so the loops pack into continuous diagonal ribs — a twill back you can see from a metre away.'; }
+  else if (arrKey === 'micro') { key = 'pebble'; label = 'Pebble (fine, dense loops)'; text = 'Short floats tied every second needle make small, dense, low loops — a fine pebbly back, firm and smooth to the hand.'; }
+  else if (a < 0.22) { key = 'grain'; label = 'Flat grain'; text = 'The loop yarn has little surplus over the float, so the floats lie almost flat — a smooth, low, grainy back.'; }
+  else if (a < 0.40) { key = 'scale'; label = 'Scale (classic French terry)'; text = `The loops lie over like fish scales${slant ? ', all slanting the same way, so the back shows a fine diagonal grain' : ''}.`; }
+  else { key = 'open'; label = 'Open loop'; text = 'Tall loops stand off the back — loopy and soft, closer to a towel, and quicker to snag.'; }
+  const notes = [];
+  if (slant) notes.push(`A singles loop yarn's twist torque turns every loop the same way: the grains slant about ${slant}°. A two-ply (balanced) loop yarn stands its loops square.`);
+  else notes.push('The two-ply loop yarn is balanced, so the loops stand square without a slant.');
+  if (cover < 0.35) notes.push(`The loop yarn covers only about ${Math.round(cover * 100)}% of the back: the binder shows between the loops${binderFilament ? ' — with a polyester binder that is white specks in a dark shade' : ''}.`);
+  else if (cover > 0.65) notes.push(`The loop yarn covers about ${Math.round(Math.min(cover, 1) * 100)}% of the back: a closed loop surface.`);
+  notes.push('The back usually looks lighter than the face: the soft, hairy loop yarn scatters light where the tight face yarn shadows it.');
+  return {
+    texture: key, label, description: text, notes,
+    aspect: Math.round(a * 100) / 100,
+    lie_deg: Math.round(lie), standing_height_mm: r2(stand),
+    slant_deg: slant, loop_cover_pct: Math.round(Math.min(cover, 1.2) * 100),
+    // how much lighter the back reads than the face (MODELLED: diffuse
+    // scattering of a soft, open loop surface; more for a coarse loop yarn)
+    back_lift: r2(0.06 + (loopNe / (ply || 1) <= 20 ? 0.04 : 0) + (key === 'open' ? 0.03 : 0)),
+    basis: 'Lie and slant angles and the yarn spread are MODELLED; the aspect and cover follow from the loop length, float and counts.',
+  };
+}
+
 // ── plush ───────────────────────────────────────────────────────────────
 // sinker (high-nib) heights, mm
 const PLUSH_SIZES = {
@@ -134,5 +191,5 @@ const PLUSH_ARRANGEMENTS = {
 
 module.exports = {
   LOOPBACK_SIZES, LOOPBACK_ARRANGEMENTS, PLUSH_SIZES, PLUSH_ARRANGEMENTS,
-  loopbackSize, loopbackGeometry, loopbackPattern,
+  loopbackSize, loopbackGeometry, loopbackPattern, loopbackBack,
 };

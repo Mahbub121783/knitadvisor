@@ -1248,7 +1248,10 @@ class FabricVisualizer {
       // built to these, not to a generic pile.
       plush: this._plushGeom(),
       // Loopback terry: the derived loop height (fleece-engine loop block)
-      loopback: (this.result.fleece && this.result.fleece.loop) ? { heightMm: this.result.fleece.loop.loop_height_mm } : null,
+      loopback: (this.result.fleece && this.result.fleece.loop) ? (() => {
+        const L = this.result.fleece.loop, B = L.back || {};
+        return { heightMm: L.loop_height_mm, lieDeg: B.lie_deg, slantDeg: B.slant_deg, backLift: B.back_lift || 0 };
+      })() : null,
     };
   }
 

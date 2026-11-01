@@ -2489,7 +2489,7 @@ function renderFleece(f) {
     </table></div>
     <div class="label mt-2">${esc(mb.formula)} — every needle in every face course carries one length of each yarn, so the loop yarn is what closes the balance. A heavier fleece needs a coarser loop yarn.</div>
   </div>`;
-  if (f.loop) html += renderLoopbackLoops(f.loop);
+  if (f.loop) html += renderLoopbackLoops(f.loop, mb);
   html += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;">
     <div class="card-sm">
       <div class="label">Fibre content</div>
@@ -2566,7 +2566,48 @@ function loopTable(head, rows) {
   </table></div>`;
 }
 
-function renderLoopbackLoops(L) {
+// The loop back as it looks in the hand, drawn from the engine's numbers:
+// one grain per float, centred between its two tie points, as long as the
+// float, lying over and slanted by the loop yarn's twist. A diagonal layout's
+// twill and a half-drop's fine grain come out of the tie points by themselves.
+function loopBackPreviewSvg(L, mb) {
+  const B = L.back, n = L.arrangement.tuck_repeat, seq = L.arrangement.sequence.map(t => t - 1);
+  const W = 300, H = 170;
+  const pxmm = 14;                                   // drawing scale
+  const dx = pxmm * 10 / mb.wales_per_cm;            // one wale
+  const dy = pxmm * 10 / mb.courses_per_cm;          // one loop feed (face course)
+  const lie = B.lie_deg * Math.PI / 180;
+  // a loop lying over shows as a scale: as long as its float, as deep as the
+  // loop leans over, plus the yarn's own width
+  const rx = Math.max(dx * 0.7, (L.float_mm * 0.5) * pxmm * 0.92);
+  const ry = Math.max(dy * 0.45, 0.5 * (L.loop_height_mm * Math.sin(lie) + 0.25) * pxmm);
+  const cols = Math.ceil(W / dx) + n * 2, rows = Math.ceil(H / dy) + 3;
+  const open = B.texture === 'open';
+  let g = `<defs><radialGradient id="kaScale" cx="50%" cy="35%" r="65%"><stop offset="0" stop-color="#f1f0ec"/><stop offset=".7" stop-color="#c9c7c1"/><stop offset="1" stop-color="#8e8c87"/></radialGradient></defs>
+    <rect width="${W}" height="${H}" fill="#7b7a76"/>`;
+  for (let r = -1; r < rows; r++) {
+    const t = seq[((r % seq.length) + seq.length) % seq.length], y = r * dy;
+    for (let w = -n; w < cols; w++) {
+      if (((w % n) + n) % n !== t) continue;
+      const cx = (w + n / 2) * dx, rot = -B.slant_deg;
+      g += open
+        ? `<ellipse cx="${cx}" cy="${y}" rx="${rx * 0.8}" ry="${ry}" transform="rotate(${rot} ${cx} ${y})" fill="#6a6965" stroke="url(#kaScale)" stroke-width="${Math.max(2.5, ry * 0.55)}"/>`
+        : `<ellipse cx="${cx}" cy="${y}" rx="${rx}" ry="${ry}" transform="rotate(${rot} ${cx} ${y})" fill="url(#kaScale)" stroke="rgba(55,55,58,.45)" stroke-width="0.8"/>`;
+    }
+  }
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:360px;height:auto;display:block;border-radius:8px">${g}</svg>`;
+}
+
+const BACK_TYPES = [
+  ['scale', 'Scale', 'standard loop · 1:3 half-drop'],
+  ['twill', 'Twill / herringbone', 'diagonal or zig-zag layout'],
+  ['grain', 'Flat grain', 'micro or small loop · 1:3'],
+  ['pebble', 'Pebble', '1:1 layout'],
+  ['rib', 'Rib-look', 'straight layout'],
+  ['open', 'Open loop', 'large or jumbo loop, or 1:5'],
+];
+
+function renderLoopbackLoops(L, mb) {
   const esc = (x) => String(x == null ? '' : x).replace(/[&<>]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]));
   const snagCls = L.snag_index > 1.4 ? 'text-amber' : '';
   return `<div class="card-sm" style="margin-bottom:10px;">
@@ -2586,6 +2627,22 @@ function renderLoopbackLoops(L) {
         ${loopTable(['Size', 'Yarn / needle', 'Loop yarn', 'Loop height'], L.sizes.map(z => ({ on: z.key === L.size.key, cells: [esc(z.label), z.loop_length_mm + ' mm', z.loop_ne + '/1', z.loop_height_mm + ' mm'] })))}
       </div>
     </div>
+    ${L.back ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;align-items:start;margin-top:12px">
+      <div><div class="label" style="margin-bottom:4px">The back in the hand — ${esc(L.back.label)}</div>${loopBackPreviewSvg(L, mb)}</div>
+      <div>
+        <div class="mt-4 text-sm">${esc(L.back.description)}</div>
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin:8px 0">
+          <div><div class="label">Loops lie over</div><div class="value-sm mt-2">${L.back.lie_deg}° · ${L.back.standing_height_mm} mm high</div></div>
+          <div><div class="label">Slant</div><div class="value-sm mt-2">${L.back.slant_deg ? L.back.slant_deg + '°' : 'square'}</div></div>
+          <div><div class="label">Loop yarn covers</div><div class="value-sm mt-2">${L.back.loop_cover_pct}% of the back</div></div>
+          <div><div class="label">Back vs face</div><div class="value-sm mt-2">~${Math.round(L.back.back_lift * 100)}% lighter</div></div>
+        </div>
+        ${L.back.notes.map(x => `<div class="mt-2 text-sm" style="color:var(--t2)">${esc(x)}</div>`).join('')}
+      </div>
+    </div>
+    <div class="label" style="margin:10px 0 4px">Back types — match your swatch, then set the loops</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px">${BACK_TYPES.map(([k, n, how]) => `<span style="font-size:11px;padding:4px 8px;border-radius:7px;border:1px solid var(--line3);${k === L.back.texture ? 'background:var(--line3);font-weight:700' : ''}"><b>${n}</b> <span style="color:var(--t3)">— ${how}</span></span>`).join('')}</div>
+    <div class="label mt-2">${esc(L.back.basis)}</div>` : ''}
     <div class="label" style="margin:10px 0 4px">Other layouts with these loops</div>
     ${loopTable(['Layout', 'Tucks on', 'Float', 'Loop height', 'Loops /cm²', 'Snag'], L.arrangements.map(a => ({ on: a.key === L.arrangement.key, cells: [esc(a.label), `1 in ${a.tuck_repeat} · tracks ${a.sequence.join('-')}`, a.float_mm + ' mm', a.loop_height_mm + ' mm', a.loops_per_cm2, a.snag_index + '×'] })))}
     <div class="label mt-2">${esc(L.formula)}. A bigger loop needs a finer loop yarn for the same GSM; a shorter float (1:1) makes a smaller, firmer, safer loop. ${esc(L.basis)}.</div>
