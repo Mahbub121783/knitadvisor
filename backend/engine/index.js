@@ -69,6 +69,7 @@ const {
 const { getPattern: getEnginePattern } = require('./domain/pattern-engine');
 const { analyzePique, isPique, solvePiqueRecipe, piqueGsmFor } = require('./domain/pique-engine');
 const { analyzeFleece, isFleeceFamily } = require('./domain/fleece-engine');
+const { analyzePlushTerry, isPlushTerry } = require('./domain/terry-engine');
 const { analyzeCriticalPath } = require('./domain/critical-path');
 const { recommendMachine } = require('./domain/machine-optimizer');
 const { analyzeYarn, recommendYarnGrade } = require('./domain/yarn-engine');
@@ -456,8 +457,53 @@ function calculate(params) {
     }
   }
 
+  // --- 3.06 Plush terry / velour: ground + pile plated, sinker-loop pile ---
+  // A different fabric from loopback terry: the pile yarn forms a loop at every
+  // needle over a high sinker nib. The ground yarn, its stitch length and the
+  // pile yarn all come from the terry engine — the factory's terry rows are
+  // loopback, so their face count and 4.45 mm SL do not describe this cloth.
+  let terryResult = null;
+  if (isPlushTerry(fabricDef.id)) {
+    terryResult = analyzePlushTerry({
+      fabricId: fabricDef.id, gsm, gauge: gauge || 20, composition: parsedComp,
+      groundNe: params.ground_count, groundDenier: params.ground_denier,
+      pileNe: params.pile_count, pileDenier: params.pile_denier,
+      pileHeightMm: params.pile_height_mm || params.sinker_height_mm,
+      pileEvery: params.pile_every, cutHeightMm: params.cut_height_mm,
+      cut: params.velour_cut === false || params.velour_cut === 'false' ? false : undefined,
+    });
+    if (terryResult) {
+      const ground = terryResult.yarns.find(y => y.role === 'ground');
+      const pile = terryResult.yarns.find(y => y.role === 'pile');
+      const ePct = parsedComp && parsedComp.elastane_pct ? parsedComp.elastane_pct : 0;
+      const groundDecl = ground.denier
+        ? `${ground.denier}D Polyester Filament`
+        : generateYarnDeclaration(parseComposition(ground.composition), ground.ne, ground.composition);
+      countResult.count_display = `Ground: ${groundDecl}`
+        + (ePct > 0 ? ` + ${ePct <= 3 ? 20 : ePct <= 8 ? 40 : 70}D Elastane (plated with ground)` : '')
+        + ` + Pile: ${pile.label.replace(/ \(soft, micro-filament for (velour|plush)\)/, ' micro')} (sinker ${terryResult.pile.sinker_height_mm} mm)`;
+      if (!ground.denier) { countResult.count_ne = ground.ne; countResult.count_rounded = ground.ne; }
+      countResult.yarn2_ne = pile.ne;
+      countResult.yarn2_display = `Pile: ${pile.label}`;
+      countResult.source = 'TERRY_PLUSH_MODEL';
+      llResult = {
+        ...llResult,
+        ll_mm: ground.sl_mm, ll_cm: parseFloat((ground.sl_mm / 10).toFixed(5)),
+        multiplier_source: 'TERRY_PLUSH_MODEL',
+        trace: { formula: `l = √(tex_ground + tex_pile) / TF, TF ${terryResult.mass_balance.tightness_factor} (factory terry rows)`, result: `${ground.sl_mm} mm ground; pile ${pile.sl_mm} mm per needle` },
+      };
+      terryResult.warnings.forEach(w => warnings.push(`Terry: ${w}`));
+      trace.push({ step: '3.06', action: 'plush_terry_plan', result: `${terryResult.declaration} · sinker ${terryResult.pile.sinker_height_mm} mm · ${terryResult.mass_balance.gsm_at_chosen_counts} GSM`, formula: terryResult.mass_balance.formula });
+    }
+  }
+
   // --- 3.1 Yarn Consumption (Dynamic Weight %) ---
-  const consumptionResult = fleeceResult ? {
+  const consumptionResult = terryResult ? {
+    source: 'Plush terry mass balance (terry-engine.js)',
+    method: 'per-needle yarn length × tex (pile = ground loop + 2 × sinker height)',
+    percentages: Object.fromEntries(terryResult.yarns.map(y => [
+      y.role === 'ground' ? 'face_ground_pct' : y.role === 'pile' ? 'pile_pct' : 'elastane_pct', y.share_pct])),
+  } : fleeceResult ? {
     source: 'Fleece mass balance (fleece-engine.js)',
     method: 'per-needle yarn length × tex',
     percentages: Object.fromEntries(fleeceResult.yarns.map(y => [
@@ -472,7 +518,7 @@ function calculate(params) {
 
   // --- 3.5 Cross-Validate Stitch Length with R&D Data ---
   let rndValidation = null;
-  if (llResult.ll_mm > 0) {
+  if (llResult.ll_mm > 0 && !terryResult) {
     rndValidation = validateStitchLength(fabric, gsm, llResult.ll_mm, gauge, countResult.count_rounded, parsedComp, resolveFamily(fabricDef.id, fabricDef.category));
     if (rndValidation && rndValidation.valid === false) {
       warnings.push(`Calculated stitch length (${llResult.ll_mm} mm) differs from factory R&D data (${rndValidation.factory_sl} mm) by ${rndValidation.deviation_pct}%.`);
@@ -698,6 +744,20 @@ function calculate(params) {
           source: 'Knitting Master File (5000+ bookings).',
         };
       }
+      if (terryResult) {
+        const tm = terryResult.machine;
+        const theory = optimalMachine.optimal_gauge;
+        const d = optimalMachine.optimal_dia || 30;
+        optimalMachine.optimal_gauge = tm.gauge;
+        if (optimalMachine.gauge) optimalMachine.gauge.optimal_gauge = tm.gauge;
+        if (optimalMachine.dia) optimalMachine.dia.needles = Math.round(Math.PI * d * tm.gauge / 2) * 2;
+        optimalMachine.summary = `USE ${d}" Dia × ${tm.gauge} GG plush (terry) machine, ${tm.sinker_mm} mm sinker — ${Math.round(Math.PI * d * tm.gauge / 2) * 2} needles.`;
+        optimalMachine.bulk_data_gauge = {
+          factory_gauge: tm.gauge, theory_gauge: theory, family: 'plush terry', agrees: theory === tm.gauge,
+          note: `A plush is gauged by the plated bundle (ground + pile in one hook: ${terryResult.gauge_check.bundle_tex} tex), not by the single-jersey cover factor (${theory} GG). ${tm.note}`,
+          source: 'Terry engine gauge check.',
+        };
+      }
       if (fleeceResult) {
         const g = fleeceResult.gauge_check;
         const fg = g.ok ? g.gauge : (g.suggested_gauge || g.gauge);
@@ -706,7 +766,7 @@ function calculate(params) {
         optimalMachine.optimal_gauge = fg;
         if (optimalMachine.gauge) optimalMachine.gauge.optimal_gauge = fg;
         if (optimalMachine.dia) optimalMachine.dia.needles = Math.round(Math.PI * d * fg / 2) * 2;
-        optimalMachine.summary = `USE ${d}" Dia × ${fg} GG fleece machine — ${Math.round(Math.PI * d * fg / 2) * 2} needles.`;
+        optimalMachine.summary = `USE ${d}" Dia × ${fg} GG ${fleeceResult.variant.kind === 'terry' ? 'loopback terry (fleece)' : 'fleece'} machine — ${Math.round(Math.PI * d * fg / 2) * 2} needles.`;
         optimalMachine.bulk_data_gauge = {
           factory_gauge: fg, theory_gauge: theory, family: 'fleece', agrees: theory === fg,
           note: `A fleece is gauged by its yarns, not by the single-jersey cover factor (${theory} GG): face and binder must each clear the hook and the coarse loop yarn must tuck. ${g.factory_practice ? 'Factory practice: ' + g.factory_practice + '.' : ''}`,
@@ -844,7 +904,7 @@ function calculate(params) {
     const procs = [];
     const cat = fabricDef.category || '';
     const fid = fabricDef.id || '';
-    if (fleeceResult ? fleeceResult.variant.brushed : (cat === 'fleece' || /fleece/.test(fid))) procs.push('brush');
+    if (terryResult ? false : fleeceResult ? fleeceResult.variant.brushed : (cat === 'fleece' || /fleece/.test(fid))) procs.push('brush');
     if (finishing_route === 'garment_wash' || /wash/.test(finishing_route || '')) procs.push('garment_wash');
     if (finishing_route === 'peach' || /peach|sueded/.test(finishing_route || '')) procs.push('peach');
     { const sp = surface_finish ? finishProcess(resolveFinishId(surface_finish, null)) : null; if (sp && !procs.includes(sp)) procs.push(sp); }
@@ -865,7 +925,8 @@ function calculate(params) {
     const wpProcs = [];
     const cat2 = fabricDef.category || '';
     const fid2 = fabricDef.id || '';
-    if (fleeceResult ? fleeceResult.variant.brushed : (cat2 === 'fleece' || /fleece/.test(fid2))) wpProcs.push('brush');
+    if (terryResult) { wpProcs.push('no_brush', terryResult.variant.cut ? 'velour_cut' : 'plush'); }
+    else if (fleeceResult ? fleeceResult.variant.brushed : (cat2 === 'fleece' || /fleece/.test(fid2))) wpProcs.push('brush');
     else if (fleeceResult) wpProcs.push('no_brush');
     if (params.sheared) wpProcs.push('shear');
     if (finishing_route === 'garment_wash' || /wash/.test(finishing_route || '')) wpProcs.push('garment_wash');
@@ -1223,6 +1284,9 @@ function calculate(params) {
     // Fleece and loopback terry: yarn plan, mass balance, composition, gauge,
     // brushing, warmth and route (fleece-engine.js).
     fleece: fleeceResult,
+    // Plush (sinker-loop) terry and velour: ground + pile plan, sinker height,
+    // shearing, absorbency, gauge and route (terry-engine.js).
+    terry: terryResult,
 
     loop_length: {
       value_mm: llResult.ll_mm,

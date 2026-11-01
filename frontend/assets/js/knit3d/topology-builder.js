@@ -175,6 +175,66 @@ function loopArcs(course, tokenAt, wales, height) {
   course.starts = starts.slice(0, wales);
 }
 const frac = (x) => x - Math.floor(x);
+function ihash(x, y, salt) {
+  let h = (Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263) + Math.imul(salt, 1013904223)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}
+
+// Sinker-loop plush: the pile yarn is plated into every needle loop behind
+// the ground yarn, and between two needles it is drawn over the HIGH sinker
+// nib — so where a plain yarn has a short sinker loop, the pile yarn stands
+// a loop `height` tall off the technical back (−z). Knitted towel terry is a
+// field of these, one per needle per course. They are Ω-shaped (narrow where
+// the two needle loops pinch them, rounder at the top), a little different
+// in height and each leaning its own way — a terry pile never stands in
+// rows. Cut (velour): the loops are sheared open, so only a short stub of
+// yarn is modelled and the cut fibre is drawn as a pile on top of it.
+function plushLoops(course, c, wales, height, every, cut) {
+  const pts = course.points, st = course.starts;
+  const out = [], starts = [], floatIdx = [];
+  for (let w = 0; w < wales; w++) {
+    const end = w + 1 < st.length ? st[w + 1] : pts.length;
+    const seg = pts.slice(st[w], end);
+    starts.push(out.length);
+    if (w >= wales - 1 || w % every !== 0 || seg.length < 3) { for (const p of seg) out.push(p); continue; }
+    for (let i = 0; i < seg.length - 1; i++) out.push(seg[i]);     // the needle loop, without its sinker
+    const a = seg[seg.length - 2], b = pts[st[w + 1]];
+    // per-loop variation; repeats with the structure tile when baking
+    const kw = jitterPeriod ? w % jitterPeriod.w : w, kc = jitterPeriod ? c % jitterPeriod.c : c;
+    // integer hash: a sin() hash of (w, c) leaves faint diagonal order that
+    // the eye picks out once the baked tile repeats across a whole cloth
+    const ra = ihash(kw, kc, 1), rb = ihash(kw, kc, 2), rc = ihash(kw, kc, 3), rd = ihash(kw, kc, 4);
+    const h = height * (0.8 + 0.4 * ra);
+    const leanY = (rb - 0.5) * 0.95, leanX = (rc - 0.5) * 0.7;
+    // each loop turns on its own axis as it is pulled off the sinker and
+    // relaxes in finishing — seen from above a towel is a field of open
+    // rings facing every way, not arches in rows
+    const twist = cut ? 0 : (rd - 0.5) * 2.4;
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    const n = cut ? 7 : 18;
+    for (let i = 1; i < n; i++) {
+      const t = i / n, s = Math.sin(Math.PI * t), s15 = Math.pow(s, 1.5);
+      const p = a.clone ? a.clone() : { ...a };
+      let x = a.x + (b.x - a.x) * t + (t - 0.5) * 0.6 * s;
+      let y = a.y + (b.y - a.y) * t - 0.1 * s;
+      if (twist) {
+        const ang = twist * Math.pow(s, 0.6), co = Math.cos(ang), si = Math.sin(ang);
+        const dx = x - mx, dy = y - my;
+        x = mx + dx * co - dy * si; y = my + dx * si + dy * co;
+      }
+      p.x = x + leanX * h * s15 * 0.45;
+      p.y = y + leanY * h * s15 * 0.5;
+      p.z = a.z + (b.z - a.z) * t - h * Math.pow(s, 0.7);
+      out.push(p);
+      if (cut && i === (n >> 1)) floatIdx.push(out.length - 1);
+    }
+  }
+  course.points = out;
+  course.starts = starts;
+  if (cut) course.floatIdx = floatIdx;
+}
 
 // The machine's feed sequence for a fleece, from the engine's real cylinder
 // programme (pattern_cylinder): an all-K row is a FACE/ground feed, a row
@@ -206,6 +266,9 @@ function fleeceFeeds(pattern) {
 export function structureRepeat(con, pattern) {
   if (!con || con.base === 'warp' || con.type === 'tricot' || con.type === 'mesh' || con.type === 'spacer') return null;
   const pc = (pattern && pattern.cols) || 1, pr = (pattern && pattern.rows) || 1;
+  // the loops' own irregularity repeats over 16 × 16 stitches (~1.5 cm), long
+  // enough that the baked tile does not read as a check from a distance
+  if (con.type === 'plush') return { wales: 16, courses: 16, xPitch: PITCH_X };
   if ((con.type === 'fleece' && con.pile === 'brush') || con.type === 'terry') {
     const feeds = fleeceFeeds(pattern);
     const faces = feeds.filter(f => f.face).length || 1;
@@ -310,6 +373,32 @@ export function buildYarnPaths(opts) {
     }
     if (pq && pq.showBack) turnOver(paths, wales);
     return { paths };
+  }
+
+  // Plush terry / velour: per course the ground yarn knits every needle (the
+  // jersey face) and the pile yarn is plated one yarn-width behind it, then
+  // stands off the back over the high sinker (plushLoops).
+  if (con.type === 'plush') {
+    const wales = opts.wales || PATCH.wales;
+    const courses = opts.courses || PATCH.courses;
+    const knitOnly = () => 'knit';
+    const every = con.every === 2 ? 2 : 1;
+    const height = opts.loopHeight || (con.cut ? 0.5 : 2.2);
+    const out = [];
+    for (let c = 0; c < courses; c++) {
+      out.push(buildCourse(c, {
+        wales, courses, sample: knitOnly, xPitch: PITCH_X, xOffset: 0, pitchY,
+        baseMirror: false, zBaseFor: () => 0,
+      }));
+      const pile = buildCourse(c, {
+        wales, courses, sample: knitOnly, xPitch: PITCH_X, xOffset: 0, pitchY,
+        baseMirror: false, zBaseFor: () => FLEECE_BINDER_Z,
+      });
+      pile.role = 'fleecy';
+      plushLoops(pile, c, wales, height, every, !!con.cut);
+      out.push(pile);
+    }
+    return { paths: out, floatAnchors: !!con.cut };
   }
 
   // Fleece: the face is plain jersey — every face/ground feed knits every

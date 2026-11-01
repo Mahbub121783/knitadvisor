@@ -70,6 +70,7 @@ export function structureKind(con) {
   if (con.base === 'warp' || con.type === 'tricot') return 'warp';
   if (con.type === 'fleece') return con.pile === 'velour' || label.includes('velour') ? 'velour' : 'fleece';
   if (con.type === 'terry') return 'terry';
+  if (con.type === 'plush') return con.cut ? 'velour' : 'terry';
   if (label.includes('waffle')) return 'waffle';
   if (STRUCTURE[con.type]) return con.type;
   return 'jersey';
@@ -107,6 +108,8 @@ export function fabricBody(o) {
     const base = dia(o.countNe) + dia(o.loopNe || (o.countNe || 30) / 1.6);
     napMm = Math.max(0.2, tMm - base);
   }
+  // the engine's own sheared pile height wins (terry-engine.js)
+  if (o.napMm > 0) napMm = o.napMm;
 
   return {
     kind,

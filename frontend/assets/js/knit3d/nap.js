@@ -77,6 +77,37 @@ function napTexture(size = 1024) {
   return tex;
 }
 
+// Cut pile (velour): the shear leaves every fibre standing straight up and
+// cut to one height, so from above the pile is a dense field of fibre ENDS,
+// not lengths — fine dots, packed, each a little brighter or darker. Higher
+// shells keep the brighter ones only, so the pile thins slightly to the top
+// the way a sheared velvet does.
+function velvetTexture(size = 1024) {
+  const c = document.createElement('canvas'); c.width = c.height = size;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, size, size);
+  const R = rng(7771);
+  const N = 90000;
+  for (let k = 0; k < N; k++) {
+    const x = R() * size, y = R() * size;
+    const r = 0.8 + R() * 1.5;
+    const v = Math.round(255 * (0.3 + 0.7 * Math.pow(R(), 0.7)));
+    ctx.fillStyle = `rgb(${v},${v},${v})`;
+    for (const ox of [-size, 0, size]) for (const oy of [-size, 0, size]) {
+      const xx = x + ox, yy = y + oy;
+      if (xx < -3 || yy < -3 || xx > size + 3 || yy > size + 3) continue;
+      ctx.beginPath(); ctx.arc(xx, yy, r, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.NoColorSpace;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = 8;
+  tex.generateMipmaps = true;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  return tex;
+}
+
 // The back surface of the fleecy yarn as a smooth height field z(x,y):
 // the back-most yarn point in each cell, pushed back by one yarn radius,
 // gaps filled from neighbours, then lightly blurred.
@@ -161,7 +192,8 @@ function surfaceGeometry(sf, uvScale) {
 export function buildNap(p) {
   const group = new THREE.Group();
   const disposables = [];
-  const tex = napTexture();
+  const velvet = p.style === 'velvet';
+  const tex = velvet ? velvetTexture() : napTexture();
   disposables.push(tex);
 
   const sf = backSurface(p.points, p.yarnRadius, 0.22);
@@ -175,18 +207,23 @@ export function buildNap(p) {
   const SHELLS = p.shells || 24;
   // laid slightly in the brushing direction (down the wale); capped so a tall
   // pile stands up rather than being combed into long streaks
-  const lean = Math.min(p.napLength * 0.45, p.yarnRadius * 1.4);
+  // A sheared pile stands nearly upright, with only the slight one-way lie
+  // the final shear and polish leave (the nap direction).
+  const lean = velvet ? p.napLength * 0.12 : Math.min(p.napLength * 0.45, p.yarnRadius * 1.4);
   for (let s = 0; s < SHELLS; s++) {
     const f = (s + 1) / SHELLS;
-    const shade = 0.5 + 0.5 * Math.pow(f, 0.6);
+    // velvet: deep between the fibres, bright at the cut tips — the rich,
+    // dark-to-glowing look of a cut pile
+    const shade = velvet ? 0.3 + 0.62 * Math.pow(f, 0.55) : 0.5 + 0.5 * Math.pow(f, 0.6);
     // The root shell is solid: a real nap is a closed mat at its base, and
     // any texel discarded by every layer let light leak through as sparkles.
-    const mat = new THREE.MeshStandardMaterial({
+    const mat = new (velvet ? THREE.MeshPhysicalMaterial : THREE.MeshStandardMaterial)({
       color: napColor.clone().multiplyScalar(shade),
       roughness: 1.0,
       metalness: 0.0,
+      ...(velvet ? { sheen: 1, sheenRoughness: 0.35, sheenColor: p.color.clone().lerp(new THREE.Color(1, 1, 1), 0.22) } : {}),
       alphaMap: s === 0 ? null : tex,
-      alphaTest: s === 0 ? 0 : 0.06 + 0.82 * Math.pow(f, 1.1),
+      alphaTest: s === 0 ? 0 : (velvet ? 0.05 + 0.55 * Math.pow(f, 1.6) : 0.06 + 0.82 * Math.pow(f, 1.1)),
       // MSAA-smoothed cut-outs: a hard alpha test at close range broke the
       // shells into stepped, fern-like slices
       alphaToCoverage: s !== 0,
@@ -204,7 +241,7 @@ export function buildNap(p) {
     // A thin cylinder is mostly side-lit, so at the nap's own colour it reads
     // darker than the mat around it (like dirt). Lift it toward the lit
     // fibre-tip tone instead.
-    const perAnchor = 3;
+    const perAnchor = velvet ? 1 : 3;
     const count = Math.min(12000, p.anchors.length * perAnchor);
     const mat = new THREE.MeshStandardMaterial({ color: napColor.clone().lerp(new THREE.Color(1, 1, 1), 0.25), roughness: 0.95 });
     disposables.push(mat);
@@ -214,7 +251,8 @@ export function buildNap(p) {
     const up = new THREE.Vector3(0, 1, 0), dir = new THREE.Vector3();
     for (let i = 0; i < count; i++) {
       const a = p.anchors[i % p.anchors.length];
-      dir.set((hash2(i, 51) - 0.5) * 1.6, (hash2(i, 52) - 0.5) * 1.6 - 0.5, -0.7).normalize();
+      if (velvet) dir.set((hash2(i, 51) - 0.5) * 0.35, (hash2(i, 52) - 0.5) * 0.35 - 0.12, -1).normalize();
+      else dir.set((hash2(i, 51) - 0.5) * 1.6, (hash2(i, 52) - 0.5) * 1.6 - 0.5, -0.7).normalize();
       dummy.position.set(
         a.x + (hash2(i, 53) - 0.5) * 0.7,
         a.y + (hash2(i, 54) - 0.5) * 0.7,

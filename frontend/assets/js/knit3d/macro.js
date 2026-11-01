@@ -406,12 +406,12 @@ export function fibreSurfaceTexture(kind, aniso) {
   // A raised fibre is ~15-25 µm across: at 1024 px over the ~1.6 cm nap tile
   // one pixel is ~16 µm, so a fibre can be drawn at its real width. At the old
   // 256 px every fibre was ~100 µm — a field of scratches, not a nap.
-  const size = kind === 'nap' ? 1024 : 256;
+  const size = kind === 'nap' || kind === 'velvet' || kind === 'towel' ? 1024 : 256;
   const c = document.createElement('canvas'); c.width = c.height = size;
   const ctx = c.getContext('2d');
   ctx.fillStyle = '#808080'; ctx.fillRect(0, 0, size, size);
   ctx.lineCap = 'round';
-  const R = rng(kind === 'nap' ? 9173 : 3307);
+  const R = rng(kind === 'nap' ? 9173 : kind === 'velvet' ? 5153 : kind === 'towel' ? 6421 : 3307);
   const wrap = (fn) => { for (const ox of [-size, 0, size]) for (const oy of [-size, 0, size]) fn(ox, oy); };
   // only the copies that can touch the tile (a full 3x3 wrap of 20k fibres is slow)
   const wrapNear = (x0, y0, r, fn) => {
@@ -420,7 +420,46 @@ export function fibreSurfaceTexture(kind, aniso) {
       fn(ox, oy);
     }
   };
-  if (kind === 'nap') {
+  if (kind === 'towel') {
+    // Uncut plush terry seen from a distance: a dense field of yarn loops
+    // (~2 mm, the tile is ~2 cm), each turned its own way, so from above
+    // they show as rings and crescents piled over each other. Deep, dark
+    // gaps between them, bright loop crowns.
+    ctx.fillStyle = '#2a2a2a'; ctx.fillRect(0, 0, size, size);
+    for (let layer = 0; layer < 3; layer++) {
+      for (let k = 0; k < 230; k++) {
+        const x0 = R() * size, y0 = R() * size;
+        const rx = 16 + R() * 14, ry = rx * (0.35 + R() * 0.6), rot = R() * Math.PI;
+        const a0 = R() * Math.PI * 2, span = Math.PI * (1.1 + R() * 0.9);   // a ring seen partly from the side
+        wrapNear(x0, y0, rx + 12, (ox, oy) => {
+          ctx.strokeStyle = 'rgba(15,15,15,0.7)'; ctx.lineWidth = 15;
+          ctx.beginPath(); ctx.ellipse(x0 + ox, y0 + oy, rx, ry, rot, a0, a0 + span); ctx.stroke();
+          const v = 150 + layer * 30 + (R() * 45 | 0);
+          ctx.strokeStyle = `rgb(${v},${v},${v})`; ctx.lineWidth = 9;
+          ctx.beginPath(); ctx.ellipse(x0 + ox, y0 + oy, rx, ry, rot, a0, a0 + span); ctx.stroke();
+        });
+      }
+    }
+  } else if (kind === 'velvet') {
+    // Sheared cut pile: fibre ends packed tight and level, with the soft
+    // shading a velour shows where the pile is pressed one way or another
+    // (the tile is ~1 cm, so these patches are a few mm).
+    for (let k = 0; k < 60; k++) {
+      const x0 = R() * size, y0 = R() * size, rad = 60 + R() * 120;
+      const v = R() < 0.5 ? 'rgba(160,160,160,0.35)' : 'rgba(100,100,100,0.35)';
+      wrapNear(x0, y0, rad, (ox, oy) => {
+        const g = ctx.createRadialGradient(x0 + ox, y0 + oy, 0, x0 + ox, y0 + oy, rad);
+        g.addColorStop(0, v); g.addColorStop(1, 'rgba(128,128,128,0)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x0 + ox, y0 + oy, rad, 0, Math.PI * 2); ctx.fill();
+      });
+    }
+    for (let k = 0; k < 70000; k++) {
+      const x0 = R() * size, y0 = R() * size, r = 0.6 + R() * 1.1;
+      const v = 70 + (R() * 160 | 0);
+      ctx.fillStyle = `rgba(${v},${v},${v},0.55)`;
+      wrapNear(x0, y0, r, (ox, oy) => { ctx.beginPath(); ctx.arc(x0 + ox, y0 + oy, r, 0, Math.PI * 2); ctx.fill(); });
+    }
+  } else if (kind === 'nap') {
     // Raised fibre doesn't stand evenly: it curls and clumps into soft
     // pebbles a couple of millimetres across (the tile is ~1.6 cm), which is
     // what gives a brushed back its mottled, velvety look from a distance.

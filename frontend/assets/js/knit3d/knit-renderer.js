@@ -477,7 +477,8 @@ export class Knit3D {
       gsm: this.opts.gsm, construction: con, fiberType: this.opts.fiberType,
       elastanePct: this.opts.elastanePct, physics: this.opts.physics,
       countNe: this.opts.countNe, loopNe: this.opts.loopNe,
-      thicknessMm: this.opts.pique && this.opts.pique.thicknessMm,
+      thicknessMm: (this.opts.pique && this.opts.pique.thicknessMm) || (this.opts.plush && this.opts.plush.thicknessMm),
+      napMm: this.opts.plush && this.opts.plush.cut ? this.opts.plush.finishedMm : null,
     });
     const DENSITY_DEFAULTS = { aspect: 1.22, scalar: 1, wpc: 9, tex: 20 };
     // A denier-based warp-knit fabric (tricot/spacer/...) has no real
@@ -500,7 +501,7 @@ export class Knit3D {
     // row alongside the face course — same point-count order as interlock's
     // two beds, so both the stitch-count cap and the base density below
     // treat it the same way.
-    const isFleece3Thread = (con.type === 'fleece' && con.pile === 'brush') || con.type === 'terry';
+    const isFleece3Thread = (con.type === 'fleece' && con.pile === 'brush') || con.type === 'terry' || con.type === 'plush';
     // The binding+fleecy course doubles the path count the same way
     // interlock's second bed does, so it needs the same cap treatment —
     // a lighter cap here let the stitch grid grow enough to stall the main
@@ -544,7 +545,7 @@ export class Knit3D {
     const { paths, floatAnchors } = buildYarnPaths({
       construction: con, sample: this.opts.sample, sampleBack: this.opts.sampleBack,
       pattern: this.opts.pattern, wales, courses, pitchY,
-      pique: this.opts.pique, yarnRadius: radius,
+      pique: this.opts.pique, yarnRadius: radius, loopHeight: this._plushLoopUnits(con, density),
     });
     // Real 3-thread fleece (see topology-builder.js): the binding+fleecy
     // yarn's floats already give the back real structural coverage, so the
@@ -684,7 +685,7 @@ export class Knit3D {
     const { paths } = buildYarnPaths({
       construction: con, sample: this.opts.sample, sampleBack: this.opts.sampleBack,
       pattern: this.opts.pattern, wales: tileWales + 2 * mW, courses: tileCourses + 2 * mC, pitchY,
-      pique: this.opts.pique, yarnRadius: radius,
+      pique: this.opts.pique, yarnRadius: radius, loopHeight: this._plushLoopUnits(con, density),
       // Stitch irregularity repeats with the STRUCTURE, not the tile. Jitter
       // that repeats once per tile (~0.5 cm) survives every mip level as a
       // regular grid across the whole cloth — a ripstop look no knit has. The
@@ -717,7 +718,7 @@ export class Knit3D {
     while (tileCourses * th > 2048 && th > 4) th /= 2;
     const bake = bakeStructure(this.renderer, tile, win, 48, {
       melMaterial: melMat, keep: !!melMat, size: { w: tileWales * tw, h: tileCourses * th },
-      gap: (con.type === 'fleece' || con.type === 'terry') ? 0.6 : 0.3,
+      gap: (con.type === 'fleece' || con.type === 'terry' || con.type === 'plush') ? 0.6 : 0.3,
     });
     const disposeTile = () => { tile.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); tmp.dispose(); };
     if (!melMat) disposeTile();
@@ -781,7 +782,7 @@ export class Knit3D {
           // cavity over one structure repeat; a piqué's cell is the point
           height: maps.height,
           cavityLod: Math.log2(Math.max(2, Math.min(rep.wales * tw, rep.courses * th))),
-          cavity: this.opts.pique ? 0.55 : (con.type === 'fleece' || con.type === 'terry') ? 0.14 : 0.3,
+          cavity: this.opts.pique ? 0.55 : (con.type === 'fleece' || con.type === 'terry' || con.type === 'plush') ? 0.14 : 0.3,
           // cell-scale slope: a piqué's beads; other knits keep the yarn-scale
           // normal map only
           relief: this.opts.pique ? { depth: bake.depth, w: win.w, h: win.h, strength: 1 } : null,
@@ -796,23 +797,25 @@ export class Knit3D {
     // (fleece / velour) appears with the "Finished" state; a loop-pile back
     // (french terry) is knitted that way, so it is always there.
     let napMat = null, napTex = null;
+    // (an uncut plush back is baked from its real loops instead — see plushLoops)
     if (con.pile === 'brush' || con.pile === 'velour' || (con.pile === 'loop' && con.type !== 'terry')) {
-      const kind = con.pile === 'loop' ? 'loops' : 'nap';
+      const kind = con.pile === 'loop' ? 'loops' : con.pile === 'velour' ? 'velvet' : con.pile === 'plush' ? 'towel' : 'nap';
       const surf = fibreSurfaceTexture(kind, aniso);
       napTex = surf.normal;
-      const t = (kind === 'nap' ? 1.6 : 2.4) * cm;   // texture tile, cm
+      // texture tile, cm — a towel's loops scale with the engine's sinker height
+      const t = (kind === 'nap' ? 1.6 : kind === 'velvet' ? 1.0 : kind === 'towel' ? 2.0 * Math.max(0.6, Math.min(1.6, ((this.opts.plush || {}).heightMm || 2.2) / 2.2)) : 2.4) * cm;
       for (const tx of [surf.normal, surf.shade]) tx.repeat.set(win.w / t, win.h / t);
       this._napShade = surf.shade;
       // The shade map is a mid-grey field; lift the base colour so the lit
       // tops land on the dyed shade rather than below it.
-      const lift = kind === 'nap' ? 1.6 : 1.45;
+      const lift = kind === 'nap' ? 1.6 : kind === 'towel' ? 1.85 : 1.45;
       napMat = new THREE.MeshPhysicalMaterial({
         color: y.color.clone().lerp(new THREE.Color(1, 1, 1), kind === 'nap' ? 0.12 : 0.05).multiplyScalar(lift),
         map: surf.shade,
         // a taller, loftier pile casts deeper relief
         normalMap: napTex, normalScale: new THREE.Vector2(...Array(2).fill(Math.min(1.3, 0.5 + 0.3 * (body.napMm || 1)))),
         roughness: 1, metalness: 0,
-        sheen: kind === 'nap' ? 1 : 0.6, sheenRoughness: kind === 'nap' ? 0.5 : 0.7,
+        sheen: kind === 'loops' ? 0.6 : 1, sheenRoughness: kind === 'velvet' ? 0.3 : kind === 'nap' ? 0.5 : 0.7,
         sheenColor: y.color.clone().lerp(new THREE.Color(1, 1, 1), 0.45),
       });
       napMat.shadowSide = THREE.DoubleSide;
@@ -857,8 +860,9 @@ export class Knit3D {
     this._macro = {
       group: macroGroup, front, back, edge, edgeMat, faceMat, backMat, napMat, napTex,
       cloth: geo, table, cm,
-      napAlways: con.pile === 'loop' && con.type !== 'terry',
-      napLift: con.pile === 'loop' ? 1.45 : 1.6, napShade: this._napShade || null,
+      // a loop pile is knitted that way: there from the start
+      napAlways: (con.pile === 'loop' && con.type !== 'terry') || con.pile === 'plush',
+      napLift: con.pile === 'loop' ? 1.45 : con.pile === 'plush' ? 1.85 : 1.6, napShade: this._napShade || null,
       melMat, melF: -1, rebake: bake.rebake || null,
       disposeTile: melMat ? () => { bake.release(); disposeTile(); } : null,
       targets: bake.targets, size: box.getSize(new THREE.Vector3()),
@@ -1011,6 +1015,8 @@ export class Knit3D {
     // the loopback terry back is real loop-yarn geometry now (topology-builder
     // loopArcs), not a decorative pile
     if (con.type === 'terry') return null;
+    // an uncut plush back is real loop geometry too (plushLoops)
+    if (con.type === 'plush' && !con.cut) return null;
     const kind = con.pile === 'loop' ? 'loop' : 'brush';
     const isVelour = con.pile === 'velour';
 
@@ -1100,9 +1106,21 @@ export class Knit3D {
       napLength: this._napUnits(pileParams),
       fibreGeometry: this._napFibre,
       shells: this._shadows ? 24 : 12,              // lighter on the low-power tier
+      style: pileParams.isVelour && (this.opts.construction || {}).type === 'plush' ? 'velvet' : 'nap',
     });
     group.add(nap.group);
     this._pile = { mesh: nap.group, geometry: this._napFibre, dispose: nap.dispose, setColor: nap.setColor };
+  }
+
+  // Plush loop height in loop-model units (one wale = 10/wpc mm), from the
+  // engine's sinker height; a velour is modelled as the short stub of yarn
+  // left under its cut pile.
+  _plushLoopUnits(con, density) {
+    if (!con || con.type !== 'plush') return null;
+    const p = this.opts.plush || {};
+    const wpc = density && density.wpc > 0 ? density.wpc : 10.7;
+    if (con.cut) return Math.max(0.25, 0.3 * (p.finishedMm || 1.5) * wpc / 10);
+    return Math.max(0.8, Math.min(4.5, (p.heightMm || 2) * wpc / 10));
   }
 
   _napUnits(pileParams) {

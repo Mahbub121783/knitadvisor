@@ -152,6 +152,8 @@ const SHRINKAGE_BASE = {
     cotton:      { length: 6.0,  width: 8.0 },
     cvc:         { length: 5.5,  width: 7.5 },
     pc:          { length: 4.0,  width: 4.5 },
+    polyester:   { length: 2.0,  width: 2.5 },   // ESTIMATED — heat-set filament pile (polyester velour)
+    viscose:     { length: 7.5,  width: 8.5 },   // ESTIMATED — fleece family's viscose/cotton ratio
   },
   fleece: { // family fallback = 3-thread fleece (risk records 6, 37)
     cotton:      { length: 6.0,  width: 8.5 },
@@ -260,6 +262,13 @@ const DEFAULT_FINISHING_ROUTE = 'compacted'; // most knit fabric is delivered co
 // compactor barely reaches it. Factored so the real orders' tested L -6 / W -8
 // comes out of the relaxed potential above.
 FINISHING_ROUTE.pile = { length_factor: 0.85, width_factor: 0.85, spirality_factor: 0.35, label: 'Pile fabric (stenter → brush → stenter → compact)' };
+// Loopback terry: the same thick three-yarn cloth, never raised (records 33, 47:
+// Knit → Dye → Stenter → Compact, tested L -6 / W -8).
+FINISHING_ROUTE.loop_pile = { length_factor: 0.85, width_factor: 0.85, spirality_factor: 0.35, label: 'Loop pile, not raised (stenter → compact)' };
+// Plush terry and velour skip the compactor (it crushes the pile): stenter with
+// overfeed and a relax dryer leave more of the length shrinkage in the cloth.
+// MODELLED from the tubular-relaxed and pile factors; no plush order tested yet.
+FINISHING_ROUTE.plush = { length_factor: 0.95, width_factor: 0.85, spirality_factor: 0.45, label: 'Plush / velour (stenter with overfeed, relax dried, no compactor)' };
 
 // ============================================================
 // v2.0 — MODEL CONFIDENCE BANDS (±, from source regression std. error)
@@ -452,7 +461,9 @@ function predictQuality(params) {
   const torqueFactor  = YARN_STRUCTURE_TORQUE[yarnStructure];
   const twistAlpha    = estimateTwistAlpha(params.twist_multiplier);
   const finishKey     = FINISHING_ROUTE[params.finishing_route] ? params.finishing_route
-    : ((family === 'fleece' || family === 'terry') ? 'pile' : DEFAULT_FINISHING_ROUTE);
+    : (/^(terry_fabric|velour_plush)$/.test(fabricId) ? 'plush'
+      : fabricId === 'french_terry' ? 'loop_pile'
+      : (family === 'fleece' || family === 'terry') ? 'pile' : DEFAULT_FINISHING_ROUTE);
   const route         = FINISHING_ROUTE[finishKey];
   const routeLenF     = route.length_factor;
   const routeWidF     = route.width_factor;

@@ -1243,6 +1243,20 @@ class FabricVisualizer {
       // result carries no shrinkage prediction, which hides the toggle
       // rather than animating against a number that was never computed.
       shrinkage: this._getShrinkage(),
+      // Plush terry / velour: the engine's sinker height, the sheared pile
+      // and the thickness it computed (terry-engine.js) — the 3D loops are
+      // built to these, not to a generic pile.
+      plush: this._plushGeom(),
+    };
+  }
+
+  _plushGeom() {
+    const t = this.result.terry;
+    if (!t || !t.ok || !t.pile) return null;
+    return {
+      heightMm: t.pile.sinker_height_mm, finishedMm: t.pile.finished_pile_mm,
+      cut: !!t.variant.cut, every: t.variant.pile_every === 2 ? 2 : 1,
+      thicknessMm: t.thermal ? t.thermal.thickness_mm : null,
     };
   }
 
@@ -1428,6 +1442,19 @@ class FabricVisualizer {
     // _stitchDensity()'s Munden-constant choice, so mislabeling it 'double' here
     // silently pulls in rib/interlock's tighter packing constants (Kc/Kw, GSM
     // reference) for these single-bed structures.
+    // Sinker-loop plush (knitted towel terry) and velour: ground + pile
+    // plated into every needle loop, the pile standing as a loop at every
+    // needle (or cut open and sheared, velour). A different fabric from the
+    // loopback below — test it first, by id and by the engine's own answer.
+    const plush = this.result.terry && this.result.terry.ok ? this.result.terry : null;
+    if (plush || id === 'terry_fabric' || id === 'velour_plush' || has('toweling', 'towelling', 'plush')) {
+      const cut = plush ? !!plush.variant.cut : (id === 'velour_plush' || has('velour', 'velvet'));
+      return {
+        type: 'plush', base: 'single', label: cut ? 'velour' : (id === 'velour_plush' ? 'plush' : 'plush terry'),
+        mesh: false, brush: cut, pile: cut ? 'velour' : 'plush', cut,
+        every: plush && plush.variant.pile_every === 2 ? 2 : 1,
+      };
+    }
     // French terry's catalogue name says "Inlay Fleece", but it is the
     // UNRAISED loopback — test it before the fleece branch.
     if (id === 'french_terry' || has('french terry', 'loopback', 'loop back'))
@@ -1514,7 +1541,7 @@ class FabricVisualizer {
     ctx.fillRect(0, 0, W, H);
 
     if (brushed) { this._paintBrushedPile(ctx, W, H, dyed, opts, view); this._overlaySoftLight(ctx, W, H); }
-    else if (con.type === 'terry' && side === 'back') { this._paintLoopPile(ctx, W, H, dyed, opts, view); }
+    else if ((con.type === 'terry' || con.type === 'plush') && side === 'back') { this._paintLoopPile(ctx, W, H, dyed, opts, view); }
     else if (con.type === 'mesh' || con.type === 'spacer') { this._paintMeshField(ctx, W, H, side, opts, view); this._overlaySoftLight(ctx, W, H); }
     else if (con.type === 'tricot') { this._paintTricotField(ctx, W, H, side, opts, view); this._overlaySoftLight(ctx, W, H); }
     else {
@@ -2266,7 +2293,7 @@ class FabricVisualizer {
 
     const opts = this._faceOpts();
     const con = opts.construction;
-    const WEBGL_TYPES = ['jersey', 'rib', 'interlock', 'pique', 'terry', 'fleece', 'mesh', 'spacer', 'tricot'];
+    const WEBGL_TYPES = ['jersey', 'rib', 'interlock', 'pique', 'terry', 'plush', 'fleece', 'mesh', 'spacer', 'tricot'];
     const webglOk = (() => {
       try { return !!window.WebGLRenderingContext && !!document.createElement('canvas').getContext('webgl'); }
       catch (_) { return false; }
@@ -2316,7 +2343,7 @@ class FabricVisualizer {
     const pique = this._piqueGeom();
     const glOpts = {
       dyed: this._dyedColor, construction: con, countNe: opts.countNe,
-      loopNe: opts.loopNe, tieNe: opts.tieNe,
+      loopNe: opts.loopNe, tieNe: opts.tieNe, plush: opts.plush,
       tf: opts.tf, fiberType: opts.fiberType, sheen: opts.sheen, sample, sampleBack,
       physics: opts.physics, density: pique ? pique.density : opts.density, twist: this._yarnTwist(),
       // Piqué: held-loop elongation, cell relief, wale lean and which side is
@@ -2414,7 +2441,7 @@ class FabricVisualizer {
       <div class="ka3d-controls">
         <button class="ka3d-btn" data-act="front" title="Front side">Front</button>
         <button class="ka3d-btn" data-act="back" title="Back side">Back</button>
-        ${con.brush || con.pile ? '<button class="ka3d-btn" data-act="brush" title="Brushed back">Brush</button>' : ''}
+        ${con.brush || (con.pile && con.pile !== 'plush') ? '<button class="ka3d-btn" data-act="brush" title="Brushed back">Brush</button>' : ''}
         <span class="ka3d-sep"></span>
         <button class="ka3d-btn" data-act="zoomout">–</button>
         <span class="ka3d-zoom">1.7×</span>

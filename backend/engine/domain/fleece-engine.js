@@ -105,6 +105,15 @@ const ANCHORS = [
   { id: 47, kind: 'terry',  gsm: 400, check: '22/1', face: { ne: 22, sl: 4.45 }, binder: { tex: texOfNe(22), sl: 3.60 }, loop: { ne: 22, sl: 1.55 }, comp: 'cotton' },
 ];
 
+// unbrushed-terry rows of the industry count chart: "TERRY W/OUT brush", GSM → "face/1+loop/1"
+function TERRY_CHART() {
+  let rows = [];
+  try { rows = require('../formulas/gsm-count').MASTER_LOOKUP || []; } catch (_) { rows = []; }
+  return rows.filter(r => /terry/i.test(r.type) && /w\/?out\s*brush/i.test(r.type) && r.gsm > 0)
+    .map(r => { const m = String(r.count).match(/^(\d+)\/1\s*\+\s*(\d+)\/1$/); return m ? { gsm: r.gsm, face: +m[1], loop: +m[2] } : null; })
+    .filter(Boolean);
+}
+
 // ── brushing (MODELLED) ─────────────────────────────────────────────────
 const PASS_LOSS = 0.035;                 // share of the loop yarn torn out per pass
 function brushing(variant, fibres, opt) {
@@ -172,10 +181,48 @@ function model() {
     return { record: a.id, gsm: a.gsm, predicted: r1(pred), error_pct: r1((pred - a.gsm) / a.gsm * 100) };
   }).filter(Boolean);
 
+  // ── loopback terry: its own factory rows and its own anchors ──
+  // The factory's "terry" rows are loopback (French) terry — face SL ~4.45 mm
+  // on 20G, the same three-yarn knitting as a fleece — but never raised, so the
+  // stenter does not pull the width in for brushing: it finishes WIDER (about
+  // 78" open from a 34" cylinder against a fleece's 72"), i.e. fewer wales per
+  // cm. Using the fleece's 0.578·G for terry overstated the stitches per m² and
+  // left almost nothing for the loop yarn (a 30/1 loop at 280 GSM).
+  const tRows = (snapRef.factoryRecords || []).filter(r => r.fab === 'terry' && r.fgsm > 150 && r.fgsm < 520 && r.sl > 4 && r.g > 0);
+  const tW = tRows.filter(r => r.fdia > 40 && r.dia > 0);
+  const terryWpcPerG = tW.length >= 20 ? mean(tW.map(r => (Math.PI * r.dia * r.g) / (r.fdia * 2.54) / r.g)) : 0.537;
+  const terryFaceFit = tRows.length >= 20 ? fit(tRows.map(r => r.fgsm), tRows.map(r => r.ne)) : { a: 44.74, b: -0.0446 };
+  const terrySlFit = tRows.length >= 20 ? fit(tRows.map(r => r.ne), tRows.map(r => r.sl)) : { a: 5.003, b: -0.0158 };
+  const terryGauges = {}; tRows.forEach(r => { terryGauges[r.g] = (terryGauges[r.g] || 0) + 1; });
+  // Terry anchors: the measured order (record 47) plus the four unbrushed-terry
+  // rows of the industry count chart (GSM + face and loop count; face SL from
+  // the factory trend, spun binder of the face count). The same chart's fleece
+  // rows, put through the fleece wpc, land on the measured fleece Kc within a
+  // few per cent — which is what makes its terry rows usable here.
+  const wpcT20 = terryWpcPerG * 20;
+  const terryAnchors = live.filter(a => a.kind === 'terry').map(a => ({ ...a, tier: 'order' }));
+  for (const row of TERRY_CHART()) {
+    const fsl = terrySlFit.a + terrySlFit.b * row.face;
+    terryAnchors.push({ id: `chart-${row.gsm}`, kind: 'terry', gsm: row.gsm, tier: 'industry chart',
+      face: { ne: row.face, sl: fsl }, binder: { tex: texOfNe(row.face), sl: fsl * 0.81 }, loop: { ne: row.loop, sl: 1.55 }, comp: 'cotton' });
+  }
+  const kcTerryEach = terryAnchors.map(a => kcOf(a, wpcT20));
+  if (kcTerryEach.length) KC.terry = mean(kcTerryEach);
+  const terryLoo = terryAnchors.length > 1 ? terryAnchors.map((a, i) => {
+    const kc = mean(kcTerryEach.filter((_, j) => j !== i));
+    const sum = a.face.sl * texOfNe(a.face.ne) + a.binder.sl * a.binder.tex + a.loop.sl * texOfNe(a.loop.ne);
+    const pred = (kc * 10 / a.face.sl) * wpcT20 * sum / 100;
+    return { record: a.id, tier: a.tier, gsm: a.gsm, predicted: r1(pred), error_pct: r1((pred - a.gsm) / a.gsm * 100) };
+  }) : [];
+
   cached = {
     wpcPerG, faceFit, slFit, KC, anchors: live.map(a => a.id), loo,
     rows: rows.length, gauges,
-    kc_each: { fleece: kcFleece.map(r3), terry: kcTerry.map(r3) },
+    kc_each: { fleece: kcFleece.map(r3), terry: kcTerryEach.map(r3) },
+    terry: {
+      wpcPerG: terryWpcPerG, faceFit: terryFaceFit, slFit: terrySlFit, rows: tRows.length, gauges: terryGauges,
+      anchors: terryAnchors.map(a => a.id), loo: terryLoo,
+    },
   };
   cachedFor = snapRef;
   return cached;
@@ -210,12 +257,14 @@ function analyzeFleece(p) {
 
   // ---- machine-state geometry ----
   const pitch = 25.4 / G;
-  const wpc = M.wpcPerG * G;
+  const isTerry = v.kind === 'terry';
+  const D = isTerry ? M.terry : M;                    // terry has its own factory rows
+  const wpc = D.wpcPerG * G;
   // face count: the engine's own (factory) answer wins; else the measured trend
   let faceNe = +p.faceNe > 0 ? +p.faceNe : null;
-  const faceFromTrend = M.faceFit.a + M.faceFit.b * gsm;
+  const faceFromTrend = D.faceFit.a + D.faceFit.b * gsm;
   if (!faceNe) faceNe = snap(v.yarns === 2 ? Math.max(20, faceFromTrend - 6) : faceFromTrend, STD_FACE);
-  let faceSl = +p.faceSlMm > 0 ? +p.faceSlMm : (v.faceSl20 ? v.faceSl20 * 20 / G : (M.slFit.a + M.slFit.b * faceNe) * 20 / G);
+  let faceSl = +p.faceSlMm > 0 ? +p.faceSlMm : (v.faceSl20 ? v.faceSl20 * 20 / G : (D.slFit.a + D.slFit.b * faceNe) * 20 / G);
   const loopSl = v.loopLen20 * 20 / G;
 
   // ---- binder ----
@@ -320,7 +369,7 @@ function analyzeFleece(p) {
       if (knitLoad <= 1650 * Math.pow(2.54 / g, 2) * 1.25 && loopNe / ply >= 8 * Math.pow(g / 20, 2)) { suggested = g; break; }
     }
   }
-  const dataGauge = Object.entries(M.gauges).sort((a, c) => c[1] - a[1])[0];
+  const dataGauge = Object.entries(D.gauges).sort((a, c) => c[1] - a[1])[0];
 
   // ---- thickness, density, porosity, warmth ----
   const bulk = 1.25;                                                   // MODELLED: knitted yarn is fuller than a compact cylinder
@@ -389,7 +438,7 @@ function analyzeFleece(p) {
     composition: { declared: fmtComp(declared), achieved: fmtComp(actual), loop_yarn_blend: loopBlend.label, loop_polyester_needed_pct: r1(loopPolyNeeded * 100) },
     gauge_check: {
       gauge: G, ok: gaugeOk, knit_load_tex: r1(knitLoad), knit_limit_tex: r1(knitTexMax), loop_ne: loopNe / ply, loop_ne_min: r1(loopNeMin),
-      suggested_gauge: suggested, factory_practice: dataGauge ? `${dataGauge[0]}G (${dataGauge[1]} of ${M.rows} factory fleece rows)` : null,
+      suggested_gauge: suggested, factory_practice: dataGauge ? `${dataGauge[0]}G (${dataGauge[1]} of ${D.rows} factory ${isTerry ? 'loopback terry' : 'fleece'} rows)` : null,
       note: 'Face and binder knit on their own feeds, so each must clear the hook; the loop yarn only tucks, so it can be far coarser. The limits are modelled from mill practice (26/1 face and binder and a 10/1 loop run on 20G).',
     },
     brushing: b.passes ? {
@@ -402,11 +451,14 @@ function analyzeFleece(p) {
     process_route: route,
     warnings,
     calibration: {
-      anchors: M.anchors, kc: M.KC, kc_each: M.kc_each, wales_per_cm_per_gauge: r3(M.wpcPerG), factory_rows: M.rows,
-      face_count_trend: `Ne ≈ ${r2(M.faceFit.a)} ${M.faceFit.b < 0 ? '−' : '+'} ${Math.abs(r3(M.faceFit.b))} × GSM`,
-      leave_one_out: M.loo,
+      anchors: isTerry ? M.terry.anchors : M.anchors.filter(id => id !== 47), kc: M.KC, kc_each: M.kc_each,
+      wales_per_cm_per_gauge: r3(D.wpcPerG), factory_rows: D.rows, row_kind: isTerry ? 'loopback terry' : 'fleece',
+      face_count_trend: `Ne ≈ ${r2(D.faceFit.a)} ${D.faceFit.b < 0 ? '−' : '+'} ${Math.abs(r3(D.faceFit.b))} × GSM`,
+      leave_one_out: isTerry ? M.terry.loo : M.loo,
     },
-    source: 'Fleece model: factory records + three full order specifications (measured), mass balance and heat transfer (derived), brushing and gauge limits (modelled).',
+    source: isTerry
+      ? 'Loopback terry model: factory terry records and one full order specification (measured), an industry count chart, mass balance and heat transfer (derived), gauge limits (modelled).'
+      : 'Fleece model: factory records + full order specifications (measured), mass balance and heat transfer (derived), brushing and gauge limits (modelled).',
   };
 
   function needLighterFace(ne) { return ne > 32; }

@@ -1225,6 +1225,16 @@
       <div id="pique-body"></div>
     </div>
 
+    <!-- ===== PLUSH TERRY / VELOUR (terry-engine.js) ===== -->
+    <div class="result-section anim-in hidden" id="sec-terry">
+      <div class="result-section-title">
+        <div class="rst-icon purple">&#10047;</div>
+        <div class="rst-title-text" id="terry-title">Plush Terry Construction</div>
+        <span class="badge badge-amber" style="margin-left:auto">Pile geometry + factory data</span>
+      </div>
+      <div id="terry-body"></div>
+    </div>
+
     <!-- ===== FLEECE / LOOPBACK TERRY (fleece-engine.js) ===== -->
     <div class="result-section anim-in hidden" id="sec-fleece">
       <div class="result-section-title">
@@ -2343,6 +2353,13 @@ function renderResult(r, params) {
     document.getElementById('fleece-body').innerHTML = renderFleece(r.fleece);
   }
 
+  // — Plush terry / velour —
+  if (r.terry && r.terry.ok) {
+    document.getElementById('sec-terry').classList.remove('hidden');
+    document.getElementById('terry-title').textContent = r.terry.variant.cut ? 'Velour Construction' : (r.terry.variant.kind === 'velour' ? 'Plush Construction' : 'Plush Terry Construction');
+    document.getElementById('terry-body').innerHTML = renderTerry(r.terry);
+  }
+
   // — Fabric Visualization —
   requestAnimationFrame(() => {
     const vizBody = document.getElementById('viz-section-body');
@@ -2499,9 +2516,112 @@ function renderFleece(f) {
     </div>
     <div class="card-sm">
       <div class="label">How it is grounded</div>
-      <div class="mt-4 text-sm">${f.calibration.factory_rows} factory fleece qualities (wales ≈ ${f.calibration.wales_per_cm_per_gauge} × gauge per cm; face ${esc(f.calibration.face_count_trend)}) and ${f.calibration.anchors.length} full order specifications fix the yarn lengths and Kc.</div>
-      ${f.calibration.leave_one_out && f.calibration.leave_one_out.length ? `<div class="mt-4 text-sm">Each order predicted from the other: ${f.calibration.leave_one_out.map(l => `${l.gsm} → ${l.predicted} GSM (${l.error_pct > 0 ? '+' : ''}${l.error_pct}%)`).join(', ')}.</div>` : ''}
+      <div class="mt-4 text-sm">${f.calibration.factory_rows} factory ${esc(f.calibration.row_kind || 'fleece')} qualities (wales ≈ ${f.calibration.wales_per_cm_per_gauge} × gauge per cm; face ${esc(f.calibration.face_count_trend)}) and ${f.calibration.anchors.length} ${f.variant.kind === 'terry' ? 'reference specifications (one full order, the rest an industry count chart)' : 'full order specifications'} fix the yarn lengths and Kc.</div>
+      ${f.calibration.leave_one_out && f.calibration.leave_one_out.length ? `<div class="mt-4 text-sm">Each one predicted from the others: ${f.calibration.leave_one_out.map(l => `${l.gsm} → ${l.predicted} GSM (${l.error_pct > 0 ? '+' : ''}${l.error_pct}%)`).join(', ')}.</div>` : ''}
       <div class="label mt-2">Brushing loss, pile height and the gauge limits are modelled; the rest is measured or derived.</div>
+    </div>
+  </div>`;
+  return html;
+}
+
+function renderTerry(t) {
+  const esc = (x) => String(x == null ? '' : x).replace(/[&<>]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]));
+  const tile = (label, value, sub, cls = '') => `<div class="card-sm">
+      <div class="label">${label}</div>
+      <div class="value-sm mt-4 ${cls}">${value}</div>
+      ${sub ? `<div class="label mt-2">${sub}</div>` : ''}
+    </div>`;
+  const mb = t.mass_balance, pl = t.pile, g = t.gauge_check, w = t.absorbency, th = t.thermal, sh = t.shearing;
+  const roleName = { ground: 'Ground (face)', pile: 'Pile', elastane: 'Elastane' };
+  const roleCol = { ground: '#60a5fa', pile: '#4ade80', elastane: '#fbbf24' };
+  // a to-scale side view of one wale: the ground loop and the pile loop over the high sinker
+  const sideView = (() => {
+    const hMax = Math.max(pl.sinker_height_mm, 3.5), W = 300, H = 120, base = 92, k = 60 / hMax;
+    const hk = pl.sinker_height_mm * k, hc = pl.finished_pile_mm * k;
+    let loops = '';
+    for (let i = 0; i < 5; i++) {
+      const x = 26 + i * 40;
+      loops += t.variant.cut
+        ? `<path d="M${x - 6} ${base} C ${x - 7} ${base - hc * 0.6}, ${x - 9} ${base - hc}, ${x - 11} ${base - hc}" stroke="#4ade80" stroke-width="3" fill="none" stroke-linecap="round"/>
+           <path d="M${x + 6} ${base} C ${x + 7} ${base - hc * 0.6}, ${x + 9} ${base - hc}, ${x + 11} ${base - hc}" stroke="#4ade80" stroke-width="3" fill="none" stroke-linecap="round"/>`
+        : `<path d="M${x - 7} ${base} C ${x - 9} ${base - hk}, ${x + 9} ${base - hk}, ${x + 7} ${base}" stroke="#4ade80" stroke-width="3" fill="none"/>`;
+    }
+    return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:360px;height:auto;display:block">
+      <line x1="10" y1="${base + 6}" x2="${W - 10}" y2="${base + 6}" stroke="#60a5fa" stroke-width="7" stroke-linecap="round" opacity=".85"/>
+      ${loops}
+      ${t.variant.cut ? `<line x1="10" y1="${base - hk}" x2="${W - 10}" y2="${base - hk}" stroke="currentColor" stroke-dasharray="3 4" opacity=".35"/>` : ''}
+      <line x1="${W - 18}" y1="${base}" x2="${W - 18}" y2="${base - (t.variant.cut ? hc : hk)}" stroke="currentColor" opacity=".6"/>
+      <text x="${W - 22}" y="${base - (t.variant.cut ? hc : hk) / 2}" text-anchor="end" font-size="10" fill="currentColor" opacity=".75">${t.variant.cut ? pl.finished_pile_mm + ' mm cut pile' : pl.sinker_height_mm + ' mm loops'}</text>
+      ${t.variant.cut ? `<text x="14" y="${base - hk - 4}" font-size="9" fill="currentColor" opacity=".5">knitted ${pl.sinker_height_mm} mm, sheared off</text>` : ''}
+      <text x="14" y="${H - 4}" font-size="9" fill="currentColor" opacity=".55">ground (face side) — one ${t.variant.cut ? 'tuft' : 'loop'} per needle${t.variant.pile_every === 2 ? ' pair' : ''}</text>
+    </svg>`;
+  })();
+  let html = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:8px;margin-bottom:14px;">
+    ${tile('Construction', esc(t.variant.name), t.variant.cut ? 'loops cut open and sheared' : 'pile yarn loops at every needle', 'text-blue')}
+    ${tile('Sinker height', `${pl.sinker_height_mm} mm`, `${pl.sinker_for_exact_gsm_mm} mm hits ${mb.gsm_target} GSM exactly`, 'text-purple')}
+    ${tile('Pile density', `${pl.loops_per_cm2} /cm²`, `${mb.wales_per_cm} w × ${mb.courses_per_cm} c per cm`)}
+    ${tile('GSM with these yarns', `${mb.gsm_at_chosen_counts}`, `target ${mb.gsm_target} (${mb.deviation_pct > 0 ? '+' : ''}${mb.deviation_pct}%)`, Math.abs(mb.deviation_pct) <= 4 ? 'text-green' : 'text-amber')}
+    ${sh ? tile('Knit grey', `${mb.gsm_grey_before_shearing} g/m²`, `shearing takes ${sh.fabric_mass_removed_pct}% off`, 'text-amber')
+         : tile('Absorbs', `${w.g_per_g} g/g`, `about ${w.total_g_m2} g water per m²`, 'text-green')}
+    ${tile('Thickness', `${th.thickness_mm} mm`, `${th.porosity_pct}% air · ${th.clo} clo`, 'text-purple')}
+  </div>`;
+  html += `<div class="card-sm" style="margin-bottom:10px;">
+    <div class="label">Yarn plan — both yarns are plated into every needle loop</div>
+    <div style="display:flex;height:9px;border-radius:99px;overflow:hidden;margin:8px 0 6px;background:var(--line3);">${t.yarns.map(y => `<i title="${esc(roleName[y.role])}" style="display:block;width:${y.share_pct}%;background:${roleCol[y.role]}"></i>`).join('')}</div>
+    <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11.5px;">
+      <tr style="color:var(--t3);text-align:left"><th style="padding:4px 6px">Yarn</th><th style="padding:4px 6px">Count / type</th><th style="padding:4px 6px">Length per needle</th><th style="padding:4px 6px">Share of weight</th><th style="padding:4px 6px">Basis</th></tr>
+      ${t.yarns.map(y => `<tr style="border-top:1px solid var(--line3)">
+        <td style="padding:5px 6px;white-space:nowrap"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${roleCol[y.role]};margin-right:6px"></span>${roleName[y.role]}</td>
+        <td style="padding:5px 6px"><b>${esc(y.label)}</b>${y.exact_ne ? `<br><span style="color:var(--t3)">balance asks ${y.exact_ne} Ne</span>` : ''}</td>
+        <td style="padding:5px 6px" class="mono">${y.sl_mm != null ? y.sl_mm + ' mm' : '—'}${y.sl_finished_mm ? `<br><span style="color:var(--t3)">${y.sl_finished_mm} mm after shearing</span>` : ''}</td>
+        <td style="padding:5px 6px" class="mono">${y.share_pct}%</td>
+        <td style="padding:5px 6px;color:var(--t3)">${esc(y.basis || '')}</td></tr>`).join('')}
+    </table></div>
+    <div class="label mt-2">${esc(mb.formula)}. The ground loop is sized from the two-yarn bundle at the factory's measured tightness (TF ${mb.tightness_factor}); the pile yarn adds the climb over the high sinker and back down.</div>
+  </div>`;
+  html += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;">
+    <div class="card-sm">
+      <div class="label">Side view (to scale)</div>
+      <div class="mt-4" style="color:var(--t2)">${sideView}</div>
+    </div>
+    <div class="card-sm">
+      <div class="label">Sinker or pile yarn — same GSM</div>
+      <div class="mt-4" style="display:flex;flex-wrap:wrap;gap:6px">${pl.options.map(o => `<span class="mono" style="font-size:11px;padding:3px 7px;border-radius:6px;border:1px solid var(--line3);${o.sinker_mm === pl.sinker_height_mm ? 'background:var(--line3);font-weight:700' : ''}">${o.sinker_mm} mm → ${esc(o.pile)}${o.lint_pct != null ? ` · ${o.lint_pct}% off` : ''}</span>`).join('')}</div>
+      <div class="label mt-2">${t.variant.cut
+        ? 'The cut height sets the finished weight, so the pile yarn hardly changes. A taller knitted loop only adds what the shear takes off as lint.'
+        : 'Taller loops need a finer pile yarn to stay at the same weight. With the ground yarn fixed, these are the pairs the balance allows.'}</div>
+    </div>
+    <div class="card-sm">
+      <div class="label">Fibre content</div>
+      <div class="mt-4 text-sm">Declared <b>${esc(t.composition.declared)}</b> → built <b>${esc(t.composition.achieved)}</b>.</div>
+      <div class="mt-4 text-sm">Pile yarn: <b>${esc(t.composition.pile_blend)}</b>.</div>
+    </div>
+    <div class="card-sm">
+      <div class="label">Machine</div>
+      <div class="mt-4 text-sm ${g.ok ? '' : 'text-amber'}">${esc(t.machine.type)}, ${t.machine.gauge}G, ${t.machine.sinker_mm} mm sinker. Ground + pile = ${g.bundle_tex} tex in one hook (limit ${g.bundle_limit_tex} at ${g.gauge}G).${g.ok ? ' Runs.' : ` Use ${g.suggested_gauge ? g.suggested_gauge + 'G' : 'a coarser gauge'}.`}</div>
+      <div class="label mt-2">${esc(t.machine.note)}</div>
+    </div>
+    ${sh ? `<div class="card-sm">
+      <div class="label">Shearing</div>
+      <div class="mt-4 text-sm">Knitted with ${sh.knitted_loop_mm} mm loops, cut to <b>${sh.cut_to_mm} mm</b> in ${sh.passes} passes (grey, then final). ${sh.pile_yarn_removed_pct}% of the pile yarn — ${sh.fabric_mass_removed_pct}% of the cloth — leaves as lint, so the grey is knitted heavier.</div>
+      <div class="label mt-2">${esc(sh.basis)}</div>
+    </div>` : `<div class="card-sm">
+      <div class="label">Water uptake</div>
+      <div class="mt-4 text-sm">Fibre holds ${w.fibre_held_g_m2} g/m², the pores between the loops about ${w.capillary_g_m2} g/m² more: <b>${w.total_g_m2} g/m²</b>, ${w.g_per_g}× its own weight.</div>
+      <div class="label mt-2">${esc(w.basis)}</div>
+    </div>`}
+    <div class="card-sm">
+      <div class="label">Process route</div>
+      <div class="mt-4 text-sm">${t.process_route.map(esc).join(' → ')}</div>
+    </div>
+    <div class="card-sm">
+      <div class="label">Watch for</div>
+      ${t.risks.map(r => `<div class="mt-4 text-sm"><b>${esc(r.topic)}.</b> ${esc(r.note)}</div>`).join('')}
+    </div>
+    <div class="card-sm">
+      <div class="label">How it is grounded</div>
+      <div class="mt-4 text-sm">${t.calibration.factory_rows} factory terry qualities fix the loop size (TF ${t.calibration.tightness_factor} ± ${t.calibration.tightness_sd}), the wales per cm (${t.calibration.wales_per_cm_per_gauge} × gauge) and Kc ${t.calibration.kc}.</div>
+      <div class="label mt-2">${esc(t.calibration.note)}</div>
     </div>
   </div>`;
   return html;

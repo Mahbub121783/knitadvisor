@@ -78,6 +78,8 @@ function familyOf(category) {
   if (/pique|lacoste/.test(category)) return 'pique';
   if (/fleece/.test(category)) return 'fleece';
   if (/terry/.test(category)) return 'terry';
+  // velour / plush are sinker-loop pile fabrics — the terry family, not jersey
+  if (/velour|plush/.test(category)) return 'terry';
   if (category === 'heavy_jersey') return 'heavy_jersey';
   return 'single_jersey';
 }
@@ -333,7 +335,8 @@ const MACHINE_STAGES = [
   {
     key: 'compacting', name: 'Compacting (Tubular / Open-width)', cat: 'finishing',
     purpose: 'Mechanically pre-shrink LENGTH and set final GSM, hand and shrinkage. The machine that delivers shrinkage-to-spec and locks residual torque.',
-    when: () => true,
+    // a plush or velour pile is crushed flat by the compactor's shoe
+    when: (c) => !(c.plush || c.velour),
     problems: [
       { problem: 'High wash shrinkage (AATCC 135 fail)', cause: 'Under-compacted, length not pre-shrunk', solution: 'Increase compaction % to bring length residual to ≤ ±3%', remedy: 'Re-compact', formula: 'Residual length shrink target ≤ buyer spec (±3 to ±5%)' },
       { problem: 'GSM too high / stiff after compact', cause: 'Over-compaction', solution: 'Reduce compaction overfeed', remedy: 'Light re-stenter to relax' },
@@ -349,6 +352,25 @@ const MACHINE_STAGES = [
       { problem: 'Uneven pile / direction streak', cause: 'Worn wire rollers, uneven tension', solution: 'Calibrate raising rollers, multi-pass low intensity, even direction', remedy: 'Re-raise lightly' },
       { problem: 'Pile shedding', cause: 'Loose low-twist loop yarn over-raised', solution: 'Optimise loop yarn twist; gentle raise', remedy: 'Reduce passes' },
       { problem: 'Hole / strength loss', cause: 'Over-raising tears ground', solution: 'Lower intensity, control tension', remedy: 'Limit grey strength loss' },
+    ],
+  },
+  {
+    key: 'shearing', name: 'Shearing / Cropping', cat: 'finishing',
+    purpose: 'Spiral blades cut the pile to one height: velour loops are cut open in the grey, then levelled after dyeing; a brushed fleece nap can be sheared even.',
+    when: (c) => c.velour || c.shear,
+    problems: [
+      { problem: 'Uneven pile height / bald streaks', cause: 'Blade-to-bed gap uneven across width, creased fabric fed in', solution: 'Set the gap across the full width, feed flat with a scroll opener, several light passes instead of one deep cut', remedy: 'Re-shear lightly; a bald streak cannot be repaired' },
+      { problem: 'Holes / cut ground', cause: 'Cut too low or seam / fold through the blades', solution: 'Cut height ≥ 0.3 mm above the ground loops; seam detector to lift the blades', remedy: 'Reject the length' },
+      { problem: 'Shade change by direction', cause: 'Sheared pile lies one way', solution: 'Keep one pile direction through finishing and cutting', remedy: 'Mark the nap direction on every roll' },
+    ],
+  },
+  {
+    key: 'relax_dry', name: 'Relax / Tumble Drying', cat: 'finishing',
+    purpose: 'Dry a loop pile without tension so the loops stand up and the length relaxes before delivery (plush terry, towels).',
+    when: (c) => c.plush,
+    problems: [
+      { problem: 'Flat, harsh loops', cause: 'Dried under tension on the stenter only', solution: 'Finish in a relax/tumble dryer; hydrophilic softener', remedy: 'Re-tumble with steam' },
+      { problem: 'Low absorbency', cause: 'Silicone softener coats the loops', solution: 'Hydrophilic softener; check sinking time', remedy: 'Re-wash and re-soften' },
     ],
   },
   {
@@ -394,6 +416,8 @@ const STRUCTURE_ISSUES = {
   ],
   terry: [
     { problem: 'Loop snag / uneven loop', cause: 'Loop yarn tension variation', solution: 'Even loop sinker timing; gentle finish', remedy: 'Inspect loop uniformity' },
+    { problem: 'Pile grin-through on the face', cause: 'Pile yarn too coarse or fed at higher tension than the ground', solution: 'Feed the pile at lower tension; plating guide set so the ground lands in front', remedy: 'Check the face under a lens on the first roll' },
+    { problem: 'Crushed pile / pressure marks', cause: 'Rope dyeing at high load, tight batching, compacting', solution: 'Soft-flow jet at low load, overfeed stenter, no compactor', remedy: 'Steam and tumble to lift the pile' },
   ],
   waffle: [
     { problem: 'Texture flattening', cause: 'Over-calender/over-compact', solution: 'Gentle finishing, preserve relief', remedy: 'Low pressure set' },
@@ -672,7 +696,10 @@ function wetMechanics(fibers, ctx) {
 // ============================================================
 function processRoute(method, ctx) {
   const m = normMethod(method);
-  const seq = ['Grey inspection', 'Scouring'];
+  const seq = ['Grey inspection'];
+  // velour: the loops are cut open in the grey, before any wet process
+  if (ctx.velour) seq.push('Shearing (cut the loops open, grey)');
+  seq.push('Scouring');
   if (ctx.singe) seq.push('Singeing');
   if (ctx.shade === 'white' || ctx.shade === 'light' || m === 'pigment' || m === 'discharge') seq.push('Bleaching');
   if (ctx.combed && ctx.cottonRich) seq.push('Mercerizing (optional, premium)');
@@ -689,6 +716,24 @@ function processRoute(method, ctx) {
     // too (two-bath: disperse first, then reactive) or it shows white.
     if (ctx.cvc && ctx.shade !== 'white_melange' && ctx.shade !== 'melange') seq.push('Disperse Dye (polyester part, HT 130°C)', 'Reduction Clearing');
     seq.push('Reactive Dye (exhaust)', 'Soaping / Wash-off');
+  }
+  if (ctx.velour) {
+    // cut pile: dried without stretch, opened, levelled, and never compacted
+    seq.push('Hydro-extract (low pressure, open width)');
+    seq.push('Stenter dry (overfeed, no width stretch)');
+    seq.push('Brush / polish (opens the cut fibre)');
+    seq.push('Final shearing (level the pile)');
+    seq.push('Stenter finish (overfeed, softener)');
+    if (m === 'garment_wash') seq.push('→ Garment make → Garment Wash (enzyme/stone/acid)');
+    return seq;
+  }
+  if (ctx.plush) {
+    // loop pile: dried relaxed so the loops stand; the compactor would crush them
+    seq.push('Hydro-extract (low pressure, open width)');
+    seq.push('Stenter with overfeed (hydrophilic softener, no width stretch)');
+    seq.push('Tumble / relax dry (stands the loops, relaxes length)');
+    if (m === 'garment_wash') seq.push('→ Garment make → Garment Wash (enzyme/stone/acid)');
+    return seq;
   }
   if (ctx.brush) {
     // Raising needs DRY cloth, held wider than finish (raising pulls it in),
@@ -746,6 +791,8 @@ function analyzeWetProcessing(args) {
     lycra: (fibers.elastane || fibers.spandex || fibers.lycra || 0) > 0,
     brush: processes.includes('brush') || (fam === 'fleece' && !processes.includes('no_brush')),
     shear: processes.includes('shear'),
+    plush: processes.includes('plush'),
+    velour: processes.includes('velour_cut'),
     cellulosicPart: ((fibers.cotton || 0) + (fibers.viscose || 0) + (fibers.modal || 0) + (fibers.tencel || 0)) >= 15,
     peach: processes.includes('peach'),
     singe: processes.includes('singe') || me === 'pigment' || me === 'discharge',
