@@ -275,6 +275,8 @@
     .yarn-label { font-size: 9px; color: var(--t3); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 4px; }
     .yarn-val { font-family: var(--head); font-size: 24px; font-weight: 800; color: var(--a1); }
     .yarn-sub { font-size: 10px; color: var(--t3); margin-top: 2px; }
+    .yarn-val.yarn-val-long { font-size: 15px; font-weight: 700; line-height: 1.45; }
+    .yarn-card-wide { grid-column: 1 / -1; }
 
     /* OSY badge */
     .osy-badge {
@@ -2478,7 +2480,7 @@ function renderFleece(f) {
   html += `<div class="card-sm" style="margin-bottom:10px;">
     <div class="label">Yarn plan — what each feed carries</div>
     <div style="display:flex;height:9px;border-radius:99px;overflow:hidden;margin:8px 0 6px;background:var(--line3);">${f.yarns.map(y => `<i title="${esc(roleName[y.role])}" style="display:block;width:${y.share_pct}%;background:${roleCol[y.role]}"></i>`).join('')}</div>
-    <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11.5px;">
+    <div style="overflow-x:auto"><table class="tbl-wide" style="width:100%;border-collapse:collapse;font-size:11.5px;">
       <tr style="color:var(--t3);text-align:left"><th style="padding:4px 6px">Yarn</th><th style="padding:4px 6px">Count / type</th><th style="padding:4px 6px">Length per needle</th><th style="padding:4px 6px">Share of weight</th><th style="padding:4px 6px">Basis</th></tr>
       ${f.yarns.map(y => `<tr style="border-top:1px solid var(--line3)">
         <td style="padding:5px 6px;white-space:nowrap"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${roleCol[y.role]};margin-right:6px"></span>${roleName[y.role]}</td>
@@ -2560,7 +2562,7 @@ function loopLayoutSvg(kind, opt) {
 }
 
 function loopTable(head, rows) {
-  return `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px;">
+  return `<div style="overflow-x:auto"><table class="tbl-wide" style="width:100%;border-collapse:collapse;font-size:11px;">
     <tr style="color:var(--t3);text-align:left">${head.map(h => `<th style="padding:3px 5px;font-weight:600">${h}</th>`).join('')}</tr>
     ${rows.map(r => `<tr style="border-top:1px solid var(--line3);${r.on ? 'background:var(--line3);font-weight:700' : ''}">${r.cells.map(c => `<td style="padding:4px 5px">${c}</td>`).join('')}</tr>`).join('')}
   </table></div>`;
@@ -2711,7 +2713,7 @@ function renderTerry(t) {
   html += `<div class="card-sm" style="margin-bottom:10px;">
     <div class="label">Yarn plan — both yarns are plated into every needle loop</div>
     <div style="display:flex;height:9px;border-radius:99px;overflow:hidden;margin:8px 0 6px;background:var(--line3);">${t.yarns.map(y => `<i title="${esc(roleName[y.role])}" style="display:block;width:${y.share_pct}%;background:${roleCol[y.role]}"></i>`).join('')}</div>
-    <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11.5px;">
+    <div style="overflow-x:auto"><table class="tbl-wide" style="width:100%;border-collapse:collapse;font-size:11.5px;">
       <tr style="color:var(--t3);text-align:left"><th style="padding:4px 6px">Yarn</th><th style="padding:4px 6px">Count / type</th><th style="padding:4px 6px">Length per needle</th><th style="padding:4px 6px">Share of weight</th><th style="padding:4px 6px">Basis</th></tr>
       ${t.yarns.map(y => `<tr style="border-top:1px solid var(--line3)">
         <td style="padding:5px 6px;white-space:nowrap"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${roleCol[y.role]};margin-right:6px"></span>${roleName[y.role]}</td>
@@ -3790,7 +3792,7 @@ function renderFactoryMatch(f) {
   if (f.nearest_records && f.nearest_records.length) {
     recEl.innerHTML = f.nearest_records.slice(0, 4).map(r => {
       const segIcon = r.color === 'dark' ? '⬛' : r.color === 'light' ? '☀' : '▪';
-      return `<div style="display:flex; gap:8px; padding:3px 0; border-bottom:1px solid var(--line3);">
+      return `<div style="display:flex; flex-wrap:wrap; gap:2px 8px; padding:3px 0; border-bottom:1px solid var(--line3);">
         <span style="color:var(--a1); min-width:42px;">${r.count_ne}/1</span>
         <span style="color:var(--t3); min-width:58px;">${r.spin}</span>
         <span style="min-width:74px;">${r.gauge}G × ${r.dia}"</span>
@@ -3899,6 +3901,13 @@ function renderYarn(yarn) {
 
   // Industry declaration: base yarn + separate elastane if applicable
   document.getElementById('y-count-disp').textContent = yarn.count_display || '—';
+  // a multi-yarn count ("Ground: 30/1 … + Loop: 16/1 … + Binder: …") is a
+  // sentence, not a number: give it the full row and a reading size
+  {
+    const long = (yarn.count_display || '').length > 14;
+    document.getElementById('y-count-disp').classList.toggle('yarn-val-long', long);
+    document.getElementById('y-card-ind').classList.toggle('yarn-card-wide', long);
+  }
 
   // Confidence for the count above. The raw engine tag (ESTIMATED,
   // FACTORY_INTERPOLATED, ...) is accurate but meaningless without context —

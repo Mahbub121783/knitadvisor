@@ -353,8 +353,11 @@ class FabricVisualizer {
     const dpr = window.devicePixelRatio || 1;
     canvas.width  = W * dpr;
     canvas.height = H * dpr;
-    canvas.style.width  = W + 'px';
-    canvas.style.height = H + 'px';
+    // scale to the panel on a narrow screen, never wider than drawn
+    canvas.style.width = '100%';
+    canvas.style.maxWidth = W + 'px';
+    canvas.style.height = 'auto';
+    canvas.style.margin = '0 auto';
     const ctx = canvas.getContext('2d');
     ctx.scale(dpr, dpr);
 
@@ -562,8 +565,11 @@ class FabricVisualizer {
     const dpr = window.devicePixelRatio || 1;
     canvas.width  = warpData.svgWidth  * dpr;
     canvas.height = warpData.svgHeight * dpr;
-    canvas.style.width  = warpData.svgWidth  + 'px';
-    canvas.style.height = warpData.svgHeight + 'px';
+    // scale to the panel on a narrow screen, never wider than drawn
+    canvas.style.width = '100%';
+    canvas.style.maxWidth = warpData.svgWidth + 'px';
+    canvas.style.height = 'auto';
+    canvas.style.margin = '0 auto';
 
     this.animProgress = 0;
     this._animateWarpFrame(canvas, warpData, dpr);
@@ -770,8 +776,11 @@ class FabricVisualizer {
     const dpr = window.devicePixelRatio || 1;
     canvas.width  = W * dpr;
     canvas.height = H * dpr;
-    canvas.style.width  = W + 'px';
-    canvas.style.height = H + 'px';
+    // scale to the panel on a narrow screen, never wider than drawn
+    canvas.style.width = '100%';
+    canvas.style.maxWidth = W + 'px';
+    canvas.style.height = 'auto';
+    canvas.style.margin = '0 auto';
 
     const ctx = canvas.getContext('2d');
     ctx.scale(dpr, dpr);
@@ -1256,7 +1265,7 @@ class FabricVisualizer {
     const canvas = document.createElement('canvas');
     canvas.className = 'viz-canvas';
     canvas.width = W * SS; canvas.height = H * SS;
-    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    canvas.style.width = '100%'; canvas.style.maxWidth = W + 'px'; canvas.style.height = 'auto';
     canvas.style.borderRadius = '10px'; canvas.style.cursor = 'zoom-in';
     stageEl.appendChild(canvas);
     this.canvases.realistic = canvas;
@@ -1295,7 +1304,8 @@ class FabricVisualizer {
     const rel = (e) => {
       const r = canvas.getBoundingClientRect();
       const p = e.touches ? e.touches[0] : e;
-      return { x: (p.clientX - r.left), y: (p.clientY - r.top) };
+      // drawn at W x H, shown scaled to the panel
+      return { x: (p.clientX - r.left) * W / (r.width || W), y: (p.clientY - r.top) * H / (r.height || H) };
     };
 
     let dragging = false, moved = false, lx = 0, ly = 0;
@@ -2460,6 +2470,7 @@ class FabricVisualizer {
     const wrap = this.container.querySelector('.viz-canvas-wrap[data-wrap="threed"]');
     if (!wrap) return;
     wrap.innerHTML = '';
+    if (this._kst) { if (this._kst.off) this._kst.off(); this._kst = null; }
 
     const opts = this._faceOpts();
     const con = opts.construction;
@@ -2611,6 +2622,7 @@ class FabricVisualizer {
   // comes back and what stays.
   _toggleStretchPanel(stage, btn) {
     if (this._kst) {
+      if (this._kst.off) this._kst.off();
       this._kst.el.remove();
       this._kst = null;
       btn.classList.remove('active');
@@ -2623,16 +2635,17 @@ class FabricVisualizer {
     el.className = 'kst';
     el.innerHTML = `
       <div class="kst-row">
-        <span class="kst-lab">Pull</span>
-        <span class="kst-seg" data-k="dir"><button data-v="width" class="on">Across width</button><button data-v="length">Along length</button></span>
-        <span class="kst-lab">Hold</span>
-        <span class="kst-seg" data-k="hold"><button data-v="quick" class="on">A few seconds</button><button data-v="2h" title="Held stretched for two hours, as the ASTM D2594 growth test">2 hours</button></span>
+        <span class="kst-grp"><span class="kst-lab">Pull</span>
+        <span class="kst-seg" data-k="dir"><button data-v="width" class="on">Across width</button><button data-v="length">Along length</button></span></span>
+        <span class="kst-grp"><span class="kst-lab">Hold</span>
+        <span class="kst-seg" data-k="hold"><button data-v="quick" class="on">A few seconds</button><button data-v="2h" title="Held stretched for two hours, as the ASTM D2594 growth test">2 hours</button></span></span>
       </div>
       <div class="kst-row"><span class="kst-big">0%</span>
-        <button class="ka3d-btn" data-x="release" title="Let go of the moving clamp and watch it come back">Release</button>
-        <button class="ka3d-btn" data-x="zero">Back to 0</button>
-        <span class="kst-lab" style="margin-left:auto">${S.kind_label}</span></div>
+        <span class="kst-grp"><button class="ka3d-btn" data-x="release" title="Let go of the moving clamp and watch it come back">Release</button>
+        <button class="ka3d-btn" data-x="zero">Back to 0</button></span>
+        <span class="kst-lab kst-kind">${S.kind_label}</span></div>
       <div class="kst-slider"><input type="range" min="0" max="100" step="0.5" value="0" aria-label="Stretch percent"><div class="kst-mks"></div></div>
+      <div class="kst-legend"></div>
       <div class="kst-stage loops">Drag the slider to pull the cloth.</div>
       <div class="kst-grid"></div>
       <div class="kst-rel" hidden></div>
@@ -2663,20 +2676,19 @@ class FabricVisualizer {
       list.push([d.jam_pct, 'jam', 'warn', 'Loops fully straightened — the yarn stretches from here']);
       list.push([d.break_pct, 'break', 'bad', 'Yarns start to break']);
       list.sort((a, b) => a[0] - b[0]);
-      // labels that would overlap drop to a second line
-      let lastX = -100, two = false;
-      $('.kst-mks').innerHTML = list.map(([v, t, c, title]) => {
-        const x = Math.max(0, Math.min(100, v / max * 100));
-        const low = x - lastX < 12;
-        if (!low) lastX = x; else two = true;
-        return `<span class="kst-mk ${c}" style="left:${x}%;top:${low ? 34 : 22}px" title="${title}">${t}</span>`;
-      }).join('');
-      $('.kst-slider').style.paddingBottom = two ? '36px' : '22px';
+      // Ticks only on the track (labels there collide on a phone); the names
+      // and values sit below as chips that jump the slider to that point.
+      $('.kst-mks').innerHTML = list.map(([v, , c, title]) =>
+        `<span class="kst-tk ${c}" style="left:${Math.max(0, Math.min(100, v / max * 100))}%" title="${title}"></span>`).join('');
+      $('.kst-legend').innerHTML = list.map(([v, t, c, title]) =>
+        `<button type="button" class="kst-chip ${c}" data-go="${v}" title="${title}">${t} <b>${fmt(v, 0)}%</b></button>`).join('');
     };
 
     const chart = (s) => {
       const d = D(), c = d.curve, max = d.break_pct;
-      const W = 520, H = 130, L = 34, B = 18, T = 6, R = 6;
+      // drawn at the box's own width, so the labels stay readable on a phone
+      const box = $('.kst-chart').clientWidth || 520;
+      const W = Math.max(260, Math.min(760, box)), H = W < 420 ? 150 : 132, L = 30, B = 20, T = 8, R = 6;
       const formT = 4.54 * 9.81 / (2 * 0.125);
       const jamRow = c.find((r) => r.e >= d.jam_pct) || c[c.length - 1];
       const yMax = Math.max(formT * 2.2, jamRow.t * 1.3);
@@ -2695,7 +2707,7 @@ class FabricVisualizer {
       // loose-fit label at the left, body-fit at the right: the two lines sit close
       const hl = [[2.27, 'loose', false], [4.54, 'body', true]].map(([kg, t, right]) => {
         const y = Y(kg * 9.81 / (2 * 0.125));
-        return `<line x1="${L}" x2="${W - R}" y1="${y}" y2="${y}" stroke="#2563eb" stroke-dasharray="3 3" stroke-width="1" opacity=".55"/><text x="${right ? W - R - 2 : L + 4}" y="${y - 3}" text-anchor="${right ? 'end' : 'start'}" font-size="9" fill="#2563eb">${t}-fit load</text>`;
+        return `<line x1="${L}" x2="${W - R}" y1="${y}" y2="${y}" stroke="#2563eb" stroke-dasharray="3 3" stroke-width="1" opacity=".55"/><text x="${right ? W - R - 2 : L + 4}" y="${y - 3}" text-anchor="${right ? 'end' : 'start'}" font-size="10" fill="#2563eb">${t}-fit load</text>`;
       }).join('');
       let marker = '';
       if (s) {
@@ -2704,14 +2716,14 @@ class FabricVisualizer {
           const gx = X(s.release.g);
           marker = `<circle cx="${X(s.release.e)}" cy="${Y(c.find((r) => r.e >= s.release.e - 1e-6)?.t ?? s.t)}" r="3.5" fill="none" stroke="#2563eb" stroke-width="1.5"/>` + marker;
           marker += `<line x1="${X(s.release.e)}" x2="${gx}" y1="${H - B - 4}" y2="${H - B - 4}" stroke="#047857" stroke-width="2" marker-end="url(#kstArr)"/>`
-            + `<text x="${gx + 3}" y="${H - B - 8}" font-size="9" fill="#047857">stays ${fmt(s.release.g)}%</text>`;
+            + `<text x="${gx + 3}" y="${H - B - 8}" font-size="10" fill="#047857">stays ${fmt(s.release.g)}%</text>`;
         }
       }
-      const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => `<text x="${X(f * max)}" y="${H - 5}" font-size="9" text-anchor="middle" fill="#778">${Math.round(f * max)}%</text>`).join('');
+      const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => `<text x="${X(f * max)}" y="${H - 5}" font-size="10" text-anchor="${f === 0 ? 'start' : f === 1 ? 'end' : 'middle'}" fill="#778">${Math.round(f * max)}%</text>`).join('');
       $('.kst-chart').innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Load against stretch">
         <defs><marker id="kstArr" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#047857"/></marker></defs>
         ${bands}<line x1="${L}" x2="${L}" y1="${T}" y2="${H - B}" stroke="#ccd"/><line x1="${L}" x2="${W - R}" y1="${H - B}" y2="${H - B}" stroke="#ccd"/>
-        <text x="4" y="${T + 8}" font-size="9" fill="#778">load</text>${hl}
+        <text x="2" y="${T + 9}" font-size="10" fill="#778">load</text>${hl}
         <polyline points="${pts}" fill="none" stroke="#1d2433" stroke-width="1.8"/>${marker}${ticks}</svg>`;
     };
 
@@ -2767,6 +2779,7 @@ class FabricVisualizer {
         if (seg.dataset.k === 'dir') begin();
         return;
       }
+      if (b.dataset.go) { slider.value = b.dataset.go; this._fabric3d.stretchTo(Number(b.dataset.go)); return; }
       if (b.dataset.x === 'release') this._fabric3d.stretchRelease(st.hold);
       if (b.dataset.x === 'zero') begin();
     });
@@ -2776,7 +2789,9 @@ class FabricVisualizer {
     $('.kst-note').innerHTML = `Pulled between two clamps on the table; the red lines are chalk benchmarks — watch them neck, bow and lean.
       ${g ? `ASTM D2594 growth (held 2 h at ${fmt(g.held_at_pct)}% across): ${fmt(g.after_60s_pct)}% after 1 min, ${fmt(g.after_1h_pct)}% after 1 h. ` : ''}
       Test to ${po.standard || 'ASTM D2594'}. Curve from loop geometry, yarn strength and measured fibre recovery; jam point, friction set and gaps are modelled.`;
-    this._kst = { el, restart: begin };
+    const onResize = () => { if (st.last) chart(st.last); };
+    window.addEventListener('resize', onResize);
+    this._kst = { el, restart: begin, off: () => window.removeEventListener('resize', onResize) };
     begin();
   }
 
@@ -2979,13 +2994,26 @@ class FabricVisualizer {
     .kst-big{font:700 22px/1 var(--mono,monospace);color:#2563eb;min-width:74px;}
     .kst-slider{position:relative;padding:2px 0 22px;}
     .kst-slider input{width:100%;accent-color:#2563eb;margin:0;}
-    .kst-mk{position:absolute;top:22px;transform:translateX(-50%);font:600 9px var(--mono,monospace);color:var(--t3,#778);white-space:nowrap;}
-    .kst-mk::before{content:'';position:absolute;left:50%;top:-6px;width:1px;height:5px;background:currentColor;}
-    .kst-mk.bad{color:#dc2626;} .kst-mk.warn{color:#d97706;} .kst-mk.std{color:#2563eb;}
+    .kst-grp{display:inline-flex;align-items:center;gap:8px;flex-wrap:nowrap;}
+    .kst-kind{margin-left:auto;}
+    .kst-slider{padding-bottom:10px;}
+    .kst-tk{position:absolute;top:22px;width:2px;height:8px;margin-left:-1px;border-radius:1px;background:#778;}
+    .kst-tk.bad{background:#dc2626;} .kst-tk.warn{background:#d97706;} .kst-tk.std{background:#2563eb;}
+    .kst-legend{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 10px;}
+    .kst-chip{font:600 11px var(--mono,monospace);padding:4px 8px;border-radius:999px;border:1px solid currentColor;background:#fff;cursor:pointer;color:#556;}
+    .kst-chip b{font-weight:700;}
+    .kst-chip.std{color:#2563eb;} .kst-chip.warn{color:#b45309;} .kst-chip.bad{color:#dc2626;}
+    @media (max-width:520px){
+      .kst{padding:10px;}
+      .kst-big{font-size:20px;min-width:0;}
+      .kst-kind{margin-left:0;width:100%;}
+      .kst-seg button{padding:6px 8px;}
+      .kst-grid b{font-size:13px;}
+    }
     .kst-stage{padding:6px 9px;border-radius:8px;font-weight:600;margin-bottom:8px;}
     .kst-stage.loops{background:#ecfdf5;color:#047857;} .kst-stage.tightening{background:#fffbeb;color:#b45309;}
     .kst-stage.jammed{background:#fff7ed;color:#c2410c;} .kst-stage.damage,.kst-stage.break{background:#fef2f2;color:#b91c1c;}
-    .kst-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px 12px;margin-bottom:8px;}
+    .kst-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(150px,42%),1fr));gap:8px 12px;margin-bottom:8px;}
     .kst-grid div{display:flex;flex-direction:column;}
     .kst-grid b{font:700 14px var(--mono,monospace);}
     .kst-grid span{font-size:10.5px;color:var(--t3,#778);}

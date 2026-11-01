@@ -399,3 +399,32 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
   .card, .result-section { box-shadow: none; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
+
+/* ── Responsive safety net (all pages) ────────────────────────────────────
+   One element wider than the phone makes the mobile browser zoom the whole
+   page out to fit it — the page then sits squeezed to the left with blank
+   space on the right. Content is fixed to fit where it can; this keeps any
+   straggler from widening the page. */
+html, body { max-width: 100%; overflow-x: clip; }
+img, video, iframe { max-width: 100%; height: auto; }
+.card, .result-section, .input-card { min-width: 0; overflow-wrap: break-word; }
+/* section headers: the badge drops under the title on a narrow screen
+   instead of being squeezed until its word breaks */
+.result-section-title { flex-wrap: wrap; row-gap: 6px; }
+.result-section-title .rst-title-text { min-width: 0; flex: 1 1 auto; }
+.badge { white-space: nowrap; }
+.result-section table, .card table { max-width: 100%; }
+/* data tables keep readable columns and scroll inside their card on a phone */
+table.tbl-wide { min-width: 460px; }
+/* knitting notation, cam and needle diagrams: shrink with the screen */
+.pat-figs > div { min-width: 0; max-width: 100%; }
+.pat-figs svg { max-width: 100%; height: auto; }
+/* fabric visualisation toolbar: the info line takes its own row on a phone */
+@media (max-width: 640px) {
+  .viz-toolbar .viz-info { flex-basis: 100%; order: 3; white-space: normal; overflow: visible; font-size: 10.5px; line-height: 1.45; }
+  .viz-toolbar .viz-btn { flex: 1 1 auto; padding: 8px 10px; font-size: 11px; }
+  .viz-tab { padding: 8px 12px; font-size: 12px; }
+  .ka-loupe-tip, .ka3d-hint { flex-basis: 100%; margin-left: 0 !important; }
+  .ka3d-controls, .ka-loupe-bar { justify-content: flex-start; }
+  .ka3d-btn, .ka-loupe-btn { padding: 7px 10px; }
+}

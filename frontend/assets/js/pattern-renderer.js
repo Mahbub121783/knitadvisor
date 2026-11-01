@@ -372,7 +372,8 @@ function renderSvgSchematic(patternData, yarnInfo) {
     }
   }
 
-  let html = `<div style="display:flex; flex-wrap:wrap; gap:32px; margin-top:16px;">`;
+  // pat-figs: each diagram shrinks to the screen (see theme-v2.css)
+  let html = `<div class="pat-figs" style="display:flex; flex-wrap:wrap; gap:24px 32px; margin-top:16px;">`;
 
   // ----------------------------------------------------
   // 1. Fabric Notation — cylinder, plus dial for double-bed structures
