@@ -116,7 +116,7 @@ const tabState = { loaded: {} };
 
 const TAB_TITLES = {
   'tab-overview': 'Dashboard', 'tab-logs': 'Query Logs', 'tab-providers': 'AI Providers',
-  'tab-cache': 'Cache', 'tab-prices': 'Yarn Prices', 'tab-dyeing-prices': 'Dyeing Prices',
+  'tab-cache': 'Cache', 'tab-prices': 'Yarn Prices', 'tab-charges': 'Knit & Dye Charges', 'tab-dyeing-prices': 'Dyeing Prices',
   'tab-validation': 'Real-Order Validation', 'tab-inquiries': 'Inquiries', 'tab-rfq': 'RFQ / Quotes',
   'tab-users': 'Users', 'tab-students': 'Student Plan', 'tab-settings': 'Settings',
 };
@@ -160,6 +160,9 @@ function switchTab(tabId) {
   } else if (tabId === 'tab-prices' && !tabState.loaded.prices) {
     tabState.loaded.prices = true;
     loadYarnPrices();
+  } else if (tabId === 'tab-charges' && !tabState.loaded.charges) {
+    tabState.loaded.charges = true;
+    loadCharges();
   } else if (tabId === 'tab-dyeing-prices' && !tabState.loaded.dyeingPrices) {
     tabState.loaded.dyeingPrices = true;
     loadDyeingPrices();
@@ -1896,6 +1899,238 @@ async function saveDyeingPrice(chemicalName, input) {
   }
 }
 
+
+// ── CHARGES (knitting & dyeing price book, multi-vendor) ───────────────────
+const CH = { vendors: [], tiers: [], loaded: false, timer: null, edit: null };
+const CH_TIER_LABEL = { black: 'Black', dark_navy: 'Dark / Navy', light_medium: 'Light / Medium', neon: 'Neon', white_melange: 'White / Melange' };
+
+function chMsg(html, tone) {
+  const el = document.getElementById('ch-msg');
+  if (!html) { el.classList.add('hidden'); el.innerHTML = ''; return; }
+  const c = tone === 'bad' ? '#B23B3B' : tone === 'warn' ? '#9A5B00' : '#1E7A54';
+  el.classList.remove('hidden');
+  el.innerHTML = `<div style="border:1px solid ${c}55;background:${c}12;border-radius:8px;padding:10px 12px;font-size:11.5px;line-height:1.6;color:var(--t1);">${html}</div>`;
+}
+const chUsd = (v) => (v == null ? '<span style="color:var(--t3)">—</span>' : '$' + Number(v).toFixed(2));
+
+async function loadCharges() {
+  try {
+    const o = await api('/admin/api/charges/overview');
+    CH.vendors = o.vendors; CH.tiers = o.tiers; CH.fields = o.fields; CH.loaded = true;
+    const st = o.status;
+    document.getElementById('ch-status').textContent =
+      `${st.items} fabric rows · ${o.vendors.length} vendor${o.vendors.length === 1 ? '' : 's'} · ${st.source === 'database' ? 'live from the database' : 'built-in factory sheet (database not loaded)'}`;
+    const gc = document.getElementById('ch-gap-count');
+    gc.hidden = !o.open_gaps; gc.textContent = o.open_gaps;
+    const active = o.vendors.filter(v => v.active);
+    document.getElementById('ch-vendor').innerHTML = '<option value="all">All vendors</option>' + active.map(v => `<option value="${esc(v.code)}">${esc(v.name)}${v.is_default ? ' (default)' : ''}</option>`).join('');
+    const opts = active.map(v => `<option value="${esc(v.code)}">${esc(v.name)}</option>`).join('');
+    document.getElementById('chi-vendor').innerHTML = opts;
+    document.getElementById('chi-imp-vendor').innerHTML = opts;
+    document.getElementById('chv-from').innerHTML = '<option value="">— its own prices —</option>' + opts;
+    document.getElementById('ch-groups').innerHTML = o.groups.map(g => `<option value="${esc(g)}">`).join('');
+    document.getElementById('ch-export').href = '#';
+    renderChVendors();
+    await runChargeSearch();
+  } catch (err) { chMsg('Could not load the charge book: ' + esc(err.message), 'bad'); }
+}
+
+function renderChVendors() {
+  const tb = document.getElementById('ch-vendors-tbody');
+  tb.innerHTML = '';
+  CH.vendors.forEach(v => {
+    const tr = document.createElement('tr');
+    const basis = v.derived_from ? `Derived from <b>${esc(v.derived_from)}</b> ${v.adjust_pct >= 0 ? '+' : ''}${v.adjust_pct}%` : 'Own prices';
+    tr.innerHTML = `<td><b>${esc(v.name)}</b><div style="font-size:10px;color:var(--t3);">${esc(v.code)}</div></td><td>${esc(v.kind)}</td><td style="font-size:11px;">${basis}</td>
+      <td><button class="btn btn-ghost btn-xs chv-edit">Edit prices</button></td>
+      <td>${v.is_default ? '<span class="badge badge-green">DEFAULT</span>' : '<button class="btn btn-ghost btn-xs chv-def">Make default</button>'}</td>
+      <td><button class="btn btn-ghost btn-xs chv-act">${v.active ? 'Active — disable' : 'Disabled — enable'}</button></td>`;
+    tr.querySelector('.chv-edit').addEventListener('click', () => {
+      document.getElementById('ch-vendor').value = v.code;
+      showChSection('ch-sec-search'); runChargeSearch();
+    });
+    const d = tr.querySelector('.chv-def');
+    if (d) d.addEventListener('click', () => chVendorPatch(v.code, { is_default: true }, `${v.name} is now the default vendor.`));
+    tr.querySelector('.chv-act').addEventListener('click', () => chVendorPatch(v.code, { active: !v.active }, `${v.name} ${v.active ? 'disabled' : 'enabled'}.`));
+    tb.appendChild(tr);
+  });
+}
+
+async function chVendorPatch(code, body, ok) {
+  try { await api('/admin/api/charges/vendors/' + encodeURIComponent(code), 'PATCH', body); chMsg(esc(ok)); await loadCharges(); }
+  catch (err) { chMsg(esc(err.message), 'bad'); }
+}
+
+function showChSection(id) {
+  document.querySelectorAll('.ch-sec').forEach(s => { s.hidden = s.id !== id; });
+  document.querySelectorAll('.ch-sub').forEach(b => b.classList.toggle('active', b.dataset.chsec === id));
+  if (id === 'ch-sec-gaps') loadChGaps();
+}
+
+function chSearchSoon() { clearTimeout(CH.timer); CH.timer = setTimeout(runChargeSearch, 250); }
+
+async function runChargeSearch() {
+  const q = document.getElementById('ch-q').value.trim();
+  const count = parseFloat(document.getElementById('ch-count').value) || '';
+  const shade = document.getElementById('ch-shade').value;
+  const vendor = document.getElementById('ch-vendor').value || 'all';
+  try {
+    const d = await api(`/admin/api/charges/search?q=${encodeURIComponent(q)}&count=${count}&shade=${shade}&vendor=${vendor}&limit=80`);
+    const line = document.getElementById('ch-count-line');
+    line.textContent = (count ? `At ${count}s the knitting price is the ${count > 30 ? '"above 30s"' : '"30s and below"'} column. ` : 'Enter a yarn count to see the knitting price for that count (otherwise both columns show: above 30s / 30s and below). ')
+      + `Dyeing shown for ${CH_TIER_LABEL[shade]}. ${d.total} match${d.total === 1 ? '' : 'es'}${d.total > d.shown ? ` (first ${d.shown})` : ''}.`;
+    const tb = document.getElementById('ch-tbody');
+    tb.innerHTML = '';
+    if (!d.rows.length) tb.innerHTML = '<tr><td colspan="7" style="color:var(--t3);font-size:11px;">No match. Try fewer words, or add the fabric under “Add / import”.</td></tr>';
+    for (const r of d.rows) {
+      const offered = r.prices.filter(p => p.offered);
+      const best = offered.map(p => { const k = count ? p.at_count.knit : null, dd = p.rate['dye1_' + shade]; return k != null && dd != null ? k + dd : null; });
+      const min = Math.min(...best.filter(x => x != null));
+      r.prices.forEach((p, i) => {
+        const v = d.vendors.find(x => x.code === p.vendor);
+        const tr = document.createElement('tr');
+        if (!p.offered) { tr.innerHTML = `<td>${i ? '' : esc(r.label)}</td><td>${esc(v.name)}</td><td colspan="5" style="color:var(--t3);font-size:11px;">not priced by this vendor</td>`; tb.appendChild(tr); return; }
+        const rate = p.rate;
+        const knit = count ? chUsd(p.at_count.knit) : `${chUsd(rate.knit_above30)} / ${chUsd(rate.knit_below30)}`;
+        const d1 = rate['dye1_' + shade], d2 = rate['dye2_' + shade];
+        const k = count ? p.at_count.knit : null;
+        const tot = k != null && d1 != null ? k + d1 : null;
+        tr.innerHTML = `<td>${i ? '' : `<b>${esc(r.label)}</b>`}</td>
+          <td>${esc(v.name)}${p.derived ? ' <span class="badge badge-gray">derived</span>' : ''}${tot != null && tot === min && offered.length > 1 ? ' <span class="badge badge-green">cheapest</span>' : ''}</td>
+          <td>${knit}</td><td>${chUsd(d1)}</td><td>${chUsd(d2)}</td><td>${tot != null ? '<b>' + chUsd(tot) + '</b>' : '<span style="color:var(--t3)">—</span>'}</td>
+          <td><button class="btn btn-ghost btn-xs ch-e">Edit</button></td>`;
+        tr.querySelector('.ch-e').addEventListener('click', () => openChEdit(r, p.vendor));
+        tb.appendChild(tr);
+      });
+    }
+  } catch (err) { chMsg('Search failed: ' + esc(err.message), 'bad'); }
+}
+
+async function openChEdit(row, vendorCode) {
+  const v = CH.vendors.find(x => x.code === vendorCode);
+  CH.edit = { key: row.item_key, vendor: vendorCode };
+  document.getElementById('che-title').textContent = row.label;
+  document.getElementById('che-sub').innerHTML = `Prices for <b>${esc(v ? v.name : vendorCode)}</b> in USD per kg. Leave a box empty where the vendor does not offer it.`
+    + (v && v.derived_from ? ` <br>This vendor is derived from <b>${esc(v.derived_from)}</b>; saving a price here gives it its own value for this row.` : '');
+  document.getElementById('che-error').textContent = '';
+  document.getElementById('che-note').value = '';
+  const m = document.getElementById('ch-edit-modal'); m.classList.remove('hidden');
+  const grid = document.getElementById('che-grid'); grid.innerHTML = '<div class="section-sub">Loading…</div>';
+  try {
+    const d = await api('/admin/api/charges/item/' + encodeURIComponent(row.item_key));
+    const mine = (d.rates.find(r => r.vendor === vendorCode) || {}).rate || {};
+    const cell = (f, label) => `<label class="ch-cell"><span>${label}</span><input type="number" step="0.01" min="0" class="form-input" data-f="${f}" value="${mine[f] == null ? '' : mine[f]}"></label>`;
+    grid.innerHTML = `<div class="ch-grp">Knitting</div><div class="ch-row">${cell('knit_above30', 'Above 30s')}${cell('knit_below30', '30s &amp; below')}</div>`
+      + `<div class="ch-grp">Dyeing — one part</div><div class="ch-row ch-row5">${CH.tiers.map(t => cell('dye1_' + t, CH_TIER_LABEL[t])).join('')}</div>`
+      + `<div class="ch-grp">Dyeing — two part (blends)</div><div class="ch-row ch-row5">${CH.tiers.map(t => cell('dye2_' + t, CH_TIER_LABEL[t])).join('')}</div>`;
+    document.getElementById('che-hist').innerHTML = (d.history || []).length
+      ? '<b>Recent changes</b><br>' + d.history.slice(0, 8).map(h => `${new Date(h.changed_at).toLocaleDateString()} · ${esc(h.vendor_code)} · ${esc(h.field)}: ${h.old_value == null ? '—' : h.old_value} → ${h.new_value == null ? '—' : h.new_value}${h.note ? ' · ' + esc(h.note) : ''}`).join('<br>')
+      : '';
+  } catch (err) { grid.innerHTML = ''; document.getElementById('che-error').textContent = err.message; }
+}
+
+async function saveChEdit() {
+  if (!CH.edit) return;
+  const fields = {};
+  document.querySelectorAll('#che-grid input[data-f]').forEach(i => { fields[i.dataset.f] = i.value === '' ? null : i.value; });
+  try {
+    const r = await api('/admin/api/charges/rate', 'PUT', { vendor: CH.edit.vendor, item_key: CH.edit.key, fields, note: document.getElementById('che-note').value.trim() || null });
+    document.getElementById('ch-edit-modal').classList.add('hidden');
+    chMsg(r.changed ? `Saved — ${r.changed} price${r.changed === 1 ? '' : 's'} changed, live immediately for every new calculation.` : 'Nothing changed.');
+    await runChargeSearch();
+  } catch (err) { document.getElementById('che-error').textContent = err.message; }
+}
+
+async function loadChGaps() {
+  try {
+    const [g, c] = await Promise.all([api('/admin/api/charges/gaps'), api('/admin/api/charges/coverage')]);
+    const tb = document.getElementById('ch-gaps-tbody'); tb.innerHTML = '';
+    if (!g.gaps.length) tb.innerHTML = '<tr><td colspan="5" style="color:var(--t3);font-size:11px;">Nothing open — every price the calculator asked for was on the book.</td></tr>';
+    const KIND = { no_group: 'Fabric not on the sheet', no_variant: 'Variant not on the sheet', no_price: 'Price not offered', no_vendor_item: 'Vendor does not price it' };
+    g.gaps.forEach(x => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td><b>${esc(x.group_name || x.fabric_id || '')}</b>${x.variant ? ' — ' + esc(x.variant) : ''}<div style="font-size:10px;color:var(--t3);">${esc(x.fabric_id || '')}</div></td>
+        <td style="font-size:11px;">${esc(KIND[x.kind] || x.kind)}<div style="font-size:10px;color:var(--t3);">${esc(x.detail || '')}</div></td>
+        <td>${x.hits}</td><td style="font-size:10px;">${new Date(x.last_seen).toLocaleDateString()}</td>
+        <td><button class="btn btn-ghost btn-xs">Add price</button> <button class="btn btn-ghost btn-xs">Dismiss</button></td>`;
+      const [add, dis] = tr.querySelectorAll('button');
+      add.addEventListener('click', () => {
+        document.getElementById('chi-group').value = x.group_name || x.fabric_id || '';
+        document.getElementById('chi-variant').value = x.variant || '';
+        showChSection('ch-sec-import');
+      });
+      dis.addEventListener('click', async () => { await api(`/admin/api/charges/gaps/${x.id}/resolve`, 'POST', {}); loadChGaps(); loadCharges(); });
+      tb.appendChild(tr);
+    });
+    document.getElementById('ch-cov-line').textContent = `${c.total} calculator fabrics: ${c.total - c.approximate} priced on an exact sheet row, ${c.approximate} on the nearest row.`;
+    const cb = document.getElementById('ch-cov-tbody'); cb.innerHTML = '';
+    c.rows.sort((a, b) => (b.approximate - a.approximate) || a.fabric_id.localeCompare(b.fabric_id)).forEach(r => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${esc(r.name)}<div style="font-size:10px;color:var(--t3);">${esc(r.fabric_id)}</div></td><td>${esc(r.group || '—')}</td><td>${r.approximate ? '<span class="badge badge-yellow">NEAREST</span>' : '<span class="badge badge-green">EXACT</span>'}</td>`;
+      cb.appendChild(tr);
+    });
+  } catch (err) { chMsg('Could not load gaps: ' + esc(err.message), 'bad'); }
+}
+
+async function addChVendor() {
+  const name = document.getElementById('chv-name').value.trim();
+  if (!name) { chMsg('Give the vendor a name.', 'warn'); return; }
+  try {
+    await api('/admin/api/charges/vendors', 'POST', { name, kind: document.getElementById('chv-kind').value,
+      derived_from: document.getElementById('chv-from').value || null, adjust_pct: parseFloat(document.getElementById('chv-adj').value) || 0 });
+    document.getElementById('chv-name').value = '';
+    chMsg(`Vendor “${esc(name)}” added. ` + (document.getElementById('chv-from').value ? 'Its prices follow the vendor it is derived from until you set its own.' : 'Import or enter its prices next.'));
+    await loadCharges();
+  } catch (err) { chMsg(esc(err.message), 'bad'); }
+}
+
+async function addChItem() {
+  const group = document.getElementById('chi-group').value.trim();
+  if (!group) { chMsg('Enter the fabric group.', 'warn'); return; }
+  try {
+    const vendor = document.getElementById('chi-vendor').value;
+    const r = await api('/admin/api/charges/items', 'POST', { group_name: group, variant: document.getElementById('chi-variant').value.trim(), vendor, fields: {} });
+    await loadCharges();
+    chMsg('Created. Enter its prices now.');
+    openChEdit({ item_key: r.item_key, label: group + (document.getElementById('chi-variant').value.trim() ? ' — ' + document.getElementById('chi-variant').value.trim() : '') }, vendor);
+  } catch (err) { chMsg(esc(err.message), 'bad'); }
+}
+
+async function importChCsv() {
+  const csv = document.getElementById('chi-csv').value.trim();
+  if (!csv) { chMsg('Paste the CSV first.', 'warn'); return; }
+  try {
+    const r = await api('/admin/api/charges/import', 'POST', { vendor: document.getElementById('chi-imp-vendor').value, csv });
+    chMsg(`Imported ${r.rows} rows — ${r.created} new, ${r.updated} updated. Live for every new calculation.`);
+    document.getElementById('chi-csv').value = '';
+    await loadCharges();
+  } catch (err) { chMsg(esc(err.message), 'bad'); }
+}
+
+async function exportChCsv(ev) {
+  ev.preventDefault();
+  try {
+    const v = document.getElementById('ch-vendor').value;
+    const res = await fetch(API_BASE + '/admin/api/charges/export.csv' + (v && v !== 'all' ? '?vendor=' + encodeURIComponent(v) : ''), { headers: { 'X-Admin-Token': getToken() || '' } });
+    if (!res.ok) throw new Error(res.statusText);
+    const a = document.createElement('a'); a.href = URL.createObjectURL(await res.blob()); a.download = 'charges.csv'; a.click();
+  } catch (err) { chMsg('Export failed: ' + esc(err.message), 'bad'); }
+}
+
+function initChargesTab() {
+  ['ch-q', 'ch-count'].forEach(id => document.getElementById(id).addEventListener('input', chSearchSoon));
+  ['ch-shade', 'ch-vendor'].forEach(id => document.getElementById(id).addEventListener('change', runChargeSearch));
+  document.querySelectorAll('.ch-sub').forEach(b => b.addEventListener('click', () => showChSection(b.dataset.chsec)));
+  document.getElementById('ch-reload').addEventListener('click', loadCharges);
+  document.getElementById('ch-export').addEventListener('click', exportChCsv);
+  document.getElementById('chv-add').addEventListener('click', addChVendor);
+  document.getElementById('chi-add').addEventListener('click', addChItem);
+  document.getElementById('chi-import').addEventListener('click', importChCsv);
+  document.getElementById('che-save').addEventListener('click', saveChEdit);
+  document.getElementById('che-cancel').addEventListener('click', () => document.getElementById('ch-edit-modal').classList.add('hidden'));
+  document.getElementById('ch-edit-modal').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden'); });
+}
+
 // ── REAL-ORDER VALIDATION ─────────────────────────────────
 const TIER_BADGE_CLASS = {
   verified: 'badge-green', derived: 'badge-blue', estimated: 'badge-amber',
@@ -2192,6 +2427,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('prices-reload-btn').addEventListener('click', loadYarnPrices);
   document.getElementById('prices-update-btn').addEventListener('click', updateYarnPrices);
   document.getElementById('dyeing-prices-reload-btn').addEventListener('click', loadDyeingPrices);
+  initChargesTab();
   document.getElementById('val-reload-btn').addEventListener('click', loadValidationTab);
   document.getElementById('val-add-btn').addEventListener('click', addValidationRecord);
   document.getElementById('cache-refresh-btn').addEventListener('click', () => { loadCacheStats(); loadCacheEntries(curCachePage); });

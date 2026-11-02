@@ -1318,4 +1318,144 @@ router.post('/api/settings/credentials', adminAuth, async (req, res) => {
   }
 });
 
+// ============================================================
+// CHARGE BOOK — knitting & dyeing charges, per vendor
+// (engine/domain/charge-book.js is the live snapshot; every write reloads it)
+// ============================================================
+const chargeBook = require('../engine/domain/charge-book');
+const chargeRepo = require('../db/repositories/charge-repo');
+
+const chargeErr = (res, err, tag) => {
+  console.error(`[Charges ${tag}]`, err);
+  const dup = err && err.code === '23505';
+  res.status(dup ? 409 : /required|must/.test(err.message || '') ? 400 : 500).json({ error: dup ? 'Already exists' : err.message });
+};
+
+router.get('/api/charges/overview', adminAuth, async (req, res) => {
+  try {
+    const gaps = await chargeRepo.gaps(false).catch(() => []);
+    res.json({ status: chargeBook.status(), vendors: chargeBook.listVendors(), tiers: chargeBook.TIERS, fields: chargeBook.FIELDS,
+      groups: [...new Set(chargeBook.listItems().map((i) => i.group_name))].sort(), open_gaps: gaps.length });
+  } catch (err) { chargeErr(res, err, 'overview'); }
+});
+
+// Search by fabric text and/or count: "rib 2x2 lycra", "interlock", count=30 -> prices per vendor
+router.get('/api/charges/search', adminAuth, (req, res) => {
+  const count = parseFloat(req.query.count);
+  res.json(chargeBook.search({ q: String(req.query.q || '').slice(0, 120), count: count > 0 ? count : null,
+    shade: req.query.shade || null, vendor: req.query.vendor || null, limit: Math.min(200, parseInt(req.query.limit, 10) || 60),
+    includeInactive: req.query.inactive === '1' }));
+});
+
+// What the engine would charge for a real input — the same quote() the costing uses
+router.get('/api/charges/quote', adminAuth, (req, res) => {
+  const q = req.query;
+  const comp = q.composition ? require('../engine/domain/composition-engine').parseComposition(String(q.composition)) : null;
+  const { dyeRoute } = require('../engine/domain/wet-cost-model');
+  const fibers = comp && comp.fibers ? comp.fibers : { cotton: 100 };
+  res.json(chargeBook.quote({ fabricId: String(q.fabric || 'single_jersey'), fibers, yarnForm: q.yarn_form || null, feederType: q.feeder_type || null,
+    stripeType: q.stripe_type || null, brushed: q.brushed === '1', itemKey: q.item || null, vendor: q.vendor || null,
+    countNe: parseFloat(q.count) || 30, shade: q.shade || 'light_medium', twoPart: dyeRoute(fibers).key === 'two_part' }));
+});
+
+router.get('/api/charges/item/:key', adminAuth, async (req, res) => {
+  try {
+    const item = chargeBook.getItem(req.params.key);
+    if (!item) return res.status(404).json({ error: 'Unknown item' });
+    const rates = chargeBook.listVendors().map((v) => { const r = chargeBook.vendorRate(v.code, item.item_key); return { vendor: v.code, name: v.name, derived: r ? r.derived : false, rate: r ? r.rate : null }; });
+    res.json({ item, rates, history: await chargeRepo.history(item.item_key).catch(() => []) });
+  } catch (err) { chargeErr(res, err, 'item'); }
+});
+
+const CHARGE_WHO = 'admin';
+router.put('/api/charges/rate', adminAuth, async (req, res) => {
+  try {
+    const { vendor, item_key, fields, note } = req.body || {};
+    if (!vendor || !item_key || !fields || typeof fields !== 'object') return res.status(400).json({ error: 'vendor, item_key and fields are required' });
+    for (const [k, v] of Object.entries(fields)) {
+      if (!chargeBook.FIELDS.includes(k)) return res.status(400).json({ error: `unknown field ${k}` });
+      if (v !== null && v !== '' && !(Number.isFinite(+v) && +v >= 0 && +v < 100)) return res.status(400).json({ error: `${k} must be a price between 0 and 100 (blank = not offered)` });
+    }
+    const changed = await chargeRepo.upsertRate(vendor, item_key, fields, CHARGE_WHO, note);
+    await chargeBook.reload();
+    res.json({ ok: true, changed });
+  } catch (err) { chargeErr(res, err, 'rate'); }
+});
+
+// A new fabric / variant — optionally with its first prices for a vendor
+router.post('/api/charges/items', adminAuth, async (req, res) => {
+  try {
+    const { group_name, variant, vendor, fields } = req.body || {};
+    const key = await chargeRepo.createItem({ group_name, variant });
+    if (vendor && fields) await chargeRepo.upsertRate(vendor, key, fields, CHARGE_WHO, 'new item');
+    await chargeBook.reload();
+    res.json({ ok: true, item_key: key });
+  } catch (err) { chargeErr(res, err, 'item-create'); }
+});
+
+router.patch('/api/charges/items/:key/active', adminAuth, async (req, res) => {
+  try { await chargeRepo.setItemActive(req.params.key, !!req.body.active); await chargeBook.reload(); res.json({ ok: true }); }
+  catch (err) { chargeErr(res, err, 'item-active'); }
+});
+
+router.post('/api/charges/vendors', adminAuth, async (req, res) => {
+  try { const code = await chargeRepo.createVendor(req.body || {}); await chargeBook.reload(); res.json({ ok: true, code }); }
+  catch (err) { chargeErr(res, err, 'vendor-create'); }
+});
+router.patch('/api/charges/vendors/:code', adminAuth, async (req, res) => {
+  try { await chargeRepo.updateVendor(req.params.code, req.body || {}); await chargeBook.reload(); res.json({ ok: true }); }
+  catch (err) { chargeErr(res, err, 'vendor-update'); }
+});
+
+// Bulk import: JSON rows, or CSV text with a header line.
+// Columns: vendor, group, variant, knit_above30, knit_below30, dye1_black ... dye2_white_melange
+router.post('/api/charges/import', adminAuth, async (req, res) => {
+  try {
+    let rows = req.body && req.body.rows;
+    const vendor = req.body && req.body.vendor;
+    if (!rows && req.body && typeof req.body.csv === 'string') {
+      const lines = req.body.csv.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+      const head = lines.shift().split(',').map((h) => h.trim().toLowerCase());
+      rows = lines.map((l) => { const c = l.split(',').map((x) => x.trim()); const o = {}; head.forEach((h, i) => { o[h] = c[i]; }); return o; });
+    }
+    if (!Array.isArray(rows) || !rows.length) return res.status(400).json({ error: 'rows (or csv) required' });
+    if (rows.length > 2000) return res.status(400).json({ error: 'at most 2000 rows per import' });
+    rows = rows.map((r) => ({ ...r, vendor: r.vendor || vendor }));
+    const bad = rows.findIndex((r) => !r.vendor || !r.group);
+    if (bad >= 0) return res.status(400).json({ error: `row ${bad + 1}: vendor and group are required` });
+    const known = new Set(chargeBook.listVendors().map((v) => v.code));
+    const unknown = rows.find((r) => !known.has(r.vendor));
+    if (unknown) return res.status(400).json({ error: `unknown vendor "${unknown.vendor}" — add the vendor first` });
+    const out = await chargeRepo.importRows(rows, CHARGE_WHO, req.body.note || 'import');
+    await chargeBook.reload();
+    res.json({ ok: true, ...out, rows: rows.length });
+  } catch (err) { chargeErr(res, err, 'import'); }
+});
+
+router.get('/api/charges/export.csv', adminAuth, (req, res) => {
+  const vendor = req.query.vendor || (chargeBook.defaultVendor() || {}).code;
+  const F = chargeBook.FIELDS;
+  const lines = [['vendor', 'group', 'variant', ...F].join(',')];
+  for (const it of chargeBook.listItems()) {
+    const r = chargeBook.vendorRate(vendor, it.item_key); if (!r) continue;
+    lines.push([csvCell(vendor), csvCell(it.group_name), csvCell(it.variant), ...F.map((f) => (r.rate[f] == null ? '' : r.rate[f]))].join(','));
+  }
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="charges-${vendor}.csv"`);
+  res.send(lines.join('\n'));
+});
+
+// What the engine asked for that the book could not answer — and every engine fabric's landing row
+router.get('/api/charges/gaps', adminAuth, async (req, res) => {
+  try { res.json({ gaps: await chargeRepo.gaps(req.query.all === '1') }); } catch (err) { chargeErr(res, err, 'gaps'); }
+});
+router.post('/api/charges/gaps/:id/resolve', adminAuth, async (req, res) => {
+  try { await chargeRepo.resolveGap(parseInt(req.params.id, 10)); res.json({ ok: true }); } catch (err) { chargeErr(res, err, 'gap-resolve'); }
+});
+router.get('/api/charges/coverage', adminAuth, (req, res) => {
+  const { FABRIC_DERIVATIVES } = require('../engine/catalog/fabric-derivatives');
+  const rows = chargeBook.coverage(FABRIC_DERIVATIVES.filter((f) => f.category !== 'warp_knit'));
+  res.json({ total: rows.length, approximate: rows.filter((r) => r.approximate).length, rows });
+});
+
 module.exports = router;

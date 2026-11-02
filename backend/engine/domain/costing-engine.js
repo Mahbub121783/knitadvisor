@@ -269,7 +269,8 @@ const YARN_TYPE_CATALOG = {
 // ============================================================
 const { getKnittingPrice } = require('../catalog/knitting-price-table');
 const countryCosts = require('../catalog/country-costs');
-const { dyeingCharge, finishingCharge, processLoss: wetProcessLoss } = require('./wet-cost-model');
+const { dyeingCharge, finishingCharge, processLoss: wetProcessLoss, dyeRoute } = require('./wet-cost-model');
+const chargeBook = require('./charge-book');
 const { isWovenId } = require('../catalog/woven-derivatives');
 const ENERGY_SHARE_PCT = Object.fromEntries(
   Object.entries(countryCosts.ENERGY_SHARE).map(([k, v]) => [k, Math.round(v * 100)]));
@@ -860,12 +861,37 @@ function calculateCost(params) {
   const wastePct = INVISIBLE_WASTE_PCT[fabricId] || INVISIBLE_WASTE_PCT.default;
   const rawMaterialWithWaste = round4(effectiveYarnPrice / (1 - wastePct / 100));
 
-  // ---- 5. KNITTING COST (Official Price List: fabric × above/below 30s) ----
+  // ---- 4b. THE CHARGE SHEET: knitting and dyeing for this fabric, this vendor ----
+  // One sheet row prices the fabric (group + variant), by count tier and shade
+  // tier, one-part or two-part. It is the primary source for both lines; the
+  // models below answer only where the sheet has no price.
+  const fibersForCharge = parsedComp ? (parsedComp.fibers || {}) : { cotton: 100 };
+  let chargeQuote = null;
+  try {
+    chargeQuote = chargeBook.quote({
+      fabricId, category: params.category || null, fibers: fibersForCharge,
+      yarnForm: params.yarn_form || null, feederType: params.feeder_type || null,
+      stripeType: params.stripe_type || null, brushed: !!params.brushed,
+      itemKey: params.charge_item || null, vendor: params.charge_vendor || null,
+      countNe, shade: colorShade, twoPart: dyeRoute(fibersForCharge).key === 'two_part',
+    });
+  } catch (_) { chargeQuote = null; }
+  if (chargeQuote && chargeQuote.ok) (chargeQuote.notes || []).forEach((n) => warnings.push(`Charge sheet: ${n}`));
+
+  // ---- 5. KNITTING COST (charge sheet first; the older price table is the fallback) ----
   let knittingFinal, knittingBase, knittingDetail;
   if (params.knitting_cost) {
     knittingBase = parseFloat(params.knitting_cost);
     knittingFinal = knittingBase;
     knittingDetail = { source: 'user_override', price_usd_kg: knittingBase, note: 'Manual override' };
+  } else if (chargeQuote && chargeQuote.ok && chargeQuote.knit) {
+    const k = chargeQuote.knit;
+    knittingBase = k.usd; knittingFinal = k.usd;
+    knittingDetail = {
+      source: 'charge_sheet', price_usd_kg: k.usd, fabric_key: chargeQuote.item.group, variant: chargeQuote.item.variant || 'plain',
+      tier_label: k.tier, above30: k.above30, below30: k.below30, vendor: chargeQuote.vendor.name,
+      note: `${chargeQuote.item.label} · ${k.tier} · ${chargeQuote.vendor.name} = USD ${k.usd}/kg`,
+    };
   } else {
     knittingDetail = getKnittingPrice(fabricId, countNe, parsedComp, params.yarn_form || null, params.feeder_type || null);
     knittingBase = knittingDetail.price_usd_kg;
@@ -902,11 +928,34 @@ function calculateCost(params) {
       surfaceFinish: params.surface_finish || null,
     });
     dyeingFinal = dyeModel.per_kg;
+    // The sheet's price for this shade tier replaces the model's base. What the
+    // model adds on top stays: a lighter or darker band inside the tier, a
+    // special colour, an in-bath enzyme or softener. Printing and garment dyeing
+    // are not on the sheet, so those keep the model.
+    let sheetUsed = null;
+    const notSheet = ['pigment', 'discharge', 'garment_wash'].includes(String(params.dyeing_method || ''));
+    if (chargeQuote && chargeQuote.ok && chargeQuote.dye && !notSheet) {
+      const tier = chargeQuote.tier;
+      const surf = (dyeModel.lines || []).filter((l) => /Enzyme|Silicone/.test(l.item)).reduce((t, l) => t + l.usd, 0);
+      let delta = surf;
+      if (tier === 'light_medium' || tier === 'dark_navy') {
+        const ref = dyeingCharge({ shade: tier, fibers, dyeingMethod: null, surfaceFinish: null });
+        delta = dyeModel.per_kg - ref.per_kg;
+      }
+      sheetUsed = { usd: chargeQuote.dye.usd, delta: round4(delta) };
+      dyeingFinal = round4(chargeQuote.dye.usd + delta);
+    }
     dyeingDetail = {
-      source: 'shade_band',
+      source: sheetUsed ? 'charge_sheet' : 'shade_band',
       ...dyeModel,
+      ...(sheetUsed ? {
+        per_kg: dyeingFinal, model_usd: dyeModel.per_kg, sheet: { vendor: chargeQuote.vendor.name, item: chargeQuote.item.label, tier: chargeQuote.tier, part: chargeQuote.dye.part, usd: sheetUsed.usd, adjustment_usd: sheetUsed.delta },
+        spread_pct: sheetUsed.delta ? 5 : 3, basis: 'charge sheet',
+        lines: [{ item: `${chargeQuote.item.label} — ${chargeQuote.tier.replace('_', '/')} ${chargeQuote.dye.part}-part (${chargeQuote.vendor.name})`, usd: sheetUsed.usd },
+          ...(sheetUsed.delta ? [{ item: 'Band / special colour / in-bath finish', usd: sheetUsed.delta }] : [])],
+      } : {}),
       note: `${dyeModel.band_label} (${dyeModel.how}) on ${dyeModel.route_label}: `
-        + dyeModel.lines.map((l) => `${l.item} $${l.usd}`).join(' + ') + ` = $${dyeModel.per_kg}/kg grey`,
+        + (sheetUsed ? `charge sheet $${sheetUsed.usd}${sheetUsed.delta ? ` ${sheetUsed.delta > 0 ? '+' : '−'} $${Math.abs(sheetUsed.delta)} adjustment` : ''}` : dyeModel.lines.map((l) => `${l.item} $${l.usd}`).join(' + ')) + ` = $${dyeingFinal}/kg grey`,
     };
   }
   const dyeingAnchor = dyeingFinal;
@@ -980,7 +1029,7 @@ function calculateCost(params) {
     if (k === 'composite') return priceSource.modelled ? 0.09 : 0.06;
     return priceSource.modelled ? 0.10 : 0.06;
   })();
-  const knitSpread = knittingDetail && knittingDetail.source === 'user_override' ? 0.02 : 0.10;
+  const knitSpread = knittingDetail && (knittingDetail.source === 'user_override' || knittingDetail.source === 'charge_sheet') ? 0.02 : 0.10;
   const dyeSpread = (dyeingDetail.spread_pct || 0) / 100;
   const finSpread = ((finishingDetail && finishingDetail.spread_pct) || 0) / 100;
   const G = 1 / ((1 - Ld) * (1 - Lf));
@@ -1171,6 +1220,11 @@ function calculateCost(params) {
     },
 
     accuracy,
+    charges: chargeQuote && chargeQuote.ok ? {
+      vendor: chargeQuote.vendor, item: chargeQuote.item, approximate: chargeQuote.approximate, notes: chargeQuote.notes,
+      knit: chargeQuote.knit, dye: chargeQuote.dye, tier: chargeQuote.tier, two_part: chargeQuote.two_part,
+      dye_table: chargeQuote.dye_table, alternatives: chargeQuote.alternatives,
+    } : null,
 
     cost_in_currency: {
       currency,

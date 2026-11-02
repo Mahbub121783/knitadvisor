@@ -80,6 +80,17 @@ const dyeingPricesReady = dyeingPriceBook.load()
   .then(() => console.log(`[DyeingPrices] ${dyeingPriceBook.status().overrides} chemical price overrides loaded`))
   .catch(err => console.warn('[DyeingPrices] no overrides loaded, recipes will use their own extracted prices:', err.message));
 
+// Knitting & dyeing charge book (multi-vendor). The factory sheet is compiled in
+// as the seed, so a missing table or database changes nothing: the engine reads
+// the seed until the editable copy loads. Gaps (a fabric or price the book could
+// not answer) are written to charge_gaps for the admin dashboard.
+const chargeBook = require('./engine/domain/charge-book');
+const chargeRepo = require('./db/repositories/charge-repo');
+chargeBook.setGapSink((g) => { chargeRepo.recordGap(g).catch(() => {}); });
+const chargeBookReady = chargeBook.load()
+  .then((s) => console.log(`[Charges] ${s.items} items, ${s.vendors} vendors from the ${s.source}${s.error ? ' (' + s.error + ')' : ''}`))
+  .catch((err) => console.warn('[Charges] using the compiled-in factory sheet:', err.message));
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -389,6 +400,7 @@ async function start() {
 
   await referenceReady;
   await dyeingPricesReady;
+  await chargeBookReady;
 
   app.listen(PORT, () => {
     console.log(`[Server] Running on port ${PORT}`);

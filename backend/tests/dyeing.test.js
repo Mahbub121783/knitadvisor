@@ -157,11 +157,11 @@ assert(allTheory.dye_classes.length === 7 && allTheory.machines.length === 6 && 
 // (per the user's explicit direction — woven fabrics never need a dyeing
 // cost in this tool, not a real recipe and not even a price-list estimate)
 
-// Test 17: the costing prices dyeing by shade band, not by recipe card. Black
-// on a cotton knit is the price list's black, on the reactive route.
+// Test 17: the costing prices dyeing from the charge sheet, not a recipe card.
+// Black on a cotton single jersey is the sheet's one-part black.
 const knitResult = calculateCost({ gsm: 180, fabric: 'single_jersey', color_shade: 'black', order_qty_kg: 1000 });
 const dd = knitResult.cost_breakdown_usd.dyeing;
-assert.strictEqual(dd.source, 'shade_band');
+assert.strictEqual(dd.source, 'charge_sheet');
 assert.strictEqual(dd.band, 'black');
 assert.strictEqual(dd.route, 'reactive');
 assert.strictEqual(dd.per_kg, 1.75);

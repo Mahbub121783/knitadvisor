@@ -27,7 +27,7 @@ const C = (extra = {}, comp = '100% Cotton', fabric = 'single_jersey', gsm = 160
   assert.strictEqual(d('light_medium'), 1.30);
   assert.strictEqual(d('white_melange'), 0.80);
   assert.strictEqual(d('fluorescent'), 2.60);
-  assert(d('melange', {}) < d('white_melange'), 'a melange is washed, not dyed');
+  assert.strictEqual(d('melange', {}), d('white_melange'), 'the sheet prices White / Melange as one column');
   // inside a tier, the band chosen moves the price
   assert(d('light_medium', { dye_band: 'light' }) < d('light_medium', { dye_band: 'medium' }));
   assert(d('dark_navy', { dye_band: 'extra_dark' }) > d('dark_navy', { dye_band: 'dark' }));
@@ -49,8 +49,8 @@ const C = (extra = {}, comp = '100% Cotton', fabric = 'single_jersey', gsm = 160
   assert.strictEqual(cvc.dyeing_detail.route, 'two_part');
   const pol = C({ color_shade: 'light_medium' }, '100% Polyester');
   assert.strictEqual(pol.dyeing_detail.route, 'disperse');
-  assert(pol.dyeing_per_kg_usd < C({ color_shade: 'light_medium' }).dyeing_per_kg_usd, 'disperse is cheaper than reactive');
-  assert(C({ color_shade: 'fluorescent' }, '100% Polyester').dyeing_per_kg_usd < C({ color_shade: 'fluorescent' }).dyeing_per_kg_usd, 'a polyester neon is the cheap one');
+  assert.strictEqual(pol.dyeing_per_kg_usd, C({ color_shade: 'light_medium' }).dyeing_per_kg_usd, 'the sheet quotes by shade, not by dye class: a polyester pays the same row');
+  assert.strictEqual(C({ color_shade: 'fluorescent' }, '100% Polyester').dyeing_per_kg_usd, C({ color_shade: 'fluorescent' }).dyeing_per_kg_usd);
   assert.strictEqual(C({ color_shade: 'light_medium' }, '100% Nylon').dyeing_detail.route, 'acid');
   // a polyester loses far less in the bath than a cotton
   assert(pol.process_loss.pct < C({ color_shade: 'light_medium' }).process_loss.pct - 3);

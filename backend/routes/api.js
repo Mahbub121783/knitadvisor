@@ -1224,6 +1224,12 @@ router.get('/color/shade-check', (req, res) => {
   }
 });
 
+// GET /api/charges/vendors — who can be chosen to price knitting and dyeing
+router.get('/charges/vendors', (req, res) => {
+  const book = require('../engine/domain/charge-book');
+  res.json({ vendors: book.listVendors().filter((v) => v.active).map((v) => ({ code: v.code, name: v.name, kind: v.kind, is_default: !!v.is_default })) });
+});
+
 router.get('/color/popular', (req, res) => {
   try {
     res.json({ success: true, colors: colorEngine.getPopularColors() });

@@ -3495,6 +3495,18 @@ function renderCostDetail(costing, esc) {
         + `<div class="cd-note">${fmt(pl.dye_stage_pct, 1)}% is lost in the dye bath and ${fmt(pl.finish_stage_pct, 1)}% in finishing; the dyehouse charges per kg of grey, so every cost before a loss is spread over the kilos that survive it.</div>` : '')
       + `</div>`);
   }
+  const ch = costing.charges;
+  if (ch) {
+    const alts = (ch.alternatives || []).filter(a => a.total != null);
+    const cheaper = alts.length > 1 && alts[0].vendor !== ch.vendor.code && ch.knit && ch.dye ? alts[0] : null;
+    cards.push(`<div class="cd-card"><h4>Charge sheet</h4>
+      <div class="cd-row"><span>Priced as</span><span>${esc(ch.item.label)}</span></div>
+      <div class="cd-row"><span>Vendor</span><span>${esc(ch.vendor.name)}</span></div>
+      ${ch.knit ? `<div class="cd-row"><span>Knitting (${esc(ch.knit.tier)})</span><span>${money(ch.knit.usd)}</span></div>` : ''}
+      ${ch.dye ? `<div class="cd-row"><span>Dyeing ${esc(String(ch.tier).replace('_', '/'))}, ${esc(ch.dye.part)}-part</span><span>${money(ch.dye.usd)}</span></div>` : ''}
+      ${alts.length > 1 ? `<div class="cd-note">Knit + dye by vendor: ${alts.map(a => `${esc(a.name)} ${money(a.total)}`).join(' · ')}.${cheaper ? ` <b>${esc(cheaper.name)} is cheaper for this fabric.</b>` : ''}</div>` : ''}
+      ${ch.approximate ? `<div class="cd-note">No exact row on the sheet for this fabric; the nearest was used. ${esc((ch.notes || []).join(' '))}</div>` : ''}</div>`);
+  }
   const yc = costing.yarn_components;
   if (Array.isArray(yc) && yc.length) {
     cards.push(`<div class="cd-card"><h4>Yarn, priced part by part</h4>`

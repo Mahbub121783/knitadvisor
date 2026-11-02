@@ -1217,6 +1217,10 @@ function calculate(params) {
     velour_cut: !!(terryResult && terryResult.variant && terryResult.variant.cut),
     // fleece / terry / velour: every yarn priced at its own count
     yarn_components: yarnComponentsForCost,
+    category: fabricDef.category,
+    charge_vendor: params.charge_vendor || null,
+    charge_item: params.charge_item || null,
+    stripe_type: params.stripe_type || null,
     extra_surcharges: shadeSpec && shadeSpec.extra_surcharges ? shadeSpec.extra_surcharges : [],
     parsedComp,
     is_warp_knit: fabricDef.category === 'warp_knit',
@@ -1623,6 +1627,8 @@ function calculate(params) {
       build_up:                 costResult.cost_breakdown_usd.build_up,
       // the likely range of the total and what drives it
       accuracy:                 costResult.accuracy,
+      // the charge-sheet row, vendor and the other vendors' prices
+      charges:                  costResult.charges,
       yarn_components:          costResult.yarn.price_source && costResult.yarn.price_source.components
         ? costResult.yarn.price_source.components : null,
       total_per_kg_usd:         costResult.cost_breakdown_usd.total_per_kg,
@@ -1748,6 +1754,8 @@ const ENGINE_INPUTS = Object.freeze([
   // costing
   'yarn_price_type', 'yarn_white', 'yarn_organic', 'yarn_organic_type',
   'yarn_ecovero', 'yarn_at_sight', 'feeder_type',
+  // charge sheet: which vendor's prices, a specific sheet row, engineering / feeder stripe
+  'charge_vendor', 'charge_item', 'stripe_type',
   // Which country's cost base to price against. Part of the cache key by
   // construction, which matters: without it, switching country would return
   // whichever country was calculated first for those inputs.

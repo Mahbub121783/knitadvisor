@@ -860,7 +860,19 @@
     @media (min-width: 1500px) { .main { max-width: 1400px; } }
     @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
     @media print { .sidebar, .topbar, #toast-wrap { display: none !important; } .main { padding: 0; } }
-  </style>
+  
+    /* charges tab */
+    .ch-subtabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+    .ch-sub { background: none; border: 1px solid var(--line); border-radius: 99px; padding: 6px 14px; font: 600 12px var(--head, inherit); color: var(--t2); cursor: pointer; }
+    .ch-sub.active { background: var(--a1); border-color: var(--a1); color: #fff; }
+    .ch-filters { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); align-items: end; }
+    .ch-sec[hidden] { display: none; }
+    .ch-grid-edit .ch-grp { font-size: 10px; letter-spacing: .6px; text-transform: uppercase; color: var(--t3); font-weight: 700; margin: 10px 0 6px; }
+    .ch-row { display: grid; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .ch-row5 { grid-template-columns: repeat(auto-fit, minmax(min(100%, 96px), 1fr)); }
+    .ch-cell { display: flex; flex-direction: column; gap: 3px; font-size: 10.5px; color: var(--t3); min-width: 0; }
+    .ch-cell input { width: 100%; }
+</style>
 </head>
 <body>
 
@@ -930,6 +942,10 @@
         <button class="tab-btn sb-link" data-tab="tab-prices">
           <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M12 2l3 6.5L22 9l-5 4.9L18.2 21 12 17.6 5.8 21 7 13.9 2 9l7-.5z"/></svg>
           Yarn Prices
+        </button>
+        <button class="tab-btn sb-link" data-tab="tab-charges">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M4 7h16M4 12h16M4 17h10"/><circle cx="19" cy="17" r="2"/></svg>
+          Knit &amp; Dye Charges
         </button>
         <button class="tab-btn sb-link" data-tab="tab-dyeing-prices">
           <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M12 3c3 4 5 6.5 5 10a5 5 0 0 1-10 0c0-3.5 2-6 5-10z"/></svg>
@@ -1287,6 +1303,128 @@
           </tr></thead>
           <tbody id="dyeing-prices-unresolved-tbody"></tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- ── CHARGES (knitting & dyeing, multi-vendor) ── -->
+    <div id="tab-charges" class="tab-panel">
+      <div class="row-between mb-16">
+        <div>
+          <div class="section-title">Knitting &amp; Dyeing Charges</div>
+          <div class="section-sub" id="ch-status">The price book every costing is built on — one row per fabric and variant, one price set per vendor.</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <a id="ch-export" class="btn btn-ghost btn-sm" href="#">Export CSV</a>
+          <button id="ch-reload" class="btn btn-ghost btn-sm">Reload</button>
+        </div>
+      </div>
+
+      <div class="ch-subtabs">
+        <button class="ch-sub active" data-chsec="ch-sec-search">Search &amp; prices</button>
+        <button class="ch-sub" data-chsec="ch-sec-vendors">Vendors</button>
+        <button class="ch-sub" data-chsec="ch-sec-import">Add / import</button>
+        <button class="ch-sub" data-chsec="ch-sec-gaps">Gaps &amp; coverage <span class="sb-count" id="ch-gap-count" hidden>0</span></button>
+      </div>
+      <div id="ch-msg" class="hidden mb-16"></div>
+
+      <!-- search -->
+      <div id="ch-sec-search" class="ch-sec">
+        <div class="ch-filters">
+          <div class="form-group"><label class="form-label" for="ch-q">Fabric / variant</label>
+            <input id="ch-q" class="form-input" placeholder="e.g. rib 2x2 lycra, interlock, lacoste, fleece brush" autocomplete="off"></div>
+          <div class="form-group"><label class="form-label" for="ch-count">Yarn count (Ne)</label>
+            <input id="ch-count" type="number" min="1" max="200" step="1" class="form-input" placeholder="e.g. 30"></div>
+          <div class="form-group"><label class="form-label" for="ch-shade">Shade</label>
+            <select id="ch-shade" class="form-select">
+              <option value="light_medium">Light / Medium</option><option value="dark_navy">Dark / Navy</option><option value="black">Black</option>
+              <option value="neon">Neon / Fluorescent</option><option value="white_melange">White / Melange</option></select></div>
+          <div class="form-group"><label class="form-label" for="ch-vendor">Vendor</label>
+            <select id="ch-vendor" class="form-select"></select></div>
+        </div>
+        <div class="section-sub" id="ch-count-line" style="margin:6px 0 10px;"></div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead><tr><th>Fabric &amp; variant</th><th>Vendor</th><th>Knitting</th><th>Dyeing 1-part</th><th>Dyeing 2-part</th><th>Knit + dye (1-part)</th><th></th></tr></thead>
+            <tbody id="ch-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- vendors -->
+      <div id="ch-sec-vendors" class="ch-sec" hidden>
+        <div class="section-sub">A vendor is whoever quotes a price: your own sheet, an outside knitter, a dyehouse. A new vendor can be <b>derived</b> from another at &plusmn;% so a single quote is one line, not 346 rows; give it its own price on any row to override.</div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead><tr><th>Vendor</th><th>Type</th><th>Basis</th><th>Prices</th><th>Default</th><th>Active</th></tr></thead>
+            <tbody id="ch-vendors-tbody"></tbody>
+          </table>
+        </div>
+        <div class="section-title mt-16" style="font-size:12px;">Add a vendor</div>
+        <div class="ch-filters">
+          <div class="form-group"><label class="form-label" for="chv-name">Name</label><input id="chv-name" class="form-input" placeholder="e.g. ABC Dyeing Ltd"></div>
+          <div class="form-group"><label class="form-label" for="chv-kind">Type</label>
+            <select id="chv-kind" class="form-select"><option value="dyehouse">Dyehouse</option><option value="knitter">Knitter</option><option value="vendor">Both / other</option></select></div>
+          <div class="form-group"><label class="form-label" for="chv-from">Derive prices from</label><select id="chv-from" class="form-select"></select></div>
+          <div class="form-group"><label class="form-label" for="chv-adj">Adjust (%)</label><input id="chv-adj" type="number" step="0.5" class="form-input" placeholder="e.g. -5 or 8"></div>
+        </div>
+        <button id="chv-add" class="btn btn-primary btn-sm mt-8">Add vendor</button>
+      </div>
+
+      <!-- add / import -->
+      <div id="ch-sec-import" class="ch-sec" hidden>
+        <div class="section-title" style="font-size:12px;">Add a fabric or variant</div>
+        <div class="section-sub">A fabric the sheet does not list yet. It is priced for one vendor straight away; other vendors can price it later.</div>
+        <div class="ch-filters">
+          <div class="form-group"><label class="form-label" for="chi-group">Fabric group</label><input id="chi-group" class="form-input" list="ch-groups" placeholder="e.g. RIB 6 x 2"></div>
+          <div class="form-group"><label class="form-label" for="chi-variant">Variant (blank = base)</label><input id="chi-variant" class="form-input" placeholder="e.g. Elastane Half Feeder"></div>
+          <div class="form-group"><label class="form-label" for="chi-vendor">Vendor</label><select id="chi-vendor" class="form-select"></select></div>
+        </div>
+        <datalist id="ch-groups"></datalist>
+        <button id="chi-add" class="btn btn-primary btn-sm mt-8">Create &amp; price it</button>
+
+        <div class="section-title mt-16" style="font-size:12px;">Import a whole price list</div>
+        <div class="section-sub">Paste CSV. First line is the header: <code>group,variant,knit_above30,knit_below30,dye1_black,dye1_dark_navy,dye1_light_medium,dye1_neon,dye1_white_melange,dye2_black,dye2_dark_navy,dye2_light_medium,dye2_neon,dye2_white_melange</code>. Blank or 0 = not offered. Rows for fabrics not in the book are created. &ldquo;Export CSV&rdquo; gives a ready template.</div>
+        <div class="ch-filters">
+          <div class="form-group"><label class="form-label" for="chi-imp-vendor">Vendor these prices belong to</label><select id="chi-imp-vendor" class="form-select"></select></div>
+        </div>
+        <textarea id="chi-csv" class="form-input" rows="7" style="width:100%;font-family:monospace;font-size:11px;" placeholder="group,variant,knit_above30,knit_below30,..."></textarea>
+        <button id="chi-import" class="btn btn-primary btn-sm mt-8">Import</button>
+      </div>
+
+      <!-- gaps & coverage -->
+      <div id="ch-sec-gaps" class="ch-sec" hidden>
+        <div class="section-sub">Whenever a calculation asks for a price the book cannot give (a fabric not on the sheet, a variant or a shade tier not offered) it is recorded here, so a new fabric or a missing price shows up on its own. Add the price and the entry stops recurring.</div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead><tr><th>What was asked for</th><th>Problem</th><th>Times</th><th>Last seen</th><th></th></tr></thead>
+            <tbody id="ch-gaps-tbody"></tbody>
+          </table>
+        </div>
+        <div class="section-title mt-16" style="font-size:12px;">Which sheet row each calculator fabric lands on</div>
+        <div class="section-sub" id="ch-cov-line"></div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead><tr><th>Calculator fabric</th><th>Priced as</th><th>Match</th></tr></thead>
+            <tbody id="ch-cov-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- charge editor -->
+    <div id="ch-edit-modal" class="modal-overlay hidden">
+      <div class="modal-box" style="width:min(640px,100%);">
+        <div class="modal-title" id="che-title">Edit prices</div>
+        <div class="section-sub" id="che-sub" style="margin-bottom:10px;"></div>
+        <div class="ch-grid-edit" id="che-grid"></div>
+        <div class="form-group" style="margin-top:10px;"><label class="form-label" for="che-note">Why (kept in the change log)</label>
+          <input id="che-note" class="form-input" placeholder="e.g. new rate from 1 Dec"></div>
+        <div id="che-hist" class="section-sub" style="margin:8px 0;max-height:110px;overflow:auto;"></div>
+        <div id="che-error" style="font-size:11px;color:var(--a3);min-height:16px;"></div>
+        <div class="modal-footer">
+          <button id="che-cancel" class="btn btn-ghost btn-sm">Cancel</button>
+          <button id="che-save" class="btn btn-primary btn-sm">Save prices</button>
+        </div>
       </div>
     </div>
 

@@ -1,0 +1,440 @@
+# Knitting & dyeing charge sheet (USD/kg) — transcribed from the factory's charge sheet "knitdyecharge.pdf" (12 pages).
+# Format:  variant ; knit_above30 knit_below30 ; dyeing
+#   dyeing = a macro, or  10 numbers: one-part (black dark light/medium neon white/melange) / two-part (same five)
+#   0 = not offered on the sheet.   Variant shorthands: EFF EHF ES ESEFF ESEHF FS FSEFF FSEHF
+# Macros: S = standard cotton, E = elastane, V = viscose, VE = viscose+elastane, ST = yarn-dyed stripe (0.50), ST85 = 0.85, Z = none
+@S   1.75 1.55 1.30 2.60 0.80 / 2.20 2.00 1.75 0 0
+@E   1.95 1.75 1.50 2.80 1.00 / 2.40 2.20 1.95 0 0
+@V   1.90 1.70 1.45 2.75 0.95 / 2.35 2.15 1.90 0 0
+@VE  2.10 1.90 1.65 2.95 1.15 / 2.55 2.35 2.10 0 0
+@ST  0.5 0.5 0.5 0.5 0.5 / 0.5 0.5 0.5 0 0
+@ST85 0.85 0.85 0.85 0.85 0.85 / 0.85 0.85 0.85 0 0
+@Z   0 0 0 0 0 / 0 0 0 0 0
+
+## 4 x 1 Rib
+- ; .45 .45 ; 1.75 1.55 1.30 2.60 0.80 / 2.20 2.00 0 0 0
+## 5 x 2 Rib
+- ; .50 .50 ; 0 1.55 1.30 2.60 0.80 / 2.20 2.00 0 0 0
+EFF ; .65 .60 ; 2.00 2.00 2.00 0 1.00 / 2.50 2.50 2.50 0 0
+EHF ; .55 .50 ; 2.00 2.00 2.00 0 2.00 / 2.50 2.50 2.50 0 0
+FSEFF ; .65 .60 ; Z
+## 6 x 2 Rib
+- ; .60 .50 ; S
+## 9 x 3 Rib
+- ; .50 .45 ; 1.75 1.55 1.30 2.60 0.80 / 0 0 0 0 0
+EFF ; .50 .47 ; 1.75 1.55 1.30 2.60 0.80 / 0 0 0 0 0
+## Crape Jersey
+- ; .70 .65 ; 1.75 1.55 1.30 0 0.80 / 2.20 2.00 0 0 0
+## Crinkle Jersey
+EFF ; 1.00 1.00 ; 1.75 1.55 1.30 2.60 0 / 2.20 2.00 1.75 0 0
+## Design Lycra Interlock Pique(F.F)
+- ; .80 .85 ; S
+EFF ; .80 .85 ; S
+## Double Lacoste
+- ; .23 .18 ; S
+EHF ; .44 .39 ; E
+ES ; 1.80 1.75 ; ST
+ESEHF ; 2.30 2.25 ; Z
+FS ; .31 .26 ; ST
+FSEHF ; .50 .45 ; Z
+## Double Lacoste SLUB
+- ; .28 .23 ; S
+EHF ; .50 .45 ; E
+ES ; 2.05 2.00 ; ST
+ESEHF ; 2.45 2.40 ; Z
+FS ; .33 .28 ; ST
+FSEHF ; .57 .52 ; Z
+## Double Lacoste Viscose
+- ; .28 .23 ; V
+EHF ; .46 .41 ; VE
+## Eyelet Rib
+- ; 2.30 2.20 ; 2.10 1.90 1.30 2.60 0.80 / 2.35 2.10 1.85 0 0
+## Fancy Jersey
+- ; .55 .40 ; 1.75 1.55 1.30 0 0.80 / 0 0 0 0 0
+Design ; 0 .40 ; S
+## Fancy Terry
+- ; .60 .55 ; 1.75 1.55 1.30 2.60 0.80 / 2.20 2.00 0 0 0
+## Flat Back RIB
+- ; .33 .33 ; 1.75 1.55 1.30 5.10 0.80 / 2.10 1.90 1.65 2.60 0
+EFF ; .45 .40 ; 1.65 1.60 1.50 0 0.95 / 0 0 0 0 0
+EHF ; 0 0 ; 1.65 1.60 1.50 0 1.00 / 0 0 0 0 0
+## French Terry Loop Back Three Thread
+- ; .28 .23 ; S
+EFF ; .50 .45 ; E
+EHF ; .50 .45 ; E
+ES ; 2.30 2.25 ; ST
+ESEFF ; 0 .45 ; Z
+ESEHF ; 2.55 2.50 ; Z
+FS ; .44 .39 ; ST
+FSEHF ; .57 .52 ; Z
+## French Terry Loop Back Three Thread inside Brush
+- ; .33 .28 ; VE
+EHF ; .50 .45 ; 2.30 2.10 1.85 3.15 1.35 / 2.75 2.55 2.30 0 0
+ES ; 2.05 2.00 ; ST85
+ESEHF ; 2.55 2.50 ; Z
+FS ; .44 .39 ; ST85
+FSEHF ; .57 .52 ; Z
+## French Terry Loop Back Two Thread
+- ; .28 .23 ; S
+EFF ; .44 .39 ; E
+EHF ; .44 .39 ; E
+ES ; 2.05 2.00 ; ST
+ESEHF ; 2.45 2.40 ; Z
+FS ; .37 .32 ; ST
+FSEHF ; .50 .45 ; Z
+Pique Mixed Design ; .44 .39 ; S
+## French Terry Loop Back Two Thread inside Brush
+- ; .28 .23 ; VE
+EHF ; .44 .39 ; 2.30 2.10 1.85 3.15 1.35 / 2.75 2.55 2.30 0 0
+ES ; 2.05 2.00 ; ST85
+ESEHF ; 2.45 2.40 ; Z
+FS ; .37 .32 ; ST85
+FSEHF ; .50 .45 ; Z
+## Heavy Jersey
+- ; .30 .25 ; S
+## Heavy Jersey (above 270gsm)
+- ; .30 .25 ; S
+## Interlock
+- ; .28 .23 ; S
+EFF ; .50 .45 ; E
+EHF ; .44 .39 ; E
+ES ; 3.05 3.00 ; ST
+ESEFF ; 4.05 4.00 ; Z
+ESEHF ; 3.80 3.75 ; Z
+FS ; .37 .32 ; ST
+FSEFF ; .57 .52 ; Z
+FSEHF ; .50 .45 ; Z
+## Interlock Design Hole Double Face
+- ; .70 .65 ; S
+## Interlock Double Face
+- ; .57 .52 ; S
+EFF ; .60 .55 ; 1.60 1.60 1.50 0 0.95 / 1.80 1.75 1.65 0 0
+## Interlock Pique
+- ; .57 .52 ; S
+Design ; 1.50 1.50 ; S
+EFF ; .60 .55 ; 0 0 0 0 0 / 2.20 2.00 1.75 0 0.80
+## Interlock Polyester Double Face
+- ; .70 .65 ; S
+## Interlock Y/D Stripe
+- ; 2.25 2.20 ; Z
+## Mesh Jersey
+- ; .55 0 ; 1.75 1.55 1.30 0 0.80 / 2.20 2.00 1.75 0 0
+## Ottoman Rib
+- ; .67 .67 ; 1.75 1.55 1.30 0 0.80 / 2.20 2.00 1.75 0 0.80
+EHF ; .70 .70 ; 1.75 1.55 1.30 0 0.80 / 2.20 2.00 1.75 0 0.80
+## Pique
+- ; .27 .25 ; 1.75 1.65 1.30 0 0.80 / 0 1.80 1.65 0 0
+EFF ; 0 .25 ; 1.97 1.77 1.57 0 1.05 / 2.32 2.12 1.92 0 1.40
+EHF ; 1.65 0 ; S
+Polyester Birds Eye Design ; .61 .57 ; 2.15 1.95 1.35 5.10 0.85 / 2.40 2.15 1.90 2.60 0
+Polyester Mesh Design ; .61 .57 ; 2.15 1.95 1.35 5.10 0.85 / 2.40 2.15 1.90 2.60 0
+## Pique Honeycomb
+- ; .23 .18 ; S
+EHF ; .44 .39 ; E
+ES ; 1.85 1.80 ; ST
+ESEHF ; 2.30 2.25 ; Z
+FS ; .31 .26 ; ST
+FSEHF ; .50 .45 ; Z
+Polyester Birds Eye Design ; 0 0 ; 2.20 2.00 1.40 2.80 0.90 / 2.45 2.20 1.95 0 0
+Polyester Mesh Design ; 0 0 ; 2.20 2.00 1.40 2.80 0.90 / 2.45 2.20 1.95 0 0
+## Pique Honeycomb SLUB
+- ; .28 .23 ; S
+EHF ; .46 .41 ; Z
+## Pointal Jersey
+- ; .70 .70 ; 1.75 1.55 1.30 2.60 0 / 2.20 2.00 1.75 0 0
+Jacquard ; 2.30 2.20 ; S
+Pointal Design ; .80 .70 ; S
+## Pointtelle Rib
+- ; 1.50 1.45 ; S
+Jacquard ; 2.55 2.50 ; 0 0 2.00 0 0 / 0 0 0 0 0
+## Popcorn Jersey
+- ; 0 .72 ; S
+## Rib (Irregular)
+- ; .50 .45 ; S
+EFF ; .75 .70 ; 0 0 0 0 0 / 2.40 2.00 1.75 0 0
+## RIB 1 x 1
+- ; .25 .20 ; S
+EFF ; .44 .39 ; 1.95 1.75 1.50 3.10 1.00 / 2.40 2.20 1.95 3.10 0
+EHF ; .37 .32 ; 1.95 1.75 1.50 3.10 1.00 / 2.40 2.20 1.95 0 0
+ES ; 2.35 2.30 ; ST
+ESEFF ; 3.05 3.00 ; Z
+ESEHF ; 2.55 2.50 ; Z
+FS ; .37 .32 ; ST
+FSEFF ; .50 .45 ; Z
+FSEHF ; .45 .40 ; Z
+## RIB 1 x 1 Slub
+- ; .35 .30 ; S
+EFF ; .50 .45 ; E
+EHF ; .41 .36 ; E
+ES ; 2.51 2.46 ; ST
+ESEFF ; 3.15 3.10 ; Z
+ESEHF ; 2.65 2.60 ; Z
+FS ; .45 .40 ; ST
+FSEFF ; .57 .52 ; Z
+FSEHF ; .50 .45 ; Z
+## RIB 1 x 1 Viscose
+- ; .31 .26 ; V
+EFF ; .45 .40 ; VE
+EHF ; .40 .35 ; VE
+ES ; 2.45 2.40 ; ST
+ESEFF ; 3.05 3.00 ; Z
+FS ; .45 .40 ; ST
+FSEHF ; .50 .45 ; Z
+## RIB 2 x 1
+- ; .35 .30 ; S
+EFF ; .50 .45 ; E
+EHF ; .45 .40 ; E
+ES ; 3.25 3.20 ; ST
+ESEFF ; 2.50 2.50 ; Z
+ESEHF ; 3.05 3.00 ; Z
+FS ; .37 .32 ; ST
+FSEFF ; .57 .52 ; Z
+FSEHF ; .50 .45 ; Z
+## RIB 2 x 1 Slub
+- ; .37 .32 ; 1.75 1.55 1.30 2.60 0.80 / 2.20 2.00 1.75 2.60 0
+EFF ; .50 .45 ; 1.95 1.75 1.50 2.80 1.00 / 2.40 2.20 1.95 3.10 0
+EHF ; .44 .39 ; 1.95 1.75 1.50 5.60 1.00 / 2.40 2.20 1.95 3.10 0
+ES ; 3.29 3.24 ; 0.5 0.5 0.5 0.5 0.5 / 0.5 0.5 0.5 2.60 0
+ESEFF ; 3.65 3.60 ; Z
+ESEHF ; 3.67 3.62 ; Z
+FS ; .44 .39 ; 0.5 0.5 0.5 0.5 0.5 / 0.5 0.5 0.5 2.60 0
+FSEFF ; .57 .52 ; Z
+FSEHF ; .50 .45 ; Z
+## RIB 2 x 1 Viscose
+- ; .37 .32 ; V
+EFF ; 0 0 ; VE
+EHF ; .50 .45 ; VE
+ES ; 3.41 3.36 ; ST
+ESEFF ; 3.93 3.88 ; Z
+FS ; .44 .39 ; ST
+FSEFF ; .61 .57 ; Z
+FSEHF ; .50 .45 ; Z
+## RIB 2 x 2
+- ; .31 .26 ; S
+EFF ; .50 .45 ; E
+EHF ; .48 .43 ; 1.95 1.75 1.50 2.80 1.00 / 2.40 2.20 1.95 3.10 0
+ES ; 3.29 3.24 ; ST
+ESEFF ; 3.80 3.75 ; Z
+ESEHF ; 3.67 3.62 ; Z
+FS ; .37 .32 ; ST
+FSEFF ; .57 .52 ; Z
+FSEHF ; .50 .45 ; Z
+## RIB 2 x 2 Slub
+- ; .31 .26 ; S
+EFF ; .57 .52 ; E
+EHF ; .50 .45 ; E
+ES ; 3.29 3.24 ; ST
+ESEFF ; 3.80 3.75 ; Z
+ESEHF ; 3.67 3.62 ; Z
+FS ; .37 .32 ; ST
+FSEFF ; .57 .52 ; Z
+FSEHF ; .50 .45 ; Z
+## RIB 2 x 2 Viscose
+- ; .37 .32 ; V
+EFF ; .57 .52 ; VE
+EHF ; .50 .45 ; VE
+ES ; 3.05 3.00 ; 0.5 0.5 0.5 0.5 0.5 / 0.5 0.5 0.5 2.60 0
+ESEFF ; 3.80 3.75 ; Z
+FS ; .44 .39 ; ST
+FSEHF ; .57 .52 ; Z
+## RIB 3 x 1
+EFF ; .55 .50 ; 1.95 0 1.50 0 0.80 / 0 0 0 0 0
+## RIB 3 x 2
+- ; .31 .26 ; S
+EFF ; .50 .45 ; 1.95 1.75 1.50 2.80 0.80 / 2.40 2.20 1.95 0 0
+EHF ; .48 .43 ; E
+ES ; 3.29 3.24 ; ST
+ESEFF ; 3.93 3.88 ; Z
+ESEHF ; 3.67 3.62 ; Z
+FS ; .37 .32 ; ST
+FSEFF ; .57 .52 ; Z
+FSEHF ; .50 .45 ; Z
+## RIB 3 x 2 Slub
+- ; .31 .26 ; S
+EFF ; .57 .52 ; 1.95 1.75 1.50 2.80 0.70 / 2.40 2.20 1.95 0 0
+EHF ; .50 .45 ; E
+ES ; 3.25 3.20 ; ST
+ESEFF ; 3.80 3.75 ; Z
+ESEHF ; 3.55 3.50 ; Z
+FS ; .37 .32 ; ST
+FSEFF ; .57 .52 ; Z
+FSEHF ; .50 .45 ; Z
+## RIB 3 x 2 Viscose
+- ; .37 .32 ; V
+EFF ; .57 .52 ; VE
+EHF ; .50 .45 ; VE
+ES ; 3.35 3.30 ; ST
+ESEFF ; 3.80 3.75 ; Z
+FS ; .44 .39 ; ST
+FSEHF ; .57 .52 ; Z
+## RIB 3 x 3
+- ; .31 .26 ; S
+EFF ; .54 .50 ; 1.95 1.75 1.50 3.10 1.00 / 2.30 2.10 1.85 5.60 0
+## RIB 4 x 2
+- ; .31 .26 ; 1.75 1.55 1.30 2.60 0.80 / 2.20 2.00 1.75 2.60 0
+EFF ; .50 .45 ; E
+EHF ; .48 .43 ; 1.95 1.75 1.50 2.80 1.00 / 2.40 2.20 1.95 3.10 0
+ES ; 3.25 3.20 ; ST
+ESEFF ; 3.80 3.75 ; Z
+ESEHF ; 3.55 3.50 ; Z
+FS ; .37 .32 ; ST
+FSEFF ; .57 .52 ; Z
+FSEHF ; .50 .45 ; Z
+## RIB 4 x 2 Slub
+- ; .31 .26 ; S
+EFF ; .57 .52 ; 1.95 1.75 1.50 2.80 1.00 / 2.40 2.20 1.95 3.10 0
+EHF ; .50 .45 ; E
+ES ; 3.34 3.29 ; ST
+ESEFF ; 3.80 3.75 ; Z
+ESEHF ; 3.77 3.62 ; Z
+FS ; .37 .32 ; ST
+FSEFF ; .57 .52 ; Z
+FSEHF ; .50 .45 ; Z
+## RIB 4 x 2 Viscose
+- ; .37 .32 ; V
+EFF ; .57 .52 ; VE
+EHF ; .50 .45 ; VE
+ES ; 3.25 3.20 ; ST
+ESEFF ; 3.80 3.75 ; Z
+FS ; .44 .39 ; ST
+FSEHF ; .57 .52 ; Z
+## RIB 4 x 3
+- ; .31 .26 ; 1.75 1.55 1.30 2.60 0.80 / 2.20 2.00 1.75 2.60 0
+EFF ; .50 .45 ; 1.95 1.75 1.50 2.80 1.00 / 2.40 2.20 1.95 3.10 0
+EHF ; .48 .43 ; 1.95 1.75 1.50 2.80 1.00 / 2.40 2.20 1.95 3.10 0
+ES ; 3.29 3.24 ; ST
+ESEFF ; 3.93 3.88 ; Z
+ESEHF ; 3.67 3.62 ; Z
+FS ; .37 .32 ; ST
+FSEFF ; .57 .52 ; Z
+FSEHF ; .50 .45 ; Z
+## RIB 4 x 3 Viscose
+- ; .37 .32 ; V
+EFF ; .57 .52 ; VE
+EHF ; .50 .45 ; VE
+ES ; 3.35 3.30 ; ST
+ESEFF ; 3.90 3.85 ; Z
+FS ; .44 .39 ; ST
+FSEHF ; .57 .52 ; Z
+## RIB 4 x 4
+- ; .31 .26 ; S
+EFF ; .50 .45 ; E
+EHF ; .48 .43 ; E
+ES ; 3.30 3.25 ; ST
+ESEFF ; 3.90 3.85 ; Z
+ESEHF ; 3.65 3.60 ; Z
+FS ; .37 .32 ; ST
+FSEFF ; .65 .65 ; Z
+FSEHF ; .50 .45 ; Z
+## RIB 4 x 4 Viscose
+- ; .37 .32 ; V
+EFF ; .57 .52 ; VE
+EHF ; .50 .45 ; VE
+ES ; 3.41 3.36 ; ST
+ESEFF ; 4.05 4.00 ; Z
+FS ; .44 .39 ; ST
+FSEHF ; .57 .52 ; Z
+## RIB 4 x 8
+EFF ; 0 0 ; 1.95 1.75 1.50 2.80 1.00 / 2.40 2.20 1.95 3.10 0
+## RIB 5 x 1
+- ; 0 .40 ; S
+## RIB 5 x 3
+- ; .59 .54 ; 1.75 0 0 0 0 / 0 0 0 0 0
+EFF ; .57 .57 ; 2.00 1.80 1.55 3.15 1.05 / 0 0 0 0 0
+## RIB 5 x 4
+EFF ; .65 .60 ; 2.00 1.80 1.55 3.15 1.05 / 0 0 0 0 0
+## RIB 6 x 4
+EFF ; 0 .55 ; E
+## RIB 7 x 3
+- ; .25 2.20 ; S
+EFF ; .57 .57 ; 2.00 1.80 1.55 3.15 1.05 / 0 0 0 0 0
+Jacquard ; 2.20 2.20 ; 1.75 1.55 1.30 2.60 0.80 / 0 0 0 0 0
+## RIB 8 x 2
+- ; 0 0 ; 0 1.55 1.30 2.60 0.80 / 0 0 0 0 0
+EFF ; .50 .47 ; 1.95 1.75 1.50 2.80 1.00 / 2.40 2.20 1.95 3.10 0
+## RIB 8 x 4
+- ; .50 .45 ; 1.75 1.55 1.30 2.60 0.80 / 2.40 2.20 1.95 3.10 0
+EFF ; .50 .47 ; Z
+## RIB 8 x 8
+- ; 0 0 ; 1.75 1.55 1.30 2.60 0.80 / 0 0 0 0 0
+EFF ; .50 .47 ; 1.95 1.75 1.50 2.80 1.00 / 2.40 2.20 1.95 3.10 0
+## RIB Flat Back
+- ; .75 .70 ; 1.75 1.55 1.30 2.60 0.80 / 2.20 2.00 1.75 0 2.55
+EFF ; .90 .85 ; 2.10 1.90 1.65 2.95 1.15 / 2.55 2.35 2.10 0 2.75
+EHF ; .85 .80 ; 2.10 1.90 1.65 2.95 1.15 / 2.55 2.35 2.10 0 2.75
+## RIB Flat Back Y/D
+- ; 1.00 .95 ; ST
+EFF ; 1.15 1.10 ; 0.7 0.7 0.7 0.7 0.7 / 0.7 0.7 0.7 0 0
+EHF ; .55 .50 ; 2.00 1.90 1.80 0 1.30 / 0 0 0 0 0
+## RIB Flat Back Y/D Polyester
+- ; 1.00 .95 ; ST
+EFF ; 1.15 1.10 ; 0.7 0.7 0.7 0.7 0.7 / 0.7 0.7 0.7 0 0
+## Seersucker Crinkle Jersey
+- ; .60 .55 ; 1.75 1.55 1.30 2.60 0.80 / 2.20 2.00 0 0 0
+Design ; .60 .55 ; 1.75 1.55 1.30 2.60 0.80 / 2.20 2.00 0 0 0
+## Shoulder Tape
+- ; .10 .05 ; 2.35 2.15 1.55 2.60 1.05 / 2.60 2.35 2.10 0 0
+## Single Jersey
+- ; .23 .18 ; S
+Design ; .30 .25 ; S
+EFF ; .35 .30 ; 1.95 1.75 1.50 3.10 1.00 / 2.40 2.20 1.95 0 0
+EHF ; .31 .26 ; 1.95 1.75 1.50 3.10 1.00 / 2.40 2.20 1.95 0 0
+ES ; 1.15 1.10 ; ST
+ESEFF ; 2.15 2.10 ; Z
+ESEHF ; 1.60 1.55 ; Z
+Feeder Missing ; .25 .20 ; 1.75 1.55 1.30 2.60 0.80 / 2.20 2.00 1.75 2.60 0
+FS ; .35 .30 ; ST
+FSEFF ; .45 .40 ; Z
+FSEHF ; .40 .35 ; Z
+Irregular Yarn Compostion ; .30 .25 ; S
+Pique Mixed Design ; .45 .40 ; S
+Pointal Design ; 1.55 1.50 ; S
+Polyester Birds Eye Design ; .45 .40 ; 2.20 2.00 1.40 2.80 0.90 / 2.45 2.20 1.95 0 0
+Polyester Mesh Design ; .50 .45 ; 2.20 2.00 1.40 2.60 0.90 / 2.45 2.20 1.95 0 0
+## Single Jersey Slub
+- ; .25 .20 ; S
+EFF ; .45 .40 ; E
+EHF ; .37 .32 ; E
+ES ; 1.35 1.30 ; ST
+FS ; .31 .26 ; ST
+FSEFF ; .50 .45 ; Z
+FSEHF ; .45 .40 ; Z
+## Single Jersey Viscose
+- ; .25 .20 ; V
+EFF ; .39 .34 ; VE
+EHF ; .33 .28 ; VE
+## Single Lacoste
+- ; .23 .18 ; 1.75 1.55 1.30 2.60 0.80 / 2.20 2.00 1.75 2.60 0
+EFF ; .44 .39 ; 1.95 1.75 1.50 3.10 1.00 / 2.40 2.20 1.95 0 0
+EHF ; .44 .39 ; E
+ES ; 1.80 1.75 ; ST
+ESEHF ; 2.30 2.25 ; Z
+FS ; .31 .26 ; ST
+FSEHF ; .50 .45 ; Z
+## Single Lacoste Slub
+- ; .28 .23 ; S
+EHF ; .50 .45 ; E
+ES ; 2.05 2.00 ; ST
+ESEHF ; 2.45 2.40 ; Z
+FS ; .33 .28 ; ST
+FSEHF ; .57 .52 ; Z
+## Single Lacoste Viscose
+- ; .28 .23 ; V
+EHF ; .46 .41 ; VE
+## Terry Towelling
+- ; .38 .35 ; S
+## Verigated RIB
+- ; .57 .52 ; S
+EFF ; .63 .58 ; E
+EHF ; .70 .65 ; E
+## Waffle / Thermal
+- ; .63 .58 ; S
+Design ; .63 .58 ; S
+EFF ; .85 .80 ; 1.95 1.75 1.50 3.10 1.00 / 2.40 2.20 1.95 0 0
+EHF ; .85 .80 ; 1.95 1.75 1.50 3.10 1.00 / 2.40 2.20 1.95 0 0
+FS ; .70 .65 ; ST
+## Waffle(Random)
+- ; .70 .65 ; 2.10 1.90 1.30 2.60 0.80 / 2.35 2.10 1.85 0 0
+EFF ; .65 .60 ; 1.95 1.75 1.50 3.10 1.00 / 2.40 2.20 1.95 3.10 0
+## Woven Fabric
+- ; 1.35 1.30 ; 0.6 0.6 0.6 0.6 0.6 / 0.6 0.6 0.6 0 0

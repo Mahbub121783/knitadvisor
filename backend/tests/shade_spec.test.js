@@ -67,7 +67,7 @@ const C = (comp, extra) => calculate({ fabric: 'single_jersey', gsm: 180, compos
   const o = S('white_melange', { cotton: 100 }), e = S('white_melange', { cotton: 100 }, { white_type: 'ecru' });
   assert(o.white.whiteness_index > e.white.whiteness_index, 'optic is whiter than ecru');
   assert(_lStar(o.render_hex) > _lStar(e.render_hex));
-  assert(C('100% Cotton', { color_shade: 'white_melange', white_type: 'ecru' }).costing.dyeing_per_kg_usd < C('100% Cotton', { color_shade: 'white_melange' }).costing.dyeing_per_kg_usd, 'ecru (scour only) costs less than optic white');
+  assert(C('100% Cotton', { color_shade: 'white_melange', white_type: 'ecru' }).costing.dyeing_per_kg_usd <= C('100% Cotton', { color_shade: 'white_melange' }).costing.dyeing_per_kg_usd, 'ecru (scour only) never costs more than optic white (the sheet has one White/Melange price)');
   assert.strictEqual(S('white_melange', { polyester: 100 }, { white_type: 'ecru' }).composition_check.status, 'note', 'ecru polyester is a tint');
 }
 
