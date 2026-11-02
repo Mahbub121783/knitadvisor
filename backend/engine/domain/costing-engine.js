@@ -728,6 +728,14 @@ function calculateCost(params) {
     surchargesApplied.push({ name: 'Ecovero Viscose Surcharge', amount: SM_SURCHARGES.ecovero });
   }
 
+  // Route-specific yarn premiums handed in by the caller (e.g. a melange yarn)
+  for (const x of (Array.isArray(params.extra_surcharges) ? params.extra_surcharges : [])) {
+    const amt = parseFloat(x && x.amount);
+    if (!Number.isFinite(amt) || amt === 0) continue;
+    surchargeTotal += amt;
+    surchargesApplied.push({ name: String(x.name || 'Surcharge'), amount: amt });
+  }
+
   const finalYarnPrice = round4(basePrice + surchargeTotal);
 
   // ---- 3b. ELASTANE SEPARATE COST (when composition includes elastane) ----

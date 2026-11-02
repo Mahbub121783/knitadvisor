@@ -1831,7 +1831,13 @@ export class Knit3D {
     const look = finished ? this._finishLook : this._greigeLook;
     const hex = finished || !this._greigeHex ? this._dyeHex : this._greigeHex;
     const target = new THREE.Color(hex);
-    const mel = this._melange ? melangeSplit(target) : null;
+    // the engine's split when the cloth shows its own melange colour;
+    // otherwise (a dye picked in the viewer) split the picked colour
+    const ms = this.opts.melangeSpec;
+    const useSpec = ms && ms.target && String(ms.target).toLowerCase() === String(hex).toLowerCase();
+    const mel = this._melange
+      ? (useSpec ? { dark: new THREE.Color(ms.dark), light: new THREE.Color(ms.light), f: ms.f } : melangeSplit(target))
+      : null;
 
     this._paint(hex, mel);
     applyYarnLook(this._material, look);
@@ -1846,6 +1852,15 @@ export class Knit3D {
       if (mel) { u.uMelF.value = mel.f; u.uMelLight.value.copy(mel.light); }
     }
     if (this._hair && this._hair.update) this._hair.update(look.hair, look.hairLen);
+
+    // A fluorescent dye re-emits absorbed UV/blue as visible light, so a neon
+    // reads brighter than any surface colour can: a little emission, finished
+    // cloth only (the greige is undyed).
+    const glow = finished ? (this.opts.fluoro || 0) : 0;
+    const em = target.clone().multiplyScalar(0.22 * glow);
+    for (const mat of [this._material, this._macro && this._macro.faceMat, this._macro && this._macro.backMat]) {
+      if (mat && mat.emissive) mat.emissive.copy(em);
+    }
 
     const m = this._macro;
     if (m) {

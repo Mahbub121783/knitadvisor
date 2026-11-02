@@ -72,6 +72,7 @@ const { analyzeFleece, isFleeceFamily } = require('./domain/fleece-engine');
 const { analyzePlushTerry, isPlushTerry } = require('./domain/terry-engine');
 const { analyzeStretch } = require('./domain/stretch-engine');
 const { yarnCharacter } = require('./domain/yarn-character');
+const { analyzeShadeSpec } = require('./domain/shade-spec');
 const { loopbackPattern } = require('./domain/terry-loops');
 const { analyzeCriticalPath } = require('./domain/critical-path');
 const { recommendMachine } = require('./domain/machine-optimizer');
@@ -98,6 +99,7 @@ function calculate(params) {
           target_width, yarn_type, twist_multiplier, finishing_route,
           fiber_grade, spinning_system, yarn_form, slub_thickness, slub_length_cm, slub_spacing_cm,
           poly_form, poly_lustre,
+          melange_type, melange_pct, white_type, neon_color,
           denier, filaments, elastane_denier, elastane_pct, dyeing_method, surface_finish,
           light_source, illuminant, shade_depth_pct } = normalizeParams(params);
 
@@ -197,6 +199,29 @@ function calculate(params) {
     );
   }
 
+  // --- 1.62. Shade × composition (shade-spec.js) ---
+  // What the shade really is on THESE fibres: a melange is a fibre blend (its
+  // dark-fibre share is the shade), a neon needs polyester to glow, a white is
+  // one of four processes. Decides the colour every view renders, the dyeing
+  // price row and the yarn premium, and checks the composition fits.
+  let shadeSpec = null;
+  if (effectiveShade && !useDepth) {
+    try {
+      shadeSpec = analyzeShadeSpec({
+        shade: effectiveShade,
+        fibers: parsedComp ? parsedComp.fibers : { cotton: 100 },
+        melange_type, melange_pct, white_type, neon: neon_color,
+        colorHex: colorResolved && colorResolved.hex ? colorResolved.hex : null,
+      });
+    } catch (_) { shadeSpec = null; }
+    if (shadeSpec) {
+      const cc = shadeSpec.composition_check;
+      if (cc && cc.status === 'mismatch') warnings.push(`Colour vs composition: ${cc.message}`);
+      (shadeSpec.warnings || []).forEach((w) => warnings.push(w));
+      trace.push({ step: '1.62', action: 'shade_spec', result: `${shadeSpec.type}${shadeSpec.melange ? ' · ' + shadeSpec.melange.label + ' ' + shadeSpec.melange.dark_fibre_pct + '% ' + shadeSpec.melange.carrier : ''}${shadeSpec.fluorescent ? ' · ' + shadeSpec.fluorescent.label + ' ' + shadeSpec.fluorescent.brightness_pct + '%' : ''} · ${cc ? cc.status : ''}` });
+    }
+  }
+
   // --- 1.65. Fabric optical physics (dye × fibre × construction × finish × light) ---
   // Reflectance shifts so the rendered colour reads as the REAL dyed/finished cloth
   // (drives the 3D/2D visualization material + colour). Always attached so the
@@ -210,7 +235,12 @@ function calculate(params) {
       fluorescent: '#b6ff1a', white_melange: '#eceae4', white: '#eceae4',
       melange: '#8c8c8c', heather: '#8c8c8c', grey: '#8c8c8c', gray: '#8c8c8c',
     };
-    const baseHex = (colorResolved && colorResolved.hex)
+    // a melange renders its fibre blend and a neon what these fibres reach;
+    // otherwise an exact colour wins, then the white process, then the tier
+    const specHex = shadeSpec && shadeSpec.render_hex;
+    const baseHex = (shadeSpec && (shadeSpec.type === 'melange' || shadeSpec.type === 'fluorescent') && specHex)
+      || (colorResolved && colorResolved.hex)
+      || (shadeSpec && shadeSpec.type === 'white' && specHex)
       || SHADE_HEX[(effectiveShade || '').toString().toLowerCase()] || '#3f7fc4';
 
     // map fabric id → CONSTRUCTION_PHYSICS key
@@ -984,7 +1014,7 @@ function calculate(params) {
       fabric: fabricDef.id,
       category: fabricDef.category,
       finish_gsm: gsm,
-      shade: colorResult ? colorResult.shade : 'medium',
+      shade: (shadeSpec && shadeSpec.wet_shade) || (colorResult ? colorResult.shade : 'medium'),
       dyeing_method: dyeing_method,
       fibers: fib,
       spinning: spinning_system || (yarnExpertise ? yarnExpertise.spinning_system : null),
@@ -1068,7 +1098,8 @@ function calculate(params) {
     gsm,
     count_ne: costCountNe || 30,
     gauge: gauge || fabricDef.typical_gauge || 24,
-    color_shade: color_shade,
+    color_shade: (shadeSpec && shadeSpec.costing_shade) || color_shade,
+    extra_surcharges: shadeSpec && shadeSpec.extra_surcharges ? shadeSpec.extra_surcharges : [],
     parsedComp,
     is_warp_knit: fabricDef.category === 'warp_knit',
     denier: fabricDef.category === 'warp_knit' ? (denier || warpKnitSpec?.denier_estimated || 70) : null,
@@ -1486,6 +1517,8 @@ function calculate(params) {
     // Stretch and recovery per direction, grain under load, open area — the
     // load–extension curve the 3D stretch test plays (stretch-engine.js).
     stretch: stretchResult,
+    // Shade × composition: melange route, neon brightness, white process, fit check
+    shade_spec: shadeSpec,
     critical_path: cpaResult || null,
 
     // Net-to-gross fabric consumption + full CMT/FOB estimate — null unless
@@ -1552,6 +1585,8 @@ const ENGINE_INPUTS = Object.freeze([
   'slub_thickness', 'slub_length_cm', 'slub_spacing_cm',
   // polyester: spun staple / textured / flat filament, and bright / semi-dull / full-dull
   'poly_form', 'poly_lustre',
+  // colour route: melange type and dark-fibre %, white type, neon hue
+  'melange_type', 'melange_pct', 'white_type', 'neon_color',
   // wet processing
   'finishing_route', 'dyeing_method', 'surface_finish',
   // costing
@@ -1603,6 +1638,10 @@ function normalizeParams(p) {
     spinning_system: p.spinning_system ? String(p.spinning_system).trim() : null,
     yarn_form: p.yarn_form ? String(p.yarn_form).trim() : null,
     poly_form: p.poly_form ? String(p.poly_form).trim() : null,
+    melange_type: p.melange_type ? String(p.melange_type).trim().toLowerCase() : null,
+    melange_pct: p.melange_pct != null && p.melange_pct !== '' ? parseFloat(p.melange_pct) : null,
+    white_type: p.white_type ? String(p.white_type).trim().toLowerCase() : null,
+    neon_color: p.neon_color ? String(p.neon_color).trim().toLowerCase() : null,
     poly_lustre: p.poly_lustre ? String(p.poly_lustre).trim() : null,
     slub_thickness: p.slub_thickness ? parseFloat(p.slub_thickness) : null,
     slub_length_cm: p.slub_length_cm ? parseFloat(p.slub_length_cm) : null,

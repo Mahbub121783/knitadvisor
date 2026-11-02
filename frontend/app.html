@@ -302,9 +302,58 @@
     .shade-btn[data-shade="medium"] .shade-swatch { background: #808080; border-color: #aaa; }
     .shade-btn[data-shade="light"] .shade-swatch  { background: #f0f0f0; border-color: #ccc; }
     .shade-btn:hover { border-color: rgba(24,87,196,.35); color: var(--t1); background: rgba(24,87,196,.04); }
-    .shade-btn.active[data-shade="dark"]   { border-color: #555; background: rgba(50,50,50,.25); color: #ccc; }
-    .shade-btn.active[data-shade="medium"] { border-color: rgba(24,87,196,.5); background: rgba(24,87,196,.07); color: var(--a1); }
-    .shade-btn.active[data-shade="light"]  { border-color: rgba(255,255,255,.4); background: rgba(255,255,255,.06); color: #fff; }
+    /* Selected: unmistakable — accent ring, tint, tick. "Auto" = the tier the
+       exact colour above resolves to (dashed, until a button is chosen). */
+    .shade-btn { position: relative; }
+    .shade-btn.active {
+      border-color: var(--a1, #1857C4); border-width: 2px; color: var(--t1);
+      background: rgba(24,87,196,.07); box-shadow: 0 0 0 3px rgba(24,87,196,.14);
+    }
+    .shade-btn.active::after {
+      content: '✓'; position: absolute; top: 6px; right: 7px; width: 18px; height: 18px; border-radius: 50%;
+      background: var(--a1, #1857C4); color: #fff; font: 700 11px/18px var(--head, sans-serif); text-align: center;
+    }
+    .shade-btn.active .shade-swatch { transform: scale(1.12); box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--a1, #1857C4); }
+    .shade-btn .shade-swatch { transition: transform .15s, box-shadow .15s; }
+    .shade-btn.auto:not(.active) { border-style: dashed; border-color: rgba(24,87,196,.55); color: var(--t1); }
+    .shade-btn.auto:not(.active)::after {
+      content: 'auto'; position: absolute; top: 5px; right: 6px; font: 600 9px/1 var(--head, sans-serif);
+      color: var(--a1, #1857C4); background: rgba(24,87,196,.08); padding: 3px 5px; border-radius: 4px;
+    }
+    .shade-btn[data-shade="fluorescent"] .shade-swatch { box-shadow: 0 0 10px 2px rgba(182,255,26,.55); }
+
+    /* Shade detail: the route behind the chosen shade, and the live check */
+    .sd { margin-top: 10px; border: 1px solid var(--line2); border-radius: 12px; padding: 12px; background: var(--bg2, #fff); }
+    .sd[hidden] { display: none; }
+    .sd-row-label { font-size: 10.5px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: var(--t3); margin: 2px 0 6px; }
+    .sd-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+    .sd-chip { display: inline-flex; align-items: center; gap: 6px; font: 600 12px var(--head, sans-serif); padding: 6px 11px; border-radius: 99px;
+      border: 1.5px solid var(--line2); background: var(--bg2, #fff); color: var(--t2); cursor: pointer; }
+    .sd-chip i { width: 14px; height: 14px; border-radius: 50%; border: 1px solid rgba(0,0,0,.15); display: inline-block; }
+    .sd-chip.on { border-color: var(--a1, #1857C4); color: var(--a1, #1857C4); background: rgba(24,87,196,.07); }
+    .sd-slider { display: flex; align-items: center; gap: 10px; margin: 2px 0 10px; }
+    .sd-slider input[type=range] { flex: 1; accent-color: var(--a1, #1857C4); }
+    .sd-slider b { font: 700 13px var(--mono, monospace); min-width: 64px; text-align: right; color: var(--t1); }
+    .sd-result { display: grid; grid-template-columns: 74px 1fr; gap: 12px; align-items: start; }
+    .sd-sw { width: 74px; height: 74px; border-radius: 10px; border: 1px solid rgba(0,0,0,.12); background: #ccc; position: relative; overflow: hidden; }
+    .sd-sw.mel { background-size: 6px 6px; }
+    .sd-sw.glow { box-shadow: 0 0 16px 3px var(--glow, transparent); }
+    .sd-status { display: inline-flex; align-items: center; gap: 6px; font: 700 11px var(--head, sans-serif); letter-spacing: .3px; padding: 3px 9px; border-radius: 99px; margin-bottom: 6px; }
+    .sd-status.ok { color: #1E7A54; background: rgba(30,122,84,.09); }
+    .sd-status.note { color: #9A5B00; background: rgba(154,91,0,.09); }
+    .sd-status.mismatch { color: #B23B3B; background: rgba(178,59,59,.09); }
+    .sd-msg { font-size: 12.5px; line-height: 1.55; color: var(--t1); }
+    .sd-lines { font-size: 11.5px; line-height: 1.6; color: var(--t2); margin-top: 6px; }
+    .sd-lines div::before { content: '·'; color: var(--t3); margin-right: 6px; }
+    .sd-lines .sd-meter::before { content: none; }
+    .sd-fix { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .sd-fix button { font: 600 12px var(--head, sans-serif); padding: 7px 11px; border-radius: 8px; border: 1px solid var(--a1, #1857C4);
+      background: var(--a1, #1857C4); color: #fff; cursor: pointer; }
+    .sd-fix button.alt { background: #fff; color: var(--a1, #1857C4); }
+    .sd-fix small { display: block; font-weight: 400; font-size: 10.5px; opacity: .85; }
+    .sd-meter { height: 7px; border-radius: 99px; background: var(--bg4, #e9ecef); overflow: hidden; margin-top: 6px; }
+    .sd-meter i { display: block; height: 100%; border-radius: 99px; }
+    @media (max-width: 520px) { .sd-result { grid-template-columns: 56px 1fr; } .sd-sw { width: 56px; height: 56px; } }
     .shade-hint {
       font-size: 9.5px;
       color: var(--t3);
@@ -641,7 +690,24 @@
             </button>
           </div>
           <input type="hidden" id="color-input" value="">
+          <input type="hidden" id="melange-type-input" value="">
+          <input type="hidden" id="melange-pct-input" value="">
+          <input type="hidden" id="white-type-input" value="">
+          <input type="hidden" id="neon-input" value="">
           <div class="shade-hint" id="shade-hint"></div>
+
+          <div class="sd" id="shade-detail" hidden>
+            <div id="sd-controls"></div>
+            <div class="sd-result">
+              <div class="sd-sw" id="sd-sw" title="What the cloth will look like"></div>
+              <div>
+                <div class="sd-status" id="sd-status">Checking…</div>
+                <div class="sd-msg" id="sd-msg"></div>
+                <div class="sd-lines" id="sd-lines"></div>
+                <div class="sd-fix" id="sd-fix"></div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Shade Depth — continuous %OWF (dye concentration), overrides the 6-tier buttons above -->
@@ -1094,6 +1160,10 @@ const PREFILL_FIELD_MAP = {
   yarn_form: 'yarn-form-input',
   poly_form: 'poly-form-input',
   poly_lustre: 'poly-lustre-input',
+  melange_type: 'melange-type-input',
+  melange_pct: 'melange-pct-input',
+  white_type: 'white-type-input',
+  neon_color: 'neon-input',
   feeder_type: 'feeder-type-input',
   finishing_route: 'finishing-route-input',
   dyeing_method: 'dyeing-method-input',
@@ -1618,13 +1688,192 @@ function setComp(val, btn) {
   document.querySelectorAll('#comp-chips .comp-chip').forEach(c => c.classList.remove('active'));
   if (btn) btn.classList.add('active');
   syncYarnPanel();
+  if (typeof scheduleShadeCheck === 'function') scheduleShadeCheck();
 }
 
 const SHADE_HINTS = {
-  dark:   'Grey GSM will be knit ~4% below target. SL set looser. Dye uptake brings final GSM to target.',
-  medium: 'Grey GSM knit ~1.5% below target. Standard SL. Normal dye uptake.',
-  light:  'Minimal dye uptake. Knit at target GSM. SL set slightly tighter.',
+  black:         'Deepest dye load (8-10% on cotton): grey GSM knit ~4-5% under the finish target, stitch length set looser.',
+  dark_navy:     'Heavy dye load: grey GSM knit ~4% under target, stitch length a little looser.',
+  light_medium:  'Normal dye load: grey GSM knit ~1.5% under target, standard stitch length.',
+  fluorescent:   'A neon needs a fluorescent dye — and the fibre decides how much it can glow. Pick the neon below.',
+  white_melange: 'No dye mass: knit close to the finish GSM, stitch length a little tighter. Pick the white below.',
+  melange:       'The colour is in the fibre, not dyed: the dark-fibre share IS the shade. Pick the melange below.',
+  dark: 'Heavy dye load: grey GSM knit ~4% under target.', medium: 'Normal dye load.', light: 'Minimal dye load.',
 };
+
+
+/* ============================================================
+   SHADE DETAIL — the route behind the shade, checked live against
+   the composition (GET /api/color/shade-check). Melange: type + dark
+   fibre %; fluorescent: which neon; white: which white; dyed tiers:
+   quick colour families that fill the exact-colour box above.
+   ============================================================ */
+const MEL_TYPES = [
+  ['ecru', 'Ecru', 2, 1, 4, '#E2DCCB'], ['grey', 'Grey', 10, 5, 20, '#B5B3AE'], ['anthra', 'Anthra', 30, 25, 45, '#7F7E7A'],
+  ['charcoal', 'Charcoal', 55, 46, 70, '#55544F'], ['black', 'Black', 85, 71, 95, '#2D2C2D'], ['color', 'Colour', 30, 10, 80, 'linear-gradient(135deg,#1F2D5C 50%,#E9E5DA 50%)'],
+];
+const NEON_LIST = [['yellow', 'Yellow', '#E5FF00'], ['lime', 'Lime', '#B6FF1A'], ['green', 'Green', '#3DFF2E'], ['orange', 'Orange', '#FF6A13'],
+  ['pink', 'Pink', '#FF2D95'], ['magenta', 'Magenta', '#F21BD0'], ['red', 'Red', '#FF2E3B']];
+const WHITE_LIST = [['optic', 'Optic white', '#F7F9FF'], ['bleached', 'Bleached (no OBA)', '#F3F2EC'], ['ivory', 'Ivory / off-white', '#F1EBDC'], ['ecru', 'Ecru / natural', '#E9E1CE']];
+const FAMILIES = {
+  light_medium: [['Sky blue', '#6FA8DC'], ['Royal', '#2F5DB8'], ['Red', '#C8102E'], ['Pink', '#F28CB1'], ['Mint', '#98D8B5'], ['Lilac', '#B39DDB'], ['Yellow', '#F5D547'], ['Peach', '#F4B08C'], ['Light grey', '#B7BABE']],
+  dark_navy: [['Navy', '#1F2A44'], ['Maroon', '#5C1A2B'], ['Bottle green', '#1E4D2B'], ['Charcoal', '#36393F'], ['Chocolate', '#4A2E22'], ['Purple', '#3E2A5C'], ['Teal', '#14535B']],
+  black: [['Jet black', '#111111'], ['Off-black', '#232323']],
+};
+
+function shadeIs(k) { return document.getElementById('color-input').value === k; }
+
+function sdChip(label, attrs, on, dot) {
+  return `<button type="button" class="sd-chip${on ? ' on' : ''}" ${attrs}>${dot ? `<i style="background:${dot}"></i>` : ''}${label}</button>`;
+}
+
+function renderShadeDetail() {
+  const box = document.getElementById('shade-detail');
+  const shade = document.getElementById('color-input').value;
+  const ctl = document.getElementById('sd-controls');
+  if (!shade) { box.hidden = true; return; }
+  box.hidden = false;
+  let html = '';
+  if (shade === 'melange') {
+    const mt = document.getElementById('melange-type-input').value;
+    html += `<div class="sd-row-label">Melange</div><div class="sd-chips">` +
+      sdChip('Auto (from composition)', 'data-mt=""', !mt) +
+      MEL_TYPES.map(([k, l, , , , sw]) => sdChip(l, `data-mt="${k}"`, mt === k, sw)).join('') + '</div>';
+    const T = MEL_TYPES.find(t => t[0] === mt);
+    const pct = document.getElementById('melange-pct-input').value;
+    if (T) {
+      const v = pct || T[2];
+      html += `<div class="sd-row-label">Dark fibre share</div><div class="sd-slider"><input type="range" id="sd-mpct" min="${T[3]}" max="${T[4]}" step="1" value="${v}"><b id="sd-mpct-v">${v}%</b></div>`;
+    }
+  } else if (shade === 'fluorescent') {
+    const n = document.getElementById('neon-input').value;
+    html += `<div class="sd-row-label">Which neon</div><div class="sd-chips">` +
+      NEON_LIST.map(([k, l, hx]) => sdChip(l, `data-neon="${k}"`, n === k, hx)).join('') + '</div>';
+  } else if (shade === 'white_melange') {
+    const w = document.getElementById('white-type-input').value || 'optic';
+    html += `<div class="sd-row-label">Which white</div><div class="sd-chips">` +
+      WHITE_LIST.map(([k, l, hx]) => sdChip(l, `data-white="${k}"`, w === k, hx)).join('') + '</div>';
+  } else if (FAMILIES[shade]) {
+    html += `<div class="sd-row-label">Colour <span style="text-transform:none;font-weight:400;letter-spacing:0">(fills the exact colour above; optional)</span></div><div class="sd-chips">` +
+      FAMILIES[shade].map(([l, hx]) => sdChip(l, `data-fam="${hx}"`, false, hx)).join('') + '</div>';
+  }
+  ctl.innerHTML = html;
+  const r = document.getElementById('sd-mpct');
+  if (r) r.addEventListener('input', () => {
+    document.getElementById('sd-mpct-v').textContent = r.value + '%';
+    document.getElementById('melange-pct-input').value = r.value;
+    scheduleShadeCheck();
+  });
+  scheduleShadeCheck();
+}
+
+let _sdTimer = null, _sdSeq = 0;
+function scheduleShadeCheck() { clearTimeout(_sdTimer); _sdTimer = setTimeout(runShadeCheck, 220); }
+
+async function runShadeCheck() {
+  const shade = document.getElementById('color-input').value;
+  if (!shade) return;
+  const p = new URLSearchParams({ shade });
+  const comp = document.getElementById('comp-input').value; if (comp) p.set('composition', comp);
+  const add = (k, id) => { const v = document.getElementById(id).value; if (v) p.set(k, v); };
+  add('color', 'color-engine-input');
+  if (shade === 'melange') { add('melange_type', 'melange-type-input'); add('melange_pct', 'melange-pct-input'); }
+  if (shade === 'white_melange') add('white_type', 'white-type-input');
+  if (shade === 'fluorescent') add('neon', 'neon-input');
+  const seq = ++_sdSeq;
+  let data = null;
+  try {
+    const res = await fetch('/api/color/shade-check?' + p.toString(), { credentials: 'same-origin' });
+    data = res.ok ? await res.json() : null;
+  } catch (_) { data = null; }
+  if (seq !== _sdSeq) return;              // a newer check has started
+  paintShadeCheck(data && data.spec, data && data.composition);
+}
+
+function paintShadeCheck(spec, compLabel) {
+  const st = document.getElementById('sd-status'), msg = document.getElementById('sd-msg');
+  const lines = document.getElementById('sd-lines'), fix = document.getElementById('sd-fix'), sw = document.getElementById('sd-sw');
+  if (!spec) { st.className = 'sd-status note'; st.textContent = 'Check unavailable'; msg.textContent = 'The live check could not run; the calculation will still check it.'; lines.innerHTML = ''; fix.innerHTML = ''; return; }
+  const cc = spec.composition_check || { status: 'ok', message: '' };
+  st.className = 'sd-status ' + cc.status;
+  st.textContent = cc.status === 'ok' ? '✓ Fits ' + (compLabel || 'the composition') : cc.status === 'note' ? 'Note · ' + (compLabel || '') : '✗ Does not fit ' + (compLabel || 'the composition');
+  msg.textContent = cc.message || '';
+  const L = [];
+  sw.className = 'sd-sw'; sw.style.cssText = '';
+  if (spec.melange) {
+    const m = spec.melange;
+    // a fleck of the two fibres, in their real proportion
+    const dk = Math.round((1 - m.light_fraction) * 100);
+    sw.classList.add('mel');
+    sw.style.background = `radial-gradient(circle at 30% 30%, ${m.dark_hex} 0 18%, transparent 19%) 0 0/${dk > 50 ? 4 : 6}px ${dk > 50 ? 4 : 6}px, ${m.target_hex}`;
+    L.push(`${m.label}: ${m.dark_fibre_pct}% ${m.carrier_label} — ${m.about}`);
+    L.push(m.method.charAt(0).toUpperCase() + m.method.slice(1) + '.');
+    if (m.yarn_premium_usd) L.push(`Melange yarn premium about +$${m.yarn_premium_usd.toFixed(2)}/kg.`);
+    (m.notes || []).forEach(n => L.push(n));
+  } else if (spec.fluorescent) {
+    const f = spec.fluorescent;
+    sw.style.background = f.achieved_hex;
+    sw.classList.add('glow'); sw.style.setProperty('--glow', f.brightness_pct >= 85 ? f.achieved_hex : 'transparent');
+    L.push(`Brightness on these fibres: <b>${f.brightness_pct}%</b> of a polyester neon<div class="sd-meter"><i style="width:${f.brightness_pct}%;background:${f.achieved_hex}"></i></div>`);
+    L.push(`Light fastness about ${f.light_fastness} (of 8). Hi-vis: ${f.hi_vis.possible ? 'can be certified' : f.hi_vis.colour_qualifies ? 'not on this composition' : 'not a hi-vis colour'}.`);
+    L.push('Dye: ' + f.dye_classes.join('; ') + '.');
+    (f.notes || []).forEach(n => L.push(n));
+  } else if (spec.white) {
+    const w = spec.white;
+    sw.style.background = w.hex;
+    L.push(`${w.label} · whiteness index about ${w.whiteness_index}.`);
+    (w.notes || []).forEach(n => L.push(n));
+  } else if (spec.dyed) {
+    const hex = document.getElementById('color-engine-input').value ? (document.getElementById('ce-swatch').style.background || '') : '';
+    sw.style.background = hex || ({ black: '#151515', dark_navy: '#1F2A44', light_medium: '#4A8FCC' }[spec.shade] || '#888');
+    (spec.dyed.notes || []).forEach(n => L.push(n));
+  }
+  (spec.warnings || []).forEach(w => L.push('<span style="color:#9A5B00">' + w + '</span>'));
+  lines.innerHTML = L.map(t => `<div>${t}</div>`).join('');
+  fix.innerHTML = (cc.suggestions || []).map((x, i) =>
+    `<button type="button" class="${i ? 'alt' : ''}" data-fix-comp="${x.composition || ''}" data-fix-mt="${x.melange_type || ''}">${x.label}${x.why ? `<small>${x.why}</small>` : ''}</button>`).join('');
+}
+
+document.addEventListener('click', (e) => {
+  const c = e.target.closest('#shade-detail [data-mt], #shade-detail [data-neon], #shade-detail [data-white], #shade-detail [data-fam], #sd-fix button');
+  if (!c) return;
+  if (c.hasAttribute('data-mt')) {
+    document.getElementById('melange-type-input').value = c.dataset.mt;
+    document.getElementById('melange-pct-input').value = '';
+    renderShadeDetail();
+  } else if (c.hasAttribute('data-neon')) {
+    document.getElementById('neon-input').value = c.dataset.neon; renderShadeDetail();
+  } else if (c.hasAttribute('data-white')) {
+    document.getElementById('white-type-input').value = c.dataset.white; renderShadeDetail();
+  } else if (c.hasAttribute('data-fam')) {
+    const t = document.getElementById('ce-text');
+    t.value = c.dataset.fam;
+    t.dispatchEvent(new Event('input', { bubbles: true }));
+    t.dispatchEvent(new Event('change', { bubbles: true }));
+    setTimeout(scheduleShadeCheck, 400);
+  } else if (c.dataset.fixComp) {
+    setComp(c.dataset.fixComp, null);
+    document.querySelectorAll('#comp-chips .comp-chip').forEach(ch => {
+      const m = (ch.getAttribute('onclick') || '').match(/setComp\('([^']*)'/);
+      ch.classList.toggle('active', !!m && m[1] === c.dataset.fixComp);
+    });
+    scheduleShadeCheck();
+  } else if (c.dataset.fixMt) {
+    document.getElementById('melange-type-input').value = c.dataset.fixMt;
+    document.getElementById('melange-pct-input').value = '';
+    renderShadeDetail();
+  }
+});
+document.addEventListener('DOMContentLoaded', () => {
+  const c = document.getElementById('comp-input');
+  if (c) c.addEventListener('input', scheduleShadeCheck);
+  renderShadeDetail();
+});
+
+// The tier an exact colour resolves to is marked on its button ("auto")
+function markAutoShade(tier) {
+  document.querySelectorAll('.shade-btn').forEach(b => b.classList.toggle('auto', !!tier && b.dataset.shade === tier));
+}
 
 function setShade(val, btn) {
   const current = document.getElementById('color-input').value;
@@ -1633,12 +1882,14 @@ function setShade(val, btn) {
     document.getElementById('color-input').value = '';
     document.getElementById('shade-hint').textContent = '';
     document.querySelectorAll('.shade-btn').forEach(c => c.classList.remove('active'));
+    renderShadeDetail();
     return;
   }
   document.getElementById('color-input').value = val;
   document.querySelectorAll('.shade-btn').forEach(c => c.classList.remove('active'));
   if (btn) btn.classList.add('active');
   document.getElementById('shade-hint').textContent = SHADE_HINTS[val] || '';
+  renderShadeDetail();
 }
 
 /* ============================================================
@@ -1694,7 +1945,7 @@ function onDepthInput(val) {
     preview.hidden = true;
     hidden.value = '';
     lastResolved = null;
-    hintEl.textContent = 'Pick an exact color to drive a true-to-life dyed-fabric preview. Leave empty to use only the Color Shade mode below.';
+    hintEl.textContent = 'Pick an exact color to drive a true-to-life dyed-fabric preview. Leave empty to use only the Color Shade mode below.';    if (typeof markAutoShade === 'function') { markAutoShade(null); scheduleShadeCheck(); }
   }
 
   function showPreview(c, rawInput) {
@@ -1717,6 +1968,7 @@ function onDepthInput(val) {
     chipsEl.innerHTML = chips.map(t => `<span class="ce-chip">${t}</span>`).join('');
     preview.hidden = false;
     try { picker.value = c.hex; } catch (_) {}
+    if (typeof markAutoShade === 'function') { markAutoShade(c.shade_tier); scheduleShadeCheck(); }
     const shadeMode = document.getElementById('color-input').value;
     hintEl.textContent = shadeMode
       ? `Visualization will use this exact color; shade-mode math uses "${shadeMode}".`
@@ -1859,6 +2111,10 @@ async function doCalculate() {
     gsm,
     composition: document.getElementById('comp-input').value || undefined,
     color_shade: document.getElementById('color-input').value || undefined,
+    melange_type: shadeIs('melange') ? (document.getElementById('melange-type-input').value || undefined) : undefined,
+    melange_pct: shadeIs('melange') && document.getElementById('melange-pct-input').value ? parseFloat(document.getElementById('melange-pct-input').value) : undefined,
+    white_type: shadeIs('white_melange') ? (document.getElementById('white-type-input').value || undefined) : undefined,
+    neon_color: shadeIs('fluorescent') ? (document.getElementById('neon-input').value || undefined) : undefined,
     color_input: document.getElementById('color-engine-input').value || undefined,
     shade_depth_pct: document.getElementById('depth-toggle').checked
       ? parseFloat(document.getElementById('depth-number').value) : undefined,

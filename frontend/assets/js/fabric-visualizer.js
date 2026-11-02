@@ -1022,9 +1022,13 @@ class FabricVisualizer {
   // Melange / heather / marl: a yarn spun from a mix of differently coloured
   // fibres — from the shade choice or the resolved colour's name.
   _isMelange() {
+    // the engine knows: a melange is a fibre blend; "white_melange" is the
+    // white tier's old name, not a melange
+    const spec = this.result.shade_spec;
+    if (spec) return spec.type === 'melange';
     const inp = this.result.input || {};
     const s = [inp.color_shade, inp.effective_shade, (this.result.color || {}).shade,
-      (this.result.color_resolved || {}).name].filter(Boolean).join(' ').toLowerCase();
+      (this.result.color_resolved || {}).name].filter(Boolean).join(' ').toLowerCase().replace(/white_melange/g, 'white');
     return /melange|heather|marl/.test(s);
   }
 
@@ -1130,6 +1134,8 @@ class FabricVisualizer {
       gsm: opts.gsm, elastanePct: (this.result.yarn || {}).elastane_pct || 0,
       dyeMethod: (this.result.wet_processing || {}).dyeing_method || null,
       melange: this._isMelange(),
+      melangeSpec: this._melangeSpec(),
+      fluoro: this._fluoro(),
       yarnLook: this._yarnLook(),
     };
     const fail = () => { holder.remove(); this._photoFailed = true; this._renderRealisticView(); };
@@ -1195,6 +1201,21 @@ class FabricVisualizer {
   // yarn analysis: open-end is bulky, hairy and matt; compact is smooth
   // with few protruding fibres and more lustre; vortex sits lowest of all
   // on hairiness. Uster hairiness H (a ring yarn is ~5-6) scales it.
+  // The engine's melange split (shade-spec.js): the two fibre colours and
+  // the light share, against the colour the cloth renders at
+  _melangeSpec() {
+    const m = (this.result.shade_spec || {}).melange;
+    if (!m) return null;
+    const phys = (this.result.fabric_physics || {}).rendered_color;
+    return { dark: m.dark_hex, light: m.light_view_hex || m.light_hex, f: m.light_fraction, target: (phys && phys.hex) || m.target_hex };
+  }
+
+  // A fluorescent dye re-emits light: 0 (cotton, barely) … 1 (polyester neon)
+  _fluoro() {
+    const f = (this.result.shade_spec || {}).fluorescent;
+    return f ? Math.max(0, Math.min(1, (f.brightness_pct - 45) / 55)) : 0;
+  }
+
   _yarnLook() {
     // From the engine (yarn-character.js): spinning system x fibre x yarn form
     // x polyester form and lustre, as the yarn is really drawn.
@@ -2538,6 +2559,8 @@ class FabricVisualizer {
       // drive the manual stretch test
       stretch: this.result.stretch || null,
       yarnLook: this._yarnLook(),
+      melangeSpec: this._melangeSpec(),
+      fluoro: this._fluoro(),
     };
 
     import('/assets/js/knit3d/index.js?v=20260608g').then(({ Knit3D, LIGHT_PRESETS, LIGHT_PRESET_ORDER }) => {

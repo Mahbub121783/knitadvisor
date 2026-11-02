@@ -15,6 +15,8 @@ const crypto = require('crypto');
 const router = express.Router();
 
 const { calculate, getAllFabrics, ENGINE_INPUTS } = require('../engine/index');
+const { analyzeShadeSpec } = require('../engine/domain/shade-spec');
+const { parseComposition } = require('../engine/domain/composition-engine');
 const { UnitConverter, FabricWeightFormulas, YarnCountFormulas, WeftCalculators } = require('../engine/formulas');
 const { FAULTS_DATABASE, diagnoseFaults } = require('../engine/domain/faults-engine');
 const providerManager = require('../ai/provider-manager-v2');
@@ -1177,6 +1179,36 @@ router.get('/color/preview', (req, res) => {
     res.json({ success: true, input, color: preview });
   } catch (err) {
     res.status(500).json({ error: 'Color engine failure', detail: err.message });
+  }
+});
+
+// GET /api/color/shade-check?shade=&composition=&melange_type=&melange_pct=&white_type=&neon=&color=
+// The calculator's live check: what this shade is on these fibres, whether
+// the composition fits, and what the cloth will look like.
+router.get('/color/shade-check', (req, res) => {
+  const q = (k) => (req.query[k] == null ? '' : String(req.query[k]).slice(0, 120).trim());
+  const shade = q('shade').toLowerCase();
+  if (!shade) return res.status(400).json({ error: 'shade query param is required' });
+  try {
+    const comp = q('composition');
+    const parsed = comp ? parseComposition(comp) : null;
+    let colorHex = null;
+    const color = q('color');
+    if (color) {
+      try { const c = colorEngine.getColorPreview(color); colorHex = c && c.hex ? c.hex : null; } catch (_) { colorHex = null; }
+    }
+    const spec = analyzeShadeSpec({
+      shade,
+      fibers: parsed && parsed.fibers ? parsed.fibers : { cotton: 100 },
+      melange_type: q('melange_type').toLowerCase() || null,
+      melange_pct: q('melange_pct') ? parseFloat(q('melange_pct')) : null,
+      white_type: q('white_type').toLowerCase() || null,
+      neon: q('neon').toLowerCase() || null,
+      colorHex,
+    });
+    res.json({ success: true, composition: parsed ? parsed.display : '100% Cotton (assumed)', spec });
+  } catch (err) {
+    res.status(500).json({ error: 'Shade check failure', detail: err.message });
   }
 });
 
