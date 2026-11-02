@@ -228,6 +228,8 @@ function yarnCharacter(a = {}) {
   // ── what the Realistic and 3D views draw ────────────────────────────────
   const look = {
     hairAbs: r2(hair),
+    // longer protruding fibres on a hairy yarn, short and few on a clean one
+    hairLen: r2(clamp(0.55 + 0.45 * hair, 0.5, 1.5)),
     gloss: r2(sysGloss),
     bulk: r2(bulk),
     ply: FORM_LOOK[form].ply,

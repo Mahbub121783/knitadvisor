@@ -103,4 +103,20 @@ const ex = (r) => r.yarn.expertise;
   assert(ENGINE_INPUTS.includes('poly_lustre') && ENGINE_INPUTS.includes('poly_form'), 'poly inputs are on the whitelist');
 }
 
+
+// 8. better yarn, finer and cleaner: the effective tightness, open area and
+//    stitch definition follow the yarn type
+{
+  const cov = (sp) => calculate({ fabric: 'single_jersey', gsm: 160, composition: '100% Cotton', efficiency: 85, spinning_system: sp }).yarn.character.cover;
+  const k = cov('carded'), b = cov('combed'), c = cov('compact'), sc = cov('siro_compact');
+  assert(k.tf_effective > b.tf_effective && b.tf_effective > c.tf_effective && c.tf_effective > sc.tf_effective, 'carded fuller (higher effective TF), compact slimmer');
+  assert(k.open_area_pct < b.open_area_pct && sc.open_area_pct > b.open_area_pct, 'hairy carded closes the cloth, siro-compact leaves it open');
+  assert.strictEqual(b.tf_effective, b.tf_geometric, 'combed ring is the reference');
+  assert(c.stitch_definition === 'crisp' && /soft/.test(k.stitch_definition));
+  const r = calculate({ fabric: 'single_jersey', gsm: 160, composition: '100% Cotton', efficiency: 85, spinning_system: 'compact' });
+  assert(r.physical_constraints.effective && r.physical_constraints.effective.tf_effective < r.physical_constraints.tightness_factor, 'the result card gets the effective TF');
+  assert(r.yarn.character.look.hairLen < calculate({ fabric: 'single_jersey', gsm: 160, composition: '100% Cotton', efficiency: 85, spinning_system: 'carded' }).yarn.character.look.hairLen, 'shorter fibre ends on a compact yarn');
+  console.log(`  Effective TF: carded ${k.tf_effective}, combed ${b.tf_effective}, compact ${c.tf_effective}, siro-compact ${sc.tf_effective}; open area ${k.open_area_pct}/${b.open_area_pct}/${c.open_area_pct}/${sc.open_area_pct}%`);
+}
+
 console.log('\nAll yarn character tests passed.');

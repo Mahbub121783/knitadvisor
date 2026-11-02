@@ -540,3 +540,45 @@ export function fibreSurfaceTexture(kind, aniso) {
 // Deterministic phase for the cloth's undulation, so a fabric always lies
 // the same way.
 export function wavePhase(seed) { return hash2(seed, 11) * Math.PI * 2; }
+
+
+// ── Yarn hairiness seen on the cloth ────────────────────────────────────────
+// Fibre ends that stand out of a spun yarn: 0.2-1.2 mm long, ~15-20 µm thick,
+// each curling its own way. The tile is ~6 mm (1024 px, ~6 µm a pixel), so a
+// fibre is drawn at its real width. Every fibre carries a random RANK in its
+// alpha; the cloth cuts at a threshold (alphaTest), so one texture shows any
+// hairiness from a compact yarn (few, short) to a carded one (many, long)
+// without being repainted.
+export function fuzzTexture(aniso, seed = 4441) {
+  const size = 1024;
+  const c = document.createElement('canvas'); c.width = c.height = size;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, size, size);
+  ctx.lineCap = 'round';
+  const R = rng(seed);
+  const N = 2600;
+  for (let k = 0; k < N; k++) {
+    const rank = 0.04 + 0.96 * R();
+    // longer fibres are rarer and only show on the hairier yarns
+    const len = 30 + Math.pow(R(), 1.6) * 170 * (0.5 + 0.5 * (1 - rank) + 0.3);
+    const a = R() * Math.PI * 2, bend = (R() - 0.5) * 1.6;
+    const x0 = R() * size, y0 = R() * size;
+    const x2 = x0 + Math.cos(a) * len, y2 = y0 + Math.sin(a) * len;
+    const mx = (x0 + x2) / 2 + Math.cos(a + Math.PI / 2) * len * bend * 0.4;
+    const my = (y0 + y2) / 2 + Math.sin(a + Math.PI / 2) * len * bend * 0.4;
+    const v = 200 + (R() * 55 | 0);
+    ctx.strokeStyle = `rgba(${v},${v},${v},${(1 - rank).toFixed(3)})`;
+    ctx.lineWidth = 2.2 + R() * 1.4;
+    for (const ox of [-size, 0, size]) for (const oy of [-size, 0, size]) {
+      const minx = Math.min(x0, x2, mx) + ox, maxx = Math.max(x0, x2, mx) + ox;
+      const miny = Math.min(y0, y2, my) + oy, maxy = Math.max(y0, y2, my) + oy;
+      if (maxx < 0 || minx > size || maxy < 0 || miny > size) continue;
+      ctx.beginPath(); ctx.moveTo(x0 + ox, y0 + oy); ctx.quadraticCurveTo(mx + ox, my + oy, x2 + ox, y2 + oy); ctx.stroke();
+    }
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = aniso;
+  return t;
+}

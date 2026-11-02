@@ -188,6 +188,7 @@ function analyzeStretch(p = {}) {
   const tex = Number(p.tex) > 0 ? Number(p.tex) : 590.5 / ne;
   const d = Number(p.yarnDiaMm) > 0 ? Number(p.yarnDiaMm) : 25.4 / (28 * Math.sqrt(ne));
   const fm = fibreModel(p.fibers);
+  const hairF = Number.isFinite(p.hairFactor) ? clamp(p.hairFactor, 0.02, 2.5) : 1;
   const el = Number.isFinite(p.elastanePct) && p.elastanePct > 0 ? p.elastanePct : fm.elastane;
 
   // ── relaxed cloth ────────────────────────────────────────────────────────
@@ -282,6 +283,9 @@ function analyzeStretch(p = {}) {
       if (K.layers === 2 && kind !== 'rib') open *= open;
       if (K.back) open *= 1 - K.back / Math.pow(1 + Math.max(0, ex), 0.6);
       if (K.restOpen) open = Math.min(1, open + K.restOpen * (1 + 0.6 * Math.max(0, ex) + 0.6 * Math.max(0, ey)));
+      // protruding fibre ends reach across the gaps: a hairy (carded) yarn
+      // closes the cloth a little, a clean (compact) one leaves it open
+      open *= clamp(1 - 0.3 * (hairF - 1), 0.6, 1.25);
       return { x, y2, ys, T, perp, tanT, open, tFrac };
     };
 

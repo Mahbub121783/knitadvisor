@@ -178,7 +178,8 @@ export function createYarnMaterial(opts) {
   let roughness = f.roughness;
   let clearcoat = f.clearcoat;
   let bump = f.bump;
-  let fuzz = synthetic ? 0.4 : 1.0;
+  // the engine's hairiness for this yarn type (carded ~1.25, compact ~0.7)
+  let fuzz = (synthetic ? 0.4 : 1.0) * (Number.isFinite(opts.hair) ? Math.max(0.35, Math.min(1.7, opts.hair)) : 1);
   let sheen = f.sheen;
 
   // engine physics overrides (real measured-ish optics + finish hand-feel)

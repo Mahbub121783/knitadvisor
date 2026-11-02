@@ -1225,7 +1225,7 @@ class FabricVisualizer {
     const U = (ex.properties || {}).evenness_u_pct;
     if (ch && ch.look) {
       const l = ch.look;
-      return { system: (ch.system || {}).key || null, hair: 1, hairAbs: l.hairAbs, gloss: l.gloss, bulk: l.bulk, ply: l.ply, slub: !!l.slub, filament: !!l.filament, dty: !!l.dty, lustre: l.lustre, uneven: Number.isFinite(U) ? U : undefined };
+      return { system: (ch.system || {}).key || null, hair: 1, hairAbs: l.hairAbs, hairLen: l.hairLen, gloss: l.gloss, bulk: l.bulk, ply: l.ply, slub: !!l.slub, filament: !!l.filament, dty: !!l.dty, lustre: l.lustre, uneven: Number.isFinite(U) ? U : undefined };
     }
     return { system: ((ex.spinning_system || {}).key) || null, hair: 1, gloss: 1, bulk: 1, slub: false, uneven: Number.isFinite(U) ? U : undefined };
   }

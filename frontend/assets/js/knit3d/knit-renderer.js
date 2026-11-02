@@ -13,7 +13,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 import { buildYarnPaths, floatAnchorsFromPaths, structureRepeat } from './topology-builder.js?v=20260608g';
-import { bakeStructure, ClothSurface, fibreSurfaceTexture, wavePhase, melangeMaterial } from './macro.js?v=20260608g';
+import { bakeStructure, ClothSurface, fibreSurfaceTexture, wavePhase, melangeMaterial, fuzzTexture } from './macro.js?v=20260608g';
 import { ClothSim } from './cloth-physics.js?v=20260608g';
 import { fabricBody, fabricMechanics } from './fabric-body.js?v=20260608g';
 import { hash2 } from './noise.js?v=20260608g';
@@ -957,6 +957,7 @@ export class Knit3D {
       physics: this.opts.physics,
       twist: this.opts.twist,
       filament: (this.opts.yarnLook || {}).filament,
+      hair: (this.opts.yarnLook || {}).hairAbs,
     });
     // spinning system: a compact yarn's aligned surface reads glossier, an
     // open-end yarn's wrapped, hairy one matt (_yarnLook in the visualizer)
@@ -1376,6 +1377,49 @@ export class Knit3D {
     macroGroup.add(front, back, edge);
     this._pivot.add(macroGroup);
 
+    // Protruding fibre over the cloth: two thin layers just above the face
+    // (and the back, unless a nap covers it), sharing the cloth's own moving
+    // geometry and lifted along its normal in the shader. How many fibres show
+    // and how far they stand is set per state in _applyStage from the yarn's
+    // hairiness — a carded yarn frosts the cloth and softens the stitch, a
+    // compact one leaves it crisp.
+    const fuzz = [];
+    {
+      const L = this.opts.yarnLook || {};
+      if (!L.filament) {
+        const tex = fuzzTexture(aniso);
+        const FT = 0.6 * cm;                                  // fibre tile, scene units
+        const sides = [[geo.front, 1]];
+        if (!(con.pile && con.pile !== 'none')) sides.push([geo.back, -1]);
+        for (const [g, side] of sides) {
+          for (let k = 0; k < 2; k++) {
+            const t = tex.clone();
+            t.needsUpdate = true;
+            t.repeat.set(win.w / FT, win.h / FT);
+            t.offset.set(0.37 * k, 0.61 * k);
+            const mat = new THREE.MeshStandardMaterial({
+              map: t, color: y.color.clone(), roughness: 0.92, metalness: 0,
+              alphaTest: 0.7, side: THREE.DoubleSide,
+            });
+            const uLift = { value: 0 };
+            mat.onBeforeCompile = (sh) => {
+              sh.uniforms.uLift = uLift;
+              sh.vertexShader = sh.vertexShader
+                .replace('#include <common>', '#include <common>\nuniform float uLift;')
+                .replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed += normalize(objectNormal) * uLift;');
+            };
+            mat.customProgramCacheKey = () => 'ka-fuzz';
+            const mesh = new THREE.Mesh(g, mat);
+            mesh.frustumCulled = false;
+            mesh.renderOrder = 2;
+            macroGroup.add(mesh);
+            fuzz.push({ mesh, mat, tex: t, uLift, layer: k, side });
+          }
+        }
+        tex.dispose();
+      }
+    }
+
     // The table: invisible except for the cloth's shadow on it, which is
     // what shows a lifted or folded cloth standing off the surface.
     let table = null;
@@ -1392,6 +1436,7 @@ export class Knit3D {
     const box = new THREE.Box3().setFromObject(macroGroup);
     this._macro = {
       group: macroGroup, front, back, edge, edgeMat, faceMat, backMat, napMat, napTex, backLift,
+      fuzz,
       cloth: geo, table, cm,
       // a loop pile is knitted that way: there from the start
       napAlways: (con.pile === 'loop' && con.type !== 'terry') || con.pile === 'plush',
@@ -1851,7 +1896,10 @@ export class Knit3D {
       u.uMel.value = mel ? 1 : 0;
       if (mel) { u.uMelF.value = mel.f; u.uMelLight.value.copy(mel.light); }
     }
-    if (this._hair && this._hair.update) this._hair.update(look.hair, look.hairLen);
+    const YL = this.opts.yarnLook || {};
+    const yHair = Number.isFinite(YL.hairAbs) ? YL.hairAbs : 1;
+    const yLen = Number.isFinite(YL.hairLen) ? YL.hairLen : 1;
+    if (this._hair && this._hair.update) this._hair.update(look.hair, look.hairLen * yLen);
 
     // A fluorescent dye re-emits absorbed UV/blue as visible light, so a neon
     // reads brighter than any surface colour can: a little emission, finished
@@ -1871,9 +1919,27 @@ export class Knit3D {
         mat.sheen = Math.max(0, Math.min(1, b.sheen + look.sheen * 1.4));
         mat.sheenRoughness = look.sheenRough != null ? look.sheenRough : b.sheenRoughness;
         mat.clearcoat = Math.max(0, Math.min(1, b.clearcoat + look.clearcoat));
-        mat.normalScale.set(look.normal, look.normal);
+        // fibre ends blur the stitch on a hairy yarn; a clean one stays crisp
+        const defn = Math.max(0.78, Math.min(1.15, 1.17 - 0.22 * yHair));
+        mat.normalScale.set(look.normal * defn, look.normal * defn);
+        mat.sheen = Math.max(0, Math.min(1, mat.sheen + 0.22 * (yHair - 1)));
+        mat.roughness = Math.max(0.05, Math.min(1, mat.roughness + 0.06 * (yHair - 1)));
         mat.sheenColor.copy(mel ? mel.dark : target).lerp(new THREE.Color(1, 1, 1), look.sheenTint);
         if (look.lift) mat.color.lerp(new THREE.Color(1, 1, 1), look.lift);
+      }
+      // how much fibre stands out: the yarn's hairiness x the finish (a
+      // singe or bio-polish takes it off, a peach raises it)
+      if (m.fuzz && m.fuzz.length) {
+        const dens = Math.max(0, Math.min(0.92, 0.1 + 0.34 * yHair * (look.hair || 1)));
+        const fcol = (mel ? mel.light.clone().lerp(mel.dark, 1 - mel.f) : target.clone()).lerp(new THREE.Color(1, 1, 1), 0.16);
+        for (const z of m.fuzz) {
+          const d = z.layer ? dens * 0.55 : dens;
+          z.mesh.visible = d > 0.02;
+          z.mat.alphaTest = 1 - d;
+          z.mat.color.copy(fcol);
+          // fibres stand 0.1-0.3 mm off the yarn surface (further on a hairy yarn)
+          z.uLift.value = (z.layer ? 0.24 : 0.09) * yLen * 0.1 * m.cm;
+        }
       }
       if (mel && m.rebake && Math.abs(mel.f - m.melF) > 0.004) {
         m.melMat.uniforms.uF.value = mel.f;
@@ -2127,6 +2193,7 @@ export class Knit3D {
       const m = this._macro;
       m.front.geometry.dispose(); m.back.geometry.dispose(); m.edge.geometry.dispose();
       [m.faceMat, m.backMat, m.edgeMat, m.napMat, m.napTex, m.napShade, m.melMat].forEach((x) => { if (x) x.dispose(); });
+      (m.fuzz || []).forEach((z) => { z.mat.dispose(); z.tex.dispose(); });
       if (m.disposeTile) m.disposeTile();
       m.cloth.dispose();
       if (m.table) { m.table.geometry.dispose(); m.table.material.dispose(); }

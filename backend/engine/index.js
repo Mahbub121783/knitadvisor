@@ -908,6 +908,7 @@ function calculate(params) {
 
   // --- 6.1c Stretch, recovery, grain under load and gaping (stretch-engine.js)
   let stretchResult = null;
+  let yarnCoverRef = null;
   try {
     const fibersForStretch = parsedComp ? parsedComp.fibers : { cotton: 100 };
     stretchResult = analyzeStretch({
@@ -924,10 +925,58 @@ function calculate(params) {
       feedType: compModifiers ? compModifiers.feed_type : null,
       rkm: yarnExpertise && yarnExpertise.properties ? yarnExpertise.properties.tenacity_rkm : null,
       spiralityPct: qualityResult.spirality ? qualityResult.spirality.predicted_pct : 0,
+      hairFactor: yarnChar ? yarnChar.hair_factor : 1,
     });
+    // The same cloth spun as a combed ring yarn — the reference the yarn type
+    // is judged against (cover, tightness, open area)
+    if (yarnChar && !yarnChar.filament_only && yarnExpertise && yarnExpertise.diameter_mm) {
+      const ref = analyzeStretch({
+        fabricId: fabricDef.id, category: fabricDef.category, gsm,
+        loopMm: llResult && llResult.ll_mm > 0 && !llResult.is_course_length ? llResult.ll_mm : null,
+        countNe: countResult.count_ne || null, tex: tfResult ? tfResult.tex : null,
+        yarnDiaMm: yarnExpertise.diameter_mm / (yarnChar.bulk || 1),
+        fibers: fibersForStretch, elastanePct: parsedComp ? parsedComp.elastane_pct || 0 : 0,
+        lycraDenier: compModifiers ? compModifiers.lycra_denier : null, feedType: compModifiers ? compModifiers.feed_type : null,
+        rkm: 18, spiralityPct: 0, hairFactor: 1,
+      });
+      yarnCoverRef = { open_pct: ref.rest.open_pct };
+    }
     trace.push({ step: '6.1c', action: 'stretch', result: `${stretchResult.kind}: width jams at ${stretchResult.directions.width.jam_pct}%, length at ${stretchResult.directions.length.jam_pct}%` });
   } catch (e) {
     warnings.push('Stretch model unavailable for this fabric.');
+  }
+
+  // --- 6.1c2 What the yarn type does to the cloth's tightness and cover ---
+  // TF = √tex / l is geometry: it treats every yarn of a count as the same
+  // size. It is not. A compact yarn is denser and slimmer than a combed ring
+  // one of the same count, an open-end or carded yarn bulkier and hairier.
+  // The cloth behaves as if knitted at TF × (real diameter / reference), and
+  // its protruding fibres reach across the gaps.
+  if (yarnChar && tfResult && tfResult.value) {
+    const bulk = yarnChar.bulk || 1;
+    const hair = yarnChar.hair_factor || 1;
+    const tfEff = parseFloat((tfResult.value * bulk).toFixed(2));
+    const openNow = stretchResult && stretchResult.rest ? stretchResult.rest.open_pct : null;
+    const openRef = yarnCoverRef ? yarnCoverRef.open_pct : null;
+    const L = tfResult.limits || {};
+    const status = tfEff < (L.min || -Infinity) ? 'below the knittable range'
+      : tfEff > (L.max || Infinity) ? 'above the knittable range'
+      : tfEff < (L.ideal_min || L.min || 0) ? 'on the loose side' : tfEff > (L.ideal_max || L.max || 99) ? 'on the tight side' : 'in range';
+    const cover = {
+      tf_geometric: tfResult.value,
+      tf_effective: tfEff,
+      diameter_vs_reference_pct: Math.round((bulk - 1) * 100),
+      hairiness_vs_reference_pct: Math.round((hair - 1) * 100),
+      open_area_pct: openNow,
+      open_area_reference_pct: openRef,
+      stitch_definition: hair < 0.75 ? 'crisp' : hair > 1.15 ? 'soft, blurred by fibre' : 'clear',
+      status,
+      text: `Effective tightness ${tfEff} (geometric ${tfResult.value}): the ${yarnChar.system.label.toLowerCase()} yarn is ${bulk >= 1.005 ? Math.round((bulk - 1) * 100) + '% fuller' : bulk <= 0.995 ? Math.round((1 - bulk) * 100) + '% slimmer' : 'the same size'} than combed ring at this count${openNow != null && openRef != null ? `, and the cloth is ${openNow < openRef ? 'more closed' : openNow > openRef ? 'more open' : 'as open'} (${openNow}% open area against ${openRef}% for combed ring)` : ''}. Stitch definition: ${hair < 0.75 ? 'crisp' : hair > 1.15 ? 'soft, blurred by protruding fibre' : 'clear'}.`,
+    };
+    tfResult.effective = cover;
+    yarnChar.cover = cover;
+    yarnChar.effects.splice(1, 0, { area: 'Cover', text: cover.text, kind: hair > 1.15 || bulk > 1.04 ? 'note' : hair < 0.75 ? 'good' : 'note' });
+    if (status !== 'in range' && /range/.test(status)) warnings.push(`Effective tightness ${tfEff} with this yarn type is ${status} (geometric TF ${tfResult.value}).`);
   }
 
   // --- 6.1b Finished width prediction (grey open width × width shrinkage) ---
@@ -1414,6 +1463,8 @@ function calculate(params) {
       family: tfResult.category,
       basis: tfResult.basis,
       expert_analysis: tfResult.expert_analysis,
+      // the yarn type's real size and hairiness on the tightness (6.1c2)
+      effective: tfResult.effective || null,
     } : null,
 
     factory_reference: factoryLookup ? {

@@ -1261,6 +1261,21 @@
         <span class="result-key">Structure Status</span>
         <span class="result-val" id="pc-status">—</span>
       </div>
+      <div id="pc-eff" class="hidden">
+        <div class="result-row">
+          <span class="result-key">Effective TF <span class="text-dim">(with this yarn type)</span></span>
+          <span class="result-val white" id="pc-tf-eff">—</span>
+        </div>
+        <div class="result-row">
+          <span class="result-key">Open area <span class="text-dim">(vs combed ring)</span></span>
+          <span class="result-val" id="pc-open">—</span>
+        </div>
+        <div class="result-row">
+          <span class="result-key">Stitch definition</span>
+          <span class="result-val" id="pc-def">—</span>
+        </div>
+        <div class="info-box text-xs" id="pc-eff-note" style="margin-top:6px;"></div>
+      </div>
     </div>
 
     <!-- ===== K/T/M PATTERN ===== -->
@@ -2313,6 +2328,18 @@ function renderResult(r, params) {
   }
 
   // — Physical Constraints —
+  {
+    const ef = r.physical_constraints && r.physical_constraints.effective;
+    const box = document.getElementById('pc-eff');
+    if (ef && box) {
+      box.classList.remove('hidden');
+      const d = ef.diameter_vs_reference_pct;
+      document.getElementById('pc-tf-eff').textContent = `${ef.tf_effective}${d ? `  (${d > 0 ? '+' : ''}${d}% yarn size)` : ''}`;
+      document.getElementById('pc-open').textContent = ef.open_area_pct != null ? `${ef.open_area_pct}%  (combed ring ${ef.open_area_reference_pct}%)` : '—';
+      document.getElementById('pc-def').textContent = ef.stitch_definition;
+      document.getElementById('pc-eff-note').textContent = ef.text;
+    } else if (box) box.classList.add('hidden');
+  }
   if (r.physical_constraints) {
     document.getElementById('sec-constraints').classList.remove('hidden');
     const tf = r.physical_constraints.tightness_factor;
