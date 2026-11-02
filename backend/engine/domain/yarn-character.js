@@ -87,7 +87,10 @@ function polyspec(fibers, args) {
     // Blends with cotton are spun together, so the polyester is staple. A
     // 100 % polyester knit is most often a filament; with no choice and a
     // chosen spinning system, spun.
-    form = (cotton > 0 || args.spinning_system || share < 100) ? 'staple' : 'dty';
+    // Elastane rides beside it on its own feeder, so a polyester/spandex
+    // jersey is still a filament knit.
+    const otherHard = Object.entries(fibers || {}).some(([k, v]) => k !== 'polyester' && k !== 'elastane' && k !== 'spandex' && Number(v) > 0);
+    form = (cotton > 0 || args.spinning_system || otherHard) ? 'staple' : 'dty';
     if (args.is_warp_knit) form = 'fdy';
   }
   let lustre = norm(args.poly_lustre);

@@ -343,6 +343,12 @@
     .sd-status.note { color: #9A5B00; background: rgba(154,91,0,.09); }
     .sd-status.mismatch { color: #B23B3B; background: rgba(178,59,59,.09); }
     .sd-msg { font-size: 12.5px; line-height: 1.55; color: var(--t1); }
+    .sd-price { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 8px 0 2px; padding: 8px 10px; border-radius: 8px;
+      background: rgba(24,87,196,.06); border: 1px solid rgba(24,87,196,.18); font-size: 12px; color: var(--t2); }
+    .sd-price b { font: 700 16px var(--head, sans-serif); color: var(--t1); white-space: nowrap; }
+    .sd-price b em { font: 400 11.5px var(--body, sans-serif); color: var(--t3); font-style: normal; }
+    .sd-lines .sd-price::before { content: none; }
+    .sd-price small { font-size: 10.5px; color: var(--t3); flex-basis: 100%; }
     .sd-lines { font-size: 11.5px; line-height: 1.6; color: var(--t2); margin-top: 6px; }
     .sd-lines div::before { content: '·'; color: var(--t3); margin-right: 6px; }
     .sd-lines .sd-meter::before { content: none; }
@@ -694,6 +700,7 @@
           <input type="hidden" id="melange-pct-input" value="">
           <input type="hidden" id="white-type-input" value="">
           <input type="hidden" id="neon-input" value="">
+          <input type="hidden" id="dye-band-input" value="">
           <div class="shade-hint" id="shade-hint"></div>
 
           <div class="sd" id="shade-detail" hidden>
@@ -1164,6 +1171,7 @@ const PREFILL_FIELD_MAP = {
   melange_pct: 'melange-pct-input',
   white_type: 'white-type-input',
   neon_color: 'neon-input',
+  dye_band: 'dye-band-input',
   feeder_type: 'feeder-type-input',
   finishing_route: 'finishing-route-input',
   dyeing_method: 'dyeing-method-input',
@@ -1721,6 +1729,12 @@ const FAMILIES = {
   black: [['Jet black', '#111111'], ['Off-black', '#232323']],
 };
 
+// the price bands a dyehouse quotes inside each tier
+const DYE_BANDS = {
+  light_medium: [['light', 'Light'], ['medium', 'Medium'], ['special', 'Special (turquoise / royal / brilliant red)']],
+  dark_navy: [['dark', 'Dark'], ['extra_dark', 'Extra dark / deep navy'], ['special', 'Special (brilliant)']],
+};
+
 function shadeIs(k) { return document.getElementById('color-input').value === k; }
 
 function sdChip(label, attrs, on, dot) {
@@ -1753,7 +1767,16 @@ function renderShadeDetail() {
     const w = document.getElementById('white-type-input').value || 'optic';
     html += `<div class="sd-row-label">Which white</div><div class="sd-chips">` +
       WHITE_LIST.map(([k, l, hx]) => sdChip(l, `data-white="${k}"`, w === k, hx)).join('') + '</div>';
-  } else if (FAMILIES[shade]) {
+  }
+  if (DYE_BANDS[shade]) {
+    const bandEl = document.getElementById('dye-band-input');
+    if (bandEl.value && !DYE_BANDS[shade].some(([k]) => k === bandEl.value)) bandEl.value = '';
+    const b = bandEl.value;
+    html += `<div class="sd-row-label">Dyeing price band <span style="text-transform:none;font-weight:400;letter-spacing:0">(auto reads the exact colour)</span></div><div class="sd-chips">` +
+      sdChip('Auto', 'data-band=""', !b) +
+      DYE_BANDS[shade].map(([k, l]) => sdChip(l, `data-band="${k}"`, b === k)).join('') + '</div>';
+  }
+  if (FAMILIES[shade]) {
     html += `<div class="sd-row-label">Colour <span style="text-transform:none;font-weight:400;letter-spacing:0">(fills the exact colour above; optional)</span></div><div class="sd-chips">` +
       FAMILIES[shade].map(([l, hx]) => sdChip(l, `data-fam="${hx}"`, false, hx)).join('') + '</div>';
   }
@@ -1780,6 +1803,7 @@ async function runShadeCheck() {
   if (shade === 'melange') { add('melange_type', 'melange-type-input'); add('melange_pct', 'melange-pct-input'); }
   if (shade === 'white_melange') add('white_type', 'white-type-input');
   if (shade === 'fluorescent') add('neon', 'neon-input');
+  if (DYE_BANDS[shade]) add('dye_band', 'dye-band-input');
   const seq = ++_sdSeq;
   let data = null;
   try {
@@ -1787,10 +1811,10 @@ async function runShadeCheck() {
     data = res.ok ? await res.json() : null;
   } catch (_) { data = null; }
   if (seq !== _sdSeq) return;              // a newer check has started
-  paintShadeCheck(data && data.spec, data && data.composition);
+  paintShadeCheck(data && data.spec, data && data.composition, data && data.dyeing);
 }
 
-function paintShadeCheck(spec, compLabel) {
+function paintShadeCheck(spec, compLabel, dyeing) {
   const st = document.getElementById('sd-status'), msg = document.getElementById('sd-msg');
   const lines = document.getElementById('sd-lines'), fix = document.getElementById('sd-fix'), sw = document.getElementById('sd-sw');
   if (!spec) { st.className = 'sd-status note'; st.textContent = 'Check unavailable'; msg.textContent = 'The live check could not run; the calculation will still check it.'; lines.innerHTML = ''; fix.innerHTML = ''; return; }
@@ -1829,15 +1853,21 @@ function paintShadeCheck(spec, compLabel) {
     (spec.dyed.notes || []).forEach(n => L.push(n));
   }
   (spec.warnings || []).forEach(w => L.push('<span style="color:#9A5B00">' + w + '</span>'));
-  lines.innerHTML = L.map(t => `<div>${t}</div>`).join('');
+  const price = dyeing && dyeing.per_kg != null
+    ? `<div class="sd-price"><span>Dyeing charge</span><b>$${dyeing.per_kg.toFixed(2)}<em> /kg grey</em></b><span>${dyeing.band_label}</span>`
+      + `<small>${dyeing.how ? dyeing.how.charAt(0).toUpperCase() + dyeing.how.slice(1) + ' · ' : ''}${dyeing.route_label} · usual range $${dyeing.range.low.toFixed(2)}–$${dyeing.range.high.toFixed(2)}</small></div>`
+    : '';
+  lines.innerHTML = price + L.map(t => `<div>${t}</div>`).join('');
   fix.innerHTML = (cc.suggestions || []).map((x, i) =>
     `<button type="button" class="${i ? 'alt' : ''}" data-fix-comp="${x.composition || ''}" data-fix-mt="${x.melange_type || ''}">${x.label}${x.why ? `<small>${x.why}</small>` : ''}</button>`).join('');
 }
 
 document.addEventListener('click', (e) => {
-  const c = e.target.closest('#shade-detail [data-mt], #shade-detail [data-neon], #shade-detail [data-white], #shade-detail [data-fam], #sd-fix button');
+  const c = e.target.closest('#shade-detail [data-mt], #shade-detail [data-neon], #shade-detail [data-white], #shade-detail [data-fam], #shade-detail [data-band], #sd-fix button');
   if (!c) return;
-  if (c.hasAttribute('data-mt')) {
+  if (c.hasAttribute('data-band')) {
+    document.getElementById('dye-band-input').value = c.dataset.band; renderShadeDetail();
+  } else if (c.hasAttribute('data-mt')) {
     document.getElementById('melange-type-input').value = c.dataset.mt;
     document.getElementById('melange-pct-input').value = '';
     renderShadeDetail();
@@ -2115,6 +2145,7 @@ async function doCalculate() {
     melange_pct: shadeIs('melange') && document.getElementById('melange-pct-input').value ? parseFloat(document.getElementById('melange-pct-input').value) : undefined,
     white_type: shadeIs('white_melange') ? (document.getElementById('white-type-input').value || undefined) : undefined,
     neon_color: shadeIs('fluorescent') ? (document.getElementById('neon-input').value || undefined) : undefined,
+    dye_band: DYE_BANDS[document.getElementById('color-input').value] ? (document.getElementById('dye-band-input').value || undefined) : undefined,
     color_input: document.getElementById('color-engine-input').value || undefined,
     shade_depth_pct: document.getElementById('depth-toggle').checked
       ? parseFloat(document.getElementById('depth-number').value) : undefined,

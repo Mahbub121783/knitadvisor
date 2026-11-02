@@ -430,7 +430,28 @@
     .sr-fix { font-size: 12px; color: var(--t2); margin-top: 6px; }
     .sr-fix b { color: var(--a1); }
     @media (max-width: 520px) { .sr { grid-template-columns: 1fr; } .sr-sw { width: 100%; height: 56px; } }
-    </style>
+    
+    /* costing: range, build-up, dyeing and finishing detail */
+    .cost-acc { margin-top: 8px; font-size: 12px; color: var(--t2); line-height: 1.5; }
+    .cost-acc b { color: var(--t1); }
+    .cost-acc .acc-pill { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase;
+      padding: 2px 8px; border-radius: 99px; margin-left: 6px; vertical-align: 1px; }
+    .acc-high { background: rgba(16,185,129,.12); color: #0f8a62; }
+    .acc-medium { background: rgba(245,158,11,.14); color: #9a5b00; }
+    .acc-low { background: rgba(220,38,38,.10); color: #b42318; }
+    .cost-detail { margin-top: 12px; display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); }
+    .cd-card { border: 1px solid var(--line2, rgba(0,0,0,.08)); border-radius: 10px; padding: 10px 12px; min-width: 0; }
+    .cd-card h4 { margin: 0 0 6px; font-size: 10.5px; letter-spacing: .6px; text-transform: uppercase; color: var(--t3); font-weight: 700; }
+    .cd-row { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; padding: 3px 0; color: var(--t2); }
+    .cd-row span:first-child { min-width: 0; overflow-wrap: break-word; }
+    .cd-row span:last-child { white-space: nowrap; color: var(--t1); font-variant-numeric: tabular-nums; }
+    .cd-row.tot { border-top: 1px solid var(--line2, rgba(0,0,0,.08)); margin-top: 3px; padding-top: 5px; font-weight: 700; }
+    .cd-note { font-size: 11px; color: var(--t3); line-height: 1.5; margin-top: 4px; }
+    .cd-step { display: grid; grid-template-columns: 1fr auto; gap: 0 10px; font-size: 12px; padding: 4px 0; border-bottom: 1px dashed var(--line2, rgba(0,0,0,.08)); }
+    .cd-step:last-child { border-bottom: 0; }
+    .cd-step small { grid-column: 1 / -1; color: var(--t3); font-size: 10.5px; }
+    .cd-step b { color: var(--t1); font-variant-numeric: tabular-nums; }
+</style>
   <link rel="stylesheet" href="assets/css/theme-v2.css?v=20260922a">
   <script src="assets/js/app-shell.js?v=20260922a" defer></script>
 </head>
@@ -532,7 +553,8 @@
         <div>
           <div class="ch-lbl">Total, per kg of finished fabric</div>
           <div class="ch-val" id="cost-total-val">&#8212;</div>
-          <div class="ch-sub">USD &middot; ex-mill &middot; yarn, knitting, dyeing and finishing included</div>
+          <div class="ch-sub">USD &middot; ex-mill &middot; yarn, knitting, dyeing, finishing and process loss included</div>
+          <div class="cost-acc hidden" id="cost-accuracy"></div>
         </div>
         <div class="ch-country">
           <label for="cost-country">Costing country</label>
@@ -554,7 +576,7 @@
       <div class="result-section-label" style="margin-top:0;">Cost breakdown
         <span style="font-weight:400;color:var(--t3);">&#8212; per kg of finished fabric</span></div>
       <div class="result-row">
-        <span class="result-key">Yarn <span class="text-dim">incl. waste &amp; winding</span></span>
+        <span class="result-key">Yarn <span class="text-dim">incl. knitting loss</span></span>
         <span class="result-val white" id="cost-breakdown-yarn">&#8212;</span>
       </div>
       <div class="result-row">
@@ -562,13 +584,18 @@
         <span class="result-val white" id="cost-breakdown-knitting">&#8212;</span>
       </div>
       <div class="result-row">
-        <span class="result-key">Dyeing CMT</span>
+        <span class="result-key">Dyeing <span class="text-dim" id="cost-dye-band"></span></span>
         <span class="result-val white" id="cost-breakdown-dyeing">&#8212;</span>
       </div>
       <div class="result-row">
         <span class="result-key">Finishing</span>
         <span class="result-val white" id="cost-breakdown-finishing">&#8212;</span>
       </div>
+      <div class="result-row">
+        <span class="result-key">Process loss <span class="text-dim" id="cost-loss-pct"></span></span>
+        <span class="result-val white" id="cost-breakdown-loss">&#8212;</span>
+      </div>
+      <div id="cost-detail" class="cost-detail"></div>
     </div>
 
     <!-- ===== GARMENT CMT COSTING (fabric consumption gross-up + Cut-Make-Trim) =====
@@ -1436,44 +1463,6 @@
         <span class="result-val amber" id="c-combined-sl">—</span>
       </div>
       <div id="c-shade-note" class="mt-6" style="font-size:10px;color:var(--t3);line-height:1.6;padding:8px 10px;background:rgba(255,255,255,.03);border-radius:6px;border-left:2px solid rgba(24,87,196,0.4)"></div>
-    </div>
-
-    <!-- ===== REAL DYEING RECIPE (only when a real, cost-verified factory
-         recipe matched this shade — costing.dyeing_detail.source ===
-         'REAL_RECIPE'. Every other shade still uses the price-list estimate
-         shown in Fabric Price above; this section simply stays hidden then,
-         not filled with a guess. ===== -->
-    <div class="result-section anim-in hidden" id="sec-dye-recipe" style="border:1px solid rgba(16,185,129,.3); background:rgba(16,185,129,.04);">
-      <div class="result-section-title">
-        <div class="rst-icon" style="color:#10b981;">🧪</div>
-        <div class="rst-title-text" style="color:#10b981;">Real Dyeing Recipe</div>
-        <span id="dye-recipe-badge" class="badge" style="margin-left:auto;background:rgba(16,185,129,.12);color:#10b981;border:1px solid rgba(16,185,129,.3);">—</span>
-      </div>
-      <div class="cost-headline" style="margin-bottom:12px;">
-        <div>
-          <div class="ch-lbl">Dyeing cost, per kg of fabric</div>
-          <div class="ch-val" id="dye-recipe-cost-usd" style="font-size:22px;">&#8212;</div>
-          <div class="ch-sub" id="dye-recipe-sub">&#8212;</div>
-        </div>
-      </div>
-      <div id="dye-recipe-hybrid-note" class="mt-6" style="font-size:10px;color:var(--t3);line-height:1.6;padding:8px 10px;background:rgba(255,255,255,.03);border-radius:6px;border-left:2px solid rgba(16,185,129,.4);margin-bottom:10px;"></div>
-      <div id="dye-recipe-dye-note" class="hidden mt-6" style="font-size:10px;color:#f59e0b;line-height:1.6;padding:8px 10px;background:rgba(245,158,11,.06);border-radius:6px;border-left:2px solid rgba(245,158,11,.4);margin-bottom:10px;"></div>
-      <div class="result-section-label" style="margin-top:0;">Chemical cost detail
-        <span style="font-weight:400;color:var(--t3);">&#8212; the real component of the hybrid above, from an actual factory recipe card</span></div>
-      <div style="overflow-x:auto;">
-        <table style="width:100%;border-collapse:collapse;font-size:11px;min-width:480px;">
-          <thead>
-            <tr style="color:var(--t3);text-transform:uppercase;font-size:9px;letter-spacing:.5px;">
-              <th style="text-align:left;padding:6px 4px;">Chemical</th>
-              <th style="text-align:left;padding:6px 4px;">Function</th>
-              <th style="text-align:right;padding:6px 4px;">Dosing</th>
-              <th style="text-align:right;padding:6px 4px;">Req. Qty (kg)</th>
-              <th style="text-align:right;padding:6px 4px;">Price (Tk)</th>
-            </tr>
-          </thead>
-          <tbody id="dye-recipe-rows"></tbody>
-        </table>
-      </div>
     </div>
 
     <!-- ===== DYEING THEORY & QUALITY NOTES — always shown once composition
@@ -2417,7 +2406,6 @@ function renderResult(r, params) {
 
   // — Costing —
   renderCosting(r.costing);
-  renderDyeingRecipe(r.costing);
   renderDyeingTheoryNotes(r);
 
   // — Garment CMT costing (fabric consumption gross-up + Cut-Make-Trim) —
@@ -3074,8 +3062,7 @@ async function onCountryChange() {
     if (r && r.success && r.costing) {
       costingParams = { ...costingParams, country: sel.value };
       renderCosting(r.costing);
-      renderDyeingRecipe(r.costing);
-      // costingParams may already carry garment_type/garment_weight_g from an
+          // costingParams may already carry garment_type/garment_weight_g from an
       // earlier "Calculate Garment Cost" click — if so, the country change
       // just re-priced the fabric under it, so refresh that card from the
       // SAME response rather than leaving it showing the old country's numbers.
@@ -3366,7 +3353,7 @@ function renderCosting(costing) {
         + `</tbody></table>`
         + `<div style="font-size:9px;color:var(--t3);margin-top:8px;line-height:1.6;">`
         + `Not modelled: ${ctry.method.not_modelled.join(', ')} — no free source prices those per country `
-        + `with a date. Tariff: ${esc(ctry.tariff.source)}.`
+        + `with a date. Tariff as of ${esc(ctry.tariff.as_of)}.`
         + (ctry.tariff.caveat ? ` Note on ${esc(v.anchor)}: ${esc(ctry.tariff.caveat)}.` : '')
         + `</div></div>`;
     }
@@ -3431,75 +3418,66 @@ function renderCosting(costing) {
   document.getElementById('cost-breakdown-knitting').textContent = `$${fmt(costing.knitting_per_kg_usd, 2)} / kg`;
   document.getElementById('cost-breakdown-dyeing').textContent = `$${fmt(costing.dyeing_per_kg_usd, 2)} / kg`;
   document.getElementById('cost-breakdown-finishing').textContent = `$${fmt(costing.finishing_per_kg_usd, 2)} / kg`;
+  renderCostDetail(costing, esc);
 
   syncStages();
 }
 
-/* ============================================================
-   REAL DYEING RECIPE
-   ============================================================
-   Shown ONLY when costing.dyeing_detail.source === 'REAL_RECIPE' — a real,
-   cost-verified factory recipe (dyeing-engine.js / data/dyeing-reference
-   .json) matched this shade. Every other shade keeps using the price-list
-   estimate already shown in Fabric Price above, and this section simply
-   stays hidden — never filled with a guessed recipe.
-   ============================================================ */
-function renderDyeingRecipe(costing) {
-  const sec = document.getElementById('sec-dye-recipe');
-  const d = costing && costing.dyeing_detail;
-  if (!d || d.source !== 'REAL_RECIPE') {
-    sec.classList.add('hidden');
-    syncStages();
-    return;
+// The range, the build-up, and what the dyeing and finishing lines are made of.
+function renderCostDetail(costing, esc) {
+  const pl = costing.process_loss;
+  { const d = costing.dyeing_detail; document.getElementById('cost-dye-band').textContent = d && d.band_label ? d.band_label + (d.route && d.route !== 'reactive' ? ' · ' + d.route.replace('_', '-') : '') : ''; }
+  document.getElementById('cost-breakdown-loss').textContent = pl ? `$${fmt(pl.cost_per_kg, 2)} / kg` : '—';
+  document.getElementById('cost-loss-pct').textContent = pl ? `${fmt(pl.pct, 1)}% grey → finished` : '';
+
+  const acc = costing.accuracy;
+  const accEl = document.getElementById('cost-accuracy');
+  if (acc) {
+    const word = { high: 'High confidence', medium: 'Medium confidence', low: 'Low confidence' }[acc.confidence] || '';
+    const top = (acc.drivers || [])[0];
+    accEl.innerHTML = `Likely range <b>$${fmt(acc.low, 2)} – $${fmt(acc.high, 2)}</b> (±${fmt(acc.pct, 1)}%)`
+      + `<span class="acc-pill acc-${acc.confidence}">${word}</span>`
+      + (top ? `<div style="font-size:11px;color:var(--t3);">Most of the uncertainty is in the ${esc(top.line)} (${top.share_pct}%).</div>` : '');
+    accEl.classList.remove('hidden');
+  } else accEl.classList.add('hidden');
+
+  const money = (v) => `$${fmt(v, 2)}`;
+  const cards = [];
+  if (Array.isArray(costing.build_up) && costing.build_up.length) {
+    cards.push(`<div class="cd-card"><h4>How the price is built (per kg)</h4>`
+      + costing.build_up.map((b) => `<div class="cd-step"><span>${esc(b.step)}</span><b>${money(b.usd)}</b><small>${esc(b.how)}</small></div>`).join('')
+      + `</div>`);
   }
-  sec.classList.remove('hidden');
-
-  const esc = (x) => String(x == null ? '' : x).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
-
-  document.getElementById('dye-recipe-badge').textContent = d.match_quality === 'exact_composition'
-    ? 'MATCHED — SHADE + FIBRE' : 'MATCHED — SHADE ONLY';
-  document.getElementById('dye-recipe-cost-usd').textContent = `$${fmt(d.per_kg, 4)}`;
-  document.getElementById('dye-recipe-sub').textContent =
-    `${esc(d.recipe_name)} · ${esc(d.color_label)}`;
-
-  const hybridNote = document.getElementById('dye-recipe-hybrid-note');
-  if (d.price_list_base_usd != null) {
-    hybridNote.innerHTML = `<strong style="color:#10b981;">Hybrid figure, not a raw chemical price.</strong> `
-      + `$${fmt(d.price_list_base_usd, 4)} official price-list rate (machine, labour, utilities, overhead) `
-      + `&minus; $${fmt(d.price_list_base_usd * (d.assumed_chemical_share_pct / 100), 4)} assumed chemical share `
-      + `(~${fmt(d.assumed_chemical_share_pct, 0)}% of conversion cost, ${esc(d.assumed_chemical_share_source)}) `
-      + `+ $${fmt(d.real_chemical_cost_usd, 4)} real chemical cost from this factory recipe `
-      + `= <strong>$${fmt(d.per_kg, 4)}/kg</strong>.`;
-  } else {
-    hybridNote.textContent = '';
+  const d = costing.dyeing_detail;
+  if (d && Array.isArray(d.lines) && d.lines.length) {
+    cards.push(`<div class="cd-card"><h4>Dyeing — ${esc(d.band_label || '')}</h4>`
+      + d.lines.map((l) => `<div class="cd-row"><span>${esc(l.item)}</span><span>${money(l.usd)}</span></div>`).join('')
+      + `<div class="cd-row tot"><span>Per kg grey fabric</span><span>${money(d.per_kg)}</span></div>`
+      + `<div class="cd-note">${esc(d.band_what ? d.band_what.charAt(0).toUpperCase() + d.band_what.slice(1) : '')}${d.how ? ' · ' + esc(d.how) : ''}.`
+      + `${d.route_label ? ' ' + esc(d.route_label) + '.' : ''}${d.range ? ` Usual range ${money(d.range.low)}–${money(d.range.high)}.` : ''}`
+      + `${d.print_note ? ' ' + esc(d.print_note) : ''}</div></div>`);
+  } else if (d && d.note) {
+    cards.push(`<div class="cd-card"><h4>Dyeing</h4><div class="cd-note">${esc(d.note)}</div></div>`);
   }
-
-  const dyeNote = document.getElementById('dye-recipe-dye-note');
-  if (d.dye_cost_included === false) {
-    dyeNote.classList.remove('hidden');
-    dyeNote.textContent = 'This recipe covers pretreatment, neutralisation and auxiliary chemicals only — ' +
-      'the reactive dye itself is job-specific (depends on the exact shade %) and is not costed here.';
-  } else {
-    dyeNote.classList.add('hidden');
+  const f = costing.finishing_detail;
+  const fl = f && Array.isArray(f.lines) ? f.lines : [];
+  const plParts = pl && Array.isArray(pl.parts) ? pl.parts : [];
+  if (fl.length || plParts.length) {
+    cards.push(`<div class="cd-card"><h4>Finishing &amp; process loss</h4>`
+      + fl.map((l) => `<div class="cd-row"><span>${esc(l.item)}</span><span>${money(l.usd)}</span></div>`).join('')
+      + (fl.length ? `<div class="cd-row tot"><span>Finishing per kg</span><span>${money(costing.finishing_per_kg_usd)}</span></div>` : '')
+      + (plParts.length ? `<div style="height:8px"></div>` + plParts.map((x) => `<div class="cd-row"><span>${esc(x.item)}</span><span>${fmt(x.pct, 1)}%</span></div>`).join('')
+        + `<div class="cd-row tot"><span>Process loss</span><span>${fmt(pl.pct, 1)}%</span></div>`
+        + `<div class="cd-note">${fmt(pl.dye_stage_pct, 1)}% is lost in the dye bath and ${fmt(pl.finish_stage_pct, 1)}% in finishing; the dyehouse charges per kg of grey, so every cost before a loss is spread over the kilos that survive it.</div>` : '')
+      + `</div>`);
   }
-
-  const rows = (d.chemicals || []).filter(c => c.commercial_name || c.required_qty_kg > 0);
-  document.getElementById('dye-recipe-rows').innerHTML = rows.map(c => {
-    const dosingLabel = c.dosing_basis === 'percent_owf'
-      ? `${fmt(c.dosing * 100, 3)}% owf`
-      : c.dosing_basis === 'liquor_gpl'
-        ? `${fmt(c.dosing, 3)} g/L`
-        : '—';
-    return `<tr style="border-top:1px solid rgba(255,255,255,.06);">
-      <td style="padding:5px 4px;">${esc(c.commercial_name) || '—'}</td>
-      <td style="padding:5px 4px;color:var(--t3);">${esc(c.functional_name) || '—'}</td>
-      <td style="padding:5px 4px;text-align:right;">${dosingLabel}</td>
-      <td style="padding:5px 4px;text-align:right;">${fmt(c.required_qty_kg, 3)}</td>
-      <td style="padding:5px 4px;text-align:right;">${fmt(c.price_tk, 2)}</td>
-    </tr>`;
-  }).join('');
-
-  syncStages();
+  const yc = costing.yarn_components;
+  if (Array.isArray(yc) && yc.length) {
+    cards.push(`<div class="cd-card"><h4>Yarn, priced part by part</h4>`
+      + yc.map((c) => `<div class="cd-row"><span>${fmt(c.share_pct, 1)}% ${esc(c.role)} · ${esc(c.label)}${c.count_ne ? ` · ${c.count_ne}s` : ''}</span><span>${money(c.price_usd)}</span></div>`).join('')
+      + `<div class="cd-row tot"><span>Weighted yarn price</span><span>${money(costing.yarn_base_price_usd)}</span></div></div>`);
+  }
+  document.getElementById('cost-detail').innerHTML = cards.join('');
 }
 
 /* ============================================================
@@ -4571,6 +4549,9 @@ Speed Ceiling: ${maxRpm} (Status: ${rpmStatus})`;
     const knitCost = document.getElementById('cost-breakdown-knitting').textContent;
     const dyeCost = document.getElementById('cost-breakdown-dyeing').textContent;
     const finCost = document.getElementById('cost-breakdown-finishing').textContent;
+    const lossCost = document.getElementById('cost-breakdown-loss').textContent;
+    const lossPct = document.getElementById('cost-loss-pct').textContent;
+    const accTxt = document.getElementById('cost-accuracy').textContent;
     const country = document.getElementById('cost-country');
     const countryName = country && country.selectedOptions[0]
       ? country.selectedOptions[0].textContent.trim() : '';
@@ -4580,7 +4561,8 @@ Yarn Price: ${yarnPrice} per kg of yarn
 - Yarn (with waste): ${yarnCost}
 - Knitting: ${knitCost}
 - Dyeing: ${dyeCost}
-- Finishing: ${finCost}`;
+- Finishing: ${finCost}
+- Process loss (${lossPct}): ${lossCost}${accTxt ? '\n' + accTxt : ''}`;
   }
 
   // Quality

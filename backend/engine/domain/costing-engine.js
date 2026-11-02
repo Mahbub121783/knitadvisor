@@ -172,6 +172,31 @@ const SM_PRICE_MATRIX = {
     label: '100% Viscose (Regular)',
     fiber: 'viscose', type: 'regular',
   },
+  // ----- MODELLED ROWS ------------------------------------------------------
+  // Not on the factory list. Built from the China/India mill price plus the
+  // landed cost into Bangladesh, and flagged `modelled` so the result says so
+  // and widens its range. Before these existed a 100% polyester, nylon or
+  // acrylic fabric fell through to the carded-cotton row.
+  'polyester_spun': {
+    16: 2.02, 18: 2.03, 20: 2.05, 22: 2.06, 24: 2.08, 26: 2.10, 28: 2.12, 30: 2.15,
+    32: 2.22, 34: 2.28, 36: 2.35, 40: 2.48,
+    label: '100% Polyester Spun (ring)', fiber: 'polyester', type: 'spun', modelled: true,
+  },
+  'pv_65_35': {
+    20: 2.45, 24: 2.48, 26: 2.50, 28: 2.52, 30: 2.55, 32: 2.62, 34: 2.68, 36: 2.75, 40: 2.88,
+    label: 'PV 65/35 (Polyester/Viscose)', fiber: 'pv', type: 'blended', modelled: true,
+  },
+  'lyocell_spun': {
+    20: 4.25, 24: 4.30, 26: 4.32, 28: 4.36, 30: 4.40, 32: 4.48, 34: 4.56, 36: 4.64, 40: 4.80,
+    label: '100% Lyocell (Tencel-type)', fiber: 'lyocell', type: 'regular', modelled: true,
+  },
+  'acrylic_spun': {
+    16: 2.68, 20: 2.72, 24: 2.78, 28: 2.82, 30: 2.85, 32: 2.92, 36: 3.00, 40: 3.10,
+    label: '100% Acrylic Spun', fiber: 'acrylic', type: 'spun', modelled: true,
+  },
+  'nylon_filament_20d': { price: 4.40, label: 'Nylon 6 Filament 20D', fiber: 'nylon', denier: 20, modelled: true },
+  'nylon_filament_40d': { price: 3.70, label: 'Nylon 6 Filament 40D', fiber: 'nylon', denier: 40, modelled: true },
+  'nylon_filament_70d': { price: 3.30, label: 'Nylon 6 Filament 70D', fiber: 'nylon', denier: 70, modelled: true },
   // ----- Spandex (Elastane) — Denier-based -----
   'spandex_20d': { price: 5.30, label: 'Spandex 20D', fiber: 'elastane', denier: 20 },
   'spandex_30d': { price: 5.10, label: 'Spandex 30D', fiber: 'elastane', denier: 30 },
@@ -222,6 +247,13 @@ const YARN_TYPE_CATALOG = {
   'cotton_viscose_50_50': { category: 'Viscose', description: 'Cotton/Viscose 50/50 — lightweight, flowy drape' },
   'viscose_regular':      { category: 'Viscose', description: '100% Viscose/Rayon — very soft, moisture-absorbent, low-cost' },
   // Elastane / Filament
+  'polyester_spun':       { category: 'Polyester', description: '100% polyester staple, ring spun (modelled price)' },
+  'pv_65_35':             { category: 'Blended', description: 'Polyester/Viscose 65/35 spun (modelled price)' },
+  'lyocell_spun':         { category: 'Lyocell', description: '100% lyocell (Tencel-type) spun (modelled price)' },
+  'acrylic_spun':         { category: 'Acrylic', description: '100% acrylic spun (modelled price)' },
+  'nylon_filament_20d':   { category: 'Nylon', description: 'Nylon 6 textured filament 20D (modelled price)' },
+  'nylon_filament_40d':   { category: 'Nylon', description: 'Nylon 6 textured filament 40D (modelled price)' },
+  'nylon_filament_70d':   { category: 'Nylon', description: 'Nylon 6 textured filament 70D (modelled price)' },
   'spandex_20d':          { category: 'Spandex', description: 'Spandex/Elastane 20 Denier — lightest, for 90%+ stretch fabrics' },
   'spandex_30d':          { category: 'Spandex', description: 'Spandex 30D — standard for fine knit base fabric' },
   'spandex_40d':          { category: 'Spandex', description: 'Spandex 40D — most common, all-purpose stretch yarn' },
@@ -237,7 +269,7 @@ const YARN_TYPE_CATALOG = {
 // ============================================================
 const { getKnittingPrice } = require('../catalog/knitting-price-table');
 const countryCosts = require('../catalog/country-costs');
-const { matchDyeingRecipe, calculateDyeingCost } = require('./dyeing-engine');
+const { dyeingCharge, finishingCharge, processLoss: wetProcessLoss } = require('./wet-cost-model');
 const { isWovenId } = require('../catalog/woven-derivatives');
 const ENERGY_SHARE_PCT = Object.fromEntries(
   Object.entries(countryCosts.ENERGY_SHARE).map(([k, v]) => [k, Math.round(v * 100)]));
@@ -250,88 +282,16 @@ const KNITTING_COST_BY_GAUGE = {
 };
 
 // ============================================================
-// SECTION 5: FINISHING COST BY FABRIC (USD/kg)
+// SECTIONS 5-6: FINISHING, DYEING AND PROCESS LOSS
+// Priced by wet-cost-model.js: dyeing by shade band x fibre route (the
+// factory price list's white / average / dark / black / neon figures are the
+// anchors), finishing by width and finish, and process loss by shade and
+// fibre. The old flat finishing table and the recipe-card "hybrid" are gone:
+// a dyehouse quotes a band, not a recipe.
 // ============================================================
-const FINISHING_COST_BY_FABRIC = {
-  single_jersey:   0.40, rib_1x1: 0.40, rib_2x2: 0.40,
-  interlock:       0.45, pique_single: 0.50, pique_double: 0.55,
-  fleece_2_thread: 0.65, fleece_3_thread: 0.75, fleece_diagonal: 0.75,
-  french_terry:    0.55, terry_fabric: 0.60, ponte_di_roma: 0.50,
-  weft_lockknit:   0.40, birds_eye: 0.42,
-  popcorn_blister: 0.62, pique_interlock: 0.55,
-  cellular_blister: 0.60, jersey_blister: 0.48,
-  knop_honeycomb:  0.58, velour_plush: 0.70, accordion_tuck: 0.45,
-  purl_1x1:        0.50, // slower double-headed-needle production carries into finishing throughput too
-  default:         0.45,
-};
 
 // ============================================================
-// SECTION 6: WET-PROCESS COST BY SHADE (USD/kg)
-// Source: Official Knitting & Dyeing Price List (11-page document)
-//
-// ONE-PART:  single-fiber fabric (100% cotton, viscose, modal, poly)
-// TWO-PART:  blend fabric (CVC/PC — cotton+polyester, needs 2 dye baths)
-//
-// IMPORTANT — MELANGE IS DIFFERENT:
-//   Melange/Heather color comes from the YARN STAGE (pre-dyed fibers blended
-//   before spinning). There is NO reactive dyeing bath. The wet process is:
-//     Grey inspection → Scouring → OBA/Softener pad → Stenter → Compacting
-//   Cost = wash/finish charge only (~0.30–0.40 USD/kg), NOT a dyeing charge.
-//   The `is_wash_only` flag signals this to the UI and formula trace.
-// ============================================================
-const DYEING_COST = {
-  // shade key → { one_part, two_part, is_wash_only, process_label } USD/kg
-  black:         { one_part: 1.75, two_part: 2.20, is_wash_only: false, process_label: 'Reactive/Vat Dyeing' },
-  dark_navy:     { one_part: 1.55, two_part: 2.00, is_wash_only: false, process_label: 'Reactive Dyeing' },
-  light_medium:  { one_part: 1.30, two_part: 1.75, is_wash_only: false, process_label: 'Reactive Dyeing' },
-  fluorescent:   { one_part: 2.60, two_part: 0.00, is_wash_only: false, process_label: 'Fluorescent Reactive Dyeing' },
-  white_melange: { one_part: 0.80, two_part: 0.00, is_wash_only: false, process_label: 'Bleaching + OBA (White finish)' },
-  // ── MELANGE: WASH ONLY — no dye bath ──────────────────────────────────────
-  // Process: Scouring (0.10) + OBA/Softener pad (0.10) + overhead (0.15) = ~0.35
-  // Industry convention Bangladesh: melange wash cost ≤ 0.40 USD/kg
-  melange:       { one_part: 0.35, two_part: 0.00, is_wash_only: true,  process_label: 'Wash + OBA/Softener (no dyeing)' },
-  // Legacy compat aliases
-  dark:   null,
-  medium: null,
-  light:  null,
-};
-DYEING_COST.dark   = DYEING_COST.dark_navy;
-DYEING_COST.medium = DYEING_COST.light_medium;
-DYEING_COST.light  = DYEING_COST.white_melange;
-
-// Fallback for unknown shades
-const DYEING_COST_FALLBACK = { one_part: 1.30, two_part: 1.75, is_wash_only: false, process_label: 'Reactive Dyeing' };
-
-/**
- * What fraction of a dyehouse's per-kg CONVERSION charge (the DYEING_COST
- * figures above — machine time, labour, utilities, overhead, all bundled)
- * is chemicals. Needed because dyeing-engine.js's REAL_RECIPE match only
- * ever prices CHEMICALS off a real factory card — see this engine's own
- * "6. DYEING COST" section below for why that number cannot simply replace
- * DYEING_COST wholesale (it would silently drop machine/labour/overhead)
- * nor be added on top of it (chemicals would then be counted twice, since
- * DYEING_COST already bundles them in).
- *
- * Source: Uddin et al., "Water and chemical consumption in the textile
- * processing industry of Bangladesh", PLOS Sustainability and Transformation
- * (2023) — a factory survey giving total processing cost as raw materials
- * 49-65%, workforce 4-20%, energy 5-10%, chemicals/dyes 4-11%, water 0.3%,
- * other 9-35%. Re-based here to CONVERSION cost only (i.e. excluding the
- * paper's "raw materials" share, since that is yarn — already this engine's
- * own separate raw_material line): midpoint chemicals 7.5% ÷ midpoint
- * non-raw-material 43% (100% − midpoint raw-material 57%) ≈ 17%.
- *
- * This is a MODEL, not a measurement of any specific recipe — stated as a
- * value, not buried in a formula, so it can be argued with (same reasoning
- * as ENERGY_SHARE in engine/catalog/country-costs.js). Every dyeing.per_kg
- * built from it carries this share and its source in dyeing_detail so nothing
- * is hidden inside the total.
- */
-const DYEING_CHEMICAL_SHARE_OF_CONVERSION = 0.17;
-const DYEING_CHEMICAL_SHARE_SOURCE = 'Uddin et al. 2023, PLOS Sustainability and Transformation — Bangladesh textile wet-processing cost survey';
-
-// ============================================================
-// SECTION 7: INVISIBLE WASTE FACTORS (%)
+// SECTION 7: KNITTING LOSS (%) — yarn into grey fabric (cone ends, setting, faults)
 // ============================================================
 const INVISIBLE_WASTE_PCT = {
   single_jersey: 2.5, rib_1x1: 3.0, rib_2x2: 3.0, interlock: 3.5,
@@ -347,7 +307,9 @@ const INVISIBLE_WASTE_PCT = {
 // SECTION 8: EXCHANGE RATES (USD base)
 // ============================================================
 const DEFAULT_EXCHANGE_RATES = {
-  USD: 1.000, BDT: 110.5, EUR: 0.920,
+  // BDT: Bangladesh Bank weighted average, October 2026 (123.1). Override with
+  // exchange_rate for a quote on another day.
+  USD: 1.000, BDT: 123.1, EUR: 0.920,
   GBP: 0.790, CNY: 7.250, INR: 83.50,
 };
 
@@ -537,7 +499,7 @@ function autoDetectYarnType(parsedComp, countNe, options = {}) {
     return { key: 'us_carded_cotton', label: SM_PRICE_MATRIX.us_carded_cotton.label };
   }
   // CVC / PC blends
-  if (cotton > 0 && poly > 0) {
+  if (cotton >= 20 && poly >= 10) {
     const ratio = `${cotton}_${poly}`;
     if (cotton >= 55 && cotton <= 65) {
       if (isSlub) return { key: 'cvc_60_40_slub', label: SM_PRICE_MATRIX.cvc_60_40_slub.label };
@@ -554,6 +516,19 @@ function autoDetectYarnType(parsedComp, countNe, options = {}) {
     if (poly >= 60) return { key: 'pc_65_35', label: SM_PRICE_MATRIX.pc_65_35.label };
     return { key: 'cvc_60_40', label: SM_PRICE_MATRIX.cvc_60_40.label }; // fallback
   }
+  // Synthetics and regenerated fibres on their own rows (they used to fall
+  // through to the carded-cotton row at the bottom)
+  const hard = Math.max(1, 100 - elast);
+  const nylon = fibers.nylon || 0, acr = fibers.acrylic || 0, lyo = (fibers.tencel || 0) + (fibers.lyocell || 0);
+  if (poly / hard >= 0.85) {
+    const form = String(options.poly_form || '');
+    if (form === 'dty' || form === 'fdy') { const k = polyFilamentKey(countNe); return { key: k, label: SM_PRICE_MATRIX[k].label }; }
+    return { key: 'polyester_spun', label: SM_PRICE_MATRIX.polyester_spun.label };
+  }
+  if (nylon / hard >= 0.85) { const k = nylonFilamentKey(countNe); return { key: k, label: SM_PRICE_MATRIX[k].label }; }
+  if (acr / hard >= 0.85) return { key: 'acrylic_spun', label: SM_PRICE_MATRIX.acrylic_spun.label };
+  if (lyo / hard >= 0.85) return { key: 'lyocell_spun', label: SM_PRICE_MATRIX.lyocell_spun.label };
+  if (poly >= 50 && visc >= 25 && cotton === 0) return { key: 'pv_65_35', label: SM_PRICE_MATRIX.pv_65_35.label };
   // Modal blend
   if (modal > 30 && cotton > 30) return { key: 'cotton_modal_50_50', label: SM_PRICE_MATRIX.cotton_modal_50_50.label };
   // Viscose blend
@@ -583,7 +558,76 @@ function autoDetectYarnType(parsedComp, countNe, options = {}) {
     if (isWhite) return { key: 'carded_white', label: SM_PRICE_MATRIX.carded_white.label };
     return { key: 'carded_regular', label: SM_PRICE_MATRIX.carded_regular.label };
   }
-  return { key: 'carded_regular', label: SM_PRICE_MATRIX.carded_regular.label };
+  // No row is this blend: price it from its fibres (see blendYarnPrice)
+  return { key: 'blend_model', label: 'Blend — priced from its fibres' };
+}
+
+// ============================================================
+// HELPERS: filament rows, fibre rows, blends and multi-yarn fabrics
+// ============================================================
+const denierOf = (ne) => 5315 / Math.max(1, ne);
+function polyFilamentKey(ne) { const d = denierOf(ne); return d <= 87 ? 'filament_75d' : d <= 125 ? 'filament_100d' : 'filament_150d'; }
+function nylonFilamentKey(ne) { const d = denierOf(ne); return d <= 30 ? 'nylon_filament_20d' : d <= 55 ? 'nylon_filament_40d' : 'nylon_filament_70d'; }
+
+/** The row a single fibre is priced on, at a count, for a role in the cloth. */
+function fibreRowKey(fibre, ne, o = {}) {
+  const spin = String(o.spinning_system || '');
+  switch (fibre) {
+    case 'supima': return 'supima_combed';
+    case 'cotton': {
+      if (/carded|open_end/.test(spin) || o.coarse) return 'carded_regular';
+      if (/combed|compact|siro|vortex/.test(spin)) return 'combed_regular';
+      return ne >= 20 ? 'combed_regular' : 'carded_regular';
+    }
+    case 'polyester': return o.filament ? polyFilamentKey(ne) : 'polyester_spun';
+    case 'nylon': case 'polyamide': return nylonFilamentKey(ne);
+    case 'viscose': case 'bamboo': case 'modal': return 'viscose_regular';
+    case 'tencel': case 'lyocell': return 'lyocell_spun';
+    case 'acrylic': return 'acrylic_spun';
+    default: return null;
+  }
+}
+// fibres priced off another fibre's row, with the premium the market carries
+const FIBRE_ROW_PREMIUM = { modal: 0.40 };
+
+/**
+ * A yarn whose price is built from parts — a blend no row lists, or a fabric
+ * knitted from several yarns (fleece face + binder + loop, terry ground + pile).
+ * Each part is priced on its own row through the same chain as any yarn
+ * (market quote first), then weighted by its share of the fabric.
+ */
+function compositeYarnPrice(parts, live, countryCode, blendPremium) {
+  const comps = [];
+  for (const p of parts) {
+    const key = p.key;
+    if (!key || !SM_PRICE_MATRIX[key]) continue;
+    const r = resolveYarnPrice(key, p.ne, live, countryCode);
+    if (r.price == null) continue;
+    const prem = FIBRE_ROW_PREMIUM[p.fibre] || 0;
+    comps.push({
+      role: p.role || p.fibre, fibre: p.fibre, share_pct: Math.round(p.share * 10) / 10, count_ne: Math.round(p.ne),
+      key, label: SM_PRICE_MATRIX[key].label + (prem ? ` + ${p.fibre} premium` : ''),
+      price_usd: round4(r.price + prem), source_kind: r.price_source.kind,
+      modelled: !!SM_PRICE_MATRIX[key].modelled || !!prem,
+      last_updated: r.price_source.last_updated,
+      freshness: r.price_source.freshness,
+    });
+  }
+  const tot = comps.reduce((t, c) => t + c.share_pct, 0);
+  if (!comps.length || tot <= 0) return null;
+  const price = round4(comps.reduce((t, c) => t + c.price_usd * c.share_pct / tot, 0) + (blendPremium || 0));
+  const anyMarket = comps.some((c) => c.source_kind.startsWith('market'));
+  return {
+    price,
+    price_source: {
+      kind: 'composite',
+      last_updated: comps.map((c) => c.last_updated).filter(Boolean).sort().slice(-1)[0] || PRICE_LIST_DATE,
+      freshness: anyMarket ? 'mixed' : 'reference',
+      modelled: comps.some((c) => c.modelled),
+      blend_premium: blendPremium || 0,
+      components: comps,
+    },
+  };
 }
 
 // ============================================================
@@ -611,6 +655,7 @@ function calculateCost(params) {
     ecovero:     !!(params.ecovero),
     siro:        !!(params.siro),
     spinning_system: params.spinning_system || null,
+    poly_form:   params.poly_form || null,
     us_origin:   !!(params.us_origin),
   };
 
@@ -638,9 +683,35 @@ function calculateCost(params) {
   }
 
   // ---- 2. GET BASE PRICE: market quote first, reference list second ----
-  const resolved = resolveYarnPrice(yarnTypeKey, countNe, params.live_prices, country.code);
+  // Three shapes of yarn: one row (most fabrics), several yarns knitted
+  // together (fleece face + binder + loop, terry ground + pile — each priced
+  // at its own count), or a blend no row lists (priced from its fibres).
+  const fibersAll = parsedComp ? (parsedComp.fibers || {}) : { cotton: 100 };
+  let composite = null;
+  const comps = !params.yarn_type && Array.isArray(params.yarn_components) ? params.yarn_components : [];
+  if (comps.length > 1) {
+    composite = compositeYarnPrice(comps.map((c) => ({
+      ...c, share: +c.share_pct,
+      key: fibreRowKey(c.fibre, +c.ne, { spinning_system: c.coarse ? null : opts.spinning_system, filament: c.filament, coarse: c.coarse }),
+    })).filter((c) => c.ne > 0 && c.share > 0), params.live_prices, country.code, 0);
+    if (composite) { yarnTypeKey = 'multi_yarn'; yarnLabel = composite.price_source.components.map((c) => `${c.share_pct}% ${c.role} ${c.count_ne}s`).join(' + '); }
+  }
+  if (!composite && yarnTypeKey === 'blend_model') {
+    const el = (fibersAll.elastane || 0) + (fibersAll.spandex || 0);
+    const parts = Object.entries(fibersAll)
+      .filter(([f, v]) => v > 0 && f !== 'elastane' && f !== 'spandex')
+      .map(([f, v]) => ({ fibre: f, role: f, ne: countNe, share: v / Math.max(1, 100 - el) * 100,
+        key: fibreRowKey(f, countNe, { spinning_system: opts.spinning_system, filament: /dty|fdy/.test(opts.poly_form || '') }) }));
+    // intimate blending at the draw frame costs a little over the weighted fibres
+    composite = compositeYarnPrice(parts, params.live_prices, country.code, 0.08);
+    if (composite) yarnLabel = 'Blend — ' + composite.price_source.components.map((c) => `${c.share_pct}% ${c.fibre}`).join(' / ') + ' (priced from its fibres)';
+  }
+  const resolved = composite || resolveYarnPrice(yarnTypeKey, countNe, params.live_prices, country.code);
   let basePrice = resolved.price;
   let priceSource = resolved.price_source;
+  if (!composite && SM_PRICE_MATRIX[yarnTypeKey] && SM_PRICE_MATRIX[yarnTypeKey].modelled && priceSource.kind === 'reference_list') {
+    priceSource = { ...priceSource, modelled: true };
+  }
 
   if (basePrice === null) {
     // Neither a quote nor a listed price. A caller-supplied figure is better
@@ -728,6 +799,18 @@ function calculateCost(params) {
     surchargesApplied.push({ name: 'Ecovero Viscose Surcharge', amount: SM_SURCHARGES.ecovero });
   }
 
+  // The rows are RING carded / ring combed. Another spinning system moves the
+  // price: compact and siro cost more to spin, a rotor (open-end) yarn less.
+  const SPIN_PREMIUM = { compact: 0.15, siro: 0.20, siro_compact: 0.35, open_end: -0.30, vortex: 0.05 };
+  const SPIN_LABEL = { compact: 'Compact spinning premium', siro: 'Siro spinning premium', siro_compact: 'Siro-compact spinning premium', open_end: 'Open-end (rotor) yarn, below ring carded', vortex: 'Air-jet (vortex) premium' };
+  {
+    const sp = String(opts.spinning_system || '');
+    if (/^(carded|combed|us_|supima)/.test(yarnTypeKey) && SPIN_PREMIUM[sp] != null) {
+      surchargeTotal += SPIN_PREMIUM[sp];
+      surchargesApplied.push({ name: SPIN_LABEL[sp], amount: SPIN_PREMIUM[sp], modelled: true });
+    }
+  }
+
   // Route-specific yarn premiums handed in by the caller (e.g. a melange yarn)
   for (const x of (Array.isArray(params.extra_surcharges) ? params.extra_surcharges : [])) {
     const amt = parseFloat(x && x.amount);
@@ -771,142 +854,154 @@ function calculateCost(params) {
     };
   }
 
-  // ---- 4. INVISIBLE WASTE ----
+  // ---- 4. KNITTING LOSS: yarn → grey fabric ----
+  // Cone ends, machine setting and knitting faults. Grossed up as a loss
+  // (÷ (1 − w)), not a mark-up: 3% lost means 1/0.97 kg of yarn per kg of grey.
   const wastePct = INVISIBLE_WASTE_PCT[fabricId] || INVISIBLE_WASTE_PCT.default;
-  const wasteMultiplier = 1 + wastePct / 100;
-  const rawMaterialWithWaste = round4(effectiveYarnPrice * wasteMultiplier);
+  const rawMaterialWithWaste = round4(effectiveYarnPrice / (1 - wastePct / 100));
 
   // ---- 5. KNITTING COST (Official Price List: fabric × above/below 30s) ----
   let knittingFinal, knittingBase, knittingDetail;
   if (params.knitting_cost) {
-    // User override
     knittingBase = parseFloat(params.knitting_cost);
     knittingFinal = knittingBase;
     knittingDetail = { source: 'user_override', price_usd_kg: knittingBase, note: 'Manual override' };
   } else {
-    // Look up from official knitting price table (fabric + count tier)
     knittingDetail = getKnittingPrice(fabricId, countNe, parsedComp, params.yarn_form || null, params.feeder_type || null);
     knittingBase = knittingDetail.price_usd_kg;
     knittingFinal = knittingBase;
   }
-  // NOT adjusted by country, deliberately. Knitting comes from a factory price
-  // list and stays that list's number wherever the fabric is costed. Only the
-  // YARN follows the country, because yarn is the only line with a real market
-  // quote behind it; scaling a conversion charge by a power tariff was a model
-  // standing in for data, and a model in the middle of a costing is harder to
-  // argue with than a missing number.
+  // NOT adjusted by country, deliberately: a price-list number stays one.
   const knittingAnchor = knittingFinal;
 
-  // ---- 6. DYEING COST (Official Price List: one-part vs two-part) ----
-  // KNIT ONLY. This entire tool is a knit-fabric advisor (KnitAdvisor) — its
-  // dyeing layer (recipes, price list, theory, faults) exists to cost and
-  // explain KNIT wet-processing, full stop. A woven fabric never gets a
-  // dyeing line here, not a real recipe and not even the price-list
-  // estimate: it is out of scope for this tool, not an uncovered case to
-  // estimate around. (A caller who explicitly passes dyeing_cost still gets
-  // it applied — that is their own stated number, not this engine assuming
-  // a woven fabric needs one.)
-  const fibers = parsedComp ? (parsedComp.fibers || {}) : { cotton: 100 };
-  // Two-part = blend with both cotton + polyester (CVC / PC)
-  const isTwoPart = (fibers.polyester || 0) >= 10 && ((fibers.cotton || 0) >= 30 || (fibers.viscose || 0) >= 30);
+  // ---- 6. DYEING CHARGE: shade band × fibre route (wet-cost-model.js) ----
+  // KNIT ONLY. A woven fabric gets no dyeing line here (out of scope for a
+  // knit advisor) unless the caller passes dyeing_cost explicitly.
+  const fibers = fibersAll;
   const isWovenFabric = isWovenId(fabricId);
-
-  let dyeingFinal, dyeingBase, dyeingDetail;
+  let dyeingFinal, dyeingDetail, dyeModel = null;
   if (params.dyeing_cost) {
-    dyeingBase  = parseFloat(params.dyeing_cost);
-    dyeingFinal = dyeingBase;
-    dyeingDetail = { source: 'user_override', one_part: dyeingBase, two_part: dyeingBase, is_two_part: false };
+    dyeingFinal = round4(parseFloat(params.dyeing_cost));
+    dyeingDetail = { source: 'user_override', note: `Dyeing charge supplied: $${dyeingFinal}/kg`, spread_pct: 2 };
   } else if (isWovenFabric) {
-    dyeingBase  = 0;
     dyeingFinal = 0;
     dyeingDetail = {
       source: 'NOT_APPLICABLE',
-      note: 'Dyeing is not costed for woven fabrics in this tool — KnitAdvisor\'s dyeing layer (real recipes, price list, theory, faults) covers knit wet-processing only. Pass dyeing_cost explicitly if a woven quote needs one.',
+      note: 'Dyeing is not costed for woven fabrics in this tool — the dyeing layer covers knit wet-processing only. Pass dyeing_cost explicitly if a woven quote needs one.',
+      spread_pct: 0,
     };
   } else {
-    const shadeKey = colorShade || 'light_medium';
-    // The all-in conversion rate ALWAYS comes from the official price list —
-    // it is the only figure in this engine that bundles machine, labour,
-    // utilities and overhead. Computed first so both branches below share it.
-    const dyeRow   = DYEING_COST[shadeKey] || DYEING_COST_FALLBACK;
-    const basePrice = isTwoPart
-      ? (dyeRow.two_part > 0 ? dyeRow.two_part : dyeRow.one_part)  // fall back to one-part if 0
-      : dyeRow.one_part;
+    dyeModel = dyeingCharge({
+      shade: colorShade,
+      spec: params.shade_spec || null,
+      colorHex: params.color_hex || null,
+      depthOwf: params.shade_depth_pct != null && params.shade_depth_pct !== '' ? parseFloat(params.shade_depth_pct) : null,
+      dyeBand: params.dye_band || null,
+      fibers,
+      dyeingMethod: params.dyeing_method || null,
+      surfaceFinish: params.surface_finish || null,
+    });
+    dyeingFinal = dyeModel.per_kg;
+    dyeingDetail = {
+      source: 'shade_band',
+      ...dyeModel,
+      note: `${dyeModel.band_label} (${dyeModel.how}) on ${dyeModel.route_label}: `
+        + dyeModel.lines.map((l) => `${l.item} $${l.usd}`).join(' + ') + ` = $${dyeModel.per_kg}/kg grey`,
+    };
+  }
+  const dyeingAnchor = dyeingFinal;
+  const isTwoPart = !!(dyeModel && dyeModel.route === 'two_part');
 
-    // A genuine, cost-verified factory card (see dyeing-engine.js / data/
-    // dyeing-reference.json) exists for this shade whenever one of the 40
-    // real recipes covers it — matchDyeingRecipe()'s own is_woven guard
-    // stays as defence in depth for any other caller that reaches it
-    // directly, moot here since isWovenFabric already routed woven out above.
-    const matched = matchDyeingRecipe({ shade_tier: shadeKey, is_two_part: isTwoPart, is_woven: isWovenFabric });
-    if (matched) {
-      // The real card only ever prices CHEMICALS (see dyeing-engine.js's own
-      // header) — it is not a substitute for the price list's all-in rate,
-      // and cannot simply be added on top of it either, or chemicals would
-      // be counted twice (the price list already bundles them in). Instead:
-      // swap out the price list's OWN assumed chemical share for this real,
-      // measured one — machine/labour/overhead still come from the price
-      // list, chemicals come from an actual factory recipe.
-      const real = calculateDyeingCost({ recipe: matched, fabric_qty_kg: 1, bdt_per_usd: exchangeRates.BDT });
-      const realChemicalUsd     = real.cost_per_kg_usd;
-      const assumedChemicalUsd  = basePrice * DYEING_CHEMICAL_SHARE_OF_CONVERSION;
-      const hybridUsd           = basePrice - assumedChemicalUsd + realChemicalUsd;
-      dyeingBase  = hybridUsd;
-      dyeingFinal = round4(hybridUsd);
-      dyeingDetail = {
-        source: 'REAL_RECIPE',
-        costing_model: 'price_list_conversion_plus_real_chemicals',
-        shade_key: shadeKey, is_two_part: isTwoPart,
-        recipe_id: matched.id, recipe_name: matched.sheet_name, color_label: matched.color_label,
-        match_quality: matched.match_quality,
-        dye_cost_included: matched.dye_cost_included,
-        price_list_base_usd: basePrice,
-        assumed_chemical_share_pct: round4(DYEING_CHEMICAL_SHARE_OF_CONVERSION * 100),
-        assumed_chemical_share_source: DYEING_CHEMICAL_SHARE_SOURCE,
-        assumed_chemical_portion_usd: round4(assumedChemicalUsd),
-        real_chemical_cost_usd: round4(realChemicalUsd),
-        real_chemical_cost_tk: real.cost_per_kg_tk,
-        cost_per_kg_tk: real.cost_per_kg_tk,
-        applied_price: dyeingFinal,
-        chemicals: real.chemicals,
-        note: `Hybrid: $${basePrice.toFixed(4)} official price-list rate (machine, labour, utilities, `
-          + `overhead) − $${assumedChemicalUsd.toFixed(4)} assumed chemical share `
-          + `(~${(DYEING_CHEMICAL_SHARE_OF_CONVERSION * 100).toFixed(0)}% of conversion cost, ${DYEING_CHEMICAL_SHARE_SOURCE}) `
-          + `+ $${realChemicalUsd.toFixed(4)} real chemical cost from an actual factory recipe (${matched.sheet_name}) `
-          + `= $${dyeingFinal}/kg.`
-          + (matched.dye_cost_included ? '' : ' That real figure covers pretreatment/auxiliary chemicals only — '
-            + 'the reactive dye itself is job-specific and not included, so it is a floor, not the full chemical cost.'),
-      };
-    } else {
-      dyeingBase  = basePrice;
-      dyeingFinal = round4(basePrice);
-      dyeingDetail = {
-        source: 'Official Dyeing Price List',
-        shade_key: shadeKey, is_two_part: isTwoPart,
-        one_part_price: dyeRow.one_part, two_part_price: dyeRow.two_part,
-        applied_price: dyeingFinal,
-        note: isTwoPart
-          ? `Two-part dyeing (CVC/PC blend) at ${dyeRow.two_part > 0 ? dyeRow.two_part : dyeRow.one_part} USD/kg`
-          : `One-part dyeing (${shadeKey}) at ${dyeRow.one_part} USD/kg`,
-      };
+  // ---- 7. FINISHING: width, heat-set, brushing and surface finishes ----
+  let finishingFinal, finishingDetail;
+  if (params.finishing_cost) {
+    finishingFinal = round4(parseFloat(params.finishing_cost));
+    finishingDetail = { source: 'user_override', lines: [{ item: 'Finishing charge supplied', usd: finishingFinal }], spread_pct: 2 };
+  } else if (isWovenFabric) {
+    finishingFinal = 0.45;
+    finishingDetail = { source: 'woven_default', lines: [{ item: 'Woven finishing (flat estimate)', usd: 0.45 }], spread_pct: 25 };
+  } else {
+    const f = finishingCharge({
+      fabricId, fibers, gsm,
+      finishingRoute: params.finishing_route || null,
+      surfaceFinish: params.surface_finish || null,
+      brushed: !!params.brushed, brushSides: params.brush_sides, sheared: !!params.sheared, velourCut: !!params.velour_cut,
+    });
+    finishingFinal = f.per_kg;
+    finishingDetail = { source: 'finishing_model', ...f };
+  }
+  const finishingAnchor = finishingFinal;
+
+  // ---- 8. PROCESS LOSS, then the total ----
+  // Grey kilos that never reach the customer: what the fibre loses in the bath
+  // and what is trimmed, sampled and cut in handling. The dyehouse charges per
+  // kg of GREY fabric, so everything bought before a loss is spread over the
+  // kilos that survive it:
+  //   dyed     = (yarn per kg grey + knitting + dyeing) ÷ (1 − dye-stage loss)
+  //   finished = (dyed + finishing) ÷ (1 − finishing-stage loss)
+  // This line used to be missing: the engine knew the loss was ~12.5% and the
+  // price ignored it.
+  let loss = null;
+  if (!isWovenFabric) {
+    loss = wetProcessLoss({
+      segment: dyeModel ? dyeModel.segment : 'medium',
+      chem: dyeModel ? dyeModel.chem : 'dye',
+      fibers,
+      twoPart: isTwoPart && dyeModel && !['white_optic', 'white_bleached', 'melange_wash', 'ecru'].includes(dyeModel.band),
+      processes: Array.isArray(params.loss_processes) ? params.loss_processes : [],
+    });
+    const forced = parseFloat(params.process_loss_pct);
+    if (Number.isFinite(forced) && forced >= 0 && forced < 40) {
+      const k = loss.loss_pct > 0 ? forced / loss.loss_pct : 0;
+      const d = loss.dye_stage_pct * k;
+      loss = { ...loss, loss_pct: forced, dye_stage_pct: round2(d),
+        finish_stage_pct: round2(100 * (1 - (1 - forced / 100) / (1 - d / 100))), supplied: true, spread_pp: 0.3 };
     }
   }
-  // Also not adjusted by country. Same reason as knitting: it is a price-list
-  // number, and it stays one.
-  const dyeingAnchor = dyeingFinal;
+  const Ld = loss ? loss.dye_stage_pct / 100 : 0;
+  const Lf = loss ? loss.finish_stage_pct / 100 : 0;
+  const greyCost = rawMaterialWithWaste + knittingFinal;
+  const dyedCost = (greyCost + dyeingFinal) / (1 - Ld);
+  const totalCost = round4((dyedCost + finishingFinal) / (1 - Lf));
+  const chargesSum = rawMaterialWithWaste + knittingFinal + dyeingFinal + finishingFinal;
+  const lossCost = round4(totalCost - chargesSum);
 
-  const dualBath = isTwoPart ? 0 : 0; // already factored in via two_part price
-
-  // ---- 7. FINISHING COST ----
-  const finishingBase = params.finishing_cost
-    ? parseFloat(params.finishing_cost)
-    : FINISHING_COST_BY_FABRIC[fabricId] || FINISHING_COST_BY_FABRIC.default;
-  const heavySurcharge = gsm > 300 ? 0.10 : gsm > 250 ? 0.05 : 0;
-  const finishingAnchor = round4(finishingBase + heavySurcharge);
-  const finishingFinal = finishingAnchor;
-
-  // ---- 8. TOTAL CMT ----
-  const totalCost = round4(rawMaterialWithWaste + knittingFinal + dyeingFinal + finishingFinal);
+  // ---- 8b. HOW SURE: a range, not just a number ----
+  // Each line carries the spread a buyer would see for it between suppliers on
+  // the same day; carried through the loss gross-up and combined
+  // root-sum-square (the lines move independently).
+  const yarnSpread = (() => {
+    const k = priceSource.kind;
+    if (k === 'user_supplied') return 0.02;
+    if (k === 'fallback_guess') return 0.20;
+    if (k === 'market' || k === 'market_interpolated' || k === 'modelled_country') {
+      return priceSource.freshness === 'current' ? 0.03 : priceSource.freshness === 'recent' ? 0.04 : 0.06;
+    }
+    if (k === 'composite') return priceSource.modelled ? 0.09 : 0.06;
+    return priceSource.modelled ? 0.10 : 0.06;
+  })();
+  const knitSpread = knittingDetail && knittingDetail.source === 'user_override' ? 0.02 : 0.10;
+  const dyeSpread = (dyeingDetail.spread_pct || 0) / 100;
+  const finSpread = ((finishingDetail && finishingDetail.spread_pct) || 0) / 100;
+  const G = 1 / ((1 - Ld) * (1 - Lf));
+  const contrib = [
+    { line: 'yarn', usd: rawMaterialWithWaste * yarnSpread * G },
+    { line: 'knitting', usd: knittingFinal * knitSpread * G },
+    { line: 'dyeing', usd: dyeingFinal * dyeSpread * G },
+    { line: 'finishing', usd: finishingFinal * finSpread / (1 - Lf) },
+    { line: 'process loss', usd: loss ? totalCost * (loss.spread_pp / 100) / (1 - loss.loss_pct / 100) : 0 },
+  ];
+  const sigma = Math.sqrt(contrib.reduce((t, c) => t + c.usd * c.usd, 0));
+  const accPct = totalCost > 0 ? sigma / totalCost * 100 : 0;
+  const accuracy = {
+    low: round2(totalCost - sigma), high: round2(totalCost + sigma),
+    pct: Math.round(accPct * 10) / 10,
+    confidence: accPct <= 4 ? 'high' : accPct <= 7 ? 'medium' : 'low',
+    drivers: contrib.filter((c) => c.usd > 0.005).sort((x, y) => y.usd - x.usd)
+      .map((c) => ({ line: c.line, usd: round2(c.usd), share_pct: Math.round(c.usd * c.usd / Math.max(1e-9, sigma * sigma) * 100) })),
+    yarn_spread_pct: Math.round(yarnSpread * 100), knitting_spread_pct: Math.round(knitSpread * 100),
+    dyeing_spread_pct: Math.round(dyeSpread * 100), finishing_spread_pct: Math.round(finSpread * 100),
+  };
 
   // ---- 9. MARGIN SCENARIOS ----
   const margins = [10, 15, 20, 25, 30].map(m => ({
@@ -925,6 +1020,7 @@ function calculateCost(params) {
       knitting_usd:           round4(knittingFinal * wt_kg),
       dyeing_usd:             round4(dyeingFinal * wt_kg),
       finishing_usd:          round4(finishingFinal * wt_kg),
+      process_loss_usd:       round4(lossCost * wt_kg),
       total_usd:              round4(totalCost * wt_kg),
       [`total_${currency.toLowerCase()}`]: round4(totalCost * wt_kg * fxRate),
     };
@@ -951,7 +1047,9 @@ function calculateCost(params) {
       name: country.name,
       name_bn: country.name_bn,
       is_anchor: country.is_anchor,
-      tariff: country.tariff,
+      // the tariff's source and link stay in the catalogue: nothing external
+      // is named or linked on the site
+      tariff: (({ source, url, ...t }) => t)(country.tariff || {}),
       vs_anchor: country.vs_anchor,
       method: country.method,
       // The anchor's own figures, so the two columns can be shown side by side.
@@ -993,6 +1091,8 @@ function calculateCost(params) {
             + `${priceSource.last_updated}`
         : priceSource.kind === 'reference_list'
           ? `KnitAdvisor reference price list, ${PRICE_LIST_DATE}`
+          : priceSource.kind === 'composite'
+            ? `Priced from its parts: ${priceSource.components.map((c) => `${c.share_pct}% ${c.label} $${c.price_usd}`).join(', ')}`
           : priceSource.kind === 'user_supplied'
             ? 'Price supplied with the request'
             : 'No reference price — fallback figure',
@@ -1033,37 +1133,44 @@ function calculateCost(params) {
       },
       dyeing: {
         per_kg:            dyeingFinal,
-        shade_key:         dyeingDetail ? dyeingDetail.shade_key : colorShade,
-        is_two_part:       dyeingDetail ? dyeingDetail.is_two_part : false,
-        one_part_price:    dyeingDetail ? dyeingDetail.one_part_price : null,
-        two_part_price:    dyeingDetail ? dyeingDetail.two_part_price : null,
-        source:            dyeingDetail ? dyeingDetail.source : null,
-        note:              dyeingDetail ? dyeingDetail.note : null,
-        // Present only when source === 'REAL_RECIPE' — a real, cost-verified
-        // factory recipe matched this shade (see dyeing-engine.js). The
-        // frontend's Dyeing-stage recipe section renders these, or stays
-        // hidden when they're absent (an estimate-only shade, unchanged
-        // behaviour, nothing fabricated to show).
-        recipe_id:         dyeingDetail && dyeingDetail.source === 'REAL_RECIPE' ? dyeingDetail.recipe_id : null,
-        recipe_name:       dyeingDetail && dyeingDetail.source === 'REAL_RECIPE' ? dyeingDetail.recipe_name : null,
-        color_label:       dyeingDetail && dyeingDetail.source === 'REAL_RECIPE' ? dyeingDetail.color_label : null,
-        match_quality:     dyeingDetail && dyeingDetail.source === 'REAL_RECIPE' ? dyeingDetail.match_quality : null,
-        dye_cost_included: dyeingDetail && dyeingDetail.source === 'REAL_RECIPE' ? dyeingDetail.dye_cost_included : null,
-        // Chemical cost detail only — NOT the full dyeing cost. per_kg above
-        // (the hybrid) is the number to use for a quote; these exist so the
-        // hybrid's chemical component is auditable back to the real recipe
-        // card instead of a bare number. See costing_model/note for the math.
-        costing_model:               dyeingDetail && dyeingDetail.source === 'REAL_RECIPE' ? dyeingDetail.costing_model : null,
-        price_list_base_usd:         dyeingDetail && dyeingDetail.source === 'REAL_RECIPE' ? dyeingDetail.price_list_base_usd : null,
-        assumed_chemical_share_pct:  dyeingDetail && dyeingDetail.source === 'REAL_RECIPE' ? dyeingDetail.assumed_chemical_share_pct : null,
-        assumed_chemical_share_source: dyeingDetail && dyeingDetail.source === 'REAL_RECIPE' ? dyeingDetail.assumed_chemical_share_source : null,
-        real_chemical_cost_usd:      dyeingDetail && dyeingDetail.source === 'REAL_RECIPE' ? dyeingDetail.real_chemical_cost_usd : null,
-        cost_per_kg_tk:    dyeingDetail && dyeingDetail.source === 'REAL_RECIPE' ? dyeingDetail.cost_per_kg_tk : null,
-        chemicals:         dyeingDetail && dyeingDetail.source === 'REAL_RECIPE' ? dyeingDetail.chemicals : null,
+        shade_key:         colorShade,
+        is_two_part:       isTwoPart,
+        source:            dyeingDetail.source,
+        note:              dyeingDetail.note,
+        band:              dyeingDetail.band || null,
+        band_label:        dyeingDetail.band_label || null,
+        band_what:         dyeingDetail.band_what || null,
+        how:               dyeingDetail.how || null,
+        special:           dyeingDetail.special || null,
+        route:             dyeingDetail.route || null,
+        route_label:       dyeingDetail.route_label || null,
+        lines:             dyeingDetail.lines || null,
+        range:             dyeingDetail.range || null,
+        spread_pct:        dyeingDetail.spread_pct != null ? dyeingDetail.spread_pct : null,
+        basis:             dyeingDetail.basis || null,
+        print_note:        dyeingDetail.note && dyeingDetail.source === 'shade_band' && dyeModel && dyeModel.note ? dyeModel.note : null,
       },
+      finishing_detail: finishingDetail,
+      process_loss: loss ? {
+        pct: loss.loss_pct,
+        dye_stage_pct: loss.dye_stage_pct,
+        finish_stage_pct: loss.finish_stage_pct,
+        parts: loss.parts,
+        supplied: !!loss.supplied,
+        cost_per_kg: lossCost,
+      } : null,
+      // the price built up the way a mill builds it, step by step
+      build_up: [
+        { step: 'Yarn per kg of grey fabric', usd: round2(rawMaterialWithWaste), how: `yarn $${round2(effectiveYarnPrice)} ÷ (1 − ${wastePct}% knitting loss)` },
+        { step: 'Grey fabric', usd: round2(greyCost), how: `+ knitting $${round2(knittingFinal)}` },
+        { step: 'Dyed fabric', usd: round2(dyedCost), how: `+ dyeing $${round2(dyeingFinal)}, ÷ (1 − ${loss ? loss.dye_stage_pct : 0}% lost in the bath)` },
+        { step: 'Finished fabric', usd: round2(totalCost), how: `+ finishing $${round2(finishingFinal)}, ÷ (1 − ${loss ? loss.finish_stage_pct : 0}% lost in finishing)` },
+      ],
       finishing:             finishingFinal,
       total_per_kg:          totalCost,
     },
+
+    accuracy,
 
     cost_in_currency: {
       currency,
@@ -1072,6 +1179,7 @@ function calculateCost(params) {
       knitting_per_kg:     c(knittingFinal),
       dyeing_per_kg:       c(dyeingFinal),
       finishing_per_kg:    c(finishingFinal),
+      process_loss_per_kg: c(lossCost),
       total_per_kg:        c(totalCost),
     },
 
@@ -1101,24 +1209,25 @@ function calculateCost(params) {
             `${priceSource.reference_gap_pct > 0 ? '+' : ''}${priceSource.reference_gap_pct}%`
           : ''),
       elastane_blend: elastaneDetail ? `Base yarn $${finalYarnPrice} × ${100 - elastanePct}% + Elastane $${elastaneDetail.price_per_kg_usd} × ${elastanePct}% = $${effectiveYarnPrice}/kg (weighted blend)` : null,
-      raw_material: `$${effectiveYarnPrice} × (1 + ${wastePct}% waste) = $${rawMaterialWithWaste}`,
+      raw_material: `$${effectiveYarnPrice} ÷ (1 − ${wastePct}% knitting loss) = $${rawMaterialWithWaste} per kg grey`,
       knitting:     knittingDetail ? knittingDetail.note : `$${knittingFinal}/kg`,
       dyeing:       dyeingDetail ? dyeingDetail.note : `$${dyeingFinal}/kg`,
-      finishing:    `fabric="${fabricId}" $${finishingBase} + heavy_gsm $${heavySurcharge} = $${finishingFinal}`,
-      total:        `$${rawMaterialWithWaste} + $${knittingFinal} + $${dyeingFinal} + $${finishingFinal} = $${totalCost}/kg`,
+      finishing:    (finishingDetail.lines || []).map((l) => `${l.item} $${l.usd}`).join(' + ') + ` = $${finishingFinal}/kg`,
+      process_loss: loss ? `${loss.loss_pct}% grey→finished (${loss.dye_stage_pct}% in the bath, ${loss.finish_stage_pct}% in finishing) adds $${lossCost}/kg` : null,
+      total:        `(($${rawMaterialWithWaste} + $${knittingFinal} + $${dyeingFinal}) ÷ ${round4(1 - Ld)} + $${finishingFinal}) ÷ ${round4(1 - Lf)} = $${totalCost}/kg (range $${accuracy.low}–$${accuracy.high})`,
     },
 
     notes: [
-      'Yarn prices sourced from KnitAdvisor certified industry-verified price database (May 2, 2026).',
-      'US Upland Combed/Carded prices reference: textilepages.com + Bangladesh RMG market 2026.',
-      'US Pima/Supima price reference: Fibre2Fashion.com + Supima.com 2025.',
-      'Knitting, dyeing, and finishing costs are Bangladesh RMG industry averages.',
-      `Invisible waste factor of ${wastePct}% applied to account for knitting & winding losses.`,
+      'Yarn: live market quote where one exists, otherwise the KnitAdvisor reference price list.',
+      'Knitting: factory price list. Dyeing: shade band on the fibre route, anchored on the factory price list. Finishing: by width and finish.',
+      `Knitting loss ${wastePct}%; process loss ${loss ? loss.loss_pct + '%' : 'not applied'} grey→finished.`,
+      'Bangladesh anchor; an ex-mill cost, before margin.',
     ],
   };
 }
 
 function round4(v) { return parseFloat(Number(v).toFixed(4)); }
+function round2(v) { return Math.round(Number(v) * 100) / 100; }
 
 module.exports = {
   calculateCost,

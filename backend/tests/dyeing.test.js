@@ -157,25 +157,15 @@ assert(allTheory.dye_classes.length === 7 && allTheory.machines.length === 6 && 
 // (per the user's explicit direction — woven fabrics never need a dyeing
 // cost in this tool, not a real recipe and not even a price-list estimate)
 
-// Test 17: black on a KNIT fabric matches a real recipe, cost > 0.
+// Test 17: the costing prices dyeing by shade band, not by recipe card. Black
+// on a cotton knit is the price list's black, on the reactive route.
 const knitResult = calculateCost({ gsm: 180, fabric: 'single_jersey', color_shade: 'black', order_qty_kg: 1000 });
-console.log("Knit black dyeing source (expected REAL_RECIPE):", knitResult.cost_breakdown_usd.dyeing.source);
-assert.strictEqual(knitResult.cost_breakdown_usd.dyeing.source, 'REAL_RECIPE');
-assert(knitResult.cost_breakdown_usd.dyeing.per_kg > 0);
-
-// Test 17b: a REAL_RECIPE match is a HYBRID (price-list conversion cost +
-// real chemical cost), never the bare chemical cost on its own — a real
-// factory card only ever prices chemicals, and machine/labour/utilities/
-// overhead still have to come from somewhere. per_kg must reconstruct
-// exactly from its own disclosed parts, and must sit close to (not 10-20x
-// under) the price-list rate it partially replaces.
 const dd = knitResult.cost_breakdown_usd.dyeing;
-assert.strictEqual(dd.costing_model, 'price_list_conversion_plus_real_chemicals');
-assert(dd.price_list_base_usd > 0, 'expected a price-list base to blend with');
-assert.strictEqual(dd.assumed_chemical_share_pct, 17);
-const reconstructed = dd.price_list_base_usd - (dd.price_list_base_usd * dd.assumed_chemical_share_pct / 100) + dd.real_chemical_cost_usd;
-assert(Math.abs(reconstructed - dd.per_kg) < 0.0005, `per_kg (${dd.per_kg}) must equal price_list_base - assumed_chemical + real_chemical (${reconstructed})`);
-assert(dd.per_kg > dd.real_chemical_cost_usd * 5, 'hybrid must not collapse to the bare chemical cost');
+assert.strictEqual(dd.source, 'shade_band');
+assert.strictEqual(dd.band, 'black');
+assert.strictEqual(dd.route, 'reactive');
+assert.strictEqual(dd.per_kg, 1.75);
+assert(!('recipe_id' in dd) && !('chemicals' in dd), 'no recipe card in the costing any more');
 
 // Test 18: the SAME shade on a WOVEN fabric gets NO dyeing cost at all —
 // source NOT_APPLICABLE, per_kg exactly 0. Not a real recipe (none of the 40

@@ -232,10 +232,12 @@ for (const c of cc.listCountries()) {
     assert.strictEqual(typeof c[k], 'number',
       `costing.${k} must be a number the page can print, not ${JSON.stringify(c[k])}`);
   }
+  // five lines since the process loss became its own line
+  assert(c.process_loss && typeof c.process_loss.cost_per_kg === 'number', 'the process-loss line ships');
   const sum = c.raw_material_per_kg_usd + c.knitting_per_kg_usd
-            + c.dyeing_per_kg_usd + c.finishing_per_kg_usd;
+            + c.dyeing_per_kg_usd + c.finishing_per_kg_usd + c.process_loss.cost_per_kg;
   assert(Math.abs(sum - c.total_per_kg_usd) < 0.005,
-    `the four printed lines come to $${sum.toFixed(4)} against a printed total of ` +
+    `the five printed lines come to $${sum.toFixed(4)} against a printed total of ` +
     `$${c.total_per_kg_usd} -- a breakdown that does not add up is worse than none`);
 
   // The yarn price card and the yarn breakdown row are different numbers on

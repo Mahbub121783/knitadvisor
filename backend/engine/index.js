@@ -101,7 +101,7 @@ function calculate(params) {
           poly_form, poly_lustre,
           melange_type, melange_pct, white_type, neon_color,
           denier, filaments, elastane_denier, elastane_pct, dyeing_method, surface_finish,
-          light_source, illuminant, shade_depth_pct } = normalizeParams(params);
+          light_source, illuminant, shade_depth_pct, dye_band } = normalizeParams(params);
 
   if (!fabric) return { error: 'fabric is required', code: 'MISSING_FABRIC' };
   if (!gsm) return { error: 'gsm is required', code: 'MISSING_GSM' };
@@ -1025,7 +1025,8 @@ function calculate(params) {
   // floor knows how much extra grey to book. (Knitting Master File loss column.)
   let processLoss = null;
   {
-    const seg = colorResult ? colorResult.shade : 'medium';
+    const SEG = { white_melange: 'light', melange: 'light', light_medium: 'medium', fluorescent: 'medium', dark_navy: 'dark', black: 'dark' };
+    const seg = colorResult ? (SEG[colorResult.shade] || colorResult.shade) : 'medium';
     const procs = [];
     const cat = fabricDef.category || '';
     const fid = fabricDef.id || '';
@@ -1138,6 +1139,25 @@ function calculate(params) {
     const effectiveDenier = (denier || (warpKnitSpec?.denier_estimated) || 70);
     costCountNe = parseFloat((5315 / effectiveDenier).toFixed(2)); // denier → Ne equiv for cost calc
   }
+  const costLossProcs = processLoss && Array.isArray(processLoss.modifiers) ? processLoss.modifiers.map((m) => m.process) : [];
+  if (dyeing_method === 'pigment' && !costLossProcs.includes('aop')) costLossProcs.push('aop');
+  const yarnComponentsForCost = (() => {
+    const src = (terryResult && terryResult.yarns) || (fleeceResult && fleeceResult.yarns) || null;
+    if (!src || fabricDef.category === 'warp_knit') return null;
+    const dom = parsedComp && parsedComp.fibers
+      ? Object.entries(parsedComp.fibers).filter(([f]) => f !== 'elastane').sort((a, b) => b[1] - a[1])[0] : null;
+    return src.filter((y) => y.role !== 'elastane' && y.ne > 0 && y.share_pct > 0).map((y) => {
+      const t = `${y.label || ''} ${y.composition || ''}`.toLowerCase();
+      const fibre = /polyester|poly\b/.test(t) ? 'polyester' : /nylon|polyamide/.test(t) ? 'nylon'
+        : /viscose/.test(t) ? 'viscose' : /modal/.test(t) ? 'modal' : /cotton/.test(t) ? 'cotton' : (dom ? dom[0] : 'cotton');
+      return {
+        role: y.role, fibre, ne: y.ne, share_pct: y.share_pct,
+        filament: /filament|\bdty\b|\bfdy\b|\d+\s*d\b/.test(t),
+        // loop and pile yarns under 20s are spun carded (or rotor) in practice
+        coarse: (y.role === 'loop' || y.role === 'pile' || y.role === 'ground') && y.ne < 20,
+      };
+    });
+  })();
   const costResult = calculateCost({
     // Market quotes when the caller has them, the reference list when not.
     // Injected rather than required so this module needs no database.
@@ -1147,7 +1167,25 @@ function calculate(params) {
     gsm,
     count_ne: costCountNe || 30,
     gauge: gauge || fabricDef.typical_gauge || 24,
-    color_shade: (shadeSpec && shadeSpec.costing_shade) || color_shade,
+    // The dyeing charge is a shade band on the fibre's route: the tier (or the
+    // one an exact colour / %OWF resolved to), refined by the exact colour, the
+    // depth, the band chosen, the white or melange route and the finishes.
+    color_shade: (shadeSpec && shadeSpec.costing_shade) || effectiveShade || color_shade,
+    shade_spec: shadeSpec,
+    color_hex: colorResolved && colorResolved.hex ? colorResolved.hex : null,
+    shade_depth_pct: useDepth ? shade_depth_pct : null,
+    dye_band: dye_band || null,
+    dyeing_method: dyeing_method || null,
+    surface_finish: surface_finish ? resolveFinishId(surface_finish, null) : null,
+    finishing_route: finishing_route || null,
+    poly_form: (yarnChar && yarnChar.polyester && yarnChar.polyester.form) || poly_form || null,
+    loss_processes: costLossProcs,
+    brushed: !!(fleeceResult && fleeceResult.variant && fleeceResult.variant.brushed),
+    brush_sides: params.brush_sides || null,
+    sheared: !!params.sheared,
+    velour_cut: !!(terryResult && terryResult.variant && terryResult.variant.cut),
+    // fleece / terry / velour: every yarn priced at its own count
+    yarn_components: yarnComponentsForCost,
     extra_surcharges: shadeSpec && shadeSpec.extra_surcharges ? shadeSpec.extra_surcharges : [],
     parsedComp,
     is_warp_knit: fabricDef.category === 'warp_knit',
@@ -1171,6 +1209,25 @@ function calculate(params) {
     garment_weight_g: params.garment_weight_g || null,
   });
   trace.push({ step: '6.2', action: 'costing', total_usd_per_kg: costResult.cost_breakdown_usd.total_per_kg });
+  // The costing's loss is fibre- and route-aware (a polyester loses far less in
+  // the bath than a cotton, a melange is not bleached). The process-loss card
+  // shows the same number the price was built on.
+  {
+    const cl = costResult.cost_breakdown_usd.process_loss;
+    if (processLoss && cl) {
+      processLoss.factory_median_pct = processLoss.loss_pct;
+      processLoss.loss_pct = cl.pct;
+      processLoss.parts = cl.parts;
+      processLoss.dye_stage_pct = cl.dye_stage_pct;
+      processLoss.finish_stage_pct = cl.finish_stage_pct;
+      processLoss.note = `${cl.pct}% grey→finished: ` + cl.parts.map((x) => `${x.item} ${x.pct}%`).join(' + ') + '.';
+      const grey = Math.round(100 / (1 - cl.pct / 100) * 100) / 100;
+      processLoss.example_100kg = {
+        finished_kg: 100, grey_kg: grey, extra_kg: Math.round((grey - 100) * 100) / 100, process_loss_pct: cl.pct,
+        note: `Book ${grey} kg grey to deliver 100 kg finished (${cl.pct}% process loss).`,
+      };
+    }
+  }
 
   // --- 6.2b Garment Cut-Make-Trim costing (fabric consumption gross-up +
   //          labor/trim/overhead/profit) — only runs when the caller supplies
@@ -1520,6 +1577,14 @@ function calculate(params) {
       // already prints.
       dyeing_detail:            costResult.cost_breakdown_usd.dyeing,
       finishing_per_kg_usd:     costResult.cost_breakdown_usd.finishing,
+      finishing_detail:         costResult.cost_breakdown_usd.finishing_detail,
+      // what the grey kilos lost between knitting and delivery add to a kilo
+      process_loss:             costResult.cost_breakdown_usd.process_loss,
+      build_up:                 costResult.cost_breakdown_usd.build_up,
+      // the likely range of the total and what drives it
+      accuracy:                 costResult.accuracy,
+      yarn_components:          costResult.yarn.price_source && costResult.yarn.price_source.components
+        ? costResult.yarn.price_source.components : null,
       total_per_kg_usd:         costResult.cost_breakdown_usd.total_per_kg,
       margin_scenarios:         costResult.margin_scenarios,
       fiber_detail:             costResult.cost_breakdown_usd.raw_material.fiber_detail,
@@ -1628,7 +1693,7 @@ const ENGINE_INPUTS = Object.freeze([
   // fabric definition
   'composition',
   // colour
-  'color_shade', 'color_input', 'shade_depth_pct', 'light_source', 'illuminant',
+  'color_shade', 'color_input', 'shade_depth_pct', 'dye_band', 'light_source', 'illuminant',
   // machine
   'dia', 'gauge', 'rpm', 'efficiency', 'stitch_length', 'feeders', 'target_width',
   // yarn
@@ -1713,6 +1778,8 @@ function normalizeParams(p) {
     // button with a real dye-concentration value when provided.
     shade_depth_pct: (p.shade_depth_pct !== undefined && p.shade_depth_pct !== null && p.shade_depth_pct !== '')
       ? parseFloat(p.shade_depth_pct) : null,
+    // Dyeing price band within a tier: light | medium | dark | extra_dark | special
+    dye_band: p.dye_band ? String(p.dye_band).trim().toLowerCase() : null,
     // Illuminant for the optical-physics pass. calculate() has always
     // destructured these two off this return value; they were never in it, so
     // the lookup silently resolved to the D65 default no matter what a caller

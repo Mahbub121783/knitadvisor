@@ -16,6 +16,7 @@ const router = express.Router();
 
 const { calculate, getAllFabrics, ENGINE_INPUTS } = require('../engine/index');
 const { analyzeShadeSpec } = require('../engine/domain/shade-spec');
+const { dyeingCharge } = require('../engine/domain/wet-cost-model');
 const { UnitConverter, FabricWeightFormulas, YarnCountFormulas, WeftCalculators } = require('../engine/formulas');
 const { FAULTS_DATABASE, diagnoseFaults } = require('../engine/domain/faults-engine');
 const providerManager = require('../ai/provider-manager-v2');
@@ -1181,7 +1182,7 @@ router.get('/color/preview', (req, res) => {
   }
 });
 
-// GET /api/color/shade-check?shade=&composition=&melange_type=&melange_pct=&white_type=&neon=&color=
+// GET /api/color/shade-check?shade=&composition=&melange_type=&melange_pct=&white_type=&neon=&color=&dye_band=
 // The calculator's live check: what this shade is on these fibres, whether
 // the composition fits, and what the cloth will look like.
 router.get('/color/shade-check', (req, res) => {
@@ -1205,7 +1206,19 @@ router.get('/color/shade-check', (req, res) => {
       neon: q('neon').toLowerCase() || null,
       colorHex,
     });
-    res.json({ success: true, composition: parsed ? parsed.display : '100% Cotton (assumed)', spec });
+    // What the dyehouse will charge for this: band x fibre route, per kg grey
+    let dyeing = null;
+    try {
+      const d = dyeingCharge({
+        shade: spec && spec.costing_shade ? spec.costing_shade : shade,
+        spec, colorHex,
+        dyeBand: q('dye_band').toLowerCase() || null,
+        fibers: parsed && parsed.fibers ? parsed.fibers : { cotton: 100 },
+      });
+      dyeing = { per_kg: d.per_kg, band: d.band, band_label: d.band_label, band_what: d.band_what, how: d.how,
+        special: d.special, route: d.route, route_label: d.route_label, lines: d.lines, range: d.range };
+    } catch (_) { dyeing = null; }
+    res.json({ success: true, composition: parsed ? parsed.display : '100% Cotton (assumed)', spec, dyeing });
   } catch (err) {
     res.status(500).json({ error: 'Shade check failure', detail: err.message });
   }
