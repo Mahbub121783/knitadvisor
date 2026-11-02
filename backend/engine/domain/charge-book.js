@@ -189,11 +189,20 @@ const SHADE_TIER = { black: 'black', dark_navy: 'dark_navy', dark: 'dark_navy', 
   fluorescent: 'neon', neon: 'neon', white_melange: 'white_melange', white: 'white_melange', melange: 'white_melange', heather: 'white_melange' };
 const tierOfShade = (s) => SHADE_TIER[String(s || '').toLowerCase()] || 'light_medium';
 
+// The sheet's own two-part step: every two-part price is the one-part price + 0.45
+// (black 1.75 -> 2.20, dark 1.55 -> 2.00, light/medium 1.30 -> 1.75).
+const TWO_PART_STEP = 0.45;
+
 function priceFrom(rate, countNe, tier, twoPart) {
   const above = Number(countNe) > 30;
   const k = above ? rate.knit_above30 : rate.knit_below30, kAlt = above ? rate.knit_below30 : rate.knit_above30;
   const d1 = rate['dye1_' + tier], d2 = rate['dye2_' + tier];
-  return { knit: k != null ? k : kAlt, knit_fallback_tier: k == null && kAlt != null, dye: twoPart ? d2 : d1, dye_part: twoPart ? 'two' : 'one' };
+  let dye = twoPart ? d2 : d1, part = twoPart ? 'two' : 'one', how = null;
+  // White / melange is a bleach or a wash, not a dye bath: one price, whatever the fibres
+  if (tier === 'white_melange' && twoPart && d1 != null) { dye = d1; part = 'one'; how = 'a bleach or wash, one bath whatever the blend'; }
+  // The sheet lists no two-part price for this row: its own step on the one-part price
+  else if (twoPart && d2 == null && d1 != null) { dye = Math.round((d1 + TWO_PART_STEP) * 1000) / 1000; how = `the sheet lists no two-part price here: one-part + the sheet's usual ${TWO_PART_STEP} two-part step`; }
+  return { knit: k != null ? k : kAlt, knit_fallback_tier: k == null && kAlt != null, dye, dye_part: part, dye_how: how };
 }
 
 /**
@@ -235,6 +244,7 @@ function quote(ctx = {}) {
     if (sd != null) { chosen = { ...chosen, dye: sd, dye_part: twoPart ? 'two' : 'one' }; res.notes.push(`yarn-dyed: dyeing priced as the plain ${sibName.toLowerCase()} row`); }
   }
   const notes = [...res.notes]; if (vendorNote) notes.push(vendorNote);
+  if (chosen.dye_how) notes.push(`Dyeing: ${chosen.dye_how}.`);
   if (chosen.dye == null) { notes.push(`The sheet offers no ${twoPart ? 'two-part' : 'one-part'} ${tier.replace('_', '/')} dyeing for ${res.item.label}.`); noteGap('no_price', ctx, res.item.group_name, res.item.variant, `${twoPart ? '2P' : '1P'} ${tier} not offered`); }
   if (chosen.knit == null) { notes.push(`The sheet offers no knitting price for ${res.item.label}.`); noteGap('no_price', ctx, res.item.group_name, res.item.variant, 'knitting not offered'); }
   return {
@@ -243,7 +253,7 @@ function quote(ctx = {}) {
     vendor: { code: chosen.vendor, name: chosen.name, derived: chosen.derived },
     tier, two_part: twoPart,
     knit: chosen.knit == null ? null : { usd: chosen.knit, above30: chosen.rate.knit_above30, below30: chosen.rate.knit_below30, tier: Number(ctx.countNe) > 30 ? 'above 30s' : '30s and below', fallback_tier: chosen.knit_fallback_tier },
-    dye: chosen.dye == null ? null : { usd: chosen.dye, tier, part: chosen.dye_part },
+    dye: chosen.dye == null ? null : { usd: chosen.dye, tier, part: chosen.dye_part, how: chosen.dye_how || null },
     dye_table: { one_part: Object.fromEntries(TIERS.map((t) => [t, chosen.rate['dye1_' + t]])), two_part: Object.fromEntries(TIERS.map((t) => [t, chosen.rate['dye2_' + t]])) },
     alternatives: rows.map((r) => ({ vendor: r.vendor, name: r.name, derived: r.derived, knit: r.knit, dye: r.dye, total: r.total })).sort((a, b) => (a.total == null) - (b.total == null) || a.total - b.total),
   };
