@@ -326,22 +326,30 @@ const FABRIC_DERIVATIVES = [
     typical_gauge: 18,
     structure: {
       type: 'weft_knit',
-      courses_per_repeat: 2,
-      wales_per_repeat: 1,
+      courses_per_repeat: 6,
+      wales_per_repeat: 4,
       beds: ['cylinder'],
       yarn_feeds: 3,
+      // Loopback (3-thread) French terry — same knitting as 3-thread fleece, left unbrushed.
       pattern: [
-        ['K'],
-        ['K']
+        ['K','K','K','K'],
+        ['K','K','K','K'],
+        ['M','M','M','T'],
+        ['K','K','K','K'],
+        ['K','K','K','K'],
+        ['M','T','M','M']
       ],
       cam: [
-        { feed: 1, cylinder: 'K', yarn: 'ground', note: 'Ground yarn knits all needles' },
-        { feed: 2, cylinder: 'K+T alternate', yarn: 'tie', note: 'Tie yarn tucks every 2nd needle (holds inlay)' },
-        { feed: 3, cylinder: 'inlay', yarn: 'pile', note: 'Pile yarn floats over sinkers — forms loops on back' }
+        { feed: 1, cylinder: 'K', yarn: 'binder', note: 'Binder yarn knits all needles' },
+        { feed: 2, cylinder: 'K', yarn: 'face', note: 'Face yarn knits all needles (the smooth face)' },
+        { feed: 3, cylinder: 'D tuck · A,B,C miss', yarn: 'loop', note: 'Loop yarn tucks on track D and floats behind A,B,C — the loops on the back' },
+        { feed: 4, cylinder: 'K', yarn: 'binder', note: 'Binder yarn knits all needles' },
+        { feed: 5, cylinder: 'K', yarn: 'face', note: 'Face yarn knits all needles' },
+        { feed: 6, cylinder: 'B tuck · A,C,D miss', yarn: 'loop', note: 'Loop yarn tucks on track B — offset half a repeat so the loops lie in a brick' }
       ],
       needle_arrangement: {
-        butt_pattern: 'AAAA',
-        description: 'All needles engaged. Sinker control creates back loops for pile.'
+        butt_pattern: 'ABCD',
+        description: 'Four tracks. The loop yarn is tied in by a tuck on 1 needle in 4, alternating between tracks D and B; the face and binder knit every needle. Unbrushed: the loops stay on the back.'
       }
     },
     machine_note: 'Requires sinker ring modification for loop formation. Loop height controlled by sinker advancement.',
@@ -385,9 +393,9 @@ const FABRIC_DERIVATIVES = [
       ],
       cam: [
         { feed: 1, cylinder: 'K', yarn: 'ground', note: 'All tracks knit' },
-        { feed: 2, cylinder: 'M/T', yarn: 'fleece', note: 'Track 1 Tucks, others Miss' },
+        { feed: 2, cylinder: 'M/T', yarn: 'loop', note: 'Loop yarn: track 1 Tucks, others Miss' },
         { feed: 3, cylinder: 'K', yarn: 'ground', note: 'All tracks knit' },
-        { feed: 4, cylinder: 'M/T', yarn: 'fleece', note: 'Track 3 Tucks, others Miss' }
+        { feed: 4, cylinder: 'M/T', yarn: 'loop', note: 'Loop yarn: track 3 Tucks, others Miss' }
       ],
       needle_arrangement: { 
         butt_pattern: 'ABCD', 
@@ -441,12 +449,12 @@ const FABRIC_DERIVATIVES = [
         ['M','T','M','M']  // Feeder 6 (Fleece/Loop) - Track 2 Tucks
       ],
       cam: [
-        { feed: 1, cylinder: 'K', yarn: 'plated', note: 'All tracks knit' },
-        { feed: 2, cylinder: 'K', yarn: 'ground', note: 'All tracks knit' },
-        { feed: 3, cylinder: 'M/T', yarn: 'fleece', note: 'Track 4 Tucks, Tracks 1-3 Miss' },
-        { feed: 4, cylinder: 'K', yarn: 'plated', note: 'All tracks knit' },
-        { feed: 5, cylinder: 'K', yarn: 'ground', note: 'All tracks knit' },
-        { feed: 6, cylinder: 'M/T', yarn: 'fleece', note: 'Track 2 Tucks, Tracks 1,3,4 Miss' }
+        { feed: 1, cylinder: 'K', yarn: 'binder', note: 'Binder yarn knits all needles' },
+        { feed: 2, cylinder: 'K', yarn: 'face', note: 'Face yarn knits all needles' },
+        { feed: 3, cylinder: 'M/T', yarn: 'loop', note: 'Track 4 Tucks, Tracks 1-3 Miss' },
+        { feed: 4, cylinder: 'K', yarn: 'binder', note: 'Binder yarn knits all needles' },
+        { feed: 5, cylinder: 'K', yarn: 'face', note: 'Face yarn knits all needles' },
+        { feed: 6, cylinder: 'M/T', yarn: 'loop', note: 'Track 2 Tucks, Tracks 1,3,4 Miss' }
       ],
       needle_arrangement: { 
         butt_pattern: 'ABCD', 
@@ -496,18 +504,18 @@ const FABRIC_DERIVATIVES = [
         ['T','M','M','M']  // F12
       ],
       cam: [
-        { feed: 1, cylinder: 'K', yarn: 'plated', note: 'Knit' },
-        { feed: 2, cylinder: 'K', yarn: 'ground', note: 'Knit' },
-        { feed: 3, cylinder: 'M/T', yarn: 'fleece', note: 'Track 4 Tucks' },
-        { feed: 4, cylinder: 'K', yarn: 'plated', note: 'Knit' },
-        { feed: 5, cylinder: 'K', yarn: 'ground', note: 'Knit' },
-        { feed: 6, cylinder: 'M/T', yarn: 'fleece', note: 'Track 3 Tucks' },
-        { feed: 7, cylinder: 'K', yarn: 'plated', note: 'Knit' },
-        { feed: 8, cylinder: 'K', yarn: 'ground', note: 'Knit' },
-        { feed: 9, cylinder: 'M/T', yarn: 'fleece', note: 'Track 2 Tucks' },
-        { feed: 10, cylinder: 'K', yarn: 'plated', note: 'Knit' },
-        { feed: 11, cylinder: 'K', yarn: 'ground', note: 'Knit' },
-        { feed: 12, cylinder: 'M/T', yarn: 'fleece', note: 'Track 1 Tucks' }
+        { feed: 1, cylinder: 'K', yarn: 'binder', note: 'Binder knits' },
+        { feed: 2, cylinder: 'K', yarn: 'face', note: 'Face knits' },
+        { feed: 3, cylinder: 'M/T', yarn: 'loop', note: 'Loop yarn: track 4 Tucks' },
+        { feed: 4, cylinder: 'K', yarn: 'binder', note: 'Binder knits' },
+        { feed: 5, cylinder: 'K', yarn: 'face', note: 'Face knits' },
+        { feed: 6, cylinder: 'M/T', yarn: 'loop', note: 'Loop yarn: track 3 Tucks' },
+        { feed: 7, cylinder: 'K', yarn: 'binder', note: 'Binder knits' },
+        { feed: 8, cylinder: 'K', yarn: 'face', note: 'Face knits' },
+        { feed: 9, cylinder: 'M/T', yarn: 'loop', note: 'Loop yarn: track 2 Tucks' },
+        { feed: 10, cylinder: 'K', yarn: 'binder', note: 'Binder knits' },
+        { feed: 11, cylinder: 'K', yarn: 'face', note: 'Face knits' },
+        { feed: 12, cylinder: 'M/T', yarn: 'loop', note: 'Loop yarn: track 1 Tucks' }
       ],
       needle_arrangement: { 
         butt_pattern: 'ABCD', 
@@ -543,18 +551,20 @@ const FABRIC_DERIVATIVES = [
     typical_gauge: 20,
     structure: {
       type: 'weft_knit',
-      courses_per_repeat: 2,
+      courses_per_repeat: 1,
       wales_per_repeat: 1,
       beds: ['cylinder'],
       yarn_feeds: 2,
-      pattern: [['K'],['K']],
+      // Sinker-loop plush: ground + pile plated, pile loop formed over the sinker.
+      pattern: [
+        ['K']
+      ],
       cam: [
-        { feed: 'A', cylinder: 'K', yarn: 'ground', note: 'Ground yarn, short sinker — base structure' },
-        { feed: 'B', cylinder: 'K', yarn: 'pile', note: 'Pile yarn, long sinker advance — forms loops on face or back' }
+        { feed: 1, cylinder: 'K', yarn: 'ground + pile (plated)', note: 'Ground and pile yarn are fed together through one plating feeder; every needle knits both, and the pile yarn is drawn over the sinker nib to form the loop' }
       ],
       needle_arrangement: {
         butt_pattern: 'AAAA',
-        description: 'All needles engaged. Loop height controlled by long/short sinker ring alternation, NOT needle selection.'
+        description: 'All needles knit. Loop height is set by the sinker (pile) height, not by needle selection.'
       }
     },
     machine_note: 'Requires special sinker ring with alternating long/short sinkers. Terry loops are on face OR back depending on sinker setting.',
@@ -973,40 +983,33 @@ const FABRIC_DERIVATIVES = [
     typical_gauge: 18,
     structure: {
       type: 'weft_knit',
-      courses_per_repeat: 12,
-      wales_per_repeat: 2,
+      courses_per_repeat: 8,
+      wales_per_repeat: 4,
       beds: ['cylinder'],
+      // Popcorn: 3 tucks per cell, cells alternating, a plain course after each cell.
       pattern: [
-        ['T','T'], // Feed 1
-        ['T','T'], // Feed 2
-        ['T','T'], // Feed 3
-        ['K','T'], // Feed 4 — A releases (3 held loops knocked over together)
-        ['T','T'], // Feed 5
-        ['T','K'], // Feed 6 — B releases (5 held loops knocked over together)
-        ['T','T'], // Feed 7
-        ['K','T'], // Feed 8 — A releases again (its 2nd cycle)
-        ['T','T'], // Feed 9
-        ['T','T'], // Feed 10
-        ['T','T'], // Feed 11
-        ['K','K']  // Feed 12 — BOTH release together (4-course and 6-course cycles coincide at their LCM)
+        ['T','T','K','K'],
+        ['T','T','K','K'],
+        ['T','T','K','K'],
+        ['K','K','K','K'],
+        ['K','K','T','T'],
+        ['K','K','T','T'],
+        ['K','K','T','T'],
+        ['K','K','K','K']
       ],
       cam: [
-        { feed: 1, cylinder: 'T/T', note: 'A=tuck (1 of 3 held), B=tuck (1 of 5 held)' },
-        { feed: 2, cylinder: 'T/T', note: 'A=tuck (2 of 3), B=tuck (2 of 5)' },
-        { feed: 3, cylinder: 'T/T', note: 'A=tuck (3 of 3), B=tuck (3 of 5)' },
-        { feed: 4, cylinder: 'K/T', note: 'A releases (knocks over 3 held loops); B=tuck (4 of 5)' },
-        { feed: 5, cylinder: 'T/T', note: 'A=tuck (1 of 3, new cycle), B=tuck (5 of 5)' },
-        { feed: 6, cylinder: 'T/K', note: 'A=tuck (2 of 3); B releases (knocks over 5 held loops)' },
-        { feed: 7, cylinder: 'T/T', note: 'A=tuck (3 of 3), B=tuck (1 of 5, new cycle)' },
-        { feed: 8, cylinder: 'K/T', note: 'A releases (2nd time this repeat); B=tuck (2 of 5)' },
-        { feed: 9, cylinder: 'T/T', note: 'A=tuck (1 of 3), B=tuck (3 of 5)' },
-        { feed: 10, cylinder: 'T/T', note: 'A=tuck (2 of 3), B=tuck (4 of 5)' },
-        { feed: 11, cylinder: 'T/T', note: 'A=tuck (3 of 3), B=tuck (5 of 5)' },
-        { feed: 12, cylinder: 'K/K', note: 'A and B release together — the 4-course and 6-course tracks coincide at course 12 (LCM), resetting the repeat' }
+        { feed: 1, cylinder: 'A,B tuck · C,D knit', note: 'Cell 1 starts: needles A,B hold their loop (1 of 3)' },
+        { feed: 2, cylinder: 'A,B tuck · C,D knit', note: 'Cell 1: second held loop' },
+        { feed: 3, cylinder: 'A,B tuck · C,D knit', note: 'Cell 1: third held loop' },
+        { feed: 4, cylinder: 'all knit', note: 'All needles knit — cell 1 cleared, the popcorn stands up' },
+        { feed: 5, cylinder: 'A,B knit · C,D tuck', note: 'Cell 2 starts on needles C,D' },
+        { feed: 6, cylinder: 'A,B knit · C,D tuck', note: 'Cell 2: second held loop' },
+        { feed: 7, cylinder: 'A,B knit · C,D tuck', note: 'Cell 2: third held loop' },
+        { feed: 8, cylinder: 'all knit', note: 'All needles knit — cell 2 cleared' }
       ],
       needle_arrangement: {
-        butt_pattern: 'A: 4-course cam track, B: 6-course cam track (mismatched, NOT a simple ABAB alternation)',
-        description: 'Two independently-timed tuck-hold cam tracks running out of phase with each other — this mismatch, not the tucking itself, is what produces Popcorn\'s characteristic elongated, inclined, slightly curved stitch look (vs. Cellular Blister\'s regular checkerboard, where both tracks share one timing).'
+        butt_pattern: 'AABB',
+        description: 'Two tracks in pairs (A A B B). Each needle holds at most 3 tucks (4 loops in the hook) and every feed knits on half the needles or all of them.'
       }
     },
     machine_note: 'Track B holds up to 5 stacked loops — higher press-off risk than Cellular Blister\'s 4. Coarser, low-extension yarns hold more reliably.',
@@ -1137,29 +1140,38 @@ const FABRIC_DERIVATIVES = [
       courses_per_repeat: 12,
       wales_per_repeat: 4,
       beds: ['cylinder'],
+      // Diagonal knop: 3-course single-needle knops stepping one wale every 3 courses.
       pattern: [
-        ['T','T','K','K'], ['T','T','K','K'], ['T','T','K','K'], // wales 1-2 hold 3x, release into feed 4 of next block
-        ['K','T','T','K'], ['K','T','T','K'], ['K','T','T','K'], // wales 2-3 hold 3x
-        ['K','K','T','T'], ['K','K','T','T'], ['K','K','T','T'], // wales 3-4 hold 3x
-        ['T','K','K','T'], ['T','K','K','T'], ['T','K','K','T']  // wales 4-1 hold 3x (wraps around), releases into feed 1 of next repeat
+        ['T','K','K','K'],
+        ['T','K','K','K'],
+        ['T','K','K','K'],
+        ['K','T','K','K'],
+        ['K','T','K','K'],
+        ['K','T','K','K'],
+        ['K','K','T','K'],
+        ['K','K','T','K'],
+        ['K','K','T','K'],
+        ['K','K','K','T'],
+        ['K','K','K','T'],
+        ['K','K','K','T']
       ],
       cam: [
-        { feed: 1, cylinder: 'T,T,K,K', note: 'Wales 1-2 tuck (1 of 3 held)' },
-        { feed: 2, cylinder: 'T,T,K,K', note: 'Wales 1-2 tuck (2 of 3)' },
-        { feed: 3, cylinder: 'T,T,K,K', note: 'Wales 1-2 tuck (3 of 3) — release cam engages at feed 4' },
-        { feed: 4, cylinder: 'K,T,T,K', note: 'Wales 1-2 release; wales 2-3 begin (1 of 3 held) — note wale 2 shares the boundary between adjacent cells' },
-        { feed: 5, cylinder: 'K,T,T,K', note: 'Wales 2-3 tuck (2 of 3)' },
-        { feed: 6, cylinder: 'K,T,T,K', note: 'Wales 2-3 tuck (3 of 3)' },
-        { feed: 7, cylinder: 'K,K,T,T', note: 'Wales 2-3 release; wales 3-4 begin (1 of 3 held)' },
-        { feed: 8, cylinder: 'K,K,T,T', note: 'Wales 3-4 tuck (2 of 3)' },
-        { feed: 9, cylinder: 'K,K,T,T', note: 'Wales 3-4 tuck (3 of 3)' },
-        { feed: 10, cylinder: 'T,K,K,T', note: 'Wales 3-4 release; wales 4-1 begin (1 of 3 held, wrapping past the repeat edge)' },
-        { feed: 11, cylinder: 'T,K,K,T', note: 'Wales 4-1 tuck (2 of 3)' },
-        { feed: 12, cylinder: 'T,K,K,T', note: 'Wales 4-1 tuck (3 of 3) — releases at feed 1 of the next repeat' }
+        { feed: 1, cylinder: 'track A tuck · others knit', note: 'Knop on needle A, held loop 1 of 3' },
+        { feed: 2, cylinder: 'track A tuck · others knit', note: 'Knop on needle A, held loop 2 of 3' },
+        { feed: 3, cylinder: 'track A tuck · others knit', note: 'Knop on needle A, held loop 3 of 3' },
+        { feed: 4, cylinder: 'track B tuck · others knit', note: 'Knop on needle B, held loop 1 of 3' },
+        { feed: 5, cylinder: 'track B tuck · others knit', note: 'Knop on needle B, held loop 2 of 3' },
+        { feed: 6, cylinder: 'track B tuck · others knit', note: 'Knop on needle B, held loop 3 of 3' },
+        { feed: 7, cylinder: 'track C tuck · others knit', note: 'Knop on needle C, held loop 1 of 3' },
+        { feed: 8, cylinder: 'track C tuck · others knit', note: 'Knop on needle C, held loop 2 of 3' },
+        { feed: 9, cylinder: 'track C tuck · others knit', note: 'Knop on needle C, held loop 3 of 3' },
+        { feed: 10, cylinder: 'track D tuck · others knit', note: 'Knop on needle D, held loop 1 of 3' },
+        { feed: 11, cylinder: 'track D tuck · others knit', note: 'Knop on needle D, held loop 2 of 3' },
+        { feed: 12, cylinder: 'track D tuck · others knit', note: 'Knop on needle D, held loop 3 of 3' }
       ],
       needle_arrangement: {
-        butt_pattern: 'Diagonal 2-wale tuck block, shifting by 1 wale every 3 courses',
-        description: '4 diagonal positions x 3-course dwell = 12-course repeat, exactly matching the source\'s "12 course & 4 wales". Denser than Knitted Twill (which shifts a single tuck by 1 wale every course) — the 3-course dwell per position is what stacks enough held loops to genuinely pucker into a honeycomb cell rather than just a diagonal line.'
+        butt_pattern: 'ABCD',
+        description: 'Four tracks, one needle each. A 3-course knop moves one wale to the right every 3 courses — a diagonal of knops. No needle holds more than 3 tucks.'
       }
     },
     appearance: 'Small raised honeycomb cells arranged in a diagonal cascade (not a static grid) from 3-course tuck-stacking that shifts one wale every 3 courses. All-cylinder single-bed structure — the double-bed waffle_knit elsewhere in this catalog gets a visually similar honeycomb look by a completely different mechanism.'
@@ -1189,22 +1201,20 @@ const FABRIC_DERIVATIVES = [
     typical_gauge: 20,
     structure: {
       type: 'weft_knit',
-      courses_per_repeat: 2,
+      courses_per_repeat: 1,
       wales_per_repeat: 1,
       beds: ['cylinder'],
       yarn_feeds: 3,
+      // Sinker-loop plush: ground + pile plated, pile loop formed over the sinker.
       pattern: [
-        ['K'],
         ['K']
       ],
       cam: [
-        { feed: 1, cylinder: 'K', yarn: 'ground', note: 'Ground yarn knits all needles' },
-        { feed: 2, cylinder: 'K+T alternate', yarn: 'tie', note: 'Tie yarn tucks every 2nd needle, holding the pile inlay' },
-        { feed: 3, cylinder: 'inlay', yarn: 'pile', note: 'Soft-twist continuous-filament pile yarn floats over sinkers — forms uncut loops on the back' }
+        { feed: 1, cylinder: 'K', yarn: 'ground + pile (plated)', note: 'Ground and pile yarn are fed together through one plating feeder; every needle knits both, and the pile yarn is drawn over the sinker nib to form the loop' }
       ],
       needle_arrangement: {
         butt_pattern: 'AAAA',
-        description: 'Same sinker-controlled inlay mechanism as French Terry. The structural knitting is identical; Velour/Plush and Terry diverge only in yarn choice and FINISHING.'
+        description: 'All needles knit. Loop height is set by the sinker (pile) height, not by needle selection.'
       }
     },
     machine_note: 'Post-knit finishing decides the final hand: sheared = "true velour" (cut pile, like velvet); left as-is = "plush" (uncut loop pile, denser/finer than Terry).',
@@ -1331,15 +1341,15 @@ const FABRIC_DERIVATIVES = [
       wales_per_repeat: 4,
       beds: ['cylinder', 'dial'],
       pattern: {
-        C: [['K','K','M','M']],
-        D: [['M','M','K','K']]
+        C: [['K','K','-']],
+        D: [['-','K','K']]
       },
       cam: [
-        { feed: 1, cylinder: 'K on 2 needles', dial: 'K on 2 needles', note: 'Groups of 2 cylinder then 2 dial needles active' }
+        { feed: 1, cylinder: 'K (2 in, 1 out)', dial: 'K (2 in, 1 out)', note: 'Rib gating: 2 cylinder needles in action, then 1 out; the dial is set the other way round, so 2 face wales alternate with 2 back wales' }
       ],
       needle_arrangement: {
-        butt_pattern: 'CC_DD_CC_DD',
-        description: '2 cylinder needles active, 2 dial, 2 cylinder... Remaining needles disengaged or removed.'
+        butt_pattern: 'Cylinder CC_ · Dial _DD (repeat 3 needles per bed)',
+        description: 'Rib gating. Per bed, 3-needle repeat: cylinder 2 in, 1 out; dial 1 out, 2 in. Needles marked _ are taken out of action (not a miss: they hold no loop). 4 of every 6 needle positions knit — 67% of a 1x1 rib, which is why the fabric comes off narrower. (A dedicated rib machine with grooves cut in groups — e.g. a 2+2 dial and cylinder — knits the same rib with every needle working.)'
       }
     },
     appearance: 'Pronounced vertical cords. Less elastic than 1×1. Used for heavier sweater ribbing.'
@@ -2060,16 +2070,27 @@ const FABRIC_DERIVATIVES = [
     typical_gauge: 24,
     structure: {
       type: 'weft_knit',
-      courses_per_repeat: 4,
+      courses_per_repeat: 6,
       wales_per_repeat: 2,
       beds: ['cylinder', 'dial'],
-      // Six feeds on interlock gating: a dial tuck course, a plain interlock
-      // course (two feeds), the tuck course on the other dial needles, and a
-      // plain interlock course again. The grid carries one row per interlock
-      // course (each plain pair is one row), so 4 rows = 6 feeds.
+      // Texipique: dial tuck course + full interlock course, twice, tucks on alternate dial needles.
       pattern: {
-        C: [['K','K'],['K','K'],['K','K'],['K','K']],
-        D: [['T','M'],['K','K'],['M','T'],['K','K']]
+        C: [
+          ['K','K'],
+          ['K','M'],
+          ['M','K'],
+          ['K','K'],
+          ['K','M'],
+          ['M','K']
+        ],
+        D: [
+          ['T','M'],
+          ['M','K'],
+          ['K','M'],
+          ['M','T'],
+          ['M','K'],
+          ['K','M']
+        ]
       },
       cam: [
         { feed: 1, cylinder: 'K all', dial: 'odd T', note: 'Tuck course on odd dial needles' },
@@ -2080,8 +2101,8 @@ const FABRIC_DERIVATIVES = [
         { feed: 6, cylinder: 'K (short)', dial: 'K (long)', note: 'Plain interlock, second half' }
       ],
       needle_arrangement: {
-        butt_pattern: 'Standard interlock ABAB',
-        description: 'Interlock gating with selective engagement via cam settings for miss courses.'
+        butt_pattern: 'Cylinder A B · Dial A B (interlock gating)',
+        description: 'Interlock gating, long (A) and short (B) butts on both beds.'
       }
     },
     appearance: 'Textured face, smooth back. More stable than single pique. Non-reversible.'
@@ -2398,15 +2419,15 @@ const FABRIC_DERIVATIVES = [
       wales_per_repeat: 3,
       beds: ['cylinder', 'dial'],
       pattern: {
-        C: [['K','K','M']],
-        D: [['M','M','K']]
+        C: [['K','K']],
+        D: [['-','K']]
       },
       cam: [
-        { feed: 1, cylinder: 'K on active, M on inactive', dial: 'K on active, M on inactive', note: '2 active cylinder needles alternate with 1 active dial needle' }
+        { feed: 1, cylinder: 'K (2 in, 0 out)', dial: 'K (1 in, 1 out)', note: 'Rib gating: 2 cylinder needles in action, then 0 out; the dial is set the other way round, so 2 face wales alternate with 1 back wales' }
       ],
       needle_arrangement: {
-        butt_pattern: 'AAB_AAB',
-        description: '2 active cylinder needles (A) followed by 1 deactivated slot (B) aligned with 1 active dial needle'
+        butt_pattern: 'Cylinder CC · Dial _D (repeat 2 needles per bed)',
+        description: 'Rib gating. Per bed, 2-needle repeat: cylinder 2 in; dial 1 out, 1 in. Needles marked _ are taken out of action (not a miss: they hold no loop). 3 of every 4 needle positions knit — 75% of a 1x1 rib, which is why the fabric comes off narrower. (A dedicated rib machine with grooves cut in groups — e.g. a 2+2 dial and cylinder — knits the same rib with every needle working.)'
       }
     },
     appearance: 'Distinct vertical rib cords with 2-to-1 width ratio. Reversible but unbalanced structure.'
@@ -2436,15 +2457,15 @@ const FABRIC_DERIVATIVES = [
       wales_per_repeat: 6,
       beds: ['cylinder', 'dial'],
       pattern: {
-        C: [['K','K','K','M','M','M']],
-        D: [['M','M','M','K','K','K']]
+        C: [['K','K','K','-','-']],
+        D: [['-','-','K','K','K']]
       },
       cam: [
-        { feed: 1, cylinder: 'K on 3 needles, M on 3 needles', dial: 'M on 3 needles, K on 3 needles', note: 'Alternating blocks of 3 cylinder and 3 dial needles active' }
+        { feed: 1, cylinder: 'K (3 in, 2 out)', dial: 'K (3 in, 2 out)', note: 'Rib gating: 3 cylinder needles in action, then 2 out; the dial is set the other way round, so 3 face wales alternate with 3 back wales' }
       ],
       needle_arrangement: {
-        butt_pattern: 'AAABBB_AAABBB',
-        description: 'Blocks of 3 active cylinder needles alternating with blocks of 3 active dial needles. Rib gating offset.'
+        butt_pattern: 'Cylinder CCC__ · Dial __DDD (repeat 5 needles per bed)',
+        description: 'Rib gating. Per bed, 5-needle repeat: cylinder 3 in, 2 out; dial 2 out, 3 in. Needles marked _ are taken out of action (not a miss: they hold no loop). 6 of every 10 needle positions knit — 60% of a 1x1 rib, which is why the fabric comes off narrower. (A dedicated rib machine with grooves cut in groups — e.g. a 2+2 dial and cylinder — knits the same rib with every needle working.)'
       }
     },
     appearance: 'Broad vertical panels. Bulky structure with high stretch recovery, common in knitwear collars.'
@@ -2474,15 +2495,15 @@ const FABRIC_DERIVATIVES = [
       wales_per_repeat: 5,
       beds: ['cylinder', 'dial'],
       pattern: {
-        C: [['K','K','K','M','M']],
-        D: [['M','M','M','K','K']]
+        C: [['K','K','K','-']],
+        D: [['-','-','K','K']]
       },
       cam: [
-        { feed: 1, cylinder: 'K on 3, M on 2', dial: 'M on 3, K on 2', note: 'Alternating block of 3 cylinder needles active and 2 dial needles active' }
+        { feed: 1, cylinder: 'K (3 in, 1 out)', dial: 'K (2 in, 2 out)', note: 'Rib gating: 3 cylinder needles in action, then 1 out; the dial is set the other way round, so 3 face wales alternate with 2 back wales' }
       ],
       needle_arrangement: {
-        butt_pattern: 'AAABB_AAABB',
-        description: '3 active cylinder needles followed by 2 active dial needles.'
+        butt_pattern: 'Cylinder CCC_ · Dial __DD (repeat 4 needles per bed)',
+        description: 'Rib gating. Per bed, 4-needle repeat: cylinder 3 in, 1 out; dial 2 out, 2 in. Needles marked _ are taken out of action (not a miss: they hold no loop). 5 of every 8 needle positions knit — 62% of a 1x1 rib, which is why the fabric comes off narrower. (A dedicated rib machine with grooves cut in groups — e.g. a 2+2 dial and cylinder — knits the same rib with every needle working.)'
       }
     },
     appearance: 'Rib cords with alternating widths of 3 wales (face) and 2 wales (back).'
@@ -2512,15 +2533,15 @@ const FABRIC_DERIVATIVES = [
       wales_per_repeat: 5,
       beds: ['cylinder', 'dial'],
       pattern: {
-        C: [['K','K','K','K','M']],
-        D: [['M','M','M','M','K']]
+        C: [['K','K','K','K']],
+        D: [['-','-','-','K']]
       },
       cam: [
-        { feed: 1, cylinder: 'K on 4, M on 1', dial: 'M on 4, K on 1', note: '4 active cylinder needles and 1 active dial needle repeating sequence' }
+        { feed: 1, cylinder: 'K (4 in, 0 out)', dial: 'K (1 in, 3 out)', note: 'Rib gating: 4 cylinder needles in action, then 0 out; the dial is set the other way round, so 4 face wales alternate with 1 back wales' }
       ],
       needle_arrangement: {
-        butt_pattern: 'AAAAB_AAAAB',
-        description: '4 active needles on cylinder bed, 1 active needle on dial bed.'
+        butt_pattern: 'Cylinder CCCC · Dial ___D (repeat 4 needles per bed)',
+        description: 'Rib gating. Per bed, 4-needle repeat: cylinder 4 in; dial 3 out, 1 in. Needles marked _ are taken out of action (not a miss: they hold no loop). 5 of every 8 needle positions knit — 62% of a 1x1 rib, which is why the fabric comes off narrower. (A dedicated rib machine with grooves cut in groups — e.g. a 2+2 dial and cylinder — knits the same rib with every needle working.)'
       }
     },
     appearance: 'Wide flat wale panels on technical face separated by narrow single wale channels.'
@@ -2550,15 +2571,15 @@ const FABRIC_DERIVATIVES = [
       wales_per_repeat: 4,
       beds: ['cylinder', 'dial'],
       pattern: {
-        C: [['K','K','K','M']],
-        D: [['M','M','M','K']]
+        C: [['K','K','K']],
+        D: [['-','-','K']]
       },
       cam: [
-        { feed: 1, cylinder: 'K on 3, M on 1', dial: 'M on 3, K on 1', note: '3 active cylinder needles alternate with 1 active dial needle' }
+        { feed: 1, cylinder: 'K (3 in, 0 out)', dial: 'K (1 in, 2 out)', note: 'Rib gating: 3 cylinder needles in action, then 0 out; the dial is set the other way round, so 3 face wales alternate with 1 back wales' }
       ],
       needle_arrangement: {
-        butt_pattern: 'AAAB_AAAB',
-        description: '3 active cylinder needles followed by 1 active dial needle.'
+        butt_pattern: 'Cylinder CCC · Dial __D (repeat 3 needles per bed)',
+        description: 'Rib gating. Per bed, 3-needle repeat: cylinder 3 in; dial 2 out, 1 in. Needles marked _ are taken out of action (not a miss: they hold no loop). 4 of every 6 needle positions knit — 67% of a 1x1 rib, which is why the fabric comes off narrower. (A dedicated rib machine with grooves cut in groups — e.g. a 2+2 dial and cylinder — knits the same rib with every needle working.)'
       }
     },
     appearance: 'Wide vertical face cords with a narrow single-wale back rib. Between 2×1 and 4×1 in density.'
@@ -2588,15 +2609,15 @@ const FABRIC_DERIVATIVES = [
       wales_per_repeat: 6,
       beds: ['cylinder', 'dial'],
       pattern: {
-        C: [['K','K','K','K','M','M']],
-        D: [['M','M','M','M','K','K']]
+        C: [['K','K','K','K','-']],
+        D: [['-','-','-','K','K']]
       },
       cam: [
-        { feed: 1, cylinder: 'K on 4, M on 2', dial: 'M on 4, K on 2', note: 'Alternating block of 4 cylinder needles active and 2 dial needles active' }
+        { feed: 1, cylinder: 'K (4 in, 1 out)', dial: 'K (2 in, 3 out)', note: 'Rib gating: 4 cylinder needles in action, then 1 out; the dial is set the other way round, so 4 face wales alternate with 2 back wales' }
       ],
       needle_arrangement: {
-        butt_pattern: 'AAAABB_AAAABB',
-        description: '4 active cylinder needles followed by 2 active dial needles.'
+        butt_pattern: 'Cylinder CCCC_ · Dial ___DD (repeat 5 needles per bed)',
+        description: 'Rib gating. Per bed, 5-needle repeat: cylinder 4 in, 1 out; dial 3 out, 2 in. Needles marked _ are taken out of action (not a miss: they hold no loop). 6 of every 10 needle positions knit — 60% of a 1x1 rib, which is why the fabric comes off narrower. (A dedicated rib machine with grooves cut in groups — e.g. a 2+2 dial and cylinder — knits the same rib with every needle working.)'
       }
     },
     appearance: 'Broad face panels with a moderate 2-wale back rib. Structured, sweater-weight ribbing.'
@@ -2626,15 +2647,15 @@ const FABRIC_DERIVATIVES = [
       wales_per_repeat: 7,
       beds: ['cylinder', 'dial'],
       pattern: {
-        C: [['K','K','K','K','M','M','M']],
-        D: [['M','M','M','M','K','K','K']]
+        C: [['K','K','K','K','-','-']],
+        D: [['-','-','-','K','K','K']]
       },
       cam: [
-        { feed: 1, cylinder: 'K on 4, M on 3', dial: 'M on 4, K on 3', note: 'Alternating block of 4 cylinder needles active and 3 dial needles active' }
+        { feed: 1, cylinder: 'K (4 in, 2 out)', dial: 'K (3 in, 3 out)', note: 'Rib gating: 4 cylinder needles in action, then 2 out; the dial is set the other way round, so 4 face wales alternate with 3 back wales' }
       ],
       needle_arrangement: {
-        butt_pattern: 'AAAABBB_AAAABBB',
-        description: '4 active cylinder needles followed by 3 active dial needles.'
+        butt_pattern: 'Cylinder CCCC__ · Dial ___DDD (repeat 6 needles per bed)',
+        description: 'Rib gating. Per bed, 6-needle repeat: cylinder 4 in, 2 out; dial 3 out, 3 in. Needles marked _ are taken out of action (not a miss: they hold no loop). 7 of every 12 needle positions knit — 58% of a 1x1 rib, which is why the fabric comes off narrower. (A dedicated rib machine with grooves cut in groups — e.g. a 2+2 dial and cylinder — knits the same rib with every needle working.)'
       }
     },
     appearance: 'Near-balanced broad panels, heavier and bulkier than 3×3. Used in chunky knitwear ribbing.'
@@ -2664,15 +2685,15 @@ const FABRIC_DERIVATIVES = [
       wales_per_repeat: 6,
       beds: ['cylinder', 'dial'],
       pattern: {
-        C: [['K','K','K','K','K','M']],
-        D: [['M','M','M','M','M','K']]
+        C: [['K','K','K','K','K']],
+        D: [['-','-','-','-','K']]
       },
       cam: [
-        { feed: 1, cylinder: 'K on 5, M on 1', dial: 'M on 5, K on 1', note: '5 active cylinder needles and 1 active dial needle repeating sequence' }
+        { feed: 1, cylinder: 'K (5 in, 0 out)', dial: 'K (1 in, 4 out)', note: 'Rib gating: 5 cylinder needles in action, then 0 out; the dial is set the other way round, so 5 face wales alternate with 1 back wales' }
       ],
       needle_arrangement: {
-        butt_pattern: 'AAAAAB_AAAAAB',
-        description: '5 active needles on cylinder bed, 1 active needle on dial bed.'
+        butt_pattern: 'Cylinder CCCCC · Dial ____D (repeat 5 needles per bed)',
+        description: 'Rib gating. Per bed, 5-needle repeat: cylinder 5 in; dial 4 out, 1 in. Needles marked _ are taken out of action (not a miss: they hold no loop). 6 of every 10 needle positions knit — 60% of a 1x1 rib, which is why the fabric comes off narrower. (A dedicated rib machine with grooves cut in groups — e.g. a 2+2 dial and cylinder — knits the same rib with every needle working.)'
       }
     },
     appearance: 'Very wide flat face panels separated by narrow single-wale channels. Near single-jersey look with rib elasticity at the seam lines.'
@@ -2702,15 +2723,15 @@ const FABRIC_DERIVATIVES = [
       wales_per_repeat: 8,
       beds: ['cylinder', 'dial'],
       pattern: {
-        C: [['K','K','K','K','K','M','M','M']],
-        D: [['M','M','M','M','M','K','K','K']]
+        C: [['K','K','K','K','K','-','-']],
+        D: [['-','-','-','-','K','K','K']]
       },
       cam: [
-        { feed: 1, cylinder: 'K on 5, M on 3', dial: 'M on 5, K on 3', note: 'Alternating block of 5 cylinder needles active and 3 dial needles active' }
+        { feed: 1, cylinder: 'K (5 in, 2 out)', dial: 'K (3 in, 4 out)', note: 'Rib gating: 5 cylinder needles in action, then 2 out; the dial is set the other way round, so 5 face wales alternate with 3 back wales' }
       ],
       needle_arrangement: {
-        butt_pattern: 'AAAAABBB_AAAAABBB',
-        description: '5 active cylinder needles followed by 3 active dial needles.'
+        butt_pattern: 'Cylinder CCCCC__ · Dial ____DDD (repeat 7 needles per bed)',
+        description: 'Rib gating. Per bed, 7-needle repeat: cylinder 5 in, 2 out; dial 4 out, 3 in. Needles marked _ are taken out of action (not a miss: they hold no loop). 8 of every 14 needle positions knit — 57% of a 1x1 rib, which is why the fabric comes off narrower. (A dedicated rib machine with grooves cut in groups — e.g. a 2+2 dial and cylinder — knits the same rib with every needle working.)'
       }
     },
     appearance: 'Wide face cords with a substantial 3-wale back rib. Heavy, structured — outerwear and collar ribbing.'
@@ -2740,15 +2761,15 @@ const FABRIC_DERIVATIVES = [
       wales_per_repeat: 9,
       beds: ['cylinder', 'dial'],
       pattern: {
-        C: [['K','K','K','K','K','M','M','M','M']],
-        D: [['M','M','M','M','M','K','K','K','K']]
+        C: [['K','K','K','K','K','-','-','-']],
+        D: [['-','-','-','-','K','K','K','K']]
       },
       cam: [
-        { feed: 1, cylinder: 'K on 5, M on 4', dial: 'M on 5, K on 4', note: 'Alternating block of 5 cylinder needles active and 4 dial needles active' }
+        { feed: 1, cylinder: 'K (5 in, 3 out)', dial: 'K (4 in, 4 out)', note: 'Rib gating: 5 cylinder needles in action, then 3 out; the dial is set the other way round, so 5 face wales alternate with 4 back wales' }
       ],
       needle_arrangement: {
-        butt_pattern: 'AAAAABBBB_AAAAABBBB',
-        description: '5 active cylinder needles followed by 4 active dial needles.'
+        butt_pattern: 'Cylinder CCCCC___ · Dial ____DDDD (repeat 8 needles per bed)',
+        description: 'Rib gating. Per bed, 8-needle repeat: cylinder 5 in, 3 out; dial 4 out, 4 in. Needles marked _ are taken out of action (not a miss: they hold no loop). 9 of every 16 needle positions knit — 56% of a 1x1 rib, which is why the fabric comes off narrower. (A dedicated rib machine with grooves cut in groups — e.g. a 2+2 dial and cylinder — knits the same rib with every needle working.)'
       }
     },
     appearance: 'Near-balanced very wide panels. Bulky, heavyweight ribbing used in chunky cuffs, collars, and sweater bodies at coarse gauge.'
@@ -2778,15 +2799,15 @@ const FABRIC_DERIVATIVES = [
       wales_per_repeat: 4,
       beds: ['cylinder', 'dial'],
       pattern: {
-        C: [['K','K','M','M']],
-        D: [['M','M','K','K']]
+        C: [['K','K','-']],
+        D: [['-','K','K']]
       },
       cam: [
-        { feed: 1, cylinder: 'K on 2, M on 2', dial: 'M on 2, K on 2', note: 'Knit with main spun yarn plated with elastane thread' }
+        { feed: 1, cylinder: 'K (2 in, 1 out)', dial: 'K (2 in, 1 out)', note: 'Rib gating: 2 cylinder needles in action, then 1 out; the dial is set the other way round, so 2 face wales alternate with 2 back wales' }
       ],
       needle_arrangement: {
-        butt_pattern: 'CC_DD_CC_DD',
-        description: '2 active cylinder needles alternating with 2 active dial needles. Plating attachment engaged.'
+        butt_pattern: 'Cylinder CC_ · Dial _DD (repeat 3 needles per bed)',
+        description: 'Rib gating. Per bed, 3-needle repeat: cylinder 2 in, 1 out; dial 1 out, 2 in. Needles marked _ are taken out of action (not a miss: they hold no loop). 4 of every 6 needle positions knit — 67% of a 1x1 rib, which is why the fabric comes off narrower. (A dedicated rib machine with grooves cut in groups — e.g. a 2+2 dial and cylinder — knits the same rib with every needle working.)'
       }
     },
     appearance: 'Heavy ribbed structure with exceptional widthwise elastic stretch and shape retention.'
@@ -3007,6 +3028,7 @@ const FABRIC_DERIVATIVES = [
       courses_per_repeat: 6,
       wales_per_repeat: 6,
       beds: ['cylinder', 'dial'],
+      // Cable rib: 3x3 rib panels, each panel tucked once in 6 courses so the cord stands out.
       pattern: {
         C: [
           ['K','K','K','M','M','M'],
@@ -3014,26 +3036,28 @@ const FABRIC_DERIVATIVES = [
           ['T','T','T','M','M','M'],
           ['K','K','K','M','M','M'],
           ['K','K','K','M','M','M'],
-          ['T','T','T','M','M','M']
+          ['K','K','K','M','M','M']
         ],
         D: [
           ['M','M','M','K','K','K'],
           ['M','M','M','K','K','K'],
-          ['M','M','M','T','T','T'],
+          ['M','M','M','K','K','K'],
           ['M','M','M','K','K','K'],
           ['M','M','M','K','K','K'],
           ['M','M','M','T','T','T']
         ]
       },
       cam: [
-        { feed: 1, cylinder: 'K', dial: 'M', note: 'Courses 1-2: Knit on cylinder panel' },
-        { feed: 3, cylinder: 'T', dial: 'M', note: 'Course 3: Tuck on cylinder to accumulate yarn and raise design' },
-        { feed: 4, cylinder: 'M', dial: 'K', note: 'Courses 4-5: Knit on dial panel' },
-        { feed: 6, cylinder: 'M', dial: 'T', note: 'Course 6: Tuck on dial to raise panel' }
+        { feed: 1, cylinder: 'K (panel A)', dial: 'K (panel B)', note: 'Both panels knit' },
+        { feed: 2, cylinder: 'K (panel A)', dial: 'K (panel B)', note: 'Both panels knit' },
+        { feed: 3, cylinder: 'T (panel A)', dial: 'K (panel B)', note: 'Cylinder panel tucks — yarn gathers and the cord rises' },
+        { feed: 4, cylinder: 'K (panel A)', dial: 'K (panel B)', note: 'Both panels knit' },
+        { feed: 5, cylinder: 'K (panel A)', dial: 'K (panel B)', note: 'Both panels knit' },
+        { feed: 6, cylinder: 'K (panel A)', dial: 'T (panel B)', note: 'Dial panel tucks — the back cord rises' }
       ],
       needle_arrangement: {
-        butt_pattern: 'AAABBB',
-        description: 'Blocks of 3 active cylinder needles and 3 active dial needles. Cylinder A needles correspond to dial B slots.'
+        butt_pattern: 'Cylinder AAA--- · Dial ---BBB',
+        description: 'Blocks of 3 cylinder needles and 3 dial needles in action (rib gating); the other needles of each block are out of action.'
       }
     },
     appearance: 'Bulky mock cable patterns on technical face with a ribbed reverse. Heavyweight.'

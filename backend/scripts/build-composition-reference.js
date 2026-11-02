@@ -62,12 +62,18 @@ function build() {
   records.forEach(r => {
     compCounts[r.fab] = compCounts[r.fab] || {};
     compCounts[r.fab][r.comp] = (compCounts[r.fab][r.comp] || 0) + 1;
+    if (!/lycra/.test(String(r.spin || ''))) compCounts[r.fab].__plain = (compCounts[r.fab].__plain || 0) + 1;
   });
 
   const out = {};
 
   for (const rec of records) {
     const fab = rec.fab;
+    // Lycra rows are a different cloth at the same weight (finer count, much
+    // denser): mixing them into the plain table pulled the 200 GSM single
+    // jersey recipe from 20s to 24.4s. Elastane is applied by the composition
+    // modifiers on top of the plain table, so the plain table stays plain.
+    if (/lycra/.test(String(rec.spin || '')) && (compCounts[fab].__plain || 0) >= 20) continue;
     const wellSampled = (compCounts[fab][rec.comp] || 0) >= MIN_RECORDS_FOR_COMP_KEY;
     const compKey = wellSampled ? (COMP_KEY[rec.comp] || '100_cotton') : '100_cotton';
 
@@ -76,7 +82,8 @@ function build() {
     const block = out[fab][compKey];
 
     const bucketGsm = Math.round(rec.gsm / GSM_BUCKET) * GSM_BUCKET;
-    block.buckets[bucketGsm] = block.buckets[bucketGsm] || { ne: [], g: [], sl: [], n: 0 };
+    block.buckets[bucketGsm] = block.buckets[bucketGsm] || { ne: [], g: [], sl: [], rows: [], n: 0 };
+    block.buckets[bucketGsm].rows.push(rec);
     block.buckets[bucketGsm].ne.push(rec.ne);
     block.buckets[bucketGsm].g.push(rec.g);
     block.buckets[bucketGsm].sl.push(rec.sl);
@@ -93,9 +100,16 @@ function build() {
       const gsmPoints = Object.keys(block.buckets).map(Number).sort((a, b) => a - b);
       const count_map = gsmPoints.map(gsm => {
         const b = block.buckets[gsm];
-        const ne = Math.round(mean(b.ne) * 10) / 10;
-        const gauge = mode(b.g);
-        const sl = Math.round(mean(b.sl) * 1000) / 1000;
+        // ONE recipe the factory actually ran: the most common count in the
+        // bucket, with the median stitch length and the usual gauge of the
+        // rows knitted in THAT count. Averaging count and SL separately
+        // across rows made pairs that never coexisted (180 GSM → 26.4s at
+        // 2.84 mm, which finishes near 155 GSM).
+        const ne = mode(b.ne);
+        const same = b.rows.filter(r => r.ne === ne);
+        const gauge = mode(same.map(r => r.g));
+        const slSorted = same.map(r => r.sl).filter(x => x != null).sort((x, y) => x - y);
+        const sl = Math.round(slSorted[slSorted.length >> 1] * 1000) / 1000;
         return {
           gsm,
           count_ne: ne,
@@ -105,6 +119,26 @@ function build() {
           n: b.n,
         };
       });
+      // A point whose own count and SL cannot weigh its GSM (by the family's
+      // loop constant Ks = 10·GSM·ℓ/tex, fitted on the same rows) is a
+      // handful of odd rows, not a recipe: drop it and let the neighbours
+      // interpolate. 260/280 GSM single jersey were 30s at 3.5 mm and 22s at
+      // 4.0 mm — recipes that finish near 110-130 GSM.
+      const ksRows = records.filter(r => r.fab === fab && !/lycra/.test(String(r.spin || '')) && r.sl > 0 && r.ne > 0 && r.fgsm > 0)
+        .map(r => 10 * r.fgsm * (r.sl / 10) / (590.5 / r.ne)).sort((x, y) => x - y);
+      const ks = ksRows.length ? ksRows[ksRows.length >> 1] : null;
+      // (single-yarn families only: a fleece or terry carries its loop yarn's
+      // weight, which the face count does not see)
+      if (ks && ['single_jersey', 'rib', 'pique', 'interlock', 'waffle'].includes(fab)) {
+        for (let i = count_map.length - 1; i >= 0; i--) {
+          const m = count_map[i];
+          const pred = ks * (590.5 / m.count_ne) / (10 * (m.sl / 10));
+          if (Math.abs(pred / m.gsm - 1) > 0.15 && count_map.length > 2) {
+            console.log(`  dropped ${fab}.${compKey} ${m.gsm} GSM: ${m.count_ne}s at ${m.sl} mm finishes near ${Math.round(pred)} GSM (n=${m.n})`);
+            count_map.splice(i, 1);
+          }
+        }
+      }
       const gsms = count_map.map(m => m.gsm);
       final[fab][compKey] = {
         gsm_range: { min: Math.min(...gsms), max: Math.max(...gsms) },

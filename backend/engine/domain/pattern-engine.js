@@ -27,23 +27,10 @@ class PatternEngine {
     // Apply dynamic adjustments based on gsm, gauge, and composition
     let dynamicNote = structure.note || '';
     
-    // --- 1. Rib 2x2 & Lycra Rib 2x2: Drop Needle setup at very high GSM ---
-    if ((fabricId === 'rib_2x2' || fabricId === 'lycra_rib_2x2') && gsm && gsm > 220 && gauge && gauge >= 18) {
-      structure.courses_per_repeat = 1;
-      structure.wales_per_repeat = 5;
-      structure.pattern = {
-        C: [['K', 'K', 'M', 'M', 'M']],
-        D: [['M', 'M', 'K', 'K', 'M']]
-      };
-      structure.cam = [
-        { feed: 1, cylinder: 'K on active, M on dropped', dial: 'K on active, M on dropped', note: '2 active cylinder then 2 active dial needles knit, dropping the 5th needle slot to prevent crowing/collision.' }
-      ];
-      structure.needle_arrangement = {
-        butt_pattern: 'CC__DD__',
-        description: 'Drop-needle setup: 2 active cylinder needles alternating with 2 active dial needles and 1 deactivated needle slot on both beds to accommodate thick yarn on fine gauge.'
-      };
-      dynamicNote = 'Heavy fabric drop-needle configuration active (4 wales + 1 dropped wale repeat) to prevent needle damage and jamming.';
-    }
+    // --- 1. (removed) A heavy 2x2 rib used to be swapped for an invented
+    //     5-needle "drop-needle" programme above 220 GSM. A heavier 2x2 rib is
+    //     the same set-out on a coarser count; the knitting plan checks the
+    //     count against the gauge instead.
 
     // --- 2. Lycra Rib 1x1 & 2x2: Full-feed vs Half-feed Plating ---
     if (fabricId === 'lycra_rib_1x1' || fabricId === 'lycra_rib_2x2') {

@@ -28,14 +28,14 @@ function assert(condition, message) {
 // TEST CASE 1: Heavy Rib 2x2 Drop Needle adaptation
 // ----------------------------------------------------------------
 try {
-  console.log("--- Test Case 1: Rib 2x2 Drop Needle Adaptation (High GSM, GG >= 18) ---");
+  console.log("--- Test Case 1: Heavy 2x2 rib keeps its rib-gating set-out (no invented drop needle) ---");
   const pattern = getPattern('rib_2x2', 240, 18, '100% Cotton');
-  
+
   assert(pattern !== null, "Pattern is generated successfully");
-  assert(pattern.courses_per_repeat === 1, "Courses per repeat adjusted to 1");
-  assert(pattern.wales_per_repeat === 5, "Wales per repeat adjusted to 5 (4 active + 1 dropped)");
-  assert(pattern.needle_arrangement.butt_pattern === 'CC__DD__', "Needle arrangement butt pattern updated to drop-needle CC__DD__");
-  assert(pattern.structure_note.includes("Heavy fabric drop-needle configuration active"), "Structure note contains drop-needle details");
+  assert(pattern.courses_per_repeat === 1, "One feed per repeat");
+  // rib gating: per bed a 3-needle repeat, cylinder 2 in 1 out, dial 1 out 2 in
+  assert(pattern.pattern_cylinder[0].join('') === 'KK-' && pattern.pattern_dial[0].join('') === '-KK', "2x2 rib is 2 in, 1 out on each bed");
+  assert(!/drop-needle configuration/.test(pattern.structure_note || ''), "No drop-needle programme swapped in at high GSM");
 } catch (err) {
   console.error("Test Case 1 failed with error:", err);
   failedTests++;
@@ -212,7 +212,7 @@ try {
 
   assert(result.success === true, "Calculator successfully computed result");
   assert(result.pattern !== null, "Pattern embedded directly in response");
-  assert(result.pattern.wales_per_repeat === 5, "Dynamic drop needle pattern is returned");
+  assert(result.pattern.pattern_dial && result.pattern.pattern_dial[0].includes('-'), "The rib set-out (needles out of action) is returned");
   assert(result.critical_path !== null, "Critical path analysis is returned in response");
   assert(result.critical_path.setup.cam_timing === 'Delayed Timing', "CPA correctly identified Delayed Timing requirement for tight rib");
 } catch (err) {

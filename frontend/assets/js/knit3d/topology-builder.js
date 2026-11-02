@@ -276,7 +276,7 @@ function fleeceFeeds(pattern) {
     const yarns = pattern.feedYarns || [];
     const feeds = grid.map((row, i) => (row.some(c => c === 'T' || c === 'M')
       ? { fleecy: row }
-      : { face: true, plated: yarns[i] === 'plated' }));
+      : { face: true, plated: yarns[i] === 'plated' || yarns[i] === 'binder' }));
     if (feeds.some(f => f.face) && feeds.some(f => f.fleecy && f.fleecy.includes('T'))) return feeds;
   }
   const n = FLEECE_TUCK_EVERY;

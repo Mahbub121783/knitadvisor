@@ -74,6 +74,7 @@ const { analyzeStretch } = require('./domain/stretch-engine');
 const { yarnCharacter } = require('./domain/yarn-character');
 const { analyzeShadeSpec } = require('./domain/shade-spec');
 const { loopbackPattern } = require('./domain/terry-loops');
+const { buildKnitPlan } = require('./domain/knit-plan');
 const { analyzeCriticalPath } = require('./domain/critical-path');
 const { recommendMachine } = require('./domain/machine-optimizer');
 const { analyzeYarn, recommendYarnGrade, SPINNING_SYSTEMS } = require('./domain/yarn-engine');
@@ -779,22 +780,10 @@ function calculate(params) {
       targetWidthInches: target_width,
     });
     if (optimalMachine && optimalMachine.ok) {
-      // Cross-check the cover-factor gauge against what bulk factory bookings
-      // actually use (mills run far finer than the cover-factor lower bound).
-      const bulk = gaugeFromBulkData(fabricDef.category, countResult.count_ne);
-      if (bulk) {
-        const theory = optimalMachine.optimal_gauge;
-        optimalMachine.bulk_data_gauge = {
-          factory_gauge: bulk.gg,
-          theory_gauge: theory,
-          family: bulk.family,
-          agrees: Math.abs(bulk.gg - theory) <= 2,
-          note: Math.abs(bulk.gg - theory) <= 2
-            ? `Bulk-production bookings confirm ~${bulk.gg} GG for ${countResult.count_ne}s — matches the cover-factor ${theory} GG.`
-            : `Cover-factor gives ${theory} GG, but real bulk bookings for ${countResult.count_ne}s ${bulk.family} fabric run ~${bulk.gg} GG (modern loose/lycra fabrics knit finer). Use ${bulk.gg} GG to match buyer-approved hand-feel.`,
-          source: 'Knitting Master File (5000+ bookings).',
-        };
-      }
+      // (The "bulk bookings" gauge cross-check that stood here read the
+      // Knitting Master File's DIAMETER column as a gauge — "28s single
+      // jersey → 34 GG", "rib → 42 GG". It is gone; the knitting plan below
+      // takes the gauge from the R&D records' own gauge column.)
       if (terryResult) {
         const tm = terryResult.machine;
         const theory = optimalMachine.optimal_gauge;
@@ -833,12 +822,55 @@ function calculate(params) {
     }
   }
 
+  // --- 4.2 Knitting plan: one consistent gauge / dia / needles / feeders /
+  //     width / density / output, and the structure checked rule by rule ---
+  let knitPlan = null;
+  let planPattern = null;
+  if (fabricDef.category !== 'warp_knit' && countResult.count_ne > 0) {
+    try {
+      planPattern = getEnginePattern(fabricDef.id, gsm, gauge, composition);
+      if (planPattern && fleeceResult && fleeceResult.loop) planPattern = { ...planPattern, ...loopbackPattern(fleeceResult.loop.arrangement.key) };
+      const hint = terryResult && terryResult.machine ? { gauge: terryResult.machine.gauge, source: 'plush engine (ground + pile in one hook)' }
+        : fleeceResult && fleeceResult.gauge_check ? { gauge: fleeceResult.gauge_check.ok ? fleeceResult.gauge_check.gauge : (fleeceResult.gauge_check.suggested_gauge || fleeceResult.gauge_check.gauge), source: 'fleece engine (face, binder and loop yarn must all clear the hook)' }
+          : null;
+      knitPlan = buildKnitPlan({
+        fabricDef, pattern: planPattern, countNe: countResult.count_ne,
+        slMm: llResult && llResult.ll_mm > 0 ? llResult.ll_mm : null,
+        slSource: llResult && llResult.multiplier_source === 'FACTORY_R_D_RECORD' ? 'factory records' : 'engine model',
+        slUser: stitch_length, gsm, lycra: !!(parsedComp && parsedComp.has_elastane),
+        gauge, dia, feeders, rpm, efficiency, targetWidthIn: target_width, gaugeHint: hint,
+        yarnTex: {
+          loop: countResult.yarn2_ne ? 590.5 / countResult.yarn2_ne : null,
+          binder: countResult.binder_denier ? countResult.binder_denier / 9 : null,
+        },
+      });
+    } catch (e) { knitPlan = null; warnings.push(`Knitting plan skipped: ${e.message}`); }
+  }
+  if (knitPlan) {
+    knitPlan.notes.forEach((n) => warnings.push(`Knitting: ${n}`));
+    if (knitPlan.structure) knitPlan.structure.checks.filter((c) => c.level === 'error' || c.level === 'warn')
+      .forEach((c) => warnings.push(`Structure: ${c.text}`));
+    // the optimal-machine card and the critical path read these: make them the plan's
+    if (optimalMachine && optimalMachine.ok) {
+      const R = knitPlan.recommended;
+      optimalMachine.optimal_gauge = R.gauge;
+      optimalMachine.optimal_dia = R.dia;
+      if (optimalMachine.gauge) optimalMachine.gauge.optimal_gauge = R.gauge;
+      if (optimalMachine.dia) Object.assign(optimalMachine.dia, { optimal_dia: R.dia, needles: R.needles, feeders: R.feeders, open_width_in: R.finished_width_in, mode: target_width ? 'width_target' : 'economical_default' });
+      const kind = terryResult ? 'plush (terry) machine'
+        : fleeceResult ? `${fleeceResult.variant.kind === 'terry' ? 'loopback terry (fleece)' : 'fleece'} machine`
+          : `${knitPlan.machine_label.toLowerCase()} machine`;
+      optimalMachine.summary = `USE ${R.dia}" Dia × ${R.gauge} GG ${kind} — ${R.needles} needles, ${R.feeders} feeders, ~${R.finished_width_in}" finished open width.`;
+    }
+    trace.push({ step: '4.2', action: 'knitting_plan', result: `${knitPlan.machine.dia}" × ${knitPlan.machine.gauge}G · ${knitPlan.machine.needles} needles · ${knitPlan.machine.feeders} feeders · SL ${knitPlan.stitch_length.used_mm} mm → ${knitPlan.fabric.finished_width_in}" finished · ${knitPlan.fabric.wpi} wpi × ${knitPlan.fabric.cpi} cpi`, formula: knitPlan.fabric.formula });
+  }
+
   // --- 5. Production (only if machine specs provided) ---
   let productionResult = null;
   if (dia && gauge && rpm) {
     const eff = efficiency || 85;
     const sl = stitch_length || (llResult.ll_mm > 0 ? llResult.ll_mm : null);
-    const f = feeders || machineResult.feeders_theoretical;
+    const f = feeders || (knitPlan ? knitPlan.machine.feeders : machineResult.feeders_theoretical);
     if (sl && f) {
       productionResult = calculateProduction(
         fabricDef, dia, gauge, f, sl, rpm, countResult.count_ne, eff, countResult
@@ -981,16 +1013,15 @@ function calculate(params) {
 
   // --- 6.1b Finished width prediction (grey open width × width shrinkage) ---
   // Gives a specific FINISHED dia/width instead of a range, per factory request.
-  if (optimalMachine && optimalMachine.ok && optimalMachine.dia && optimalMachine.dia.open_width_in) {
-    const wShrink = qualityResult.shrinkage ? qualityResult.shrinkage.widthwise_pct : 0;
-    const greyW = optimalMachine.dia.open_width_in;
-    const finishedW = parseFloat((greyW * (1 - wShrink / 100)).toFixed(1));
+  if (optimalMachine && optimalMachine.ok && knitPlan) {
+    // Finished width straight from the calibrated width model (needles × ℓ ÷ Kw)
+    const fw = knitPlan.recommended.finished_width_in;
     optimalMachine.finished_width = {
-      grey_open_width_in: greyW,
-      width_shrinkage_pct: wShrink,
-      finished_open_width_in: finishedW,
-      finished_open_width_cm: parseFloat((finishedW * 2.54).toFixed(1)),
-      note: `Grey ${greyW}" open width − ${wShrink}% width shrinkage → ~${finishedW}" finished (deliver to buyer).`,
+      grey_open_width_in: null,
+      width_shrinkage_pct: null,
+      finished_open_width_in: fw,
+      finished_open_width_cm: Math.round(fw * 2.54 * 10) / 10,
+      basis: knitPlan.fabric.kw_basis,
     };
   }
 
@@ -1508,6 +1539,8 @@ function calculate(params) {
       feeders_theoretical: machineResult.feeders_theoretical,
       pitch_mm: machineResult.pitch_mm,
       suitable_count_for_gauge: machineResult.suitable_count,
+      ...(knitPlan ? { gauge_optimal: knitPlan.recommended.gauge, feeders_theoretical: knitPlan.machine.feeders,
+        needles: dia && gauge ? knitPlan.machine.needles : machineResult.needles } : {}),
       // Single optimal Dia + Gauge recommendation (expert request)
       optimal: optimalMachine && optimalMachine.ok ? optimalMachine : null,
     },
@@ -1539,10 +1572,17 @@ function calculate(params) {
     },
 
     production: productionResult ? {
-      kg_per_hour: productionResult.kg_per_hour,
-      kg_per_shift: productionResult.kg_per_shift,
-      kg_per_day: productionResult.kg_per_day,
+      // every feeder knitting every needle (the classic formula) …
+      classic_kg_per_hour: productionResult.kg_per_hour,
+      // … and the structure-aware figure: tucks and misses take less yarn
+      kg_per_hour: knitPlan ? knitPlan.production.kg_per_hour : productionResult.kg_per_hour,
+      kg_per_shift: knitPlan ? knitPlan.production.kg_per_shift_8h : productionResult.kg_per_shift,
+      kg_per_day: knitPlan ? knitPlan.production.kg_per_day : productionResult.kg_per_day,
     } : null,
+
+    // The knitting floor's plan: machine, stitch length, width, density,
+    // output and the checked structure (knit-plan.js)
+    knit_plan: knitPlan,
 
     quality_prediction: qualityResult ? {
       shrinkage:            qualityResult.shrinkage,

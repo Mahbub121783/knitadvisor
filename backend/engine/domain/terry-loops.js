@@ -98,9 +98,9 @@ function loopbackPattern(arrKey) {
     grid.push(K.slice(), K.slice(), row);
     const f = i * 3;
     cam.push(
-      { feed: f + 1, cylinder: 'K', yarn: 'plated', note: 'Binder (tie-in) knits all needles' },
-      { feed: f + 2, cylinder: 'K', yarn: 'ground', note: 'Face yarn knits all needles' },
-      { feed: f + 3, cylinder: 'M/T', yarn: 'fleece', note: `Loop yarn tucks on track ${t + 1}, misses the other ${a.n - 1}` },
+      { feed: f + 1, cylinder: 'K', yarn: 'binder', note: 'Binder (tie-in) knits all needles' },
+      { feed: f + 2, cylinder: 'K', yarn: 'face', note: 'Face yarn knits all needles' },
+      { feed: f + 3, cylinder: 'M/T', yarn: 'loop', note: `Loop yarn tucks on track ${t + 1}, misses the other ${a.n - 1}` },
     );
   });
   return {
