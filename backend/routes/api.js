@@ -16,7 +16,6 @@ const router = express.Router();
 
 const { calculate, getAllFabrics, ENGINE_INPUTS } = require('../engine/index');
 const { analyzeShadeSpec } = require('../engine/domain/shade-spec');
-const { parseComposition } = require('../engine/domain/composition-engine');
 const { UnitConverter, FabricWeightFormulas, YarnCountFormulas, WeftCalculators } = require('../engine/formulas');
 const { FAULTS_DATABASE, diagnoseFaults } = require('../engine/domain/faults-engine');
 const providerManager = require('../ai/provider-manager-v2');
