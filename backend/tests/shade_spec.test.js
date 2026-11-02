@@ -90,4 +90,11 @@ const C = (comp, extra) => calculate({ fabric: 'single_jersey', gsm: 180, compos
   assert.strictEqual(plain.shade_spec, null, 'no shade, no spec');
 }
 
+// 7. the API module must load: a duplicate import there took the server down
+//    on 2026-11-02 while every engine test still passed
+{
+  const router = require('../routes/api');
+  assert(router && typeof router === 'function', 'routes/api.js loads');
+}
+
 console.log('\nAll shade spec tests passed.');
