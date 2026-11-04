@@ -1,0 +1,93 @@
+{
+  "document": {
+    "doc_key": "he-2025-conductive-knit-strain-sensor",
+    "title": "Multifunctional conductive yarns based on cotton integrated knitting fabric strain sensor for human motion monitoring",
+    "authors": "Xin He, Tiantian Li, Jie Xu, Shenglan Yuan, Shaoju Fu",
+    "year": 2025,
+    "doc_type": "paper",
+    "file_name": "1-s2.0-S0926669025008854-main.pdf",
+    "pages": 8,
+    "summary": "Smart-textile research. Five yarns (silvered nylon, PET/cotton/viscose, cotton, acrylic/cotton, polyester/cotton) are knitted on a hand-cranked flat machine into plain, rib and gauze structures, coated with polyaniline, and tested as strain sensors: density, thickness, tensile strength, drape, pilling, air permeability, and resistance change under strain and bending.",
+    "relevance": "peripheral",
+    "relevance_note": "About sensing, not about making ordinary apparel fabric. It gives no gauge, stitch length, GSM or machine setting, uses a hand flat machine, and reports results as relative comparisons between four fabrics. It cannot calibrate any circular-knit formula in the engine. What it offers: a yarn table whose twist coefficients can be checked, the ordering of plain against rib and gauze structures, and the standard test methods for drape, pilling and air permeability."
+  },
+  "lessons": [
+    {
+      "title": "What the paper did",
+      "kind": "concept",
+      "topics": ["smart textile", "strain sensor", "flat knitting", "plain", "rib", "gauze"],
+      "page_start": 1, "page_end": 2,
+      "body": "Conductive composite yarns were made first, then knitted on a hand-cranked flat knitting machine into plain, rib and gauze (Rowan-type) structures. Four fabrics were built: fabric 1 = silvered nylon + acrylic/cotton; fabric 2 = PET/cotton/viscose + acrylic/cotton; fabric 3 = PET/cotton/viscose + cotton; fabric 4 = PET/cotton/viscose + graphene yarn + polyester/cotton. The fabrics were coated with polyaniline to raise conductivity, then compared on structure, mechanical, wearability and sensing properties. Conclusion: fabric 1 (silvered nylon + acrylic/cotton) gave the best conductivity and the steadiest sensing."
+    },
+    {
+      "title": "Why knitted structure suits strain sensing",
+      "kind": "concept",
+      "topics": ["knitted structure", "porosity", "elasticity", "air permeability", "deformation"],
+      "page_start": 1, "page_end": 2,
+      "body": "Compared with woven and nonwoven fabric, a knitted structure is porous and highly elastic, so air and moisture pass through more freely, it follows large deformations without damage, and its electrical resistance changes markedly when it is stretched. The loop structure also gives a ready three-dimensional frame for adding small electronic parts. Cotton fibre is favoured for skin contact because it is hydrophilic, soft and biocompatible. The authors state that how knitting structure relates to sensitivity still needs study."
+    },
+    {
+      "title": "The yarns used and their twist (Table 1)",
+      "kind": "table",
+      "topics": ["yarn", "linear density", "tex", "twist", "twist coefficient", "blend"],
+      "page_start": 2, "page_end": 2,
+      "body": "Yarn | Composition | Linear density (tex) | Twist (per 10 cm) | Twist coefficient\nSilvered nylon | 100% silvered nylon | 19.60 | 124.35 | 174.09\nPET/cotton/viscose | 14% PET + 23% cotton + 63% viscose | 14.70 | 124.36 | 173.96\nCotton | 100% cotton | 19.70 | 166.00 | 232.99\nAcrylic/cotton | 40% acrylic + 60% cotton | 16.40 | 142.30 | 182.00\nPolyester/cotton | 40% cotton + 60% polyester (as printed) | 14.58 | 137.00 | 165.00\n\nChecked by calculation: the paper's twist coefficient is twist per 10 cm x sqrt(tex / 10). Silvered nylon (124.35 x sqrt(1.96) = 174.09) and cotton (166.00 x sqrt(1.97) = 232.99) match the table exactly; acrylic/cotton (142.30 x sqrt(1.64) = 182.2 against 182.00) and polyester/cotton (137.00 x sqrt(1.458) = 165.4 against 165.00) match to within 0.5. PET/cotton/viscose does NOT: 124.36 x sqrt(1.47) = 150.8, but the table prints 173.96, which is what a 19.6 tex yarn would give. So that row has an error in either its tex (14.70) or its coefficient (173.96). The last row also prints '40% cotton + 60% polyester' under a name that reads the other way round."
+    },
+    {
+      "title": "These yarns are far harder twisted than ordinary knitting yarn",
+      "kind": "engine",
+      "topics": ["twist multiplier", "alpha e", "knitting yarn", "yarn engine", "spirality"],
+      "page_start": 2, "page_end": 2,
+      "body": "Converting Table 1 (twist per 10 cm and tex) to the usual cotton-count twist multiplier (turns per inch / sqrt(Ne)), worked out here and not stated in the paper (the PET/cotton/viscose figure assumes its printed 14.70 tex is right): silvered nylon about 5.7, PET/cotton/viscose about 5.0, cotton about 7.7, acrylic/cotton about 6.0, polyester/cotton about 5.5. Ordinary single-jersey cotton yarn is spun at about 3.5 to 4.2. So these are hard-twist yarns chosen for sensing, not apparel yarns, and their values should not be used to set the engine's default twist. High twist also means high torque, which in a plain knit would show up as spirality (the wales leaning)."
+    },
+    {
+      "title": "Structure, density and thickness of the four fabrics",
+      "kind": "data",
+      "topics": ["fabric density", "thickness", "tightness", "wales", "courses", "structure"],
+      "page_start": 2, "page_end": 3,
+      "body": "Fabric 4 was the densest, at 88 per 10 cm in the weft direction and 43 per 10 cm in the warp direction. Fabric 1 was slightly less dense, and fabrics 2 and 3 the least dense. Fabrics 3 and 4 were the thickest; fabrics 1 and 2 thinner. The authors read this as: the PET/cotton/viscose + graphene + polyester/cotton combination knitted into the tightest structure, silvered nylon + acrylic/cotton into the loosest, and fabrics 2 and 3 lowest in both density and thickness. Note: 'weft' and 'warp' are used for a knitted fabric; they most likely mean courses and wales, but the paper does not say, and it gives no stitch length or machine gauge."
+    },
+    {
+      "title": "Rib and gauze structures are more compact and stronger than plain",
+      "kind": "concept",
+      "topics": ["plain", "rib", "gauze", "tensile strength", "surface", "compactness"],
+      "page_start": 3, "page_end": 3,
+      "body": "Fabrics 3 and 4 (rib and gauze) had the largest tensile strength; fabrics 1 and 2 (plain) were weaker. The authors attribute it to rib and gauze structures being a little more complex and compact than plain (and, for fabric 4, to the graphene yarn). Surface: plain is smooth; rib and gauze are concavo-convex. Fabrics 1 and 2 were flat and smooth with dense interlacing points; fabric 3 looked fluffy because of a fancy yarn and alternating lengthwise arrangement; fabric 4 showed a horizontal stripe pattern. Direction agrees with the engine's picture that a double-bed structure is firmer than single jersey. The paper gives no number for how much stronger."
+    },
+    {
+      "title": "Wearability tests: drape, pilling and air permeability",
+      "kind": "method",
+      "topics": ["drape", "suspension", "pilling", "martindale", "air permeability", "test method"],
+      "page_start": 3, "page_end": 4,
+      "body": "Drape ('suspension'): the sagging shape of the fabric under its own weight, read as shape, angle and area; fabrics 2 and 4 had the largest value, fabric 1 less, fabric 3 the smallest at 42.50 %. Pilling: on a Martindale abrasion tester, rubbed against an abradant a set number of times, then graded by eye or image analysis; fabric 3 (the one with the fancy yarn) pilled most, the other three little. Air permeability: air drawn through a fixed area at a set pressure difference; fabrics 3 and 4 passed the most air, fabrics 1 and 2 less. The paper does not say how many Martindale cycles or what pressure were used. It also does not explain why fabric 4, the densest, was among the most air-permeable."
+    },
+    {
+      "title": "Coating and testing procedure",
+      "kind": "method",
+      "topics": ["polyaniline", "coating", "SEM", "FTIR", "resistance", "tensile testing"],
+      "page_start": 2, "page_end": 3,
+      "body": "Fabrics were soaked in 50 mL aniline solution for 1 hour, then in ammonium persulphate (3.42 g) with 50 mL hydrochloric acid for 3 hours, washed with deionised water to remove excess chemical, and dried at 65 C. Surface structure was viewed by scanning electron microscope; chemical bonds by infrared spectroscopy (an amine peak near 1581 per cm confirmed the coating on fabric 2); resistance by an LCR digital bridge; strength by an electronic fabric strength tester with the fabric clamped top and bottom and electrodes on both sides."
+    },
+    {
+      "title": "Sensing results: strain, speed, repeatability and washing",
+      "kind": "data",
+      "topics": ["strain", "resistance change", "stretch speed", "cycling", "washing", "gauge factor"],
+      "page_start": 4, "page_end": 5,
+      "body": "Resistance fell sharply after coating on all fabrics. Resistance change was larger at 10 % strain than at 20 % strain. Fabric 1 was steady at 50 and 70 mm/s but became unstable at 100 mm/s, and strain and resistance were well correlated. Resistance stayed stable over a 3000 s cycling run. Graphene-type yarns had higher resistance than metal yarns, and resistance rose with the number of washes. On a finger joint, resistance change was about -8 to 0 % at 30 degrees, -12 to 0 % at 60 degrees and -18 to 0 % at 90 degrees: the bigger the bend, the bigger the change. Mechanically useful point: a stretched knit changes electrical and geometric state in a way that depends on speed, so any stretch test should state its speed."
+    },
+    {
+      "title": "How far the paper can be trusted",
+      "kind": "caution",
+      "topics": ["limitations", "reliability", "sample size", "reporting"],
+      "page_start": 1, "page_end": 6,
+      "body": "Treat as direction, not data. Four fabrics, one machine (hand-cranked flat), no repeat counts or error bars in the text, no stitch length, gauge, GSM or yarn count per fabric, and the numbers sit mostly in figures. The writing contradicts itself in places: it calls fabric 4 'the largest resistance ability' where it means largest resistance; says the knee-bending change is stable at 90 degrees and then gives one range (-0.06 to 0.08 %) for 30, 60, 90 and 120 degrees, while the finger result at 90 degrees is -18 to 0 %; and explains compactness by sigma and pi bonds in graphene, which is a chemistry argument, not a loop-geometry one. Do not take a number from it into the engine without a second source."
+    },
+    {
+      "title": "What this means for KnitAdvisor",
+      "kind": "engine",
+      "topics": ["stretch engine", "structure", "yarn engine", "calibration", "future work"],
+      "page_start": 1, "page_end": 6,
+      "body": "1) Nothing here changes a formula: no stitch length, gauge or GSM is reported, so no constant in the knitting plan, stretch engine or costing can be calibrated from it. 2) Useful checks: the yarn table's twist coefficient matches twist x sqrt(tex/10) exactly (a way to check the yarn engine's twist maths), and rib/gauze stronger than plain agrees with the engine's ordering. 3) The three test methods (Martindale pilling, drape by suspension, air permeability) are the ones a real fabric should be measured by; any future 'predicted vs measured' feature should use them. 4) A conductive-yarn fabric (silver or graphene yarn) is a niche input the calculator does not model; if smart-textile orders ever arrive they need their own rules. 5) Interest for the stretch engine: stretch speed changes the response of a knit (stable at 50 to 70 mm/s, unstable at 100 mm/s here), which supports stating the test speed in the 3D stretch test."
+    }
+  ]
+}
