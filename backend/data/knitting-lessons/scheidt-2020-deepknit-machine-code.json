@@ -1,0 +1,72 @@
+{
+  "document": {
+    "doc_key": "scheidt-2020-deepknit-machine-code",
+    "title": "deepKnit: learning-based generation of machine knitting code",
+    "authors": "Fabian Scheidt, Jifei Ou, Hiroshi Ishii, Tobias Meisen",
+    "year": 2020,
+    "doc_type": "paper",
+    "file_name": "1-s2.0-S2351978920319259-mainext.pdf",
+    "pages": 10,
+    "summary": "A conference paper that trains a neural network (LSTM) on 1,171 flat-bed machine knitting patterns to generate new ones, and defines how to check that a generated pattern can actually be knitted. The generator is not relevant here; the definitions of the machine operations and the knittability limits are.",
+    "relevance": "supporting",
+    "relevance_note": "It is about flat V-bed knitting code, not circular fabric, and the neural network itself is of no use to the engine. What it gives is an explicit, simulation-based list of the ways a pattern fails on a machine and the numeric limits experts allow (loops per needle, courses a loop may be held, racking), which bear directly on the engine's structure checks."
+  },
+  "lessons": [
+    {
+      "title": "The five basic machine operations",
+      "kind": "concept",
+      "topics": ["knit", "tuck", "miss", "transfer", "split", "racking", "V-bed", "needle operations"],
+      "page_start": 2, "page_end": 2,
+      "body": "A flat V-bed machine has two opposing needle beds and does five fundamental operations. Knit: a needle reaches to the yarn, pulls a new loop through all the loops it holds and drops them. Tuck: the needle catches the yarn but does not release the loops it held, so it adds a loop. Transfer: all loops on a needle move to the needle of the opposite bed; because the beds can be offset (racking), several transfers move loops sideways. Split: a knit combined with a transfer (the old loops are passed to the opposite bed instead of dropped). Miss: the needle does nothing and keeps holding its loops. Combinations with racking give move operations (a hole), crossing loops (cables), and so on. Circular machines use knit, tuck and miss only."
+    },
+    {
+      "title": "Why knitting code is a sequence and not a picture",
+      "kind": "concept",
+      "topics": ["knitting code", "pattern encoding", "course by course", "tokens", "notation"],
+      "page_start": 3, "page_end": 3,
+      "body": "A knit pattern is a grid of instruction codes, but it behaves like text: the codes are categorical (nothing lies between a front knit and a back knit), scaling the grid changes its meaning (it repeats the instructions in adjacent courses rather than making them bigger) and rotating it breaks it (cable codes must come in pairs). The machine runs it course by course from the bottom upwards, so the authors write it as one line of tokens with an end-of-line mark after each course. This is the same convention as the engine's grid: one row per feed, one column per needle."
+    },
+    {
+      "title": "The training data and the model, briefly",
+      "kind": "data",
+      "topics": ["dataset", "LSTM", "pattern library", "style categories", "model accuracy"],
+      "page_start": 3, "page_end": 5,
+      "body": "1,978 human-made patterns were taken from a commercial design-system library and a manufacturer's library; patterns wider or taller than 30 instructions, or using rare codes, were removed, leaving 1,171. Eight style families (links, cable, stitch move, tuck, miss, stripe, jacquard, inlay); the last three need more than one yarn and were dropped. 17 instruction codes make up the vocabulary, and front knit and back knit alone are more than 80 percent of all tokens. Model: two recurrent (LSTM) layers of 100 cells with dropout, a 90/10 train/test split; test accuracy about 78 to 79 percent against 98 percent on training for the larger networks (overfitting). Generated patterns are more random-looking than human ones. Of no use to the engine except as a picture of how few distinct instructions real patterns use."
+    },
+    {
+      "title": "Knittability, part 1: syntax",
+      "kind": "method",
+      "topics": ["knittability", "syntax", "cable", "cross stitches", "adjacent instructions"],
+      "page_start": 5, "page_end": 5,
+      "body": "A pattern is syntactically correct if the cross (cable) codes come in pairs (a second pair is needed where two adjacent pairs would be ambiguous) and no more than three of the same code are adjacent. Anything else the machine will execute, but that does not make the cloth sound, which is the point of the second set of checks."
+    },
+    {
+      "title": "Knittability, part 2: process reliability and the numeric limits",
+      "kind": "data",
+      "topics": ["knittability", "process reliability", "loops per needle", "tuck", "miss", "racking", "transfer limits"],
+      "page_start": 6, "page_end": 6,
+      "body": "A machine will run any syntactically correct code, yet some code unravels, jams the machine, or breaks yarn or needles. Six situations are checked after every needle operation in a simulation: (1) too many loops in a needle, so new loops are dropped; (2) a loop held for too many courses, from repeated misses on a needle that holds loops; (3) too many loops transferred at once; (4) too much racking, which moves a loop so far that the yarn wears out; (5) continuous pick-up stitches, which can never form a loop; (6) transfer of a pick-up stitch, which is unstable. Thresholds depend on machine and yarn; the authors follow experts: at most three loops per needle (the loop plus two tucks), a loop held for no more than seven courses, transfer of up to two loops, racking no further than four needles. The pattern is also repeated sideways and upwards and padded with plain knit to check its edges."
+    },
+    {
+      "title": "Results: how many generated patterns could be knitted",
+      "kind": "data",
+      "topics": ["knittability results", "decoding", "temperature", "beam search", "uniqueness"],
+      "page_start": 5, "page_end": 7,
+      "body": "Random decoding at low temperature gives clean, aligned patterns; raising the temperature raises variety and breaks alignment and cross pairs; beam search gives cleaner but less varied patterns. 1000 patterns were generated for each style combination and checked: overall knittability stayed close to 50 percent even at high temperature (one in two could be made), and much better than random code. The detailed table of knittability and uniqueness by decoding method was not extracted for this store."
+    },
+    {
+      "title": "How far the paper can be trusted",
+      "kind": "caution",
+      "topics": ["limitations", "flat machine", "thresholds", "simulation", "table not read"],
+      "page_start": 1, "page_end": 8,
+      "body": "Sound method, narrow scope. The limits (three loops per needle, seven courses held, two transferred, four racked) are expert recommendations for one machine family and a typical yarn, not measurements; the authors say thresholds depend on machine and yarn. The knittability table and the pattern-style figures were not read. Single-yarn patterns only. Circular machines have no transfer, split or racking."
+    },
+    {
+      "title": "What this means for KnitAdvisor",
+      "kind": "engine",
+      "topics": ["structure checks", "tuck limit", "miss limit", "popcorn", "knop", "knitting plan"],
+      "page_start": 5, "page_end": 6,
+      "body": "The knitting plan's structure checks look for the same failures on circular structures: a needle that tucks several times running, a loop held over several feeds by misses, and floats. The plan warns at five or more tucks in a row and notes four; the paper's flat-machine limit is three loops per needle, i.e. two tucks, and a loop held for at most seven courses (the plan warns at five misses). Piqué and lacoste use two tucks (three loops) and sit at the limit; popcorn and honeycomb use three (four loops) and cellular blister four (five loops), above it. Because this limit is for a flat machine and a typical yarn, the plan now also notes a needle that holds three tucks, as a caution and not an error; the five-miss warning is deliberately stricter than the seven-course figure."
+    }
+  ]
+}

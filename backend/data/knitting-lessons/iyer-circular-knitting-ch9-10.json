@@ -1,0 +1,128 @@
+{
+  "document": {
+    "doc_key": "iyer-circular-knitting-ch9-10",
+    "title": "Circular Knitting: technology, process, structures, yarns, quality (3rd edition 2004) — chapters 9 to 11 and the contents",
+    "authors": "Chandrasekhar Iyer, Bernd Mammel, Wolfgang Schach",
+    "year": 2004,
+    "doc_type": "textbook",
+    "file_name": "ilide.info-circular-knitting-lyer-mammel-pdf-pr_0ad748e6b14d72ae77fbdf0264fce372.pdf",
+    "pages": 286,
+    "summary": "The standard German-industry reference on circular knitting. Only the contents and the last chapters were read for this store (PDF pages 245 to 276: faults and their causes, plant conditions, operational data, production calculation, and the appendix tables of pitch and gauge, diameters, feeders per inch and average yarn counts by gauge). The other 250 pages (stitch formation, needle control, patterning, machines, structures, yarns) are scanned images and have not been read.",
+    "relevance": "core",
+    "relevance_note": "Directly about the engine's machine side: gauge and pitch, diameters, feeders, yarn count by gauge, production. Its production method reproduces the engine's exactly. Its feeder-per-inch and gauge-range tables corrected three machine settings in the knitting plan. Its yarn-count averages are for the European market of its day and run about 40 percent finer than what the factory knits at the same gauge. Chapters 1 to 8 (structures and yarns) still need reading."
+  },
+  "lessons": [
+    {
+      "title": "What was read and what was not",
+      "kind": "caution",
+      "topics": ["coverage", "scanned book", "contents", "partial reading"],
+      "page_start": 1, "page_end": 286,
+      "body": "Chapters of the book: 01 Knitting technique, 02 Needle control, 03 Additional patterning equipment, 04 Machines for garment-length fabrics, 05 High-pile machines, 06 Other machines, 07 Knitted and fabric structures, 08 Yarns for circular knitting, 09 Quality and production monitoring, 10 Appendix tables, 11 Fluff blower devices, 12 Index. Read here: the contents and chapters 9, 10 and 11 (PDF pages 245 to 276; book page = PDF page minus 14). Not read: chapters 1 to 8, which are scanned page images with no text layer and no OCR tool available; they must be read page by page (chapter 7 on structures and chapter 8 on yarns matter most to the engine). Tables below were read by eye from page images and spot-checked by arithmetic where possible."
+    },
+    {
+      "title": "Machine pitch and gauge (Table 10.1)",
+      "kind": "table",
+      "topics": ["pitch", "gauge", "needles per inch", "machine pitch"],
+      "page_start": 266, "page_end": 266,
+      "body": "Pitch t (mm) against gauge E (needles per inch): 16.93 = E1.5; 12.70 = E2; 11.29 = E2.25; 10.16 = E2.5; 8.47 = E3; 7.26 = E3.5; 6.35 = E4; 5.64 = E4.5; 5.08 = E5; 4.62 = E5.5; 4.23 = E6; 3.63 = E7; 3.18 = E8; 2.82 = E9; 2.54 = E10; 2.31 = E11; 2.12 = E12; 1.95 = E13; 1.81 = E14; 1.69 = E15; 1.59 = E16; 1.49 = E17; 1.41 = E18; 1.27 = E20; 1.21 = E21; 1.15 = E22; 1.06 = E24; 1.02 = E25; 0.98 = E26; 0.91 = E28; 0.85 = E30; 0.79 = E32; 0.75 = E34; 0.71 = E36; 0.67 = E38; 0.64 = E40; 0.60 = E42; 0.58 = E44. Every entry is 25.4 / E, so the engine's pitch = 25.4 / gauge is exactly the book's."
+    },
+    {
+      "title": "Which machine groups run which gauges and diameters (10.1, 10.2)",
+      "kind": "table",
+      "topics": ["machine groups", "gauge range", "diameter range", "single jersey", "rib", "fleece", "plush", "jacquard", "purl"],
+      "page_start": 267, "page_end": 268,
+      "body": "Pitch (gauge) range and nominal diameters by machine group. Plain single jersey and patterned outerwear: 3.63 to 0.75 mm (E7 to E34), diameters 18 to 60 inch. Plain underwear: 1.41 to 0.79 mm (E18 to E32), 11 to 24 inch in body widths. Plain jacquard: 5.08 to 0.79 mm (E5 to E32), 30 inch. Three-thread fleece: 2.12 to 0.91 mm (E12 to E28), 11 to 32 inch. Plush: 3.63 to 0.91 mm (E7 to E28), 10 to 34 inch. High-pile: 5.08 to 1.15 mm (E5 to E22), 24, 26, 30, 38, 48 inch. Wrap-finger device: 5.08 to 0.71 mm (E5 to E28), 11 to 32 inch. Rib for plain double jersey and outerwear: 3.63 to 0.60 mm (E7 to E42), 6 to 36 inch. Rib jacquard: 5.08 to 0.85 mm (E5 to E30), 10 to 32 inch. Rib underwear: 2.54 to 1.27 mm (E10 to E22), 10 to 24 inch. Rib for transfer patterning: 2.12 to 1.59 mm (E12 to E16), 12 to 30 inch. Purl outerwear: 6.35 to 1.27 mm (E4 to E20), 30 and 33 inch. Rib and purl for garment-length fabrics: 12 to 40 inch. Nominal diameters (inch) run from 1/12 to 60: 1, 1.25, 1.5, 1.75, 2 ... 8, 9, 9.5, 10 to 38 in single steps, 40, 48, 55, 60."
+    },
+    {
+      "title": "Feeders per inch of diameter, by machine group (Table 10.3)",
+      "kind": "table",
+      "topics": ["feeders", "feeders per inch", "machine group", "feeder count"],
+      "page_start": 270, "page_end": 271,
+      "body": "Maximum feeders per inch of nominal diameter: plain single jersey and patterned outerwear up to 4.8; plain underwear up to 3.0; plain jacquard up to 4.0; three-thread fleece up to 3.0; plush up to 2.0; high-pile 0.5 to 0.7; wrap-finger up to 3.2; rib for plain double jersey and outerwear up to 4.8; rib jacquard up to 3.2; rib underwear up to 3.0; rib transfer patterning up to 1.6; purl outerwear up to 0.8. These are upper limits of what is built, not typical counts. Feeder numbers actually built (examples): single jersey 10, 12, 14, 18, 22, 24, 28, 34, 36, 38 ... 90, 96, 102, 104, 108, 112, 120, 128, 144; three-thread fleece 21, 33, 36, 39, 42, 45, 48, 51, 54, 57, 60, 69, 72, 78, 84, 90, 96; plush 14, 16, 20, 24 ... 54, 60; high-pile 12, 16, 18, 24, 32, 36; rib for plain double jersey 6, 8, 9, 10, 12, 14 ... 120, 144; rib jacquard 6, 8, 12, 24, 36, 48, 64, 72, 84, 96."
+    },
+    {
+      "title": "Average yarn count by gauge (Table 10.4)",
+      "kind": "table",
+      "topics": ["yarn count", "dtex", "gauge", "cotton", "polyester filament", "polyamide", "wool", "acrylic"],
+      "page_start": 272, "page_end": 276,
+      "body": "Average yarn count in decitex (dtex) for each pitch / gauge. Wool: E10 640, E12 500, E14 420, E15 300, E16 300, E18 250, E20 250, E22-24 200. Cotton: E14 300, E15 280, E16 235, E18 220, E20 194, E22-24 150, E28-32 125, E40-42 63. Polyester filament: E12 280, E14 235, E15 190, E16 140, E18 140, E20 140, E22-24 122, E28-32 95, E40-42 50. Polyamide filament: E10 400, E12 350, E14 250, E15 150, E16 150, E18 125, E20 125, E22-24 100, E28-32 76, E40-42 33. Acrylic staple yarn: E10 300, E12 235, E14 200, E15 200, E16 200, E18 167, E20 150. Cotton in English count (590.5 / (dtex / 10), worked out here): E14 Ne 19.7, E15 21.1, E16 25.1, E18 26.8, E20 30.4, E22-24 39.4, E28-32 47.2, E40-42 93.7. The book also lists many example counts per gauge, e.g. cotton E12: 250 x 2 and 355; E18: 300 to 145; E24 interlock: 142, 133, 100; polyester filament E24: 84 x 2 down to 76."
+    },
+    {
+      "title": "The book's gauge-to-count averages against the factory",
+      "kind": "engine",
+      "topics": ["yarn count", "gauge", "factory records", "tightness", "pitch to yarn ratio"],
+      "page_start": 272, "page_end": 272,
+      "body": "The book's cotton averages run much finer than what the factory knits at the same gauge. 24 gauge: the book's 150 dtex is Ne 39; the factory's most common 24G single-jersey count is Ne 28 (211 dtex), about 40 percent coarser, and the G x G / 18 rule gives Ne 32, between the two. 20 gauge: book Ne 30, rule Ne 22. In terms of the pitch-to-yarn-diameter ratio the engine uses to check a gauge, the book's yarn at E20 gives about 8.1, while the factory band for single jersey is 5.5 to 6.9: the book describes lighter, more open fabrics (European underwear and outerwear), the factory heavier, tighter ones. So the book's table is a reference for a light fabric, not the engine's default."
+    },
+    {
+      "title": "Choosing the yarn count: the rules of thumb (9.1.1.2)",
+      "kind": "concept",
+      "topics": ["yarn count selection", "machine pitch", "feeders per course", "knitted structure", "high bulk acrylic", "blends"],
+      "page_start": 246, "page_end": 247,
+      "body": "The right count is set mainly by the gauge (pitch). For 100 percent wool (not plain or purl machines): machine pitch x 2 = correct count (Ne or Nm); for plain and purl machines: machine pitch x (1.0 to 1.5) = correct count. The units and the pitch scale are not stated precisely, so this is a wool-trade rule, not a cotton one. Deviations come from machine type (cylinder-dial distance, knock-over comb, needle strength and hook size), knitted structure and yarn type. The more feeders that form one course, the finer the yarn must be, and the reverse. Structures with 1 feeder per course: rib (also drop-stitch and striper). 2 feeders: double piqué (Overnit, Pique Rodier), interlock, 2:2 cross tubular, Punto di Roma (Romanit), 2-colour jacquard, half Milano, Milano rib. 3 feeders: 3-colour jacquard, relief (blister). 4 or more: 4-colour jacquard and combined multicolour patterns. High-bulk acrylic must be run finer than wool for the same fabric because of its higher specific volume (ratio about 1.4 to 1); a blend with 70 percent synthetic and 30 percent wool runs a little finer than pure wool (for example Ne 23.5/1 in place of Ne 21/1)."
+    },
+    {
+      "title": "Processing difficulty of structures, and machine setting",
+      "kind": "concept",
+      "topics": ["structure difficulty", "interlock", "double pique", "rib", "machine setting", "yarn tension", "delayed timing", "take-down"],
+      "page_start": 247, "page_end": 248,
+      "body": "Low difficulty: interlock, 2-colour jacquard, 3-colour jacquard, 2:2 cross tubular, Punto di Roma. Medium: double piqué, 4-colour jacquard. High: rib, half Milano, Milano rib, relief and combined multicolour patterns. Setting a machine optimally is empirical for each yarn and structure; the balance is between yarn tension before and after the feeder, yarn draw-in at cylinder and dial, dial height and fabric take-up tension. Guidance: yarn tension at the feeder about 3 to 6 cN; take-up tension as low as possible; for double-bed structures the cylinder needles are drawn down before the dial needles (delayed timing), and the dial needles draw only as far as needed; a loose fabric is easier to get by a larger dial-to-cylinder distance than by a longer draw-in; even at the tightest setting a minimum distance must remain so the fabric can pass freely. Tension and weight must be re-checked at every yarn lot change."
+    },
+    {
+      "title": "Plant conditions, yarn storage and cleaning",
+      "kind": "data",
+      "topics": ["humidity", "air conditioning", "yarn storage", "fluff", "needle life", "waxing"],
+      "page_start": 247, "page_end": 248,
+      "body": "Yarn should be stored at a relative humidity of at least 65 percent at 20 C (a vapour content of 9 to 10 g per kg of dry air); a dry yarn has too little extension. Avoid extreme temperatures (at high temperature paraffin migrates permanently; at low temperature condensation forms) and sunlight. The plant itself should be air-conditioned: 55 percent plus or minus 10 at 25 C plus or minus 3, which corresponds to about 65 percent at 22 C or 72 percent at 20 C; air conditioning cut the number of holes sharply. Cleaning: remove fluff at least at the end of every shift; clear fly agglomerations at somewhat larger intervals; occasionally remove paraffin residue from tension discs and yarn guides. Machine state: horizontal floor without vibration, flawless porcelain or ceramic yarn guides, needles and hooks matched to gauge and yarn count, cylinder and dial drives free of play, needle beds centred on each other; for synthetic yarns in 3-shift work, needles may need renewing after only 6 months."
+    },
+    {
+      "title": "What the yarn must be: evenness, strength, twist, moisture, package",
+      "kind": "data",
+      "topics": ["yarn evenness", "breaking length", "twist coefficient", "moisture", "winding", "package density", "splice", "waxing"],
+      "page_start": 249, "page_end": 250,
+      "body": "Evenness: a jersey yarn of Ne 21.5 should have short-term Uster unevenness no worse than 16 percent U or 20 percent CV. Strength: for medium counts a breaking length of about 4 km (DIN 53834). Extension over very short lengths is decisive but has no good test. Twist: the average twist coefficient alpha-e for knit yarns is 2.10 to 2.32 for worsted yarns and 2.6 to 2.8 for yarns spun on the cotton system (DIN 53832, 50 mm specimens); the finer the yarn the higher the coefficient, and man-made and blended yarns a little higher than pure wool. Moisture: a dry yarn impairs extension and builds up fluff, but friction rises with moisture; process a yarn at the moisture it had when spun, not below 14 percent. Package: cones of 5 degrees 57 minutes are preferred to 9 degrees 15 minutes (less friction, harder build-up, better unwinding); practical package density about 0.4 kg per dm3, avoiding very soft packages. Waxing with paraffin is needed to cut friction. A splice is preferred to a knot, with a tensile loss of no more than 20 percent."
+    },
+    {
+      "title": "Yarn fault to fabric fault (table in 9.1.1.3)",
+      "kind": "table",
+      "topics": ["yarn faults", "fabric faults", "cause and effect", "hairiness", "unevenness", "stripes"],
+      "page_start": 250, "page_end": 250,
+      "body": "Cause | Effect\nvery uneven yarn | cloudy fabric\nyarn with very low strength and/or too many thin places | holes or cracks\nlong-period unevenness | fabric with stripes\nbad dyeing or blending | horizontal stripes\ninsufficiently paraffined yarn | drop stitches, holes or cloth fall-out\ntoo large or weak knots, or bad splicing | yarn end separation or break during knitting\nuncleared thick places | irreparable faults in the fabric\ntoo much yarn hairiness | diffused stitch appearance and fluff build-up\n\nAlso: the dye process affects yarn properties (kind of dyeing, dye class, depth of shade, after-treatment; impairment rises with deeper shades); a fabric may be strongly affected by a yarn defect, but a defect in the fabric is not automatically a yarn defect: a wrong machine setting causes the same faults."
+    },
+    {
+      "title": "The eleven fabric faults, with definitions and common causes (9.1.2)",
+      "kind": "concept",
+      "topics": ["fabric faults", "holes", "drop stitches", "cloth fall-out", "snagging", "tuck", "bunching-up", "stripes", "colour fly", "distorted stitches"],
+      "page_start": 251, "page_end": 261,
+      "body": "Eleven visible fault groups: 1 cracks or holes; 2 drop stitches; 3 cloth fall-out; 4 snagging; 5 tuck or double stitches; 6 bunching-up; 7 vertical stripes; 8 horizontal stripes; 9 soil stripes; 10 colour fly; 11 distorted stitches. Holes are broken yarn during loop formation near the needle hook (size depends on structure, count, gauge and course density); drop stitches (runners) come from a defective needle or a yarn not laid properly in the hook; cloth fall-out is an area of drop stitches side by side, from a yarn laid out or broken without immediate stop; snagging occurs almost only with continuous filament, when filaments are pulled out; tuck or double stitches are unintended tuck loops or floats, showing as thick places or beads; bunching-up is visible knots that turn up irregularly. Vertical stripes: bent needles, a heavily running needle, damaged needle latch or hook, damaged dial or cylinder. Horizontal stripes: deflector in the dial cam in tuck position or not fully switched off, a badly set yarn feeder, different yarn run-in tension, unequal tension at feeders, or a jerky take-up. Distorted stitches (heads lopsided, not round): unequal coulier depth between dial and cylinder needles. Causes of large holes also include knots with too-short ends, soft or sticky cones, dragging take-off, too-high yarn tension, and a yarn feeder positioned so a needle runs into it."
+    },
+    {
+      "title": "Production calculation: the method and three worked examples (9.3)",
+      "kind": "method",
+      "topics": ["production", "running metres", "fabric width", "kg per hour", "efficiency", "course density", "wale density", "feeders per course"],
+      "page_start": 264, "page_end": 265,
+      "body": "Needed: diameter D (inch), gauge E, number of feeders S, revolutions per minute n, efficiency eta (the ratio of practically obtained to theoretical output, always below 1), and for the fabric the course density MR per cm, wale density MS per cm and fabric weight FG in g per m2. Formulae: machine performance L (m per hour) = S x n x 60 x eta / (feeders per course x MR x 100); fabric width B (m) = D x 3.14 x E / (MS x 100); output G (kg per hour) = L x B x FG / 1000. Example 1, plain single jersey: 30 inch, E28, 96 feeders, 35 rpm, eta 0.85, cotton Nm 50/1 (Ne 29.6), 18 courses per cm, 13 wales per cm, 125 g per m2: L = 95.2 m per hour, B = 2.03 m, G = 24.2 kg per hour. Example 2, plain interlock, polyester 76 dtex: 30 inch, E28, 96 feeders, 31 rpm, eta 0.85, 17 courses and 14 wales per cm, 100 g per m2, two feeders per course: L = 44.6 m per hour, B = 1.9 m, G = 8.5 kg per hour. Example 3, 3-colour jacquard, polyester 150 dtex: 30 inch, E20, 96 feeders, 23 rpm, eta 0.80, 12 courses and 11 wales per cm, 180 g per m2, three feeders per course: L = 29.4 m per hour, B = 1.7 m, G = 9 kg per hour. All three recalculated and correct. Note the width formula is simply needles divided by wales per cm."
+    },
+    {
+      "title": "Does the engine reproduce the book's production figures?",
+      "kind": "engine",
+      "topics": ["production formula", "engine check", "running metres", "open width", "feeders per course"],
+      "page_start": 264, "page_end": 265,
+      "body": "Yes, exactly. The engine's running-metres, open-width and kg-per-hour functions return 95.2 m per hour, 2.03 m and 24.16 kg per hour for Example 1 (book 95.2, 2.03, 24.2). The book's method starts from measured fabric (courses, wales, weight), the engine's from yarn (count, stitch length); both are valid and give the same output when the fabric is the same. The interlock and jacquard examples confirm the rule that the number of feeders per course divides the length: an interlock takes two feeders to make one course (the knitting plan accounts for this by giving each feed's yarn once), a three-colour jacquard three. Width = needles / wales per cm is the same relation the knitting plan uses (width = needles x stitch length / Kw, with wales per cm = Kw / stitch length)."
+    },
+    {
+      "title": "How far the book can be trusted, and where it disagrees with the engine",
+      "kind": "caution",
+      "topics": ["limitations", "twist coefficient", "market", "date", "engine disagreement"],
+      "page_start": 245, "page_end": 276,
+      "body": "A careful, standard text, but a German-industry book from the 1990s with the tables of its day: the yarn-count averages describe European light fabrics, and the rules of thumb are mostly for wool. One real disagreement: the twist coefficient alpha-e of 2.6 to 2.8 quoted for cotton-system knit yarns is well below the engine's default twist multiplier of 3.75 and the 3.5 to 4.2 commonly used for jersey cotton. The book does not define alpha-e beyond the DIN number, so the two may use different definitions; not resolved. The rule 'pitch x 2 = count' does not state its units. Rib as a 'high difficulty' structure sits oddly beside interlock as 'low' and may refer to multi-colour work on rib machines. All table values were read from images and checked only where arithmetic allows (the pitch table, the production examples)."
+    },
+    {
+      "title": "What this means for KnitAdvisor",
+      "kind": "engine",
+      "topics": ["knitting plan", "feeders", "gauge range", "plush", "corrections", "next reading"],
+      "page_start": 245, "page_end": 276,
+      "body": "Confirmed: pitch = 25.4 / gauge; the production formulas. Corrections made from the tables: (1) feeders per inch for plush and terry machines was 2.4, above the book's maximum of 2.0, now 2.0 with a range of 1.6 to 2.0; (2) the feeders-per-inch ranges were widened to what is built, up to 4.8 for single jersey and for rib and interlock (the typical value stays 3.0 for single, 2.0 for double-bed, as the dataset and the factory convention say); (3) the gauge lists the knitting plan snaps to were widened to the book's ranges (fleece E12 to E28, plush E7 to E28, rib E7 to E42). Open: the cotton twist coefficient (alpha-e) against the engine's default; chapters 7 (structures) and 8 (yarns) still to be read."
+    }
+  ]
+}

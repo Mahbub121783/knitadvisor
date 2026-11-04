@@ -1,0 +1,58 @@
+{
+  "document": {
+    "doc_key": "anon-how-to-read-a-knitting-pattern",
+    "title": "How to read a (hand) knitting pattern",
+    "authors": null,
+    "year": null,
+    "doc_type": "notes",
+    "file_name": "ilide.info-how-to-read-a-knitting-pattern-pr_cebd272bfbb9fa86ec7b3205aa00357c.pdf",
+    "pages": 15,
+    "summary": "A beginner's guide to the written language of hand-knitting patterns: abbreviations (K, P, CO, BO, inc, dec, rep, sl, YO, tog), flat and round working, a first pattern row by row, stockinette and garter stitch, the symbols * [ ] ( ), and garment terms (left and right front, 'at the same time', 'reverse shaping'). A master list of abbreviations follows.",
+    "relevance": "peripheral",
+    "relevance_note": "This is hand knitting, a different language from machine notation. It gives no numbers and calibrates nothing. The only use is as a glossary and as a bridge for beginners between the stitch names a student may know (knit, purl, rib, stockinette) and the machine structures the engine uses."
+  },
+  "lessons": [
+    {
+      "title": "The language of a hand-knitting pattern",
+      "kind": "concept",
+      "topics": ["abbreviations", "hand knitting", "K", "P", "cast on", "bind off", "increase", "decrease", "slip", "yarn over"],
+      "page_start": 1, "page_end": 2,
+      "body": "Patterns use abbreviations to save space. K = knit stitch, P = purl stitch, CO = cast on (begin a piece), BO = bind off (also called casting off), inc = increase (add a stitch; the basic form is to work the front and then the back of one stitch), dec = decrease (remove a stitch; the basic form is two stitches worked together), rep = repeat, sl = slip (move a stitch to the other needle without working it), YO = yarn over (yarn over the needle, making a hole), tog = together. 'Work even' means continue without increases or decreases. 'Maintain pattern as established' means keep the central pattern as already set while adding or removing stitches at the edges."
+    },
+    {
+      "title": "Flat and round, and the first patterns",
+      "kind": "concept",
+      "topics": ["flat knitting", "round knitting", "stockinette", "garter stitch", "right side", "wrong side", "slip knot"],
+      "page_start": 2, "page_end": 3,
+      "body": "Hand knitting is worked back and forth in rows to make a flat piece, or in rounds to make a seamless tube (socks, hats). A piece starts with a slip knot, which counts as the first stitch (unlike crochet). Row 1 (right side, RS): knit; row 2 (wrong side, WS): purl; repeating them gives stockinette stitch (St st), with a smooth knit side and a purled reverse side; reverse stockinette uses the purl side as the face. Knitting every row gives garter stitch, which is reversible. Measure a piece flat, not stretched, from the cast-on row."
+    },
+    {
+      "title": "Repeat symbols and ribbing",
+      "kind": "concept",
+      "topics": ["asterisk", "brackets", "parentheses", "ribbing", "K2 P2", "popcorn", "repeat"],
+      "page_start": 4, "page_end": 4,
+      "body": "An asterisk marks a group to repeat across a row; brackets enclose a group to repeat a stated number of times ([YO, K2tog] 6 times); parentheses enclose stitches to be worked together into one stitch ((K1, P1, K1) in the next stitch makes a popcorn stitch). Ribbing example on 18 stitches: Row 1: *K2, P2; rep from * across, end K2. Row 2: *P2, K2; rep from * across, end P2. That is knitting the knit stitches and purling the purl stitches, giving the stretchy 2x2 rib used for cuffs and hems."
+    },
+    {
+      "title": "Garment terms",
+      "kind": "concept",
+      "topics": ["left front", "right front", "at the same time", "reversing shaping", "garment"],
+      "page_start": 4, "page_end": 5,
+      "body": "Left front or left sleeve: the piece worn on the left of the body. Right front or right sleeve: worn on the right. 'At the same time': do two steps together, for example armhole and neck shaping. 'Work same as left, reversing shaping': mirror the other side (armhole decreases worked at the start of right-side rows on the left front are worked at the end of right-side rows on the right front); sketching the first piece helps."
+    },
+    {
+      "title": "How far the notes can be trusted",
+      "kind": "caution",
+      "topics": ["limitations", "beginner guide", "hand knitting", "no numbers"],
+      "page_start": 1, "page_end": 15,
+      "body": "Accurate and clear for what it is, a beginner's guide to hand patterns. It says nothing about machines, yarn counts, gauge or fabric properties, and the abbreviation master list was not stored beyond the common terms above."
+    },
+    {
+      "title": "What this means for KnitAdvisor",
+      "kind": "engine",
+      "topics": ["glossary", "academy", "rib notation", "stockinette", "single jersey", "machine notation"],
+      "page_start": 1, "page_end": 5,
+      "body": "No calibration. Use as a bridge in the academy: stockinette stitch is the hand version of single jersey (knit side is the technical face); a K2, P2 ribbing is the hand form of the 2x2 rib, whose machine set-out is two cylinder needles in, then one out, with the dial set the other way; a pattern repeat (* ... rep from *) is the machine's wale repeat across the needles, and the sequence of rows is the machine's feeds, so a 2-row hand pattern is a 2-feed machine repeat. In machine notation K, T and M replace knit, tuck and miss; purl and yarn-over have no circular-machine equivalent."
+    }
+  ]
+}

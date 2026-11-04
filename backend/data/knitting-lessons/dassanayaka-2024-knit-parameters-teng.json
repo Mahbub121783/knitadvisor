@@ -1,0 +1,72 @@
+{
+  "document": {
+    "doc_key": "dassanayaka-2024-knit-parameters-teng",
+    "title": "Optimising fundamental knitting parameters for wearable triboelectric nanogenerators",
+    "authors": "D. G. Dassanayaka, R. L. Bulathsinghala, B. T. R. Bulathsinghala, G. Lanarolle, N. D. Wanasekara, R. D. I. G. Dharmasena",
+    "year": 2024,
+    "doc_type": "paper",
+    "file_name": "1-s2.0-S2211285524004361-main.pdf",
+    "pages": 14,
+    "summary": "A Sri Lankan and British study that varies loop length, yarn count, number of yarns per loop and structure (single jersey, rib, interlock) of nylon knitted swatches (flat machine) and measures electrical output of a triboelectric energy harvester, together with the surface cover, air permeability, stretch and recovery of the same fabrics. Its electrical side is not relevant here; its fabric side gives a clean set of measured trends against loop length, count and structure.",
+    "relevance": "supporting",
+    "relevance_note": "The energy-harvesting purpose is off-topic, but one controlled experiment changes only one knitting parameter at a time and measures cover, air permeability, stretch and recovery. Those trends back the engine's directions (a looser stitch opens the cloth and raises stretch; a bigger yarn closes it). It is nylon on a flat machine, 50 mm swatches, so no number can calibrate the engine. Several values disagree between its own sections."
+  },
+  "lessons": [
+    {
+      "title": "The four knitting parameters the paper varies",
+      "kind": "concept",
+      "topics": ["loop length", "yarn count", "number of yarns", "structure", "tightness factor", "cover"],
+      "page_start": 2, "page_end": 5,
+      "body": "Fabric behaviour is set by four things: loop length (stitch length), yarn count, the number of yarns fed to a needle, and the loop arrangement (structure). Stated relations: courses per inch, wales per inch and stitch density are inversely proportional to loop length; the tightness factor is inversely proportional to loop length and proportional to the square root of yarn count, so a longer loop gives a more open fabric with less yarn cover, a finer or fewer yarns gives the same. Shorter loops give higher coverage, weight and opacity and less stretch. Typical use by loop length: short for intimates and base layers, medium for T-shirts and leggings, long for jackets and sweaters. Several yarns in one loop act like a coarser count (plated, double-sided and spacer fabrics). Structure: single jersey lightest with least cover and opacity; rib the most stretch (cuffs, collars); interlock lower stretch, high opacity and thickness (trousers, sportswear). Loop length is set by the needle height (cam depth) and the take-down force."
+    },
+    {
+      "title": "Experimental design",
+      "kind": "method",
+      "topics": ["experimental design", "nylon 6,6", "flat knitting machine", "single jersey", "loop length", "dtex"],
+      "page_start": 5, "page_end": 6,
+      "body": "One parameter varied at a time. Fabrics: nylon 6,6 knitted on a computerised flat machine, conditioned at 20 C and 65 percent relative humidity, cut to 50 x 50 mm. (a) Loop length 3.0, 3.6, 4.0 and 5.0 mm, single jersey, 500 dtex yarn, one yarn per loop; each loop length verified by measuring 10 loops. (b) Yarn count 350, 500 and 650 dtex, single jersey, loop length 3.6 mm. (c) One to four yarns per loop, single jersey, 350 dtex yarn, 3.6 mm (a low count was used so the needles could take the load). (d) Structure single jersey, rib and interlock at 3.6 mm and 500 dtex. Fabric cover: optical photographs at 40 times, analysed with image software for the percentage of the area covered by yarn. Air permeability: BS 5636 on 5 cm2 at a 98 Pa pressure drop. Stretch and recovery: a tensile tester to a named test standard (LTD3)."
+    },
+    {
+      "title": "Loop length: cover, air permeability, stretch and recovery",
+      "kind": "data",
+      "topics": ["loop length", "surface cover", "air permeability", "stretchability", "recoverability", "single jersey"],
+      "page_start": 6, "page_end": 7,
+      "body": "500 dtex single jersey at loop length 3.0 / 3.6 / 4.0 / 5.0 mm. Surface cover (percent): 98.20 / 95.23 / 93.34 / 91.92. Air permeability (cm3 per cm2 per s): 70.2 / 81.65 / 85.7 / 106.2. Stretch in the course direction (percent): 136.17 at 3.0 mm to 259.76 at 5.0 mm. Stretch in the wale direction: 102.15 at 3.0 mm to 136.31 at 5.0 mm. Recovery in the course direction: 92.64 at 3.0 mm to 76.9 at 5.0 mm. Recovery in the wale direction: 96.66 at 3.0 mm to 44.46 at 5.0 mm. Reading: a longer loop opens the cloth (less cover, more air), stretches more and recovers less, and the wale direction recovers far worse than the course direction at long loops. Tightness factor for these four (worked out here, sqrt of 50 tex over loop length in cm): 23.6, 19.6, 17.7, 14.1 - cover falls steadily as TF falls."
+    },
+    {
+      "title": "Yarn count: cover, air permeability, stretch and recovery",
+      "kind": "data",
+      "topics": ["yarn count", "dtex", "cover", "air permeability", "stretchability", "recoverability"],
+      "page_start": 7, "page_end": 9,
+      "body": "Single jersey at 3.6 mm with 350 / 500 / 650 dtex. Surface cover (percent): 91.21 / 92.85 / 94.43. Air permeability: 95.2 / 81.65 / 64.13. Course stretch: 196.27 / 180.23 / 158.98 percent; wale stretch: 116.13 / 111.36 / 110.28. Course recovery: 59.03 / 82.9 / 85.16; wale recovery: 82.71 / 84.17 / 85.55. A coarser yarn closes the cloth, cuts air flow and stretch and raises recovery (the 59 percent course recovery at 350 dtex is an outlier from the trend of the others in the same paper). Tightness factor (worked out here): 16.4, 19.6, 22.4. Note the 500 dtex cover of 92.85 percent here differs from 95.23 percent for the same fabric in the loop-length series."
+    },
+    {
+      "title": "Several yarns in one loop",
+      "kind": "data",
+      "topics": ["number of yarns", "plating", "cover", "air permeability", "stretch", "recovery", "equivalent count"],
+      "page_start": 9, "page_end": 10,
+      "body": "350 dtex single jersey at 3.6 mm with 1 to 4 yarns per loop. Surface cover rises from 91.21 to 96.70 percent. Air permeability falls from 95.2 to 30.85 (3 yarns), then 31.78 (4 yarns). Course stretch falls from 195.27 to 53.63 percent; wale stretch only from 116.13 to 108.34. Course recovery rises from 59.03 to 90.31 percent at 3 yarns and eases to 86.94 at 4; wale recovery from 82.71 to 87.11 then 85.03. The equivalent tightness factor (worked out here, yarns x 35 tex, 3.6 mm) is 16.4, 23.2, 28.5 and 32.9: with three or more yarns the fabric is far tighter than any ordinary single-yarn jersey, and the paper notes the extra load on the needles."
+    },
+    {
+      "title": "Structure: single jersey, rib and interlock",
+      "kind": "data",
+      "topics": ["rib", "interlock", "single jersey", "cover", "air permeability", "stretch", "loop mobility"],
+      "page_start": 10, "page_end": 12,
+      "body": "500 dtex at 3.6 mm. Surface cover: single jersey 95.23 percent, rib 98.06, interlock 99.76. Air permeability: highest single jersey (81.65), lowest interlock (42.8). Course stretch: rib highest (the front loops can extend and expose the back loops); single jersey and interlock lower. Wale stretch about the same for all three, single jersey marginally lowest. Recovery: rib relatively low (it stretches a lot and cannot return fully), single jersey and interlock higher. Explanation offered: rib courses zig-zag between the beds and relax so that front and back courses sit side by side, so the rib stretches widthways; in interlock the front and back loops sit directly opposite and lock, which limits course stretch and hides the back loops. Double-bed structures cover more, pass less air and are heavier than single jersey."
+    },
+    {
+      "title": "How far the paper can be trusted",
+      "kind": "caution",
+      "topics": ["limitations", "inconsistency", "units", "sample size", "nylon", "flat machine"],
+      "page_start": 5, "page_end": 12,
+      "body": "Clean design, loose reporting. Issues found: (1) the same fabric (500 dtex, 3.6 mm single jersey) has a surface cover of 95.23 percent in the loop-length and structure series but 92.85 percent in the yarn-count series; (2) its course recovery of 59.03 at 350 dtex breaks the trend of the other two points; (3) air permeability is given in cm3 per cm2 per s (81.65) and later as a percentage (81.65 percent, 42.8 percent); (4) stretch figures above 100 percent are not defined (extension at what load); (5) 50 mm swatches of nylon on a flat machine, with no stated repeat counts for the textile properties. Use for direction only; never for numbers."
+    },
+    {
+      "title": "What this means for KnitAdvisor",
+      "kind": "engine",
+      "topics": ["tightness factor", "open area", "stretch engine", "cover", "stitch length", "yarn count"],
+      "page_start": 5, "page_end": 12,
+      "body": "1) Directions the engine already follows are confirmed by controlled data: cover falls and air flow rises as TF falls; stretch rises and recovery falls with a longer loop; a coarser yarn closes the cloth and lifts recovery; double-bed fabrics cover more and pass less air. 2) Order of magnitude: the paper's cover goes from 98.2 to 91.9 percent as TF goes 23.6 to 14.1, a surface cover of 95 percent at TF 19.6; the engine's open area is about 4 to 5 percent (cover 95 to 96) at the usual TF of 17, so the two are consistent in size. 3) The wale direction loses recovery much faster than the course direction at long stitch lengths (96.7 to 44.5 against 92.6 to 76.9): the stretch engine's recovery model should show wale growth worse than course growth for a loose cloth - worth checking. 4) Nothing is calibrated: nylon, flat machine, 50 mm."
+    }
+  ]
+}

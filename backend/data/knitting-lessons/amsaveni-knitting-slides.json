@@ -1,0 +1,86 @@
+{
+  "document": {
+    "doc_key": "amsaveni-knitting-slides",
+    "title": "Knitting (lecture slides): weft and warp, terms, notation, machine parts and needles",
+    "authors": "M. Amsaveni",
+    "year": null,
+    "doc_type": "lecture",
+    "file_name": "ilide.info-knitting-pr_ad08f7ff54835042ac4be244c5975a0e.pdf",
+    "pages": 72,
+    "summary": "A 72-slide course deck from a costume-design and fashion department: what knitting is and its advantages, woven against knitted, weft against warp (an 18-point comparison), general terms (course, wale, loop parts, face and back loops, gauge, pitch, feeders, cut-edge and tubular fabric, stitch length, course length, stitch density), notation types, parts of a circular machine, and a long section on the three needle types (bearded, latch, compound) with the latch needle's action step by step. About half the slides carry text only as images; they were read from page images.",
+    "relevance": "supporting",
+    "relevance_note": "Definitions, glossary and mechanism for teaching, with a few formulas (course length, stitch density, open width of a slit tube) that agree with the engine. A handful of claims in the weft-versus-warp table and the needle comparison are too sweeping to rely on. No calibration."
+  },
+  "lessons": [
+    {
+      "title": "Knitting and its advantages over weaving",
+      "kind": "concept",
+      "topics": ["knitting", "woven vs knitted", "advantages", "elasticity", "shrinkage", "drape"],
+      "page_start": 2, "page_end": 12,
+      "body": "Knitting is making fabric by interlooping yarn, the second most important fabric-forming method. Advantages listed: fabric from a minimum number of yarns, even one; loop size can be varied widely and easily; extensibility and stability can be engineered; the desired porosity or compactness is easy to reach; yarn wastage in conversion is negligible; design changes are quick and cheap. Knitted against woven: good drape and wrinkle resistance, high elasticity and recovery, porous so the skin breathes, greater freedom of movement; but lower tensile and tear strength, greater potential shrinkage (the accepted standard is 5 percent for knits) and easier snagging. Woven fabric is the reverse: poorer drape, creases, stronger, no stretch."
+    },
+    {
+      "title": "Weft against warp knitting (the 18-point table)",
+      "kind": "table",
+      "topics": ["weft knitting", "warp knitting", "comparison", "stretch", "shrinkage", "speed"],
+      "page_start": 15, "page_end": 18,
+      "body": "Weft: loops made across the fabric width, one yarn can make the fabric, yarn from cones on a creel, less preparation, plain/rib/interlock/purl, machines flat or circular, stretch in both directions but more in width, lower dimensional stability, more shrinkage, snags easily and can ravel from the edge. Warp: loops made along the length, every needle has its own yarn, yarn from a beam, much preparation and many yarns, tricot, raschel, milanese, crochet, machines generally flat, filament yarn preferred, wider variety of structures, higher dimensional stability, less stretch (more in the length direction as the table has it), less shrinkage, less snagging, does not ravel. Also stated: weft knitting has the lower production speed, warp the higher; and 'latch needles are used in all weft machines', which is too sweeping (compound and bearded needles also run in weft machines, and compound needles dominate warp)."
+    },
+    {
+      "title": "Course, wale, loop parts and loop types",
+      "kind": "concept",
+      "topics": ["course", "wale", "needle loop", "sinker loop", "open loop", "closed loop", "face loop", "back loop", "technical face", "technical back"],
+      "page_start": 20, "page_end": 27,
+      "body": "Course: the horizontal row of loops made by adjacent needles in the same knitting cycle. Wale: the vertical column of loops made by the same needle in successive cycles. Parts of a loop: the head (crown, top arc, H), the two side limbs (L) and the bottom arc or sinker loop (S); needle loop = H + 2L; a complete loop = needle loop + sinker loop. Open loop: the legs do not cross at the bottom; closed loop: they cross. Face loop (weft knit loop): the new loop passes from back to face through the old one; the side of the fabric with all face loops is the technical face. Back loop (purl loop): the new loop passes from face to back; the side with all back loops is the technical back. A knitted stitch is the basic unit of intermeshing, three or more intermeshed loops."
+    },
+    {
+      "title": "Notation, stitch length, course length and stitch density",
+      "kind": "data",
+      "topics": ["notation", "stitch length", "course length", "stitch density", "wales per inch", "courses per inch"],
+      "page_start": 28, "page_end": 30,
+      "body": "Four types of notation: verbal, line (looping) diagram, diagrammatic (chain) notation, symbolic notation. Stitch length (loop length) is the length of yarn in one complete loop (needle loop plus sinker loop), always in millimetres. Course length = number of loops in a course x stitch length = number of needles x stitch length. Stitch density = wales density x courses density = WPI x CPI (loops per square inch), or CPC x WPC on the cm scale. Single jersey is made by one set of needles, double jersey by two sets; the needle carrier (bed) is cylindrical or flat."
+    },
+    {
+      "title": "Machine terms: cylinder, dial, gauge, pitch, feeder, slit tube",
+      "kind": "data",
+      "topics": ["cylinder", "dial", "gauge", "needle pitch", "feeder", "cut edge fabric", "tubular fabric", "maximum diameter"],
+      "page_start": 32, "page_end": 36,
+      "body": "Cylinder: circular steel bed with tricks cut in its outer surface in which needles slide vertically, driven by their butts in the cam track; the maximum cylinder diameter given is 46 inches (the machine book in this store lists nominal diameters up to 60). Dial: the upper steel bed of double-knit machines, needles mounted horizontally and moved in and out by the dial cams. Gauge: needles per inch (G or E); needle pitch: the space for each needle. Feeder: a yarn guide close to the needles around the knitting zone; it feeds yarn into the hooks and holds the latches open while the needles clear. Cut-edge fabric: a tube slit open; a slit tube from a 30 inch machine has an open width of 94 inches (pi x d) at knitting, before relaxation (pi x 30 = 94.2, which is the engine's greige width). Tubular fabric is used unslit."
+    },
+    {
+      "title": "Parts of a circular knitting machine",
+      "kind": "concept",
+      "topics": ["circular machine", "VDQ pulley", "positive feed", "creel", "sinker ring", "cam box", "expander", "needle detector", "fan"],
+      "page_start": 37, "page_end": 45,
+      "body": "Creel (yarn packages), tension disc, inlet and outlet stop motions (stop the machine at once on a yarn break), yarn guide, feeder ring with feeders, needle track, needles, sinker ring with sinkers, cam box (cams convert rotary drive into the reciprocating needle action), cylinder with a balancer, adjustable fan (removes lint), expander (holds the knitted tube to width with even take-down), needle detector, air-gun nozzle for yarn feeding and cleaning, uniwave lubrication, disk drum (jacquard) and pattern wheel (stripe machines). VDQ pulley: it controls the quality; moving the tension pulley changes the GSM, positively decreasing and the reverse increasing it. MPF (positive feed) with its wheel and belt gives positive yarn feed."
+    },
+    {
+      "title": "Needle types: bearded, latch and compound",
+      "kind": "concept",
+      "topics": ["bearded needle", "latch needle", "compound needle", "needle comparison", "hook", "latch", "tongue"],
+      "page_start": 5, "page_end": 72,
+      "body": "Bearded (spring) needle: the first needle made, cheapest and simplest (one piece of metal), with a hook, beard, eye, stem and shank; the beard must be pressed shut, so it is not self-acting, a frame needle with all needles moving together. Latch needle: a hook plus a latch (latch blade, spoon, slot or saw cut, cheeks and rivet); self-acting (the old loop closes the latch), works at any angle, individual control of each needle allows knit, tuck and miss by varying the lift, suits electronic selection; limitations: thick and rigid, strains the yarn, fluff can collect on the latch. Compound needle: an open hook and a separately controlled closing element (tongue, latch, piston or plunger), either pusher type or tongue sliding in a tube; most used in warp knitting, little strain on the yarn, fast, expensive. Comparison on the slides (bearded vs latch): latch is more expensive and complicated, has a shorter stroke, is the most used in weft knitting, and runs at a coarser gauge; the slides claim the bearded is more used in circular single knitting and runs finer, which does not match modern practice."
+    },
+    {
+      "title": "Latch needle action, step by step",
+      "kind": "method",
+      "topics": ["latch needle", "rest position", "latch opening", "clearing", "yarn feeding", "latch closing", "knocking over", "loop length"],
+      "page_start": 47, "page_end": 60,
+      "body": "Rest position: the needle hook head is level with the top of the trick verge; the loop from the previous feeder is in the closed hook, held down by sinkers (or web holders) that move forward between the needles. Latch opening: as the butt passes up the clearing cam the old loop, held down by the sinker, slides inside the hook, touches the latch and opens it. Clearing height: at the top of the cam the old loop is cleared from hook and spoon onto the stem; the feeder guide plate guards the latch so it cannot close on the empty hook. Yarn feeding and latch closing: the needle starts down the stitch cam, the latch dropping below the verge with the old loop moving under it; new yarn is fed through a hole in the feeder guide into the descending hook (no danger of feeding under the latch); the old loop contacts the underside of the latch and closes it. Knocking-over and loop-length formation: as the head descends below the top of the trick the old loop slides off and the new loop is drawn through it; the depth of the stitch cam sets the loop length. Varying the lift gives knit, tuck or miss."
+    },
+    {
+      "title": "How far the slides can be trusted",
+      "kind": "caution",
+      "topics": ["limitations", "lecture slides", "sweeping claims", "no numbers"],
+      "page_start": 1, "page_end": 72,
+      "body": "Good for vocabulary, weak as a reference. Several statements are too broad (latch needles 'in all' weft machines; bearded needles finer-gauge and more common in circular single knitting; weft knitting 'less production speed'), the 'machine parts' pages are loosely worded, and the slides carry no numbers beyond the 46 inch maximum diameter and the 5 percent shrinkage standard. The figure-only slides (history, hand knitting, needle photographs) were skimmed."
+    },
+    {
+      "title": "What this means for KnitAdvisor",
+      "kind": "engine",
+      "topics": ["glossary", "open width", "course length", "stitch density", "academy"],
+      "page_start": 20, "page_end": 36,
+      "body": "Agrees with the engine: open width of a slit tube = pi x diameter before relaxation; stitch length in millimetres; stitch density = wales density x courses density; course length = needles x stitch length. Use for the glossary and academy: course, wale, open and closed loop, technical face and back, needle types and the latch cycle. The 46 inch maximum diameter is below what the machine book lists (up to 60), so the engine's 44 inch upper limit on the diameter choices should stay as a practical limit for these fabrics, not a machine limit."
+    }
+  ]
+}

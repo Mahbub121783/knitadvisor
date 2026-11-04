@@ -82,12 +82,13 @@ function calFor(table, family, lycra) {
 // feeders per inch of diameter (modern machines) and the speed factor
 // (rpm × dia, inches) they run at
 const MACHINE = {
-  single:   { label: 'Single jersey', fpi: 3.0, fpiRange: [2.8, 3.4], sf: 900, gauges: [18, 20, 22, 24, 28, 32, 36] },
-  pique:    { label: 'Single jersey, 4-track (piqué / lacoste)', fpi: 3.0, fpiRange: [2.8, 3.4], sf: 850, gauges: [20, 22, 24, 28] },
-  fleece:   { label: 'Fleece (3-thread)', fpi: 3.0, fpiRange: [2.4, 3.2], sf: 800, gauges: [16, 18, 20, 22, 24] },
-  terry:    { label: 'Plush / terry (sinker loop)', fpi: 2.4, fpiRange: [2.0, 3.0], sf: 650, gauges: [16, 18, 20, 22, 24] },
-  rib:      { label: 'Rib (cylinder + dial, rib gating)', fpi: 2.0, fpiRange: [1.6, 2.4], sf: 750, gauges: [14, 16, 18, 20, 22, 24] },
-  interlock:{ label: 'Interlock (cylinder + dial, interlock gating)', fpi: 2.0, fpiRange: [1.6, 2.4], sf: 750, gauges: [18, 20, 22, 24, 28] },
+  // feeders per inch: fpi is the usual figure; fpiRange spans what is built (up to 4.8 on single jersey and rib)
+  single:   { label: 'Single jersey', fpi: 3.0, fpiRange: [2.8, 4.8], sf: 900, gauges: [14, 16, 18, 20, 22, 24, 28, 32, 36] },
+  pique:    { label: 'Single jersey, 4-track (piqué / lacoste)', fpi: 3.0, fpiRange: [2.8, 4.8], sf: 850, gauges: [18, 20, 22, 24, 28] },
+  fleece:   { label: 'Fleece (3-thread)', fpi: 3.0, fpiRange: [2.4, 3.0], sf: 800, gauges: [12, 14, 16, 18, 20, 22, 24, 28] },
+  terry:    { label: 'Plush / terry (sinker loop)', fpi: 2.0, fpiRange: [1.6, 2.0], sf: 650, gauges: [12, 14, 16, 18, 20, 22, 24, 28] },
+  rib:      { label: 'Rib (cylinder + dial, rib gating)', fpi: 2.0, fpiRange: [1.6, 4.8], sf: 750, gauges: [10, 12, 14, 16, 18, 20, 22, 24, 28, 32, 36, 40] },
+  interlock:{ label: 'Interlock (cylinder + dial, interlock gating)', fpi: 2.0, fpiRange: [1.6, 4.8], sf: 750, gauges: [14, 16, 18, 20, 22, 24, 28, 32] },
 };
 const STANDARD_DIA = [20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44];
 
@@ -173,6 +174,7 @@ function structureChecks(st, T, machine) {
       const t = run('T'), m = run('M');
       if (t > 4) add('warn', `${name} needle ${j + 1} tucks ${t} times running: ${t + 1} loops in one hook — needs fine yarn, low tension, and risks hook damage and press-off.`);
       else if (t === 4) add('note', `${name} needle ${j + 1} holds 4 tucks — the practical limit; keep the yarn fine and the take-down even.`);
+      else if (t === 3) add('note', `${name} needle ${j + 1} holds 3 tucks (4 loops in one hook): flat-bed practice caps a needle at 3 loops, so use a fine yarn and a loose take-down.`);
       if (m > 4) add('warn', `${name} needle ${j + 1} misses ${m} feeds running — its held loop is stretched over ${m} courses.`);
     }
     // horizontal floats: consecutive missing needles in one feed

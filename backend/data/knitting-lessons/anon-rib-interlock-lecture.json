@@ -1,0 +1,79 @@
+{
+  "document": {
+    "doc_key": "anon-rib-interlock-lecture",
+    "title": "Fabric Manufacturing II: rib and interlock derivatives (lecture slides)",
+    "authors": null,
+    "year": null,
+    "doc_type": "lecture",
+    "file_name": "ilide.info-lecture-rib-and-interlock-pr_25427166b4eedf3bfda93da638e41d3a.pdf",
+    "pages": 40,
+    "summary": "Forty slides on the double-bed family: rib features and sets, the rib derivatives (2x2, half and full cardigan, Swiss and French double piqué, Milano, Roma, gabardine), interlock and its derivatives, a rib-against-interlock machine comparison, and purl structures. The needle-action notation diagrams are images and were not read; the written knitting sequences were.",
+    "relevance": "core",
+    "relevance_note": "These written sequences are the structure definitions the engine's pattern catalogue is built on, so they were used to check it: half cardigan, full cardigan and Swiss double piqué agree with the catalogue; French double piqué does not (the lecture uses knit and miss on the dial, the catalogue uses tucks). Interlock properties (relaxation, thickness) give a figure to test against the factory records."
+  },
+  "lessons": [
+    {
+      "title": "Rib: features and sets",
+      "kind": "concept",
+      "topics": ["rib", "1x1 rib", "2x2 rib", "rib sets", "broad rib", "vertical cord", "elasticity"],
+      "page_start": 2, "page_end": 4,
+      "body": "Rib shows the same appearance on face and back (1x1, 2x2) with a vertical cord look; it is heavier than single jersey, does not curl at the edges, is elastic and form-fitting, keeps warmth better than plain structures, is dearer to make and needs a finer yarn. Rib sets: simple (single) rib 2x1, 3x1 and so on; broad rib 6x3, 3x2 and so on. Uses: men's hosiery, collars, cuffs, necklines, bottom edges of sweaters, knit hats. Derivatives listed: 2x2 rib, half cardigan (royal rib), full cardigan (polka rib), Swiss double piqué, French double piqué, 5x1 Derby rib, Milano, half Milano, Roma."
+    },
+    {
+      "title": "Half cardigan and full cardigan: the knitting sequences",
+      "kind": "method",
+      "topics": ["half cardigan", "full cardigan", "royal rib", "polka rib", "tuck", "bulky structure", "sequence"],
+      "page_start": 6, "page_end": 10,
+      "body": "Half cardigan (royal rib): a rib-based structure with many tucks added to make the fabric heavy, wide and soft; two knitting sequences make one repeat. Course 1: ordinary 1x1 rib. Course 2: all the needles of one bed tuck and all the needles of the other bed knit. One face (here the reverse) carries the tucks and looks like a cardigan; the other face has very rounded loops. Full cardigan (polka rib): even more tucks, so wider, heavier, bulkier and less flexible than half cardigan or 1x1 rib; symmetric on both sides; two yarns make one full course. Course 1: all back-bed needles tuck and all front-bed needles knit. Course 2: all front-bed needles tuck and all back-bed needles knit. Both cardigans are very bulky and used for heavy outerwear."
+    },
+    {
+      "title": "Swiss and French double piqué: the written sequences",
+      "kind": "method",
+      "topics": ["Swiss double pique", "French double pique", "double pique", "Rodier", "knit and miss", "dial", "cylinder"],
+      "page_start": 11, "page_end": 14,
+      "body": "Double piqué is a double-jersey fabric on a rib basis using knit loops and floats; also called wevenit, rodier, overnit. Swiss double piqué, four courses: (1) cylinder all knit; dial odd needles knit, even miss. (2) cylinder all miss; dial as course 1. (3) cylinder as course 1; dial odd needles miss, even knit. (4) cylinder all miss; dial as course 3. French double piqué, four courses: (1) cylinder all knit; dial odd needles miss, even knit. (2) cylinder all miss; dial odd knit, even miss. (3) cylinder as course 1; dial as course 2. (4) cylinder all miss; dial as course 1. Note that in this lecture the French version, like the Swiss, uses only knit and miss; many references give the French dial tucking."
+    },
+    {
+      "title": "Interlock: properties",
+      "kind": "data",
+      "topics": ["interlock", "relaxation", "thickness", "extensibility", "curl", "technical face"],
+      "page_start": 21, "page_end": 23,
+      "body": "Interlock is two 1x1 ribs locked together. It shows the technical face of plain fabric on both sides, the wales of the two sides lie exactly opposite and locked, so the smooth surface cannot be stretched open to show the reverse loops. It lies flat without curl, and cannot be unrun from the end knitted first. It relaxes by about 30 to 40 percent or more compared with its knitted width, is thicker, heavier and narrower than rib of the same gauge, needs a finer, better and more expensive yarn, has the same appearance front and back, and has widthways and lengthways extensibility about the same as single jersey. Uses: underwear, shirts, suits, trousers, sportswear, dresses."
+    },
+    {
+      "title": "Interlock derivatives and machine requirements",
+      "kind": "concept",
+      "topics": ["interlock machine", "interlock gating", "cross tuck", "texi pique", "jersey cord", "Punto di Roma", "Super Roma"],
+      "page_start": 25, "page_end": 36,
+      "body": "An interlock machine must have interlock gating (long and short needles opposite each other), two separate cam systems in each bed and needles set out alternately. Derivatives (shown as notation diagrams, not read): single piqué or cross-tuck interlock, texi piqué, jersey cord, Punto di Roma, Super Roma. Rib compared with interlock machine: rib has a vertical cord look, one type of latch needle, one feeder per course, less relaxation, dial and cylinder needles opposite and in the same sequence, not so thick and heavy; interlock has the technical face of plain on both sides, two types of needle, at least two feeders per course, more relaxation, dial and cylinder needles opposite and alternately placed, thick and heavy."
+    },
+    {
+      "title": "Purl structures",
+      "kind": "concept",
+      "topics": ["purl", "double-ended needle", "loop transfer", "racking", "extensibility", "children wear"],
+      "page_start": 38, "page_end": 40,
+      "body": "A purl structure has wales that contain both face and reverse loops. It is made with double-ended latch needles, or by transferring rib loops from one bed to the other combined with racking of the needle bed. Reversible (the same on both sides), highly extensible in all directions (about twice as extensible as single jersey in the length direction), does not curl, runs in the wale direction from either end and can be unravelled course by course from either side; commonly used for children's wear."
+    },
+    {
+      "title": "Checking the written sequences against the engine's pattern catalogue",
+      "kind": "engine",
+      "topics": ["pattern catalogue", "half cardigan", "full cardigan", "Swiss double pique", "French double pique", "verification"],
+      "page_start": 6, "page_end": 14,
+      "body": "Half cardigan: catalogue cylinder K/K, dial K/T = course 1 plain rib, course 2 cylinder knits and dial tucks - agrees. Full cardigan: cylinder K/T, dial T/K = back tucks while front knits, then the reverse - agrees. Swiss double piqué: the catalogue has cylinder K, M, K, M and dial KM, MK, MK, KM (odd and even needles); the lecture has dial KM, KM, MK, MK. The catalogue's grid is the lecture's shifted by one feed against the cylinder, which gives the mirror-image (feed order reversed) of the same structure; both knit the same loops, so no change. French double piqué: the catalogue has dial tucks (TM, KM, MT, MK) where the lecture has knit and miss only (MK, KM, KM, MK). Not changed: the catalogue follows the usual trade definition with tucks, the lecture does not, and one source is not enough to overrule it, but the difference is recorded here."
+    },
+    {
+      "title": "How far the slides can be trusted",
+      "kind": "caution",
+      "topics": ["limitations", "lecture slides", "figures not read", "French double pique"],
+      "page_start": 1, "page_end": 40,
+      "body": "Useful for the written sequences, which are clear and mostly agree with other sources. Not read: all notation diagrams (Half Milano, Milano, Roma, gabardine, jersey cord, super Roma, texi piqué), because they are images, so only what the slide text says is stored. The French double piqué sequence disagrees with the catalogue and with common usage, so it is flagged. The interlock relaxation figure (30 to 40 percent or more) is stated without a source or a gauge."
+    },
+    {
+      "title": "What this means for KnitAdvisor",
+      "kind": "engine",
+      "topics": ["interlock", "relaxation", "factory records", "feeders per course", "knitting plan"],
+      "page_start": 21, "page_end": 37,
+      "body": "1) The catalogue's half and full cardigan and Swiss piqué sequences are confirmed. 2) Interlock needs at least two feeders per course, which is how the knitting plan counts it (each feed's yarn counted once, so the cloth makes two feeds to one course); a rib needs one. 3) The 30 to 40 percent relaxation of interlock against its knitted width can be tested on the factory records (finished width against needles and stitch length): interlock records give Kw about 4.3 against 2.9 for plain rib and 3.8 for single jersey, i.e. the interlock fabric is relatively narrower for its needle count, in the direction the slide says. 4) The French double piqué question stays open until a second reference is read."
+    }
+  ]
+}

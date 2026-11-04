@@ -71,6 +71,41 @@ function gate(docs) {
     // the double-bed rule the engine disagrees with: G x G / 15.3 for 3.91 x sqrt(Ne)
     if (Math.abs(1 / (3.91 * 3.91) - 1 / 15.29) > 0.001) errs.push('nayen: 3.91 x sqrt(Ne) should be G x G / 15.3');
   }
+  const all_ = (k) => { const d = docs.find((x) => x.document.doc_key === k); return d ? d.lessons.map((l) => l.body).join(' ') : null; };
+  // Iyer: pitch table is 25.4/E, production examples recompute, Ne conversions
+  const iy = all_('iyer-circular-knitting-ch9-10');
+  if (iy) {
+    for (const [t, e] of [[16.93, 1.5], [12.7, 2], [2.12, 12], [1.41, 18], [1.06, 24], [0.91, 28], [0.64, 40], [0.58, 44]]) {
+      if (Math.abs(25.4 / e - t) > 0.011) errs.push(`iyer: pitch ${t} is not 25.4/${e}`);
+      if (!iy.includes(`${t.toFixed(2)} = E${e}`)) errs.push(`iyer: pitch table is missing ${t.toFixed(2)} = E${e}`);
+    }
+    const L = (S, n, eta, fpc, MR) => (S * n * 60 * eta) / (fpc * MR * 100), B = (D, E, MS) => (D * 3.14 * E) / (MS * 100);
+    const ex1 = L(96, 35, 0.85, 1, 18) * B(30, 28, 13) * 125 / 1000;
+    if (Math.abs(L(96, 35, 0.85, 1, 18) - 95.2) > 0.05 || Math.abs(ex1 - 24.2) > 0.1) errs.push('iyer: example 1 does not recompute');
+    if (Math.abs(L(96, 31, 0.85, 2, 17) - 44.6) > 0.05 || Math.abs(L(96, 31, 0.85, 2, 17) * 1.9 * 100 / 1000 - 8.5) > 0.1) errs.push('iyer: example 2 does not recompute');
+    if (Math.abs(L(96, 23, 0.8, 3, 12) - 29.4) > 0.05) errs.push('iyer: example 3 does not recompute');
+    for (const [dtex, ne] of [[300, 19.7], [194, 30.4], [150, 39.4], [125, 47.2], [63, 93.7]]) {
+      if (Math.abs(590.5 / (dtex / 10) - ne) > 0.1) errs.push(`iyer: ${dtex} dtex is Ne ${(590.5 / (dtex / 10)).toFixed(1)}, text says ${ne}`);
+      if (!iy.includes(String(ne))) errs.push(`iyer: Ne ${ne} missing`);
+    }
+    for (const f of ['up to 4.8', 'up to 2.0', '0.5 to 0.7', '3 to 6 cN', '65 percent', '2.6 to 2.8', '95.2', '24.2']) if (!iy.includes(f)) errs.push(`iyer: missing "${f}"`);
+  }
+  // Dassanayaka: tightness factors worked out in the lessons
+  const te = all_('dassanayaka-2024-knit-parameters-teng');
+  if (te) {
+    const tf = (tex, mm) => Math.sqrt(tex) / (mm / 10);
+    for (const v of [tf(50, 3.0), tf(50, 3.6), tf(50, 4.0), tf(50, 5.0), tf(35, 3.6), tf(65, 3.6), tf(70, 3.6), tf(105, 3.6), tf(140, 3.6)]) if (!te.includes(v.toFixed(1))) errs.push(`dassanayaka: TF ${v.toFixed(1)} is missing`);
+    for (const f of ['98.20', '91.92', '106.2', '259.76', '44.46', '95.23', '98.06', '99.76']) if (!te.includes(f)) errs.push(`dassanayaka: missing ${f}`);
+  }
+  // deepKnit: the four numeric limits
+  const dk = all_('scheidt-2020-deepknit-machine-code');
+  if (dk) for (const f of ['three loops per needle', 'seven courses', 'two loops', 'four needles']) if (!dk.includes(f)) errs.push(`deepknit: missing "${f}"`);
+  // slit tube open width = pi x d
+  const am = all_('amsaveni-knitting-slides');
+  if (am) { if (Math.abs(Math.PI * 30 - 94.2) > 0.05 || !am.includes('94 inches')) errs.push('amsaveni: slit tube width'); }
+  // rib/interlock lecture: the sequences must be present
+  const ri = all_('anon-rib-interlock-lecture');
+  if (ri) for (const f of ['half cardigan', 'Full cardigan', 'Swiss double piqué', 'French double piqué', '30 to 40 percent']) if (!ri.toLowerCase().includes(f.toLowerCase())) errs.push(`rib lecture: missing "${f}"`);
   const lec = docs.find((d) => d.document.doc_key === 'anon-knitting-basics-lecture');
   if (lec) {
     const all = lec.lessons.map((l) => l.body).join(' ');
