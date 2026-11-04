@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <script src="assets/js/auth-guard.js?v=20260922a"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fabric Studio — KnitAdvisor</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <meta name="description" content="Design a new weft-knitted fabric needle by needle: structure checks, cam and needle set-out, yarn per feeder, GSM, width, VDQ course length and a live 3D preview.">
+  <meta name="theme-color" content="#FFFFFF">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css?v=20260603c">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "/assets/js/vendor/three.module.js",
+      "three/addons/controls/OrbitControls.js": "/assets/js/vendor/OrbitControls.js"
+    }
+  }
+  </script>
+  <style>
+    [hidden] { display: none !important; }
+    .st-main { padding: 18px 0 48px; }
+    .st-head h1 { font-size: 24px; margin: 0 0 4px; }
+    .st-head p { margin: 0 0 16px; color: var(--t2); font-size: 13px; max-width: 760px; }
+    .st-layout { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 16px; align-items: start; }
+    @media (max-width: 1000px) { .st-layout { grid-template-columns: minmax(0, 1fr); } }
+    @media (max-width: 700px) { .st-main { padding-left: 16px; padding-right: 16px; } .st-tabs button { padding: 9px 9px; font-size: 12px; } }
+    .st-layout > * { min-width: 0; }
+    .st-card { background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; margin-bottom: 12px; }
+    .st-step { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: var(--t2); margin-bottom: 10px; }
+    .st-step b { display: inline-flex; width: 20px; height: 20px; border-radius: 50%; background: var(--accent); color: var(--on-accent); align-items: center; justify-content: center; font-size: 11px; letter-spacing: 0; }
+    .st-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+    .st-row.one { grid-template-columns: 1fr; }
+    .st-f label { display: block; font-size: 11px; color: var(--t2); margin-bottom: 3px; }
+    .st-f input, .st-f select { width: 100%; box-sizing: border-box; padding: 7px 8px; border: 1px solid var(--line2); border-radius: var(--radius-sm); font: 13px var(--head); background: var(--bg); color: var(--t1); }
+    .st-f input:focus, .st-f select:focus { outline: 2px solid var(--accent-line); border-color: var(--accent); }
+    .st-hint { font-size: 11px; color: var(--t3); margin: 2px 0 0; line-height: 1.45; }
+    .st-seg { display: flex; border: 1px solid var(--line2); border-radius: var(--radius-sm); overflow: hidden; margin-bottom: 8px; }
+    .st-seg button { flex: 1; padding: 7px 4px; border: 0; background: var(--bg); font: 600 12px var(--head); color: var(--t2); cursor: pointer; border-right: 1px solid var(--line2); }
+    .st-seg button:last-child { border-right: 0; }
+    .st-seg button.on { background: var(--accent); color: var(--on-accent); }
+    .st-btn { padding: 7px 11px; border: 1px solid var(--line2); border-radius: var(--radius-sm); background: var(--bg); font: 600 12px var(--head); color: var(--t1); cursor: pointer; }
+    .st-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .st-btn.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+    .st-btn:disabled { opacity: .45; cursor: default; }
+    .st-check { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--t1); margin: 4px 0 8px; }
+
+    /* editor */
+    .st-tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 10px; }
+    .st-pal { display: flex; gap: 4px; margin-right: 8px; }
+    .st-pal button { width: 40px; height: 34px; border: 1px solid var(--line2); border-radius: var(--radius-sm); background: var(--bg); font: 700 14px var(--mono); cursor: pointer; }
+    .st-pal button.on { outline: 2px solid var(--accent); outline-offset: 1px; }
+    .st-pal button small { display: block; font: 500 8px var(--head); color: var(--t3); }
+    .st-bed { margin-bottom: 12px; }
+    .st-bed h4 { font-size: 12px; margin: 0 0 6px; color: var(--t1); }
+    .st-bed h4 span { font-weight: 400; color: var(--t3); }
+    .st-gridwrap { overflow-x: auto; }
+    table.st-grid { border-collapse: separate; border-spacing: 2px; user-select: none; touch-action: none; }
+    table.st-grid th { font: 500 10px var(--mono); color: var(--t3); padding: 0 2px; }
+    table.st-grid td.c { width: 30px; height: 30px; min-width: 30px; text-align: center; font: 700 13px var(--mono); border-radius: 4px; cursor: crosshair; border: 1px solid transparent; }
+    td.c.K { background: #1857C4; color: #fff; }
+    td.c.T { background: #E8A33A; color: #2a1a00; }
+    td.c.M { background: #F1F3F5; color: #868C94; border-color: var(--line2); }
+    td.c.X { background: repeating-linear-gradient(45deg, #fff, #fff 4px, #E4E6E9 4px, #E4E6E9 8px); color: #868C94; border-color: var(--line2); }
+    td.c.bad { box-shadow: 0 0 0 2px var(--danger) inset; }
+    td.feedcell { white-space: nowrap; padding-right: 6px; }
+    td.feedcell select, td.feedcell input { font: 11px var(--head); padding: 4px 4px; border: 1px solid var(--line2); border-radius: 4px; background: var(--bg); color: var(--t1); }
+    td.feedcell input { width: 58px; }
+    .st-legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 11px; color: var(--t2); margin-top: 6px; }
+    .st-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 4px; }
+
+    /* status + checks */
+    .st-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 8px; }
+    .st-badge { padding: 3px 9px; border-radius: 99px; font: 700 11px var(--head); }
+    .st-badge.ok { background: rgba(30,122,84,.1); color: var(--good); }
+    .st-badge.bad { background: rgba(178,59,59,.1); color: var(--danger); }
+    .st-badge.calibrated { background: rgba(30,122,84,.1); color: var(--good); }
+    .st-badge.close { background: rgba(24,87,196,.08); color: var(--accent); }
+    .st-badge.estimate { background: rgba(154,91,0,.1); color: var(--warn); }
+    .st-checks { list-style: none; margin: 0; padding: 0; font-size: 12px; }
+    .st-checks li { padding: 6px 8px 6px 26px; border-radius: 6px; margin-bottom: 4px; position: relative; line-height: 1.45; }
+    .st-checks li::before { position: absolute; left: 8px; top: 6px; font-weight: 800; }
+    .st-checks li.error { background: rgba(178,59,59,.07); color: #7d2222; } .st-checks li.error::before { content: '✕'; color: var(--danger); }
+    .st-checks li.warn { background: rgba(154,91,0,.07); color: #6b3f00; } .st-checks li.warn::before { content: '!'; color: var(--warn); }
+    .st-checks li.note { background: var(--bg2); color: var(--t2); } .st-checks li.note::before { content: 'i'; color: var(--accent); }
+    .st-checks li.ok { background: rgba(30,122,84,.06); color: #175c40; } .st-checks li.ok::before { content: '✓'; color: var(--good); }
+
+    /* tabs */
+    .st-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin-bottom: 12px; overflow-x: auto; }
+    .st-tabs button { padding: 9px 12px; border: 0; background: none; font: 600 13px var(--head); color: var(--t2); cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; }
+    .st-tabs button.on { color: var(--accent); border-bottom-color: var(--accent); }
+    .st-pane { display: none; } .st-pane.on { display: block; }
+    #st-3d { width: 100%; min-height: 380px; border-radius: 12px; background: #e9ebef; position: relative; }
+    .st-3dbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; font-size: 12px; color: var(--t2); }
+    .st-3dbar input[type=color] { width: 34px; height: 28px; border: 1px solid var(--line2); border-radius: 4px; padding: 1px; background: #fff; }
+    .st-svgwrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius-sm); background: #fff; }
+
+    /* results */
+    .st-kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-bottom: 12px; }
+    .st-kpi { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 9px 10px; background: var(--bg); }
+    .st-kpi .l { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--t3); }
+    .st-kpi .v { font: 700 19px var(--head); color: var(--t1); margin: 2px 0; }
+    .st-kpi .s { font-size: 10px; color: var(--t3); line-height: 1.35; }
+    .src { display: inline-block; padding: 0 5px; border-radius: 3px; font: 600 9px var(--mono); vertical-align: 1px; margin-left: 3px; }
+    .src.m { background: rgba(30,122,84,.12); color: var(--good); }
+    .src.c { background: rgba(24,87,196,.1); color: var(--accent); }
+    .src.e { background: rgba(154,91,0,.12); color: var(--warn); }
+    table.st-t { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 12px; }
+    table.st-t th { text-align: left; font: 600 10px var(--head); text-transform: uppercase; letter-spacing: .4px; color: var(--t3); border-bottom: 1px solid var(--line); padding: 6px; }
+    table.st-t td { border-bottom: 1px solid var(--line); padding: 6px; font-family: var(--mono); font-size: 12px; white-space: nowrap; }
+    .st-scroll { overflow-x: auto; }
+    .st-sub { font-size: 13px; font-weight: 700; margin: 14px 0 6px; }
+    .st-p { font-size: 12px; color: var(--t2); line-height: 1.5; margin: 0 0 8px; }
+    .st-err { padding: 10px 12px; border-radius: var(--radius-sm); background: rgba(178,59,59,.07); color: #7d2222; font-size: 13px; }
+    .st-needles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+    .st-needles figure { margin: 0; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px; background: #fff; }
+    .st-needles figcaption { font-size: 11px; color: var(--t2); line-height: 1.45; }
+    .st-phase { font: 600 12px var(--mono); color: var(--accent); min-height: 18px; margin: 6px 0; }
+    @media print {
+      .ka-bar, header, footer, .st-layout > aside, .st-tools, .st-tabs, #pane-3d, #pane-needle, .st-noprint { display: none !important; }
+      .st-pane { display: block !important; }
+      .st-layout { display: block; }
+    }
+  </style>
+  <link rel="stylesheet" href="assets/css/theme-v2.css?v=20260922a">
+  <script src="assets/js/app-shell.js?v=20261104a" defer></script>
+</head>
+<body>
+<div class="page-wrap">
+  <header class="hdr"></header>
+
+  <main class="container st-main">
+    <div class="st-head">
+      <h1>Fabric Studio</h1>
+      <p>Design a new weft-knitted fabric needle by needle. Pick the machine type, the yarns and the target, draw the knit, tuck and miss programme, and the studio checks it, sets out the cams and needles, works out the yarn on every feeder and shows the fabric in 3D. Every figure is tagged <span class="src m">measured</span> from factory records, <span class="src c">calculated</span> from your inputs, or <span class="src e">estimated</span>.</p>
+    </div>
+
+    <div class="st-layout">
+      <aside>
+        <div class="st-card">
+          <div class="st-step"><b>1</b> Fabrication</div>
+          <div class="st-f st-row one"><div>
+            <label for="st-template">Start from</label>
+            <select id="st-template"></select>
+          </div></div>
+          <div class="st-seg" id="st-bed" role="group" aria-label="Machine type">
+            <button type="button" data-bed="single">Single jersey</button>
+            <button type="button" data-bed="rib">Rib gating</button>
+            <button type="button" data-bed="interlock">Interlock gating</button>
+          </div>
+          <p class="st-hint" id="st-bed-hint"></p>
+        </div>
+
+        <div class="st-card">
+          <div class="st-step"><b>2</b> Yarn</div>
+          <div class="st-row">
+            <div class="st-f"><label for="st-ne">Ground count (Ne)</label><input id="st-ne" type="number" min="5" max="150" step="1" placeholder="auto"></div>
+            <div class="st-f"><label for="st-fibre">Fibre</label><select id="st-fibre"></select></div>
+          </div>
+          <p class="st-hint">Leave the count empty and the studio picks it from the target GSM. Other yarns (face, binder, loop) are set per feed in the design.</p>
+          <label class="st-check"><input type="checkbox" id="st-lycra"> Elastane plated</label>
+          <div class="st-row" id="st-lycra-box" hidden>
+            <div class="st-f"><label for="st-lyd">Elastane (denier)</label><select id="st-lyd"><option>20</option><option>30</option><option selected>40</option><option>70</option></select></div>
+            <div class="st-f"><label for="st-lydraft">Draft</label><input id="st-lydraft" type="number" min="1.5" max="4" step="0.1" value="2.6"></div>
+            <div class="st-f"><label for="st-lyevery">Feeders</label><select id="st-lyevery"><option value="all">Every feeder (full)</option><option value="alternate">Alternate (half)</option></select></div>
+          </div>
+        </div>
+
+        <div class="st-card">
+          <div class="st-step"><b>3</b> Target</div>
+          <div class="st-row">
+            <div class="st-f"><label for="st-gsm">Finished GSM</label><input id="st-gsm" type="number" min="60" max="700" step="1" value="180"></div>
+            <div class="st-f"><label for="st-width">Open width (in)</label><input id="st-width" type="number" min="20" max="110" step="0.5" placeholder="optional"></div>
+          </div>
+        </div>
+
+        <div class="st-card">
+          <div class="st-step"><b>4</b> Machine <span style="text-transform:none;font-weight:400;letter-spacing:0">(empty = recommended)</span></div>
+          <div class="st-row">
+            <div class="st-f"><label for="st-gauge">Gauge (GG)</label><input id="st-gauge" type="number" min="5" max="50" step="1" placeholder="auto"></div>
+            <div class="st-f"><label for="st-dia">Diameter (in)</label><input id="st-dia" type="number" min="10" max="60" step="1" placeholder="auto"></div>
+            <div class="st-f"><label for="st-feeders">Feeders</label><input id="st-feeders" type="number" min="1" max="200" step="1" placeholder="auto"></div>
+            <div class="st-f"><label for="st-rpm">RPM</label><input id="st-rpm" type="number" min="5" max="60" step="1" placeholder="auto"></div>
+            <div class="st-f"><label for="st-sl">Stitch length (mm)</label><input id="st-sl" type="number" min="1" max="10" step="0.01" placeholder="solve"></div>
+            <div class="st-f"><label for="st-eff">Efficiency (%)</label><input id="st-eff" type="number" min="40" max="100" step="1" value="85"></div>
+            <div class="st-f"><label for="st-tc">Cylinder tracks</label><select id="st-tc"><option>2</option><option>3</option><option selected>4</option></select></div>
+            <div class="st-f"><label for="st-td">Dial tracks</label><select id="st-td"><option>1</option><option selected>2</option></select></div>
+          </div>
+          <details>
+            <summary style="font-size:12px;cursor:pointer;color:var(--t2)">VDQ scale (optional)</summary>
+            <p class="st-hint">Give one or two settings you already run: the VDQ reading and the course length a yarn-length meter shows for it (metres per revolution at one feeder). Two points make it exact on any make.</p>
+            <div class="st-row">
+              <div class="st-f"><label for="st-v1r">Reading 1</label><input id="st-v1r" type="number" step="0.01"></div>
+              <div class="st-f"><label for="st-v1l">Course length 1 (m)</label><input id="st-v1l" type="number" step="0.001"></div>
+              <div class="st-f"><label for="st-v2r">Reading 2</label><input id="st-v2r" type="number" step="0.01"></div>
+              <div class="st-f"><label for="st-v2l">Course length 2 (m)</label><input id="st-v2l" type="number" step="0.001"></div>
+            </div>
+          </details>
+        </div>
+
+        <div class="st-card st-noprint">
+          <div class="st-step"><b>5</b> Save</div>
+          <div class="st-row one"><div class="st-f"><label for="st-name">Design name</label><input id="st-name" type="text" maxlength="60" placeholder="e.g. Polo pique 2-tuck"></div></div>
+          <div class="st-tools" style="margin:0">
+            <button type="button" class="st-btn" id="st-save">Save in this browser</button>
+            <select id="st-saved" class="st-btn" style="max-width:150px"><option value="">Saved designs…</option></select>
+            <button type="button" class="st-btn" id="st-export">Export file</button>
+            <label class="st-btn" style="display:inline-block">Import<input type="file" id="st-import" accept="application/json" hidden></label>
+            <button type="button" class="st-btn" id="st-print">Print job card</button>
+          </div>
+        </div>
+      </aside>
+
+      <section>
+        <div class="st-card">
+          <div class="st-step"><b>6</b> Design the needle programme</div>
+          <div class="st-tools" id="st-edtools">
+            <div class="st-pal" id="st-pal" role="group" aria-label="Brush">
+              <button type="button" data-s="K" class="on">K<small>knit</small></button>
+              <button type="button" data-s="T">T<small>tuck</small></button>
+              <button type="button" data-s="M">M<small>miss</small></button>
+              <button type="button" data-s="-">–<small>no needle</small></button>
+            </div>
+            <button type="button" class="st-btn" data-op="addFeed">+ Feed</button>
+            <button type="button" class="st-btn" data-op="delFeed">− Feed</button>
+            <button type="button" class="st-btn" data-op="addNeedle">+ Needle</button>
+            <button type="button" class="st-btn" data-op="delNeedle">− Needle</button>
+            <button type="button" class="st-btn" data-op="shiftL" title="Shift the repeat one needle left">⇠</button>
+            <button type="button" class="st-btn" data-op="shiftR" title="Shift the repeat one needle right">⇢</button>
+            <button type="button" class="st-btn" data-op="shiftU" title="Start the repeat one feed later">⇡</button>
+            <button type="button" class="st-btn" data-op="mirror" title="Mirror left to right">Mirror</button>
+            <button type="button" class="st-btn" data-op="undo">Undo</button>
+          </div>
+          <div id="st-editor"></div>
+          <div class="st-legend">
+            <span><i style="background:#1857C4"></i>K knit: needle clears and takes the yarn</span>
+            <span><i style="background:#E8A33A"></i>T tuck: takes the yarn, keeps the old loop</span>
+            <span><i style="background:#F1F3F5;border:1px solid #D2D5DA"></i>M miss: yarn floats past</span>
+            <span><i style="background:repeating-linear-gradient(45deg,#fff,#fff 3px,#E4E6E9 3px,#E4E6E9 6px);border:1px solid #D2D5DA"></i>– no needle in this slot</span>
+          </div>
+          <p class="st-hint">Rows are feeders in the order the needles meet them, columns are needles in one repeat. Click or drag to paint. On a double bed the dial needle sits between two cylinder needles on rib gating, and face to face with one on interlock gating.</p>
+        </div>
+
+        <div class="st-card">
+          <div class="st-status" id="st-status">Draw a structure to begin.</div>
+          <ul class="st-checks" id="st-checks"></ul>
+        </div>
+
+        <div class="st-card">
+          <div class="st-tabs" role="tablist">
+            <button type="button" class="on" data-tab="3d">3D fabric</button>
+            <button type="button" data-tab="notation">Notation</button>
+            <button type="button" data-tab="setup">Cam &amp; needle set-out</button>
+            <button type="button" data-tab="needle">Needle action</button>
+            <button type="button" data-tab="results">Fabric &amp; yarn</button>
+            <button type="button" data-tab="machine">Machine &amp; VDQ</button>
+          </div>
+
+          <div class="st-pane on" id="pane-3d">
+            <div class="st-3dbar">
+              <label>Colour <input type="color" id="st-col" value="#3d5a80"></label>
+              <button type="button" class="st-btn" id="st-side">Show back</button>
+              <label class="st-check" style="margin:0" id="st-brush-wrap"><input type="checkbox" id="st-brushed"> Brushed (fleece)</label>
+              <span id="st-3dnote"></span>
+            </div>
+            <div id="st-3d"></div>
+            <p class="st-hint">Drag to turn the swatch, scroll to zoom down to the loops. The 3D view follows the programme you draw; its loop shape is a model, the numbers on the other tabs are what to set.</p>
+          </div>
+
+          <div class="st-pane" id="pane-notation">
+            <p class="st-p">Needle notation, one line per feeder, feeder 1 at the top. Dots are needles (dial on top, cylinder below on a double bed). A closed loop round a needle is a knit, an open arch a tuck, a straight line a miss.</p>
+            <div class="st-svgwrap" id="st-notation"></div>
+          </div>
+
+          <div class="st-pane" id="pane-setup"></div>
+
+          <div class="st-pane" id="pane-needle">
+            <div class="st-tools">
+              <button type="button" class="st-btn" id="st-play">Pause</button>
+              <label style="font-size:12px;color:var(--t2)">Speed <input type="range" id="st-speed" min="0.2" max="2" step="0.1" value="0.6"></label>
+              <span style="font-size:12px;color:var(--t2)">Bed <select id="st-anibed" class="st-btn"><option value="C">Cylinder</option><option value="D">Dial</option></select></span>
+            </div>
+            <div class="st-phase" id="st-phase"></div>
+            <div class="st-svgwrap" id="st-race"></div>
+            <p class="st-hint">The needles run past the cam box from left to right: each feeder's cam lifts a needle to clearing height (knit), to tuck height, or leaves it down (miss), and the stitch cam then draws it down to knock over. The rings on each stem are the loops that needle is holding — watch a tuck add one and a knit clear them.</p>
+            <div class="st-sub">Needle types</div>
+            <div class="st-needles" id="st-needletypes"></div>
+          </div>
+
+          <div class="st-pane" id="pane-results"></div>
+          <div class="st-pane" id="pane-machine"></div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer class="footer"></footer>
+</div>
+
+<script src="assets/js/api.js"></script>
+<script src="assets/js/studio.js?v=20261104a"></script>
+</body>
+</html>

@@ -19,6 +19,7 @@
   var page = (window.location.pathname.split('/').pop() || 'index.html').toLowerCase();
 
   var TOOLS = [
+    { href: '/studio.html',      t: 'Fabric studio',     d: 'Design a new knit structure: checks, cam set-out, 3D' },
     { href: '/converter.html',   t: 'Unit converter',    d: 'GSM, yarn count, length and weight conversions' },
     { href: '/patterns.html',    t: 'Pattern catalog',   d: 'K/T/M patterns and fabric constructions' },
     { href: '/weft-calc.html',   t: 'Weft calculator',   d: 'Loop length, production and yarn per fabric' },

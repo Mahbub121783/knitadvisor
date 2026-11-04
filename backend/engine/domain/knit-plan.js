@@ -403,4 +403,8 @@ function buildKnitPlan(a) {
   };
 }
 
-module.exports = { buildKnitPlan, normaliseStructure, CAL, MACHINE };
+module.exports = {
+  buildKnitPlan, normaliseStructure, CAL, MACHINE, STANDARD_DIA,
+  // shared with the fabric studio (fabric-studio.js)
+  calFor, tracksOf, camChart, structureChecks, feedConsumption,
+};

@@ -38,6 +38,7 @@ const { GLOSSARY, BASIC_ELEMENTS, FORMATION_CYCLES, QUIZ_QUESTIONS } = require('
 const colorEngine = require('../engine/domain/color-engine');
 const { buildTechPackContent } = require('../engine/domain/techpack-content-builder');
 const { renderTechPackPdf } = require('../engine/domain/techpack-pdf-renderer');
+const fabricStudio = require('../engine/domain/fabric-studio');
 
 const memCache = require('../cache/memory-cache');
 const { resultCache } = require('../db/repositories/cache-repo');
@@ -1225,6 +1226,27 @@ router.get('/color/shade-check', (req, res) => {
 });
 
 // GET /api/charges/vendors — who can be chosen to price knitting and dyeing
+// ============================================================
+// Fabric studio: a new weft structure drawn needle by needle
+// ============================================================
+//
+// Live: the page re-asks on every edit, so it is outside the daily
+// calculation limit (the /api rate limiter still applies). Signed-in only,
+// like the calculator it sits beside.
+router.get('/studio/templates', requireUser, (req, res) => {
+  res.json({ success: true, templates: fabricStudio.listTemplates(), fibres: fabricStudio.FIBRES, limits: fabricStudio.LIMITS });
+});
+
+router.post('/studio/analyse', requireUser, (req, res) => {
+  try {
+    const out = fabricStudio.analyse(req.body || {});
+    res.status(out.success ? 200 : 400).json(out);
+  } catch (err) {
+    console.error('[studio] analyse failed:', err);
+    res.status(500).json({ success: false, error: 'The studio could not analyse this structure.' });
+  }
+});
+
 router.get('/charges/vendors', (req, res) => {
   const book = require('../engine/domain/charge-book');
   res.json({ vendors: book.listVendors().filter((v) => v.active).map((v) => ({ code: v.code, name: v.name, kind: v.kind, is_default: !!v.is_default })) });
