@@ -39,6 +39,7 @@ const colorEngine = require('../engine/domain/color-engine');
 const { buildTechPackContent } = require('../engine/domain/techpack-content-builder');
 const { renderTechPackPdf } = require('../engine/domain/techpack-pdf-renderer');
 const fabricStudio = require('../engine/domain/fabric-studio');
+const studioRepo = require('../db/repositories/studio-repo');
 
 const memCache = require('../cache/memory-cache');
 const { resultCache } = require('../db/repositories/cache-repo');
@@ -1244,6 +1245,40 @@ router.post('/studio/analyse', requireUser, (req, res) => {
   } catch (err) {
     console.error('[studio] analyse failed:', err);
     res.status(500).json({ success: false, error: 'The studio could not analyse this structure.' });
+  }
+});
+
+// Saved designs: private to the signed-in account, rolls included.
+router.get('/studio/designs', requireUser, async (req, res) => {
+  try {
+    res.json({ success: true, designs: await studioRepo.designs.list(req.user.id) });
+  } catch (err) {
+    console.error('[studio] list designs failed:', err);
+    res.status(500).json({ success: false, error: 'Could not load your saved designs.' });
+  }
+});
+
+router.put('/studio/designs', requireUser, async (req, res) => {
+  try {
+    const row = await studioRepo.designs.save(req.user.id, req.body);
+    res.json({ success: true, design: row });
+  } catch (err) {
+    if (err instanceof studioRepo.DesignError) return res.status(400).json({ success: false, error: err.message });
+    console.error('[studio] save design failed:', err);
+    res.status(500).json({ success: false, error: 'Could not save the design.' });
+  }
+});
+
+router.delete('/studio/designs/:id', requireUser, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id)) return res.status(400).json({ success: false, error: 'Invalid id.' });
+  try {
+    const removed = await studioRepo.designs.remove(req.user.id, id);
+    if (!removed) return res.status(404).json({ success: false, error: 'Design not found.' });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[studio] delete design failed:', err);
+    res.status(500).json({ success: false, error: 'Could not delete the design.' });
   }
 });
 

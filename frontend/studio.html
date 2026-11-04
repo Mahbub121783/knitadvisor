@@ -222,8 +222,10 @@
           <div class="st-step"><b>6</b> Save</div>
           <div class="st-row one"><div class="st-f"><label for="st-name">Design name</label><input id="st-name" type="text" maxlength="60" placeholder="e.g. Polo pique 2-tuck"></div></div>
           <div class="st-tools" style="margin:0">
-            <button type="button" class="st-btn" id="st-save">Save in this browser</button>
-            <select id="st-saved" class="st-btn" style="max-width:150px"><option value="">Saved designs…</option></select>
+            <button type="button" class="st-btn primary" id="st-save">Save to my account</button>
+            <select id="st-saved" class="st-btn" style="max-width:170px"><option value="">Saved designs…</option></select>
+            <button type="button" class="st-btn" id="st-del" hidden>Delete this design</button>
+            <button type="button" class="st-btn" id="st-move" hidden>Move browser designs to my account</button>
             <button type="button" class="st-btn" id="st-export">Export file</button>
             <label class="st-btn" style="display:inline-block">Import<input type="file" id="st-import" accept="application/json" hidden></label>
             <button type="button" class="st-btn" id="st-print">Print job card</button>
@@ -318,6 +320,6 @@
 </div>
 
 <script src="assets/js/api.js"></script>
-<script src="assets/js/studio.js?v=20261105b"></script>
+<script src="assets/js/studio.js?v=20261105c"></script>
 </body>
 </html>

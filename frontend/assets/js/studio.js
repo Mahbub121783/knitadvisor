@@ -727,7 +727,7 @@
   function writeStore(a) { try { localStorage.setItem(STORE, JSON.stringify(a)); return true; } catch (_) { return false; } }
   var FIELDS = ['st-ne', 'st-fibre', 'st-gsm', 'st-width', 'st-gauge', 'st-dia', 'st-feeders', 'st-rpm', 'st-sl', 'st-eff', 'st-tc', 'st-td', 'st-lyd', 'st-lydraft', 'st-lyevery', 'st-v1r', 'st-v1l', 'st-v2r', 'st-v2l'];
   function designNow() {
-    var o = { v: 1, name: $('st-name').value || 'Untitled design', bed: S.bed, C: S.C, D: S.D, feeds: S.feeds, lycra: $('st-lycra').checked, brushed: $('st-brushed').checked, colour: $('st-col').value, fields: {} };
+    var o = { v: 2, name: $('st-name').value || 'Untitled design', bed: S.bed, C: S.C, D: S.D, feeds: S.feeds, rolls: rolls, lycra: $('st-lycra').checked, brushed: $('st-brushed').checked, colour: $('st-col').value, fields: {} };
     FIELDS.forEach(function (id) { o.fields[id] = $(id).value; });
     return o;
   }
@@ -740,11 +740,22 @@
     $('st-brushed').checked = !!o.brushed; if (o.colour) $('st-col').value = o.colour;
     Object.keys(o.fields || {}).forEach(function (id) { if ($(id)) $(id).value = o.fields[id]; });
     S.templateId = ''; $('st-template').value = '';
+    rolls = Array.isArray(o.rolls) ? o.rolls : [];
+    writeRolls();
     renderAll();
   }
+  var account = [];          // designs saved to the signed-in account
   function refreshSaved() {
-    $('st-saved').innerHTML = '<option value="">Saved designs…</option>' + readStore().map(function (d, i) { return '<option value="' + i + '">' + esc(d.name) + '</option>'; }).join('');
+    var local = readStore();
+    $('st-saved').innerHTML = '<option value="">Saved designs…</option>' +
+      (account.length ? '<optgroup label="My account">' + account.map(function (d, i) { return '<option value="a' + i + '">' + esc(d.name) + '</option>'; }).join('') + '</optgroup>' : '') +
+      (local.length ? '<optgroup label="This browser only">' + local.map(function (d, i) { return '<option value="l' + i + '">' + esc(d.name) + '</option>'; }).join('') + '</optgroup>' : '');
+    $('st-move').hidden = !local.length;
   }
+  function loadAccount() {
+    return apiFetch('/api/studio/designs').then(function (r) { account = r.designs || []; refreshSaved(); }).catch(function () { refreshSaved(); });
+  }
+  function flash(btn, text, back) { btn.textContent = text; setTimeout(function () { btn.textContent = back; }, 1800); }
 
   // ── wiring ───────────────────────────────────────────────────────────────
   function renderAll() {
@@ -783,14 +794,33 @@
     $('st-play').addEventListener('click', function () { this.textContent = race.toggle() ? 'Pause' : 'Play'; });
     $('st-anibed').addEventListener('change', function () { race.reset(); });
     $('st-save').addEventListener('click', function () {
-      var a = readStore(), d = designNow();
-      var i = a.findIndex(function (x) { return x.name === d.name; });
-      if (i > -1) a[i] = d; else a.push(d);
-      this.textContent = writeStore(a) ? 'Saved ✓' : 'Browser storage is off';
-      var b = this; setTimeout(function () { b.textContent = 'Save in this browser'; }, 1500);
-      refreshSaved();
+      var btn = this, d = designNow();
+      apiFetch('/api/studio/designs', { method: 'PUT', body: { name: d.name, design: d } }).then(function () {
+        flash(btn, 'Saved to your account ✓', 'Save to my account'); return loadAccount();
+      }).catch(function (e) {
+        var msg = (e.data && e.data.error) || '';
+        if (e.status === 400) { alert(msg); return; }
+        // the server could not be reached: keep it in this browser rather than lose it
+        var a = readStore(), i = a.findIndex(function (x) { return x.name === d.name; });
+        if (i > -1) a[i] = d; else a.push(d);
+        flash(btn, writeStore(a) ? 'Saved in this browser (account unreachable)' : 'Could not save', 'Save to my account'); refreshSaved();
+      });
     });
-    $('st-saved').addEventListener('change', function () { var d = readStore()[+this.value]; if (d) loadDesign(d); this.value = ''; });
+    $('st-saved').addEventListener('change', function () {
+      var v = this.value, d = v[0] === 'a' ? (account[+v.slice(1)] || {}).design : readStore()[+v.slice(1)];
+      if (d) { loadDesign(d); $('st-del').dataset.id = v[0] === 'a' ? account[+v.slice(1)].id : ''; $('st-del').hidden = v[0] !== 'a'; }
+      this.value = '';
+    });
+    $('st-del').addEventListener('click', function () {
+      var id = this.dataset.id; if (!id || !confirm('Delete this saved design from your account?')) return;
+      apiFetch('/api/studio/designs/' + id, { method: 'DELETE' }).then(function () { $('st-del').hidden = true; return loadAccount(); }).catch(function (e) { alert((e.data && e.data.error) || 'Could not delete.'); });
+    });
+    $('st-move').addEventListener('click', function () {
+      var btn = this, local = readStore();
+      Promise.all(local.map(function (d) { return apiFetch('/api/studio/designs', { method: 'PUT', body: { name: d.name, design: d } }); })).then(function () {
+        writeStore([]); flash(btn, 'Moved ✓', 'Move browser designs to my account'); return loadAccount();
+      }).catch(function (e) { alert((e.data && e.data.error) || 'Could not move them.'); });
+    });
     $('st-export').addEventListener('click', function () {
       var d = designNow();
       var blob = new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' });
@@ -807,7 +837,7 @@
       rd.readAsText(file); this.value = '';
     });
     $('st-print').addEventListener('click', function () { window.print(); });
-    refreshSaved();
+    refreshSaved(); loadAccount();
     loadTemplates().then(function () { applyTemplate(S.templateId); undo = []; })
       .catch(function (e) { $('st-status').innerHTML = '<div class="st-err">' + esc(e.message || 'Could not load the fabric catalogue.') + '</div>'; renderAll(); });
   }
