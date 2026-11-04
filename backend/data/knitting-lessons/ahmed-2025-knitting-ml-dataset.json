@@ -1,0 +1,79 @@
+{
+  "document": {
+    "doc_key": "ahmed-2025-knitting-ml-dataset",
+    "title": "Structuring a textile knitting dataset for machine learning and data mining applications",
+    "authors": "Toufique Ahmed, Abu Saleh Muhammad Junayed",
+    "year": 2025,
+    "doc_type": "paper",
+    "file_name": "1-s2.0-S2352340925005979-main.pdf",
+    "pages": 9,
+    "summary": "A data article describing 12,569 production records (38 columns) from 168 circular knitting machines of one Bangladeshi mill, three months, cleaned and extended with engineered features (tex for every yarn, tightness factor, feeders, fabric-to-machine diameter ratio). It reports a polynomial link between yarn count and GSM for single jersey (R-squared 0.77), a decay link between tightness factor and stitch length (0.78), and machine-learning models predicting GSM (random forest and XGBoost R-squared 0.98).",
+    "relevance": "core",
+    "relevance_note": "The same kind of data the engine is built on (factory greige records), nearly six times larger than the 2,201-row factory file the engine uses. Useful for the feeder rule, for how to clean and bucket such data, and as a yardstick. Not usable as engine data without permission: it is published for research and non-commercial use (CC BY-NC) and the mill's own policy says the same. Several reported figures are loosely described (units, split, outliers); see the caution lesson."
+  },
+  "lessons": [
+    {
+      "title": "What the dataset contains",
+      "kind": "data",
+      "topics": ["dataset", "production report", "machine brands", "constructions", "12569 rows", "Bangladesh"],
+      "page_start": 2, "page_end": 4,
+      "body": "12,569 records and 38 columns from 168 circular knitting machines, taken mostly from the daily production report of one mill in Gazipur, Bangladesh (mid-2023; one section prints 2022). Per record: machine brand, diameter and gauge, body part, booking type, yarn count, lot, construction, composition, colour and colour range, stitch length (mm), fabric diameter (inch), GSM, production in kg for shifts A, B, C (6-14, 14-22, 22-6), reject quantity. Machine brands: Fukuhara 3641, Jiunn Long 2330 (plus 581 spelled 'Jiunn Long'), Hangxing 2227, Pailung 2041, Lisky 620, Santoni 179. Constructions after tidying: single jersey 5648, lycra single jersey 1970, rib 1913, fleece/terry 1168, mesh 621, pique 571, interlock 571, other 107 (these add up to 12,569). Yarns included BCI cotton, polyester, 95/5 cotton/elastane, 60/40 cotton/polyester, organic cotton, viscose/elastane blends and a recycled-cotton blend."
+    },
+    {
+      "title": "Feeders are three per inch of diameter (six more on Fukuhara)",
+      "kind": "data",
+      "topics": ["feeders", "diameter", "Fukuhara", "feeder count", "machine"],
+      "page_start": 6, "page_end": 6,
+      "body": "Feature engineering rule stated by the authors: the number of feeders is normally 3 times the machine diameter in inches, but for Fukuhara machines it is 3 times the diameter plus 6. A 30 inch machine therefore has 90 feeders (96 if Fukuhara). This agrees with the other textbook example in this store (30 inch, 90 feeders) and with the engine's long-standing diameter x 3 rule. It is a stated convention across all the machines in the file, not a measured distribution, and it covers the common circular machine; double-bed machines may differ."
+    },
+    {
+      "title": "Several yarns in one fabric: how the data splits them",
+      "kind": "method",
+      "topics": ["multi-yarn", "fleece", "three loops", "stitch length", "tex conversion", "plies"],
+      "page_start": 6, "page_end": 6,
+      "body": "Fabrics such as terry and fleece use more than one yarn: a three-thread fleece has a face yarn, a binding yarn and a loop yarn. The authors split every record's yarn counts and stitch lengths into up to three separate counts and three separate stitch lengths (yarn_count_tex_1..3, stitch_1..3). Example record: an interlock lycra fleece with three stitch lengths printed 17.0 / 14.2 / 1.15, composed of 72 percent polyester (100 denier, 144 filaments), 23 percent viscose (34 Ne) and 5 percent elastane (30 denier). Counts in Ne and denier are put on one scale with Tex = 590.6 / Ne and Tex = denier / 9. This is the same one-yarn-per-feed accounting as the knitting plan and fleece engine; the units of 17.0 / 14.2 / 1.15 are not stated and look unlike millimetre stitch lengths."
+    },
+    {
+      "title": "Tightness factor against stitch length",
+      "kind": "data",
+      "topics": ["tightness factor", "stitch length", "exponential fit", "cover factor", "TF"],
+      "page_start": 6, "page_end": 7,
+      "body": "Tightness factor TF = sqrt(Tex) / l, the share of the loop area covered by yarn (the knit equivalent of woven cover factor). Fitted over the whole file: TF = 33.43 x exp(-0.321 x) + 1.89 with x the stitch length, R-squared 0.78. At 2.7 mm it gives about 15.9, a sensible jersey value. Notes: the text calls this a logarithmic relation but the equation is an exponential decay; the paper says l is in millimetres, but TF values in the usual range of 14 to 21 only arise with l in centimetres (sqrt(21 tex) / 0.27 cm = 17, whereas in millimetres it would be 1.7), which is how the engine calculates it. Because TF falls with 1/l for any one count, a fit across mixed counts and structures is a description of the mill's range, not a law."
+    },
+    {
+      "title": "GSM against yarn count for single jersey",
+      "kind": "data",
+      "topics": ["GSM", "yarn count", "single jersey", "polynomial", "relationship"],
+      "page_start": 4, "page_end": 5,
+      "body": "For single jersey only, the authors find a polynomial relation between yarn count (Ne) and GSM, R-squared 0.77 (shown in a figure whose equation is not printed). No such relation was found for the other constructions, which they flag as needing further study. A count-to-GSM curve at 0.77 is loose because GSM also depends on stitch length and structure; the engine's own count and stitch-length lookup is built on the same relationship from factory records and keeps both."
+    },
+    {
+      "title": "Cleaning and bucketing the raw production data",
+      "kind": "method",
+      "topics": ["data cleaning", "missing values", "categories", "normalisation", "composition", "construction"],
+      "page_start": 4, "page_end": 7,
+      "body": "The raw report had tens of thousands of errors. Steps: (1) Names unified: 'S/J', 's/j', 's.j' and 'single jersey' become one value; any string containing 'ri' becomes rib; 'fleece' and 'terry' merge into one class; names that carried the composition ('Fleece, 87% Cotton, 13% Polyester') were split. (2) Compositions cut from 294 to 43 values (252 occurred fewer than 40 times and went to 'other'); constructions from 135 to 8; body parts from 108 to 5 (bottom, top, body, rib, other). (3) Missing values filled from related columns: machine brand 950 missing (filled with the commonest brand), booking type 1388, composition 52, body part 52, yarn count 33, lot 36, colour 4, colour range 45; yarn count and body part from GSM and construction, colour from lot. (4) Derived columns: Tex for each yarn, tightness factor, feeders, fabric-to-machine diameter ratio, second fabric diameter after a cylinder change."
+    },
+    {
+      "title": "Machine-learning results for GSM",
+      "kind": "data",
+      "topics": ["machine learning", "random forest", "XGBoost", "GSM prediction", "regression"],
+      "page_start": 8, "page_end": 8,
+      "body": "Target: GSM. Categorical inputs one-hot encoded, numerical inputs standardised. Results (R-squared, mean absolute error, mean squared error): Random Forest 0.98, 1.6, 139.28; XGBoost 0.98, 2.7, 134.79; Support Vector Regression 0.59, 15.9, 3350; Linear Regression R-squared about -3.4 x 10^19, MAE 4.6 x 10^10, an obvious failure of encoding or scaling rather than a real result. The two tree models perform alike. A mean absolute error of 1.6 beside a mean squared error of 139 (root about 11.8) means most predictions are close and a few are far off."
+    },
+    {
+      "title": "How far the paper can be trusted",
+      "kind": "caution",
+      "topics": ["limitations", "data leakage", "licence", "imputation", "units", "one mill"],
+      "page_start": 1, "page_end": 9,
+      "body": "A valuable dataset, loosely reported. Points: (1) The R-squared of 0.98 for GSM is not backed by a stated train/test split, and GSM is largely fixed by the stitch length, count and diameter that are among the inputs, so the model may be learning the geometry, not predicting from outside it. (2) The linear regression's -3.4 x 10^19 shows the pipeline was not checked for that model. (3) Missing values were imputed with the commonest value or from related columns, which pulls the data toward the mill's habits. (4) One mill, three months, with printed dates that disagree (2022 and 2023). (5) 'Limitations: not applicable' is not credible for a single-mill production log. (6) The tightness-factor unit is misstated (mm for cm). (7) Licence: CC BY-NC, and the mill's policy allows research and non-commercial use only. KnitAdvisor is a commercial product, so these records must not be loaded into the engine without the owners' written permission."
+    },
+    {
+      "title": "What this means for KnitAdvisor",
+      "kind": "engine",
+      "topics": ["feeders", "factory records", "validation", "data licence", "knitting plan"],
+      "page_start": 1, "page_end": 9,
+      "body": "1) Correction made from this: the knitting plan's feeders per inch for single and piqué machines was 3.2; the stated convention, the other textbook example and the engine's old rule all say 3.0, so it is now 3.0 (90 feeders at 30 inch). 2) The engine's TF (sqrt tex over stitch length in cm) is the right form; do not copy the paper's 'mm'. 3) The engine's 2,201-row factory file is about a sixth the size; the paper shows the value of the same fields (diameter, gauge, count, stitch length, GSM, fabric diameter) and of splitting multi-yarn records, which the engine already does. 4) The dataset is a good independent yardstick for the engine's width and GSM models, but the licence forbids commercial use: ask the authors for permission before any validation run, or run it only as a private, non-published check. 5) The data-cleaning steps (name unification, bucketing rare compositions, filling gaps from related columns) are a template for importing a customer's own production data later."
+    }
+  ]
+}

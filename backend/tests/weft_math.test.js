@@ -36,13 +36,13 @@ console.log(`Optimum SJ Gauge npi (expected ~23.26): ${gauge_sj.npi}`);
 assert(Math.abs(gauge_sj.npi - 23.26) < 0.05);
 
 // Test 5: Optimum Gauge from Tex (Double Jersey)
-// G = sqrt(1400/Tex) needles/cm => npi = 2.54 * sqrt(1400/Tex)
-// For Tex = 19.6833
-// G = sqrt(1400/19.6833) = 8.4338
-// npi = 8.4338 * 2.54 = 21.42
+// Double bed: count = G x G / 8.4 (the rule factory rib gauges follow), K = 770
+// G = sqrt(770/Tex) needles/cm => npi = 2.54 * sqrt(770/Tex)
+// For Tex = 19.6833: G = sqrt(39.12) = 6.2547, npi = 15.89 (= sqrt(8.4 x 30))
 const gauge_dj = WeftCalculators.calcOptimumGaugeFromTex(tex, true);
-console.log(`Optimum DJ Gauge npi (expected ~21.42): ${gauge_dj.npi}`);
-assert(Math.abs(gauge_dj.npi - 21.42) < 0.05);
+console.log(`Optimum DJ Gauge npi (expected ~15.89): ${gauge_dj.npi}`);
+assert(Math.abs(gauge_dj.npi - 15.89) < 0.05);
+assert(Math.abs(gauge_dj.npi - Math.sqrt(8.4 * (590.5 / tex))) < 0.1, 'G x G / 8.4');
 
 // Test 6: Running meters per hour
 // L = (rpm * feeders * eff * 60) / (feeders_per_course * courses_per_cm * 100)

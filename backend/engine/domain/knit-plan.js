@@ -82,8 +82,8 @@ function calFor(table, family, lycra) {
 // feeders per inch of diameter (modern machines) and the speed factor
 // (rpm × dia, inches) they run at
 const MACHINE = {
-  single:   { label: 'Single jersey', fpi: 3.2, fpiRange: [2.8, 4.0], sf: 900, gauges: [18, 20, 22, 24, 28, 32, 36] },
-  pique:    { label: 'Single jersey, 4-track (piqué / lacoste)', fpi: 3.2, fpiRange: [2.8, 3.4], sf: 850, gauges: [20, 22, 24, 28] },
+  single:   { label: 'Single jersey', fpi: 3.0, fpiRange: [2.8, 3.4], sf: 900, gauges: [18, 20, 22, 24, 28, 32, 36] },
+  pique:    { label: 'Single jersey, 4-track (piqué / lacoste)', fpi: 3.0, fpiRange: [2.8, 3.4], sf: 850, gauges: [20, 22, 24, 28] },
   fleece:   { label: 'Fleece (3-thread)', fpi: 3.0, fpiRange: [2.4, 3.2], sf: 800, gauges: [16, 18, 20, 22, 24] },
   terry:    { label: 'Plush / terry (sinker loop)', fpi: 2.4, fpiRange: [2.0, 3.0], sf: 650, gauges: [16, 18, 20, 22, 24] },
   rib:      { label: 'Rib (cylinder + dial, rib gating)', fpi: 2.0, fpiRange: [1.6, 2.4], sf: 750, gauges: [14, 16, 18, 20, 22, 24] },
@@ -248,7 +248,7 @@ function buildKnitPlan(a) {
     factoryGauge = { gauge: +g, share_pct: Math.round(n / near.length * 100), n: near.length, spread: c };
   }
   const isDouble = mt === 'rib' || mt === 'interlock';
-  const npi = Math.sqrt((isDouble ? 1400 : 1650) / tex) * 2.54;
+  const npi = Math.sqrt((isDouble ? 770 : 1650) / tex) * 2.54;
   const coverGauge = M.gauges.reduce((b, g) => (Math.abs(g - npi) < Math.abs(b - npi) ? g : b), M.gauges[0]);
   let recGauge = factoryGauge && factoryGauge.n >= 5 ? factoryGauge.gauge : coverGauge;
   let recSource = factoryGauge && factoryGauge.n >= 5 ? 'factory records' : 'cover factor';
@@ -376,7 +376,7 @@ function buildKnitPlan(a) {
     family, machine_type: mt, machine_label: M.label, lycra,
     gauge: {
       recommended: recGauge, used: gauge, source: a.gauge > 0 ? 'your machine' : recSource, recommended_source: recSource,
-      factory: factoryGauge, cover_factor: { npi: r1(npi), gauge: coverGauge, formula: `NPI = √(${isDouble ? 1400 : 1650} ÷ ${r2(tex)} tex) × 2.54 = ${r1(npi)}` },
+      factory: factoryGauge, cover_factor: { npi: r1(npi), gauge: coverGauge, formula: `NPI = √(${isDouble ? 770 : 1650} ÷ ${r2(tex)} tex) × 2.54 = ${r1(npi)}` },
       fit: gaugeFit, pitch_mm: r3(pitch), yarn_diameter_mm: r3(yarnD), pitch_to_yarn: r2(pitchRatio), factory_band: [r2(B.lo), r2(B.hi)],
     },
     stitch_length: { ...sl, gsm_at_this_sl: gsmFromSl },

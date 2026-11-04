@@ -1,0 +1,79 @@
+{
+  "document": {
+    "doc_key": "hossain-2021-rib-collar-parameters",
+    "title": "Selection of suitable knitting parameters for 1 x 1 rib collar manufacturing in V-bed knitting machine",
+    "authors": "Md. Shakhawat Hossain, Md. Momtaz Islam, Naimul Hasan",
+    "year": 2021,
+    "doc_type": "paper",
+    "file_name": "1-s2.0-S2405844021006484-main.pdf",
+    "pages": 6,
+    "summary": "A Bangladeshi study of polo-shirt collars knitted as 1x1 rib on a 12-gauge V-bed flat machine. For five carded cotton counts (20 to 40 Ne) it finds how many yarn plies and what stitch length give a collar without holes and with the lowest shrinkage, and gives a straight-line rule for the number of needles for a required collar size (N = 5X + 72). Also states the allowances that make a finished collar match the body.",
+    "relevance": "supporting",
+    "relevance_note": "Flat-bed collar knitting, not circular fabric, so it cannot calibrate the engine's circular formulas. Useful for the garment side (collar and cuff GSM, size allowances, plied yarn) and as a data point on multi-ply tightness: converted to total tex, all five recommended settings land at the same tightness factor, about 20. Several of its own numbers disagree with each other (listed in the caution lesson)."
+  },
+  "lessons": [
+    {
+      "title": "What the study set out to fix",
+      "kind": "concept",
+      "topics": ["collar", "polo shirt", "V-bed", "flat knitting", "1x1 rib", "size accuracy"],
+      "page_start": 1, "page_end": 2,
+      "body": "A polo shirt has a body, collar and cuff. The body is single lacoste, double lacoste, single pique or double pique knitted on a circular machine; the collar and cuff are 1x1 rib knitted on a V-bed flat machine. A collar that is the wrong size means regrading, remaking or a late shipment. The study gives rules for the number of yarn plies, the stitch length and the number of needles so that the finished collar matches the body size. Materials: carded 100 percent cotton in 20, 24, 28, 34 and 40 Ne; polo pique body on a Mayer & Cie circular machine; collar on a Shima Seiki V-bed machine of 12 gauge and 72 inch working width; reactive-dyed."
+    },
+    {
+      "title": "Body and collar: GSM, count and size allowances",
+      "kind": "data",
+      "topics": ["collar GSM", "body GSM", "yarn count", "size allowance", "separation thread", "shade matching"],
+      "page_start": 1, "page_end": 1,
+      "body": "Body fabric of a polo is normally 180 to 240 GSM; the collar must be 1.5 to 2.5 times the body GSM. Body and collar use the same yarn count so shade, stretch and hand match after dyeing. A finished collar grows 0.5 to 0.8 cm when the separation thread is removed, and a further 0.5 cm when it is joined to the body (sewing pressure and the operator's pull), so the finished collar should be about 1.0 cm smaller than the required size; the study allows 0.4 to 1.2 cm smaller. Collar sizes in common use run from 36 to 50 cm."
+    },
+    {
+      "title": "Number of plies by count (Table 1)",
+      "kind": "table",
+      "topics": ["yarn ply", "collar GSM", "shrinkage", "knit-ability", "holes", "count"],
+      "page_start": 3, "page_end": 4,
+      "body": "Count | Plies | Length shrinkage % | Width shrinkage % | Collar GSM | Knit-ability\n20 Ne | 2 | -3.5 | -6.5 | 279 | loop-like hole\n20 Ne | 3 | -2.5 | -3 | 360 | no visual defect\n20 Ne | 4 | -1.5 | -2.5 | 425 | hole\n24 Ne | 3 | -3.7 | -6.4 | 343 | loop-like hole\n24 Ne | 4 | -2.4 | -2.9 | 399 | no visual defect\n24 Ne | 5 | -1.4 | -2.4 | 432 | pin hole\n28 Ne | 3 | -3.8 | -6.4 | 325 | loop-like hole\n28 Ne | 4 | -2.5 | -2.9 | 380 | no visual defect\n28 Ne | 5 | -1.2 | -2.4 | 412 | hole\n34 Ne | 4 | -3.4 | -6.4 | 360 | loop-like hole\n34 Ne | 5 | -5.3 | -2.9 | 385 | no visual defect\n34 Ne | 6 | -1.4 | -2.4 | 500 | pin hole\n40 Ne | 5 | -4.4 | -7.1 | 378 | loop-like hole\n40 Ne | 6 | -2.5 | -4 | 488 | no visual defect\n40 Ne | 7 | -1.5 | -2.4 | 508 | pin hole\n\nThe 34 Ne 5-ply length shrinkage of -5.3 stands out against its neighbours (-3.4 and -1.4) and is probably a misprint for -2.4."
+    },
+    {
+      "title": "The plies, stitch lengths and gauge that worked",
+      "kind": "data",
+      "topics": ["yarn ply", "stitch length", "count", "12 gauge", "best combination"],
+      "page_start": 4, "page_end": 5,
+      "body": "Too few plies leave a loop-like hole and lower GSM; one ply more than the best gives pin holes or holes. Best combinations on the 12-gauge V-bed: 20 Ne, 3 ply, 4.7 mm; 24 Ne, 4 ply, 4.75 mm; 28 Ne, 4 ply, 4.76 mm; 34 Ne, 5 ply, 4.68 mm; 40 Ne, 6 ply, 4.6 mm. Plies rise as the yarn gets finer (3, 4, 4, 5, 6) so that the bundle stays about the same thickness; the stitch length stays in a narrow band of 4.6 to 4.76 mm. The authors fit a curve to the stitch lengths, y = -0.0236 x^2 + 0.2127 x + 4.2749 with R-squared 0.9991 (see the caution lesson: that fit does not hold)."
+    },
+    {
+      "title": "Needles for a collar size: N = 5X + 72",
+      "kind": "data",
+      "topics": ["needle count", "collar size", "linear rule", "needle formula", "flat machine"],
+      "page_start": 3, "page_end": 5,
+      "body": "Table 2 lists total needles used against collar size: 36 cm 252 needles, 37 cm 257, 38 cm 262 ... 50 cm 322, in steps of 5 needles per cm. This is exactly the straight line N = 5X + 72, with X the required collar size in centimetres (R-squared 1, and it reproduces every row: 5 x 36 + 72 = 252, 5 x 50 + 72 = 322). Reading it: 5 needles per cm is close to the 4.72 needles per cm of a 12-gauge bed (12 / 2.54), and the 72-needle constant would be the extra needles of the collar's ends and edges; the paper itself does not explain either number, so that reading is an inference."
+    },
+    {
+      "title": "Sizes and shrinkage of the finished collars",
+      "kind": "data",
+      "topics": ["shrinkage", "finished size", "collar length", "dimensional change"],
+      "page_start": 4, "page_end": 5,
+      "body": "Five developed samples, each measured three times. Shrinkage of most samples was between 2.5 and 3.5 percent, irregular between length and width (width higher in S01, S03 and S05, length higher in the others). Required against finished collar size (cm): 36 to 35.4, 40 to 39.3, 44 to 43.3, 48 to 46.9, 50 to 49.3. The finished size is 0.6 to 0.7 cm under the required size in four samples and 1.1 cm under in one (S04), inside the 0.4 to 1.2 cm allowance."
+    },
+    {
+      "title": "Test methods and process conditions",
+      "kind": "method",
+      "topics": ["ASTM D3774", "ISO 5077", "ISO 3759", "ISO 6330", "EN 14970", "stitch length measurement", "GSM cutter", "pre-treatment", "reactive dyeing"],
+      "page_start": 2, "page_end": 3,
+      "body": "Conditioning: 21 C, 62 percent relative humidity, samples rested 2 hours. Collar length and width: ASTM D3774, laid out without stress, length parallel to the selvages, width across. Shrinkage: ISO 5077 with ISO 139 conditioning, ISO 3759 marking and ISO 6330 washing and drying. GSM: a 100 cm2 GSM cutter, weight x 100, repeated; the paper cites D3773. Stitch length: EN 14970 (count 100 wales, unroll the yarn, measure its length, divide by 100 wales). Pre-treatment: material-to-liquor 1:8, scouring auxiliaries at 40 C, up to 98 C, 2.00 g/L caustic and 3.50 g/L hydrogen peroxide for 40 minutes, then 60 C with acetic acid, enzyme and peroxide killer. Reactive dyeing at up to 60 C, pH about 8, 1:8. Collar finishing: hydro-extractor, then an open dryer at 130 C and 50 m per minute. The body fabric is slit, dried open and compacted."
+    },
+    {
+      "title": "How far the paper can be trusted",
+      "kind": "caution",
+      "topics": ["limitations", "inconsistency", "R-squared", "sample size", "reporting"],
+      "page_start": 1, "page_end": 6,
+      "body": "Useful rules of thumb, careless reporting. Checked here: (1) the quadratic stitch-length curve is claimed at R-squared 0.9991, but with x taken as the number of plies, the five printed stitch lengths (4.7, 4.75, 4.76, 4.68, 4.6) against it give R-squared of about 0.08, and the curve is off by 0.07 and 0.10 mm for the 34 and 40 Ne points; taking x as the sample order is worse. (2) The collar GSM for 40 Ne 6-ply is 488 in Table 1 but 440 in the GSM figure; the text says GSM 'increased to 395 for 20 Ne 3 ply' where it means 24 Ne 4-ply, and the cubic GSM curve (R-squared 0.9792) overshoots at 6 plies. (3) The spirality formula is printed as (xt - x0) / x0 x 100 with 'xt = original dimension', which is a dimensional change, not spirality (the angle of wale lean). (4) '100 percent precision' is claimed while finished sizes differ from the required size by 0.6 to 1.1 cm. (5) One mill, one lot of carded yarn, one machine, three readings per sample. Direction is dependable; the fitted equations are not."
+    },
+    {
+      "title": "What this means for KnitAdvisor",
+      "kind": "engine",
+      "topics": ["tightness factor", "multi-ply yarn", "pitch to yarn ratio", "garment costing", "collar", "cuff"],
+      "page_start": 3, "page_end": 5,
+      "body": "1) Converted to total tex (plies x 590.5 / Ne) and stitch length in cm, the five recommended settings all have the same tightness factor, about 20: 20 Ne x3 = 88.6 tex, TF 20.0; 24 Ne x4 = 98.4 tex, 20.9; 28 Ne x4 = 84.4 tex, 19.3; 34 Ne x5 = 86.8 tex, 19.9; 40 Ne x6 = 88.6 tex, 20.5 (worked out here, not in the paper). So the rule behind the table is constant tightness with a roughly constant total tex of about 85 to 98. 2) The yarn bundle (about 0.33 to 0.35 mm across) against the 12-gauge pitch of 2.117 mm gives a pitch-to-yarn ratio of 6.0 to 6.5, inside the 5.5 to 6.9 band the factory records show for jersey, so the knitting plan's gauge-fit check agrees with this independent case. 3) Garment side: collar GSM is 1.5 to 2.5 times the body GSM, the finished collar is made about 1.0 cm under size, and body and collar share one yarn count. 4) Nothing here changes a circular-knit formula; N = 5X + 72 is specific to a 12-gauge flat bed."
+    }
+  ]
+}

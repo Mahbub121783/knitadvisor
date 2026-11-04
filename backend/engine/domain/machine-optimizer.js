@@ -9,8 +9,8 @@
  * Methodology (industry-grounded):
  *
  *  GAUGE  — fully deterministic from yarn count via cover-factor theory.
- *           NPI = √(K_cover / Tex) × 2.54   (K = 1650 single, 1400 double)
- *           ≡ NPI ≈ 4.25·√Ne (single) / 3.91·√Ne (double).
+ *           NPI = √(K_cover / Tex) × 2.54   (K = 1650 single, 770 double)
+ *           ≡ NPI ≈ 4.25·√Ne (single) / 2.90·√Ne (double).
  *           Source: Spencer "Knitting Technology" 3rd ed.; Munden cover factor.
  *           Then SNAP to nearest commercially-available gauge (machines only
  *           come in discrete gauges) and validate against the fabric's range.
@@ -65,7 +65,10 @@ const WPC_RELAX_FACTOR = {
 };
 
 // Cover-factor constants (consistent with formulas.js calcOptimumGaugeFromTex).
-const K_COVER = { single: 1650, double: 1400 };
+// double bed: count = G x G / 8.4 (a published rule that the factory's rib gauges follow:
+// 18G rib runs 30s-36s), i.e. NPI = 2.90 x sqrt(Ne), K = 770. The earlier 1400 gave G x G / 15.3
+// and called 18G suitable only for 21s.
+const K_COVER = { single: 1650, double: 770 };
 
 // ============================================================
 // HELPERS
@@ -127,7 +130,7 @@ function recommendOptimalGauge(count_ne, category, fabricDef, tex) {
     if (optimal_gauge > gr.max) { optimal_gauge = snapToNearest(gr.max, available); clamped = true; }
   }
 
-  const k_label = isDouble ? '4.64·√Ne (double bed)' : '4.25·√Ne (single bed)';
+  const k_label = `${(2.54 * Math.sqrt(k / 590.5)).toFixed(2)}·√Ne (${isDouble ? 'double' : 'single'} bed)`;
 
   return {
     ok: true,

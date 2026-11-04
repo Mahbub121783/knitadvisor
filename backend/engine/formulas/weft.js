@@ -22,13 +22,13 @@ const WeftCalculators = {
     return parseFloat(((stitch_density * loop_length_cm * tex) / 10).toFixed(2));
   },
   calcOptimumGaugeFromTex(tex, isDouble) {
-    const factor = isDouble ? 1400 : 1650;
+    const factor = isDouble ? 770 : 1650;
     const npc = Math.sqrt(factor / tex);
     const npi = npc * 2.54;
     return { npc: parseFloat(npc.toFixed(4)), npi: parseFloat(npi.toFixed(2)) };
   },
   calcOptimumTexFromGauge(gauge, isDouble) {
-    const factor = isDouble ? 1400 : 1650;
+    const factor = isDouble ? 770 : 1650;
     const multiplier = factor * 2.54 * 2.54;
     return parseFloat((multiplier / (gauge * gauge)).toFixed(4));
   }
