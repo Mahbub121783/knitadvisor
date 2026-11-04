@@ -320,8 +320,14 @@ function solve(ctx, ground) {
   const model = structureModel(ctx);
   const KS0 = blend(KP.calFor('ks', family, false), KP.calFor('ks', family, true), phi);
   const KW0 = blend(KP.calFor('kw', family, false), KP.calFor('kw', family, true), phi);
-  const KS = scaled(KS0, fibre.ks * model.ksF);
-  const KW = scaled(KW0, fibre.kw * model.kwF);
+  let KS = scaled(KS0, fibre.ks * model.ksF);
+  let KW = scaled(KW0, fibre.kw * model.kwF);
+  const modelKS = KS.med, modelKW = KW.med;
+  if (ctx.calib) {
+    const sp = Math.max(0.015, ctx.calib.spread);
+    KS = { ...KS, med: ctx.calib.ks, q1: ctx.calib.ks * (1 - sp), q3: ctx.calib.ks * (1 + sp), n: ctx.calib.n, basis: `${ctx.calib.n} trial roll${ctx.calib.n > 1 ? 's' : ''} measured at your mill` };
+    KW = { ...KW, med: ctx.calib.kw, q1: ctx.calib.kw * (1 - sp), q3: ctx.calib.kw * (1 + sp), n: ctx.calib.n, basis: `${ctx.calib.n} trial roll${ctx.calib.n > 1 ? 's' : ''} measured at your mill` };
+  }
   // a loop feed with no yarn named gets the anchor's loop yarn, and says so
   const loopYarn = (() => {
     const tex = ground.tex * ANCHOR_LOOP_TEX_RATIO;
@@ -440,11 +446,44 @@ function solve(ctx, ground) {
 
   return {
     ground, gauge, recGauge, fg, coverGauge, pitch, lref, slSource, slRange, gsm, gsmRange, target,
-    KS, KW, model, fibre, phi, A: at.A, dia, diaSource, needles, width, widthRange: [widthAt(dia, KW.q3), widthAt(dia, KW.q1)], workFrac,
+    KS, KW, modelKS, modelKW, model, fibre, phi, A: at.A, dia, diaSource, needles, width, widthRange: [widthAt(dia, KW.q3), widthAt(dia, KW.q1)], workFrac,
     feeders, rpm, eff, feeds, composition, kgh, wpc, cpc, tfGround, M, tW,
     gfit: gaugeFit(family, gauge, ground.tex, ground.fibre),
   };
 }
+
+
+// ── trial rolls: the mill's own measurements replace the carried-over constants ─
+// A roll knitted and finished (dyed, compacted) is measured for stitch length,
+// GSM and open width. Run through this same design, each gives the Ks and Kw
+// that reproduce it; the mean of the rolls (geometric) then stands in for the
+// family constant, with the rolls' own scatter as the likely range.
+function calibrate(ctx, ground, rolls) {
+  if (!Array.isArray(rolls) || !rolls.length) return null;
+  if (rolls.length > 12) throw new StudioError('At most 12 trial rolls.');
+  const per = rolls.map((r, n) => {
+    const need = (v, lo, hi, what) => {
+      const x = +v;
+      if (!(x >= lo && x <= hi)) throw new StudioError(`Trial roll ${n + 1}: ${what} must be between ${lo} and ${hi}.`);
+      return x;
+    };
+    const sl = need(r.sl_mm, 1, 10, 'stitch length (mm)'), gsm = need(r.gsm, 40, 800, 'finished GSM'), width = need(r.width_in, 15, 120, 'finished open width (in)');
+    const dia = need(r.dia, 10, 60, 'cylinder diameter (in)'), gauge = need(r.gauge, 5, 50, 'gauge');
+    const y = +r.ne > 0 ? readYarn({ ne: need(r.ne, 5, 150, 'count (Ne)'), fibre: ground.fibre }, null) : ground;
+    const probe = solve({ ...ctx, calib: null, input: { ...ctx.input, machine: { ...(ctx.input.machine || {}), sl_mm: sl, gauge, dia, feeders: null, rpm: null }, target: {} } }, y);
+    return {
+      roll: n + 1, ks: probe.KS.med * gsm / probe.gsm, kw: probe.KW.med * probe.width / width,
+      model_gsm: Math.round(probe.gsm), model_width_in: r1(probe.width), gsm, width_in: width,
+    };
+  });
+  const gm = (k) => Math.exp(mean(per.map((x) => Math.log(x[k]))));
+  const ks = gm('ks'), kw = gm('kw');
+  const cv = (k, m) => (per.length > 1 ? Math.sqrt(mean(per.map((x) => (x[k] / m - 1) ** 2)) * per.length / (per.length - 1)) : 0);
+  const spread = Math.max(cv('ks', ks), cv('kw', kw));
+  per.forEach((x) => { x.ks_off_pct = r1((x.ks / ks - 1) * 100); x.kw_off_pct = r1((x.kw / kw - 1) * 100); x.outlier = per.length > 2 && (Math.abs(x.ks / ks - 1) > 0.1 || Math.abs(x.kw / kw - 1) > 0.1); });
+  return { ks, kw, n: per.length, spread, per };
+}
+
 
 // ── checks the floor would otherwise find on the machine ───────────────────
 function checksFor(ctx, S, T) {
@@ -585,7 +624,13 @@ function analyse(input) {
     const nb = st.beds.D ? 2 : 1;
     const working = [st.beds.C, st.beds.D].filter(Boolean).reduce((t, g) => t + g[0].filter((x) => x !== '-').length, 0);
     const posNorm = (nb * st.width) / Math.max(1, working);
-    const ctx = { st, family, lycra, feedRows, input, gating, elastane, posNorm };
+    const ctx = { st, family, lycra, feedRows, input, gating, elastane, posNorm, calib: null };
+    const rolls = input.calibration && input.calibration.rolls;
+    if (Array.isArray(rolls) && rolls.length) {
+      const g0 = ground || readYarn({ ne: +rolls[0].ne, fibre: (input.yarn || {}).fibre }, null);
+      if (!g0) throw new StudioError('Trial roll 1: give the count (Ne) of the yarn you knitted.');
+      ctx.calib = calibrate(ctx, g0, rolls);
+    }
 
     // solver over counts when no ground yarn is given
     let solver = null, S;
@@ -628,7 +673,9 @@ function analyse(input) {
     const reasons = [...M0.notes];
     if (S.ground.fibre !== 'cotton') reasons.push(`fibre: ${S.fibre.basis}`);
     if (partPlated) reasons.push(S.KS.basis);
-    const confidence = isAnchor && !unmeasured && Math.abs(M0.kwF - 1) < 0.001 && S.ground.fibre === 'cotton'
+    const confidence = ctx.calib
+      ? { level: 'verified', why: `Calibrated on your ${ctx.calib.n} trial roll${ctx.calib.n > 1 ? 's' : ''}: Ks ${r1(ctx.calib.ks)} (the factory constants alone would give ${r1(S.modelKS)}), Kw ${r2(ctx.calib.kw)} (${r2(S.modelKW)}). Valid for this structure, fibre and plating, finished state.` }
+      : isAnchor && !unmeasured && Math.abs(M0.kwF - 1) < 0.001 && S.ground.fibre === 'cotton'
       ? { level: 'calibrated', why: `This is ${anchorDef.name} — the structure the family constants were measured on.` }
       : !unmeasured && M0.tau / TUCK_ANCHOR <= 1 && Math.abs(ratio - 1) <= 0.15
         ? { level: 'close', why: `A ${FAMILY[family].label.toLowerCase()} structure.${reasons.length ? ' ' + reasons.join('; ') + '.' : ''} The measured family constants carry over with these corrections.` }
@@ -698,6 +745,11 @@ function analyse(input) {
         wpi: r1(S.wpc * 2.54), cpi: r1(S.cpc * 2.54), wpc: r1(S.wpc), cpc: r1(S.cpc),
         width_open_in: r1(S.width), width_range_in: S.widthRange.map(r1), tube_in: r1(S.width / 2), target_width_in: S.tW,
         kw: r2(S.KW.med), kw_basis: S.KW.basis, ks: r1(S.KS.med), ks_basis: S.KS.basis,
+        calibration: ctx.calib ? {
+          n: ctx.calib.n, ks: r2(ctx.calib.ks), kw: r3(ctx.calib.kw), model_ks: r2(S.modelKS), model_kw: r3(S.modelKW),
+          ks_vs_model_pct: r1((ctx.calib.ks / S.modelKS - 1) * 100), kw_vs_model_pct: r1((ctx.calib.kw / S.modelKW - 1) * 100),
+          scatter_pct: r1(ctx.calib.spread * 100), rolls: ctx.calib.per.map((x) => ({ ...x, ks: r2(x.ks), kw: r3(x.kw) })),
+        } : null,
         structure_model: { tuck_share: r2(S.model.tau), miss_share: r2(S.model.mu), kw_factor: r2(S.model.kwF), ks_factor: r2(S.model.ksF), fibre_ks: r2(S.fibre.ks), fibre_kw: r2(S.fibre.kw), plating: r2(S.phi), notes: S.model.notes },
         state: 'finished (dyed and compacted), as the factory records measure it',
         formulas: {

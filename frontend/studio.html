@@ -71,6 +71,10 @@
     td.feedcell { white-space: nowrap; padding-right: 6px; }
     td.feedcell select, td.feedcell input { font: 11px var(--head); padding: 4px 4px; border: 1px solid var(--line2); border-radius: 4px; background: var(--bg); color: var(--t1); }
     td.feedcell input { width: 58px; }
+    .st-roll { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px dashed var(--line2); }
+    .st-roll input { width: 100%; box-sizing: border-box; padding: 5px 6px; border: 1px solid var(--line2); border-radius: 4px; font: 12px var(--head); background: var(--bg); color: var(--t1); }
+    .st-roll label { font-size: 10px; color: var(--t3); }
+    .st-roll button { grid-column: 1 / -1; justify-self: end; border: 0; background: none; color: var(--t3); cursor: pointer; font-size: 12px; }
     .st-legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 11px; color: var(--t2); margin-top: 6px; }
     .st-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 4px; }
 
@@ -81,6 +85,7 @@
     .st-badge.bad { background: rgba(178,59,59,.1); color: var(--danger); }
     .st-badge.calibrated { background: rgba(30,122,84,.1); color: var(--good); }
     .st-badge.close { background: rgba(24,87,196,.08); color: var(--accent); }
+    .st-badge.verified { background: rgba(30,122,84,.16); color: var(--good); box-shadow: 0 0 0 1px var(--good) inset; }
     .st-badge.estimate { background: rgba(154,91,0,.1); color: var(--warn); }
     .st-checks { list-style: none; margin: 0; padding: 0; font-size: 12px; }
     .st-checks li { padding: 6px 8px 6px 26px; border-radius: 6px; margin-bottom: 4px; position: relative; line-height: 1.45; }
@@ -203,8 +208,18 @@
           </details>
         </div>
 
+        <div class="st-card">
+          <div class="st-step"><b>5</b> Trial rolls <span style="text-transform:none;font-weight:400;letter-spacing:0">(your mill's own cloth)</span></div>
+          <p class="st-hint" style="margin-top:0">Knit a roll of this design, finish it (dyed, compacted) and measure it. The studio then uses your mill's numbers instead of the factory-record constants, for this design only. One roll corrects the level; two at different stitch lengths also show the scatter.</p>
+          <div id="st-rolls"></div>
+          <div class="st-tools" style="margin:6px 0 0">
+            <button type="button" class="st-btn" id="st-addroll">+ Trial roll</button>
+            <label class="st-check" style="margin:0"><input type="checkbox" id="st-userolls" checked> Use my rolls</label>
+          </div>
+        </div>
+
         <div class="st-card st-noprint">
-          <div class="st-step"><b>5</b> Save</div>
+          <div class="st-step"><b>6</b> Save</div>
           <div class="st-row one"><div class="st-f"><label for="st-name">Design name</label><input id="st-name" type="text" maxlength="60" placeholder="e.g. Polo pique 2-tuck"></div></div>
           <div class="st-tools" style="margin:0">
             <button type="button" class="st-btn" id="st-save">Save in this browser</button>
@@ -218,7 +233,7 @@
 
       <section>
         <div class="st-card">
-          <div class="st-step"><b>6</b> Design the needle programme</div>
+          <div class="st-step"><b>7</b> Design the needle programme</div>
           <div class="st-tools" id="st-edtools">
             <div class="st-pal" id="st-pal" role="group" aria-label="Brush">
               <button type="button" data-s="K" class="on">K<small>knit</small></button>
@@ -303,6 +318,6 @@
 </div>
 
 <script src="assets/js/api.js"></script>
-<script src="assets/js/studio.js?v=20261105a"></script>
+<script src="assets/js/studio.js?v=20261105b"></script>
 </body>
 </html>

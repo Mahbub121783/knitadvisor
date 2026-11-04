@@ -17,6 +17,7 @@
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
   };
+  var r1 = function (v) { return Math.round(v * 10) / 10; };
   var SRC = { m: 'measured', c: 'calculated', e: 'estimated' };
   var src = function (k) { return '<span class="src ' + k + '">' + SRC[k] + '</span>'; };
   var ROLE_LABEL = { ground: 'ground', face: 'face', binder: 'binder', loop: 'loop' };
@@ -31,6 +32,7 @@
     templateId: 'single_jersey',
   };
   var undo = [];
+  var rolls = [];            // trial rolls for the drawn design
   var templates = [];
   var last = null;            // last engine answer
   var reqSeq = 0;
@@ -232,9 +234,52 @@
     if (!S.D) $('st-anibed').value = 'C';
   }
 
+  // ── trial rolls ──────────────────────────────────────────────────────────
+  var ROLLS = 'ka_studio_rolls';
+  function signature() {
+    return JSON.stringify([S.bed, S.C, S.D, S.feeds.map(function (f) { return [f.role, f.ne || '', f.sl_ratio || '']; }),
+      $('st-fibre').value, $('st-lycra').checked ? [$('st-lyd').value, $('st-lyevery').value] : 0]);
+  }
+  function readRolls() { try { return (JSON.parse(localStorage.getItem(ROLLS) || '{}')[signature()]) || []; } catch (_) { return []; } }
+  function writeRolls() {
+    try { var all = JSON.parse(localStorage.getItem(ROLLS) || '{}'); all[signature()] = rolls; localStorage.setItem(ROLLS, JSON.stringify(all)); } catch (_) {}
+  }
+  var ROLL_F = [['sl_mm', 'ℓ mm', '0.01'], ['ne', 'Ne', '1'], ['gsm', 'GSM', '1'], ['width_in', 'Width in', '0.1'], ['dia', 'Dia in', '1'], ['gauge', 'GG', '1']];
+  function renderRolls() {
+    $('st-rolls').innerHTML = rolls.map(function (r, i) {
+      return '<div class="st-roll" data-i="' + i + '">' + ROLL_F.map(function (f) {
+        return '<div><label>' + f[1] + '</label><input type="number" step="' + f[2] + '" data-k="' + f[0] + '" value="' + esc(r[f[0]] == null ? '' : r[f[0]]) + '"></div>';
+      }).join('').replace(/(<div><label>GG<\/label>.*?<\/div>)$/, '$1') + '<button type="button" data-del="' + i + '" aria-label="Remove roll">remove roll</button></div>';
+    }).join('') || '<p class="st-hint">No rolls yet.</p>';
+  }
+  function completeRolls() {
+    return rolls.filter(function (r) { return r.sl_mm > 0 && r.gsm > 0 && r.width_in > 0 && r.dia > 0 && r.gauge > 0; })
+      .map(function (r) { return { sl_mm: +r.sl_mm, ne: +r.ne > 0 ? +r.ne : null, gsm: +r.gsm, width_in: +r.width_in, dia: +r.dia, gauge: +r.gauge }; });
+  }
+  function bindRolls() {
+    $('st-addroll').addEventListener('click', function () {
+      var last0 = rolls[rolls.length - 1] || {};
+      rolls.push({ sl_mm: '', ne: num('st-ne') || last0.ne || '', gsm: '', width_in: '', dia: num('st-dia') || last0.dia || '', gauge: num('st-gauge') || last0.gauge || '' });
+      renderRolls(); writeRolls();
+    });
+    $('st-rolls').addEventListener('input', function (e) {
+      var row = e.target.closest('.st-roll'); if (!row) return;
+      rolls[+row.getAttribute('data-i')][e.target.getAttribute('data-k')] = e.target.value;
+      writeRolls(); schedule();
+    });
+    $('st-rolls').addEventListener('click', function (e) {
+      var d = e.target.getAttribute('data-del'); if (d == null) return;
+      rolls.splice(+d, 1); renderRolls(); writeRolls(); schedule();
+    });
+    $('st-userolls').addEventListener('change', schedule);
+  }
+
   // ── engine call ──────────────────────────────────────────────────────────
   var timer = null, timer3d = null;
+  var lastSig = null;
   function schedule() {
+    var sg = signature();
+    if (sg !== lastSig) { lastSig = sg; rolls = readRolls(); renderRolls(); }
     clearTimeout(timer);
     timer = setTimeout(analyse, 280);
   }
@@ -255,6 +300,7 @@
       yarn: num('st-ne') ? { ne: num('st-ne'), fibre: $('st-fibre').value } : { fibre: $('st-fibre').value },
       elastane: $('st-lycra').checked ? { denier: +$('st-lyd').value, draft: num('st-lydraft') || 2.6, every: $('st-lyevery').value } : null,
       target: { gsm: num('st-gsm'), width_in: num('st-width') },
+      calibration: $('st-userolls').checked && completeRolls().length ? { rolls: completeRolls() } : null,
       machine: {
         gauge: num('st-gauge'), dia: num('st-dia'), feeders: num('st-feeders'), rpm: num('st-rpm'),
         sl_mm: num('st-sl'), efficiency: num('st-eff'), tracks_cyl: +$('st-tc').value, tracks_dial: +$('st-td').value,
@@ -288,7 +334,7 @@
     $('st-status').innerHTML =
       '<span class="st-badge ' + (r.ok_to_knit ? 'ok' : 'bad') + '">' + (r.ok_to_knit ? 'Knittable' : errs + ' error' + (errs > 1 ? 's' : '') + ' — will not knit as drawn') + '</span>' +
       (warns ? '<span class="st-badge estimate">' + warns + ' warning' + (warns > 1 ? 's' : '') + '</span>' : '') +
-      '<span class="st-badge ' + conf.level + '">' + ({ calibrated: 'Calibrated on factory records', close: 'Close to a measured family', estimate: 'New structure — estimate' })[conf.level] + '</span>' +
+      '<span class="st-badge ' + conf.level + '">' + ({ verified: 'Verified on your trial rolls', calibrated: 'Calibrated on factory records', close: 'Close to a measured family', estimate: 'New structure — estimate' })[conf.level] + '</span>' +
       '<span style="font-size:12px;color:var(--t2)">' + esc(r.structure.family_label) +
       (r.structure.match ? ' · same as <b>' + esc(r.structure.match.name) + '</b>' : '') + '</span>' +
       '<div style="flex-basis:100%;font-size:12px;color:var(--t2)">' + esc(conf.why) + '</div>' +
@@ -311,7 +357,7 @@
 
   function renderResults() {
     var r = last, f = r.fabric, y = r.yarn;
-    var est = r.structure.confidence.level === 'calibrated' ? 'm' : 'e';
+    var est = ({ calibrated: 'm', verified: 'm' })[r.structure.confidence.level] || 'e';
     var html = '<div class="st-kpis">' +
       kpi('Ground yarn', esc(y.ground.count), esc(y.ground.fibre) + ' · ' + y.ground.tex + ' tex' + (y.ground.source === 'solved' ? ' · solved' : ''), r.solver ? 'm' : null) +
       kpi('Stitch length', f.sl_mm + ' mm', esc(f.sl_source) + (f.sl_range_mm ? ' · range ' + f.sl_range_mm.join('–') : ''), est) +
@@ -320,6 +366,13 @@
       kpi('Tightness factor', f.tf, f.tf_window ? 'factory middle ' + f.tf_window.q1 + '–' + f.tf_window.q3 : '', 'c') +
       kpi('Wales × courses', f.wpi + ' × ' + f.cpi, 'per inch · ' + f.wpc + ' × ' + f.cpc + ' per cm', est) +
       '</div>';
+    if (f.calibration) {
+      var cb = f.calibration;
+      html += '<div class="st-sub">Your trial rolls ' + src('m') + '</div><p class="st-p">Ks ' + cb.ks + ' against ' + cb.model_ks + ' from the factory constants (' + (cb.ks_vs_model_pct > 0 ? '+' : '') + cb.ks_vs_model_pct + '%), Kw ' + cb.kw + ' against ' + cb.model_kw + ' (' + (cb.kw_vs_model_pct > 0 ? '+' : '') + cb.kw_vs_model_pct + '%). Scatter between rolls ' + cb.scatter_pct + '%.</p>' +
+        '<div class="st-scroll"><table class="st-t"><tr><th>Roll</th><th>Measured GSM</th><th>Model GSM</th><th>Measured width</th><th>Model width</th><th>Ks vs mean</th><th>Kw vs mean</th></tr>' +
+        cb.rolls.map(function (x) { return '<tr' + (x.outlier ? ' style="background:rgba(154,91,0,.1)"' : '') + '><td>' + x.roll + (x.outlier ? ' ⚠' : '') + '</td><td>' + Math.round(x.gsm) + '</td><td>' + x.model_gsm + '</td><td>' + r1(x.width_in) + '"</td><td>' + x.model_width_in + '"</td><td>' + x.ks_off_pct + '%</td><td>' + x.kw_off_pct + '%</td></tr>'; }).join('') + '</table></div>' +
+        (cb.rolls.some(function (x) { return x.outlier; }) ? '<p class="st-p">A flagged roll is more than 10% from the others: re-measure it, or it may be a different yarn lot or machine setting.</p>' : '');
+    }
     html += '<p class="st-p">State: ' + esc(f.state) + '. Kw ' + f.kw + ' (' + esc(f.kw_basis) + '), Ks ' + f.ks + ' (' + esc(f.ks_basis) + ').</p>';
     html += '<p class="st-p" style="font-family:var(--mono);font-size:11px">' + esc(f.formulas.gsm) + '<br>' + esc(f.formulas.width) + '</p>';
     if (r.solver) {
@@ -695,11 +748,13 @@
 
   // ── wiring ───────────────────────────────────────────────────────────────
   function renderAll() {
+    rolls = readRolls(); renderRolls();
     renderBed(); renderEditor(); renderNotation(); schedule();
   }
 
   function init() {
     bindEditor();
+    bindRolls();
     renderNeedleTypes();
     $('st-bed').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) setBed(b.getAttribute('data-bed')); });
     $('st-template').addEventListener('change', function () { applyTemplate(this.value); });

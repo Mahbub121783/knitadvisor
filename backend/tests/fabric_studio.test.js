@@ -145,4 +145,28 @@ assert.strictEqual(tpl('ponte_di_roma').gating, 'interlock');
   assert(tf.checks.some((c) => /knitting feeders/.test(c.text)));
 }
 
+// 12. trial rolls replace the carried-over constants and reproduce the mill's own cloth
+{
+  const grid = { C: ['KT', 'KK', 'TK', 'KK'] };
+  const base = { grid, yarn: { ne: 24 }, machine: { gauge: 24, dia: 30, sl_mm: 2.6 } };
+  const m = S.analyse(base);
+  const rolls = [2.6, 2.75].map((sl) => ({ sl_mm: sl, gsm: m.fabric.gsm * 1.08 * 2.6 / sl, width_in: m.fabric.width_open_in * 0.97 * sl / 2.6, dia: 30, gauge: 24 }));
+  const c = S.analyse({ ...base, calibration: { rolls } });
+  assert.strictEqual(c.structure.confidence.level, 'verified');
+  assert(Math.abs(c.fabric.gsm / (m.fabric.gsm * 1.08) - 1) < 0.01, `gsm ${c.fabric.gsm}`);
+  assert(Math.abs(c.fabric.width_open_in / (m.fabric.width_open_in * 0.97) - 1) < 0.01, 'width');
+  assert(Math.abs(c.fabric.calibration.ks_vs_model_pct - 8) < 0.6, 'the model was 8% light');
+  // the stitch length solved for a target now follows the mill's own cloth
+  const t = S.analyse({ ...base, machine: { gauge: 24, dia: 30 }, target: { gsm: 230 }, calibration: { rolls } });
+  const u = S.analyse({ ...base, machine: { gauge: 24, dia: 30 }, target: { gsm: 230 } });
+  assert(t.fabric.sl_mm > u.fabric.sl_mm, 'a mill whose cloth is heavier per loop reaches the same weight with a longer loop');
+  // scatter widens the likely range; an outlier among three is flagged
+  const noisy = S.analyse({ ...base, calibration: { rolls: [rolls[0], rolls[1], { ...rolls[0], gsm: rolls[0].gsm * 1.2 }] } });
+  assert(noisy.fabric.calibration.rolls.some((r) => r.outlier), 'outlier flagged');
+  assert(noisy.fabric.gsm_range[1] - noisy.fabric.gsm_range[0] > c.fabric.gsm_range[1] - c.fabric.gsm_range[0]);
+  // nonsense is refused with the field named
+  const bad = S.analyse({ ...base, calibration: { rolls: [{ ...rolls[0], gsm: 5 }] } });
+  assert(!bad.success && /finished GSM/.test(bad.error));
+}
+
 console.log('Fabric studio tests passed');
