@@ -1,0 +1,86 @@
+{
+  "document": {
+    "doc_key": "anon-knitting-basics-lecture",
+    "title": "Knitting: basic terms, elements and loop formation (lecture notes)",
+    "authors": null,
+    "year": null,
+    "doc_type": "lecture",
+    "file_name": "ilide.info-knitting-1-pr_3df6a63a286c392576472ac79d4c7a7e.pdf",
+    "pages": 7,
+    "summary": "Seven pages of slide-style notes: what a buyer specifies, which yarn properties knitting needs, weft versus warp knitting, the basic terms (face and back loop, gauge, single and double jersey), the three knitting elements (needle, cam, sinker), three needle types, and the step-by-step loop formation of the latch and compound needles and the sinker's action. Most of the explanation sits in figures that carry no text.",
+    "relevance": "supporting",
+    "relevance_note": "Definitions and mechanism, no numbers. Useful as the engine's glossary and for explaining a result to a student; it cannot calibrate anything. The figures were not read (they are images), so the text here is the written part only."
+  },
+  "lessons": [
+    {
+      "title": "What a buyer specifies",
+      "kind": "concept",
+      "topics": ["buyer specification", "fabric dia", "GSM", "yarn count", "colour", "design"],
+      "page_start": 1, "page_end": 1,
+      "body": "Knitting is forming fabric by intermeshing loops of yarn. The points a buyer fixes are: the diameter (width) of the fabric, its design, its GSM, the yarn count, the type of yarn, and the colour. These are exactly the inputs the calculator asks for, with the rest (gauge, stitch length, machine settings) left to the knitter to work out."
+    },
+    {
+      "title": "Yarn properties that matter for knitting",
+      "kind": "concept",
+      "topics": ["yarn quality", "work of rupture", "evenness", "elongation", "resilience", "tenacity", "loop strength", "friction", "fatigue"],
+      "page_start": 1, "page_end": 1,
+      "body": "A yarn for knitting should have: a high work of rupture (it must absorb energy as the loop is drawn); proper evenness; breaking elongation above 5 (the unit is not printed, presumably percent); good resiliency; reasonable tenacity and loop strength; smooth, low-friction surface; and resistance to fatigue from repeated stress and strain. Loop strength matters because a loop bends sharply over the needle and the sinker; low friction matters because the yarn runs through guides, tensioners and the needle hook at speed."
+    },
+    {
+      "title": "Weft and warp knitting",
+      "kind": "concept",
+      "topics": ["weft knitting", "warp knitting", "loop direction"],
+      "page_start": 2, "page_end": 2,
+      "body": "Two forms: weft knitting, where the loops are formed in a horizontal way, and warp knitting, where they are formed in a vertical way. (A simplification: in weft knitting one yarn runs across the fabric width and each course is made from it; in warp knitting a set of yarns runs lengthways, one per wale, and the guides lap them across the needles.) The engine treats the two separately: circular weft structures by stitch length and gauge, warp knits by course length and lapping."
+    },
+    {
+      "title": "Basic terms: face loop, back loop, gauge, single and double jersey",
+      "kind": "concept",
+      "topics": ["face loop", "back loop", "weft purl", "gauge", "single jersey", "double jersey", "terms"],
+      "page_start": 3, "page_end": 3,
+      "body": "Face loop: the new loop passes from the back to the face side of the old loop. Back loop (also called a weft purl loop): the new loop passes from the face to the back side of the old loop. Gauge: the number of needles per inch of the machine. Single jersey: weft-knitted fabric made by one set of needles. Double jersey: fabric made by two sets of needles in two needle beds (cylinder and dial)."
+    },
+    {
+      "title": "The three knitting elements and the three needle types",
+      "kind": "concept",
+      "topics": ["needle", "cam", "sinker", "latch needle", "spring bearded needle", "compound needle"],
+      "page_start": 3, "page_end": 5,
+      "body": "The three basic knitting elements are the needle, the cam and the sinker. Needles are the main stitch-forming element. Latch needle: a hook at the top with a latch that swings, sliding in individual tricks of the cylinder. Spring bearded needle: a hook curved downwards that needs a presser to close it, rarely used now. Compound needle: the most modern, a hollow steel tube with a separate hook-closing element inside; yarn strain is minimum and productivity is high."
+    },
+    {
+      "title": "How a latch needle forms a loop",
+      "kind": "method",
+      "topics": ["latch needle", "loop formation", "clearing", "feeding", "knock-over"],
+      "page_start": 5, "page_end": 5,
+      "body": "Run-in position: the old loop rests on the open latch. Clearing: as the needle moves up, the held loop slips off the latch onto the stem. Feeding: the needle moves down and the hook catches a new piece of yarn. Closing: as the needle continues down, the held loop pushes the latch shut. Knock-over and loop pulling: the old loop is cast off over the closed latch while the new loop is drawn through it, forming a knit loop. The needle then returns to the run-in position and the cycle repeats."
+    },
+    {
+      "title": "How a compound needle forms a loop",
+      "kind": "method",
+      "topics": ["compound needle", "loop formation", "tongue", "hook"],
+      "page_start": 6, "page_end": 6,
+      "body": "The held loop sits on the needle in the run-in position. The hook and tongue elements move up together so the hook can catch new yarn (feeding). Both then descend, at different speeds, so the tongue closes the hook. Knock-over and loop pulling follow and a knit loop is formed. Hook and tongue rise again at different speeds and the needle returns to run-in. Because the hook is closed by the tongue and not by the loop, the yarn is under less strain than with a latch needle."
+    },
+    {
+      "title": "The sinker, cylinder, dial and cam",
+      "kind": "concept",
+      "topics": ["sinker", "cylinder", "dial", "cam", "holding down", "loop pulling"],
+      "page_start": 6, "page_end": 7,
+      "body": "Sinker: the second primary element, a thin metal plate moving to and fro at right angles between adjacent needles; it forms the loop and holds the fabric down. Its action: (1) the held loop sits in the sinker throat as the sinker moves forward while the needle rises to clear; (2) the sinker stays forward while the needle reaches clearing; (3) the needle catches yarn and the sinker moves back; (4) loop pulling; (5) before the needle rises again the sinker moves forward, pushes the fabric a little and holds the old loop. Cylinder: a steel circular bed with tricks on its outside surface in which needles are mounted. Dial: the upper needle bed of double-knit machines, with needles mounted horizontally and moved by dial cams. Cam: hardened steel with a track for the needle butts; the simplest design is shown as a figure."
+    },
+    {
+      "title": "How far the notes can be trusted",
+      "kind": "caution",
+      "topics": ["limitations", "lecture notes", "figures", "simplification"],
+      "page_start": 1, "page_end": 7,
+      "body": "Reliable as a glossary, thin as a reference. No author, date or source. The text is a skeleton of the slides: loop-formation steps, the cam design and the sinker positions are drawn in figures that were not read here. It gives no numbers except a bare 'breaking elongation more than 5' with no unit. The weft/warp description is a classroom simplification."
+    },
+    {
+      "title": "What this means for KnitAdvisor",
+      "kind": "engine",
+      "topics": ["glossary", "academy", "knowledge assistant", "yarn engine"],
+      "page_start": 1, "page_end": 7,
+      "body": "Nothing to calibrate. Use: (1) the knitting glossary (face and back loop, single and double jersey, cylinder, dial, sinker, cam) for the academy and the knowledge assistant; (2) its list of yarn properties for knitting (work of rupture, evenness, elongation, resilience, loop strength, low friction, fatigue resistance) as a checklist against what the yarn engine reports (it covers strength, evenness, hairiness and torque, but not loop strength or fatigue); (3) the buyer's list as a reminder that GSM, dia, count, yarn type and colour are the five inputs the user brings."
+    }
+  ]
+}

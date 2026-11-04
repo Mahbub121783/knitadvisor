@@ -55,6 +55,27 @@ function gate(docs) {
     const want = { 'silvered nylon': [19.60, 124.35, 5.7], 'PET/cotton/viscose': [14.70, 124.36, 5.0], cotton: [19.70, 166.0, 7.7], 'acrylic/cotton': [16.40, 142.30, 6.0], 'polyester/cotton': [14.58, 137.0, 5.5] };
     for (const [k, [tex, tw, v]] of Object.entries(want)) if (Math.abs(ae(tex, tw) - v) > 0.06) errs.push(`he-2025: twist multiplier for ${k} should be ${ae(tex, tw).toFixed(2)}, text says ${v}`);
   }
+  // Nayen: facts that must survive, and the worked examples recomputed
+  const ny = docs.find((d) => d.document.doc_key === 'nayen-knitting-calculations');
+  if (ny) {
+    const all = ny.lessons.map((l) => l.body).join(' ');
+    for (const f of ['G x G / 18', 'G x G / 8.4', '26.55', '15.74', '21.55', '334.9', '73.64', '45.3697', '0.836']) if (!all.includes(f)) errs.push(`nayen: lessons are missing "${f}"`);
+    const kg = (nd, feeders, sl, rpm, ne, eff) => (nd * feeders * sl * rpm * 60 / 1000 * 1.0936 / (840 * ne) * 0.4536 * eff);
+    if (Math.abs(kg(2260, 90, 4, 26, 24, 0.85) - 26.55) > 0.05) errs.push('nayen: example 07 does not recompute to 26.55');
+    const fil = 2286 * 120 * 4.5 * 30 * 60 / 1000 * 75 / 9000 / 1000 * 0.85;
+    if (Math.abs(fil - 15.74) > 0.02) errs.push('nayen: example 08 does not recompute to 15.74');
+    const fleece = kg(1696, 60, 4.5, 28, 26, 0.85) + kg(1696, 30, 2.5, 28, 16, 0.85);
+    if (Math.abs(fleece - 21.55) > 0.1) errs.push(`nayen: example 09 recomputes to ${fleece.toFixed(2)}, not 21.55`);
+    if (Math.abs(280 / 0.836 - 334.9) > 0.1) errs.push('nayen: 10 OSY should be 334.9 GSM');
+    if (Math.abs(9000 * 4500 / 550000 - 73.64) > 0.01) errs.push('nayen: denier example should be 73.64');
+    // the double-bed rule the engine disagrees with: G x G / 15.3 for 3.91 x sqrt(Ne)
+    if (Math.abs(1 / (3.91 * 3.91) - 1 / 15.29) > 0.001) errs.push('nayen: 3.91 x sqrt(Ne) should be G x G / 15.3');
+  }
+  const lec = docs.find((d) => d.document.doc_key === 'anon-knitting-basics-lecture');
+  if (lec) {
+    const all = lec.lessons.map((l) => l.body).join(' ');
+    for (const f of ['latch needle', 'compound needle', 'sinker', 'weft purl', 'work of rupture']) if (!all.toLowerCase().includes(f)) errs.push(`lecture: lessons are missing "${f}"`);
+  }
   return errs;
 }
 

@@ -1,0 +1,100 @@
+{
+  "document": {
+    "doc_key": "nayen-knitting-calculations",
+    "title": "Knitting Calculations (textbook chapter)",
+    "authors": "Engr. Zulker Nayen",
+    "year": null,
+    "doc_type": "textbook",
+    "file_name": "ilide.info-knitting-calculations-pr_f7e80fb155697c699b6dd266f6f64211.pdf",
+    "pages": 11,
+    "summary": "A working chapter on the arithmetic of a knitting floor: which yarn count suits which machine gauge, the definitions of gauge and pitch, count/length/weight relations, how to work out a circular machine's hourly output (including a fleece with two yarns), GSM and OSY conversion, fabric weight from length and width, and fibre percentage in a multi-yarn fabric. Every example was recalculated for this store.",
+    "relevance": "core",
+    "relevance_note": "Directly about the engine's own formulas. The production and conversion arithmetic matches the engine (checked below). It gives two things the engine can use: a gauge-to-count rule for double-bed machines that differs from the engine's cover-factor figure, and a clean method for fabrics knitted with two yarns. It cannot calibrate width, stitch length or GSM: its examples are arithmetic exercises, with a stitch length (4 mm at Ne 24 on 24G) far looser than real practice."
+  },
+  "lessons": [
+    {
+      "title": "Which yarn count suits which gauge",
+      "kind": "concept",
+      "topics": ["gauge", "yarn count", "needle hook", "suitable count", "machine selection"],
+      "page_start": 1, "page_end": 1,
+      "body": "The needle hook and the yarn must balance. A yarn thicker than the hook can take leaves holes; a yarn thinner than the hook gives a net-like, open fabric. Thumb rule: use a machine whose gauge is close to the English count, so a 20-gauge machine suits 20s. The rule has limits: on 28 gauge the suitable range is 26s to 30s, and for very fine counts it fails because machines top out at 32 gauge; fine yarn is then used doubled (60s two-fold is about 30s net and suits a 30-gauge machine). Formulas offered: for a single-knit machine, suitable count = G x G / 18; for a double-knit machine, suitable count = G x G / 8.4, where G is the machine gauge. Manufacturers also give count ranges, and a mill's own past records are the best guide; the chapter's reference table of grammage and finished width was 'under construction' and is not in the text. A trial run decides, because machine make and type also matter."
+    },
+    {
+      "title": "Gauge and pitch: how they are defined",
+      "kind": "concept",
+      "topics": ["gauge", "pitch", "DIN 60917", "DIN 62125", "needles per inch"],
+      "page_start": 1, "page_end": 2,
+      "body": "Gauge is the number of needles in one unit length of the needle bed, flat or circular; on a double-knit circular machine it applies to both cylinder and dial. It is usually needles per inch: E = number of needles / 1 inch (25.4 mm). The German standard DIN 60917 uses the letter E for it. DIN 62125 prefers the word 'pitch' and says 'gauge' should be avoided in future: pitch t is the distance in millimetres between the centres of two neighbouring needles. The two are the same fact, pitch (mm) = 25.4 / gauge, which is what the engine's machine card already uses."
+    },
+    {
+      "title": "Gauge and count rules compared with the engine",
+      "kind": "engine",
+      "topics": ["cover factor", "optimal gauge", "double bed", "rib", "machine optimizer", "factory records"],
+      "page_start": 1, "page_end": 1,
+      "body": "Single bed: the book's G x G / 18 gives count = gauge squared / 18, the same as the engine's cover-factor rule NPI = 4.25 x sqrt(Ne) (which is count = gauge squared / 18.06). They agree. Double bed: the book says G x G / 8.4, while the engine's cover-factor rule for double bed (NPI = 3.91 x sqrt(Ne)) works out to G x G / 15.3. They disagree by almost a factor of two. The factory records point the book's way: rib on 18 gauge is knitted in about 20s to 40s, typically 30s to 36s, and 18 x 18 / 8.4 = 38.6, whereas the engine's rule would call 18 gauge suitable only for about 21s. The knitting plan takes its gauge from the factory records, so it is unaffected, but the older machine-optimizer card still prints the double-bed cover-factor line. Recommended follow-up: set the double-bed rule to G x G / 8.4 (NPI about 2.9 x sqrt(Ne))."
+    },
+    {
+      "title": "Count, length and weight relations",
+      "kind": "concept",
+      "topics": ["English count", "hank", "denier", "yarn length", "yarn weight", "conversion"],
+      "page_start": 2, "page_end": 4,
+      "body": "English cotton count is the number of 840-yard hanks in one pound. Length (yards) = count x 840 x weight (lb); count = length / (weight x 840); weight (lb) = length / (count x 840). For other fibres use their own hank length. Filament uses the direct system, denier = grams per 9000 metres: length (m) = weight (g) x 9000 / denier; weight (g) = length (m) x denier / 9000; denier = 9000 x weight (g) / length (m). Trade facts: yarn is still sold by the pound; a bag is 100 lb (45.3697 kg), formerly 40 cones, now 25 cones of 4 lb (older cones 2.5 lb). Worked examples recalculated: 33600 yd / (2.68 lb x 840) = 14.93s; 40 x 840 x 3.5 = 117600 yd; 40600 / (30 x 840) = 1.61 lb; 690 g x 9000 / 75 = 82800 m; 50900 m x 50 / 9000 = 282.8 g. The last, 9000 x 4500 / 550000, is 73.64 denier; the book prints 73.66."
+    },
+    {
+      "title": "Hourly output of a circular machine: the method",
+      "kind": "method",
+      "topics": ["production", "needles", "feeders", "stitch length", "RPM", "efficiency", "kg per hour"],
+      "page_start": 4, "page_end": 6,
+      "body": "Needed: gauge, diameter, number of feeders, RPM, yarn count (or denier), stitch length and efficiency. Step 1: needles = diameter x gauge x pi, rounded to an even number. Step 2: stitches per revolution = needles x feeders (single jersey: every needle knits at every feeder). Step 3: yarn per hour in metres = stitches x stitch length (mm) x RPM x 60 / 1000, times 1.0936 for yards. Step 4: weight = length / (count x 840) in pounds, x 0.4536 for kg (for filament, length x denier / 9000 in grams). Step 5: multiply by efficiency; 85 percent is the commonly quoted figure, higher in better conditions. Example 07 (24G, 30 inch, 90 feeders, 26 RPM, Ne 24, 4 mm, 85 percent): 2260 needles, 203400 stitches per revolution, 1269216 m per hour, 68.85 lb = 31.23 kg, 26.55 kg per hour at 85 percent. Example 08 (filament 75 denier, 28G, 26 inch, 120 feeders, 30 RPM, 4.5 mm): 2286 needles, 274320 stitches, 2221992 m, 18.516 kg, 15.74 kg per hour at 85 percent. Both recalculated and correct."
+    },
+    {
+      "title": "Output for a fabric knitted with two yarns (fleece)",
+      "kind": "method",
+      "topics": ["fleece", "loop yarn", "two yarns", "production", "feeders", "mass balance"],
+      "page_start": 6, "page_end": 8,
+      "body": "When two yarns are used at different feeders and with different stitch lengths, work out each yarn on its own and add. Example 09 (fleece, 18G, 30 inch, 60 feeders of 26s face yarn at 4.5 mm and 30 feeders of 16s loop yarn at 2.5 mm, 28 RPM, 85 percent): 1696 needles. Face: 101760 stitches per revolution, 769305 m per hour, 841312 yd, 38.52 lb = 17.47 kg, 14.85 kg at 85 percent. Loop: 50880 stitches, 213696 m, 233696 yd, 17.39 lb = 7.89 kg, 6.70 kg at 85 percent. Total 21.55 kg per hour. The book notes that the coarse loop cones go on after every two feeders. Slip in the text: the face calculation prints a divisor of 840 x 30, but the result is right only for the 26s face yarn (841312 / (840 x 26) = 38.52 lb), so '30' is a misprint. This is the same per-feed, per-yarn accounting the knitting plan uses."
+    },
+    {
+      "title": "The closed-form production formula, and its units",
+      "kind": "method",
+      "topics": ["production formula", "pounds", "feeders", "formula", "units"],
+      "page_start": 8, "page_end": 8,
+      "body": "The chapter gives one formula for cotton at 85 percent: production in one hour = Gauge x Dia x 3.14 x RPM x 60 x Stitch length (mm) x 1.0936 x 1 x 85 / (1000 x 840 x count x 100). Checked against Example 07: the result is in pounds, not kilograms, and the lone '1' stands for the number of feeders. For one feeder it gives 0.65 lb per hour; multiplied by 90 feeders it gives 58.5 lb, which is 26.55 kg (x 0.4536) after the 85 percent. So the formula as printed needs two corrections to be used: multiply by the feeder count, and convert pounds to kilograms. The engine's own function carries both inside its unit chain."
+    },
+    {
+      "title": "Does the engine reproduce the book's production figures?",
+      "kind": "engine",
+      "topics": ["production formula", "engine check", "needles", "filament", "verification"],
+      "page_start": 4, "page_end": 6,
+      "body": "Yes. The engine's cotton production function for Example 07 gives 26.57 kg per hour against the book's 26.55, and its filament function for Example 08 gives 15.75 against 15.74. The small gap is rounding: the book rounds the needle count to 2260 (30 x 24 x 3.14 = 2260.8, 'nearest even'), the engine uses pi exactly and rounds to 2262. The knitting plan's output differs deliberately: it also weighs each feed by what it does (a tuck takes about 0.7 of a loop, a miss a float), so a piqué or a fleece is not costed as if every feeder knitted every needle."
+    },
+    {
+      "title": "GSM and OSY conversion, with the errors in the examples",
+      "kind": "method",
+      "topics": ["GSM", "OSY", "conversion", "grammage", "ounces per square yard"],
+      "page_start": 8, "page_end": 9,
+      "body": "GSM is grams per square metre; OSY is ounces per square yard. Method: 1 yard square = 0.836 m square, 1 m square = 1.196 yd square, and the book takes 1 ounce = 28 g (the true value is 28.35 g). 10 OSY to GSM: 10 oz = 280 g, divided by 0.836 gives 334.9 GSM. The book prints 344.9, which is a slip. With 28.35 g per ounce the answer is 339.1 GSM (the standard figure is 1 OSY = 33.9 GSM). 250 GSM to OSY: 250 / 28 = 8.93 oz per m square, divided by 1.196 gives 7.47 OSY (7.37 with 28.35 g). Use 28.35 g per ounce: the engine's conversion, OSY = GSM x 0.836 / 28.35, does."
+    },
+    {
+      "title": "Fabric weight, GSM from a roll, and fibre percentage",
+      "kind": "method",
+      "topics": ["fabric weight", "tubular width", "open width", "GSM", "fibre percentage", "composition"],
+      "page_start": 9, "page_end": 10,
+      "body": "Weight of a length of fabric: area = length x width, and a tubular fabric counts twice its flat width. 300 GSM, 35 inch tube, 20 m: area = 20 x 35 x 2 / 39.37 = 35.6 m square, weight 300 x 35.6 = 10.68 kg (10.67 kg without rounding the area). GSM from a roll: 15.5 kg, 35 m long, 65 inch open width (1.65 m): area 57.75 m square, GSM = 15500 / 57.75 = 268.4 (the text prints 57075 in one line, a typo; the result is right). Composition of a multi-yarn fabric: take each yarn's weight in the fabric and its fibre shares. Fleece with 30s cotton face and 20s 50:50 polyester/cotton loop, consumed 2:1 by weight: 2 kg cotton face + 1 kg loop (0.5 kg cotton, 0.5 kg polyester) gives cotton 2.5 kg and polyester 0.5 kg, that is 83.33 percent cotton and 16.67 percent polyester. The yarn weights themselves come from the stitches each yarn makes, as in the two-yarn production method."
+    },
+    {
+      "title": "How far the chapter can be trusted",
+      "kind": "caution",
+      "topics": ["limitations", "reliability", "typos", "examples", "stitch length"],
+      "page_start": 1, "page_end": 11,
+      "body": "Method sound, details sloppy. Every worked example was recalculated; the arithmetic of production (Examples 07, 08, 09) holds, and the slips are small and listed in the lessons above: 73.66 for 73.64 denier, 344.9 for 334.9 GSM, a divisor printed 840 x 30 for 840 x 26, 57075 for 57.75, and a production formula with its units and feeder count missing. The examples are for arithmetic, not for settings: Example 07 knits Ne 24 at 4 mm on 24G, a loop length far looser than real mills use (about 2.9 mm for 24s on 24G, tightness factor 12 instead of about 17), so none of its settings may be used as a default. The reference table of counts by gauge, grammage and width was never filled in. No date, no publisher, no sources given for the G x G / 18 and G x G / 8.4 rules."
+    },
+    {
+      "title": "What this means for KnitAdvisor",
+      "kind": "engine",
+      "topics": ["engine check", "follow-up", "double bed", "production", "conversion"],
+      "page_start": 1, "page_end": 11,
+      "body": "1) Confirmed, no change needed: needle count, stitches per revolution, yarn length per hour, count and denier conversions, the 85 percent efficiency convention, OSY conversion at 28.35 g, and the per-yarn method for fleece. 2) Worth changing: the double-bed cover-factor rule in the machine optimizer (G x G / 15.3) against the book's G x G / 8.4 and the factory's rib gauges; the card should show the factory gauge and the book rule. 3) Useful to add: a note under production that a hard-coded 85 percent is the book's convention and the factory can differ. 4) Nothing here calibrates width, stitch length or GSM; those stay on the factory records."
+    }
+  ]
+}
