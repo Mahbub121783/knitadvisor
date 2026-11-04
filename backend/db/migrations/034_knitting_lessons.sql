@@ -12,6 +12,8 @@
 --   knitting_lessons    the lessons, each tagged by topic and typed
 --                       (concept | method | data | table | caution | engine).
 --
+-- (Topics are matched through their own GIN index, not folded into the text
+-- search: array_to_string is not immutable, so it cannot sit in a generated column.)
 -- Internal only: the citation lives here so a lesson can be traced back to its
 -- source, and is never shown on the site or in an API response.
 -- ============================================================================
@@ -42,7 +44,7 @@ CREATE TABLE IF NOT EXISTS knitting_lessons (
   page_start  smallint,
   page_end    smallint,
   search      tsvector GENERATED ALWAYS AS (
-                to_tsvector('english', coalesce(title, '') || ' ' || coalesce(body, '') || ' ' || array_to_string(topics, ' '))
+                to_tsvector('english', coalesce(title, '') || ' ' || coalesce(body, ''))
               ) STORED,
   created_at  timestamptz NOT NULL DEFAULT now(),
   updated_at  timestamptz NOT NULL DEFAULT now(),
