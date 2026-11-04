@@ -291,7 +291,8 @@
       '<span class="st-badge ' + conf.level + '">' + ({ calibrated: 'Calibrated on factory records', close: 'Close to a measured family', estimate: 'New structure — estimate' })[conf.level] + '</span>' +
       '<span style="font-size:12px;color:var(--t2)">' + esc(r.structure.family_label) +
       (r.structure.match ? ' · same as <b>' + esc(r.structure.match.name) + '</b>' : '') + '</span>' +
-      '<div style="flex-basis:100%;font-size:12px;color:var(--t2)">' + esc(conf.why) + '</div>';
+      '<div style="flex-basis:100%;font-size:12px;color:var(--t2)">' + esc(conf.why) + '</div>' +
+      (r.structure.reduced ? '<div style="flex-basis:100%;font-size:12px;color:var(--t2)">Your repeat of ' + esc(r.structure.reduced.from) + ' is the same fabric as its smallest repeat, ' + esc(r.structure.reduced.to) + ' — the set-out below uses that.</div>' : '');
     $('st-checks').innerHTML = r.checks.map(function (c) { return '<li class="' + c.level + '">' + esc(c.text) + '</li>'; }).join('');
     // repaint flagged cells without losing focus in feed inputs
     var bad = badCells();

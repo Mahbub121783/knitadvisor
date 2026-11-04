@@ -109,4 +109,40 @@ assert.strictEqual(tpl('swiss_double_pique').gating, 'rib');
 assert.strictEqual(tpl('interlock').gating, 'interlock');
 assert.strictEqual(tpl('ponte_di_roma').gating, 'interlock');
 
+
+// 11. the structure moves the cloth, not just the yarn (same yarn, ℓ, machine)
+{
+  const base = { yarn: { ne: 30 }, machine: { sl_mm: 2.7, gauge: 24, dia: 30 } };
+  const a = (C, x = {}) => S.analyse({ grid: { C }, ...base, ...x });
+  const sj = a(['K']), same = a(['KKKK']), miss = a(['KM', 'MK']), lac = run('lacoste_single', base);
+  // a repeat drawn bigger than it needs is the same fabric, and is recognised as such
+  assert.strictEqual(same.fabric.gsm, sj.fabric.gsm);
+  assert.strictEqual(same.structure.confidence.level, 'calibrated');
+  assert(same.structure.reduced, 'repeat reduced');
+  // tucks widen the cloth and pack the courses; floats draw it in
+  assert(lac.fabric.width_open_in > sj.fabric.width_open_in * 1.2, 'tucks widen');
+  assert(lac.fabric.cpi > sj.fabric.cpi * 1.3, 'tucks pack courses');
+  assert(miss.fabric.width_open_in < sj.fabric.width_open_in, 'misses narrow');
+  assert.strictEqual(miss.structure.confidence.level, 'estimate', 'miss magnitude is not measured');
+  // more tucks than the anchor → wider still (within the measured cap)
+  const pq = run('pique_single', base);
+  assert(pq.fabric.width_open_in > lac.fabric.width_open_in, 'more tucks, wider');
+  // a needle taken out narrows the cloth by its share and leaves the weight per area alone
+  const drop = a(['KKK-']);
+  assert(Math.abs(drop.fabric.width_open_in / sj.fabric.width_open_in - 0.75) < 0.01, 'drop needle width');
+  assert(Math.abs(drop.fabric.gsm / sj.fabric.gsm - 1) < 0.02, 'drop needle gsm');
+  // fibre is in the constants (factory: CVC and PC jersey run heavier than cotton at one ℓ)
+  const f = (fibre) => S.analyse({ grid: { C: ['K'] }, yarn: { ne: 30, fibre }, machine: { sl_mm: 2.7 } });
+  assert(f('cvc').fabric.gsm > f('cotton').fabric.gsm && f('polyester_spun').fabric.gsm > f('cvc').fabric.gsm, 'fibre ordering');
+  assert.strictEqual(f('viscose').structure.confidence.level, 'estimate', 'no viscose records');
+  // part-plating sits between plain and fully plated; an odd repeat is doubled so "alternate" means something
+  const L = { grid: { C: ['K'] }, yarn: { ne: 30 }, machine: { sl_mm: 2.9 } };
+  const none = S.analyse(L), half = S.analyse({ ...L, elastane: { denier: 20, every: 'alternate' } }), full = S.analyse({ ...L, elastane: { denier: 20 } });
+  assert(none.fabric.gsm < half.fabric.gsm && half.fabric.gsm < full.fabric.gsm, 'plating blend');
+  assert.strictEqual(half.structure.feeds, 2);
+  // a tighter tuck feeder changes the cloth's loop length, and a note says so
+  const tf = S.analyse({ grid: { C: lac.structure.beds.C.map((r) => r.join('')) }, feeds: [{ sl_ratio: 0.92 }, {}, { sl_ratio: 0.92 }, {}], ...base });
+  assert(tf.checks.some((c) => /knitting feeders/.test(c.text)));
+}
+
 console.log('Fabric studio tests passed');
