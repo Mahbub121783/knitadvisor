@@ -4,7 +4,7 @@
 // needle to needle; the geometry is in studio-loop-geom.js.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import './studio-loop-geom.js?v=20261106d';
+import './studio-loop-geom.js?v=20261107a';
 
 const FEED_COLOURS = ['#1857C4', '#0f9d76', '#c2410c', '#7a4fc2', '#b8860b', '#0e7490', '#be185d', '#4d7c0f', '#9a3412', '#334155', '#0369a1', '#a16207'];
 const ROLE_COLOURS = { ground: '#1857C4', face: '#1857C4', binder: '#7a4fc2', loop: '#c2410c' };
@@ -60,8 +60,11 @@ export class LoopView {
       const r = (spec.radius && spec.radius[co.feed]) || 0.13;
       const v = co.points.map((p) => new THREE.Vector3(p.x - cx, p.y - cy, p.z));
       const curve = new THREE.CatmullRomCurve3(v, false, 'centripetal', 0.5);
-      const tube = new THREE.TubeGeometry(curve, Math.max(48, v.length * 4), r, 8, false);
-      const mat = new THREE.MeshStandardMaterial({ color: feedColour(spec, co.feed), roughness: 0.62, metalness: 0.02, transparent: true, opacity: 1 });
+      const tube = new THREE.TubeGeometry(curve, Math.max(48, v.length * (spec.real ? 3 : 4)), r, spec.real ? 7 : 8, false);
+      // real view: a spun yarn's soft sheen instead of the diagram's plastic
+      const mat = spec.real
+        ? new THREE.MeshPhysicalMaterial({ color: spec.colour || '#3d5a80', roughness: 0.88, metalness: 0, sheen: 1, sheenRoughness: 0.55, sheenColor: new THREE.Color(0xffffff).multiplyScalar(0.35), transparent: true, opacity: 1 })
+        : new THREE.MeshStandardMaterial({ color: feedColour(spec, co.feed), roughness: 0.62, metalness: 0.02, transparent: true, opacity: 1 });
       const mesh = new THREE.Mesh(tube, mat);
       mesh.userData = { course: co.course, feed: co.feed };
       this.group.add(mesh); this.meshes.push(mesh);
@@ -71,6 +74,7 @@ export class LoopView {
         const pm = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pv, false, 'centripetal', 0.5), Math.max(48, pv.length * 4), (spec.pileRadius || r), 8, false),
           new THREE.MeshStandardMaterial({ color: spec.pileColour || '#c2410c', roughness: 0.7, metalness: 0.02, transparent: true, opacity: 1 }));
         pm.userData = { course: co.course, feed: co.feed, pile: true };
+        if (spec.real) pm.material.color.set(spec.colour || '#3d5a80');
         this.group.add(pm); this.meshes.push(pm);
       }
       if (spec.plated && spec.plated[co.feed]) {
@@ -84,15 +88,25 @@ export class LoopView {
         this.group.add(em); this.meshes.push(em);
       }
     });
-    this.setStep(this._step == null ? null : this._step);
-    this.highlight(this._hl == null ? null : this._hl);
-    if (!this._viewed) this.view('angle');
+    if (spec.real) {
+      // the real view is the whole cloth: no build step, no picked-out feeder
+      this.meshes.forEach((m) => { m.visible = true; m.material.opacity = 1; m.material.depthWrite = true; });
+    } else {
+      this.setStep(this._step == null ? null : this._step);
+      this.highlight(this._hl == null ? null : this._hl);
+    }
+    // re-frame when the swatch changes size (another bed, more feeds or needles)
+    const dims = `${geo.wales}x${geo.rows}x${geo.bed}`;
+    if (!this._viewed) this.view(spec.real ? 'face' : 'angle');
+    else if (dims !== this._dims) this.view(this._lastView || 'angle');
+    this._dims = dims;
     this.redraw();
     return geo;
   }
 
   view(name) {
     this._viewed = true;
+    this._lastView = name;
     const g = this.geo; if (!g) return;
     // fit the swatch to whichever of width and height binds at this aspect
     const t = 2 * Math.tan((this.camera.fov * Math.PI) / 360);

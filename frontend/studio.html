@@ -301,7 +301,7 @@
           <div class="st-pane on" id="pane-3d">
             <div class="st-seg st-3dmode" id="st-3dmode">
               <button type="button" class="on" data-mode="loops">Loop structure</button>
-              <button type="button" data-mode="cloth">Cloth</button>
+              <button type="button" data-mode="cloth">Fabric (real view)</button>
             </div>
             <div class="st-3dbar" id="st-loopbar">
               <span>View</span>
@@ -314,11 +314,9 @@
             <div class="st-3dbar" id="st-clothbar" hidden>
               <label>Colour <input type="color" id="st-col" value="#3d5a80"></label>
               <button type="button" class="st-btn" id="st-side">Show back</button>
-              <label class="st-check" style="margin:0" id="st-brush-wrap"><input type="checkbox" id="st-brushed"> Brushed (fleece)</label>
               <span id="st-3dnote"></span>
             </div>
             <div id="st-loops"><div class="st-tip" id="st-tip" hidden></div></div>
-            <div id="st-3d" hidden></div>
             <div class="st-build" id="st-build">
               <button type="button" class="st-btn" id="st-bplay">Knit it feed by feed</button>
               <input type="range" id="st-bstep" min="0" max="1" value="1" aria-label="Courses knitted">
@@ -326,7 +324,7 @@
             </div>
             <div class="st-legend" id="st-feedkey"></div>
             <p class="st-hint" id="st-loophint">Each tube is one yarn; each course is one feeder's pass. A knit loop is drawn through the loop below it, back to front. A tuck is an open arch with no crossing at its foot, lying behind the held loop. A miss is a straight float behind the held loop. A held loop reaches up to the course where its needle next knits. Point at a yarn to read the stitch; click a feeder below to pick out its yarn. Drag to turn, scroll to zoom. Loop shape follows the finished wales and courses per cm; yarn thickness follows each feeder's count.</p>
-            <p class="st-hint" id="st-clothhint" hidden>The cloth view draws the whole swatch with its drape and finish. Use Loop structure to read the stitches.</p>
+            <p class="st-hint" id="st-clothhint" hidden>The real view knits many repeats of exactly the programme you drew, in one colour, at the fabric's own wales and courses per cm and yarn thickness — the face (or back) as it will look on the table. It redraws on every change. Drag to turn, scroll to zoom.</p>
           </div>
 
           <div class="st-pane" id="pane-notation">
@@ -360,6 +358,6 @@
 </div>
 
 <script src="assets/js/api.js"></script>
-<script src="assets/js/studio.js?v=20261106f"></script>
+<script src="assets/js/studio.js?v=20261107a"></script>
 </body>
 </html>
