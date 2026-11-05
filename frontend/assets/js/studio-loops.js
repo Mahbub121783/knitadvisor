@@ -4,7 +4,7 @@
 // needle to needle; the geometry is in studio-loop-geom.js.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import './studio-loop-geom.js?v=20261106b';
+import './studio-loop-geom.js?v=20261106d';
 
 const FEED_COLOURS = ['#1857C4', '#0f9d76', '#c2410c', '#7a4fc2', '#b8860b', '#0e7490', '#be185d', '#4d7c0f', '#9a3412', '#334155', '#0369a1', '#a16207'];
 const ROLE_COLOURS = { ground: '#1857C4', face: '#1857C4', binder: '#7a4fc2', loop: '#c2410c' };
@@ -65,6 +65,14 @@ export class LoopView {
       const mesh = new THREE.Mesh(tube, mat);
       mesh.userData = { course: co.course, feed: co.feed };
       this.group.add(mesh); this.meshes.push(mesh);
+      if (co.pile) {
+        // plush: the pile yarn, its standing loops on the back
+        const pv = co.pile.map((p) => new THREE.Vector3(p.x - cx, p.y - cy, p.z));
+        const pm = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pv, false, 'centripetal', 0.5), Math.max(48, pv.length * 4), (spec.pileRadius || r), 8, false),
+          new THREE.MeshStandardMaterial({ color: spec.pileColour || '#c2410c', roughness: 0.7, metalness: 0.02, transparent: true, opacity: 1 }));
+        pm.userData = { course: co.course, feed: co.feed, pile: true };
+        this.group.add(pm); this.meshes.push(pm);
+      }
       if (spec.plated && spec.plated[co.feed]) {
         // the elastane is plated: it follows the ground yarn's path, one
         // yarn's width toward the technical back of whichever bed it is on

@@ -87,7 +87,7 @@ for (const t of T) {
   const nothing = S.analyse({ grid: { C: ['KM', 'KM'] }, yarn: { ne: 30 }, target: { gsm: 160 } });
   assert(nothing.success);
   const bad = S.analyse({ grid: { C: ['KX'] }, yarn: { ne: 30 }, target: { gsm: 160 } });
-  assert(!bad.success && /Use K, T, M or -/.test(bad.error));
+  assert(!bad.success && /Use K, T, M, E or -/.test(bad.error));
 }
 
 // 8. elastane by mass balance: 20 D at draft 2.6 in 30s, full plating
@@ -189,6 +189,40 @@ assert.strictEqual(tpl('ponte_di_roma').gating, 'interlock');
   // a gauge you set is kept; only the count is searched
   const g = run('single_jersey', 160, { gauge: 28 });
   assert(g.solver.options.every((x) => x.gauge === 28) && g.machine.gauge === 28);
+}
+
+// held loops pack the cloth: an interlock programme drawn on rib gating is the
+// same cloth as interlock, and the double piqués reach their usual weights
+{
+  const T = S.listTemplates();
+  const two = (gating) => S.analyse({ bed: 'double', gating, grid: { C: ['KM', 'MK'], D: ['MK', 'KM'] }, feeds: [{}, {}], yarn: { ne: 34, fibre: 'cotton' }, machine: { sl_mm: 2.9, gauge: 24, dia: 30 }, target: {} });
+  const il = two('interlock'), rb = two('rib');
+  assert(Math.abs(rb.fabric.gsm / il.fabric.gsm - 1) < 0.01 && Math.abs(rb.fabric.width_open_in / il.fabric.width_open_in - 1) < 0.01, 'rib-gated interlock programme = measured interlock');
+  assert(Math.abs(rb.fabric.cpc - il.fabric.cpc) < 0.2, 'face courses counted the same way');
+  const run = (id, gsm, extra = {}) => { const t = T.find((x) => x.id === id); return S.analyse({ bed: t.bed, gating: t.gating, grid: t.grid, feeds: t.roles.map((r) => ({ role: r })), yarn: { fibre: 'cotton' }, target: { gsm }, machine: {}, ...extra }); };
+  for (const id of ['swiss_double_pique', 'french_double_pique', 'gabardine_double', 'blister_single']) {
+    const o = run(id, 270);
+    assert(o.success && o.solver.verdict.level === 'ok', `${id} 270 GSM is reachable`);
+    const ne = parseFloat(o.yarn.ground.count);
+    assert(ne >= 20 && ne <= 40, `${id}: ${ne}s is a count double piqué is knitted with`);
+  }
+  // plush terry and velour: two yarns plated per feed, weighed by the plush model
+  const tf = run('terry_fabric', 400);
+  assert(tf.success && tf.plush && Math.abs(tf.fabric.gsm / 400 - 1) < 0.03, 'terry reaches its weight');
+  const g = parseFloat(tf.yarn.ground.count);
+  assert(g >= 20 && g <= 40, `terry ground ${g}s, not a 60s`);
+  assert(tf.yarn.feeds.length === 2 && tf.yarn.feeds.some((f) => f.role === 'pile'), 'ground and pile both listed');
+  assert(!tf.checks.some((c) => c.level === 'warn' && /Tightness factor/.test(c.text)), 'no single-yarn tightness window on a plated plush loop');
+  const ve = run('velour_plush', 320, { plush: { cut: true } });
+  assert(ve.success && ve.plush.shearing && ve.plush.variant.cut, 'velour is sheared');
+  // pointelle: eyelets are transfers, not misses — no track error, and the rules of a transfer are checked
+  for (const id of ['pointelle_chevron', 'pointelle_diagonal']) {
+    const o = run(id, 130);
+    assert(o.success && !o.checks.some((c) => c.level === 'error'), `${id} knits on a pointelle machine`);
+    assert(o.structure.match && o.structure.match.id === id);
+  }
+  const bad = S.analyse({ bed: 'single', grid: { C: ['KE-', 'KKK'] }, feeds: [{}, {}], yarn: { ne: 30, fibre: 'cotton' }, target: { gsm: 140 }, machine: {} });
+  assert(bad.checks.some((c) => c.level === 'error' && /transferred loop goes onto needle 3/.test(c.text)), 'a transfer needs a needle to take the loop');
 }
 
 console.log('Fabric studio tests passed');

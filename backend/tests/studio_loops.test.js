@@ -80,4 +80,22 @@ const zAt = (list, y) => list.reduce((b, p) => (Math.abs(p.y - y) < Math.abs(b.y
   const loopCourse = g.courses[1];
   assert(loopCourse.points.every((p) => p.z <= 0.0001), 'loop yarn never comes to the face');
 }
+// a transfer (E): the loop is handed to the next needle, the needle is left
+// empty (the eyelet), and the moved loop's head leans onto the receiving needle
+{
+  const g = buildLoopPaths({ C: [['K', 'K', 'K'], ['K', 'E', 'K'], ['K', 'K', 'K']], h: 0.75 });
+  const moved = stitch(g, 0, 'C', 1), e = stitch(g, 1, 'C', 1);
+  assert.strictEqual(moved.transferred, 1);
+  const crown = pts(g, 0, moved).reduce((b, p) => (p.y > b.y ? p : b));
+  assert(Math.abs(crown.x - (moved.x + 0.5)) < 1e-9, 'head leans onto the next needle');
+  assert.strictEqual(pts(g, 1, e).length, 1, 'the emptied needle takes no loop');
+}
+
+// plush: the pile yarn stands over the sinker on the back, as tall as asked
+{
+  const g = buildLoopPaths({ C: [['K']], h: 0.8, pileH: 1.6, pileFeeds: [true] });
+  const pile = g.courses[3].pile;
+  assert(pile && Math.min(...pile.map((p) => p.z)) <= -1.79, 'loops stand the sinker height off the back');
+  assert(Math.max(...pile.map((p) => p.z)) < Math.max(...g.courses[3].points.map((p) => p.z)) - 0.1, 'plated: the pile lies behind the ground yarn on the face');
+}
 console.log('studio loop geometry: ok');

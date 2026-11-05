@@ -66,6 +66,21 @@
     })();
     var step = h * knitRate;
     var y = function (c) { return c * step; };
+    // a transfer (E): the loop on this needle is handed to the next needle at
+    // that feed. Returns the feed of the transfer, or -1 if the loop is
+    // knitted off here as usual.
+    var transferAt = function (b, j, c) {
+      for (var k = c + 1; k <= c + 3 * F; k++) { var a = act(b, j, k); if (a === 'K') return -1; if (a === 'E') return k; }
+      return -1;
+    };
+    // the receiving needle clears the transferred loop at its next knit, at
+    // or after the transfer feed
+    var knitFrom = function (b, j, k) { for (var q = k; q <= k + 3 * F; q++) if (act(b, j, q) === 'K') return q; return k; };
+    // sinker-loop plush: the pile yarn of these feeds stands over the high
+    // sinker on the technical back, height H wales
+    var pileH = spec.pileH || 0;
+    var PILE = { full: function () { return true; }, alternate: function (w) { return w % 2 === 0; }, checker: function (w, c) { return (w + c) % 2 === 0; }, diagonal: function (w, c) { return (w + c) % 3 === 0; } };
+    var pileOn = PILE[spec.pileArrangement] || PILE.full;
 
     var courses = [];
     for (var c = 0; c < nC; c++) {
@@ -89,7 +104,10 @@
         }
         var rec = { course: c, feed: feed, bed: b.key, needle: (p.j % W) + 1, wale: p.j, x: X, act: a, y0: y0, from: pts.length };
         if (a === 'K') {
-          var n = nextKnit(b, p.j, c), yt = y(n) + 0.38 * h, t = tucksOn(b, p.j, c);
+          var n = nextKnit(b, p.j, c), t = tucksOn(b, p.j, c);
+          var tk = transferAt(b, p.j, c), sh = 0;
+          if (tk > -1) { n = knitFrom(b, p.j + 1, tk); sh = 0.5; rec.transferred = tk - c; }
+          var yt = y(n) + 0.38 * h;
           // the feet go behind everything on the needle: the old loop and any tucks
           var fz = z0 - s * (0.14 + 0.16 * Math.min(2, t));
           // keyhole: narrow feet (they pass inside the old head), legs
@@ -98,11 +116,12 @@
           push(X - 0.29, y0 + 0.14 * h, z0 + s * 0.12, s);
           push(X - 0.38, y0 + 0.40 * h, z0 + s * 0.17, s);
           if (n > c + 1) push(X - 0.37, yt - 0.64 * h, z0 + s * 0.15, s);
-          push(X - 0.33, yt - 0.40 * h, z0 + s * 0.10, s);
-          push(X - 0.23, yt - 0.12 * h, z0 - s * 0.04, s);
-          push(X, yt, z0 - s * 0.12, s);
-          push(X + 0.23, yt - 0.12 * h, z0 - s * 0.04, s);
-          push(X + 0.33, yt - 0.40 * h, z0 + s * 0.10, s);
+          // a transferred loop leans its head onto the needle that took it
+          push(X - 0.33 + sh * 0.6, yt - 0.40 * h, z0 + s * 0.10, s);
+          push(X - 0.23 + sh, yt - 0.12 * h, z0 - s * 0.04, s);
+          push(X + sh, yt, z0 - s * 0.12, s);
+          push(X + 0.23 + sh, yt - 0.12 * h, z0 - s * 0.04, s);
+          push(X + 0.33 + sh * 0.6, yt - 0.40 * h, z0 + s * 0.10, s);
           if (n > c + 1) push(X + 0.37, yt - 0.64 * h, z0 + s * 0.15, s);
           push(X + 0.38, y0 + 0.40 * h, z0 + s * 0.17, s);
           push(X + 0.29, y0 + 0.14 * h, z0 + s * 0.12, s);
@@ -123,6 +142,7 @@
           push(X + 0.30, y0 + 0.06 * h, z0 - s * 0.27, s);
           rec.top = y0 + 0.06 * h;
         } else {
+          // no needle, or an emptied needle after a transfer: the eyelet
           push(X, y0 + 0.02 * h, z0, s);
           rec.top = y0;
         }
@@ -130,7 +150,25 @@
         stitches.push(rec);
         prev = { b: b, x: X, a: a };
       }
-      courses.push({ course: c, feed: feed, points: pts, side: side, stitches: stitches });
+      var course = { course: c, feed: feed, points: pts, side: side, stitches: stitches };
+      if (pileH > 0 && spec.pileFeeds && spec.pileFeeds[feed]) {
+        // the pile yarn follows the ground loop one yarn behind it and, between
+        // two needles, climbs over the high sinker into a standing loop
+        var pile = [], ps = [];
+        stitches.forEach(function (st, si) {
+          for (var q = st.from; q <= st.to; q++) { var pt = pts[q]; pile.push({ x: pt.x, y: pt.y, z: pt.z - 0.11 }); ps.push(1); }
+          var nx = stitches[si + 1];
+          if (!nx) return;
+          var mx2 = (st.x + nx.x) / 2, yb = y(c) - 0.12 * h;
+          if (pileOn(st.wale, c)) {
+            [[-0.2, 0, 0.25], [-0.26, 0.2, 0.8], [0, 0.32, 1], [0.26, 0.2, 0.8], [0.2, 0, 0.25]].forEach(function (k) {
+              pile.push({ x: mx2 + k[0], y: yb - k[1] * h, z: -0.2 - k[2] * pileH }); ps.push(1);
+            });
+          } else { pile.push({ x: mx2, y: yb, z: -0.26 }); ps.push(1); }
+        });
+        course.pile = pile;
+      }
+      courses.push(course);
     }
     return { courses: courses, wales: nW, rows: nC, h: h, step: step, bed: bed, F: F, W: W, zc: zc };
   }

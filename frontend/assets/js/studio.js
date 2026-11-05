@@ -88,6 +88,7 @@
       var fit = function (g) { return g.map(function (r) { var o = []; for (var j = 0; j < w; j++) o.push(r[j % r.length]); return o; }); };
       S.C = fit(S.C); if (S.D) S.D = fit(S.D);
       S.feeds = t.roles.map(function (r) { return { role: r }; });
+      $('st-cut').checked = id === 'velour_plush';
       if (t.gsm_range && t.gsm_range.min && !$('st-gsm').dataset.touched) {
         $('st-gsm').value = Math.round((t.gsm_range.min + t.gsm_range.max) / 2 / 5) * 5;
       }
@@ -278,6 +279,8 @@
   var timer = null, timer3d = null;
   var lastSig = null;
   function schedule() {
+    // a loop-yarn feeder that knits on a single bed is a plush pile
+    $('st-plush-box').hidden = !(!S.D && S.feeds.some(function (f, i) { return f && f.role === 'loop' && S.C[i] && S.C[i].indexOf('K') > -1; }));
     var sg = signature();
     if (sg !== lastSig) { lastSig = sg; rolls = readRolls(); renderRolls(); }
     clearTimeout(timer);
@@ -298,6 +301,7 @@
         return { role: f.role || 'ground', yarn: +f.ne > 0 ? { ne: +f.ne, fibre: $('st-fibre').value } : null, sl_ratio: +f.sl_ratio > 0 ? +f.sl_ratio : null };
       }),
       yarn: num('st-ne') ? { ne: num('st-ne'), fibre: $('st-fibre').value } : { fibre: $('st-fibre').value },
+      plush: { cut: $('st-cut').checked, sinker_mm: num('st-sinker'), arrangement: $('st-parr').value },
       elastane: $('st-lycra').checked ? { denier: +$('st-lyd').value, draft: num('st-lydraft') || 2.6, every: $('st-lyevery').value } : null,
       target: { gsm: num('st-gsm'), width_in: num('st-width') },
       calibration: $('st-userolls').checked && completeRolls().length ? { rolls: completeRolls() } : null,
@@ -384,6 +388,15 @@
           return '<tr' + (i === 0 ? ' style="background:var(--accent-tint)"' : '') + '><td>' + esc(o.count) + (i === 0 ? ' ✓' : '') + '</td><td>' + o.gauge + ' GG' + (o.practised ? ' ·&nbsp;factory' : '') + '</td><td>' + o.sl_mm + ' mm</td><td>' + o.tf + '</td><td>' + o.gsm + '</td><td>' + o.width_in + '"</td><td>' + (o.breaks && o.breaks.length ? '<span style="color:#9a5b00">' + esc(o.breaks.join('; ')) + '</span>' : 'all kept') + '</td></tr>';
         }).join('') + '</table></div><p class="st-p">“factory”: the gauge the factory records most often knit this count on for this family. Limits: tightness factor inside the factory\'s 5th–95th percentile, gauge fit, hook load, stitch length 1.8–7 mm.</p>';
     }
+    if (r.plush) {
+      var P = r.plush, mb = P.mass_balance;
+      html += '<div class="st-sub">Plush pile ' + src('e') + '</div><p class="st-p"><b>' + esc(P.variant.name) + '</b> — ' + esc(P.declaration) + '. Sinker ' + P.pile.sinker_height_mm + ' mm (' + P.pile.sinker_for_exact_gsm_mm + ' mm hits the target exactly), ' + esc(P.pile.kind) + ' ' + P.pile.finished_pile_mm + ' mm, ' + P.pile.loops_per_cm2 + ' loops per cm². Ground loop ' + mb.ground_sl_mm + ' mm, pile ' + mb.pile_sl_mm + ' mm of yarn per needle.</p>' +
+        '<p class="st-p" style="font-family:var(--mono);font-size:11px">' + esc(mb.formula) + '</p>' +
+        '<div class="st-scroll"><table class="st-t"><tr><th>Sinker</th><th>Pile yarn</th><th>GSM</th>' + (P.shearing ? '<th>Lint sheared</th>' : '') + '</tr>' +
+        P.pile.options.map(function (o) { return '<tr' + (o.sinker_mm === P.pile.sinker_height_mm ? ' style="background:var(--accent-tint)"' : '') + '><td>' + o.sinker_mm + ' mm</td><td>' + esc(o.pile) + '</td><td>' + o.gsm + '</td>' + (P.shearing ? '<td>' + (o.lint_pct == null ? '—' : o.lint_pct + '%') + '</td>' : '') + '</tr>'; }).join('') + '</table></div>' +
+        (P.shearing ? '<p class="st-p">Shearing: knitted ' + P.shearing.knitted_loop_mm + ' mm, cut to ' + P.shearing.cut_to_mm + ' mm in ' + P.shearing.passes + ' passes — ' + P.shearing.pile_yarn_removed_pct + '% of the pile yarn (' + P.shearing.fabric_mass_removed_pct + '% of the grey cloth) leaves as lint.</p>' : '') +
+        '<p class="st-p">Water the cloth takes up about ' + P.absorbency.total_g_m2 + ' g/m² (' + P.absorbency.g_per_g + ' g per g); thickness ' + P.thermal.thickness_mm + ' mm, ' + P.thermal.clo + ' clo. Route: ' + P.process_route.map(esc).join(' → ') + '.</p>';
+    }
     html += '<div class="st-sub">Yarn on every feeder ' + src('c') + '</div><div class="st-scroll"><table class="st-t"><tr><th>Feed</th><th>Role</th><th>Yarn</th><th>SL mm</th><th>TF</th><th>Yarn per needle</th><th>Course length m/rev</th><th>Yarn speed m/min</th><th>Share of fabric</th><th>Input tension cN ' + src('e') + '</th></tr>' +
       y.feeds.map(function (x) {
         return '<tr><td>F' + x.feed + '</td><td style="color:' + ROLE_COL[x.role] + '">' + x.role + '</td><td>' + esc(x.yarn) + '</td><td>' + x.sl_mm + '</td><td>' + (x.tf == null ? '—' : x.tf) + '</td><td>' + x.share + '</td><td>' + x.course_length_m + '</td><td>' + x.yarn_speed_m_min + '</td><td>' + x.mass_share_pct + '%</td><td>' + x.tension_cN.join('–') + '</td></tr>';
@@ -454,7 +467,8 @@
     var n = W * rep, dx = 26, rowH = S.D ? 86 : 54, left = 46;
     var w = left + n * dx + 20, h = F * rowH + 14;
     var roles = S.feeds.map(function (f) { return (f && f.role) || 'ground'; });
-    var out = '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" font-family="IBM Plex Mono, monospace">';
+    var out = '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" font-family="IBM Plex Mono, monospace">' +
+      '<defs><marker id="st-arr" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L6 3 L0 6 z" fill="#0e7490"/></marker></defs>';
     for (var i = 0; i < F; i++) {
       var y0 = 8 + i * rowH;
       var col = ROLE_COL[roles[i]] || '#1857C4';
@@ -472,6 +486,7 @@
         // it runs straight past
         if (sc === 'K') d += ' L' + (x - 6) + ' ' + yb + ' L' + (x + 4) + ' ' + (yC - 3) + ' A5 5 0 1 1 ' + (x - 4) + ' ' + (yC - 3) + ' L' + (x + 6) + ' ' + yb;
         else if (sc === 'T') d += ' L' + (x - 6) + ' ' + yb + ' L' + x + ' ' + (yC - 4) + ' L' + (x + 6) + ' ' + yb;
+        if (sc === 'E') out += '<path d="M' + x + ' ' + (yC + 6) + ' Q' + (x + dx / 2) + ' ' + (yC + 16) + ' ' + (x + dx - 3) + ' ' + (yC + 6) + '" fill="none" stroke="#0e7490" stroke-width="1.6" marker-end="url(#st-arr)"/>';
         if (S.D) {
           var xd = S.bed === 'interlock' ? x : x + dx / 2;
           var sd = S.D[i][j];
@@ -499,7 +514,7 @@
   var race = (function () {
     var svgNS = 'http://www.w3.org/2000/svg';
     var ZONE = 230, GAP = 34, H = 300, BASE = 210;       // BASE: sinker (verge) line
-    var LIFT = { K: 110, T: 62, M: 0, '-': 0 };           // clearing / tuck / rest
+    var LIFT = { K: 110, T: 62, M: 0, E: 88, '-': 0 };    // clearing / tuck / rest / transfer
     var DROP = 22;                                        // stitch cam: below the verge to knock over
     var needles = [], svg = null, t0 = null, offset = 0, playing = true, raf = null, spawn = 0, built = false;
 
@@ -591,6 +606,7 @@
           var col = ROLE_COL[(S.feeds[z] || {}).role] || '#1857C4';
           if (sym === 'K') nd.held = [{ c: col }];
           else if (sym === 'T') nd.held = nd.held.concat([{ c: col }]);
+          else if (sym === 'E') nd.held = [];
         }
         var tipY = BASE - 52 - lift;                 // hook tip above the verge at rest
         nd.el.setAttribute('transform', 'translate(' + (x + 20) + ',' + tipY + ')');
@@ -619,6 +635,7 @@
             ({ K: 'knit — raised to clearing height, old loop below the latch, takes the new yarn and will knock the old loop over',
                T: 'tuck — raised only to tuck height, old loop stays in the hook, takes the new yarn too (' + (nd.held.length + 1) + ' loops after this feeder)',
                M: 'miss — not raised, keeps its loop, the yarn floats past',
+               E: 'transfer — raised to transfer height, its loop is handed to the next needle; the needle is left empty and starts a new loop at the next feed (the eyelet)',
                '-': 'no needle in this trick' })[sym];
         }
       }
@@ -682,7 +699,7 @@
     if (ly === 'alternate' && C.length % 2) { C = C.concat(C); D = D ? D.concat(D) : null; feeds = feeds.concat(feeds); }
     var groundNe = 590.5 / y.ground.tex;
     var clamp = function (v, a, b) { return Math.max(a, Math.min(b, v)); };
-    return {
+    var spec = {
       C: C, D: D, bed: S.bed, feeds: feeds,
       // on a phone, fewer needles so each loop is big enough to read
       wales: $('st-loops').clientWidth < 520 ? 8 : null,
@@ -693,12 +710,25 @@
       plated: feeds.map(function (fd, i) { return !!ly && fd.role !== 'loop' && (ly === 'all' || i % 2 === 0); }),
       colourBy: $('st-colby').value, colour: $('st-col').value,
     };
+    // plush: the ground yarn is drawn on the loop feeder, the pile behind it
+    // over the sinker, as tall as the sinker sets it (mm → wales: × wpc ÷ 10)
+    if (last.plush) {
+      var P = last.plush, gF = last.yarn.feeds[0], pF = last.yarn.feeds[1];
+      spec.pileFeeds = feeds.map(function (fd, i) { return fd.role === 'loop' && C[i].indexOf('K') > -1; });
+      spec.pileH = (P.shearing ? P.shearing.cut_to_mm : P.pile.sinker_height_mm) * f.wpc / 10;
+      spec.pileArrangement = P.variant.arrangement;
+      spec.radius = feeds.map(function () { return clamp(0.5 * (0.907 / Math.sqrt(590.5 / gF.tex)) * f.wpc / 10, 0.06, 0.22); });
+      spec.pileRadius = clamp(0.5 * (0.907 / Math.sqrt(590.5 / pF.tex)) * f.wpc / 10, 0.06, 0.24);
+      spec.feeds = feeds.map(function (fd) { return fd.role === 'loop' ? { role: 'ground' } : fd; });
+      spec.pileColour = '#c2410c';
+    }
+    return spec;
   }
 
   function renderLoops() {
     var host = $('st-loops');
     if (!loopPromise) {
-      loopPromise = import('/assets/js/studio-loops.js?v=20261106c').then(function (mod) {
+      loopPromise = import('/assets/js/studio-loops.js?v=20261106e').then(function (mod) {
         loopView = new mod.LoopView(host, showTip);
         loopView.feedColour = mod.feedColour;
         return loopView;
@@ -720,7 +750,7 @@
     });
   }
 
-  var ACT = { K: 'knit', T: 'tuck', M: 'miss', '-': 'no needle' };
+  var ACT = { K: 'knit', T: 'tuck', M: 'miss', E: 'transfer', '-': 'no needle' };
   function showTip(s) {
     var tip = $('st-tip');
     if (!s) { tip.hidden = true; return; }
@@ -728,6 +758,7 @@
     var what = s.act === 'K' ? 'Knit loop' + (s.held ? ', held ' + s.held + ' course' + (s.held > 1 ? 's' : '') + ' (the needle tucks or misses above it)' : '') + (s.tucks ? '; drawn through ' + s.tucks + ' tuck' + (s.tucks > 1 ? 's' : '') + ' as well as the old loop' : '')
       : s.act === 'T' ? 'Tuck: the needle took the yarn but did not clear, so it is not knocked over. It is cleared with the held loop ' + (s.held + 1) + ' course' + (s.held ? 's' : '') + ' later'
         : s.act === 'M' ? 'Miss: the needle stayed down; the yarn floats behind the held loop'
+        : s.act === 'E' ? 'Transfer: the loop was handed to the next needle, so this needle is empty — the yarn passes and the eyelet opens; it starts a new loop at the next feed'
           : 'No needle in this slot: the yarn passes straight across';
     tip.innerHTML = '<b>F' + (s.feed + 1) + ' · ' + bed + ' needle ' + s.needle + ' · ' + ACT[s.act] + '</b>' + (s.elastane ? ' (elastane)' : '') + '<br>' + what + '.';
     tip.hidden = false;
@@ -784,7 +815,7 @@
   function renderCloth() {
     var host = $('st-3d');
     var con = construction();
-    var mm = function (g) { return g.map(function (r) { return r.map(function (x) { return x === '-' ? 'M' : x; }); }); };
+    var mm = function (g) { return g.map(function (r) { return r.map(function (x) { return x === '-' || x === 'E' ? 'M' : x; }); }); };
     var grid = mm(S.C), dial = S.D ? mm(S.D) : null;
     var roles = S.feeds.map(function (f) { return (f && f.role) || 'ground'; });
     var pattern = {
@@ -841,9 +872,9 @@
   var STORE = 'ka_studio_designs';
   function readStore() { try { return JSON.parse(localStorage.getItem(STORE) || '[]'); } catch (_) { return []; } }
   function writeStore(a) { try { localStorage.setItem(STORE, JSON.stringify(a)); return true; } catch (_) { return false; } }
-  var FIELDS = ['st-ne', 'st-fibre', 'st-gsm', 'st-width', 'st-gauge', 'st-dia', 'st-feeders', 'st-rpm', 'st-sl', 'st-eff', 'st-tc', 'st-td', 'st-lyd', 'st-lydraft', 'st-lyevery', 'st-v1r', 'st-v1l', 'st-v2r', 'st-v2l'];
+  var FIELDS = ['st-ne', 'st-fibre', 'st-gsm', 'st-width', 'st-gauge', 'st-dia', 'st-feeders', 'st-rpm', 'st-sl', 'st-eff', 'st-tc', 'st-td', 'st-lyd', 'st-lydraft', 'st-lyevery', 'st-v1r', 'st-v1l', 'st-v2r', 'st-v2l', 'st-sinker', 'st-parr'];
   function designNow() {
-    var o = { v: 2, name: $('st-name').value || 'Untitled design', bed: S.bed, C: S.C, D: S.D, feeds: S.feeds, rolls: rolls, lycra: $('st-lycra').checked, brushed: $('st-brushed').checked, colour: $('st-col').value, fields: {} };
+    var o = { v: 2, name: $('st-name').value || 'Untitled design', bed: S.bed, C: S.C, D: S.D, feeds: S.feeds, rolls: rolls, lycra: $('st-lycra').checked, cut: $('st-cut').checked, brushed: $('st-brushed').checked, colour: $('st-col').value, fields: {} };
     FIELDS.forEach(function (id) { o.fields[id] = $(id).value; });
     return o;
   }
@@ -852,7 +883,7 @@
     snapshot();
     S.bed = o.bed || (o.D ? 'rib' : 'single'); S.C = o.C; S.D = o.D || null; S.feeds = o.feeds || o.C.map(function () { return { role: 'ground' }; });
     $('st-name').value = o.name || ''; delete $('st-name').dataset.auto;
-    $('st-lycra').checked = !!o.lycra; $('st-lycra-box').hidden = !o.lycra;
+    $('st-lycra').checked = !!o.lycra; $('st-lycra-box').hidden = !o.lycra; $('st-cut').checked = !!o.cut;
     $('st-brushed').checked = !!o.brushed; if (o.colour) $('st-col').value = o.colour;
     Object.keys(o.fields || {}).forEach(function (id) { if ($(id)) $(id).value = o.fields[id]; });
     S.templateId = ''; $('st-template').value = '';

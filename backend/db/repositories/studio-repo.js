@@ -23,7 +23,7 @@ function cleanDesign(body) {
     const w = Array.isArray(g[0]) ? g[0].length : -1;
     if (w < 1 || w > 48) throw new DesignError(`${what}: 1 to 48 needles.`);
     g.forEach((row) => {
-      if (!Array.isArray(row) || row.length !== w || row.some((x) => !['K', 'T', 'M', '-'].includes(x))) throw new DesignError(`${what}: every feed must hold the same number of K, T, M or - cells.`);
+      if (!Array.isArray(row) || row.length !== w || row.some((x) => !['K', 'T', 'M', 'E', '-'].includes(x))) throw new DesignError(`${what}: every feed must hold the same number of K, T, M, E or - cells.`);
     });
   };
   grid(d.C, 'Cylinder');

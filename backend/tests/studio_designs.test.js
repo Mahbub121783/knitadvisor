@@ -16,7 +16,7 @@ const refuse = (body, re) => assert.throws(() => cleanDesign(body), (e) => e ins
 refuse({ name: '', design: ok.design }, /name/);
 refuse({ name: 'x', design: null }, /Nothing/);
 refuse({ name: 'x', design: { C: [] } }, /feeds/);
-refuse({ name: 'x', design: { C: [['K', 'X']] } }, /K, T, M or -/);
+refuse({ name: 'x', design: { C: [['K', 'X']] } }, /K, T, M, E or -/);
 refuse({ name: 'x', design: { C: [['K', 'K'], ['K']] } }, /same number/);
 refuse({ name: 'x', design: { C: [['K']], D: [['K'], ['K']] } }, /same number of feeds/);
 refuse({ name: 'x', design: { ...ok.design, rolls: new Array(13).fill({}) } }, /12 trial rolls/);

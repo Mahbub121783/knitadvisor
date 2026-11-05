@@ -66,6 +66,7 @@
     td.c.K { background: #1857C4; color: #fff; }
     td.c.T { background: #E8A33A; color: #2a1a00; }
     td.c.M { background: #F1F3F5; color: #868C94; border-color: var(--line2); }
+    td.c.E { background: #fff; color: #0e7490; border: 2px dashed #0e7490; }
     td.c.X { background: repeating-linear-gradient(45deg, #fff, #fff 4px, #E4E6E9 4px, #E4E6E9 8px); color: #868C94; border-color: var(--line2); }
     td.c.bad { box-shadow: 0 0 0 2px var(--danger) inset; }
     td.feedcell { white-space: nowrap; padding-right: 6px; }
@@ -177,6 +178,14 @@
             <div class="st-f"><label for="st-fibre">Fibre</label><select id="st-fibre"></select></div>
           </div>
           <p class="st-hint">Leave the count empty and the studio picks it from the target GSM. Other yarns (face, binder, loop) are set per feed in the design.</p>
+          <div id="st-plush-box" hidden>
+            <p class="st-hint"><b>Plush pile.</b> A loop-yarn feeder that knits is plated behind the ground yarn and drawn over the high sinker: terry or velour. The ground count above is the ground yarn; the loop feeder's count is the pile.</p>
+            <label class="st-check"><input type="checkbox" id="st-cut"> Shear the loops open (velour)</label>
+            <div class="st-row">
+              <div class="st-f"><label for="st-sinker">Sinker height (mm)</label><input id="st-sinker" type="number" min="0.8" max="4" step="0.1" placeholder="auto"></div>
+              <div class="st-f"><label for="st-parr">Pile loop on</label><select id="st-parr"><option value="full">every needle</option><option value="alternate">alternate needles</option><option value="checker">checker</option><option value="diagonal">diagonal</option></select></div>
+            </div>
+          </div>
           <label class="st-check"><input type="checkbox" id="st-lycra"> Elastane plated</label>
           <div class="st-row" id="st-lycra-box" hidden>
             <div class="st-f"><label for="st-lyd">Elastane (denier)</label><select id="st-lyd"><option>20</option><option>30</option><option selected>40</option><option>70</option></select></div>
@@ -250,6 +259,7 @@
               <button type="button" data-s="K" class="on">K<small>knit</small></button>
               <button type="button" data-s="T">T<small>tuck</small></button>
               <button type="button" data-s="M">M<small>miss</small></button>
+              <button type="button" data-s="E">E<small>transfer</small></button>
               <button type="button" data-s="-">–<small>no needle</small></button>
             </div>
             <button type="button" class="st-btn" data-op="addFeed">+ Feed</button>
@@ -267,6 +277,7 @@
             <span><i style="background:#1857C4"></i>K knit: needle clears and takes the yarn</span>
             <span><i style="background:#E8A33A"></i>T tuck: takes the yarn, keeps the old loop</span>
             <span><i style="background:#F1F3F5;border:1px solid #D2D5DA"></i>M miss: yarn floats past</span>
+            <span><i style="background:#fff;border:2px dashed #0e7490"></i>E transfer: the loop moves to the next needle — an eyelet (pointelle)</span>
             <span><i style="background:repeating-linear-gradient(45deg,#fff,#fff 3px,#E4E6E9 3px,#E4E6E9 6px);border:1px solid #D2D5DA"></i>– no needle in this slot</span>
           </div>
           <p class="st-hint">Rows are feeders in the order the needles meet them, columns are needles in one repeat. Click or drag to paint. On a double bed the dial needle sits between two cylinder needles on rib gating, and face to face with one on interlock gating.</p>
@@ -349,6 +360,6 @@
 </div>
 
 <script src="assets/js/api.js"></script>
-<script src="assets/js/studio.js?v=20261106d"></script>
+<script src="assets/js/studio.js?v=20261106f"></script>
 </body>
 </html>
