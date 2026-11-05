@@ -334,15 +334,19 @@ function loopRate(st, feedRows) {
 // rate ½; a rate between ½ and 1 interpolates (log scale) between the two
 // measured cloths. A single bed has no measured miss cloth: there the loops
 // are taken to keep their shape (packing = 1 ÷ rate), an estimate.
+const SINGLE_BED_PACK = 0.42;
 function holdPacking(family, rate, pitchMm, slMm) {
   if (rate >= 0.999) return { ks: 1, kw: 1, basis: null };
   const double = family === 'rib' || family === 'interlock';
   if (!double) {
     // between no packing (held loops rob all their extra yarn from the
-    // neighbours) and full packing 1 ÷ rate (every loop keeps its shape);
-    // the middle, √(1 ÷ rate), with the range widened to cover both halves
+    // neighbours) and full packing 1 ÷ rate (every loop keeps its shape).
+    // Set by the one measured pair we have: cotton single jersey and 1×1
+    // cross miss knitted from the same yarn at the same 3.0 mm loop, finished
+    // 163 and 170.7 GSM — (1 ÷ rate)^0.42 reproduces it. One pair, one mill:
+    // the likely range stays wide, and a trial roll replaces it.
     const r = Math.max(rate, 0.25);
-    return { ks: Math.pow(1 / r, 0.5), kw: 1, spread: Math.pow(1 / r, 0.25), basis: `loop rate ${r2(rate)}: each needle misses ${r1((1 - rate) * 100)}% of the feeds, so its loop is held and the cloth packs more feeds per cm — taken as √(1 ÷ rate), the middle of no packing and full packing, and the likely range widened to cover both (no single-bed miss cloth in the factory records — estimate; a trial roll fixes it)`, measured: false };
+    return { ks: Math.pow(1 / r, SINGLE_BED_PACK), kw: 1, spread: Math.pow(1 / r, 0.2), basis: `loop rate ${r2(rate)}: each needle misses ${r1((1 - rate) * 100)}% of the feeds, so its loop is held and the cloth packs more feeds per cm — (1 ÷ rate)^${SINGLE_BED_PACK}, set on one published jersey / cross-miss pair (same yarn and loop), not on your factory's records; likely range widened (estimate — a trial roll fixes it)`, measured: false };
   }
   const ksR = KP.calFor('ks', 'rib', false).med, ksI = KP.calFor('ks', 'interlock', false).med;
   const kwR = KP.calFor('kw', 'rib', false).med, kwI = KP.calFor('kw', 'interlock', false).med;

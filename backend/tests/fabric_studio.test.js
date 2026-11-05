@@ -225,4 +225,15 @@ assert.strictEqual(tpl('ponte_di_roma').gating, 'interlock');
   assert(bad.checks.some((c) => c.level === 'error' && /transferred loop goes onto needle 3/.test(c.text)), 'a transfer needs a needle to take the loop');
 }
 
+// single-bed miss: the one measured pair (same yarn, same 3.0 mm loop:
+// jersey 163, 1×1 cross miss 170.7 GSM finished) is reproduced, and the
+// result stays an estimate with a wide range
+{
+  const run = (C) => S.analyse({ bed: 'single', grid: { C }, feeds: C.map(() => ({})), yarn: { ne: 30, fibre: 'cotton' }, machine: { sl_mm: 3.0, gauge: 24, dia: 30 }, target: {} });
+  const sj = run(['K']), cm = run(['KM', 'MK']);
+  assert(Math.abs(cm.fabric.gsm / sj.fabric.gsm - 170.7 / 163) < 0.01, 'cross miss : jersey weight as measured');
+  assert.strictEqual(cm.structure.confidence.level, 'estimate');
+  assert(cm.fabric.gsm_range[1] - cm.fabric.gsm_range[0] > 2.5 * (sj.fabric.gsm_range[1] - sj.fabric.gsm_range[0]), 'range wider than a measured fabric');
+}
+
 console.log('Fabric studio tests passed');
