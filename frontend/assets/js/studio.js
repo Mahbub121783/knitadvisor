@@ -514,7 +514,7 @@
   // ── needle action: the cam race ──────────────────────────────────────────
   var race = (function () {
     var svgNS = 'http://www.w3.org/2000/svg';
-    var ZONE = 230, GAP = 34, H = 300, BASE = 210;       // BASE: sinker (verge) line
+    var ZONE = 230, GAP = 34, H = 372, BASE = 210;       // BASE: sinker (verge) line; H clears the lowest stem (BASE + 98 + DROP) and the legend
     var LIFT = { K: 110, T: 62, M: 0, E: 88, '-': 0 };    // clearing / tuck / rest / transfer
     var DROP = 22;                                        // stitch cam: below the verge to knock over
     var needles = [], svg = null, t0 = null, offset = 0, playing = true, raf = null, spawn = 0, built = false;

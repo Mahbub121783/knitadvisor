@@ -29,6 +29,17 @@
     .st-head p { margin: 0 0 16px; color: var(--t2); font-size: 13px; max-width: 760px; }
     .st-layout { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 16px; align-items: start; }
     @media (max-width: 1000px) { .st-layout { grid-template-columns: minmax(0, 1fr); } }
+    /* one column: fabrication, yarn and target, then straight to the design,
+       its checks and the 3D — machine, trial rolls and save after — so an
+       edit and the fabric it makes are on one screen, not a page apart */
+    @media (max-width: 1000px) {
+      .st-layout { display: flex; flex-direction: column; gap: 0; }
+      .st-layout > aside, .st-layout > section { display: contents; }
+      .st-layout > aside > .st-card { order: 3; }
+      .st-layout > aside > .st-card:nth-child(-n+3) { order: 1; }
+      .st-layout > section > * { order: 2; }
+      .st-layout > aside > *, .st-layout > section > * { min-width: 0; max-width: 100%; }
+    }
     @media (max-width: 700px) { .st-main { padding-left: 16px; padding-right: 16px; } .st-tabs button { padding: 9px 9px; font-size: 12px; } }
     .st-layout > * { min-width: 0; }
     .st-card { background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; margin-bottom: 12px; }
@@ -358,6 +369,6 @@
 </div>
 
 <script src="assets/js/api.js"></script>
-<script src="assets/js/studio.js?v=20261107a"></script>
+<script src="assets/js/studio.js?v=20261107c"></script>
 </body>
 </html>
