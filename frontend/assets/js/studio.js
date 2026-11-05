@@ -376,10 +376,13 @@
     html += '<p class="st-p">State: ' + esc(f.state) + '. Kw ' + f.kw + ' (' + esc(f.kw_basis) + '), Ks ' + f.ks + ' (' + esc(f.ks_basis) + ').</p>';
     html += '<p class="st-p" style="font-family:var(--mono);font-size:11px">' + esc(f.formulas.gsm) + '<br>' + esc(f.formulas.width) + '</p>';
     if (r.solver) {
-      html += '<div class="st-sub">Count options ' + src('m') + '</div><p class="st-p">' + esc(r.solver.basis) + '.</p><div class="st-scroll"><table class="st-t"><tr><th>Count</th><th>Stitch length</th><th>TF</th><th>Gauge</th><th>Gauge fit</th></tr>' +
+      var vd = r.solver.verdict || {};
+      html += '<div class="st-sub">Count and gauge ' + src('m') + '</div>' +
+        (vd.text ? '<ul class="st-checks"><li class="' + (vd.level === 'ok' ? 'ok' : 'warn') + '">' + esc(vd.text) + '</li></ul>' : '') +
+        '<p class="st-p">' + esc(r.solver.basis) + '. ' + r.solver.feasible + ' of ' + r.solver.tried + ' count × gauge settings keep every limit.</p><div class="st-scroll"><table class="st-t"><tr><th>Count</th><th>Gauge</th><th>Stitch length</th><th>TF</th><th>GSM</th><th>Open width</th><th>Limits</th></tr>' +
         r.solver.options.map(function (o, i) {
-          return '<tr' + (i === 0 ? ' style="background:var(--accent-tint)"' : '') + '><td>' + esc(o.count) + (i === 0 ? ' ✓' : '') + '</td><td>' + o.sl_mm + ' mm</td><td>' + o.tf + '</td><td>' + o.gauge + ' GG</td><td>' + esc(o.gauge_fit) + '</td></tr>';
-        }).join('') + '</table></div>';
+          return '<tr' + (i === 0 ? ' style="background:var(--accent-tint)"' : '') + '><td>' + esc(o.count) + (i === 0 ? ' ✓' : '') + '</td><td>' + o.gauge + ' GG' + (o.practised ? ' ·&nbsp;factory' : '') + '</td><td>' + o.sl_mm + ' mm</td><td>' + o.tf + '</td><td>' + o.gsm + '</td><td>' + o.width_in + '"</td><td>' + (o.breaks && o.breaks.length ? '<span style="color:#9a5b00">' + esc(o.breaks.join('; ')) + '</span>' : 'all kept') + '</td></tr>';
+        }).join('') + '</table></div><p class="st-p">“factory”: the gauge the factory records most often knit this count on for this family. Limits: tightness factor inside the factory\'s 5th–95th percentile, gauge fit, hook load, stitch length 1.8–7 mm.</p>';
     }
     html += '<div class="st-sub">Yarn on every feeder ' + src('c') + '</div><div class="st-scroll"><table class="st-t"><tr><th>Feed</th><th>Role</th><th>Yarn</th><th>SL mm</th><th>TF</th><th>Yarn per needle</th><th>Course length m/rev</th><th>Yarn speed m/min</th><th>Share of fabric</th><th>Input tension cN ' + src('e') + '</th></tr>' +
       y.feeds.map(function (x) {
@@ -664,8 +667,121 @@
     return { type: 'rib', base: 'double', label: 'rib', mesh: false, brush: false, ribRepeat: { a: Math.max(1, a), b: Math.max(1, b) } };
   }
 
+  // ── 3D: the loop structure ─────────────────────────────────────────────
+  var mode3d = 'loops', loopView = null, loopPromise = null, buildTimer = null;
   function render3D() {
     if (!last || !$('pane-3d').classList.contains('on')) return;
+    if (mode3d === 'loops') renderLoops(); else renderCloth();
+  }
+
+  function loopSpec() {
+    var f = last.fabric, y = last.yarn;
+    var C = S.C, D = S.D, feeds = S.feeds;
+    var ly = $('st-lycra').checked ? $('st-lyevery').value : null;
+    // alternate plating on an odd repeat only repeats over twice the feeds
+    if (ly === 'alternate' && C.length % 2) { C = C.concat(C); D = D ? D.concat(D) : null; feeds = feeds.concat(feeds); }
+    var groundNe = 590.5 / y.ground.tex;
+    var clamp = function (v, a, b) { return Math.max(a, Math.min(b, v)); };
+    return {
+      C: C, D: D, bed: S.bed, feeds: feeds,
+      // on a phone, fewer needles so each loop is big enough to read
+      wales: $('st-loops').clientWidth < 520 ? 8 : null,
+      h: clamp(f.wpc / f.cpc, 0.5, 1.4),
+      // yarn diameter 0.907/√Ne mm (cotton), drawn a little flattened in the
+      // relaxed loop; one wale = 10/wpc mm
+      radius: feeds.map(function (fd) { var ne = +fd.ne > 0 ? +fd.ne : groundNe; return clamp(0.5 * (0.907 / Math.sqrt(ne)) * f.wpc / 10, 0.06, 0.22); }),
+      plated: feeds.map(function (fd, i) { return !!ly && fd.role !== 'loop' && (ly === 'all' || i % 2 === 0); }),
+      colourBy: $('st-colby').value, colour: $('st-col').value,
+    };
+  }
+
+  function renderLoops() {
+    var host = $('st-loops');
+    if (!loopPromise) {
+      loopPromise = import('/assets/js/studio-loops.js?v=20261106c').then(function (mod) {
+        loopView = new mod.LoopView(host, showTip);
+        loopView.feedColour = mod.feedColour;
+        return loopView;
+      });
+    }
+    loopPromise.then(function (v) {
+      var spec = loopSpec();
+      var geo = v.draw(spec);
+      var bs = $('st-bstep');
+      bs.max = String(geo.rows); bs.value = String(geo.rows); v.setStep(null); stopBuild();
+      $('st-bnote').textContent = geo.rows + ' courses · ' + geo.wales + ' needles a bed · ' + (geo.rows / geo.F) + ' × ' + (geo.wales / geo.W) + ' repeats';
+      var F = geo.F, hl = v._hl;
+      $('st-feedkey').innerHTML = '<span>Feeders:</span>' + Array.from({ length: F }, function (_, i) {
+        var fd = spec.feeds[i] || {};
+        return '<button type="button" class="fk' + (hl === i ? ' on' : '') + '" data-fk="' + i + '"><i style="background:' + v.feedColour(spec, i) + '"></i>F' + (i + 1) + ' ' + esc(fd.role || 'ground') + (spec.plated[i] ? ' + elastane' : '') + '</button>';
+      }).join('') + (spec.plated.some(Boolean) ? '<span><i style="background:#f5f5f4;border:1px solid #bbb"></i>elastane, plated behind</span>' : '');
+    }).catch(function () {
+      host.innerHTML = '<p class="st-p" style="padding:16px">The loop view needs WebGL, which this browser does not have.</p>';
+    });
+  }
+
+  var ACT = { K: 'knit', T: 'tuck', M: 'miss', '-': 'no needle' };
+  function showTip(s) {
+    var tip = $('st-tip');
+    if (!s) { tip.hidden = true; return; }
+    var bed = s.bed === 'C' ? 'cylinder' : 'dial';
+    var what = s.act === 'K' ? 'Knit loop' + (s.held ? ', held ' + s.held + ' course' + (s.held > 1 ? 's' : '') + ' (the needle tucks or misses above it)' : '') + (s.tucks ? '; drawn through ' + s.tucks + ' tuck' + (s.tucks > 1 ? 's' : '') + ' as well as the old loop' : '')
+      : s.act === 'T' ? 'Tuck: the needle took the yarn but did not clear, so it is not knocked over. It is cleared with the held loop ' + (s.held + 1) + ' course' + (s.held ? 's' : '') + ' later'
+        : s.act === 'M' ? 'Miss: the needle stayed down; the yarn floats behind the held loop'
+          : 'No needle in this slot: the yarn passes straight across';
+    tip.innerHTML = '<b>F' + (s.feed + 1) + ' · ' + bed + ' needle ' + s.needle + ' · ' + ACT[s.act] + '</b>' + (s.elastane ? ' (elastane)' : '') + '<br>' + what + '.';
+    tip.hidden = false;
+    var host = $('st-loops'), x = Math.min(s.clientX + 14, host.clientWidth - 270), yy = Math.min(s.clientY + 14, host.clientHeight - 80);
+    tip.style.left = Math.max(4, x) + 'px'; tip.style.top = Math.max(4, yy) + 'px';
+  }
+
+  function stopBuild() { if (buildTimer) { clearInterval(buildTimer); buildTimer = null; } $('st-bplay').textContent = 'Knit it feed by feed'; }
+  function playBuild() {
+    if (buildTimer) return stopBuild();
+    if (!loopView || !loopView.geo) return;
+    var bs = $('st-bstep'), n = loopView.geo.rows, k = 0;
+    $('st-bplay').textContent = 'Stop';
+    loopView.setStep(0); bs.value = '1';
+    buildTimer = setInterval(function () {
+      k++;
+      if (k >= n) { loopView.setStep(null); bs.value = String(n); stopBuild(); return; }
+      loopView.setStep(k); bs.value = String(k + 1);
+      var f = k % loopView.geo.F;
+      $('st-bnote').textContent = 'Course ' + (k + 1) + ' of ' + n + ' — feeder F' + (f + 1);
+    }, 650);
+  }
+
+  function bindLoops() {
+    $('st-3dmode').addEventListener('click', function (e) {
+      var b = e.target.closest('button'); if (!b) return;
+      mode3d = b.getAttribute('data-mode');
+      Array.prototype.forEach.call(this.children, function (x) { x.classList.toggle('on', x === b); });
+      var lp = mode3d === 'loops';
+      $('st-loops').hidden = !lp; $('st-loopbar').hidden = !lp; $('st-build').hidden = !lp; $('st-feedkey').hidden = !lp; $('st-loophint').hidden = !lp;
+      $('st-3d').hidden = lp; $('st-clothbar').hidden = lp; $('st-clothhint').hidden = lp;
+      render3D();
+    });
+    $('st-loopbar').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-view]'); if (b && loopView) loopView.view(b.getAttribute('data-view'));
+    });
+    $('st-colby').addEventListener('change', render3D);
+    $('st-feedkey').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-fk]'); if (!b || !loopView) return;
+      var i = +b.getAttribute('data-fk'), on = loopView._hl === i;
+      loopView.highlight(on ? null : i);
+      Array.prototype.forEach.call(this.querySelectorAll('.fk'), function (x) { x.classList.toggle('on', !on && x === b); });
+    });
+    $('st-bplay').addEventListener('click', playBuild);
+    $('st-bstep').addEventListener('input', function () {
+      stopBuild(); if (!loopView) return;
+      var k = +this.value;
+      loopView.setStep(k >= loopView.geo.rows ? null : k - 1);
+      $('st-bnote').textContent = k >= loopView.geo.rows ? 'All ' + k + ' courses' : 'Course ' + k + ' of ' + loopView.geo.rows + ' — feeder F' + (((k - 1) % loopView.geo.F) + 1);
+    });
+  }
+
+  // ── 3D: the cloth ──────────────────────────────────────────────────────
+  function renderCloth() {
     var host = $('st-3d');
     var con = construction();
     var mm = function (g) { return g.map(function (r) { return r.map(function (x) { return x === '-' ? 'M' : x; }); }); };
@@ -766,6 +882,7 @@
   function init() {
     bindEditor();
     bindRolls();
+    bindLoops();
     renderNeedleTypes();
     $('st-bed').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) setBed(b.getAttribute('data-bed')); });
     $('st-template').addEventListener('change', function () { applyTemplate(this.value); });

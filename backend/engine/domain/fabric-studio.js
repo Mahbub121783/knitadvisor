@@ -190,12 +190,18 @@ function classify(st, roles, gating) {
 }
 
 // the anchor's yarn per needle position, in ground-tex units
+// (memoised: the setup search asks for it thousands of times)
+const anchorCache = new Map();
 function anchorMass(family, pitchMm, slMm) {
-  const f = byId(FAMILY[family].anchor);
-  const t = KP.normaliseStructure(f);
-  const roles = templateOf(f).roles;
-  const cons = KP.feedConsumption(t, pitchMm, slMm);
-  return { def: f, M: mean(cons.map((c, i) => c.share * (roles[i] === 'loop' ? ANCHOR_LOOP_TEX_RATIO : 1))) };
+  const key = `${family}|${pitchMm}|${slMm}`;
+  if (anchorCache.has(key)) return anchorCache.get(key);
+  let a = anchorCache.get(family);
+  if (!a) { const f = byId(FAMILY[family].anchor); a = { f, t: KP.normaliseStructure(f), roles: templateOf(f).roles }; anchorCache.set(family, a); }
+  const cons = KP.feedConsumption(a.t, pitchMm, slMm);
+  const out = { def: a.f, M: mean(cons.map((c, i) => c.share * (a.roles[i] === 'loop' ? ANCHOR_LOOP_TEX_RATIO : 1))) };
+  if (anchorCache.size > 5000) anchorCache.clear();
+  anchorCache.set(key, out);
+  return out;
 }
 
 function maxRun(col, sym) {
@@ -486,6 +492,104 @@ function calibrate(ctx, ground, rolls) {
 
 
 // ── checks the floor would otherwise find on the machine ───────────────────
+// hook load: loops held in one hook against the space between needles
+function hookLoad(st, S) {
+  const d = S.gfit.yarn_d_mm;
+  let worst = { idx: 0, loops: 1, where: '' };
+  for (const [b, name] of [['C', 'cylinder'], ['D', 'dial']]) {
+    const g = st.beds[b]; if (!g) continue;
+    for (let j = 0; j < st.width; j++) {
+      const col = g.map((r) => r[j]); if (col.every((x) => x === '-')) continue;
+      const loops = 1 + maxRun(col, 'T');
+      const idx = (loops * d) / S.pitch;
+      if (idx > worst.idx) worst = { idx, loops, where: `${name} needle ${j + 1}` };
+    }
+  }
+  return worst;
+}
+
+// ── choosing the count and the gauge together ─────────────────────────────
+// The limits a setting must keep, every one from the checks below, so the
+// studio never proposes a setting its own checks then reject:
+//   tightness factor inside the factory's 5th–95th percentile for the family
+//   needle pitch ÷ yarn diameter inside the factory's band (gauge fit)
+//   hook load ≤ 0.6 where tucks pile loops in one hook
+//   stitch length 1.8–7 mm
+// Every commercial count is tried on every gauge whose fit could be good for
+// it (or only on the gauge you set). Settings that keep all limits are ranked
+// by how near the middle of the factory's practice they sit; when none keeps
+// them all the nearest is returned with the limits it breaks, and the answer
+// says so instead of passing it off as a solution.
+function chooseSetup(ctx, fibre) {
+  const { family, input, st } = ctx;
+  const mach = input.machine || {};
+  const W = tfWindow(family, ctx.lycra);
+  const M = KP.MACHINE[FAMILY[family].machine];
+  const B = KP.CAL.band[family] && KP.CAL.band[family].n >= 20 ? KP.CAL.band[family] : KP.CAL.band.single_jersey;
+  const fixedGauge = +mach.gauge > 0 ? +mach.gauge : null;
+  const tried = [];
+  for (const ne of COUNTS) {
+    const yarn = { tex: 590.5 / ne, ne, label: `${ne}s Ne`, fibre, fibre_label: FIBRES[fibre].label };
+    const yarnD = (Math.sqrt(yarn.tex) / 28) * FIBRES[fibre].dFactor;
+    const fits = M.gauges.filter((g) => { const r = 25.4 / g / yarnD; return r >= B.lo * 0.92 && r <= B.hi * 1.08; });
+    const fg = factoryGauge(family, ctx.lycra, ne);
+    const gauges = fixedGauge ? [fixedGauge] : [...new Set([...(fits.length ? fits : []), ...(fg ? [fg.gauge] : [])])];
+    if (!gauges.length) gauges.push(M.gauges.reduce((b, g) => (Math.abs(25.4 / g / yarnD - (B.lo + B.hi) / 2) < Math.abs(25.4 / b / yarnD - (B.lo + B.hi) / 2) ? g : b), M.gauges[0]));
+    for (const g of gauges) {
+      let s;
+      try { s = solve({ ...ctx, input: { ...input, machine: { ...mach, gauge: g } } }, yarn); } catch (e) { if (e instanceof StudioError) continue; throw e; }
+      const broken = [];
+      if (W && s.tfGround > W.p95) broken.push(`tightness factor ${r1(s.tfGround)} above the factory's ${W.p95}`);
+      if (W && s.tfGround < W.p5) broken.push(`tightness factor ${r1(s.tfGround)} below the factory's ${W.p5}`);
+      if (s.gfit.fit !== 'good') broken.push(`${g} GG ${s.gfit.fit} for ${ne}s (pitch/yarn ${s.gfit.ratio}, factory ${s.gfit.band[0]}–${s.gfit.band[1]})`);
+      const hl = hookLoad(st, s);
+      if (hl.loops > 1 && hl.idx > 0.6) broken.push(`hook load ${r2(hl.idx)} (${hl.loops} loops) above 0.6`);
+      if (s.lref < 1.8 || s.lref > 7) broken.push(`stitch length ${r2(s.lref)} mm outside 1.8–7`);
+      const spread = W ? Math.max(0.3, W.q3 - W.q1) : 1;
+      const mid = Math.sqrt(B.lo * B.hi);
+      // the factory's own gauge for this count weighs more than the middle of the fit band
+      const score = (W ? Math.abs(s.tfGround - W.med) / spread : 0)
+        + 0.5 * Math.abs(Math.log(s.gfit.ratio / mid)) / Math.log(B.hi / B.lo)
+        + (fg && fg.gauge !== g ? 0.8 : 0);
+      tried.push({ s, g, ne, broken, score, practised: !!(fg && fg.gauge === g), tfIn: W ? s.tfGround >= W.q1 && s.tfGround <= W.q3 : null });
+    }
+  }
+  if (!tried.length) throw new StudioError('No commercial count reaches this GSM on this structure.');
+  const ok = tried.filter((t) => !t.broken.length).sort((a, b) => a.score - b.score);
+  const rest = tried.filter((t) => t.broken.length).sort((a, b) => a.broken.length - b.broken.length || a.score - b.score);
+  const ranked = ok.length ? ok : rest;
+  const best = ranked[0];
+  const target = +((input.target || {}).gsm);
+  let verdict;
+  if (ok.length) {
+    verdict = { level: 'ok', text: `${ok.length} setting${ok.length > 1 ? 's' : ''} of ${tried.length} tried keep every limit. Best: ${best.ne}s Ne on ${best.g} GG at ${r2(best.s.lref)} mm${best.practised ? ' — the gauge the factory most often knits this count on' : ''}.` };
+  } else {
+    // what the structure can reach inside the limits, so the answer says what to change
+    const heavy = W && tried.every((t) => t.s.tfGround > W.p95);
+    const light = W && tried.every((t) => t.s.tfGround < W.p5);
+    verdict = {
+      level: 'not_reachable',
+      text: `No count and gauge knits ${target} GSM on this structure inside every factory limit. ` +
+        (heavy ? `Every workable count would have to be knitted tighter than the factory ever finishes this family: ${target} GSM is too heavy for it. Lower the target, use a heavier (or plied) yarn, or a structure that lays more yarn per needle.`
+          : light ? `Every workable count would be knitted looser than the factory ever finishes this family: ${target} GSM is too light for it. Raise the target, use a finer count or a more open structure.`
+            : '') +
+        ` Nearest: ${best.ne}s Ne on ${best.g} GG at ${r2(best.s.lref)} mm, which breaks: ${best.broken.join('; ')}.`.replace(/\s+/g, ' '),
+    };
+  }
+  return {
+    S: best.s, verdict,
+    solver: {
+      basis: `every commercial count (${COUNTS[0]}s–${COUNTS[COUNTS.length - 1]}s) tried on ${fixedGauge ? `your ${fixedGauge} GG` : 'each gauge that suits it'}; limits from the factory records${W ? ` (tightness factor ${W.p5}–${W.p95}, ${W.basis})` : ''}, ranked by nearness to the factory median`,
+      verdict,
+      tried: tried.length, feasible: ok.length,
+      options: ranked.slice(0, 6).map((t) => ({
+        count: t.s.ground.label, sl_mm: r2(t.s.lref), tf: r1(t.s.tfGround), gauge: t.g, gauge_fit: t.s.gfit.fit,
+        gsm: Math.round(t.s.gsm), width_in: r1(t.s.width), practised: t.practised, breaks: t.broken, score: r2(t.score),
+      })),
+    },
+  };
+}
+
 function checksFor(ctx, S, T) {
   const { st, family, input, feedRows } = ctx;
   const mach = input.machine || {};
@@ -506,18 +610,7 @@ function checksFor(ctx, S, T) {
       if ((c === 'K' || c === 'T') && (d === 'K' || d === 'T')) add('error', `Feed ${i + 1}, needle ${j + 1}: on interlock gating the cylinder and dial needles face each other — both cannot rise at the same feed. Move one to the other track.`);
     }
   }
-  // hook load: loops held in one hook against the space between needles
-  const d = S.gfit.yarn_d_mm;
-  let worst = { idx: 0, loops: 1, where: '' };
-  for (const [b, name] of [['C', 'cylinder'], ['D', 'dial']]) {
-    const g = st.beds[b]; if (!g) continue;
-    for (let j = 0; j < st.width; j++) {
-      const col = g.map((r) => r[j]); if (col.every((x) => x === '-')) continue;
-      const loops = 1 + maxRun(col, 'T');
-      const idx = (loops * d) / S.pitch;
-      if (idx > worst.idx) worst = { idx, loops, where: `${name} needle ${j + 1}` };
-    }
-  }
+  const worst = hookLoad(st, S);
   if (worst.loops > 1) {
     const msg = `${worst.where}: ${worst.loops} loops in one hook at ${S.gauge} GG with ${S.ground.label} — hook load ${r2(worst.idx)} (yarn Ø × loops ÷ needle pitch; estimate).`;
     if (worst.idx > 0.6) add('warn', `${msg} Above 0.6: press-off and needle damage are likely — use a finer yarn, a coarser gauge or fewer tucks in a row.`);
@@ -636,32 +729,18 @@ function analyse(input) {
     let solver = null, S;
     if (auto) {
       if (!((input.target || {}).gsm > 0)) throw new StudioError('Give the ground yarn count, or a target GSM so the count can be solved.');
-      const W = tfWindow(family, lycra);
       const fibre = FIBRES[(input.yarn || {}).fibre] ? input.yarn.fibre : 'cotton';
-      const opts = [];
-      for (const ne of COUNTS) {
-        try {
-          const s = solve(ctx, { tex: 590.5 / ne, ne, label: `${ne}s Ne`, fibre, fibre_label: FIBRES[fibre].label });
-          const spread = W ? Math.max(0.3, W.q3 - W.q1) : 1;
-          let score = W ? Math.abs(s.tfGround - W.med) / spread : 0;
-          if (s.gfit.fit !== 'good') score += 2;
-          if (s.lref < 1.8 || s.lref > 7) score += 5;
-          opts.push({ s, score });
-        } catch (e) { if (!(e instanceof StudioError)) throw e; }
-      }
-      opts.sort((a, b) => a.score - b.score);
-      if (!opts.length) throw new StudioError('No commercial count reaches this GSM on this structure.');
-      S = opts[0].s;
-      solver = {
-        basis: W ? `count chosen so the tightness factor sits nearest the factory median (${W.med}, ${W.basis})` : 'nearest workable count',
-        options: opts.slice(0, 4).map(({ s, score }) => ({
-          count: s.ground.label, sl_mm: r2(s.lref), tf: r1(s.tfGround), gauge: s.gauge, gauge_fit: s.gfit.fit, score: r2(score),
-        })),
-      };
+      const pick = chooseSetup(ctx, fibre);
+      S = pick.S; solver = pick.solver;
     } else S = solve(ctx, ground);
 
     const T = { C: KP.tracksOf(st.beds.C), D: KP.tracksOf(st.beds.D) };
     const checks = checksFor(ctx, S, T);
+    if (solver) {
+      const v = { level: solver.verdict.level === 'ok' ? 'ok' : 'warn', text: solver.verdict.text };
+      const at = checks.findIndex((c) => c.level !== 'error');
+      checks.splice(at < 0 ? checks.length : at, 0, v);
+    }
     const match = matchCatalogue(st);
     const anchorDef = S.A.def;
     const isAnchor = match && match.id === anchorDef.id;

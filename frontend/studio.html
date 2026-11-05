@@ -101,6 +101,15 @@
     .st-tabs button.on { color: var(--accent); border-bottom-color: var(--accent); }
     .st-pane { display: none; } .st-pane.on { display: block; }
     #st-3d { width: 100%; min-height: 380px; border-radius: 12px; background: #e9ebef; position: relative; }
+    #st-loops { width: 100%; height: 460px; border-radius: 12px; background: radial-gradient(circle at 50% 40%, #f4f5f7, #dfe2e7); position: relative; overflow: hidden; touch-action: none; }
+    #st-loops[hidden], #st-3d[hidden], .st-build[hidden] { display: none; }
+    @media (max-width: 640px) { #st-loops { height: 360px; } }
+    .st-3dmode { margin-bottom: 8px; }
+    .st-tip { position: absolute; z-index: 2; pointer-events: none; background: rgba(17,24,39,.92); color: #fff; font-size: 11.5px; line-height: 1.45; padding: 6px 9px; border-radius: 6px; max-width: 260px; }
+    .st-build { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; color: var(--t2); flex-wrap: wrap; }
+    .st-build input[type=range] { flex: 1; min-width: 140px; }
+    .st-legend button.fk { border: 1px solid var(--line2); background: var(--bg, #fff); border-radius: 999px; padding: 3px 9px; font-size: 11px; cursor: pointer; color: var(--t1); }
+    .st-legend button.fk.on { outline: 2px solid var(--accent, #1857C4); }
     .st-3dbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; font-size: 12px; color: var(--t2); }
     .st-3dbar input[type=color] { width: 34px; height: 28px; border: 1px solid var(--line2); border-radius: 4px; padding: 1px; background: #fff; }
     .st-svgwrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius-sm); background: #fff; }
@@ -279,14 +288,34 @@
           </div>
 
           <div class="st-pane on" id="pane-3d">
-            <div class="st-3dbar">
+            <div class="st-seg st-3dmode" id="st-3dmode">
+              <button type="button" class="on" data-mode="loops">Loop structure</button>
+              <button type="button" data-mode="cloth">Cloth</button>
+            </div>
+            <div class="st-3dbar" id="st-loopbar">
+              <span>View</span>
+              <button type="button" class="st-btn" data-view="face">Face</button>
+              <button type="button" class="st-btn" data-view="back">Back</button>
+              <button type="button" class="st-btn" data-view="edge">Edge</button>
+              <button type="button" class="st-btn" data-view="angle">Angle</button>
+              <label>Colour by <select id="st-colby" class="st-btn"><option value="feed">feeder</option><option value="role">yarn role</option><option value="one">one colour</option></select></label>
+            </div>
+            <div class="st-3dbar" id="st-clothbar" hidden>
               <label>Colour <input type="color" id="st-col" value="#3d5a80"></label>
               <button type="button" class="st-btn" id="st-side">Show back</button>
               <label class="st-check" style="margin:0" id="st-brush-wrap"><input type="checkbox" id="st-brushed"> Brushed (fleece)</label>
               <span id="st-3dnote"></span>
             </div>
-            <div id="st-3d"></div>
-            <p class="st-hint">Drag to turn the swatch, scroll to zoom down to the loops. The 3D view follows the programme you draw; its loop shape is a model, the numbers on the other tabs are what to set.</p>
+            <div id="st-loops"><div class="st-tip" id="st-tip" hidden></div></div>
+            <div id="st-3d" hidden></div>
+            <div class="st-build" id="st-build">
+              <button type="button" class="st-btn" id="st-bplay">Knit it feed by feed</button>
+              <input type="range" id="st-bstep" min="0" max="1" value="1" aria-label="Courses knitted">
+              <span id="st-bnote"></span>
+            </div>
+            <div class="st-legend" id="st-feedkey"></div>
+            <p class="st-hint" id="st-loophint">Each tube is one yarn; each course is one feeder's pass. A knit loop is drawn through the loop below it, back to front. A tuck is an open arch with no crossing at its foot, lying behind the held loop. A miss is a straight float behind the held loop. A held loop reaches up to the course where its needle next knits. Point at a yarn to read the stitch; click a feeder below to pick out its yarn. Drag to turn, scroll to zoom. Loop shape follows the finished wales and courses per cm; yarn thickness follows each feeder's count.</p>
+            <p class="st-hint" id="st-clothhint" hidden>The cloth view draws the whole swatch with its drape and finish. Use Loop structure to read the stitches.</p>
           </div>
 
           <div class="st-pane" id="pane-notation">
@@ -320,6 +349,6 @@
 </div>
 
 <script src="assets/js/api.js"></script>
-<script src="assets/js/studio.js?v=20261105c"></script>
+<script src="assets/js/studio.js?v=20261106d"></script>
 </body>
 </html>

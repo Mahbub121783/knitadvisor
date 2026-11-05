@@ -169,4 +169,26 @@ assert.strictEqual(tpl('ponte_di_roma').gating, 'interlock');
   assert(!bad.success && /finished GSM/.test(bad.error));
 }
 
+// choosing count and gauge together: what it proposes, its own checks accept
+{
+  const T = S.listTemplates();
+  const run = (id, gsm, machine = {}) => {
+    const t = T.find((x) => x.id === id);
+    return S.analyse({ bed: t.bed, gating: t.gating, grid: t.grid, feeds: t.roles.map((r) => ({ role: r })), yarn: { fibre: 'cotton' }, target: { gsm }, machine });
+  };
+  for (const [id, gsm] of [['single_jersey', 160], ['lacoste_single', 215], ['rib_1x1', 220], ['interlock', 220], ['fleece_3_thread', 300], ['rib_2x2', 305]]) {
+    const o = run(id, gsm);
+    assert(o.success && o.solver.verdict.level === 'ok', `${id} ${gsm}: a setting inside every limit exists`);
+    assert(!o.checks.some((c) => c.level === 'warn' && /Tightness factor|too fine|coarse for|hook load/.test(c.text)), `${id} ${gsm}: the chosen setting passes its own checks — ${o.checks.filter((c) => c.level === 'warn').map((c) => c.text).join(' | ')}`);
+    assert(o.solver.options[0].breaks.length === 0);
+  }
+  // a weight the structure cannot reach inside the factory's limits is said so, not passed off
+  const h = run('heavy_jersey', 335);
+  assert.strictEqual(h.solver.verdict.level, 'not_reachable');
+  assert(/too heavy/.test(h.solver.verdict.text) && h.checks.some((c) => c.level === 'warn' && /No count and gauge/.test(c.text)));
+  // a gauge you set is kept; only the count is searched
+  const g = run('single_jersey', 160, { gauge: 28 });
+  assert(g.solver.options.every((x) => x.gauge === 28) && g.machine.gauge === 28);
+}
+
 console.log('Fabric studio tests passed');
