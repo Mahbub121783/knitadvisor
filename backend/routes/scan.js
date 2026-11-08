@@ -43,7 +43,7 @@ router.get('/card.pdf', (req, res) => {
     // the window to cut out
     doc.save().dash(mm(1), { space: mm(1) }).lineWidth(0.8).strokeColor('#1857C4').rect(mm(ox + 15), mm(oy + 15), mm(40), mm(40)).stroke().restore();
     doc.fillColor('#1857C4').fontSize(7).text('CUT OUT', mm(ox + 15), mm(oy + 33), { width: mm(40), align: 'center' });
-    doc.fillColor('#6f7680').fontSize(6).text('wales run top to bottom  ↕', mm(ox + 15), mm(oy + 38), { width: mm(40), align: 'center' });
+    doc.fillColor('#6f7680').fontSize(6).text('wales run top to bottom', mm(ox + 15), mm(oy + 38), { width: mm(40), align: 'center' });
   };
   doc.fillColor('#191C1F').fontSize(16).text('KnitAdvisor fabric scan card', mm(15), mm(14));
   doc.fontSize(9).fillColor('#565C64').text('Print at 100 % ("Actual size" — never "Fit to page"). Check the 50 mm bar with a ruler before use. Cut along the grey line and cut out the blue window. Keep the white paper clean: it is the colour reference.', mm(15), mm(22), { width: mm(180) });
