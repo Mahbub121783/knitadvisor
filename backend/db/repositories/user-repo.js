@@ -5,18 +5,20 @@
 const { query, queryOne } = require('../client');
 
 const SESSION_DAYS = parseInt(process.env.USER_SESSION_DAYS, 10) || 14;
+const LOCK_AFTER = 8;      // wrong passwords in a row before the account locks
+const LOCK_MINUTES = 15;   // first lock; doubles with each further miss, capped at a day
 
 const users = {
   findByEmail(email) {
     return queryOne(
-      'SELECT id, email, username, full_name, company, password_hash, disabled, email_verified, two_factor, totp_secret, totp_last_step FROM app_users WHERE lower(email) = lower($1)',
+      'SELECT id, email, username, full_name, company, password_hash, disabled, email_verified, two_factor, totp_secret, totp_last_step, failed_logins, locked_until FROM app_users WHERE lower(email) = lower($1)',
       [email]
     );
   },
 
   findByUsername(username) {
     return queryOne(
-      'SELECT id, email, username, full_name, company, password_hash, disabled, email_verified, two_factor, totp_secret, totp_last_step FROM app_users WHERE lower(username) = lower($1)',
+      'SELECT id, email, username, full_name, company, password_hash, disabled, email_verified, two_factor, totp_secret, totp_last_step, failed_logins, locked_until FROM app_users WHERE lower(username) = lower($1)',
       [username]
     );
   },
@@ -54,7 +56,7 @@ const users = {
   findById(id) {
     return queryOne(
       'SELECT id, email, username, username_changed_at, full_name, company, plan_interest, password_hash, disabled, ' +
-      'email_verified, is_paid, student_status, student_expires_at, created_at, last_login_at, two_factor, totp_pending FROM app_users WHERE id = $1',
+      'email_verified, is_paid, student_status, student_expires_at, created_at, last_login_at, two_factor, totp_pending, pending_email FROM app_users WHERE id = $1',
       [id]
     );
   },
@@ -116,6 +118,52 @@ const users = {
   /** The time step of the last accepted app code — the same code cannot be replayed. */
   setTotpLastStep(id, step) {
     return query('UPDATE app_users SET totp_last_step = $2 WHERE id = $1', [id, step]);
+  },
+
+  /**
+   * A wrong password for this account. From LOCK_AFTER wrong in a row the
+   * account is locked for LOCK_MINUTES, doubling each further miss (capped at
+   * a day) — a guesser spread over many IP addresses is stopped all the same.
+   * @returns {Promise<{failed: number, lockedUntil: Date|null}>}
+   */
+  async recordFailedLogin(id) {
+    const row = await queryOne(
+      `UPDATE app_users SET failed_logins = failed_logins + 1,
+              locked_until = CASE WHEN failed_logins + 1 >= $2
+                THEN now() + make_interval(mins => LEAST(1440, $3 * power(2, failed_logins + 1 - $2)::int)) ELSE locked_until END
+        WHERE id = $1 RETURNING failed_logins, locked_until`,
+      [id, LOCK_AFTER, LOCK_MINUTES]
+    );
+    return { failed: row ? row.failed_logins : 0, lockedUntil: row && row.locked_until };
+  },
+
+  clearFailedLogins(id) {
+    return query('UPDATE app_users SET failed_logins = 0, locked_until = NULL WHERE id = $1 AND (failed_logins > 0 OR locked_until IS NOT NULL)', [id]);
+  },
+
+  setPendingEmail(id, email) {
+    return query('UPDATE app_users SET pending_email = $2 WHERE id = $1', [id, email]);
+  },
+
+  /** Self-service email change, after the new address proved itself with a code. */
+  async confirmEmailChange(id) {
+    try {
+      const rows = await query(
+        `UPDATE app_users SET email = pending_email, email_verified = true, pending_email = NULL
+          WHERE id = $1 AND pending_email IS NOT NULL RETURNING id, email`,
+        [id]
+      );
+      return { row: rows[0] || null, conflict: false };
+    } catch (err) {
+      if (err.code === '23505') return { row: null, conflict: true };
+      throw err;
+    }
+  },
+
+  /** The account and everything keyed to it (sessions, codes, history, events cascade). */
+  async remove(id) {
+    const rows = await query('DELETE FROM app_users WHERE id = $1 RETURNING id', [id]);
+    return rows.length > 0;
   },
 
   markEmailVerified(id) {
@@ -238,14 +286,53 @@ const sessions = {
     );
   },
 
-  async create(userId, tokenHash) {
+  async create(userId, tokenHash, ip = null, userAgent = null) {
     const row = await queryOne(
-      `INSERT INTO app_user_sessions (user_id, token_hash, expires_at)
-       VALUES ($1, $2, now() + make_interval(days => $3))
+      `INSERT INTO app_user_sessions (user_id, token_hash, expires_at, ip, user_agent)
+       VALUES ($1, $2, now() + make_interval(days => $3), $4, $5)
        RETURNING expires_at`,
-      [userId, tokenHash, SESSION_DAYS]
+      [userId, tokenHash, SESSION_DAYS, ip, userAgent ? String(userAgent).slice(0, 300) : null]
     );
     return { expiresAt: row.expires_at, maxAgeSeconds: SESSION_DAYS * 86400 };
+  },
+
+  /** The account's signed-in devices, newest first; `current` marks the one asking. */
+  async list(userId, currentHash) {
+    const rows = await query(
+      `SELECT id, ip, user_agent, created_at, last_seen_at, token_hash = $2 AS current
+         FROM app_user_sessions WHERE user_id = $1 AND expires_at > now()
+        ORDER BY last_seen_at DESC LIMIT 30`,
+      [userId, currentHash || '']
+    );
+    return rows;
+  },
+
+  async removeById(userId, id) {
+    const rows = await query('DELETE FROM app_user_sessions WHERE user_id = $1 AND id = $2 RETURNING id', [userId, id]);
+    return rows.length > 0;
+  },
+
+  /** At most one write per session every 10 minutes. */
+  touch(tokenHash) {
+    return query(`UPDATE app_user_sessions SET last_seen_at = now() WHERE token_hash = $1 AND last_seen_at < now() - interval '10 minutes'`, [tokenHash]);
+  },
+
+  /**
+   * Has this account signed in before from this browser on this network (90
+   * days)? An account with no sign-in on record yet counts every device as
+   * known: the first sign-in after signup is not news to its owner.
+   */
+  async knownDevice(userId, ip, userAgent) {
+    const net = String(ip || '').split('.').slice(0, 3).join('.');
+    const row = await queryOne(
+      `SELECT EXISTS (SELECT 1 FROM app_security_events
+                       WHERE user_id = $1 AND kind = 'login' AND user_agent = $2
+                         AND split_part(ip, '.', 1) || '.' || split_part(ip, '.', 2) || '.' || split_part(ip, '.', 3) = $3
+                         AND created_at > now() - interval '90 days') AS seen,
+              EXISTS (SELECT 1 FROM app_security_events WHERE user_id = $1 AND kind = 'login') AS any`,
+      [userId, userAgent ? String(userAgent).slice(0, 300) : '', net]
+    );
+    return !!(row && (row.seen || !row.any));
   },
 
   /** Ends every session for the user except the one making the request. */
@@ -386,4 +473,19 @@ const codes = {
   },
 };
 
-module.exports = { users, sessions, calculations, codes, SESSION_DAYS, MAX_HISTORY_PER_USER };
+const events = {
+  add(userId, kind, { ip = null, userAgent = null, detail = null } = {}) {
+    return query(
+      'INSERT INTO app_security_events (user_id, kind, ip, user_agent, detail) VALUES ($1, $2, $3, $4, $5)',
+      [userId, kind, ip, userAgent ? String(userAgent).slice(0, 300) : null, detail]
+    );
+  },
+  list(userId, limit = 25) {
+    return query('SELECT kind, ip, user_agent, detail, created_at FROM app_security_events WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2', [userId, limit]);
+  },
+  prune() {
+    return query("DELETE FROM app_security_events WHERE created_at < now() - interval '400 days'");
+  },
+};
+
+module.exports = { users, sessions, calculations, codes, events, SESSION_DAYS, MAX_HISTORY_PER_USER, LOCK_AFTER };

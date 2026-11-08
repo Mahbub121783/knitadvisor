@@ -37,6 +37,27 @@ function normalizeEmail(email) {
   return String(email == null ? '' : email).trim().toLowerCase();
 }
 
+// Passwords that pass "10 characters, 3 kinds" and are still among the first
+// guessed: the leaked-password favourites, keyboard runs, and the site's own
+// name. Checked on the password with digits/symbols at the ends stripped, so
+// "Password@123" and "Knitadvisor2026!" are caught as well.
+const GUESSABLE = new Set([
+  'password', 'passw0rd', 'p@ssword', 'p@ssw0rd', 'welcome', 'qwerty', 'qwertyuiop', 'asdfghjkl', 'zxcvbnm',
+  'abcdefgh', 'abcdefghij', 'iloveyou', 'admin', 'administrator', 'letmein', 'monkey', 'dragon', 'football',
+  'baseball', 'sunshine', 'princess', 'starwars', 'whatever', 'trustno', 'superman', 'batman', 'master',
+  'changeme', 'default', 'secret', 'computer', 'internet', 'bangladesh', 'dhaka', 'pakistan', 'india',
+  'knitadvisor', 'knit', 'textile', 'textiles', 'onlinetextileschool', 'garments', 'fabric', 'company',
+  'qwer', 'asdf', 'zaq1xsw2', '1q2w3e4r', '1qaz2wsx', 'qazwsx', 'loveyou', 'mypassword', 'newpassword',
+]);
+function guessablePassword(password, email) {
+  const core = password.toLowerCase().replace(/^[^a-z]+|[^a-z]+$/g, '');
+  if (!core || GUESSABLE.has(core) || /^(.)\1+$/.test(core)) return 'That password is one of the first an attacker tries. Choose something less common.';
+  if (/^(0123456789|1234567890|9876543210)/.test(password.replace(/\D/g, '')) && core.length < 4) return 'That password is mostly a number run. Choose something less common.';
+  const local = email ? String(email).split('@')[0].toLowerCase() : '';
+  if (local.length >= 4 && password.toLowerCase().includes(local)) return 'Password must not contain your email name.';
+  return null;
+}
+
 function passwordClassCount(password) {
   return PASSWORD_CLASSES.reduce((n, re) => n + (re.test(password) ? 1 : 0), 0);
 }
@@ -51,6 +72,9 @@ function passwordProblem(password, email) {
   if (passwordClassCount(password) < PASSWORD_MIN_CLASSES) {
     return `Password must include at least ${PASSWORD_MIN_CLASSES} of: lowercase letters, uppercase letters, numbers, symbols.`;
   }
+  // the kinds rule first (it says what to add); then the guessable list
+  const guessable = guessablePassword(password, email);
+  if (guessable) return guessable;
   return null;
 }
 

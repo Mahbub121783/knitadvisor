@@ -28,12 +28,57 @@ function shell(title, bodyHtml, preheader = '') {
 </td></tr>
 <tr><td style="padding:0 28px 24px;font-family:-apple-system,'Segoe UI',Arial,sans-serif;">
   <p style="font-size:12px;line-height:1.5;color:#868C94;margin:24px 0 0;border-top:1px solid #E4E6E9;padding-top:14px;">
-    KnitAdvisor &middot; knitadvisor.onlinetextileschool.com<br>You received this because of an action on your KnitAdvisor account. If it was not you, ignore this email — nothing changes without the code.
+    <b>KnitAdvisor will never ask for your password or a code</b> by phone, WhatsApp, SMS or email. Type codes only on <b>knitadvisor.onlinetextileschool.com</b> — check the address bar.<br><br>
+    KnitAdvisor &middot; knitadvisor.onlinetextileschool.com<br>You received this because of an action on your KnitAdvisor account.
   </p>
 </td></tr>
 </table>
 </td></tr></table>
 </body></html>`;
+}
+
+const PHISH_TEXT = 'KnitAdvisor will never ask for your password or a code by phone, WhatsApp, SMS or email. Type codes only on knitadvisor.onlinetextileschool.com.';
+
+// security notices: what happened, where, and the one thing to do if it was not them
+function noticeMail({ fullName, title, subject, lines, action }) {
+  const name = fullName || 'there';
+  const html = shell(title, `
+    <p style="font-size:14px;line-height:1.6;margin:0 0 8px;">Hi ${esc(name)},</p>
+    ${lines.map((l) => `<p style="font-size:14px;line-height:1.6;margin:0 0 6px;">${esc(l)}</p>`).join('')}
+    <p style="font-size:14px;line-height:1.6;margin:14px 0 0;"><b>${esc(action)}</b></p>
+  `, lines[0]);
+  const text = `Hi ${name},\n\n${lines.join('\n')}\n\n${action}\n\n${PHISH_TEXT}\n\nKnitAdvisor — knitadvisor.onlinetextileschool.com`;
+  return { subject, html, text };
+}
+
+function newSignInEmail({ fullName, device, ip, when }) {
+  return noticeMail({ fullName, title: 'New sign-in to your account', subject: 'New sign-in to your KnitAdvisor account',
+    lines: ['Your account was just signed in from a device we have not seen before:', `${device} · IP ${ip || 'unknown'} · ${when}`],
+    action: 'If this was you, there is nothing to do. If not, change your password now and turn on two-step sign-in (Account → Sign-in security).' });
+}
+
+function accountLockedEmail({ fullName, minutes, ip, when }) {
+  return noticeMail({ fullName, title: 'Sign-in paused after wrong passwords', subject: 'Your KnitAdvisor sign-in was paused',
+    lines: [`There were several wrong passwords for your account, the last from IP ${ip || 'unknown'} at ${when}.`, `Sign-in is paused for ${minutes} minutes to stop guessing.`],
+    action: 'If this was not you, someone may be trying your account: reset your password and turn on two-step sign-in.' });
+}
+
+function emailChangedSelfEmail({ fullName, newEmail }) {
+  return noticeMail({ fullName, title: 'Your sign-in email was changed', subject: 'Your KnitAdvisor email was changed',
+    lines: [`The sign-in email on your account was changed to ${newEmail}. Every other device was signed out.`],
+    action: 'If you did not do this, reply to this email straight away.' });
+}
+
+function accountDeletedEmail({ fullName }) {
+  return noticeMail({ fullName, title: 'Your account was deleted', subject: 'Your KnitAdvisor account was deleted',
+    lines: ['Your KnitAdvisor account and its saved history were deleted at your request.'],
+    action: 'If you did not do this, reply to this email straight away.' });
+}
+
+function emailChangeCodeEmail({ fullName, code }) {
+  return codeMail({ fullName, code, title: 'Confirm your new email', subjectWhat: 'email change code',
+    lead: 'Enter this code to make this address the sign-in email of your KnitAdvisor account:',
+    after: `The code expires in ${CODE_TTL_MINUTES} minutes. Your email does not change unless you enter it.` });
 }
 
 function codeBlock(code) {
@@ -53,7 +98,7 @@ function codeMail({ fullName, code, title, lead, after, subjectWhat }) {
     ${codeBlock(code)}
     <p style="font-size:13px;line-height:1.5;color:#565C64;margin:0;">${esc(after)}</p>
   `, `${code} — ${lead}`);
-  const text = `Hi ${name},\n\n${lead}\n\n    ${code}\n\n${after}\n\nIf this was not you, ignore this email — nothing changes without the code.\n\nKnitAdvisor — knitadvisor.onlinetextileschool.com`;
+  const text = `Hi ${name},\n\n${lead}\n\n    ${code}\n\n${after}\n\n${PHISH_TEXT}\n\nIf this was not you, ignore this email — nothing changes without the code.\n\nKnitAdvisor — knitadvisor.onlinetextileschool.com`;
   return { subject: `${code} is your KnitAdvisor ${subjectWhat}`, html, text };
 }
 
@@ -148,4 +193,5 @@ module.exports = {
   activationEmail, passwordResetEmail, passwordChangedByAdminEmail, emailChangedNoticeEmail,
   studentEmailCodeEmail, studentApprovedEmail, studentPendingReviewEmail, studentRejectedEmail,
   studentRevokedEmail, studentExpiredEmail, loginCodeEmail,
+  newSignInEmail, accountLockedEmail, emailChangedSelfEmail, accountDeletedEmail, emailChangeCodeEmail,
 };

@@ -10,13 +10,14 @@
 const userRepo = require('../db/repositories/user-repo');
 const { issueCode } = require('../engine/domain/otp');
 const mailClient = require('../mail/client');
-const { activationEmail, passwordResetEmail, studentEmailCodeEmail, loginCodeEmail } = require('../mail/templates');
+const { activationEmail, passwordResetEmail, studentEmailCodeEmail, loginCodeEmail, emailChangeCodeEmail } = require('../mail/templates');
 
 const BUILDERS = {
   activation: activationEmail,
   password_reset: passwordResetEmail,
   student_email: studentEmailCodeEmail,
   login: loginCodeEmail,
+  email_change: emailChangeCodeEmail,
 };
 
 /**

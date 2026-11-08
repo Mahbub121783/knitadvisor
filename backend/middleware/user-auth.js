@@ -65,6 +65,8 @@ async function requireUser(req, res, next) {
     if (user) {
       req.user = user;
       req.sessionTokenHash = hashToken(readCookie(req.headers.cookie, COOKIE_NAME));
+      // "last active" for the account's device list; at most one write per 10 min
+      userRepo.sessions.touch(req.sessionTokenHash).catch(() => {});
       return next();
     }
   } catch (err) {

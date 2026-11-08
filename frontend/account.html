@@ -189,13 +189,51 @@
         <div class="frow"><label for="ts-pw">Your password, to change this</label><input class="form-input" id="ts-pw" type="password" autocomplete="current-password" maxlength="128" style="max-width:340px;"></div>
         <button class="btn btn-primary" type="button" id="ts-save">Save</button>
         <div id="ts-app" hidden style="margin-top:14px;">
-          <p class="sub">1. In your authenticator app choose <b>Add account → Enter a setup key</b> (or tap the link below on this phone).<br>2. Account: your email · Key: the code below · Type: time-based.<br>3. Type the 6-digit code the app shows.</p>
+          <p class="sub">1. In your authenticator app tap <b>+</b> and <b>scan this QR code</b> — or choose <b>Enter a setup key</b> and type the key below (on this phone you can tap the link).<br>2. Type the 6-digit code the app then shows.</p>
+          <div id="ts-qr" style="width:184px;height:184px;margin:6px 0 10px;background:#fff;border:1px solid #E4E6E9;border-radius:8px;padding:6px;"></div>
           <div style="font-family:Consolas,monospace;font-size:17px;letter-spacing:2px;background:#F6F7F8;border:1px solid #E4E6E9;border-radius:8px;padding:10px 12px;word-break:break-all;" id="ts-secret"></div>
           <p style="margin:8px 0;"><a id="ts-link" href="#">Open in authenticator app</a></p>
           <div class="frow"><label for="ts-code">Code from the app</label><input class="form-input" id="ts-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" style="letter-spacing:4px;max-width:180px;"></div>
           <button class="btn btn-primary" type="button" id="ts-confirm">Turn on</button>
         </div>
         <div class="msg" id="ts-msg" role="status"></div>
+      </div>
+
+      <div class="card form-card" id="devices-card">
+        <h2>Signed-in devices</h2>
+        <p class="sub">Every browser signed in to your account. Sign out any you do not recognise, then change your password.</p>
+        <div id="dev-list" class="text-dim">Loading…</div>
+        <button class="btn btn-ghost" type="button" id="dev-others" style="margin-top:10px;">Sign out all other devices</button>
+        <div class="msg" id="dev-msg" role="status"></div>
+      </div>
+
+      <div class="card form-card" id="activity-card">
+        <h2>Recent security activity</h2>
+        <p class="sub">Sign-ins, wrong passwords and changes to how you sign in. Anything you do not recognise: change your password and turn on two-step sign-in.</p>
+        <div id="act-list" class="text-dim">Loading…</div>
+      </div>
+
+      <div class="card form-card">
+        <h2>Change sign-in email</h2>
+        <p class="sub">A code goes to the new address; your email changes only when you enter it. Your old address is told, and other devices are signed out.</p>
+        <div class="frow"><label for="em-new">New email</label><input class="form-input" id="em-new" type="email" autocomplete="email" maxlength="254" style="max-width:340px;"></div>
+        <div class="frow"><label for="em-pw">Your password</label><input class="form-input" id="em-pw" type="password" autocomplete="current-password" maxlength="128" style="max-width:340px;"></div>
+        <button class="btn btn-primary" type="button" id="em-send">Send code to new email</button>
+        <div class="frow" id="em-code-row" hidden style="margin-top:10px;">
+          <label for="em-code">Code from the new inbox</label>
+          <input class="form-input" id="em-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" style="letter-spacing:4px;max-width:180px;">
+          <button class="btn btn-primary" type="button" id="em-confirm" style="margin-top:8px;">Change email</button>
+        </div>
+        <div class="msg" id="em-msg" role="status"></div>
+      </div>
+
+      <div class="card form-card" style="border-color:#f1c4c4;">
+        <h2>Delete account</h2>
+        <p class="sub">Deletes your account, saved calculations and designs for good. This cannot be undone.</p>
+        <div class="frow"><label for="del-pw">Your password</label><input class="form-input" id="del-pw" type="password" autocomplete="current-password" maxlength="128" style="max-width:340px;"></div>
+        <div class="frow"><label for="del-confirm">Type DELETE to confirm</label><input class="form-input" id="del-confirm" type="text" autocomplete="off" maxlength="10" style="max-width:180px;"></div>
+        <button class="btn btn-ghost btn-danger-ghost" type="button" id="del-go">Delete my account</button>
+        <div class="msg" id="del-msg" role="status"></div>
       </div>
 
       <div class="card form-card">
@@ -224,6 +262,7 @@
 <script src="assets/js/ui.js?v=20260606b"></script>
 <script src="assets/js/storage.js?v=20260606b"></script>
 <script src="assets/js/password-toggle.js?v=20260922a"></script>
+<script src="assets/js/vendor/qrcode.min.js?v=1.4.4"></script>
 <script>
 (function () {
   'use strict';
@@ -505,6 +544,8 @@
       $('ts-pw').value = '';
       if (mode === 'app') {
         $('ts-secret').textContent = d.secret; $('ts-link').href = d.otpauth; $('ts-app').hidden = false; $('ts-code').value = ''; $('ts-code').focus();
+        // the QR is drawn here in the page from the otpauth link — the secret never goes to any other site
+        try { var q = qrcode(0, 'M'); q.addData(d.otpauth); q.make(); $('ts-qr').innerHTML = q.createSvgTag({ cellSize: 4, margin: 2, scalable: true }); } catch (_) { $('ts-qr').hidden = true; }
         setMsg(msg, 'Add the key to your app, then enter its code to finish.', true);
       } else { sec.two_factor = d.two_factor; renderSecurity(); setMsg(msg, mode === 'off' ? 'Two-step sign-in is off.' : 'Two-step sign-in is on: codes will be emailed to you.', true); }
     }).catch(function (e) { setMsg(msg, e.message, false); });
@@ -515,6 +556,59 @@
     }).catch(function (e) { setMsg($('ts-msg'), e.message, false); });
   });
   loadSecurity();
+
+  /* ---------- devices and activity ---------- */
+  function loadDevices() {
+    j('/api/account/sessions').then(function (d) {
+      $('dev-list').innerHTML = d.sessions.map(function (s) {
+        return '<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid #EEF0F2;">' +
+          '<div><b>' + esc(s.device) + '</b>' + (s.current ? ' <span style="color:#1E7A54;font-size:12px;">· this device</span>' : '') +
+          '<div style="font-size:12px;color:#868C94;">IP ' + esc(s.ip || '—') + ' · active ' + esc(ago(s.last_seen_at)) + ' · signed in ' + esc(ago(s.created_at)) + '</div></div>' +
+          (s.current ? '' : '<button class="btn btn-ghost" type="button" data-dev="' + s.id + '">Sign out</button>') + '</div>';
+      }).join('') || 'No devices.';
+      $('dev-others').hidden = d.sessions.filter(function (s) { return !s.current; }).length === 0;
+    }).catch(function () { $('dev-list').textContent = 'Could not load your devices.'; });
+  }
+  $('dev-list').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-dev]'); if (!b) return;
+    j('/api/account/sessions/' + b.getAttribute('data-dev'), 'DELETE').then(function () { setMsg($('dev-msg'), 'That device is signed out.', true); loadDevices(); loadActivity(); })
+      .catch(function (err) { setMsg($('dev-msg'), err.message, false); });
+  });
+  $('dev-others').addEventListener('click', function () {
+    j('/api/account/sessions/others/end', 'POST', {}).then(function () { setMsg($('dev-msg'), 'Every other device is signed out.', true); loadDevices(); loadActivity(); })
+      .catch(function (err) { setMsg($('dev-msg'), err.message, false); });
+  });
+  function loadActivity() {
+    j('/api/account/activity').then(function (d) {
+      $('act-list').innerHTML = d.events.map(function (ev) {
+        var bad = ev.kind === 'login_failed';
+        return '<div style="padding:7px 0;border-bottom:1px solid #EEF0F2;font-size:13px;"><b style="color:' + (bad ? '#9a5b00' : '#191C1F') + '">' + esc(ev.what) + '</b>' +
+          (ev.detail ? ' <span style="color:#565C64;">(' + esc(ev.detail) + ')</span>' : '') +
+          '<div style="font-size:12px;color:#868C94;">' + esc(ev.device) + ' · IP ' + esc(ev.ip || '—') + ' · ' + esc(new Date(ev.at).toLocaleString()) + '</div></div>';
+      }).join('') || 'Nothing yet.';
+    }).catch(function () { $('act-list').textContent = 'Could not load your activity.'; });
+  }
+  loadDevices(); loadActivity();
+
+  /* ---------- change email, delete ---------- */
+  $('em-send').addEventListener('click', function () {
+    var b = this; b.disabled = true;
+    j('/api/account/email/start', 'POST', { new_email: $('em-new').value.trim(), password: $('em-pw').value }).then(function (d) {
+      $('em-pw').value = ''; $('em-code-row').hidden = false; $('em-code').focus(); setMsg($('em-msg'), d.message, true);
+    }).catch(function (err) { setMsg($('em-msg'), err.message, false); }).then(function () { b.disabled = false; });
+  });
+  $('em-confirm').addEventListener('click', function () {
+    j('/api/account/email/confirm', 'POST', { code: $('em-code').value.trim() }).then(function (d) {
+      $('em-code-row').hidden = true; $('em-new').value = ''; if ($('p-email')) $('p-email').value = d.email;
+      setMsg($('em-msg'), 'Your sign-in email is now ' + d.email + '.', true); loadSecurity(); loadDevices(); loadActivity();
+    }).catch(function (err) { setMsg($('em-msg'), err.message, false); });
+  });
+  $('del-go').addEventListener('click', function () {
+    if ($('del-confirm').value !== 'DELETE') { setMsg($('del-msg'), 'Type DELETE to confirm.', false); return; }
+    if (!window.confirm('Delete your KnitAdvisor account and everything saved in it? This cannot be undone.')) return;
+    j('/api/account/delete', 'POST', { password: $('del-pw').value, confirm: 'DELETE' }).then(function () { window.location.href = '/'; })
+      .catch(function (err) { setMsg($('del-msg'), err.message, false); });
+  });
 
   /* ---------- student plan ---------- */
   var studentVer = null;

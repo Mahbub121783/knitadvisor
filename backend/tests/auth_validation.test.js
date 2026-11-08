@@ -57,8 +57,9 @@ console.log('--- Running Customer Auth Tests ---');
   assert.strictEqual(bad('AAAAAAAAAA').ok, false, 'all-uppercase, 10 chars, still rejected');
   assert.strictEqual(bad('1234567890').ok, false, 'all-digits, 10 chars, still rejected');
   assert.strictEqual(bad('aaaaaaaaaA').ok, false, 'only 2 classes (lower+upper), still rejected');
-  assert.strictEqual(bad('aaaaaaaaA1').ok, true, '3 classes (lower+upper+digit) is enough');
-  assert.strictEqual(bad('aaaaaaaa-1').ok, true, '3 classes (lower+digit+symbol) is enough');
+  assert.strictEqual(bad('mlkjhgfeA1').ok, true, '3 classes (lower+upper+digit) is enough');
+  assert.strictEqual(bad('aaaaaaaaA1').ok, false, 'one letter repeated is refused as guessable');
+  assert.strictEqual(bad('mlkjhgfe-1').ok, true, '3 classes (lower+digit+symbol) is enough');
   assert.strictEqual(
     validateSignup({ email: 'a@b.co', username: uname(), password: 'aaaaaaaaaa', full_name: 'Ab' }).errors[0],
     'Password must include at least 3 of: lowercase letters, uppercase letters, numbers, symbols.'

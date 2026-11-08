@@ -189,6 +189,25 @@ app.use(compression());
 // extra origins can be listed in CORS_ORIGINS as a comma-separated list.
 const allowedOrigins = (process.env.CORS_ORIGINS || '')
   .split(',').map(o => o.trim()).filter(Boolean);
+// Cross-site request forgery: a page on another site cannot read our answers
+// (CORS above), but a browser would still SEND its form or fetch, with the
+// session cookie when SameSite allows it. A state-changing API call is only
+// accepted when the browser says it came from this site (Origin, or Referer
+// when an old browser omits Origin). No header at all is curl or a server,
+// which carries no visitor's cookie anyway.
+app.use('/api', (req, res, next) => {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
+  const src = req.headers.origin || req.headers.referer;
+  if (!src) return next();
+  let host;
+  try { host = new URL(src).host; } catch (_) { host = null; }
+  const own = host && host === req.headers.host;
+  const listed = allowedOrigins.some((o) => { try { return new URL(o).host === host; } catch (_) { return false; } });
+  if (own || listed) return next();
+  console.warn(`[Security] cross-site ${req.method} ${req.path} from ${src} refused`);
+  return res.status(403).json({ success: false, error: 'This request did not come from KnitAdvisor.' });
+});
+
 app.use(cors({
   origin(origin, cb) {
     if (!origin) return cb(null, true);            // same-origin / curl / server-to-server

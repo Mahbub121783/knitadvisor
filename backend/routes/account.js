@@ -15,6 +15,12 @@
  *   POST   /two-step/app/confirm {code} — turn on authenticator-app two-step
  *   POST   /two-step/email      {password} — turn on emailed-code two-step (verified email only)
  *   POST   /two-step/off        {password} — back to password-only sign-in
+ *   GET    /sessions            signed-in devices; DELETE /sessions/:id signs one out
+ *   POST   /sessions/others/end sign every other device out
+ *   GET    /activity            the account's recent security events
+ *   POST   /email/start         {password, new_email} — code to the new address
+ *   POST   /email/confirm       {code} — switch, tell the old inbox, end other devices
+ *   POST   /delete              {password, confirm: 'DELETE'} — remove the account
  *   GET    /universities        allow-listed universities, for the student-plan picker
  *   GET    /student/status      this account's student verification state
  *   POST   /student/apply       start a verification (a listed university + email, or "Other")
@@ -39,15 +45,17 @@ const { studentDocUpload, relativePath, absolutePath } = require('../middleware/
 const { issueAndSend } = require('../services/account-codes');
 const { issueCode, checkCode } = require('../engine/domain/otp');
 const totp = require('../engine/domain/totp');
+const security = require('../services/security');
+const { clearSessionCookie } = require('../middleware/user-auth');
 const {
   matchUniversityDomain, resolveOutcome, resolvePlanLimits, STUDENT_DURATION_DAYS,
 } = require('../engine/domain/student-eligibility');
 const {
-  studentApprovedEmail, studentPendingReviewEmail,
+  studentApprovedEmail, studentPendingReviewEmail, emailChangedSelfEmail, accountDeletedEmail,
 } = require('../mail/templates');
 const mailClient = require('../mail/client');
 const {
-  validateProfile, validatePasswordChange, validateUsernameChange, USERNAME_CHANGE_COOLDOWN_DAYS,
+  validateProfile, validatePasswordChange, validateUsernameChange, validateEmailOnly, USERNAME_CHANGE_COOLDOWN_DAYS,
 } = require('../engine/domain/auth-validation');
 
 const passwordLimiter = createRateLimiter({
@@ -185,6 +193,7 @@ router.post('/password', passwordLimiter, async (req, res) => {
     // A password change is usually a reaction to a worry; leaving other devices
     // signed in would defeat it. This session stays so the person is not bounced.
     await userRepo.sessions.removeOthers(req.user.id, req.sessionTokenHash);
+    await security.record(req.user.id, 'password_changed', req);
     res.json({ success: true });
   } catch (err) { fail(res, 'password', err, 'Could not change your password.'); }
 });
@@ -233,6 +242,7 @@ router.post('/verify-email', securityLimiter, async (req, res) => {
     }
     await userRepo.codes.consume(c.id);
     await userRepo.users.markEmailVerified(row.id);
+    await security.record(row.id, 'email_verified', req);
     res.json({ success: true });
   } catch (err) { fail(res, 'verify-email', err, 'Could not verify your email.'); }
 });
@@ -255,6 +265,7 @@ router.post('/two-step/app/confirm', securityLimiter, async (req, res) => {
     if (step == null) return res.status(400).json({ success: false, error: 'That code is not right. Use the newest code in the app, and make sure the phone sets its time automatically.' });
     await userRepo.users.setTwoFactor(row.id, 'app', row.totp_pending);
     await userRepo.users.setTotpLastStep(row.id, step);
+    await security.record(row.id, 'two_step_on', req, 'authenticator app');
     res.json({ success: true, two_factor: 'app' });
   } catch (err) { fail(res, 'two-step/app/confirm', err, 'Could not turn on two-step sign-in.'); }
 });
@@ -265,6 +276,7 @@ router.post('/two-step/email', securityLimiter, async (req, res) => {
     if (!row) return res.status(403).json({ success: false, error: 'Your password is incorrect.' });
     if (!row.email_verified) return res.status(400).json({ success: false, error: 'Verify your email first — the sign-in codes are sent there.' });
     await userRepo.users.setTwoFactor(row.id, 'email');
+    await security.record(row.id, 'two_step_on', req, 'email code');
     res.json({ success: true, two_factor: 'email' });
   } catch (err) { fail(res, 'two-step/email', err, 'Could not turn on two-step sign-in.'); }
 });
@@ -274,8 +286,102 @@ router.post('/two-step/off', securityLimiter, async (req, res) => {
     const row = await passwordOk(req);
     if (!row) return res.status(403).json({ success: false, error: 'Your password is incorrect.' });
     await userRepo.users.setTwoFactor(row.id, 'off');
+    await security.record(row.id, 'two_step_off', req);
     res.json({ success: true, two_factor: 'off' });
   } catch (err) { fail(res, 'two-step/off', err, 'Could not turn off two-step sign-in.'); }
+});
+
+// ── Devices, activity, email change, delete ─────────────────────────────
+router.get('/sessions', async (req, res) => {
+  try {
+    const rows = await userRepo.sessions.list(req.user.id, req.sessionTokenHash);
+    res.json({
+      success: true,
+      sessions: rows.map((r) => ({ id: r.id, device: security.deviceLabel(r.user_agent), ip: r.ip, created_at: r.created_at, last_seen_at: r.last_seen_at, current: r.current })),
+    });
+  } catch (err) { fail(res, 'sessions', err, 'Could not list your devices.'); }
+});
+
+router.delete('/sessions/:id', securityLimiter, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!(id > 0)) return res.status(400).json({ success: false, error: 'Unknown device.' });
+    const ok = await userRepo.sessions.removeById(req.user.id, id);
+    if (ok) await security.record(req.user.id, 'device_signed_out', req);
+    res.json({ success: ok });
+  } catch (err) { fail(res, 'sessions/delete', err, 'Could not sign that device out.'); }
+});
+
+router.post('/sessions/others/end', securityLimiter, async (req, res) => {
+  try {
+    await userRepo.sessions.removeOthers(req.user.id, req.sessionTokenHash);
+    await security.record(req.user.id, 'other_devices_signed_out', req);
+    res.json({ success: true });
+  } catch (err) { fail(res, 'sessions/others', err, 'Could not sign the other devices out.'); }
+});
+
+const EVENT_LABEL = {
+  login: 'Signed in', login_failed: 'Wrong password or code', password_changed: 'Password changed',
+  password_reset: 'Password reset by email code', two_step_on: 'Two-step sign-in turned on', two_step_off: 'Two-step sign-in turned off',
+  email_verified: 'Email verified', email_changed: 'Sign-in email changed', device_signed_out: 'A device was signed out',
+  other_devices_signed_out: 'All other devices were signed out',
+};
+router.get('/activity', async (req, res) => {
+  try {
+    const rows = await userRepo.events.list(req.user.id, 25);
+    res.json({ success: true, events: rows.map((r) => ({ what: EVENT_LABEL[r.kind] || r.kind, kind: r.kind, detail: r.detail, device: security.deviceLabel(r.user_agent), ip: r.ip, at: r.created_at })) });
+  } catch (err) { fail(res, 'activity', err, 'Could not read your account activity.'); }
+});
+
+router.post('/email/start', securityLimiter, async (req, res) => {
+  try {
+    const row = await passwordOk(req);
+    if (!row) return res.status(403).json({ success: false, error: 'Your password is incorrect.' });
+    const v = validateEmailOnly({ email: (req.body || {}).new_email });
+    if (!v.ok) return res.status(400).json({ success: false, error: v.errors[0] });
+    const email = v.value.email;
+    if (email === String(row.email).toLowerCase()) return res.status(400).json({ success: false, error: 'That is already your email.' });
+    if (await userRepo.users.findByEmail(email)) return res.status(409).json({ success: false, error: 'Another account already uses that email.' });
+    await userRepo.users.setPendingEmail(row.id, email);
+    await issueAndSend(row.id, 'email_change', { to: email, fullName: row.full_name });
+    res.json({ success: true, message: `We sent a code to ${email}. Enter it to finish — your sign-in email does not change until then.` });
+  } catch (err) { fail(res, 'email/start', err, 'Could not start the email change.'); }
+});
+
+router.post('/email/confirm', securityLimiter, async (req, res) => {
+  try {
+    const row = await userRepo.users.findById(req.user.id);
+    if (!row.pending_email) return res.status(400).json({ success: false, error: 'Start the email change again.' });
+    const c = await userRepo.codes.latest(row.id, 'email_change');
+    const r = checkCode(String((req.body || {}).code || '').trim(), c);
+    if (!r.ok) {
+      if (r.reason === 'mismatch') await userRepo.codes.incrementAttempts(c.id);
+      return res.status(400).json({ success: false, error: codeError(r.reason) });
+    }
+    await userRepo.codes.consume(c.id);
+    const oldEmail = row.email;
+    const { row: done, conflict } = await userRepo.users.confirmEmailChange(row.id);
+    if (conflict || !done) return res.status(409).json({ success: false, error: 'Another account took that email meanwhile.' });
+    // whoever changed it, the old inbox is told, and other devices are signed out
+    await userRepo.sessions.removeOthers(row.id, req.sessionTokenHash);
+    await security.record(row.id, 'email_changed', req, `${oldEmail} → ${done.email}`);
+    const n = emailChangedSelfEmail({ fullName: row.full_name, newEmail: done.email });
+    mailClient.sendMail({ to: oldEmail, subject: n.subject, html: n.html, text: n.text }).catch(() => {});
+    res.json({ success: true, email: done.email });
+  } catch (err) { fail(res, 'email/confirm', err, 'Could not change your email.'); }
+});
+
+router.post('/delete', securityLimiter, async (req, res) => {
+  try {
+    const row = await passwordOk(req);
+    if (!row) return res.status(403).json({ success: false, error: 'Your password is incorrect.' });
+    if ((req.body || {}).confirm !== 'DELETE') return res.status(400).json({ success: false, error: 'Type DELETE to confirm.' });
+    await userRepo.users.remove(row.id);
+    const n = accountDeletedEmail({ fullName: row.full_name });
+    mailClient.sendMail({ to: row.email, subject: n.subject, html: n.html, text: n.text }).catch(() => {});
+    clearSessionCookie(req, res);
+    res.json({ success: true });
+  } catch (err) { fail(res, 'delete', err, 'Could not delete your account.'); }
 });
 
 // ── Student plan ─────────────────────────────────────────────────────────

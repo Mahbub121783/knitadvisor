@@ -33,6 +33,7 @@ const { checkCode } = require('../engine/domain/otp');
 const totp = require('../engine/domain/totp');
 const { issueAndSend } = require('../services/account-codes');
 const universityRepo = require('../db/repositories/university-repo');
+const security = require('../services/security');
 
 const signupLimiter = createRateLimiter({
   name: 'auth-signup', max: 8, windowMs: 60 * 60 * 1000,
@@ -78,8 +79,18 @@ const CODE_MSG = {
 
 async function startSession(req, res, userId) {
   const { rawToken, tokenHash } = newToken();
-  const session = await userRepo.sessions.create(userId, tokenHash);
+  const c = security.clientOf(req);
+  const session = await userRepo.sessions.create(userId, tokenHash, c.ip, c.userAgent);
   setSessionCookie(req, res, rawToken, session.maxAgeSeconds);
+}
+
+// A successful sign-in by any route: lock cleared, owner told if the device is new, recorded.
+async function signedIn(req, res, user, how) {
+  await userRepo.users.clearFailedLogins(user.id);
+  await userRepo.users.touchLogin(user.id);
+  await security.alertIfNewDevice(user, req);
+  await security.record(user.id, 'login', req, how);
+  await startSession(req, res, user.id);
 }
 
 router.post('/signup', signupLimiter, async (req, res) => {
@@ -120,8 +131,7 @@ router.post('/verify-email', codeVerifyLimiter, async (req, res) => {
     if (user.email_verified) {
       // Already activated (a second tab, a stale page) — sign them in rather
       // than telling them "invalid code" for a code that already worked.
-      await userRepo.users.touchLogin(user.id);
-      await startSession(req, res, user.id);
+      await signedIn(req, res, user, 'activation code');
       return res.json({ success: true, user: publicUser(user) });
     }
 
@@ -138,9 +148,8 @@ router.post('/verify-email', codeVerifyLimiter, async (req, res) => {
 
     await userRepo.codes.consume(row.id);
     await userRepo.users.markEmailVerified(user.id);
-    await userRepo.users.touchLogin(user.id);
-    await startSession(req, res, user.id);
-    res.json({ success: true, user: publicUser(user) });
+    await signedIn(req, res, { ...user, email_verified: true }, 'activation code');
+    res.json({ success: true, user: publicUser({ ...user, email_verified: true }) });
   } catch (err) {
     console.error('[Auth] verify-email failed:', err.message);
     res.status(500).json({ success: false, error: 'Could not verify your email. Please try again.' });
@@ -204,9 +213,17 @@ router.post('/login', loginLimiter, async (req, res) => {
   try {
     const { identifier, password } = v.value;
     const row = await userRepo.users.findByIdentifier(identifier);
+    // an account locked by wrong passwords stays locked even for the right one:
+    // otherwise the lock would only slow a guesser down until they hit it
+    if (row && row.locked_until && new Date(row.locked_until) > new Date()) {
+      verifyPassword(password, DUMMY_HASH);
+      const mins = Math.max(1, Math.ceil((new Date(row.locked_until) - Date.now()) / 60000));
+      return res.status(429).json({ success: false, code: 'LOCKED', error: `Too many wrong passwords. Sign-in for this account is paused for ${mins} more minute${mins > 1 ? 's' : ''}. You can reset your password instead.` });
+    }
     const ok = verifyPassword(password, row ? row.password_hash : DUMMY_HASH);
     if (!row || !ok || row.disabled) {
       console.warn(`[Auth] Failed sign-in for "${identifier}" from ${req.ip || 'unknown'}`);
+      if (row && !row.disabled) await wrongAttempt(row, req, 'password');
       return res.status(401).json({ success: false, error: 'Incorrect email/username or password.' });
     }
 
@@ -228,7 +245,7 @@ router.post('/login', loginLimiter, async (req, res) => {
         const c = await userRepo.codes.latest(row.id, 'login');
         const r = checkCode(code, c);
         if (!r.ok) {
-          if (r.reason === 'mismatch') await userRepo.codes.incrementAttempts(c.id);
+          if (r.reason === 'mismatch') { await userRepo.codes.incrementAttempts(c.id); await wrongAttempt(row, req, 'email code'); }
           return res.status(400).json({ success: false, two_factor_required: true, method: 'email', error: CODE_MSG[r.reason] || 'That code is not right.' });
         }
         await userRepo.codes.consume(c.id);
@@ -236,19 +253,27 @@ router.post('/login', loginLimiter, async (req, res) => {
         let step = null;
         try { step = row.totp_secret ? totp.verify(totp.open(row.totp_secret), code, row.totp_last_step) : null; }
         catch (e) { console.error('[Auth] two-step secret unreadable:', e.message); }
+        if (step == null) await wrongAttempt(row, req, 'app code');
         if (step == null) return res.status(400).json({ success: false, two_factor_required: true, method: 'app', can_email: !!row.email_verified, error: 'That code is not right. Check the time on your phone and use the newest code.' });
         await userRepo.users.setTotpLastStep(row.id, step);
       }
     }
 
-    await userRepo.users.touchLogin(row.id);
-    await startSession(req, res, row.id);
+    await signedIn(req, res, row, mode === 'off' ? 'password' : `password + ${mode === 'app' ? 'app' : 'email'} code`);
     res.json({ success: true, user: publicUser(row) });
   } catch (err) {
     console.error('[Auth] login failed:', err.message);
     res.status(500).json({ success: false, error: 'Sign-in failed. Please try again.' });
   }
 });
+
+// a wrong password or code: counted on the account, recorded, and when it
+// locks the owner is told by mail
+async function wrongAttempt(row, req, what) {
+  const r = await userRepo.users.recordFailedLogin(row.id);
+  await security.record(row.id, 'login_failed', req, what);
+  if (r.failed === userRepo.LOCK_AFTER) security.alertLocked(row, req, 15);
+}
 
 function maskEmail(e) {
   const [u, d] = String(e).split('@');
@@ -301,8 +326,8 @@ router.post('/reset-password', codeVerifyLimiter, async (req, res) => {
     // every existing session ends, matching the logged-in password-change flow.
     await userRepo.sessions.removeAllForUser(user.id);
     if (!user.email_verified) await userRepo.users.markEmailVerified(user.id);
-    await userRepo.users.touchLogin(user.id);
-    await startSession(req, res, user.id);
+    await security.record(user.id, 'password_reset', req);
+    await signedIn(req, res, user, 'password reset');
     res.json({ success: true, user: publicUser(user) });
   } catch (err) {
     console.error('[Auth] reset-password failed:', err.message);

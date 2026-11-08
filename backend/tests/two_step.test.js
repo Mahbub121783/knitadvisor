@@ -55,3 +55,32 @@ assert.strictEqual(totp.codeAt(rfc, Math.floor(1111111109 / 30)), '081804');
   assert(/if \(opts\.wait\) return delivery;/.test(src));
 }
 console.log('Two-step sign-in tests passed');
+
+// account security: guessable passwords refused, lockout, CSRF, devices, alerts
+{
+  const v = require('../engine/domain/auth-validation');
+  const signup = (pw) => v.validateSignup({ email: 'rahim.uddin@mill.com', username: 'rahimu', password: pw, full_name: 'Rahim' });
+  for (const pw of ['Password@123', 'Knitadvisor2026!', 'Qwerty#12345', 'Rahim.uddin#2026x']) assert(!signup(pw).ok, `${pw} refused`);
+  for (const pw of ['Tr0ub4dor&3horse', 'Mill-Cotton-2026']) assert(signup(pw).ok, `${pw} accepted`);
+
+  const repo = fs.readFileSync(path.join(__dirname, '../db/repositories/user-repo.js'), 'utf8');
+  assert(/LOCK_AFTER = 8/.test(repo) && /locked_until = CASE WHEN failed_logins \+ 1 >= \$2/.test(repo), 'per-account lock');
+  const auth = fs.readFileSync(path.join(__dirname, '../routes/auth.js'), 'utf8');
+  assert(/row\.locked_until && new Date\(row\.locked_until\) > new Date\(\)/.test(auth), 'a locked account stays locked for the right password');
+  assert((auth.match(/wrongAttempt\(row, req/g) || []).length >= 3, 'wrong password, email code and app code all count');
+  assert(/alertIfNewDevice/.test(fs.readFileSync(path.join(__dirname, '../services/security.js'), 'utf8')));
+  const server = fs.readFileSync(path.join(__dirname, '../server.js'), 'utf8');
+  assert(/did not come from KnitAdvisor/.test(server), 'cross-site state-changing API calls refused');
+  const sql = fs.readFileSync(path.join(__dirname, '../db/migrations/037_account_security.sql'), 'utf8');
+  assert(/CREATE TABLE app_security_events/.test(sql) && /'email_change'\)/.test(sql));
+
+  const t = require('../mail/templates');
+  for (const fn of ['newSignInEmail', 'accountLockedEmail', 'emailChangedSelfEmail', 'accountDeletedEmail']) {
+    const m = t[fn]({ fullName: 'R', device: 'Chrome on Windows', ip: '1.2.3.4', when: 'now', minutes: 15, newEmail: 'x@y.com' });
+    assert(/never ask for your password/.test(m.text) && /never ask for your password/.test(m.html), `${fn}: anti-phishing line`);
+  }
+  const sec = require('../services/security');
+  assert.strictEqual(sec.deviceLabel('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36'), 'Chrome on Windows');
+  assert.strictEqual(sec.deviceLabel('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'), 'Safari on iPhone / iPad');
+}
+console.log('Account security tests passed');
