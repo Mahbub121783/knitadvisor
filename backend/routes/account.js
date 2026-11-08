@@ -2,6 +2,7 @@
  * Signed-in customer's own data — /api/account/*
  *
  *   GET    /summary             totals, most-used fabrics, username + when it can change next
+ *   GET    /dashboard           the home page in one call: usage, work in progress, market, security
  *   GET    /calculations        their calculation history (paged, searchable)
  *   DELETE /calculations/:id    remove one
  *   DELETE /calculations        clear all
@@ -115,6 +116,133 @@ router.get('/summary', async (req, res) => {
         ? nextUsernameChangeAt.toISOString() : null,
     });
   } catch (err) { fail(res, 'summary', err, 'Could not load your summary.'); }
+});
+
+// ── Home dashboard ──────────────────────────────────────────────────────
+// Everything the signed-in home page shows, in one round trip: today's usage,
+// the latest calculations, cost sheets and studio designs (each costed or
+// summarised), the yarn prices the costing uses today, and account health.
+// Each block fails on its own: one slow table never blanks the whole page.
+const costSheetRepo = require('../db/repositories/cost-sheet-repo');
+const studioRepo = require('../db/repositories/studio-repo');
+const yarnPriceRepo = require('../db/repositories/yarn-price-repo');
+const costing = require('../engine/domain/costing-engine');
+const costSheet = require('../engine/domain/cost-sheet');
+
+const MARKET_WATCH = [
+  ['combed_regular', 30], ['combed_regular', 24], ['carded_regular', 30], ['cvc_60_40', 30],
+  ['pc_65_35', 30], ['viscose_regular', 30], ['filament_150d', 0], ['spandex_40d', 0],
+];
+const livePrice = (key, ne, country) => yarnPriceRepo.lookup(key, ne, undefined, { country });
+const r4 = (v) => (v == null || !isFinite(v) ? null : Math.round(v * 10000) / 10000);
+
+function sheetCard(row) {
+  const sh = row.sheet || {};
+  const head = sh.header || {};
+  const card = {
+    id: row.id, name: row.name, updated_at: row.updated_at, versions: row.versions, has_picture: !!row.has_picture,
+    buyer: head.buyer || null, order_no: head.order_no || null,
+    sizes: Array.isArray(sh.sizes) ? sh.sizes.slice(0, 12) : [], shells: Array.isArray(sh.shells) ? sh.shells.length : 0,
+    quantity: (sh.order || {}).quantity || null, fob: null, margin_pct: null, status: 'incomplete', note: null,
+  };
+  try {
+    const r = costSheet.analyse(sh, { live: livePrice });
+    if (!r.success) { card.note = String(r.error || '').slice(0, 140); return card; }
+    const fobs = r.per_size.map((p) => p.fob_pc).filter((v) => v > 0);
+    card.fob = fobs.length ? { min: r4(Math.min(...fobs)), max: r4(Math.max(...fobs)) } : null;
+    const m = r.per_size.map((p) => p.profit_margin_pct).filter((v) => v != null && isFinite(v));
+    card.margin_pct = m.length ? Math.round(m.reduce((t, v) => t + v, 0) / m.length * 10) / 10 : null;
+    card.warnings = (r.warnings || []).length;
+    card.status = 'costed';
+  } catch (_) { card.note = 'Could not be costed right now.'; }
+  return card;
+}
+
+function designCard(row) {
+  const d = row.design || {};
+  const f = d.fields || {};
+  return {
+    id: row.id, name: row.name, updated_at: row.updated_at,
+    bed: d.bed || (d.D ? 'rib' : 'single'), feeds: Array.isArray(d.C) ? d.C.length : 0,
+    needles: Array.isArray(d.C) && Array.isArray(d.C[0]) ? d.C[0].length : 0,
+    rolls: Array.isArray(d.rolls) ? d.rolls.length : 0,
+    gsm: +f['st-gsm'] || null, count: +f['st-ne'] || null, gauge: +f['st-gauge'] || null, lycra: !!d.lycra,
+    // a small corner of the cylinder programme (K / T / M) for the card's thumbnail
+    grid: Array.isArray(d.C) ? d.C.slice(0, 8).map((r) => (Array.isArray(r) ? r.slice(0, 16).map((c) => String(c || '-')[0]).join('') : '')) : [],
+  };
+}
+
+function marketBlock() {
+  const st = yarnPriceRepo.status();
+  const prices = MARKET_WATCH.map(([key, ne]) => {
+    const row = costing.SM_PRICE_MATRIX[key];
+    if (!row) return null;
+    const r = costing.resolveYarnPrice(key, ne, livePrice, 'BD');
+    if (r.price == null) return null;
+    const ps = r.price_source || {};
+    return { key, label: row.label, count: ne || null, price: r4(r.price),
+      kind: String(ps.kind || '').startsWith('market') ? 'market' : 'reference', date: ps.last_updated || null };
+  }).filter(Boolean);
+  // the feed's state, never its publisher
+  return {
+    feed: st.available ? { last_updated: st.last_updated, age_days: st.age_days, freshness: st.freshness, items: st.items } : { freshness: 'none' },
+    prices,
+  };
+}
+
+const settle = (p) => Promise.resolve(p).then((v) => v, (e) => { console.error('[Account] dashboard block failed:', e.message); return null; });
+
+router.get('/dashboard', async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const uid = req.user.id;
+  try {
+    const [row, stats, calcs, sheets, designs, used, sessions, events] = await Promise.all([
+      userRepo.users.findById(uid),
+      settle(userRepo.calculations.stats(uid)),
+      settle(userRepo.calculations.list(uid, { page: 1, limit: 6 })),
+      settle(costSheetRepo.sheets.list(uid)),
+      settle(studioRepo.designs.list(uid)),
+      settle(usageRepo.todayCount(uid)),
+      settle(userRepo.sessions.list(uid, req.sessionTokenHash)),
+      settle(userRepo.events.list(uid, 6)),
+    ]);
+    const { plan, dailyLimit } = resolvePlanLimits(row);
+    const sheetCards = (sheets || []).slice(0, 6).map(sheetCard);
+    const designCards = (designs || []).slice(0, 6).map(designCard);
+    const calcCards = ((calcs && calcs.rows) || []).map((c) => ({
+      id: c.id, fabric_id: c.fabric_id, fabric: c.fabric_name || c.fabric_id, gsm: c.gsm != null ? Number(c.gsm) : null,
+      composition: c.composition, runs: c.run_count, at: c.last_run_at, summary: c.summary || {}, params: c.params || null,
+    }));
+    const money = (v) => '$' + Number(v).toFixed(2);
+    const timeline = [
+      ...calcCards.map((c) => ({ kind: 'calculation', id: c.id, title: c.fabric, sub: [c.gsm ? c.gsm + ' GSM' : null, c.composition].filter(Boolean).join(' · '), at: c.at })),
+      ...sheetCards.map((s) => ({ kind: 'cost_sheet', id: s.id, title: s.name,
+        sub: s.fob ? `FOB ${money(s.fob.min)}${s.fob.max !== s.fob.min ? '–' + money(s.fob.max) : ''} · ${s.sizes.length} sizes` : `${s.sizes.length} sizes · not costed yet`, at: s.updated_at })),
+      ...designCards.map((d) => ({ kind: 'design', id: d.id, title: d.name,
+        sub: `${d.bed === 'rib' ? 'Double bed' : 'Single bed'} · ${d.feeds} feeds${d.rolls ? ` · ${d.rolls} trial rolls` : ''}`, at: d.updated_at })),
+    ].filter((t) => t.at).sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 10);
+
+    let market = null;
+    try { market = marketBlock(); } catch (e) { console.error('[Account] dashboard market failed:', e.message); }
+
+    res.json({
+      success: true,
+      user: { full_name: row.full_name, username: row.username, company: row.company, member_since: row.created_at, last_login_at: row.last_login_at,
+        student_status: row.student_status || null },
+      usage: { plan, daily_limit: dailyLimit, used_today: used == null ? null : Number(used) },
+      totals: {
+        calculations: stats ? stats.distinct_specs : null, runs: stats ? stats.total_runs : null, specs_30d: stats ? stats.specs_30d : null,
+        cost_sheets: sheets ? sheets.length : null, designs: designs ? designs.length : null,
+        top_fabrics: stats ? stats.top_fabrics : [],
+      },
+      calculations: calcCards, cost_sheets: sheetCards, designs: designCards, timeline, market,
+      security: {
+        email_verified: !!row.email_verified, two_factor: row.two_factor || 'off',
+        devices: sessions ? sessions.length : null,
+        recent: (events || []).map((e) => ({ kind: e.kind, what: EVENT_LABEL[e.kind] || e.kind, at: e.created_at, device: security.deviceLabel(e.user_agent) })),
+      },
+    });
+  } catch (err) { fail(res, 'dashboard', err, 'Could not load your dashboard.'); }
 });
 
 router.get('/calculations', async (req, res) => {

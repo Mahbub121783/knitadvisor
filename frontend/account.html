@@ -66,8 +66,8 @@
     .msg.err { color: var(--danger); }
     .main-content { padding: 0 0 32px; }
   </style>
-  <link rel="stylesheet" href="assets/css/theme-v2.css?v=20260922a">
-  <script src="assets/js/app-shell.js?v=20261108a" defer></script>
+  <link rel="stylesheet" href="assets/css/theme-v2.css?v=20261108b">
+  <script src="assets/js/app-shell.js?v=20261108b" defer></script>
 </head>
 <body>
 <div class="page-wrap">
@@ -304,7 +304,8 @@
     $('tab-profile').setAttribute('aria-selected', hist ? 'false' : 'true');
     $('panel-history').hidden = !hist;
     $('panel-profile').hidden = hist;
-    if (window.location.hash !== (hist ? '' : '#profile')) {
+    var keep = !hist && window.location.hash === '#security';
+    if (!keep && window.location.hash !== (hist ? '' : '#profile')) {
       history.replaceState(null, '', hist ? window.location.pathname : '#profile');
     }
   }
@@ -698,8 +699,14 @@
 
   /* ---------- boot ---------- */
   (window.kaUserPromise || Promise.resolve(null)).then(function (u) { if (u) fillProfile(u); });
-  showTab(window.location.hash === '#profile' ? 'profile' : 'history');
-  window.addEventListener('hashchange', function () { showTab(window.location.hash === '#profile' ? 'profile' : 'history'); });
+  // #profile opens the profile tab; #security opens it at the sign-in security card
+  function fromHash() {
+    var h = window.location.hash;
+    showTab(h === '#profile' || h === '#security' ? 'profile' : 'history');
+    if (h === '#security') setTimeout(function () { var c = $('security-card'); if (c) c.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 60);
+  }
+  fromHash();
+  window.addEventListener('hashchange', fromHash);
   loadSummary();
   loadHistory();
   loadStudentStatus();

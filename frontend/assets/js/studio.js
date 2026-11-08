@@ -842,8 +842,17 @@
       (local.length ? '<optgroup label="This browser only">' + local.map(function (d, i) { return '<option value="l' + i + '">' + esc(d.name) + '</option>'; }).join('') + '</optgroup>' : '');
     $('st-move').hidden = !local.length;
   }
+  var wantDesign = new URLSearchParams(window.location.search).get('design');
   function loadAccount() {
-    return apiFetch('/api/studio/designs').then(function (r) { account = r.designs || []; refreshSaved(); }).catch(function () { refreshSaved(); });
+    return apiFetch('/api/studio/designs').then(function (r) {
+      account = r.designs || []; refreshSaved();
+      // ?design=<id> (from the dashboard or search) opens that saved design once
+      if (wantDesign) {
+        var i = account.findIndex(function (x) { return String(x.id) === wantDesign; });
+        wantDesign = null;
+        if (i > -1) { loadDesign(account[i].design); $('st-del').dataset.id = account[i].id; $('st-del').hidden = false; }
+      }
+    }).catch(function () { refreshSaved(); });
   }
   function flash(btn, text, back) { btn.textContent = text; setTimeout(function () { btn.textContent = back; }, 1800); }
 

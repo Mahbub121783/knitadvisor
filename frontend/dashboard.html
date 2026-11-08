@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <script src="assets/js/auth-guard.js?v=20260922a"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard — KnitAdvisor</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <meta name="description" content="Your KnitAdvisor home: fabric calculations, costing sheets and studio designs in progress, today's yarn prices, usage and account health.">
+  <meta name="theme-color" content="#FFFFFF">
+  <meta name="robots" content="noindex">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css?v=20260603c">
+  <style>
+    [hidden] { display: none !important; }
+    body { background: var(--bg-page, #F6F7F8); }
+    .db { max-width: 1280px; margin: 0 auto; padding: 22px 24px 56px; }
+    .db-mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+    /* hero */
+    .db-hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; align-items: center; margin-bottom: 18px; }
+    .db-date { margin: 0 0 4px; font: 600 12px/1 var(--head); text-transform: uppercase; letter-spacing: .06em; color: var(--t3); }
+    .db-hero h1 { margin: 0; font-size: 28px; letter-spacing: -0.02em; line-height: 1.15; }
+    .db-hero .sub { margin: 6px 0 0; color: var(--t2); font-size: 14px; }
+    .db-usage { display: flex; align-items: center; gap: 14px; background: var(--bg); border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; }
+    .db-ring { width: 54px; height: 54px; flex: none; }
+    .db-ring circle { fill: none; stroke-width: 6; }
+    .db-ring .tr { stroke: var(--bg4); }
+    .db-ring .fg { stroke: var(--accent); stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; transition: stroke-dashoffset .6s ease; }
+    .db-ring text { font: 700 13px var(--mono); fill: var(--t1); }
+    .db-usage b { display: block; font-size: 14px; }
+    .db-usage div > span { display: block; font-size: 12px; color: var(--t3); margin-top: 2px; }
+    .db-plan { display: inline-block; font: 700 10.5px/1 var(--head); text-transform: uppercase; letter-spacing: .05em; padding: 3px 6px; border-radius: 4px; background: var(--accent-tint); color: var(--accent); margin-left: 6px; vertical-align: 1px; }
+
+    /* quick actions */
+    .db-quick { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+    .db-act { position: relative; display: flex; gap: 12px; align-items: flex-start; padding: 14px; border-radius: 12px; background: var(--bg); border: 1px solid var(--line); text-decoration: none; color: var(--t1); transition: border-color .15s, transform .15s, box-shadow .15s; }
+    .db-act:hover { border-color: var(--accent-line); transform: translateY(-1px); box-shadow: 0 10px 24px -16px rgba(24, 87, 196, .45); }
+    .db-act .ic { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; flex: none; color: #fff; }
+    .db-act .ic svg { width: 19px; height: 19px; }
+    .db-act b { display: block; font-size: 14px; }
+    .db-act span.t { display: block; font-size: 12px; color: var(--t3); margin-top: 3px; line-height: 1.4; }
+    .db-act.primary { background: linear-gradient(135deg, #1857C4, #2E6FDB); border-color: transparent; color: #fff; }
+    .db-act.primary span.t { color: rgba(255, 255, 255, .8); }
+    .db-act.primary .ic { background: rgba(255, 255, 255, .18); }
+    .db-searchbar { display: flex; align-items: center; gap: 10px; width: 100%; margin-bottom: 18px; padding: 11px 14px; border-radius: 12px; border: 1px solid var(--line2); background: var(--bg); color: var(--t3); font: 500 14px var(--head); cursor: text; text-align: left; }
+    .db-searchbar:hover { border-color: var(--line3); }
+    .db-searchbar svg { width: 18px; height: 18px; }
+    .db-searchbar .q { flex: 1; text-align: left; }
+    .db-searchbar [data-i] { display: inline-flex; }
+    .db-searchbar kbd { font: 600 11px/1 var(--mono); border: 1px solid var(--line2); border-bottom-width: 2px; border-radius: 4px; padding: 3px 6px; color: var(--t3); }
+
+    /* KPI tiles */
+    .db-kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
+    .db-kpi { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 13px 14px; text-decoration: none; color: var(--t1); display: block; }
+    a.db-kpi:hover { border-color: var(--line3); }
+    .db-kpi .k { font: 600 11.5px/1.2 var(--head); color: var(--t3); text-transform: uppercase; letter-spacing: .04em; }
+    .db-kpi .v { font: 700 26px/1.1 var(--mono); margin-top: 8px; letter-spacing: -0.02em; }
+    .db-kpi .d { font-size: 12px; color: var(--t3); margin-top: 4px; }
+
+    /* layout */
+    .db-grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
+    .db-card { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+    .db-card h2 { font-size: 15px; margin: 0; display: flex; align-items: center; gap: 8px; }
+    .db-card h2 svg { width: 17px; height: 17px; color: var(--accent); }
+    .db-ch { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+    .db-ch a.more, .db-ch button.more { font: 600 12.5px var(--head); color: var(--accent); text-decoration: none; background: none; border: none; cursor: pointer; padding: 0; }
+    .db-empty { padding: 18px; text-align: center; color: var(--t3); font-size: 13.5px; background: var(--bg2); border-radius: 10px; }
+    .db-empty a { color: var(--accent); font-weight: 600; text-decoration: none; }
+    .db-skel { height: 64px; border-radius: 10px; background: linear-gradient(90deg, var(--bg3), var(--bg2), var(--bg3)); background-size: 200% 100%; animation: db-sh 1.2s infinite linear; }
+    @keyframes db-sh { to { background-position: -200% 0; } }
+
+    /* tabs */
+    .db-tabs { display: inline-flex; background: var(--bg3); border-radius: 8px; padding: 3px; gap: 2px; }
+    .db-tabs button { border: none; background: none; font: 600 12.5px var(--head); color: var(--t2); padding: 6px 10px; border-radius: 6px; cursor: pointer; }
+    .db-tabs button.on { background: var(--bg); color: var(--t1); box-shadow: var(--shadow-sm); }
+
+    /* timeline */
+    .db-tl { list-style: none; margin: 0; padding: 0; }
+    .db-tl li a { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 9px 8px; border-radius: 9px; text-decoration: none; color: var(--t1); }
+    .db-tl li a:hover { background: var(--bg2); }
+    .db-tl .ic { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; }
+    .db-tl .ic svg { width: 17px; height: 17px; }
+    .db-tl b { display: block; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .db-tl small { display: block; font-size: 12px; color: var(--t3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .db-tl time { font-size: 12px; color: var(--t3); white-space: nowrap; }
+    .k-calc { background: #E8F0FD; color: #1857C4; }
+    .k-sheet { background: #E6F4EC; color: #1E7A54; }
+    .k-design { background: #F3EAFB; color: #7A3DB8; }
+    .k-dye { background: #FDEFE6; color: #B4561B; }
+
+    /* tables */
+    .db-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    #db-sheets .db-t { min-width: 620px; }
+    .db-t { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .db-t th { text-align: left; font: 600 11px/1.2 var(--head); text-transform: uppercase; letter-spacing: .04em; color: var(--t3); padding: 0 8px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+    .db-t td { padding: 9px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+    .db-t tr:last-child td { border-bottom: none; }
+    .db-t .num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .db-t a.nm { font-weight: 600; color: var(--t1); text-decoration: none; }
+    .db-t a.nm:hover { color: var(--accent); }
+    .db-t small { display: block; color: var(--t3); font-size: 11.5px; margin-top: 2px; }
+    .pill { display: inline-block; font: 600 11px/1 var(--head); padding: 4px 7px; border-radius: 999px; white-space: nowrap; }
+    .pill.ok { background: #E6F4EC; color: var(--good); }
+    .pill.warn { background: #FDF1DE; color: var(--warn); }
+    .pill.bad { background: #FBE9E9; color: var(--danger); }
+    .pill.mute { background: var(--bg3); color: var(--t2); }
+
+    /* calc cards */
+    .db-calcs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .db-calc { border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+    .db-calc .tt { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+    .db-calc b { font-size: 13.5px; }
+    .db-calc .g { font: 600 12px var(--mono); color: var(--accent); white-space: nowrap; }
+    .db-calc .c { font-size: 12px; color: var(--t3); }
+    .db-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+    .db-chips span { font-size: 11.5px; background: var(--bg2); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; color: var(--t2); }
+    .db-chips span b { font: 600 11.5px var(--mono); color: var(--t1); }
+    .db-calc button { align-self: flex-start; font: 600 12.5px var(--head); color: var(--accent); background: none; border: 1px solid var(--accent-line); border-radius: 7px; padding: 5px 10px; cursor: pointer; }
+    .db-calc button:hover { background: var(--accent-tint); }
+
+    /* design cards */
+    .db-designs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    .db-design { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; text-decoration: none; color: var(--t1); display: block; }
+    .db-design:hover { border-color: var(--accent-line); }
+    .db-design canvas { display: block; width: 100%; height: 74px; background: #F4F6FA; image-rendering: pixelated; }
+    .db-design div { padding: 9px 10px; }
+    .db-design b { display: block; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .db-design small { display: block; font-size: 11.5px; color: var(--t3); margin-top: 2px; }
+
+    /* side */
+    .db-feed { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--t2); margin-bottom: 10px; flex-wrap: wrap; }
+    .db-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .db-health { list-style: none; margin: 0; padding: 0; }
+    .db-health li { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+    .db-health li:last-child { border-bottom: none; }
+    .db-health svg { width: 18px; height: 18px; }
+    .db-health small { display: block; color: var(--t3); font-size: 11.5px; }
+    .db-health a { font: 600 12px var(--head); color: var(--accent); text-decoration: none; white-space: nowrap; }
+    .db-score { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .db-score .bar { flex: 1; height: 6px; background: var(--bg4); border-radius: 3px; overflow: hidden; }
+    .db-score .bar i { display: block; height: 100%; border-radius: 3px; transition: width .6s ease; }
+    .db-score b { font: 700 13px var(--mono); }
+    .db-top { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
+    .db-top li { font-size: 12.5px; }
+    .db-top .row { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+    .db-top .bar { height: 6px; border-radius: 3px; background: var(--bg3); overflow: hidden; }
+    .db-top .bar i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+    .db-tools h3 { font: 700 11px/1 var(--head); text-transform: uppercase; letter-spacing: .06em; color: var(--t3); margin: 12px 0 6px; }
+    .db-tools h3:first-child { margin-top: 0; }
+    .db-tools a { display: flex; align-items: center; gap: 9px; padding: 7px 6px; border-radius: 7px; text-decoration: none; color: var(--t1); font-size: 13px; }
+    .db-tools a:hover { background: var(--bg2); }
+    .db-tools a svg { width: 16px; height: 16px; color: var(--t3); }
+
+    @media (max-width: 1100px) {
+      .db-grid { grid-template-columns: minmax(0, 1fr); }
+      .db-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .db-side { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+      .db-side .db-card { margin-bottom: 0; }
+    }
+    @media (max-width: 760px) {
+      .db { padding: 16px 16px 40px; }
+      .db-hero { grid-template-columns: minmax(0, 1fr); }
+      .db-hero h1 { font-size: 23px; }
+      .db-quick { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .db-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .db-calcs { grid-template-columns: minmax(0, 1fr); }
+      .db-designs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .db-side { grid-template-columns: minmax(0, 1fr); }
+      .db-act span.t { display: none; }
+      .db-searchbar kbd { display: none; }
+    }
+  </style>
+  <link rel="stylesheet" href="assets/css/theme-v2.css?v=20261108b">
+  <script src="assets/js/app-shell.js?v=20261108b" defer></script>
+</head>
+<body>
+  <header class="hdr"></header>
+
+  <main class="db" id="db">
+    <section class="db-hero">
+      <div>
+        <p class="db-date" id="db-date"></p>
+        <h1 id="db-hello">Welcome back</h1>
+        <p class="sub" id="db-sub">Your fabric engineering, R&amp;D and costing in one place.</p>
+      </div>
+      <div class="db-usage" id="db-usage" hidden></div>
+    </section>
+
+    <section class="db-quick" aria-label="Start something new">
+      <a class="db-act primary" href="/app.html"><span class="ic" data-i="calc"></span><span><b>New fabric calculation</b><span class="t">GSM and fabric to yarn, machine, process and cost</span></span></a>
+      <a class="db-act" href="/costsheet.html"><span class="ic" style="background:#1E7A54" data-i="sheet"></span><span><b>New costing sheet</b><span class="t">Buyer quotation by size, FOB and margin</span></span></a>
+      <a class="db-act" href="/studio.html"><span class="ic" style="background:#7A3DB8" data-i="grid"></span><span><b>Design a structure</b><span class="t">Knit, tuck, miss, cam set-out and live 3D</span></span></a>
+      <a class="db-act" href="/dyeing.html"><span class="ic" style="background:#B4561B" data-i="drop"></span><span><b>Dyeing lab</b><span class="t">Recipe, process flow and cost by shade</span></span></a>
+    </section>
+    <button type="button" class="db-searchbar" id="db-search"><span data-i="search"></span><span class="q">Search tools, actions, saved sheets and designs…</span><kbd id="db-kbd">Ctrl K</kbd></button>
+
+    <section class="db-kpis" id="db-kpis" aria-label="Your numbers">
+      <div class="db-kpi"><div class="db-skel" style="height:44px"></div></div>
+      <div class="db-kpi"><div class="db-skel" style="height:44px"></div></div>
+      <div class="db-kpi"><div class="db-skel" style="height:44px"></div></div>
+      <div class="db-kpi"><div class="db-skel" style="height:44px"></div></div>
+      <div class="db-kpi"><div class="db-skel" style="height:44px"></div></div>
+    </section>
+
+    <div class="db-grid">
+      <div class="db-main">
+        <section class="db-card">
+          <div class="db-ch">
+            <h2><span data-i="clock"></span>Continue where you left off</h2>
+            <div class="db-tabs" id="db-tl-tabs" role="tablist">
+              <button type="button" class="on" data-f="all">All</button>
+              <button type="button" data-f="calculation">Fabric</button>
+              <button type="button" data-f="cost_sheet">Costing</button>
+              <button type="button" data-f="design">R&amp;D</button>
+            </div>
+          </div>
+          <ul class="db-tl" id="db-tl"><li><div class="db-skel"></div></li></ul>
+        </section>
+
+        <section class="db-card">
+          <div class="db-ch"><h2><span data-i="sheet"></span>Costing sheets</h2><a class="more" href="/costsheet.html">+ New sheet</a></div>
+          <div id="db-sheets"><div class="db-skel"></div></div>
+        </section>
+
+        <section class="db-card">
+          <div class="db-ch"><h2><span data-i="grid"></span>R&amp;D — studio designs</h2><a class="more" href="/studio.html">+ New design</a></div>
+          <div id="db-designs"><div class="db-skel"></div></div>
+        </section>
+
+        <section class="db-card">
+          <div class="db-ch"><h2><span data-i="calc"></span>Recent fabric calculations</h2><a class="more" href="/account.html">All calculations →</a></div>
+          <div id="db-calcs"><div class="db-skel"></div></div>
+        </section>
+      </div>
+
+      <aside class="db-side">
+        <section class="db-card">
+          <div class="db-ch"><h2><span data-i="chart"></span>Yarn prices today</h2><a class="more" href="/costsheet.html">Use in costing →</a></div>
+          <div id="db-market"><div class="db-skel"></div></div>
+        </section>
+
+        <section class="db-card">
+          <div class="db-ch"><h2><span data-i="shield"></span>Account health</h2><a class="more" href="/account.html#security">Manage →</a></div>
+          <div id="db-health"><div class="db-skel"></div></div>
+        </section>
+
+        <section class="db-card" id="db-top-card" hidden>
+          <div class="db-ch"><h2><span data-i="loop"></span>Your most-used fabrics</h2></div>
+          <ul class="db-top" id="db-top"></ul>
+        </section>
+
+        <section class="db-card db-tools" id="db-tools">
+          <div class="db-ch"><h2><span data-i="apps"></span>Workspace</h2></div>
+          <div id="db-tools-list"></div>
+        </section>
+      </aside>
+    </div>
+  </main>
+
+  <footer class="footer"></footer>
+  <script src="assets/js/storage.js?v=20260606b"></script>
+  <script src="assets/js/dashboard.js?v=20261108a"></script>
+</body>
+</html>

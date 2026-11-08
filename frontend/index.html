@@ -572,6 +572,7 @@
           <h5>The platform</h5>
           <a class="mi" href="app.html"><span class="ic"><svg aria-hidden="true"><use href="#i-calc"/></svg></span><span><b>Fabric calculator</b><span class="t">Yarn, machine, stitch length and weight from one specification.</span></span></a>
           <a class="mi" href="#lab"><span class="ic"><svg aria-hidden="true"><use href="#i-cube"/></svg></span><span><b>3D cloth visualiser</b><span class="t">The finished piece, down to the single loop and fibre.</span></span></a>
+          <a class="mi" href="costsheet.html"><span class="ic"><svg aria-hidden="true"><use href="#i-chart"/></svg></span><span><b>Costing sheet</b><span class="t">Buyer quotation by size: yarn by role, CM, FOB, margin and PDF.</span></span></a>
           <a class="mi" href="#carbon"><span class="ic g"><svg aria-hidden="true"><use href="#i-leaf"/></svg></span><span><b>Carbon footprint</b><span class="t">kg CO&#8322;e per kg and per m&sup2;, split fibre and energy.</span></span></a>
           <a class="mi" href="dyeing.html"><span class="ic"><svg aria-hidden="true"><use href="#i-drop"/></svg></span><span><b>Dyeing recipes</b><span class="t">Recipe, process flow and costing by shade and fibre.</span></span></a>
           <a class="mi" href="studio.html"><span class="ic"><svg aria-hidden="true"><use href="#i-grid"/></svg></span><span><b>Fabric studio</b><span class="t">Design a new structure needle by needle, with checks, set-out and 3D.</span></span></a>
@@ -629,12 +630,15 @@
         <button type="button" class="btn btn-primary btn-sm" id="headerStartBtn">Start for free</button>
       </div>
       <div id="signedInBlock" hidden style="display:flex;align-items:center;gap:0.5rem;">
-        <a class="btn btn-primary btn-sm" href="/app.html">Open calculator</a>
+        <a class="btn btn-primary btn-sm" href="/dashboard.html">My dashboard</a>
         <div class="user-wrap">
           <button type="button" class="avatar-btn" id="userMenuBtn" aria-haspopup="true" aria-expanded="false" aria-label="Account menu">--</button>
           <div id="userMenu" hidden role="menu">
             <div class="who"><b id="userMenuName">Signed in</b><span id="userMenuEmail"></span></div>
-            <a href="/app.html" role="menuitem">Open calculator</a>
+            <a href="/dashboard.html" role="menuitem">Dashboard</a>
+            <a href="/app.html" role="menuitem">New fabric calculation</a>
+            <a href="/costsheet.html" role="menuitem">Costing sheet</a>
+            <a href="/account.html" role="menuitem">My account</a>
             <button type="button" id="signOutBtn" role="menuitem">Sign out</button>
           </div>
         </div>
@@ -908,7 +912,7 @@
       <a class="cap rv" href="studio.html"><span class="ic"><svg aria-hidden="true"><use href="#i-grid"/></svg></span><b>Fabric studio</b><p>Draw a new structure needle by needle: checks, cam and needle set-out, yarn per feeder, VDQ course length and a live 3D swatch.</p><span class="tags"><i class="k">Knit</i></span></a>
       <a class="cap rv" href="patterns.html"><span class="ic"><svg aria-hidden="true"><use href="#i-grid"/></svg></span><b>Pattern catalogue</b><p>Knit, tuck and miss programmes laid out feeder by feeder.</p><span class="tags"><i class="k">Knit</i></span></a>
       <a class="cap rv" style="--d:.04s" href="#wlab"><span class="ic"><svg aria-hidden="true"><use href="#i-weave"/></svg></span><b>Weave plans</b><p>Plain, twill, satin and sateen generated from their rules, with cover factor.</p><span class="tags"><i class="w">Woven</i><i class="l">Live demo</i></span></a>
-      <a class="cap rv" style="--d:.08s" href="app.html"><span class="ic"><svg aria-hidden="true"><use href="#i-chart"/></svg></span><b>Costing</b><p>Fabric cost per kg across six countries, with live yarn prices.</p><span class="tags"><i class="k">Knit</i><i class="w">Woven</i></span></a>
+      <a class="cap rv" style="--d:.08s" href="costsheet.html"><span class="ic"><svg aria-hidden="true"><use href="#i-chart"/></svg></span><b>Costing sheet</b><p>Garment FOB by size: fleece face, binder and loop yarns priced by role, knitting, dyeing, CM, trims, margin and a PDF quote.</p><span class="tags"><i class="k">Knit</i><i class="w">Woven</i></span></a>
       <a class="cap rv" style="--d:.12s" href="app.html"><span class="ic"><svg aria-hidden="true"><use href="#i-doc"/></svg></span><b>Tech pack PDF</b><p>The specification, process and costing as one document to send.</p><span class="tags"><i class="k">Knit</i></span></a>
       <a class="cap rv" href="rfq.html"><span class="ic"><svg aria-hidden="true"><use href="#i-tag"/></svg></span><b>Buyer quotes</b><p>Request and track quotes at a frozen reference price.</p><span class="tags"><i class="k">Knit</i><i class="w">Woven</i></span></a>
       <a class="cap rv" style="--d:.04s" href="diagnostics.html"><span class="ic"><svg aria-hidden="true"><use href="#i-alert"/></svg></span><b>Fault diagnostics</b><p>From a symptom on the fabric to its likely cause and cure.</p><span class="tags"><i class="k">Knit</i></span></a>
@@ -1127,7 +1131,7 @@
   function safeNext(){
     var n = params.get('next') || '';
     if (/^\/[A-Za-z0-9._~\-\/]*(\?[A-Za-z0-9._~\-=&%]*)?$/.test(n) && n.indexOf('//') !== 0) return n;
-    return '/app.html';
+    return '/dashboard.html';
   }
 
   /* ---------- header / hero reflect sign-in state ---------- */
@@ -1146,7 +1150,7 @@
       $('userMenuBtn').textContent = initials(user);
       $('userMenuName').textContent = user.full_name || 'Signed in';
       $('userMenuEmail').textContent = user.username ? '@' + user.username + ' · ' + user.email : user.email;
-      hero.textContent = 'Open the calculator';
+      hero.textContent = 'Go to my dashboard';
       if (viz) viz.textContent = 'Open the calculator';
     } else {
       hero.textContent = 'Start for free';
@@ -1689,13 +1693,13 @@
   /* ---------- wiring ---------- */
   $('headerSignInBtn').addEventListener('click', function(){ openAuth('signin', null); });
   function primaryAction(){
-    if (user) { window.location.href = '/app.html'; return; }
+    if (user) { window.location.href = '/dashboard.html'; return; }
     openAuth('signup', null);
   }
   $('heroPrimaryBtn').addEventListener('click', primaryAction);
   Array.prototype.forEach.call(document.querySelectorAll('[data-plan]'), function(btn){
     btn.addEventListener('click', function(){
-      if (user) { window.location.href = '/app.html'; return; }
+      if (user) { window.location.href = '/dashboard.html'; return; }
       openAuth('signup', btn.getAttribute('data-plan'));
     });
   });

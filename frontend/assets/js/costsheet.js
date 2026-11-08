@@ -495,11 +495,15 @@
   });
   $('cs-saved').addEventListener('change', function () {
     var id = this.value; this.value = ''; if (!id) return;
-    apiFetch('/api/cost-sheet/sheets/' + id).then(function (r) {
+    openSaved(id);
+  });
+  // a saved sheet opened by id — from the list above or a ?sheet= link (dashboard, search)
+  function openSaved(id) {
+    return apiFetch('/api/cost-sheet/sheets/' + encodeURIComponent(id)).then(function (r) {
       S = Object.assign(blank(), r.sheet.sheet); currentId = r.sheet.id; $('cs-del').hidden = false; renderForm(); cost();
       flash('Opened "' + r.sheet.name + '".');
-    }).catch(function (e) { flash((e.data && e.data.error) || 'Could not open it.'); });
-  });
+    }).catch(function (e) { flash((e.data && e.data.error) || 'Could not open it.'); cost(); });
+  }
   $('cs-del').addEventListener('click', function () {
     if (!currentId || !confirm('Delete "' + sheetName() + '" from your account?')) return;
     apiFetch('/api/cost-sheet/sheets/' + currentId, { method: 'DELETE' }).then(function () { currentId = null; $('cs-del').hidden = true; flash('Deleted.'); refreshSaved(); })
@@ -585,6 +589,10 @@
   });
 
   // ── start ──────────────────────────────────────────────────────────────
-  apiFetch('/api/cost-sheet/options').then(function (o) { OPTS = o; renderForm(); refreshSaved(); cost(); })
+  apiFetch('/api/cost-sheet/options').then(function (o) {
+    OPTS = o; renderForm(); refreshSaved();
+    var want = new URLSearchParams(window.location.search).get('sheet');
+    if (want && /^\d+$/.test(want)) openSaved(want); else cost();
+  })
     .catch(function () { $('cs-status').className = 'cs-msg err'; $('cs-status').textContent = 'Could not load the price lists. Sign in and reload.'; });
 })();
