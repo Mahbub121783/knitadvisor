@@ -119,8 +119,23 @@
         if (kind === 'back' && r.error && /No regular loop pattern/.test(r.error)) r = { backOnly: true, features: { regularity: 0, orient: { diagonal: 0, across: 0 } } };
         if (r.error) return Promise.resolve({ ok: false, error: r.error.replace(/\. .*/, '.') });
         if (kind === 'face' && r.confidence === 'low') return Promise.resolve({ ok: false, error: 'the loops are not clear enough' });
+        // a face photo far from the ones before it is the back, or a different fabric
+        var before = goodFaces();
+        if (kind === 'face' && before.length) {
+          var mw = KS.median(before.map(function (x) { return x.wpc; })), mc = KS.median(before.map(function (x) { return x.cpc; }));
+          if (Math.abs(r.wpc / mw - 1) > 0.15 || Math.abs(r.cpc / mc - 1) > 0.15) return Promise.resolve({ ok: false, error: 'different from the earlier photos — is this the face side of the same fabric?' });
+        }
         addMeasured(kind, r);
         return Promise.resolve({ ok: true, note: kind === 'back' ? 'Back captured' : r.wpc.toFixed(1) + ' wales · ' + r.cpc.toFixed(1) + ' courses per cm' });
+      },
+      onSendFrame: function (img, info) {
+        var c = document.createElement('canvas'), k = Math.min(1, 2000 / Math.max(img.w, img.h));
+        c.width = Math.round(img.w * k); c.height = Math.round(img.h * k);
+        var t = document.createElement('canvas'); t.width = img.w; t.height = img.h;
+        t.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(img.rgba), img.w, img.h), 0, 0);
+        c.getContext('2d').drawImage(t, 0, 0, c.width, c.height);
+        return fetch(API + '/api/scan/debug', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pair: pair || undefined, image: c.toDataURL('image/jpeg', 0.9), info: info }) }).then(function (r) { return r.ok; });
       },
       onDone: function () { update(); if (goodFaces().length) $('sc-count-card').scrollIntoView({ behavior: 'smooth', block: 'start' }); },
     });

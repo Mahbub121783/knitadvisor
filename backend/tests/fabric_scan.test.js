@@ -40,6 +40,15 @@ for (const [o, tol] of [
   assert.strictEqual(KS.suggest(r.features)[0].structure, 'pique', 'and suggested as piqué');
 }
 
+// real cloth: wrinkles, hairiness and the card lying beside the fabric (window not cut)
+{
+  const r = shoot({ structure: 'single_jersey', wpc: 16, cpc: 21.5, seed: 31, wrinkle: 0.35, fuzz: 0.3, light: 0.5, blur: 2, width: 1800, height: 1500 });
+  near(r.wpc, 16, 0.015, 'wrinkled, hairy wales'); near(r.cpc, 21.5, 0.02, 'wrinkled, hairy courses');
+  const u = shoot({ structure: 'interlock', wpc: 15, cpc: 15, seed: 34, uncut: true, cardY: 0.66, pxPerMm: 11, width: 1800, height: 1500, wrinkle: 0.3, fuzz: 0.2 });
+  assert.strictEqual(u.card.fabric_at, 'above', 'the fabric beside the card is found');
+  near(u.wpc, 15, 0.015, 'beside-the-card wales'); near(u.cpc, 15, 0.02, 'beside-the-card courses');
+}
+
 // faults: a hole and a needle line, each found once and where they are
 {
   const r = shoot({ structure: 'single_jersey', wpc: 17, cpc: 23, seed: 17, rotate: 0, tilt: 0, faults: [{ type: 'hole', x: 30, y: 28, r: 0.9 }, { type: 'needle_line', wale: 40 }] });

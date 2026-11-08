@@ -76,7 +76,16 @@
       }
       var twist = 1 - 0.13 * Math.sin(along * 40 + hash(i0, j0, 4) * 6);
       var base = groove ? 0.05 : 0.12;
-      return base + (0.86 - base) * best * twist;
+      var v = base + (0.86 - base) * best * twist;
+      // real cloth: wrinkles and their shadows, and hairiness over the loops
+      if (o.wrinkle) v *= 1 + o.wrinkle * (0.6 * Math.sin(x * 0.33 + y * 0.11) + 0.4 * Math.sin(y * 0.47 - x * 0.19 + 1.3));
+      if (o.fuzz) {
+        // hairiness: noise on a grid turned and stretched off the knit axes, so it has no repeat near a loop's
+        var u1 = x * 0.799 + y * 0.602, v1 = -x * 0.602 + y * 0.799;
+        var fine = hash(Math.floor(u1 * 9.7), Math.floor(v1 * 6.1), 9), coarse = hash(Math.floor(u1 * 1.37 + 0.31 * v1), Math.floor(v1 * 1.91), 11);
+        v += o.fuzz * (fine - 0.5) + o.fuzz * 0.8 * (coarse - 0.5);
+      }
+      return v;
     };
   }
 
@@ -87,7 +96,7 @@
    */
   function photo(o, CARD) {
     var R = rng(o.seed || 7), W = o.width || 1600, H = o.height || 1200, P = o.pxPerMm || 22;
-    var cx = W / 2 + (R() - 0.5) * W * 0.08, cy = H / 2 + (R() - 0.5) * H * 0.08;
+    var cx = W / 2 + (R() - 0.5) * W * 0.08, cy = (o.cardY != null ? o.cardY * H : H / 2) + (R() - 0.5) * H * 0.08;
     var rot = ((o.rotate == null ? (R() - 0.5) * 8 : o.rotate)) * Math.PI / 180, tilt = o.tilt == null ? 0.04 : o.tilt;
     var dst = CARD.markers.map(function (m) {
       var x = (m[0] - 35) * P, y = (m[1] - 35) * P;
@@ -104,9 +113,10 @@
       if (mx >= -6 && my >= -6 && mx <= CARD.size + 6 && my <= CARD.size + 6) {
         var inMarker = mx >= 0 && my >= 0 && mx <= CARD.size && my <= CARD.size && (mx < CARD.marker || mx > CARD.size - CARD.marker) && (my < CARD.marker || my > CARD.size - CARD.marker);
         if (inMarker) v = 0.06;
-        else if (mx > CARD.window[0] && mx < CARD.window[1] && my > CARD.window[0] && my < CARD.window[1]) { v = fab(mx, my); t = 1; }
+        else if (!o.uncut && mx > CARD.window[0] && mx < CARD.window[1] && my > CARD.window[0] && my < CARD.window[1]) { v = fab(mx, my); t = 1; }
         else v = 0.9 + (R() - 0.5) * 0.02;
-      } else v = 0.42 + 0.05 * Math.sin(x * 0.01) * Math.cos(y * 0.013);
+      } else if (o.uncut) { v = fab(mx, my); t = 1; }                 // the card lies on the fabric, window not cut
+      else v = 0.42 + 0.05 * Math.sin(x * 0.01) * Math.cos(y * 0.013);
       g[y * W + x] = v; tint[y * W + x] = t;
     }
     // optics: blur (repeated box), light falloff, noise

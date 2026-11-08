@@ -20,7 +20,7 @@
   var KS = root.KAScan;
   var FOV_DEG = 66;              // typical main phone camera, horizontal — the distance shown is approximate
   var MIN_PX_PER_MM = 11, GOOD_PX_PER_MM = 14, MAX_SIDE = 2400;
-  var TICK_MS = 120, HOLD_TICKS = 5;
+  var TICK_MS = 120, HOLD_TICKS = 5, LOOP_EVERY = 4, LIVE_MIN_PXMM = 6.5;
 
   var CSS = '.kc{position:fixed;inset:0;z-index:2000;background:#000;color:#fff;font-family:var(--head,system-ui);overflow:hidden;touch-action:none}' +
     '.kc video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}.kc canvas.ov{position:absolute;inset:0;width:100%;height:100%}' +
@@ -49,7 +49,7 @@
     var steps = opts.steps, stepIx = 0;
     var root = el('div', 'kc');
     root.innerHTML = '<video playsinline muted autoplay></video><canvas class="ov"></canvas>' +
-      '<div class="kc-top"><button class="kc-x" aria-label="Close camera">✕</button><b class="kc-step"></b><div class="kc-dots"></div><button class="kc-t" hidden aria-label="Light">⚡</button></div>' +
+      '<div class="kc-top"><button class="kc-x" aria-label="Close camera">✕</button><b class="kc-step"></b><div class="kc-dots"></div><button class="kc-t" hidden aria-label="Light">⚡</button><button class="kc-x kc-send" aria-label="Send this frame for help" title="Send this frame to KnitAdvisor">?</button></div>' +
       '<div class="kc-msg">Starting the camera…</div><div class="kc-checks"></div>' +
       '<div class="kc-bot"><button class="kc-skip">Skip</button><button class="kc-shut" aria-label="Take the photo now"><svg viewBox="0 0 80 80"><circle cx="40" cy="40" r="36" stroke-dasharray="226" stroke-dashoffset="226"></circle></svg></button><button class="kc-done">Done</button></div>' +
       '<div class="kc-flash"></div>';
@@ -59,6 +59,7 @@
     var checksEl = root.querySelector('.kc-checks'), ring = root.querySelector('.kc-shut circle');
     var small = document.createElement('canvas'), sg = small.getContext('2d', { willReadFrequently: true });
     var crop = document.createElement('canvas'); crop.width = crop.height = 192; var cg = crop.getContext('2d', { willReadFrequently: true });
+    var live = null, tickN = 0, fullCanvas = document.createElement('canvas'), fg = fullCanvas.getContext('2d', { willReadFrequently: true }), moves = [];
     var stream = null, track = null, imageCapture = null, captureW = 0, timer = null, closed = false;
     var okTicks = 0, prev = null, sharpBest = 0, armed = true, busy = false, lastPrint = null, lostTicks = 0, capturedAt = 0, movedSince = false;
 
@@ -83,6 +84,16 @@
     root.querySelector('.kc-done').addEventListener('click', function () { close(true); });
     root.querySelector('.kc-skip').addEventListener('click', function () { next(); });
     root.querySelector('.kc-shut').addEventListener('click', function () { if (!busy) capture(true); });
+    root.querySelector('.kc-send').addEventListener('click', function () {
+      if (!opts.onSendFrame || busy) return;
+      busy = true; say('Sending this frame…', 'ok');
+      grabPhoto().then(function (img) {
+        return opts.onSendFrame(img, { video: video.videoWidth + '×' + video.videoHeight, capture_w: captureW || null, last: lastState, live: live ? { wpc: live.wpc, cpc: live.cpc, reg: live.regularity, at: live.at } : null, ua: navigator.userAgent });
+      }).then(function (ok) { say(ok ? 'Sent — thank you. KnitAdvisor will look at it.' : 'Could not send the frame', ok ? 'ok' : 'warn'); })
+        .catch(function () { say('Could not send the frame', 'warn'); })
+        .then(function () { setTimeout(function () { busy = false; }, 1500); });
+    });
+    var lastState = null;
     var torchOn = false;
     root.querySelector('.kc-t').addEventListener('click', function () {
       torchOn = !torchOn;
@@ -147,25 +158,31 @@
       out.distance = { ok: !tooBig && pxmmPhoto >= MIN_PX_PER_MM, cm: distCm, pxmm: pxmmPhoto, hint: tooBig ? 'Move back a little' : pxmmPhoto < MIN_PX_PER_MM ? 'Move closer' : null, good: pxmmPhoto >= GOOD_PX_PER_MM };
       // straight: perspective and turn
       var ang = Math.atan2(c[1][1] - c[0][1], c[1][0] - c[0][0]) * 180 / Math.PI;
-      out.straight = { ok: det.tilt < 1.09 && Math.abs(ang) < 9, hint: det.tilt >= 1.09 ? 'Hold the phone flat above the card' : Math.abs(ang) >= 9 ? 'Turn the phone to line up with the card' : null };
+      out.straight = { ok: det.tilt < 1.12 && Math.abs(ang) < 12, hint: det.tilt >= 1.12 ? 'Hold the phone flat above the card' : Math.abs(ang) >= 12 ? 'Turn the phone to line up with the card' : null };
       var cx = (c[0][0] + c[1][0] + c[2][0] + c[3][0]) / 4, cy = (c[0][1] + c[1][1] + c[2][1] + c[3][1]) / 4;
       out.centred = { ok: Math.abs(cx - sw / 2) < sw * 0.12 && Math.abs(cy - sh / 2) < sh * 0.12, hint: 'Centre the card' };
       var move = prev ? Math.max.apply(null, c.map(function (p, i) { return Math.hypot(p[0] - prev[i][0], p[1] - prev[i][1]); })) / Math.hypot(sw, sh) : 1;
-      out.steady = { ok: move < 0.006, hint: 'Hold still', move: move };
+      moves.push(move); if (moves.length > 3) moves.shift();
+      var mv = moves.slice().sort(function (a2, b2) { return a2 - b2; })[Math.floor(moves.length / 2)];
+      out.steady = { ok: mv < 0.015, hint: 'Hold still', move: mv };
       // light, from the white paper and the window
       var H = KS.homography(KS.CARD.markers, c);
       var at = function (mx, my) { var q = KS.apply(H, mx, my), x = Math.round(q[0]), y = Math.round(q[1]); return x >= 0 && y >= 0 && x < sw && y < sh ? g[y * sw + x] : null; };
       var whites = KS.CARD.white.map(function (p) { return at(p[0], p[1]); }).filter(function (v) { return v != null; });
       var white = whites.length ? whites.reduce(function (t, v) { return t + v; }, 0) / whites.length : 0;
-      var win = [], fp = [];
-      for (var yy = 0; yy < 12; yy++) for (var xx = 0; xx < 12; xx++) { var v = at(18 + xx * 3, 18 + yy * 3); if (v != null) { win.push(v); fp.push(v); } }
+      // where the fabric is: where the loops were last found, else the window
+      var reg = live && !live.error && live.region ? live.region : KS.CARD.regions.window;
+      var win = [], fp = [], stx = (reg[1] - reg[0]) / 11, sty = (reg[3] - reg[2]) / 11;
+      for (var yy = 0; yy < 12; yy++) for (var xx = 0; xx < 12; xx++) { var v = at(reg[0] + xx * stx, reg[2] + yy * sty); if (v != null) { win.push(v); fp.push(v); } }
       var wmean = win.length ? win.reduce(function (t, v) { return t + v; }, 0) / win.length : 0;
-      out.light = { ok: white > 0.42 && white < 0.985 && wmean > 0.05 && wmean < 0.95, hint: white <= 0.42 ? 'Too dark — more light' + (track && track.getCapabilities && track.getCapabilities().torch ? ' (⚡)' : '') : white >= 0.985 ? 'Too bright — avoid glare' : 'The fabric is too dark or too bright' };
+      // only real darkness or a burnt-out fabric stops the photo; bright paper is normal over dark cloth
+      var torchHint = track && track.getCapabilities && track.getCapabilities().torch ? ' (⚡)' : '';
+      out.light = { ok: white > 0.3 && wmean > 0.03 && wmean < 0.975, hint: white <= 0.3 ? 'Too dark — more light' + torchHint : wmean >= 0.975 ? 'Glare on the fabric — move the light' : 'The fabric is too dark — more light' + torchHint };
       out.print = fp;
       // sharpness of the window, from the full-resolution video
-      var a = KS.apply(H, 20, 20), b = KS.apply(H, 50, 50), sx = vw / sw;
+      var a = KS.apply(H, reg[0] + (reg[1] - reg[0]) * 0.1, reg[2] + (reg[3] - reg[2]) * 0.1), b = KS.apply(H, reg[1] - (reg[1] - reg[0]) * 0.1, reg[3] - (reg[3] - reg[2]) * 0.1), sx = vw / sw;
       var x0 = Math.max(0, Math.min(a[0], b[0]) * sx), y0 = Math.max(0, Math.min(a[1], b[1]) * sx), wv = Math.abs(b[0] - a[0]) * sx * 0.5, hv = Math.abs(b[1] - a[1]) * sx * 0.5;
-      x0 += wv * 0.5; y0 += hv * 0.5;                                   // the middle of the window
+      x0 += wv * 0.5; y0 += hv * 0.5;                                   // the middle of the fabric area
       cg.drawImage(video, x0, y0, wv, hv, 0, 0, 192, 192);
       var d2 = cg.getImageData(0, 0, 192, 192).data, gs = KS.toGray(d2, 192, 192), e = 0, m = 0, m2 = 0;
       for (var i = 0; i < gs.length; i++) { m += gs[i]; m2 += gs[i] * gs[i]; }
@@ -173,8 +190,29 @@
       for (var y = 1; y < 191; y++) for (var x = 1; x < 191; x++) { var k = y * 192 + x, l = 4 * gs[k] - gs[k - 1] - gs[k + 1] - gs[k - 192] - gs[k + 192]; e += l * l; }
       var sharp = e / (190 * 190) / varc;
       if (out.steady.ok) sharpBest = Math.max(sharpBest * 0.995, sharp);
-      out.sharp = { ok: sharp >= sharpBest * 0.8 && sharpBest > 0, hint: 'Focusing…', value: sharp };
+      // loops counted on the live video means the picture is sharp enough already
+      var loopsSeen = live && !live.error && live.regularity > 0.28 && Date.now() - live.t < 2500;
+      out.sharp = { ok: loopsSeen || (sharp >= sharpBest * 0.75 && sharpBest > 0), hint: 'Focusing…', value: sharp };
       prev = c;
+      // the loops themselves, counted on the video every few looks
+      var pxmmVideo = det.pxPerMm * vw / sw;
+      if (pxmmVideo < LIVE_MIN_PXMM) out.loops = { ok: true, pending: true, hint: null };
+      else {
+        if (tickN % LOOP_EVERY === 0 && out.steady.ok) {
+          try {
+            var k = Math.min(1, 1920 / Math.max(vw, vh)), fw = Math.round(vw * k), fh = Math.round(vh * k);
+            if (fullCanvas.width !== fw) { fullCanvas.width = fw; fullCanvas.height = fh; }
+            fg.drawImage(video, 0, 0, fw, fh);
+            var fgray = KS.toGray(fg.getImageData(0, 0, fw, fh).data, fw, fh), fs = fw / sw;
+            var pick = KS.findFabric(fgray, fw, fh, c.map(function (p) { return [p[0] * fs, p[1] * fs]; }), det.pxPerMm * fs, { maxPxPerMm: 10, maxN: 256 });
+            live = pick.error ? { error: pick.error, code: pick.code, t: Date.now() } : { wpc: pick.m.wpc, cpc: pick.m.cpc, regularity: pick.m.regularity, confidence: pick.m.confidence, at: pick.name, region: pick.region, flat: pick.flat, m: pick.m, t: Date.now() };
+          } catch (e) { live = { error: e.message, t: Date.now() }; }
+        }
+        var fresh = live && Date.now() - live.t < 2500;
+        out.loops = fresh && !live.error && live.regularity > 0.28
+          ? { ok: true, wpc: live.wpc, cpc: live.cpc, live: live }
+          : { ok: false, hint: fresh && live.error ? (live.code === 'no_fabric' ? 'No fabric seen — cut the window, or lay the card beside the fabric' : 'Loops not clear — hold steady, closer, more light') : 'Reading the loops…' };
+      }
       return out;
     }
 
@@ -217,6 +255,7 @@
       g.beginPath(); frame.forEach(function (p, i) { if (i) g.lineTo(p[0], p[1]); else g.moveTo(p[0], p[1]); }); g.closePath(); g.stroke();
       g.setLineDash([]);
       L.det.corners.forEach(function (c) { var p = [c[0] * f * s + ox, c[1] * f * s + oy]; g.beginPath(); g.arc(p[0], p[1], 9, 0, Math.PI * 2); g.fillStyle = col; g.fill(); });
+      if (L.loops && L.loops.live && L.loops.live.flat) drawLoops(g, L.loops.live, map);
       if (L.distance) {
         var t = '≈ ' + L.distance.cm.toFixed(0) + ' cm · ' + L.distance.pxmm.toFixed(0) + ' px/mm';
         var c0 = map(35, 72);
@@ -225,6 +264,38 @@
         g.fillStyle = '#000a'; g.fillRect(c0[0] - tw / 2, c0[1] + 4, tw, 24);
         g.fillStyle = '#fff'; g.fillText(t, c0[0], c0[1] + 21);
       }
+    }
+
+    // the counted grid, drawn over the fabric where it was counted (every 2nd line, so it stays legible)
+    function drawLoops(g, lv, map) {
+      var f = lv.flat, reg = lv.region, P = f.pxPerMm, G = KS.grid(f, lv.m);
+      var toMm = function (x, y) { return map(reg[0] + x / P, reg[2] + y / P); };
+      var clip = function (px, py, dx, dy) {          // the line through (px,py) along (dx,dy), inside the flat box
+        var t0 = -1e9, t1 = 1e9;
+        [[px, dx, f.w], [py, dy, f.h]].forEach(function (a) {
+          if (Math.abs(a[1]) < 1e-9) { if (a[0] < 0 || a[0] > a[2]) { t0 = 1; t1 = 0; } return; }
+          var ta = (0 - a[0]) / a[1], tb = (a[2] - a[0]) / a[1];
+          t0 = Math.max(t0, Math.min(ta, tb)); t1 = Math.min(t1, Math.max(ta, tb));
+        });
+        return t1 > t0 ? [[px + dx * t0, py + dy * t0], [px + dx * t1, py + dy * t1]] : null;
+      };
+      g.lineWidth = 1.2;
+      [[G.wale, '#00E5D0'], [G.course, '#FFB020']].forEach(function (pair) {
+        var Ln = pair[0], n = Math.ceil(Math.hypot(f.w, f.h) / Ln.spacing) + 2;
+        g.strokeStyle = pair[1]; g.globalAlpha = 0.85;
+        for (var k = -n; k <= n; k += 2) {
+          var d = Ln.offset + k * Ln.spacing, seg = clip(Ln.normal[0] * d, Ln.normal[1] * d, Ln.dir[0], Ln.dir[1]);
+          if (!seg) continue;
+          var a = toMm(seg[0][0], seg[0][1]), b = toMm(seg[1][0], seg[1][1]);
+          g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke();
+        }
+      });
+      g.globalAlpha = 1;
+      var lab = map((reg[0] + reg[1]) / 2, reg[2]), txt = lv.wpc.toFixed(1) + ' wales · ' + lv.cpc.toFixed(1) + ' courses /cm';
+      g.font = '700 14px system-ui, sans-serif'; g.textAlign = 'center';
+      var tw = g.measureText(txt).width + 14;
+      g.fillStyle = '#00000099'; g.fillRect(lab[0] - tw / 2, lab[1] - 26, tw, 22);
+      g.fillStyle = '#fff'; g.fillText(txt, lab[0], lab[1] - 10);
     }
 
     function setRing(fr) { ring.setAttribute('stroke-dashoffset', String(226 * (1 - Math.max(0, Math.min(1, fr))))); }
@@ -237,8 +308,10 @@
       var L;
       try { L = look(); } catch (e) { L = null; }
       if (!L) return;
-      var names = [['found', 'Card'], ['distance', 'Distance'], ['straight', 'Straight'], ['centred', 'Centred'], ['steady', 'Steady'], ['sharp', 'Sharp'], ['light', 'Light']];
+      tickN++;
+      var names = [['found', 'Card'], ['distance', 'Distance'], ['straight', 'Straight'], ['steady', 'Steady'], ['sharp', 'Sharp'], ['light', 'Light'], ['loops', 'Loops']];
       var allOk = L.found && names.slice(1).every(function (n) { return L[n[0]] && L[n[0]].ok; });
+      lastState = names.map(function (n) { return n[1] + ':' + (n[0] === 'found' ? L.found : !!(L[n[0]] && L[n[0]].ok)); }).join(' ');
       // waiting for a new spot after a photo
       if (!armed) {
         if (!L.found) lostTicks++; else lostTicks = 0;
@@ -248,7 +321,8 @@
       }
       checksEl.innerHTML = names.map(function (n) {
         var ok = n[0] === 'found' ? L.found : L[n[0]] && L[n[0]].ok;
-        return '<span class="' + (ok ? 'ok' : L.found ? 'bad' : '') + '">' + (ok ? '✓ ' : '') + n[1] + (n[0] === 'distance' && L.distance ? ' ≈' + L.distance.cm.toFixed(0) + ' cm' : '') + '</span>';
+        var extra = n[0] === 'distance' && L.distance ? ' ≈' + L.distance.cm.toFixed(0) + ' cm' : n[0] === 'loops' && L.loops && L.loops.wpc ? ' ' + L.loops.wpc.toFixed(1) + '×' + L.loops.cpc.toFixed(1) : n[0] === 'loops' && L.loops && L.loops.pending ? ' (in photo)' : '';
+        return '<span class="' + (ok ? 'ok' : L.found ? 'bad' : '') + '">' + (ok ? '✓ ' : '') + n[1] + extra + '</span>';
       }).join('');
       if (!armed) {
         okTicks = 0; setRing(0); draw(L, 'idle');

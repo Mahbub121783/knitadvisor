@@ -7,7 +7,8 @@
  *
  * Each swatch is drawn at a random wales/cm and courses/cm, then
  * "photographed" under the card with random rotation, perspective tilt, blur,
- * sensor noise, uneven light and colour — the counting must survive all of it.
+ * sensor noise, uneven light, colour, wrinkles and hairiness, a third with the
+ * card lying beside the fabric (window not cut) — the counting must survive all of it.
  */
 'use strict';
 const fs = require('fs');
@@ -36,7 +37,9 @@ for (let i = 0; i < N; i++) {
     structure, wpc, cpc, KAScan: KS, seed: 1000 + i, pxPerMm: 11 + R() * 6, width: 2000, height: 1600,
     rotate: (R() - 0.5) * 12, angle: (R() - 0.5) * 6, tilt: R() * 0.1, blur: Math.floor(R() * 3), noise: 0.01 + R() * 0.04, light: R() * 0.5,
     colour: [40 + R() * 200, 40 + R() * 200, 40 + R() * 200].map(Math.round),
+    wrinkle: R() * 0.35, fuzz: R() * 0.35,                  // real cloth: wrinkles, hairiness
   };
+  if (R() < 0.33) Object.assign(o, { uncut: true, cardY: 0.64, pxPerMm: 9.5 + R() * 3 });   // card beside the fabric, window not cut
   const ph = SY.photo(o, KS.CARD);
   const r = KS.analysePhoto(ph.rgba, ph.w, ph.h);
   const b = (by[structure] = by[structure] || { n: 0, failed: 0, w: [], c: [] });

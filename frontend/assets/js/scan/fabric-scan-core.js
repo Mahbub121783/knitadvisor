@@ -30,6 +30,12 @@
     window: [15, 55],                                     // the cut-out
     sample: [17, 53],                                     // what is analysed (2 mm inside the cut)
     white: [[35, 12.5], [12.5, 35], [57.5, 35], [35, 57.5]], // plain paper between frame and window
+    // analysed areas [x0, x1, y0, y1] mm: the cut-out window, or fabric lying just
+    // beside the card on any side (the card's 5 mm white border is skipped)
+    regions: {
+      window: [17, 53, 17, 53],
+      above: [17, 52, -44, -9], below: [17, 52, 79, 114], left: [-44, -9, 17, 52], right: [79, 114, 17, 52],
+    },
   };
 
   // ── images ─────────────────────────────────────────────────────────
@@ -97,8 +103,17 @@
    * @returns {{corners: number[][], pxPerMm: number}|{error: string}}
    */
   function detectCard(g, w, h) {
+    var tries = [[24, 0.12], [12, 0.1], [40, 0.08], [16, 0.06]], first = null;
+    for (var t = 0; t < tries.length; t++) {
+      var r = detectCardOnce(g, w, h, tries[t][0], tries[t][1]);
+      if (!r.error) return r;
+      if (!first) first = r;
+    }
+    return first;
+  }
+  function detectCardOnce(g, w, h, div, margin) {
     // adaptive threshold: darker than the neighbourhood by a margin
-    var R = Math.max(8, Math.round(Math.max(w, h) / 24));
+    var R = Math.max(8, Math.round(Math.max(w, h) / div));
     var I = new Float64Array((w + 1) * (h + 1));
     for (var y = 0; y < h; y++) {
       var row = 0;
@@ -111,7 +126,7 @@
         var xa = Math.max(0, x - R), xb = Math.min(w, x + R + 1);
         var s = I[yb * (w + 1) + xb] - I[ya * (w + 1) + xb] - I[yb * (w + 1) + xa] + I[ya * (w + 1) + xa];
         var m = s / ((yb - ya) * (xb - xa));
-        mask[y * w + x] = g[y * w + x] < m - 0.12 && g[y * w + x] < 0.45 ? 1 : 0;
+        mask[y * w + x] = g[y * w + x] < m - margin && g[y * w + x] < 0.5 ? 1 : 0;
       }
     }
     // connected components
@@ -203,15 +218,16 @@
     opts = opts || {};
     var H = homography(CARD.markers, corners);        // mm → image px
     var P = Math.min(opts.maxPxPerMm || 26, srcPxPerMm * 0.9);
-    var a = CARD.sample[0], b = CARD.sample[1], side = Math.round((b - a) * P);
-    var out = new Float32Array(side * side), bad = 0;
-    for (var y = 0; y < side; y++) for (var x = 0; x < side; x++) {
-      var q = apply(H, a + (x + 0.5) / P, a + (y + 0.5) / P);
+    var reg = opts.region || CARD.regions.window;
+    var ow = Math.round((reg[1] - reg[0]) * P), oh = Math.round((reg[3] - reg[2]) * P);
+    var out = new Float32Array(ow * oh), bad = 0;
+    for (var y = 0; y < oh; y++) for (var x = 0; x < ow; x++) {
+      var q = apply(H, reg[0] + (x + 0.5) / P, reg[2] + (y + 0.5) / P);
       var v = bilinear(g, w, h, q[0], q[1]);
       if (v !== v) { v = 0.5; bad++; }
-      out[y * side + x] = v;
+      out[y * ow + x] = v;
     }
-    return { data: out, w: side, h: side, pxPerMm: P, H: H, outside: bad / out.length };
+    return { data: out, w: ow, h: oh, pxPerMm: P, H: H, region: reg, outside: bad / out.length };
   }
 
   // ── FFT ──────────────────────────────────────────────────────────────
@@ -384,11 +400,50 @@
   function median(a) { var s = a.slice().sort(function (x, y) { return x - y; }); var m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; }
 
   /**
+   * Keeps only detail finer than ~1.3 mm (the loops) and evens out contrast:
+   * uneven light, the shadow of a wrinkle and a dark-to-light gradient across
+   * the swatch would otherwise outweigh the loop repeat in the autocorrelation.
+   */
+  function boxMean(src, w, h, r) {
+    var I = new Float64Array((w + 1) * (h + 1)), out = new Float32Array(w * h), x, y;
+    for (y = 0; y < h; y++) { var row = 0; for (x = 0; x < w; x++) { row += src[y * w + x]; I[(y + 1) * (w + 1) + x + 1] = I[y * (w + 1) + x + 1] + row; } }
+    for (y = 0; y < h; y++) {
+      var ya = Math.max(0, y - r), yb = Math.min(h, y + r + 1);
+      for (x = 0; x < w; x++) {
+        var xa = Math.max(0, x - r), xb = Math.min(w, x + r + 1);
+        out[y * w + x] = (I[yb * (w + 1) + xb] - I[ya * (w + 1) + xb] - I[yb * (w + 1) + xa] + I[ya * (w + 1) + xa]) / ((yb - ya) * (xb - xa));
+      }
+    }
+    return out;
+  }
+  function detail(img, rPx) {
+    var w = img.w, h = img.h, r = Math.max(2, Math.round(rPx || 1.3 * img.pxPerMm));
+    var lo = boxMean(img.data, w, h, r), hp = new Float32Array(w * h), sq = new Float32Array(w * h), i;
+    for (i = 0; i < hp.length; i++) { hp[i] = img.data[i] - lo[i]; sq[i] = hp[i] * hp[i]; }
+    var v = boxMean(sq, w, h, r * 2);
+    for (i = 0; i < hp.length; i++) hp[i] = hp[i] / (Math.sqrt(v[i]) + 0.01);
+    return { data: hp, w: w, h: h, pxPerMm: img.pxPerMm };
+  }
+
+  /**
    * Wales and courses per cm of a flattened image at a known scale.
    * @param img {data, w, h, pxPerMm}
    */
-  function measure(img) {
-    var side = Math.min(img.w, img.h), N = 512;
+  function measure(img, opts) {
+    opts = opts || {};
+    if (!opts.raw && !opts.pass2) {
+      // two passes: find the loop size, then filter out everything broader than
+      // a loop (hairiness, unevenness) — a broad texture tilts the
+      // autocorrelation and pulls each loop peak towards the centre
+      var first = measure(img, { maxN: opts.maxN, pass2: true });
+      if (first.error) return first;
+      var sp = Math.min(10 * img.pxPerMm / first.wpc, 10 * img.pxPerMm / first.cpc);
+      var second = measure(img, { maxN: opts.maxN, pass2: true, rPx: Math.max(2, 0.8 * sp) });
+      return second.error ? first : second;
+    }
+    var raw = img;
+    img = opts.raw ? img : detail(img, opts.rPx);
+    var side = Math.min(img.w, img.h), N = opts.maxN || 512;
     while (N > 64 && N > side * 0.62) N >>= 1;
     if (N < 64) return { error: 'The image is too small to measure.' };
     var span = side - N, spots = [[0.5, 0.5], [0, 0], [1, 0], [0, 1], [1, 1]], rows = [];
@@ -405,7 +460,7 @@
       var skew = Math.atan2(L.W[1], L.W[0]) - (Math.atan2(L.C[1], L.C[0]) - Math.PI / 2);
       rows.push({ wpc: 10 * img.pxPerMm / waleSp, cpc: 10 * img.pxPerMm / courseSp, skew: skew * 180 / Math.PI, r: (L.rW + L.rC) / 2, L: L, N: N, R: R });
     });
-    if (rows.length < 2) return { error: 'No regular loop pattern was found. Check the fabric is in focus and fills the window.' };
+    if (rows.length < 2) return { error: 'No regular loop pattern was found. Check the fabric is in focus and fills the window.', code: 'no_loops' };
     var wpcs = rows.map(function (r) { return r.wpc; }), cpcs = rows.map(function (r) { return r.cpc; });
     var wpc = median(wpcs), cpc = median(cpcs);
     var spread = Math.max(median(wpcs.map(function (v) { return Math.abs(v - wpc) / wpc; })), median(cpcs.map(function (v) { return Math.abs(v - cpc) / cpc; })));
@@ -415,7 +470,7 @@
     return {
       wpc: wpc, cpc: cpc, density: wpc * cpc, skew_deg: median(rows.map(function (x) { return x.skew; })),
       spread: spread, regularity: r, confidence: conf, staggered: best.L.staggered, used: rows.length,
-      lattice: { W: best.L.W, C: best.L.C }, _R: best.R, _N: best.N,
+      lattice: { W: best.L.W, C: best.L.C }, _R: best.R, _N: best.N, _raw: raw,
     };
   }
 
@@ -553,14 +608,15 @@
     return [116 * f(Y) - 16, 500 * (f(X) - f(Y)), 200 * (f(Y) - f(Z))];
   }
   /** rgba of the (small) image, its size, and the mm → small-image homography. */
-  function colour(rgba, w, h, H) {
+  function colour(rgba, w, h, H, reg) {
+    reg = reg || CARD.regions.window;
     var px = function (mx, my) { var q = apply(H, mx, my), x = Math.round(q[0]), y = Math.round(q[1]); if (x < 0 || y < 0 || x >= w || y >= h) return null; var i = (y * w + x) * 4; return [rgba[i], rgba[i + 1], rgba[i + 2]]; };
     var white = [0, 0, 0], nW = 0;
     CARD.white.forEach(function (p) {
       for (var d = -1; d <= 1; d++) { var c = px(p[0] + d, p[1] + d * 0.3); if (c) { white[0] += c[0]; white[1] += c[1]; white[2] += c[2]; nW++; } }
     });
     var fab = [0, 0, 0], nF = 0;
-    for (var y = CARD.sample[0]; y <= CARD.sample[1]; y += 0.7) for (var x = CARD.sample[0]; x <= CARD.sample[1]; x += 0.7) {
+    for (var y = reg[2]; y <= reg[3]; y += 0.7) for (var x = reg[0]; x <= reg[1]; x += 0.7) {
       var c = px(x, y); if (c) { fab[0] += c[0]; fab[1] += c[1]; fab[2] += c[2]; nF++; }
     }
     if (!nF) return null;
@@ -584,21 +640,44 @@
     var full = card.corners.map(function (c) { return [c[0] * small.scale, c[1] * small.scale]; });
     var srcPx = card.pxPerMm * small.scale;
     if (srcPx < 9) return { error: 'The card is too small in the photo (' + srcPx.toFixed(1) + ' px per mm). Move the phone closer, or use a clip-on macro lens.' };
-    var flat = rectify(gray, w, h, full, srcPx);
-    if (flat.outside > 0.02) return { error: 'Part of the window is outside the photo. Keep the whole card in the frame.' };
-    var m = measure(flat);
-    if (m.error) return { error: m.error };
+    var pick = findFabric(gray, w, h, full, srcPx);
+    if (pick.error) return { error: pick.error };
+    var flat = pick.flat, m = pick.m;
     var f = features(flat, m);
     // colour from a small RGBA copy
     var Hsmall = homography(CARD.markers, card.corners);
     var smallRGBA = smallRgba(rgba, w, h, small.w, small.h);
-    var col = colour(smallRGBA, small.w, small.h, Hsmall);
+    var col = colour(smallRGBA, small.w, small.h, Hsmall, pick.region);
     return {
-      card: { px_per_mm: Math.round(srcPx * 10) / 10, tilt: Math.round(card.tilt * 100) / 100 },
+      card: { px_per_mm: Math.round(srcPx * 10) / 10, tilt: Math.round(card.tilt * 100) / 100, fabric_at: pick.name },
       wpc: m.wpc, cpc: m.cpc, density: m.density, skew_deg: m.skew_deg, confidence: m.confidence, spread: m.spread,
       regularity: m.regularity, staggered: m.staggered, lattice: m.lattice, features: f, faults: faults(flat, m), colour: col,
       _flat: flat,
     };
+  }
+  // plain paper: bright and flat. Dark cloth is flat in absolute terms too, so contrast is judged against brightness.
+  function isPaper(a) { var m = 0, q = 0, n = a.length; for (var i = 0; i < n; i += 3) { m += a[i]; q += a[i] * a[i]; } n = Math.ceil(n / 3); m /= n; var sd = Math.sqrt(Math.max(0, q / n - m * m)); return sd < 0.006 || (m > 0.55 && sd / m < 0.035); }
+  /**
+   * Where the fabric is: in the cut window, or lying beside the card. Each
+   * candidate area in the photo is flattened; plain paper (no texture) is
+   * skipped; the one with the clearest loop repeat is measured.
+   */
+  function findFabric(gray, w, h, corners, srcPx, opts) {
+    opts = opts || {};
+    var order = ['window', 'above', 'below', 'left', 'right'], best = null, lastErr = null, sawOutside = false;
+    for (var i = 0; i < order.length; i++) {
+      var reg = CARD.regions[order[i]];
+      var flat = rectify(gray, w, h, corners, srcPx, { region: reg, maxPxPerMm: opts.maxPxPerMm });
+      if (flat.outside > 0.02) { if (order[i] === 'window') sawOutside = true; continue; }
+      if (isPaper(flat.data)) continue;                                        // plain paper: the window was not cut
+      var m = measure(flat, { maxN: opts.maxN });
+      if (m.error) { lastErr = m; continue; }
+      if (!best || m.regularity > best.m.regularity) best = { name: order[i], region: reg, flat: flat, m: m };
+      if (best.m.regularity > 0.4 && best.m.confidence !== 'low') break;      // clear enough: stop looking
+    }
+    if (best) return best;
+    if (sawOutside && !lastErr) return { error: 'Part of the window is outside the photo. Keep the whole card in the frame.' };
+    return { error: lastErr ? lastErr.error : 'No fabric found in the card window or beside the card. Cut out the window, or lay the card right next to the fabric.', code: lastErr ? lastErr.code : 'no_fabric' };
   }
   function smallRgba(rgba, w, h, W, H) {
     var out = new Uint8ClampedArray(W * H * 4), sx = w / W, sy = h / H;
@@ -637,7 +716,7 @@
   }
 
   return {
-    grid: grid,
+    grid: grid, findFabric: findFabric, detail: detail,
     CARD: CARD, toGray: toGray, downscale: downscale, homography: homography, apply: apply, detectCard: detectCard,
     rectify: rectify, autocorr: autocorr, lattice: lattice, measure: measure, features: features, suggest: suggest,
     faults: faults, colour: colour, srgbToLab: srgbToLab, analysePhoto: analysePhoto, median: median, FAMILY_RATIO: FAMILY_RATIO,

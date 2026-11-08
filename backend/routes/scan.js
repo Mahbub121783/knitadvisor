@@ -46,7 +46,7 @@ router.get('/card.pdf', (req, res) => {
     doc.fillColor('#6f7680').fontSize(6).text('wales run top to bottom', mm(ox + 15), mm(oy + 38), { width: mm(40), align: 'center' });
   };
   doc.fillColor('#191C1F').fontSize(16).text('KnitAdvisor fabric scan card', mm(15), mm(14));
-  doc.fontSize(9).fillColor('#565C64').text('Print at 100 % ("Actual size" — never "Fit to page"). Check the 50 mm bar with a ruler before use. Cut along the grey line and cut out the blue window. Keep the white paper clean: it is the colour reference.', mm(15), mm(22), { width: mm(180) });
+  doc.fontSize(9).fillColor('#565C64').text('Print at 100 % ("Actual size" — never "Fit to page"). Check the 50 mm bar with a ruler before use. Cut along the grey line. Then EITHER cut out the blue window and lay the card on the fabric, OR (no scissors) lay the card right next to the fabric, touching it, on a flat swatch — the scanner finds the fabric on any side. Keep the white paper clean: it is the colour reference.', mm(15), mm(22), { width: mm(180) });
   card(25, 48); card(115, 48);
   // the check bar
   doc.fillColor('#000').rect(mm(25), mm(140), mm(50), mm(3)).fill();
@@ -55,7 +55,7 @@ router.get('/card.pdf', (req, res) => {
   doc.fontSize(10).fillColor('#191C1F').text('How to scan', mm(15), mm(158));
   doc.fontSize(9).fillColor('#565C64').list([
     'Lay the fabric flat, face up, without stretching it. Smooth it by hand.',
-    'Put the card on it with the wales running from the top of the window to the bottom.',
+    'Put the card on it (window cut) or touching its edge (window not cut), with the wales running top to bottom.',
     'Hold the phone straight above, 8–12 cm away, so the four black squares fill most of the picture. Even light, no shadow of the phone.',
     'Take 2–3 photos at different places on the fabric, then one of the back.',
     'For fine jersey (above 20 wales per cm), a clip-on macro lens makes the count more certain.',
@@ -126,6 +126,31 @@ router.post('/analyse', analyseLimiter, async (req, res) => {
     if (pair) await pairs.touch(pair.code, saved.id);
     res.json({ success: true, id: saved.id, result });
   } catch (err) { fail(res, 'analyse', err, 'The scan could not be worked out.'); }
+});
+
+// A frame the scanner could not read, sent by the person for KnitAdvisor to
+// study. Kept privately on the server (never served), with what the camera saw.
+const debugLimiter = createRateLimiter({ name: 'scan-debug', max: 20, windowMs: 60 * 60 * 1000, message: 'Too many frames sent. Try again later.' });
+router.post('/debug', debugLimiter, async (req, res) => {
+  try {
+    const b = req.body || {};
+    let userId = null;
+    const user = await loadUser(req).catch(() => null);
+    if (user) userId = user.id;
+    if (!userId && b.pair) { const p = await pairs.live(b.pair); if (p) userId = p.user_id; }
+    if (!userId) return res.status(401).json({ success: false, error: 'Sign in, or scan the QR code on a signed-in screen.' });
+    const m = /^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/.exec(String(b.image || ''));
+    if (!m || m[1].length > 5.5e6) return res.status(400).json({ success: false, error: 'Send one JPEG frame (under 4 MB).' });
+    const buf = Buffer.from(m[1], 'base64');
+    if (!(buf[0] === 0xff && buf[1] === 0xd8)) return res.status(400).json({ success: false, error: 'Not a JPEG.' });
+    const fs = require('fs'), path = require('path');
+    const dir = path.join(__dirname, '..', 'uploads', 'scan-debug');
+    fs.mkdirSync(dir, { recursive: true });
+    const name = `${new Date().toISOString().replace(/[:.]/g, '-')}-u${userId}`;
+    fs.writeFileSync(path.join(dir, name + '.jpg'), buf);
+    fs.writeFileSync(path.join(dir, name + '.json'), JSON.stringify({ user_id: userId, at: new Date().toISOString(), info: b.info && typeof b.info === 'object' ? JSON.stringify(b.info).slice(0, 4000) : null }, null, 1));
+    res.json({ success: true, id: name });
+  } catch (err) { fail(res, 'debug', err, 'Could not keep the frame.'); }
 });
 
 router.get('/history', requireUser, async (req, res) => {
