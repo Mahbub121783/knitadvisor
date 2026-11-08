@@ -364,6 +364,8 @@ app.get('/health', (req, res) => {
     timestamp: new Date().toISOString(),
     version: '1.1.0',
     build: BOOT_BUILD,
+    // can the app send its code mails? 'ok' | 'login_failed' | 'not_configured' | 'unchecked'
+    mail: require('./mail/client').status(),
   });
 });
 
@@ -426,9 +428,12 @@ async function start() {
     console.log(`[Server] API: http://localhost:${PORT}/api`);
     console.log(`[Server] Health: http://localhost:${PORT}/health`);
     console.log('===========================================');
-    // open the SMTP pool now, so the first code mail does not wait on a TLS handshake
-    require('./mail/client').warmUp().catch(() => {});
   });
+  // open the SMTP pool now, so the first code mail does not wait on a TLS
+  // handshake — and a wrong mail password shows in the log at boot, not when a
+  // customer's code fails to arrive. Not in the listen callback: under
+  // Passenger that callback does not run.
+  require('./mail/client').warmUp().catch(() => {});
 }
 
 start();

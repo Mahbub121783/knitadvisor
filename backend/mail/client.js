@@ -20,6 +20,7 @@ const REQUIRED = ['MAIL_HOST', 'MAIL_USER', 'MAIL_PASSWORD'];
 
 let transporter = null;
 let configWarned = false;
+let state = 'unchecked';   // last known: 'ok' | 'login_failed' | 'not_configured' | 'unchecked'
 
 function isConfigured() {
   return REQUIRED.every(k => !!process.env[k]);
@@ -51,9 +52,9 @@ function getTransporter() {
 /** Opens the pool and checks the login once at boot; logs, never throws. */
 async function warmUp() {
   const t = getTransporter();
-  if (!t) return false;
-  try { await t.verify(); console.log(`[Mail] SMTP ready (${process.env.MAIL_HOST})`); return true; }
-  catch (err) { console.error('[Mail] SMTP check failed:', err.message); return false; }
+  if (!t) { state = 'not_configured'; return false; }
+  try { await t.verify(); state = 'ok'; console.log(`[Mail] SMTP ready (${process.env.MAIL_HOST})`); return true; }
+  catch (err) { state = /535|auth/i.test(err.message) ? 'login_failed' : 'unreachable'; console.error('[Mail] SMTP check failed:', err.message); return false; }
 }
 
 /**
@@ -81,11 +82,15 @@ async function sendMail({ to, subject, html, text }) {
     });
     const ms = Date.now() - started;
     if (ms > 4000) console.warn(`[Mail] Slow SMTP hand-off: ${ms} ms to ${process.env.MAIL_HOST}`);
+    state = 'ok';
     return { sent: true };
   } catch (err) {
+    if (/535|auth/i.test(err.message)) state = 'login_failed';
     console.error('[Mail] Send failed:', err.message);
     return { sent: false, reason: err.message };
   }
 }
 
-module.exports = { sendMail, isConfigured, warmUp };
+function status() { return isConfigured() ? state : 'not_configured'; }
+
+module.exports = { sendMail, isConfigured, warmUp, status };
