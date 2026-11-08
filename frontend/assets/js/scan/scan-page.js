@@ -96,6 +96,35 @@
       update();
     });
   }
+  function addMeasured(kind, r) {
+    var list = kind === 'face' ? S.faces : S.backs;
+    if (kind === 'face' && S.faces.length >= 3) { S.faces.shift().el.remove(); }
+    if (kind === 'back' && S.backs.length >= 1) { S.backs.shift().el.remove(); }
+    var item = addShot(list, kind === 'face' ? 'sc-face-shots' : 'sc-back-shots');
+    if (r.backOnly) { item.res = r; item.el.querySelector('div').textContent = 'Back: no regular loops (loop or brushed yarn)'; drawBlank(item.el.querySelector('canvas')); }
+    else finishShot(item, r, kind);
+    update();
+  }
+  // the live camera: each auto-captured photo is measured at once and kept only if it measures
+  $('sc-cam').addEventListener('click', function () {
+    var hadFaces = goodFaces().length;
+    var steps = [];
+    for (var k = hadFaces; k < 3; k++) steps.push({ kind: 'face', label: 'Face ' + (k + 1) + ' of 3' });
+    steps.push({ kind: 'back', label: 'Back' });
+    window.KAScanCamera.open({
+      steps: steps,
+      onCapture: function (kind, img) {
+        var r;
+        try { r = KS.analysePhoto(img.rgba, img.w, img.h); } catch (e) { r = { error: e.message }; }
+        if (kind === 'back' && r.error && /No regular loop pattern/.test(r.error)) r = { backOnly: true, features: { regularity: 0, orient: { diagonal: 0, across: 0 } } };
+        if (r.error) return Promise.resolve({ ok: false, error: r.error.replace(/\. .*/, '.') });
+        if (kind === 'face' && r.confidence === 'low') return Promise.resolve({ ok: false, error: 'the loops are not clear enough' });
+        addMeasured(kind, r);
+        return Promise.resolve({ ok: true, note: kind === 'back' ? 'Back captured' : r.wpc.toFixed(1) + ' wales · ' + r.cpc.toFixed(1) + ' courses per cm' });
+      },
+      onDone: function () { update(); if (goodFaces().length) $('sc-count-card').scrollIntoView({ behavior: 'smooth', block: 'start' }); },
+    });
+  });
   function drawBlank(c) { var g = c.getContext('2d'); g.fillStyle = '#e9ecef'; g.fillRect(0, 0, c.width, c.height); }
 
   /** The flattened window, optionally a 12 mm crop with the check grid. */

@@ -92,8 +92,10 @@
       <p class="h">Each photo is measured as soon as it is taken.</p>
       <input type="file" accept="image/*" capture="environment" id="sc-face-in" hidden>
       <input type="file" accept="image/*" id="sc-face-pick" hidden multiple>
+      <button class="sc-btn primary big" type="button" id="sc-cam" style="margin-bottom:8px">📷 Open camera — automatic</button>
+      <p class="h" style="margin:-2px 0 10px">The camera checks the distance, straightness, focus and light by itself and takes each photo when everything is right: 3 of the face, then the back.</p>
       <div class="sc-row">
-        <button class="sc-btn primary" type="button" id="sc-face">Take a photo</button>
+        <button class="sc-btn" type="button" id="sc-face">Take a photo</button>
         <button class="sc-btn" type="button" id="sc-face-file">Choose from gallery</button>
         <button class="sc-btn" type="button" id="sc-sample">Try a sample fabric</button>
       </div>
@@ -152,6 +154,7 @@
   <script src="assets/js/scan/fabric-scan-core.js?v=20261108a"></script>
   <script src="assets/js/scan/fabric-scan-synth.js?v=20261108a"></script>
   <script src="assets/js/scan/scan-view.js?v=20261108a"></script>
-  <script src="assets/js/scan/scan-page.js?v=20261108a"></script>
+  <script src="assets/js/scan/scan-camera.js?v=20261109a"></script>
+  <script src="assets/js/scan/scan-page.js?v=20261109a"></script>
 </body>
 </html>
