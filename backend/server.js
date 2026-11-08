@@ -219,6 +219,7 @@ app.use(cors({
 
 // a saved cost sheet carries one compressed style picture
 app.use(['/api/cost-sheet/sheets', '/api/cost-sheet/pdf'], express.json({ limit: '700kb' }));
+app.use('/api/scan/analyse', express.json({ limit: '300kb' }));
 app.use(express.json({ limit: '256kb' }));
 app.use(express.urlencoded({ extended: true, limit: '256kb' }));
 
@@ -236,6 +237,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/account', accountRoutes);
 // The home page's live sample: public, whitelisted, rate-limited (routes/demo.js).
 app.use('/api/demo', demoRoutes);
+// Fabric scan: the phone counts the loops, the spec is worked out here (routes/scan.js).
+app.use('/api/scan', require('./routes/scan'));
 
 // API routes
 app.use('/api', apiRoutes);

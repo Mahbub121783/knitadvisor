@@ -1,0 +1,40 @@
+{
+ "generated": "2026-11-08",
+ "n": 60,
+ "measured": 60,
+ "failed": 0,
+ "by": {
+  "single_jersey": {
+   "n": 15,
+   "failed": 0,
+   "wpc_median_err_pct": 0.2,
+   "wpc_p90_err_pct": 0.3,
+   "cpc_median_err_pct": 0.3,
+   "cpc_p90_err_pct": 0.9
+  },
+  "rib": {
+   "n": 15,
+   "failed": 0,
+   "wpc_median_err_pct": 0.1,
+   "wpc_p90_err_pct": 0.2,
+   "cpc_median_err_pct": 0.8,
+   "cpc_p90_err_pct": 1.8
+  },
+  "interlock": {
+   "n": 15,
+   "failed": 0,
+   "wpc_median_err_pct": 0.2,
+   "wpc_p90_err_pct": 0.4,
+   "cpc_median_err_pct": 0.2,
+   "cpc_p90_err_pct": 0.5
+  },
+  "pique": {
+   "n": 15,
+   "failed": 0,
+   "wpc_median_err_pct": 0.1,
+   "wpc_p90_err_pct": 0.1,
+   "cpc_median_err_pct": 49.9,
+   "cpc_p90_err_pct": 50
+  }
+ }
+}

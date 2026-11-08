@@ -39,6 +39,7 @@
     list: 'M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01',
     out: 'M14 5h5v14h-5M10 8l-4 4 4 4M6 12h10',
     search: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4',
+    scan: 'M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M7 12h10',
     plus: 'M12 5v14M5 12h14'
   };
   function icon(name, cls) {
@@ -55,6 +56,8 @@
       { href: '/converter.html',  t: 'Unit converter',    d: 'Count systems, GSM, length and weight', i: 'swap' }
     ] },
     { id: 'rnd', t: 'R&D', items: [
+      { href: '/scan.html',       t: 'Fabric scan',       d: 'Phone camera: loops counted, stitch length, count, gauge and GSM worked out', i: 'scan', badge: 'New', k: 'camera photo swatch analyse reverse engineer wales courses' },
+      { href: '/scan-board.html', t: 'Scan board',        d: 'Pair a phone by QR code; every scan shows live on this screen', i: 'scan', k: 'expo big screen live qr' },
       { href: '/studio.html',     t: 'Fabric studio',     d: 'Design a structure needle by needle: checks, cam set-out, live 3D', i: 'grid', k: 'knit tuck miss cam 3d structure needle lacoste pointelle' },
       { href: '/patterns.html',   t: 'Pattern catalogue', d: 'Knit, tuck and miss programmes, feeder by feeder', i: 'loop' },
       { href: '/dyeing.html',     t: 'Dyeing lab',        d: 'Recipes, process flow, costing and dyeing faults', i: 'drop', k: 'reactive disperse shade recipe' }

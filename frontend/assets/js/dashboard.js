@@ -64,7 +64,7 @@
   /* ---------------- workspace (static) ---------------- */
   var TOOLS = [
     ['Calculate', [['/app.html', 'Fabric calculator', 'calc'], ['/costsheet.html', 'Costing sheet', 'sheet'], ['/weft-calc.html', 'Weft calculator', 'weft'], ['/converter.html', 'Unit converter', 'swap']]],
-    ['R&D', [['/studio.html', 'Fabric studio', 'grid'], ['/patterns.html', 'Pattern catalogue', 'loop'], ['/dyeing.html', 'Dyeing lab', 'drop']]],
+    ['R&D', [['/scan.html', 'Fabric scan (camera)', 'search'], ['/studio.html', 'Fabric studio', 'grid'], ['/patterns.html', 'Pattern catalogue', 'loop'], ['/dyeing.html', 'Dyeing lab', 'drop']]],
     ['Knowledge', [['/assistant.html', 'Knowledge assistant', 'chat'], ['/diagnostics.html', 'Fault diagnostics', 'alert'], ['/academy.html', 'Knitting academy', 'cap']]],
     ['Quotes', [['/rfq.html', 'Request a quote', 'tag'], ['/rfq-status.html', 'Quote status', 'check']]]
   ];

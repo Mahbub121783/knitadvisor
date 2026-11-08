@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <script src="assets/js/auth-guard.js?v=20260922a"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fabric Scan Board — KnitAdvisor</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32">
+  <meta name="description" content="The big screen for fabric scanning: pair a phone with a QR code and see every scan's measured loops and knitting spec as it arrives.">
+  <meta name="theme-color" content="#FFFFFF">
+  <meta name="robots" content="noindex">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css?v=20260603c">
+  <style>
+    [hidden] { display: none !important; }
+    body { background: var(--bg-page, #F6F7F8); }
+    .bd { max-width: 1400px; margin: 0 auto; padding: 20px 24px 50px; display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 20px; align-items: start; }
+    .bd-card { background: var(--bg); border: 1px solid var(--line); border-radius: 14px; padding: 18px; margin-bottom: 16px; }
+    .bd h1 { font-size: 22px; margin: 0 0 4px; }
+    .bd .sub { font-size: 13px; color: var(--t2); margin: 0 0 14px; line-height: 1.5; }
+    #bd-qr svg { width: 100%; height: auto; display: block; }
+    .bd-code { font: 700 30px var(--mono); letter-spacing: .12em; text-align: center; margin: 10px 0 2px; }
+    .bd-url { font: 12px var(--mono); color: var(--t3); text-align: center; word-break: break-all; }
+    .bd-steps { font-size: 13px; color: var(--t2); line-height: 1.7; padding-left: 18px; margin: 12px 0 0; }
+    .bd-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+    .bd-btn { border: 1px solid var(--line2); background: var(--bg); border-radius: 8px; padding: 9px 14px; font: 600 13px var(--head); cursor: pointer; text-decoration: none; color: var(--t1); }
+    .bd-btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .bd-wait { text-align: center; padding: 70px 20px; color: var(--t3); }
+    .bd-wait .pulse { width: 16px; height: 16px; border-radius: 50%; background: var(--accent); margin: 0 auto 16px; animation: bd-p 1.4s ease-in-out infinite; }
+    @keyframes bd-p { 0%, 100% { transform: scale(.7); opacity: .4; } 50% { transform: scale(1.3); opacity: 1; } }
+    .bd-wait b { display: block; font-size: 20px; color: var(--t1); margin-bottom: 6px; }
+    .bd-res { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 20px; align-items: start; }
+    .bd-res img { width: 100%; border-radius: 12px; border: 1px solid var(--line); display: block; }
+    .bd-meta { font-size: 12px; color: var(--t3); margin-top: 8px; }
+    .bd-new { animation: bd-in .5s ease-out; }
+    @keyframes bd-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+    .bd-val table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    .bd-val th, .bd-val td { padding: 6px 6px; border-bottom: 1px solid var(--line); text-align: left; }
+    .bd-val td.n { text-align: right; font-family: var(--mono); }
+    .bd-val h3 { font-size: 13px; margin: 14px 0 6px; }
+    .bd-val h3:first-child { margin-top: 0; }
+    .bd-val p { font-size: 11.5px; color: var(--t3); margin: 6px 0 0; line-height: 1.5; }
+    @media (max-width: 1100px) { .bd { grid-template-columns: minmax(0, 1fr); } .bd-res { grid-template-columns: minmax(0, 1fr); } }
+  </style>
+  <link rel="stylesheet" href="assets/css/theme-v2.css?v=20261108b">
+  <script src="assets/js/app-shell.js?v=20261108c" defer></script>
+</head>
+<body>
+  <header class="hdr"></header>
+  <main class="bd">
+    <aside>
+      <section class="bd-card">
+        <h1>Fabric scan</h1>
+        <p class="sub">Scan this code with any phone — no app, no sign-in on the phone. Every scan appears here.</p>
+        <div id="bd-qr"></div>
+        <div class="bd-code" id="bd-code">········</div>
+        <div class="bd-url" id="bd-url"></div>
+        <ol class="bd-steps">
+          <li>Card on the fabric, wales top to bottom</li>
+          <li>Photograph the face (2–3 places) and the back</li>
+          <li>Confirm the structure → spec appears here</li>
+        </ol>
+        <div class="bd-btns">
+          <a class="bd-btn" href="/api/scan/card.pdf" target="_blank" rel="noopener">Print card</a>
+          <button class="bd-btn" type="button" id="bd-newcode">New code</button>
+          <a class="bd-btn" href="/scan.html" target="_blank" rel="noopener">Scan on this computer</a>
+        </div>
+      </section>
+      <section class="bd-card bd-val" id="bd-val"><div style="color:var(--t3);font-size:12px">Loading accuracy…</div></section>
+    </aside>
+    <section class="bd-card" id="bd-main">
+      <div class="bd-wait" id="bd-wait"><div class="pulse"></div><b>Waiting for a scan</b>Point a phone at the QR code.</div>
+      <div id="bd-out" hidden></div>
+    </section>
+  </main>
+  <footer class="footer"></footer>
+  <script src="assets/js/storage.js?v=20260606b"></script>
+  <script src="assets/js/vendor/qrcode.min.js?v=1.4.4"></script>
+  <script src="assets/js/scan/scan-view.js?v=20261108a"></script>
+  <script>
+  (function () {
+    'use strict';
+    var $ = function (id) { return document.getElementById(id); };
+    var host = window.location.hostname;
+    var API = (host === '127.0.0.1' || host === 'localhost') ? window.location.protocol + '//' + host + ':3001' : '';
+    var V = window.KAScanView, esc = V.esc;
+    var st = document.createElement('style'); st.textContent = V.CSS; document.head.appendChild(st);
+    var code = null, lastAt = null, timer = null, last = null;
+    function j(path, method) {
+      return fetch(API + path, { method: method || 'GET', credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json', 'Content-Type': 'application/json' } })
+        .then(function (r) { return r.json().then(function (d) { if (r.status === 401 && window.kaSignInRedirect) window.kaSignInRedirect(); if (!r.ok) throw new Error(d.error || 'HTTP ' + r.status); return d; }); });
+    }
+    function newCode() {
+      clearTimeout(timer);
+      return j('/api/scan/pair', 'POST').then(function (d) {
+        code = d.code; lastAt = null;
+        try { sessionStorage.setItem('ka_scan_pair', JSON.stringify({ code: d.code, exp: d.expires_at })); } catch (_) {}
+        show();
+      }).catch(function (e) { $('bd-code').textContent = 'error'; $('bd-url').textContent = e.message; });
+    }
+    function show() {
+      var url = window.location.origin + '/scan.html?pair=' + code;
+      try { var q = qrcode(0, 'M'); q.addData(url); q.make(); $('bd-qr').innerHTML = q.createSvgTag({ cellSize: 6, margin: 2, scalable: true }); } catch (_) { $('bd-qr').textContent = ''; }
+      $('bd-code').textContent = code.slice(0, 4) + '-' + code.slice(4);
+      $('bd-url').textContent = url;
+      poll();
+    }
+    function poll() {
+      j('/api/scan/pair/' + code).then(function (d) {
+        if (d.scan && d.updated_at !== lastAt) { lastAt = d.updated_at; render(d.scan, d.scans); }
+      }).catch(function () {}).then(function () { timer = setTimeout(poll, 2000); });
+    }
+    function render(scan, n) {
+      last = scan;
+      $('bd-wait').hidden = true;
+      var out = $('bd-out');
+      out.hidden = false;
+      out.classList.remove('bd-new'); void out.offsetWidth; out.classList.add('bd-new');
+      out.innerHTML = '<div class="bd-res"><div>' + (scan.thumb ? '<img src="' + esc(scan.thumb) + '" alt="The scanned fabric, 12 by 12 mm, with the counted grid">' : '') +
+        '<div class="bd-meta">Scan ' + n + ' · ' + esc(new Date(scan.created_at).toLocaleTimeString()) + ' · the grid shows one cell per loop</div>' +
+        '<div class="bd-btns"><button class="bd-btn primary" type="button" id="bd-full">Full analysis: cost, CO₂, 3D →</button></div></div>' +
+        '<div>' + V.render(scan.result, { big: true }) + '</div></div>';
+      $('bd-full').addEventListener('click', function () {
+        if (typeof savePending === 'function') savePending(last.result.full_params);
+        window.open('/result.html', '_blank');
+      });
+    }
+    $('bd-newcode').addEventListener('click', newCode);
+    // keep the same code across a reload, while it lives
+    var kept = null;
+    try { kept = JSON.parse(sessionStorage.getItem('ka_scan_pair') || 'null'); } catch (_) {}
+    if (kept && kept.code && new Date(kept.exp).getTime() > Date.now() + 10 * 60000) { code = kept.code; show(); } else newCode();
+
+    // how accurate the parts are, measured
+    Promise.all([
+      j('/api/scan/validation').catch(function () { return null; }),
+      fetch('assets/js/scan/validation.json', { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }),
+    ]).then(function (a) {
+      var rv = a[0] && a[0].reverse, sy = a[1], h = '';
+      if (sy) {
+        h += '<h3>Loop counting — ' + sy.n + ' test photos</h3><table><tr><th>Structure</th><th>Photos</th><th class="n">Wales err.</th><th class="n">Courses err.</th></tr>' +
+          Object.keys(sy.by).map(function (k) { var r = sy.by[k]; return '<tr><td>' + esc(V.NAMES[k] || k) + '</td><td class="n">' + r.n + '</td><td class="n">' + r.wpc_median_err_pct + '%</td><td class="n">' + (r.cpc_median_err_pct == null ? '—' : r.cpc_median_err_pct + '%') + '</td></tr>'; }).join('') +
+          '</table><p>Median error on synthetic swatches photographed under the card with tilt, rotation, blur, noise and uneven light. Piqué courses read one per tuck cell (half) — the page asks for × 2; wales, stitch length and count do not use them. Real cloth is checked against a counting glass.</p>';
+      }
+      if (rv) {
+        h += '<h3>Spec from the loops — factory fabrics</h3><table><tr><th>Family</th><th class="n">Fabrics</th><th class="n">Stitch length</th><th class="n">Count</th></tr>' +
+          Object.keys(rv).map(function (k) { var r = rv[k]; return '<tr><td>' + esc(V.NAMES[k] || k) + '</td><td class="n">' + r.n + '</td><td class="n">±' + r.stitch_length_median_err_pct + '%</td><td class="n">±' + r.count_median_err_ne + ' Ne</td></tr>'; }).join('') +
+          '</table><p>Median error recovering each factory record\'s stitch length and count from its wales/cm and GSM, with the factory\'s own constants.</p>';
+      }
+      $('bd-val').innerHTML = h || '<div style="color:var(--t3);font-size:12px">Accuracy figures unavailable.</div>';
+    });
+  })();
+  </script>
+</body>
+</html>
