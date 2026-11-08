@@ -42,3 +42,9 @@ scratch/shoot_rib.js
 # Python bytecode from running the extraction scripts
 __pycache__/
 *.pyc
+
+# buyer sheets, price lists and papers dropped in the repo root stay local
+/*.xlsx
+/*.xlsm
+/*.xls
+/*.pdf

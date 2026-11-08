@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <script src="assets/js/auth-guard.js?v=20260922a"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Costing Sheet — KnitAdvisor</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <meta name="description" content="Garment costing sheet in the buyer quotation format: sizes you declare, fabric shells priced from live yarn, knitting, dyeing and finishing rates, trims, CM, mark-ups, FOB per size, order booking and Excel export.">
+  <meta name="theme-color" content="#FFFFFF">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css?v=20260603c">
+  <style>
+    [hidden] { display: none !important; }
+    .cs-main { max-width: 1320px; margin: 0 auto; padding: 22px 24px 60px; }
+    .cs-head h1 { font-size: 26px; margin: 0 0 6px; letter-spacing: -0.01em; }
+    .cs-head p { margin: 0 0 16px; color: var(--t2); font-size: 14px; max-width: 860px; line-height: 1.55; }
+    .cs-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }
+    .cs-bar select, .cs-bar input { height: 34px; }
+    .cs-btn { border: 1px solid var(--line2); background: var(--bg); border-radius: 7px; padding: 7px 12px; font: 600 13px var(--head, inherit); color: var(--t1); cursor: pointer; }
+    .cs-btn.primary { background: var(--accent, #1857C4); border-color: var(--accent, #1857C4); color: #fff; }
+    .cs-btn.small { padding: 4px 8px; font-size: 12px; white-space: nowrap; }
+    .cs-btn.danger { color: #9b1c1c; }
+    .cs-grid { display: grid; grid-template-columns: minmax(0, 1fr) 430px; gap: 16px; align-items: start; }
+    @media (max-width: 1100px) { .cs-grid { grid-template-columns: minmax(0, 1fr); } }
+    .cs-card { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin-bottom: 12px; }
+    .cs-card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; margin: 0 0 10px; color: var(--t2); display: flex; align-items: center; gap: 8px; }
+    .cs-card h2 b { background: var(--accent, #1857C4); color: #fff; border-radius: 50%; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; }
+    .cs-f { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--t2); }
+    .cs-f input, .cs-f select, .cs-t input, .cs-t select { border: 1px solid var(--line2); border-radius: 6px; padding: 6px 8px; font: 13px inherit; color: var(--t1); background: #fff; min-width: 0; width: 100%; box-sizing: border-box; }
+    .cs-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+    .cs-hdr { display: grid; grid-template-columns: minmax(0, 1fr) 200px; gap: 14px; }
+    @media (max-width: 640px) { .cs-hdr { grid-template-columns: minmax(0, 1fr); } }
+    .cs-pic { border: 1.5px dashed var(--line2); border-radius: 10px; min-height: 170px; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 12px; color: var(--t3); cursor: pointer; overflow: hidden; position: relative; background: #fafbfc; }
+    .cs-pic img { max-width: 100%; max-height: 220px; display: block; }
+    .cs-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .cs-chip { background: #EEF3FC; color: #1857C4; border-radius: 999px; padding: 4px 6px 4px 11px; font: 600 13px inherit; display: inline-flex; gap: 6px; align-items: center; }
+    .cs-chip button { border: 0; background: transparent; color: #1857C4; cursor: pointer; font-size: 15px; line-height: 1; }
+    .cs-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .cs-t { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    .cs-t th { text-align: left; font-weight: 600; color: var(--t3); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; padding: 5px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+    .cs-t td { padding: 4px 6px; border-bottom: 1px solid #F1F2F4; vertical-align: middle; }
+    .cs-t td.num, .cs-t th.num { text-align: right; font-family: var(--mono, 'IBM Plex Mono', monospace); white-space: nowrap; }
+    .cs-t input.num { text-align: right; font-family: var(--mono, 'IBM Plex Mono', monospace); min-width: 64px; }
+    .cs-t tr.total td { font-weight: 700; border-top: 1px solid var(--line2); }
+    .cs-t tr.fob td { font-weight: 800; background: #EEF3FC; color: #12408f; font-size: 13.5px; }
+    .cs-shell { border: 1px solid var(--line); border-radius: 9px; padding: 12px; margin-bottom: 10px; background: #fcfcfd; }
+    .cs-shell-h { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .cs-shell-h input { font-weight: 700; font-size: 14px; border: 0; border-bottom: 1px dashed var(--line2); background: transparent; padding: 2px 0; min-width: 0; flex: 1; }
+    .cs-src { display: inline-block; font-size: 10.5px; padding: 1px 6px; border-radius: 4px; margin-left: 4px; white-space: nowrap; }
+    .cs-src.market { background: #E7F6EE; color: #17633f; }
+    .cs-src.reference, .cs-src.system, .cs-src.blend { background: #EEF3FC; color: #1857C4; }
+    .cs-src.yours { background: #FFF4E0; color: #8a5300; }
+    .cs-src.missing { background: #FDECEC; color: #9b1c1c; }
+    .cs-price { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin: 8px 0; }
+    .cs-price .cs-f small { color: var(--t3); font-size: 10.5px; line-height: 1.3; }
+    .cs-kg { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; margin-top: 6px; padding: 8px 10px; background: #F6F8FB; border-radius: 7px; }
+    .cs-kg b { font-family: var(--mono, monospace); }
+    .cs-res { position: sticky; top: 76px; }
+    @media (max-width: 1100px) { .cs-res { position: static; } }
+    .cs-big { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; margin-bottom: 10px; }
+    .cs-big div { background: #EEF3FC; border-radius: 8px; padding: 8px; text-align: center; }
+    .cs-big small { display: block; font-size: 11px; color: var(--t2); }
+    .cs-big b { font-size: 18px; color: #12408f; font-family: var(--mono, monospace); }
+    .cs-mix { display: flex; height: 12px; border-radius: 6px; overflow: hidden; margin: 6px 0 4px; }
+    .cs-legend { display: flex; flex-wrap: wrap; gap: 8px; font-size: 11px; color: var(--t2); }
+    .cs-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 3px; vertical-align: -1px; }
+    .cs-msg { font-size: 12.5px; padding: 8px 10px; border-radius: 7px; margin: 8px 0; }
+    .cs-msg.err { background: #FDECEC; color: #8a1d1d; }
+    .cs-msg.note { background: #F6F8FB; color: var(--t2); }
+    .cs-msg.ok { background: #E7F6EE; color: #17633f; }
+    .cs-gap-ok { color: #17633f; } .cs-gap-bad { color: #9b1c1c; }
+    .cs-hint { font-size: 11.5px; color: var(--t3); margin: 4px 0 0; line-height: 1.45; }
+    @media print {
+      .ka-bar, header, footer, .cs-bar, .cs-noprint, .cs-btn { display: none !important; }
+      .cs-grid { display: block; }
+      .cs-res { position: static; }
+      .cs-card { break-inside: avoid; border-color: #ccc; }
+      input, select { border: 0 !important; background: transparent !important; }
+    }
+  </style>
+  <link rel="stylesheet" href="assets/css/theme-v2.css?v=20260922a">
+  <script src="assets/js/app-shell.js?v=20261108a" defer></script>
+</head>
+<body>
+<div class="page-wrap">
+  <header class="hdr"></header>
+  <main class="cs-main">
+    <div class="cs-head">
+      <h1>Costing Sheet</h1>
+      <p>The buyer quotation, size by size. Declare the sizes, describe each fabric shell — the yarn, knitting, dyeing, finishing and process-loss prices fill in from KnitAdvisor's live yarn quotes and rate sheets (type your own to override any of them) — enter the consumption per size, the trims, embellishment, CM and mark-ups, and the FOB comes out per piece, per pack and per dozen.</p>
+    </div>
+
+    <div class="cs-bar">
+      <button class="cs-btn primary" type="button" id="cs-save">Save to my account</button>
+      <select id="cs-saved" class="cs-btn" aria-label="Saved sheets"><option value="">Saved sheets…</option></select>
+      <button class="cs-btn" type="button" id="cs-new">New sheet</button>
+      <button class="cs-btn" type="button" id="cs-dup">Duplicate</button>
+      <button class="cs-btn" type="button" id="cs-example">Load example (YEAW7759)</button>
+      <button class="cs-btn" type="button" id="cs-xls">Export Excel</button>
+      <button class="cs-btn" type="button" id="cs-print">Print / PDF</button>
+      <button class="cs-btn danger" type="button" id="cs-del" hidden>Delete</button>
+      <span id="cs-savemsg" style="font-size:12px;color:var(--t2)"></span>
+    </div>
+
+    <div class="cs-grid">
+      <section id="cs-form">
+        <div class="cs-card">
+          <h2><b>1</b> Style</h2>
+          <div class="cs-hdr">
+            <div class="cs-row">
+              <label class="cs-f">Style / item ref<input data-k="header.style" maxlength="40" placeholder="YEAW7759"></label>
+              <label class="cs-f">Order no.<input data-k="header.order_no" maxlength="40" placeholder="optional"></label>
+              <label class="cs-f" style="grid-column:span 2">Description<input data-k="header.description" maxlength="120" placeholder="X3 col stripe baseball neck crew"></label>
+              <label class="cs-f">Buyer / to<input data-k="header.buyer" maxlength="60"></label>
+              <label class="cs-f">Department<input data-k="header.department" maxlength="40" placeholder="Older Boy's"></label>
+              <label class="cs-f">From<input data-k="header.from" maxlength="60"></label>
+              <label class="cs-f">Factory<input data-k="header.factory" maxlength="60"></label>
+              <label class="cs-f">Date<input data-k="header.date" type="date"></label>
+              <label class="cs-f">Pack of (pcs)<input data-k="pack_of" type="number" min="1" max="24" class="num"></label>
+              <label class="cs-f">USD → BDT<input data-k="exchange_rate" type="number" step="0.1" min="50" max="300"></label>
+            </div>
+            <div>
+              <div class="cs-pic" id="cs-pic" tabindex="0" role="button" aria-label="Add the style picture">
+                <span id="cs-pic-empty">Picture (optional)<br>click or drop an image</span>
+                <img id="cs-pic-img" alt="Style picture" hidden>
+              </div>
+              <input type="file" id="cs-pic-file" accept="image/*" hidden>
+              <button class="cs-btn small cs-noprint" type="button" id="cs-pic-clear" hidden style="margin-top:6px;">Remove picture</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="cs-card">
+          <h2><b>2</b> Sizes to cost</h2>
+          <div class="cs-chips" id="cs-sizes"></div>
+          <div class="cs-bar" style="margin:10px 0 0;">
+            <input id="cs-size-new" placeholder="Add a size (e.g. XL, 7Y-10Y)" maxlength="20" style="border:1px solid var(--line2);border-radius:6px;padding:6px 8px;width:200px;">
+            <button class="cs-btn small" type="button" id="cs-size-add">Add</button>
+            <select id="cs-size-preset" class="cs-btn small" aria-label="Size presets">
+              <option value="">Presets…</option>
+              <option value="3Y-6Y|7Y-10Y|11Y-14Y|15Y-16Y">Kids bands 3Y–16Y</option>
+              <option value="2Y|3Y|4Y|5Y|6Y|7Y|8Y">Kids 2Y–8Y</option>
+              <option value="XS|S|M|L|XL|XXL">XS–XXL</option>
+              <option value="S|M|L|XL">S–XL</option>
+              <option value="S-M|L-XL|XXL-3XL">Adult bands</option>
+              <option value="0-3M|3-6M|6-12M|12-18M|18-24M">Baby 0–24M</option>
+            </select>
+          </div>
+          <p class="cs-hint">Every price below is costed for each of these sizes. Where a figure is the same for all sizes, type it in the first size and press <b>→ all</b>.</p>
+        </div>
+
+        <div class="cs-card">
+          <h2><b>3</b> Fabric shells</h2>
+          <div id="cs-shells"></div>
+          <button class="cs-btn" type="button" id="cs-shell-add">+ Add fabric shell</button>
+          <label class="cs-f" style="max-width:420px;margin-top:10px;">How the process loss enters the fabric price
+            <select data-k="loss_method">
+              <option value="sheet">Buyer-sheet way: × (1 + loss)</option>
+              <option value="exact">Exact: ÷ (1 − loss) — every grey kilo is paid for</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="cs-card"><h2><b>4</b> Trims (per piece)</h2><div id="cs-trims"></div></div>
+        <div class="cs-card"><h2><b>5</b> Embellishment (per piece)</h2><div id="cs-embellishments"></div></div>
+        <div class="cs-card"><h2><b>6</b> Wash (per piece)</h2><div id="cs-washes"></div></div>
+
+        <div class="cs-card">
+          <h2><b>7</b> CM, packaging, testing</h2>
+          <div class="cs-row" style="margin-bottom:8px;">
+            <label class="cs-f">CM from<select data-k="cm.mode"><option value="smv">SMV × cost per minute</option><option value="direct">CM per piece</option></select></label>
+            <label class="cs-f" id="cs-cpm-wrap">Cost per minute (USD)<input data-k="cm.cpm" type="number" step="0.001" min="0" class="num" placeholder="0.060"></label>
+          </div>
+          <div id="cs-cm"></div>
+          <h3 style="font-size:13px;margin:12px 0 4px;">Packaging</h3>
+          <div id="cs-packaging"></div>
+          <h3 style="font-size:13px;margin:12px 0 4px;">Testing</h3>
+          <div id="cs-testing"></div>
+        </div>
+
+        <div class="cs-card">
+          <h2><b>8</b> Commission and profit</h2>
+          <div id="cs-markups"></div>
+          <label class="cs-f" style="max-width:420px;margin-top:8px;">Applied
+            <select data-k="markup_mode"><option value="on_cost">On cost: subtotal × (1 + Σ%)</option><option value="on_price">As margin of the price: subtotal ÷ (1 − Σ%)</option></select>
+          </label>
+        </div>
+
+        <div class="cs-card">
+          <h2><b>9</b> Order and target (optional)</h2>
+          <div class="cs-row" style="margin-bottom:8px;"><label class="cs-f">Order quantity (pcs)<input data-k="order.quantity" type="number" min="0" class="num"></label></div>
+          <div id="cs-order"></div>
+          <p class="cs-hint">Size ratio and quantity give the weighted FOB, the order value, and the finished fabric, grey fabric and yarn to book for each shell. A target FOB per size shows the margin left at that price.</p>
+        </div>
+      </section>
+
+      <aside class="cs-res" id="cs-res">
+        <div class="cs-card">
+          <h2>FOB per piece</h2>
+          <div id="cs-status" class="cs-msg note">Fill the sheet — the result updates as you type.</div>
+          <div class="cs-big" id="cs-big"></div>
+          <div id="cs-mixwrap"></div>
+          <div class="cs-scroll"><table class="cs-t" id="cs-sum"></table></div>
+        </div>
+        <div class="cs-card"><h2>What moves the price</h2><div class="cs-scroll"><table class="cs-t" id="cs-sens"></table></div><p class="cs-hint">FOB change per piece if that one input moves.</p></div>
+        <div class="cs-card" id="cs-ordercard" hidden><h2>Order and fabric booking</h2><div id="cs-orderres"></div></div>
+        <div class="cs-card"><h2>Fabric price per kg</h2><div id="cs-shellres"></div><p class="cs-hint" id="cs-method"></p></div>
+      </aside>
+    </div>
+  </main>
+  <footer class="footer"></footer>
+</div>
+<script src="assets/js/api.js"></script>
+<script src="assets/js/costsheet.js?v=20261108b"></script>
+</body>
+</html>

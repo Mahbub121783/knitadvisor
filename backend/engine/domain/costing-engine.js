@@ -1285,6 +1285,7 @@ function round2(v) { return Math.round(Number(v) * 100) / 100; }
 
 module.exports = {
   calculateCost,
+  resolveYarnPrice,
   SM_PRICE_MATRIX,
   YARN_TYPE_CATALOG,
   SM_SURCHARGES,

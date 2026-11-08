@@ -1282,6 +1282,58 @@ router.delete('/studio/designs/:id', requireUser, async (req, res) => {
   }
 });
 
+// ── Garment cost sheet (buyer quotation format) ─────────────────────────────
+const costSheet = require('../engine/domain/cost-sheet');
+const costSheetRepo = require('../db/repositories/cost-sheet-repo');
+
+router.get('/cost-sheet/options', requireUser, (req, res) => {
+  res.json({ success: true, ...costSheet.options() });
+});
+
+router.post('/cost-sheet/analyse', requireUser, (req, res) => {
+  try {
+    const out = costSheet.analyse(req.body || {}, { live: (key, ne, country) => yarnPrices.lookup(key, ne, undefined, { country }) });
+    res.status(out.success ? 200 : 400).json(out);
+  } catch (err) {
+    console.error('[cost-sheet] analyse failed:', err);
+    res.status(500).json({ success: false, error: 'The cost sheet could not be calculated.' });
+  }
+});
+
+router.get('/cost-sheet/sheets', requireUser, async (req, res) => {
+  try { res.json({ success: true, sheets: await costSheetRepo.sheets.list(req.user.id) }); }
+  catch (err) { console.error('[cost-sheet] list failed:', err); res.status(500).json({ success: false, error: 'Could not load your saved sheets.' }); }
+});
+
+router.get('/cost-sheet/sheets/:id', requireUser, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id)) return res.status(400).json({ success: false, error: 'Invalid id.' });
+  try {
+    const row = await costSheetRepo.sheets.get(req.user.id, id);
+    if (!row) return res.status(404).json({ success: false, error: 'Sheet not found.' });
+    res.json({ success: true, sheet: row });
+  } catch (err) { console.error('[cost-sheet] get failed:', err); res.status(500).json({ success: false, error: 'Could not open the sheet.' }); }
+});
+
+router.put('/cost-sheet/sheets', requireUser, async (req, res) => {
+  try { res.json({ success: true, sheet: await costSheetRepo.sheets.save(req.user.id, req.body) }); }
+  catch (err) {
+    if (err instanceof costSheetRepo.SheetSaveError) return res.status(400).json({ success: false, error: err.message });
+    console.error('[cost-sheet] save failed:', err);
+    res.status(500).json({ success: false, error: 'Could not save the sheet.' });
+  }
+});
+
+router.delete('/cost-sheet/sheets/:id', requireUser, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id)) return res.status(400).json({ success: false, error: 'Invalid id.' });
+  try {
+    const removed = await costSheetRepo.sheets.remove(req.user.id, id);
+    if (!removed) return res.status(404).json({ success: false, error: 'Sheet not found.' });
+    res.json({ success: true });
+  } catch (err) { console.error('[cost-sheet] delete failed:', err); res.status(500).json({ success: false, error: 'Could not delete the sheet.' }); }
+});
+
 router.get('/charges/vendors', (req, res) => {
   const book = require('../engine/domain/charge-book');
   res.json({ vendors: book.listVendors().filter((v) => v.active).map((v) => ({ code: v.code, name: v.name, kind: v.kind, is_default: !!v.is_default })) });

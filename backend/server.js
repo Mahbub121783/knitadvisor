@@ -217,6 +217,8 @@ app.use(cors({
   credentials: false,
 }));
 
+// a saved cost sheet carries one compressed style picture
+app.use('/api/cost-sheet/sheets', express.json({ limit: '700kb' }));
 app.use(express.json({ limit: '256kb' }));
 app.use(express.urlencoded({ extended: true, limit: '256kb' }));
 
