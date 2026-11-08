@@ -407,6 +407,8 @@ async function start() {
     console.log(`[Server] API: http://localhost:${PORT}/api`);
     console.log(`[Server] Health: http://localhost:${PORT}/health`);
     console.log('===========================================');
+    // open the SMTP pool now, so the first code mail does not wait on a TLS handshake
+    require('./mail/client').warmUp().catch(() => {});
   });
 }
 

@@ -162,6 +162,42 @@
         </form>
       </div>
 
+      <div class="card form-card" id="security-card">
+        <h2>Sign-in security</h2>
+        <div id="ev-box">
+          <p class="sub" id="ev-sub">Checking…</p>
+          <div id="ev-actions" hidden>
+            <button class="btn btn-ghost" type="button" id="ev-send">Email me a code</button>
+            <div class="frow" id="ev-code-row" hidden style="margin-top:10px;">
+              <label for="ev-code">6-digit code</label>
+              <input class="form-input" id="ev-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" style="letter-spacing:4px;max-width:180px;">
+              <button class="btn btn-primary" type="button" id="ev-check" style="margin-top:8px;">Verify email</button>
+            </div>
+            <div class="msg" id="ev-msg" role="status"></div>
+          </div>
+        </div>
+        <h3 style="font-size:15px;margin:18px 0 6px;">Two-step sign-in</h3>
+        <p class="sub" id="ts-sub">Off: you sign in with your password only. Turn it on and sign-in also asks for a 6-digit code.</p>
+        <div class="frow">
+          <label for="ts-mode">Second step</label>
+          <select class="form-input" id="ts-mode" style="max-width:340px;">
+            <option value="off">Off — password only</option>
+            <option value="app">Authenticator app (Google / Microsoft Authenticator)</option>
+            <option value="email">Code by email</option>
+          </select>
+        </div>
+        <div class="frow"><label for="ts-pw">Your password, to change this</label><input class="form-input" id="ts-pw" type="password" autocomplete="current-password" maxlength="128" style="max-width:340px;"></div>
+        <button class="btn btn-primary" type="button" id="ts-save">Save</button>
+        <div id="ts-app" hidden style="margin-top:14px;">
+          <p class="sub">1. In your authenticator app choose <b>Add account → Enter a setup key</b> (or tap the link below on this phone).<br>2. Account: your email · Key: the code below · Type: time-based.<br>3. Type the 6-digit code the app shows.</p>
+          <div style="font-family:Consolas,monospace;font-size:17px;letter-spacing:2px;background:#F6F7F8;border:1px solid #E4E6E9;border-radius:8px;padding:10px 12px;word-break:break-all;" id="ts-secret"></div>
+          <p style="margin:8px 0;"><a id="ts-link" href="#">Open in authenticator app</a></p>
+          <div class="frow"><label for="ts-code">Code from the app</label><input class="form-input" id="ts-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" style="letter-spacing:4px;max-width:180px;"></div>
+          <button class="btn btn-primary" type="button" id="ts-confirm">Turn on</button>
+        </div>
+        <div class="msg" id="ts-msg" role="status"></div>
+      </div>
+
       <div class="card form-card">
         <h2>Change password</h2>
         <p class="sub">At least 10 characters, with 3 of: lowercase, uppercase, numbers, symbols. Other devices are signed out when you change it.</p>
@@ -431,6 +467,54 @@
       .catch(function (err) { setMsg(msg, err.message, false); })
       .then(function () { btn.disabled = false; });
   });
+
+  /* ---------- sign-in security ---------- */
+  var sec = null;
+  function renderSecurity() {
+    if (!sec) return;
+    $('ev-sub').innerHTML = sec.email_verified
+      ? 'Email <b>' + esc(sec.email) + '</b> is verified ✓'
+      : 'Email <b>' + esc(sec.email) + '</b> is not verified yet. You can use the account; verify it so password reset and emailed sign-in codes can reach you.';
+    $('ev-actions').hidden = !!sec.email_verified;
+    $('ts-mode').value = sec.two_factor;
+    $('ts-sub').textContent = sec.two_factor === 'app' ? 'On — sign-in asks for the code from your authenticator app.'
+      : sec.two_factor === 'email' ? 'On — sign-in emails you a 6-digit code.'
+      : 'Off: you sign in with your password only. Turn it on and sign-in also asks for a 6-digit code.';
+    $('ts-mode').querySelector('option[value="email"]').disabled = !sec.email_verified;
+  }
+  function loadSecurity() {
+    j('/api/account/security').then(function (d) { sec = d; renderSecurity(); }).catch(function () { $('ev-sub').textContent = 'Could not load your security settings.'; });
+  }
+  $('ev-send').addEventListener('click', function () {
+    var b = this; b.disabled = true;
+    j('/api/account/verify-email/send', 'POST', {}).then(function (d) {
+      $('ev-code-row').hidden = false; setMsg($('ev-msg'), d.message || 'Code sent.', true); $('ev-code').focus();
+    }).catch(function (e) { setMsg($('ev-msg'), e.message, false); }).then(function () { b.disabled = false; });
+  });
+  $('ev-check').addEventListener('click', function () {
+    j('/api/account/verify-email', 'POST', { code: $('ev-code').value.trim() }).then(function () {
+      sec.email_verified = true; renderSecurity(); setMsg($('ts-msg'), 'Email verified.', true);
+    }).catch(function (e) { setMsg($('ev-msg'), e.message, false); });
+  });
+  $('ts-save').addEventListener('click', function () {
+    var mode = $('ts-mode').value, pw = $('ts-pw').value, msg = $('ts-msg');
+    $('ts-app').hidden = true;
+    if (!pw) { setMsg(msg, 'Enter your password to change this.', false); return; }
+    var path = mode === 'app' ? '/api/account/two-step/app/start' : mode === 'email' ? '/api/account/two-step/email' : '/api/account/two-step/off';
+    j(path, 'POST', { password: pw }).then(function (d) {
+      $('ts-pw').value = '';
+      if (mode === 'app') {
+        $('ts-secret').textContent = d.secret; $('ts-link').href = d.otpauth; $('ts-app').hidden = false; $('ts-code').value = ''; $('ts-code').focus();
+        setMsg(msg, 'Add the key to your app, then enter its code to finish.', true);
+      } else { sec.two_factor = d.two_factor; renderSecurity(); setMsg(msg, mode === 'off' ? 'Two-step sign-in is off.' : 'Two-step sign-in is on: codes will be emailed to you.', true); }
+    }).catch(function (e) { setMsg(msg, e.message, false); });
+  });
+  $('ts-confirm').addEventListener('click', function () {
+    j('/api/account/two-step/app/confirm', 'POST', { code: $('ts-code').value.trim() }).then(function (d) {
+      sec.two_factor = d.two_factor; $('ts-app').hidden = true; renderSecurity(); setMsg($('ts-msg'), 'Two-step sign-in is on. Next time you sign in, have the app ready.', true);
+    }).catch(function (e) { setMsg($('ts-msg'), e.message, false); });
+  });
+  loadSecurity();
 
   /* ---------- student plan ---------- */
   var studentVer = null;

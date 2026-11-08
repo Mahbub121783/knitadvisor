@@ -9,14 +9,14 @@ const SESSION_DAYS = parseInt(process.env.USER_SESSION_DAYS, 10) || 14;
 const users = {
   findByEmail(email) {
     return queryOne(
-      'SELECT id, email, username, full_name, company, password_hash, disabled, email_verified FROM app_users WHERE lower(email) = lower($1)',
+      'SELECT id, email, username, full_name, company, password_hash, disabled, email_verified, two_factor, totp_secret, totp_last_step FROM app_users WHERE lower(email) = lower($1)',
       [email]
     );
   },
 
   findByUsername(username) {
     return queryOne(
-      'SELECT id, email, username, full_name, company, password_hash, disabled, email_verified FROM app_users WHERE lower(username) = lower($1)',
+      'SELECT id, email, username, full_name, company, password_hash, disabled, email_verified, two_factor, totp_secret, totp_last_step FROM app_users WHERE lower(username) = lower($1)',
       [username]
     );
   },
@@ -54,7 +54,7 @@ const users = {
   findById(id) {
     return queryOne(
       'SELECT id, email, username, username_changed_at, full_name, company, plan_interest, password_hash, disabled, ' +
-      'email_verified, is_paid, student_status, student_expires_at, created_at, last_login_at FROM app_users WHERE id = $1',
+      'email_verified, is_paid, student_status, student_expires_at, created_at, last_login_at, two_factor, totp_pending FROM app_users WHERE id = $1',
       [id]
     );
   },
@@ -98,6 +98,24 @@ const users = {
       if (err.code === '23505') return { row: null, conflict: true }; // unique_violation on lower(username)
       throw err;
     }
+  },
+
+  /** Two-step sign-in: 'off' | 'email' | 'app'. Turning it off clears the app secret. */
+  setTwoFactor(id, mode, sealedSecret = null) {
+    return query(
+      `UPDATE app_users SET two_factor = $2, totp_secret = $3, totp_pending = NULL, totp_last_step = NULL WHERE id = $1`,
+      [id, mode, mode === 'app' ? sealedSecret : null]
+    );
+  },
+
+  /** An authenticator secret shown to the user but not yet confirmed with a code. */
+  setTotpPending(id, sealedSecret) {
+    return query('UPDATE app_users SET totp_pending = $2 WHERE id = $1', [id, sealedSecret]);
+  },
+
+  /** The time step of the last accepted app code — the same code cannot be replayed. */
+  setTotpLastStep(id, step) {
+    return query('UPDATE app_users SET totp_last_step = $2 WHERE id = $1', [id, step]);
   },
 
   markEmailVerified(id) {
@@ -212,7 +230,7 @@ const sessions = {
   /** The user behind a valid, unexpired token hash — or null. Disabled accounts never match. */
   findUserByTokenHash(tokenHash) {
     return queryOne(
-      `SELECT u.id, u.email, u.username, u.full_name, u.company, u.is_paid, u.student_status, u.student_expires_at
+      `SELECT u.id, u.email, u.username, u.full_name, u.company, u.is_paid, u.student_status, u.student_expires_at, u.email_verified, u.two_factor
          FROM app_user_sessions s
          JOIN app_users u ON u.id = s.user_id
         WHERE s.token_hash = $1 AND s.expires_at > now() AND NOT u.disabled`,

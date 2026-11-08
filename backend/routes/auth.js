@@ -5,7 +5,8 @@
  *   POST /verify-email          {email, code} — activates the account and signs in
  *   POST /resend-activation     {email} — a fresh activation code, rate-limited
  *   GET  /username-availability ?username= — live check while typing, format + uniqueness
- *   POST /login                 {identifier, password} — email OR username; blocked until verified
+ *   POST /login                 {identifier, password[, code, method]} — email OR username. A code
+ *                               is asked for ONLY when the account turned on two-step sign-in.
  *   POST /forgot-password       {identifier} — mails a password-reset code to the account's real email
  *   POST /reset-password        {identifier, code, new_password} — resets and signs in
  *   POST /logout                end the session
@@ -29,6 +30,7 @@ const {
   validateForgotPassword, validateResetPassword, usernameProblem,
 } = require('../engine/domain/auth-validation');
 const { checkCode } = require('../engine/domain/otp');
+const totp = require('../engine/domain/totp');
 const { issueAndSend } = require('../services/account-codes');
 const universityRepo = require('../db/repositories/university-repo');
 
@@ -63,8 +65,16 @@ const usernameCheckLimiter = createRateLimiter({
 const DUMMY_HASH = hashPassword('not-a-real-password-just-burns-the-same-cpu');
 
 function publicUser(u) {
-  return { id: u.id, email: u.email, username: u.username, full_name: u.full_name, company: u.company };
+  return {
+    id: u.id, email: u.email, username: u.username, full_name: u.full_name, company: u.company,
+    email_verified: !!u.email_verified, two_factor: u.two_factor || 'off',
+  };
 }
+
+const CODE_MSG = {
+  too_many_attempts: 'Too many wrong attempts. Request a new code.',
+  expired: 'This code has expired. Request a new one.',
+};
 
 async function startSession(req, res, userId) {
   const { rawToken, tokenHash } = newToken();
@@ -184,6 +194,9 @@ router.get('/universities', usernameCheckLimiter, async (req, res) => {
   }
 });
 
+// Password first. A code is asked for only when the account has two-step
+// sign-in on — an account whose activation mail never arrived signs in with
+// its password like any other (it is reminded to verify on the account page).
 router.post('/login', loginLimiter, async (req, res) => {
   const v = validateLogin(req.body);
   if (!v.ok) return res.status(400).json({ success: false, error: v.errors[0] });
@@ -196,12 +209,38 @@ router.post('/login', loginLimiter, async (req, res) => {
       console.warn(`[Auth] Failed sign-in for "${identifier}" from ${req.ip || 'unknown'}`);
       return res.status(401).json({ success: false, error: 'Incorrect email/username or password.' });
     }
-    if (!row.email_verified) {
-      return res.status(403).json({
-        success: false, code: 'EMAIL_NOT_VERIFIED', email: row.email,
-        error: 'Please verify your email before signing in.',
-      });
+
+    const mode = row.two_factor || 'off';
+    if (mode !== 'off') {
+      const code = String((req.body || {}).code || '').trim();
+      // with an app on, "email me a code instead" is the way back in after
+      // losing the phone — only to an address that was proven
+      const useEmail = mode === 'email' || ((req.body || {}).method === 'email' && row.email_verified);
+      if (!code) {
+        if (useEmail) await issueAndSend(row.id, 'login', { to: row.email, fullName: row.full_name });
+        return res.json({
+          success: false, two_factor_required: true, method: useEmail ? 'email' : 'app',
+          can_email: mode === 'app' && !!row.email_verified,
+          message: useEmail ? `Enter the 6-digit code we emailed to ${maskEmail(row.email)}.` : 'Enter the 6-digit code from your authenticator app.',
+        });
+      }
+      if (useEmail) {
+        const c = await userRepo.codes.latest(row.id, 'login');
+        const r = checkCode(code, c);
+        if (!r.ok) {
+          if (r.reason === 'mismatch') await userRepo.codes.incrementAttempts(c.id);
+          return res.status(400).json({ success: false, two_factor_required: true, method: 'email', error: CODE_MSG[r.reason] || 'That code is not right.' });
+        }
+        await userRepo.codes.consume(c.id);
+      } else {
+        let step = null;
+        try { step = row.totp_secret ? totp.verify(totp.open(row.totp_secret), code, row.totp_last_step) : null; }
+        catch (e) { console.error('[Auth] two-step secret unreadable:', e.message); }
+        if (step == null) return res.status(400).json({ success: false, two_factor_required: true, method: 'app', can_email: !!row.email_verified, error: 'That code is not right. Check the time on your phone and use the newest code.' });
+        await userRepo.users.setTotpLastStep(row.id, step);
+      }
     }
+
     await userRepo.users.touchLogin(row.id);
     await startSession(req, res, row.id);
     res.json({ success: true, user: publicUser(row) });
@@ -210,6 +249,11 @@ router.post('/login', loginLimiter, async (req, res) => {
     res.status(500).json({ success: false, error: 'Sign-in failed. Please try again.' });
   }
 });
+
+function maskEmail(e) {
+  const [u, d] = String(e).split('@');
+  return `${u.slice(0, 2)}${'•'.repeat(Math.max(1, u.length - 2))}@${d}`;
+}
 
 router.post('/forgot-password', codeRequestLimiter, async (req, res) => {
   const v = validateForgotPassword(req.body);

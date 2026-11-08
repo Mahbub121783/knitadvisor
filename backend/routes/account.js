@@ -8,6 +8,13 @@
  *   PATCH  /profile             name and company
  *   POST   /username            change username (self-service, 60-day cooldown)
  *   POST   /password            change password (ends their other sessions)
+ *   GET    /security            email verified? two-step mode
+ *   POST   /verify-email/send   mail an activation code to the account email
+ *   POST   /verify-email        {code} — confirm the account email
+ *   POST   /two-step/app/start  {password} — a new authenticator secret (off until confirmed)
+ *   POST   /two-step/app/confirm {code} — turn on authenticator-app two-step
+ *   POST   /two-step/email      {password} — turn on emailed-code two-step (verified email only)
+ *   POST   /two-step/off        {password} — back to password-only sign-in
  *   GET    /universities        allow-listed universities, for the student-plan picker
  *   GET    /student/status      this account's student verification state
  *   POST   /student/apply       start a verification (a listed university + email, or "Other")
@@ -31,6 +38,7 @@ const { createRateLimiter } = require('../middleware/rate-limiter');
 const { studentDocUpload, relativePath, absolutePath } = require('../middleware/upload');
 const { issueAndSend } = require('../services/account-codes');
 const { issueCode, checkCode } = require('../engine/domain/otp');
+const totp = require('../engine/domain/totp');
 const {
   matchUniversityDomain, resolveOutcome, resolvePlanLimits, STUDENT_DURATION_DAYS,
 } = require('../engine/domain/student-eligibility');
@@ -179,6 +187,95 @@ router.post('/password', passwordLimiter, async (req, res) => {
     await userRepo.sessions.removeOthers(req.user.id, req.sessionTokenHash);
     res.json({ success: true });
   } catch (err) { fail(res, 'password', err, 'Could not change your password.'); }
+});
+
+// ── Security: email verification and two-step sign-in ───────────────────
+const securityLimiter = createRateLimiter({
+  name: 'account-security', max: 12, windowMs: 15 * 60 * 1000,
+  message: 'Too many attempts. Try again in a few minutes.',
+});
+
+// changing how the account signs in asks for the password again
+async function passwordOk(req) {
+  const row = await userRepo.users.findById(req.user.id);
+  const pw = typeof (req.body || {}).password === 'string' ? req.body.password : '';
+  return row && pw && verifyPassword(pw, row.password_hash) ? row : null;
+}
+
+const codeError = (reason) => (reason === 'expired' ? 'This code has expired. Send a new one.'
+  : reason === 'too_many_attempts' ? 'Too many wrong attempts. Send a new code.' : 'That code is not right.');
+
+router.get('/security', async (req, res) => {
+  try {
+    const row = await userRepo.users.findById(req.user.id);
+    res.json({ success: true, email: row.email, email_verified: !!row.email_verified, two_factor: row.two_factor || 'off' });
+  } catch (err) { fail(res, 'security', err, 'Could not read your security settings.'); }
+});
+
+router.post('/verify-email/send', securityLimiter, async (req, res) => {
+  try {
+    const row = await userRepo.users.findById(req.user.id);
+    if (row.email_verified) return res.json({ success: true, already: true });
+    await issueAndSend(row.id, 'activation', { to: row.email, fullName: row.full_name });
+    res.json({ success: true, message: `A code is on its way to ${row.email}. If it is not in your inbox within a minute, check spam.` });
+  } catch (err) { fail(res, 'verify-email/send', err, 'Could not send the code.'); }
+});
+
+router.post('/verify-email', securityLimiter, async (req, res) => {
+  try {
+    const row = await userRepo.users.findById(req.user.id);
+    if (row.email_verified) return res.json({ success: true });
+    const c = await userRepo.codes.latest(row.id, 'activation');
+    const r = checkCode(String((req.body || {}).code || '').trim(), c);
+    if (!r.ok) {
+      if (r.reason === 'mismatch') await userRepo.codes.incrementAttempts(c.id);
+      return res.status(400).json({ success: false, error: codeError(r.reason) });
+    }
+    await userRepo.codes.consume(c.id);
+    await userRepo.users.markEmailVerified(row.id);
+    res.json({ success: true });
+  } catch (err) { fail(res, 'verify-email', err, 'Could not verify your email.'); }
+});
+
+router.post('/two-step/app/start', securityLimiter, async (req, res) => {
+  try {
+    const row = await passwordOk(req);
+    if (!row) return res.status(403).json({ success: false, error: 'Your password is incorrect.' });
+    const secret = totp.newSecret();
+    await userRepo.users.setTotpPending(row.id, totp.seal(secret));
+    res.json({ success: true, secret: secret.replace(/(.{4})/g, '$1 ').trim(), otpauth: totp.otpauthUri(secret, row.email) });
+  } catch (err) { fail(res, 'two-step/app/start', err, 'Could not start two-step setup.'); }
+});
+
+router.post('/two-step/app/confirm', securityLimiter, async (req, res) => {
+  try {
+    const row = await userRepo.users.findById(req.user.id);
+    if (!row.totp_pending) return res.status(400).json({ success: false, error: 'Start the setup again.' });
+    const step = totp.verify(totp.open(row.totp_pending), String((req.body || {}).code || '').trim());
+    if (step == null) return res.status(400).json({ success: false, error: 'That code is not right. Use the newest code in the app, and make sure the phone sets its time automatically.' });
+    await userRepo.users.setTwoFactor(row.id, 'app', row.totp_pending);
+    await userRepo.users.setTotpLastStep(row.id, step);
+    res.json({ success: true, two_factor: 'app' });
+  } catch (err) { fail(res, 'two-step/app/confirm', err, 'Could not turn on two-step sign-in.'); }
+});
+
+router.post('/two-step/email', securityLimiter, async (req, res) => {
+  try {
+    const row = await passwordOk(req);
+    if (!row) return res.status(403).json({ success: false, error: 'Your password is incorrect.' });
+    if (!row.email_verified) return res.status(400).json({ success: false, error: 'Verify your email first — the sign-in codes are sent there.' });
+    await userRepo.users.setTwoFactor(row.id, 'email');
+    res.json({ success: true, two_factor: 'email' });
+  } catch (err) { fail(res, 'two-step/email', err, 'Could not turn on two-step sign-in.'); }
+});
+
+router.post('/two-step/off', securityLimiter, async (req, res) => {
+  try {
+    const row = await passwordOk(req);
+    if (!row) return res.status(403).json({ success: false, error: 'Your password is incorrect.' });
+    await userRepo.users.setTwoFactor(row.id, 'off');
+    res.json({ success: true, two_factor: 'off' });
+  } catch (err) { fail(res, 'two-step/off', err, 'Could not turn off two-step sign-in.'); }
 });
 
 // ── Student plan ─────────────────────────────────────────────────────────

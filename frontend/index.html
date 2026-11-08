@@ -1085,6 +1085,7 @@
       <p class="login-info" id="authInfo" hidden></p>
       <button type="submit" class="login-submit" id="authSubmit">Sign in</button>
       <button type="button" class="link-btn" id="resendLink" hidden>Resend code</button>
+      <button type="button" class="link-btn" id="emailCodeLink" hidden>Lost your phone? Email me a code</button>
       <button type="button" class="link-btn" id="backToSignIn" hidden>&larr; Back to sign in</button>
       <button type="button" class="link-btn" id="skipStudentLink" hidden>Skip for now &mdash; I&rsquo;ll finish later</button>
     </form>
@@ -1173,6 +1174,9 @@
     $('authInfo').hidden = true;
   }
 
+  // two-step sign-in: the password already checked, kept only in memory to
+  // send again with the code (the server stays stateless)
+  var twoStep = { method: null, canEmail: false, message: '', password: '' };
   function setMode(m){
     mode = m;
     var isSignup = m === 'signup';
@@ -1183,6 +1187,7 @@
     var isStudentDoc = m === 'student-doc';
     var isStudentRetry = m === 'student-retry';
     var isStudentOnly = m === 'student-only';
+    var isTwoStep = m === 'twostep';
     var isTabbed = m === 'signin' || m === 'signup';
 
     $('authTabs').hidden = !isTabbed;
@@ -1198,30 +1203,31 @@
     $('fEmailLabel').textContent = isSignup ? 'Work email' : 'Email or username';
     $('fEmail').type = isSignup ? 'email' : 'text';
     $('fEmail').placeholder = isSignup ? 'you@yourmill.com' : 'you@yourmill.com or username';
-    $('fEmail').readOnly = isVerify || isReset;
+    $('fEmail').readOnly = isVerify || isReset || isTwoStep;
     updateStudentFieldsVisibility();
-    $('fieldCode').hidden = !(isVerify || isReset || isStudentCode);
+    $('fieldCode').hidden = !(isVerify || isReset || isStudentCode || isTwoStep);
     $('fCodeLabel').textContent = isStudentCode ? '6-digit code from your university email' : '6-digit code';
     $('fieldStudentDoc').hidden = !isStudentDoc;
-    $('fieldPassword').hidden = isVerify || isForgot || isStudentCode || isStudentDoc || isStudentRetry || isStudentOnly;
+    $('fieldPassword').hidden = isTwoStep || isVerify || isForgot || isStudentCode || isStudentDoc || isStudentRetry || isStudentOnly;
     $('fPasswordLabel').textContent = isReset ? 'New password' : 'Password';
     $('pwHint').hidden = !(isSignup || isReset);
     $('pwHint').className = 'hint';
     $('pwHint').textContent = 'At least 10 characters, with 3 of: lowercase, uppercase, numbers, symbols.';
     $('fPassword').setAttribute('autocomplete', (isSignup || isReset) ? 'new-password' : 'current-password');
     $('forgotLink').hidden = m !== 'signin';
-    $('resendLink').hidden = !(isVerify || isReset);
+    $('resendLink').hidden = !(isVerify || isReset || (isTwoStep && twoStep.method === 'email'));
+    $('emailCodeLink').hidden = !(isTwoStep && twoStep.method === 'app' && twoStep.canEmail);
     $('backToSignIn').hidden = isTabbed || isStudentCode || isStudentDoc || isStudentRetry || isStudentOnly;
     $('skipStudentLink').hidden = !(isStudentCode || isStudentDoc || isStudentRetry);
 
     var labels = {
-      signin: 'Sign in', signup: 'Create account', verify: 'Verify email', forgot: 'Send reset code', reset: 'Reset password',
+      signin: 'Sign in', twostep: 'Verify and sign in', signup: 'Create account', verify: 'Verify email', forgot: 'Send reset code', reset: 'Reset password',
       'student-code': 'Verify code', 'student-doc': 'Submit', 'student-retry': 'Try again', 'student-only': 'Start verification',
     };
     $('authSubmit').textContent = labels[m];
 
     var titles = {
-      signin: 'Sign in to continue', signup: 'Create your account', verify: 'Check your email',
+      signin: 'Sign in to continue', twostep: 'Two-step sign-in', signup: 'Create your account', verify: 'Check your email',
       forgot: 'Reset your password', reset: 'Choose a new password',
       'student-code': 'Verify your university email', 'student-doc': 'Almost done', 'student-retry': 'Let’s try that again',
       'student-only': 'Verify your student status',
@@ -1232,6 +1238,7 @@
     var spamNote = " Don't see it? Check your spam folder.";
     var subs = {
       signin: 'Use your email or username to open the calculator.',
+      twostep: (twoStep.message || 'Enter your 6-digit code.') + (twoStep.method === 'email' ? spamNote : ''),
       signup: 'Free while plans are finalised.' + plan,
       verify: (pendingIdentifier ? 'Enter the 6-digit code we emailed to ' + pendingIdentifier + '.' : 'Enter the 6-digit code we emailed you.') + spamNote,
       forgot: 'Enter your account email or username and we will mail a reset code to the address on file.',
@@ -1452,6 +1459,7 @@
     overlay.hidden = true;
     $('authForm').reset();
     pendingIdentifier = null;
+    twoStep = { method: null, canEmail: false, message: '', password: '' };
     studentIntent = false;
     studentChoice = null;
     updateStudentFieldsVisibility();
@@ -1466,7 +1474,15 @@
   });
   $('tabSignIn').addEventListener('click', function(){ setMode('signin'); });
   $('tabSignUp').addEventListener('click', function(){ setMode('signup'); });
-  $('backToSignIn').addEventListener('click', function(){ pendingIdentifier = null; setMode('signin'); });
+  $('backToSignIn').addEventListener('click', function(){ pendingIdentifier = null; twoStep.password = ''; setMode('signin'); });
+  $('emailCodeLink').addEventListener('click', function(){
+    var btn = $('emailCodeLink'); btn.disabled = true;
+    postJSON('/api/auth/login', { identifier: $('fEmail').value.trim(), password: twoStep.password, method: 'email' }).then(function(r){
+      btn.disabled = false;
+      if (r.data && r.data.two_factor_required) { twoStep.method = 'email'; twoStep.message = r.data.message; setMode('twostep'); showInfo(r.data.message); }
+      else showError((r.data && r.data.error) || 'Could not send a code.');
+    }).catch(function(){ btn.disabled = false; showError('Could not reach the server.'); });
+  });
   $('forgotLink').addEventListener('click', function(){ setMode('forgot'); $('fEmail').value = $('fEmail').value || ''; });
 
   function requestFreshCode(kind){
@@ -1542,6 +1558,12 @@
   $('resendLink').addEventListener('click', function(){
     var btn = $('resendLink');
     btn.disabled = true;
+    if (mode === 'twostep') {
+      postJSON('/api/auth/login', { identifier: $('fEmail').value.trim(), password: twoStep.password, method: 'email' }).then(function(r){
+        showInfo((r.data && r.data.message) || 'A new code is on its way.'); btn.disabled = false;
+      }).catch(function(){ showError('Could not reach the server.'); btn.disabled = false; });
+      return;
+    }
     requestFreshCode(mode === 'reset' ? 'reset' : 'activation').then(function(r){
       showInfo((r.data && r.data.message) || 'A new code is on its way.');
       btn.disabled = false;
@@ -1602,6 +1624,9 @@
     } else if (mode === 'reset') {
       path = '/api/auth/reset-password';
       body = { identifier: pendingIdentifier, code: code, new_password: password };
+    } else if (mode === 'twostep') {
+      path = '/api/auth/login';
+      body = { identifier: identifier, password: twoStep.password, code: code, method: twoStep.method };
     } else {
       path = '/api/auth/login';
       body = { identifier: identifier, password: password };
@@ -1624,6 +1649,13 @@
         pendingIdentifier = r.data.email || identifier;
         setMode('verify');
         showInfo(r.data.message || 'Enter the 6-digit code we emailed you.');
+        return;
+      }
+      if ((mode === 'signin' || mode === 'twostep') && r.data && r.data.two_factor_required && !r.data.error) {
+        twoStep = { method: r.data.method, canEmail: !!r.data.can_email, message: r.data.message, password: mode === 'signin' ? password : twoStep.password };
+        $('fCode').value = '';
+        setMode('twostep');
+        $('fCode').focus();
         return;
       }
       if (mode === 'signin' && r.data && r.data.code === 'EMAIL_NOT_VERIFIED') {

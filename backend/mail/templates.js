@@ -9,41 +9,70 @@ function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-function shell(title, bodyHtml) {
-  return `<div style="font-family:-apple-system,Segoe UI,Arial,sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;color:#191C1F;">
-    <div style="font-weight:800;font-size:17px;letter-spacing:-0.01em;margin-bottom:22px;">Knit<span style="color:#1857C4;">Advisor</span></div>
-    <h1 style="font-size:19px;margin:0 0 14px;">${esc(title)}</h1>
-    ${bodyHtml}
-    <p style="font-size:12px;color:#868C94;margin-top:32px;border-top:1px solid #E4E6E9;padding-top:16px;">
-      KnitAdvisor &middot; Part of Online Textile School. If you did not request this, you can ignore this email.
-    </p>
-  </div>`;
+// A complete HTML document (doctype, charset, a hidden preheader that shows as
+// the inbox preview line). A bare <div> fragment renders, but some filters
+// score a document-less HTML body as suspicious.
+function shell(title, bodyHtml, preheader = '') {
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light"><title>${esc(title)}</title></head>
+<body style="margin:0;padding:0;background:#F3F4F6;">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:#F3F4F6;">${esc(preheader)}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F3F4F6;padding:24px 12px;">
+<tr><td align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#FFFFFF;border:1px solid #E4E6E9;border-radius:10px;">
+<tr><td style="padding:28px 28px 8px;font-family:-apple-system,'Segoe UI',Arial,sans-serif;color:#191C1F;">
+  <div style="font-weight:800;font-size:17px;letter-spacing:-0.01em;margin-bottom:20px;">Knit<span style="color:#1857C4;">Advisor</span></div>
+  <h1 style="font-size:19px;line-height:1.3;margin:0 0 14px;">${esc(title)}</h1>
+  ${bodyHtml}
+</td></tr>
+<tr><td style="padding:0 28px 24px;font-family:-apple-system,'Segoe UI',Arial,sans-serif;">
+  <p style="font-size:12px;line-height:1.5;color:#868C94;margin:24px 0 0;border-top:1px solid #E4E6E9;padding-top:14px;">
+    KnitAdvisor &middot; knitadvisor.onlinetextileschool.com<br>You received this because of an action on your KnitAdvisor account. If it was not you, ignore this email — nothing changes without the code.
+  </p>
+</td></tr>
+</table>
+</td></tr></table>
+</body></html>`;
 }
 
 function codeBlock(code) {
-  return `<div style="font-family:'IBM Plex Mono',ui-monospace,Consolas,monospace;font-size:32px;font-weight:700;
-    letter-spacing:6px;background:#F6F7F8;border:1px solid #E4E6E9;border-radius:8px;
+  return `<div style="font-family:Consolas,'Courier New',monospace;font-size:32px;font-weight:700;color:#191C1F;
+    letter-spacing:8px;background:#F6F7F8;border:1px solid #E4E6E9;border-radius:8px;
     padding:16px 20px;text-align:center;margin:18px 0;">${esc(code)}</div>`;
 }
 
-function activationEmail({ fullName, code }) {
-  const html = shell('Confirm your email', `
-    <p style="font-size:14px;line-height:1.6;">Hi ${esc(fullName || 'there')},</p>
-    <p style="font-size:14px;line-height:1.6;">Enter this code to activate your KnitAdvisor account:</p>
+// One shape for every code mail: the code in the subject (readable from the
+// notification without opening the mail), a matching plain-text part written
+// out rather than stripped from the HTML.
+function codeMail({ fullName, code, title, lead, after, subjectWhat }) {
+  const name = fullName || 'there';
+  const html = shell(title, `
+    <p style="font-size:14px;line-height:1.6;margin:0 0 8px;">Hi ${esc(name)},</p>
+    <p style="font-size:14px;line-height:1.6;margin:0;">${esc(lead)}</p>
     ${codeBlock(code)}
-    <p style="font-size:13px;color:#565C64;">This code expires in ${CODE_TTL_MINUTES} minutes.</p>
-  `);
-  return { subject: 'Your KnitAdvisor activation code', html };
+    <p style="font-size:13px;line-height:1.5;color:#565C64;margin:0;">${esc(after)}</p>
+  `, `${code} — ${lead}`);
+  const text = `Hi ${name},\n\n${lead}\n\n    ${code}\n\n${after}\n\nIf this was not you, ignore this email — nothing changes without the code.\n\nKnitAdvisor — knitadvisor.onlinetextileschool.com`;
+  return { subject: `${code} is your KnitAdvisor ${subjectWhat}`, html, text };
+}
+
+function activationEmail({ fullName, code }) {
+  return codeMail({ fullName, code, title: 'Confirm your email', subjectWhat: 'activation code',
+    lead: 'Enter this code to activate your KnitAdvisor account:',
+    after: `The code expires in ${CODE_TTL_MINUTES} minutes.` });
 }
 
 function passwordResetEmail({ fullName, code }) {
-  const html = shell('Reset your password', `
-    <p style="font-size:14px;line-height:1.6;">Hi ${esc(fullName || 'there')},</p>
-    <p style="font-size:14px;line-height:1.6;">Use this code to reset your KnitAdvisor password:</p>
-    ${codeBlock(code)}
-    <p style="font-size:13px;color:#565C64;">This code expires in ${CODE_TTL_MINUTES} minutes. Your password will not change unless you enter it.</p>
-  `);
-  return { subject: 'Your KnitAdvisor password reset code', html };
+  return codeMail({ fullName, code, title: 'Reset your password', subjectWhat: 'password reset code',
+    lead: 'Use this code to set a new KnitAdvisor password:',
+    after: `The code expires in ${CODE_TTL_MINUTES} minutes. Your password does not change unless you enter it.` });
+}
+
+function loginCodeEmail({ fullName, code }) {
+  return codeMail({ fullName, code, title: 'Your sign-in code', subjectWhat: 'sign-in code',
+    lead: 'You turned on two-step sign-in. Enter this code to finish signing in:',
+    after: `The code expires in ${CODE_TTL_MINUTES} minutes. If you did not just sign in, change your password.` });
 }
 
 function passwordChangedByAdminEmail({ fullName }) {
@@ -65,13 +94,9 @@ function emailChangedNoticeEmail({ fullName, newEmail }) {
 }
 
 function studentEmailCodeEmail({ fullName, code }) {
-  const html = shell('Verify your university email', `
-    <p style="font-size:14px;line-height:1.6;">Hi ${esc(fullName || 'there')},</p>
-    <p style="font-size:14px;line-height:1.6;">Enter this code to confirm this university email is yours, as part of applying for KnitAdvisor's free student plan:</p>
-    ${codeBlock(code)}
-    <p style="font-size:13px;color:#565C64;">This code expires in ${CODE_TTL_MINUTES} minutes.</p>
-  `);
-  return { subject: 'Your KnitAdvisor student verification code', html };
+  return codeMail({ fullName, code, title: 'Verify your university email', subjectWhat: 'student verification code',
+    lead: "Enter this code to confirm this university email is yours, as part of applying for KnitAdvisor's free student plan:",
+    after: `The code expires in ${CODE_TTL_MINUTES} minutes.` });
 }
 
 function studentApprovedEmail({ fullName, expiresAt }) {
@@ -122,5 +147,5 @@ function studentExpiredEmail({ fullName }) {
 module.exports = {
   activationEmail, passwordResetEmail, passwordChangedByAdminEmail, emailChangedNoticeEmail,
   studentEmailCodeEmail, studentApprovedEmail, studentPendingReviewEmail, studentRejectedEmail,
-  studentRevokedEmail, studentExpiredEmail,
+  studentRevokedEmail, studentExpiredEmail, loginCodeEmail,
 };
