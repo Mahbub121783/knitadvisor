@@ -17,8 +17,8 @@
 
   function blankShell(i) {
     return { name: ['1st Shell', '2nd Shell', '3rd Shell', '4th Shell', '5th Shell', '6th Shell', '7th Shell', '8th Shell'][i] || 'Shell',
-      application: '', fabric: 'single_jersey', composition: '100% cotton', gsm: '', shade: 'light_medium', two_part: false, stripe: '', brushed: false, aop: false,
-      yarns: [{ type: 'combed_regular', count: 30, share_pct: 100, price: '' }],
+      application: '', fabric: 'single_jersey', composition: '100% cotton', gsm: 160, shade: 'light_medium', two_part: false, stripe: '', brushed: false, aop: false,
+      yarns: [{ type: 'combed_regular', count: '', share_pct: 100, price: '' }],
       yarn_dye_price: '', knit_price: '', dye_price: '', finish_price: '', aop_price: '', loss_pct: '',
       consumption_unit: 'pc', consumption: [] };
   }
@@ -100,13 +100,14 @@
       var yarns = sh.yarns.map(function (y, j) {
         var yp = p + '.yarns.' + j, row = OPTS.yarns.filter(function (x) { return x.key === y.type; })[0] || {};
         return '<tr><td style="min-width:200px"><select data-k="' + yp + '.type">' + yarnOptions(y.type) + '</select></td>' +
-          '<td>' + (row.denier ? '<span style="font-size:12px;color:var(--t3)">' + row.denier + 'D</span>' : '<input class="num" type="number" min="5" max="120" data-k="' + yp + '.count" value="' + esc(y.count) + '" placeholder="Ne">') + '</td>' +
+          '<td>' + (row.denier ? '<span style="font-size:12px;color:var(--t3)">' + row.denier + 'D</span>' : '<input class="num" type="number" min="5" max="120" data-k="' + yp + '.count" data-auto="1" value="' + esc(y.count) + '" placeholder="auto"><small class="cs-asrc" data-asrc="' + yp + '.count"></small>') + '</td>' +
           '<td><input class="num" type="number" min="0" max="100" step="0.1" data-k="' + yp + '.share_pct" value="' + esc(y.share_pct) + '"></td>' +
-          '<td><input class="num" type="number" min="0" step="0.01" data-k="' + yp + '.price" value="' + esc(y.price) + '" placeholder="system" data-sys="yarn-' + i + '-' + j + '"></td>' +
+          '<td><input class="num" type="number" min="0" step="0.01" data-k="' + yp + '.price" data-auto="1" value="' + esc(y.price) + '" placeholder="auto"><small class="cs-asrc" data-asrc="' + yp + '.price"></small></td>' +
           '<td>' + (sh.yarns.length > 1 ? '<button class="cs-btn small" type="button" data-rmyarn="' + i + '.' + j + '">×</button>' : '') + '</td></tr>';
       }).join('');
       var price = function (k, label, help) {
-        return '<label class="cs-f">' + label + '<input class="num" type="number" min="0" step="0.01" data-k="' + p + '.' + k + '" value="' + esc(sh[k]) + '" placeholder="system" data-sys="' + k + '-' + i + '"><small data-src="' + k + '-' + i + '">' + (help || '') + '</small></label>';
+        var auto = k !== 'yarn_dye_price' && k !== 'aop_price';
+        return '<label class="cs-f">' + label + '<input class="num" type="number" min="0" step="0.01" data-k="' + p + '.' + k + '"' + (auto ? ' data-auto="1"' : '') + ' value="' + esc(sh[k]) + '" placeholder="' + (auto ? 'auto' : '0') + '"><small class="cs-asrc" data-asrc="' + p + '.' + k + '">' + (help || '') + '</small></label>';
       };
       return '<div class="cs-shell">' +
         '<div class="cs-shell-h"><input data-k="' + p + '.name" value="' + esc(sh.name) + '" aria-label="Shell name">' +
@@ -239,26 +240,55 @@
 
   function srcBadge(s) { return s ? '<span class="cs-src ' + esc(s.kind) + '">' + esc(s.label) + '</span>' : ''; }
 
+  // Every box marked data-auto shows the system's figure IN the box (blue) while
+  // it is not typed over; typing makes it yours, the ↺ puts the system's back.
+  function autoValues() {
+    var out = {};
+    if (!last || !last.success) return out;
+    last.shells.forEach(function (sh, i) {
+      var p = 'shells.' + i;
+      // always the SYSTEM's figure — also when the box is typed over, so ↺ can offer it back
+      var put = function (k, field, dec) { var pr = sh.system && sh.system[field]; if (pr) out[p + '.' + k] = { v: (+pr.value).toFixed(dec), src: pr.source }; };
+      put('knit_price', 'knitting', 3); put('dye_price', 'dyeing', 3); put('finish_price', 'finishing', 3); put('loss_pct', 'loss_pct', 2);
+      sh.yarns.forEach(function (y, j) {
+        if (y.system_price != null) out[p + '.yarns.' + j + '.price'] = { v: (+y.system_price).toFixed(2), src: y.system_source };
+        if (sh.auto_count && !y.denier) out[p + '.yarns.' + j + '.count'] = { v: String(sh.auto_count.count), src: { kind: 'system', label: sh.auto_count.label } };
+      });
+    });
+    return out;
+  }
   function paintSources() {
     if (!last || !last.success) return;
+    var av = autoValues();
+    document.querySelectorAll('#cs-form input[data-auto]').forEach(function (inp) {
+      var path = inp.getAttribute('data-k'), own = getPath(S, path), a = av[path];
+      var mine = own !== '' && own != null;
+      var srcEl = document.querySelector('[data-asrc="' + path + '"]');
+      if (!mine && a && document.activeElement !== inp) inp.value = a.v;
+      inp.classList.toggle('cs-auto', !mine);
+      if (srcEl) {
+        var src = mine ? { kind: 'yours', label: 'yours' } : a ? a.src : null;
+        srcEl.innerHTML = (src ? '<span class="cs-src ' + esc(src.kind) + '" title="' + esc(src.label) + '">' + esc(mine ? 'your figure' : shortSrc(src)) + '</span>' : '') +
+          (mine && a ? ' <button type="button" class="cs-reauto" data-reauto="' + path + '" title="Back to the system figure (' + esc(a.v) + ')">↺ auto ' + esc(a.v) + '</button>' : '');
+      }
+    });
     last.shells.forEach(function (sh, i) {
-      var put = function (k, field) {
-        var el = document.querySelector('[data-src="' + k + '-' + i + '"]');
-        var inp = document.querySelector('[data-sys="' + k + '-' + i + '"]');
-        var pr = sh.prices[field];
-        if (inp && pr && pr.source.kind !== 'yours') inp.placeholder = field === 'loss_pct' ? f2(pr.value) : f3(pr.value);
-        if (el && pr) el.innerHTML = srcBadge(pr.source);
-      };
-      put('knit_price', 'knitting'); put('dye_price', 'dyeing'); put('finish_price', 'finishing'); put('loss_pct', 'loss_pct');
-      sh.yarns.forEach(function (y, j) {
-        var inp = document.querySelector('[data-sys="yarn-' + i + '-' + j + '"]');
-        if (inp && y.source.kind !== 'yours') { inp.placeholder = f2(y.price); inp.title = y.source.label; }
-      });
       var box = document.querySelector('[data-shellres="' + i + '"]');
-      if (box) box.innerHTML = 'Fabric <b>$' + f3(sh.price_per_kg) + '</b>/kg ' + (last.loss_method === 'sheet' ? '(exact ÷(1−loss): $' + f3(sh.exact_per_kg) + ')' : '(sheet ×(1+loss): $' + f3(sh.sheet_per_kg) + ')') +
+      if (box) box.innerHTML = (sh.auto_count ? '<div style="flex-basis:100%;font-size:11.5px;color:var(--t2)">Count chosen for the fabric: <b>' + esc(sh.auto_count.label.replace(/^auto: /, '')) + '</b>' + (sh.auto_count.reachable ? '' : ' — outside the factory\'s usual tightness: check it') + '</div>' : '') +
+        'Fabric <b>$' + f3(sh.price_per_kg) + '</b>/kg ' + (last.loss_method === 'sheet' ? '(exact ÷(1−loss): $' + f3(sh.exact_per_kg) + ')' : '(sheet ×(1+loss): $' + f3(sh.sheet_per_kg) + ')') +
         ' · cost per piece: ' + sh.cost.map(function (c, k) { return esc(last.sizes[k]) + ' <b>$' + f3(c) + '</b>'; }).join(' · ') +
         (sh.notes.length ? '<div style="flex-basis:100%;font-size:11.5px;color:var(--t3)">' + sh.notes.map(esc).join(' ') + '</div>' : '');
     });
+  }
+  function shortSrc(src) {
+    var l = String(src.label || '');
+    if (/^auto: /.test(l)) return 'auto for fabric + GSM';
+    if (/charge book/.test(l)) return 'auto · charge book';
+    if (/finishing model/.test(l)) return 'auto · finishing model';
+    if (/loss model/.test(l)) return 'auto · loss model';
+    if (/market quote/.test(l)) return 'auto · market ' + (l.match(/\d{4}-\d{2}-\d{2}/) || [''])[0] + (/stale/.test(l) ? ' (old)' : '');
+    if (/reference list/.test(l)) return 'auto · reference list';
+    return src.kind === 'missing' ? 'not priced — type it' : 'auto';
   }
 
   function renderResult() {
@@ -336,7 +366,11 @@
   document.addEventListener('click', function (e) {
     var b = e.target.closest('button'); if (!b || !b.closest('#cs-form')) return;
     var a;
-    if ((a = b.getAttribute('data-fill'))) {
+    if ((a = b.getAttribute('data-reauto'))) {
+      setPath(S, a, '');
+      var inp = document.querySelector('[data-k="' + a + '"]'); if (inp) inp.value = '';
+      schedule(); return;
+    } else if ((a = b.getAttribute('data-fill'))) {
       var arr = getPath(S, a) || [], v0 = arr[0];
       if (v0 === '' || v0 == null) return;
       for (var k = 0; k < n(); k++) arr[k] = v0;

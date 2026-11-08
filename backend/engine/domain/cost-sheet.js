@@ -36,6 +36,7 @@ const costing = require('./costing-engine');
 const chargeBook = require('./charge-book');
 const wet = require('./wet-cost-model');
 const { parseComposition } = require('./composition-engine');
+const studio = require('./fabric-studio');
 
 const r2 = (v) => Math.round(v * 100) / 100;
 const r3 = (v) => Math.round(v * 1000) / 1000;
@@ -67,34 +68,71 @@ function perSize(v, n, what) {
   return Array(n).fill(x == null ? 0 : x);
 }
 
+// ── the count a fabric of this GSM is knitted with ──────────────────────
+// The Fabric Studio's setting search on the fabric's own needle programme:
+// every commercial count on every gauge that suits it, kept inside the
+// factory's tightness-factor window, gauge fit and hook load, nearest the
+// factory median. Memoised: the same fabric and GSM come back on every keystroke.
+const autoCache = new Map();
+const STUDIO_FIBRE = { cotton: 'cotton', polyester: 'polyester_spun', viscose: 'viscose', modal: 'modal' };
+function autoCount(fabricId, gsm, fiber) {
+  if (!(gsm >= 60)) return null;
+  const key = `${fabricId}|${Math.round(gsm)}|${fiber || ''}`;
+  if (autoCache.has(key)) return autoCache.get(key);
+  let out = null;
+  const t = studio.listTemplates().find((x) => x.id === fabricId);
+  if (t) {
+    const r = studio.analyse({ bed: t.bed, gating: t.gating, grid: t.grid, feeds: t.roles.map((role) => ({ role })), yarn: { fibre: STUDIO_FIBRE[fiber] || 'cotton' }, target: { gsm }, machine: {} });
+    if (r.success && r.yarn && r.yarn.ground) {
+      const best = r.solver && r.solver.options && r.solver.options[0];
+      const ne = Math.round(590.5 / r.yarn.ground.tex);
+      out = { count: ne, label: `auto: ${ne}s for ${Math.round(gsm)} GSM ${fabricId.replace(/_/g, ' ')}${best ? ` (${best.gauge} GG, ${best.sl_mm} mm stitch)` : ''}`, reachable: !r.solver || r.solver.verdict.level === 'ok' };
+    }
+  }
+  if (autoCache.size > 500) autoCache.clear();
+  autoCache.set(key, out);
+  return out;
+}
+
 // ── system prices ─────────────────────────────────────────────────────────
-function yarnLine(y, live, i, shell) {
+function yarnLine(y, live, i, shell, auto) {
   const key = String(y.type || '');
   const row = costing.SM_PRICE_MATRIX[key];
   if (!row) throw new SheetError(`${shell}: yarn ${i + 1} — choose a yarn type.`);
   const share = pos(y.share_pct);
   if (!(share > 0)) throw new SheetError(`${shell}: yarn ${i + 1} — give its share of the fabric (%).`);
   const denier = row.price !== undefined;
-  const count = denier ? (row.denier || null) : pos(y.count);
-  if (!denier && !(count > 0)) throw new SheetError(`${shell}: yarn ${i + 1} (${row.label}) — give the count (Ne).`);
+  const typed = pos(y.count);
+  // an empty count is the fabric's own: worked out from the fabric and its GSM
+  const count = denier ? (row.denier || null) : typed > 0 ? typed : auto ? auto.count : null;
+  if (!denier && !(count > 0)) throw new SheetError(`${shell}: yarn ${i + 1} (${row.label}) — give the count (Ne), or the fabric's GSM to choose it automatically.`);
+  if (!denier && !(typed > 0) && !auto) throw new SheetError(`${shell}: yarn ${i + 1} — give the count (Ne).`);
+  const countSource = denier ? null : typed > 0 ? { kind: 'yours', label: 'your count' } : { kind: 'system', label: auto.label };
+  // the system's price is worked out even when one is typed, so the page can
+  // always offer it back
   const own = pos(y.price);
+  const r = costing.resolveYarnPrice(key, count || 0, live, 'BD');
+  const ps = r.price_source;
+  const sysSource = r.price == null ? null : ps.kind.startsWith('market')
+    ? { kind: 'market', label: `market quote ${ps.last_updated}${ps.freshness === 'stale' ? ' (stale)' : ''}`, date: ps.last_updated }
+    : { kind: 'reference', label: `reference list ${ps.last_updated}`, date: ps.last_updated };
   let price, source;
   if (own != null && own > 0) { price = own; source = { kind: 'yours', label: 'your price' }; }
   else {
-    const r = costing.resolveYarnPrice(key, count || 0, live, 'BD');
     if (r.price == null) throw new SheetError(`${shell}: no price for ${row.label}${count ? ` ${count}s` : ''} — type the price.`);
-    price = r.price;
-    const ps = r.price_source;
-    source = ps.kind.startsWith('market')
-      ? { kind: 'market', label: `market quote ${ps.last_updated}${ps.freshness === 'stale' ? ' (stale)' : ''}`, date: ps.last_updated }
-      : { kind: 'reference', label: `reference list ${ps.last_updated}`, date: ps.last_updated };
+    price = r.price; source = sysSource;
   }
-  return { type: key, label: row.label, count: denier ? null : count, denier: denier ? row.denier : null, share_pct: share, price: r4(price), source, fiber: row.fiber };
+  return { type: key, label: row.label, count: denier ? null : count, count_source: countSource, denier: denier ? row.denier : null, share_pct: share, price: r4(price), source,
+    system_price: r.price == null ? null : r4(r.price), system_source: sysSource, fiber: row.fiber };
 }
 
 function shellPrices(sh, live, idx) {
   const name = String(sh.name || `Shell ${idx + 1}`).slice(0, 60);
-  const yarns = (Array.isArray(sh.yarns) ? sh.yarns : []).slice(0, 6).map((y, i) => yarnLine(y, live, i, name));
+  const yarnsIn = (Array.isArray(sh.yarns) ? sh.yarns : []).slice(0, 6);
+  // the main (largest-share, spun) yarn sets the fibre the count is chosen for
+  const lead = yarnsIn.filter((y) => costing.SM_PRICE_MATRIX[y.type] && costing.SM_PRICE_MATRIX[y.type].price === undefined).sort((a, b) => (pos(b.share_pct) || 0) - (pos(a.share_pct) || 0))[0];
+  const auto = pos(sh.gsm) ? autoCount(String(sh.fabric || 'single_jersey'), pos(sh.gsm), lead && costing.SM_PRICE_MATRIX[lead.type].fiber) : null;
+  const yarns = yarnsIn.map((y, i) => yarnLine(y, live, i, name, auto));
   if (!yarns.length) throw new SheetError(`${name}: add at least one yarn.`);
   const shareTot = yarns.reduce((t, y) => t + y.share_pct, 0);
   if (Math.abs(shareTot - 100) > 0.6) throw new SheetError(`${name}: yarn shares add up to ${r2(shareTot)}%, not 100%.`);
@@ -154,7 +192,7 @@ function shellPrices(sh, live, idx) {
       yarn_dyeing: yarnDye, knitting: knit, dyeing: dye, finishing: finish, aop, loss_pct: lossPick,
     },
     system: { knitting: knitSys, dyeing: dyeSys, finishing: finSys, loss_pct: lossSys, charge_item: q.ok ? q.item.label : null, alternatives: q.ok ? q.alternatives.slice(0, 4) : [] },
-    base_per_kg: r4(base), sheet_per_kg: r4(sheetKg), exact_per_kg: r4(exactKg), notes,
+    base_per_kg: r4(base), sheet_per_kg: r4(sheetKg), exact_per_kg: r4(exactKg), notes, auto_count: auto,
   };
 }
 
