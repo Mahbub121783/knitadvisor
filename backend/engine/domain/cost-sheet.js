@@ -37,6 +37,8 @@ const chargeBook = require('./charge-book');
 const wet = require('./wet-cost-model');
 const { parseComposition } = require('./composition-engine');
 const studio = require('./fabric-studio');
+const fleece = require('./fleece-engine');
+const plush = require('./terry-engine');
 
 const r2 = (v) => Math.round(v * 100) / 100;
 const r3 = (v) => Math.round(v * 1000) / 1000;
@@ -94,6 +96,68 @@ function autoCount(fabricId, gsm, fiber) {
   return out;
 }
 
+// ── the yarns a fabric is knitted from, by role ─────────────────────────
+// A fleece is three yarns (face, binder, loop) in the shares the factory's
+// real orders show, a plush is ground + pile, an elastane rib is cotton +
+// spandex in the declared blend. Costing one count at the whole fabric's
+// weight prices it wrong; each role is priced at its own count and share.
+const FLEECY = ['fleece_2_thread', 'fleece_3_thread', 'fleece_diagonal', 'french_terry'];
+const PLUSH = ['terry_fabric', 'velour_plush'];
+const DOUBLE = /rib|interlock|milano|cardigan|ponte|eight_lock|gabardine|poplin|swiss|french_double|bourrelet|texipique|pique_interlock|blister_single|relief/;
+
+// the spun row that prices a yarn of this blend (shares of the non-elastane part)
+function spunKey(f, ne) {
+  const T = Object.entries(f).filter(([k]) => !/elastane|spandex|lycra/.test(k)).reduce((t, [, v]) => t + v, 0) || 100;
+  const c = (f.cotton || 0) / T, py = (f.polyester || 0) / T, v = ((f.viscose || 0) + (f.bamboo || 0)) / T, mo = (f.modal || 0) / T;
+  if (c >= 0.95) return ne >= 20 ? 'combed_regular' : 'carded_regular';
+  if (py >= 0.95) return 'polyester_spun';
+  if (v + mo >= 0.95) return 'viscose_regular';
+  if (mo >= 0.4 && c >= 0.4) return 'cotton_modal_50_50';
+  if (v >= 0.4 && c >= 0.4) return 'cotton_viscose_50_50';
+  if (py >= 0.55 && v >= 0.25) return 'pv_65_35';
+  if (py >= 0.55) return 'pc_65_35';
+  if (c >= 0.7) return 'cvc_80_20';
+  return 'cvc_60_40';
+}
+const filamentKey = (den) => ['filament_75d', 'filament_100d', 'filament_150d'].reduce((b, k) => (Math.abs(+k.match(/\d+/)[0] - den) < Math.abs(+b.match(/\d+/)[0] - den) ? k : b), 'filament_75d');
+const spandexKey = (den) => ['spandex_20d', 'spandex_30d', 'spandex_40d', 'spandex_70d'].reduce((b, k) => (Math.abs(+k.match(/\d+/)[0] - den) < Math.abs(+b.match(/\d+/)[0] - den) ? k : b), 'spandex_40d');
+
+function autoYarns(sh, fibers, comp) {
+  const fabricId = String(sh.fabric || 'single_jersey');
+  const gsm = pos(sh.gsm);
+  if (!(gsm >= 60)) return null;
+  const el = comp && comp.elastane_pct ? +comp.elastane_pct : 0;
+  // a yarn named in a role line: "30/1 cotton", "150D polyester filament", "14/1 CVC 60/40"
+  const fromLine = (y, role) => {
+    const label = String(y.label || '');
+    if (y.denier || /filament/i.test(label)) {
+      const den = +y.denier || Math.round(5315 / (+y.ne || 35));
+      return { role, type: filamentKey(den), share_pct: +y.share_pct, label };
+    }
+    const ne = Math.round(+y.ne);
+    const f = /cvc|pc|poly/i.test(label) && !/^\d+\/1 (100% )?cotton/i.test(label) ? fibers : { cotton: 100 };
+    return { role, type: spunKey(f, ne), count: ne, share_pct: +y.share_pct, label };
+  };
+  try {
+    if (FLEECY.includes(fabricId)) {
+      const r = fleece.analyzeFleece({ fabricId, gsm, gauge: 20, composition: comp });
+      const lines = (r && r.yarns || []).filter((y) => y.role !== 'elastane' && +y.share_pct > 0).map((y) => fromLine(y, y.role));
+      if (lines.length) return { lines, basis: 'fleece engine: face, binder and loop counts and shares from the factory\'s real fleece and terry orders' };
+    }
+    if (PLUSH.includes(fabricId)) {
+      const r = plush.analyzePlushTerry({ fabricId, gsm, gauge: 20, composition: comp, cut: fabricId === 'velour_plush' });
+      const lines = (r && r.yarns || []).filter((y) => y.role !== 'elastane' && +y.share_pct > 0).map((y) => fromLine(y, y.role === 'pile' ? 'pile' : 'ground'));
+      if (lines.length) return { lines, basis: 'plush model: ground and pile plated at the factory terry tightness' };
+    }
+  } catch (_) { /* fall through to the single-yarn plan */ }
+  // one spun yarn at the studio's count, plus the declared elastane as spandex
+  const auto = autoCount(fabricId, gsm, 'cotton');
+  if (!auto) return null;
+  const lines = [{ role: 'ground', type: spunKey(fibers, auto.count), count: auto.count, share_pct: Math.round((100 - el) * 10) / 10 }];
+  if (el > 0) lines.push({ role: 'elastane', type: spandexKey(DOUBLE.test(fabricId) ? 40 : 20), share_pct: el });
+  return { lines, basis: auto.label + (el ? ` + ${el}% spandex as declared` : '') };
+}
+
 // ── system prices ─────────────────────────────────────────────────────────
 function yarnLine(y, live, i, shell, auto) {
   const key = String(y.type || '');
@@ -122,17 +186,28 @@ function yarnLine(y, live, i, shell, auto) {
     if (r.price == null) throw new SheetError(`${shell}: no price for ${row.label}${count ? ` ${count}s` : ''} — type the price.`);
     price = r.price; source = sysSource;
   }
-  return { type: key, label: row.label, count: denier ? null : count, count_source: countSource, denier: denier ? row.denier : null, share_pct: share, price: r4(price), source,
+  return { role: y.role || null, type: key, label: row.label, count: denier ? null : count, count_source: countSource, denier: denier ? row.denier : null, share_pct: share, price: r4(price), source,
     system_price: r.price == null ? null : r4(r.price), system_source: sysSource, fiber: row.fiber };
 }
 
 function shellPrices(sh, live, idx) {
   const name = String(sh.name || `Shell ${idx + 1}`).slice(0, 60);
-  const yarnsIn = (Array.isArray(sh.yarns) ? sh.yarns : []).slice(0, 6);
+  const comp0 = parseComposition(sh.composition || '100% cotton');
+  const fibers0 = comp0 && comp0.fibers && Object.keys(comp0.fibers).length ? comp0.fibers : { cotton: 100 };
+  let plan = null;
+  if (sh.yarn_mode === 'auto') {
+    plan = autoYarns(sh, fibers0, comp0);
+    if (!plan) throw new SheetError(`${name}: give the fabric's GSM so its yarns can be worked out, or switch to your own yarns.`);
+  }
+  const yarnsIn = plan ? plan.lines.map((l) => ({ ...l, auto_line: true })) : (Array.isArray(sh.yarns) ? sh.yarns : []).slice(0, 6);
   // the main (largest-share, spun) yarn sets the fibre the count is chosen for
   const lead = yarnsIn.filter((y) => costing.SM_PRICE_MATRIX[y.type] && costing.SM_PRICE_MATRIX[y.type].price === undefined).sort((a, b) => (pos(b.share_pct) || 0) - (pos(a.share_pct) || 0))[0];
   const auto = pos(sh.gsm) ? autoCount(String(sh.fabric || 'single_jersey'), pos(sh.gsm), lead && costing.SM_PRICE_MATRIX[lead.type].fiber) : null;
-  const yarns = yarnsIn.map((y, i) => yarnLine(y, live, i, name, auto));
+  const yarns = yarnsIn.map((y, i) => {
+    const line = yarnLine(y, live, i, name, auto);
+    if (y.auto_line && line.count) line.count_source = { kind: 'system', label: plan.basis };
+    return line;
+  });
   if (!yarns.length) throw new SheetError(`${name}: add at least one yarn.`);
   const shareTot = yarns.reduce((t, y) => t + y.share_pct, 0);
   if (Math.abs(shareTot - 100) > 0.6) throw new SheetError(`${name}: yarn shares add up to ${r2(shareTot)}%, not 100%.`);
@@ -140,7 +215,9 @@ function shellPrices(sh, live, idx) {
 
   const comp = parseComposition(sh.composition || yarns.map((y) => `${y.share_pct}% ${y.fiber || 'cotton'}`).join(' '));
   const fibers = comp && comp.fibers && Object.keys(comp.fibers).length ? comp.fibers : { cotton: 100 };
-  const mainCount = (yarns.filter((y) => y.count).sort((a, b) => b.share_pct - a.share_pct)[0] || {}).count || 30;
+  // the knitting tier follows the face / ground yarn, not a fleece's coarse loop
+  const counted = yarns.filter((y) => y.count);
+  const mainCount = (counted.find((y) => y.role === 'face' || y.role === 'ground') || counted.sort((a, b) => b.share_pct - a.share_pct)[0] || {}).count || 30;
   const shade = SHADES.includes(sh.shade) ? sh.shade : 'light_medium';
   const fabricId = String(sh.fabric || 'single_jersey');
   const notes = [];
@@ -193,6 +270,7 @@ function shellPrices(sh, live, idx) {
     },
     system: { knitting: knitSys, dyeing: dyeSys, finishing: finSys, loss_pct: lossSys, charge_item: q.ok ? q.item.label : null, alternatives: q.ok ? q.alternatives.slice(0, 4) : [] },
     base_per_kg: r4(base), sheet_per_kg: r4(sheetKg), exact_per_kg: r4(exactKg), notes, auto_count: auto,
+    yarn_mode: plan ? 'auto' : 'manual', yarn_plan_basis: plan ? plan.basis : null,
   };
 }
 

@@ -18,6 +18,7 @@
   function blankShell(i) {
     return { name: ['1st Shell', '2nd Shell', '3rd Shell', '4th Shell', '5th Shell', '6th Shell', '7th Shell', '8th Shell'][i] || 'Shell',
       application: '', fabric: 'single_jersey', composition: '100% cotton', gsm: 160, shade: 'light_medium', two_part: false, stripe: '', brushed: false, aop: false,
+      yarn_mode: 'auto',
       yarns: [{ type: 'combed_regular', count: '', share_pct: 100, price: '' }],
       yarn_dye_price: '', knit_price: '', dye_price: '', finish_price: '', aop_price: '', loss_pct: '',
       consumption_unit: 'pc', consumption: [] };
@@ -97,9 +98,10 @@
   function renderShells() {
     $('cs-shells').innerHTML = S.shells.map(function (sh, i) {
       var p = 'shells.' + i;
-      var yarns = sh.yarns.map(function (y, j) {
+      var auto = sh.yarn_mode === 'auto';
+      var yarns = auto ? '' : sh.yarns.map(function (y, j) {
         var yp = p + '.yarns.' + j, row = OPTS.yarns.filter(function (x) { return x.key === y.type; })[0] || {};
-        return '<tr><td style="min-width:200px"><select data-k="' + yp + '.type">' + yarnOptions(y.type) + '</select></td>' +
+        return '<tr><td style="width:96px"><input data-k="' + yp + '.role" value="' + esc(y.role || '') + '" placeholder="role"></td><td style="min-width:200px"><select data-k="' + yp + '.type">' + yarnOptions(y.type) + '</select></td>' +
           '<td>' + (row.denier ? '<span style="font-size:12px;color:var(--t3)">' + row.denier + 'D</span>' : '<input class="num" type="number" min="5" max="120" data-k="' + yp + '.count" data-auto="1" value="' + esc(y.count) + '" placeholder="auto"><small class="cs-asrc" data-asrc="' + yp + '.count"></small>') + '</td>' +
           '<td><input class="num" type="number" min="0" max="100" step="0.1" data-k="' + yp + '.share_pct" value="' + esc(y.share_pct) + '"></td>' +
           '<td><input class="num" type="number" min="0" step="0.01" data-k="' + yp + '.price" data-auto="1" value="' + esc(y.price) + '" placeholder="auto"><small class="cs-asrc" data-asrc="' + yp + '.price"></small></td>' +
@@ -123,8 +125,14 @@
           '<label class="cs-f" style="flex-direction:row;align-items:center;gap:6px;"><input type="checkbox" data-k="' + p + '.brushed"' + (sh.brushed ? ' checked' : '') + ' style="width:auto"> Brushed</label>' +
           '<label class="cs-f" style="flex-direction:row;align-items:center;gap:6px;"><input type="checkbox" data-k="' + p + '.aop"' + (sh.aop ? ' checked' : '') + ' style="width:auto"> All-over print</label>' +
         '</div>' +
-        '<div class="cs-scroll" style="margin-top:8px"><table class="cs-t"><tr><th>Yarn</th><th>Count</th><th class="num">Share %</th><th class="num">Price $/kg</th><th></th></tr>' + yarns + '</table></div>' +
-        '<button class="cs-btn small" type="button" data-addyarn="' + i + '" style="margin-top:4px">+ Yarn (e.g. elastane)</button>' +
+        '<div class="cs-yhead"><b>Yarns</b>' +
+          '<label><input type="radio" name="ym' + i + '" data-ymode="' + i + '" value="auto"' + (auto ? ' checked' : '') + '> Auto from fabric, GSM and composition</label>' +
+          '<label><input type="radio" name="ym' + i + '" data-ymode="' + i + '" value="manual"' + (auto ? '' : ' checked') + '> My own yarns</label></div>' +
+        (auto
+          ? '<div class="cs-scroll"><table class="cs-t" data-autoyarns="' + i + '"><tr><td style="color:var(--t3)">Working out the yarns…</td></tr></table></div>' +
+            '<button class="cs-btn small" type="button" data-edityarns="' + i + '" style="margin-top:4px">Edit these yarns</button>'
+          : '<div class="cs-scroll" style="margin-top:4px"><table class="cs-t"><tr><th>Role</th><th>Yarn</th><th>Count</th><th class="num">Share %</th><th class="num">Price $/kg</th><th></th></tr>' + yarns + '</table></div>' +
+            '<button class="cs-btn small" type="button" data-addyarn="' + i + '" style="margin-top:4px">+ Yarn (binder, loop, elastane…)</button>') +
         '<div class="cs-price">' +
           price('yarn_dye_price', 'Yarn dyeing $/kg', 'yarn-dyed stripes only') +
           price('knit_price', 'Knitting $/kg') + price('dye_price', 'Dyeing $/kg') + price('finish_price', 'Finishing $/kg') +
@@ -273,6 +281,14 @@
       }
     });
     last.shells.forEach(function (sh, i) {
+      var at = document.querySelector('[data-autoyarns="' + i + '"]');
+      if (at) at.innerHTML = '<tr><th>Role</th><th>Yarn</th><th class="num">Count</th><th class="num">Share %</th><th class="num">Price $/kg</th></tr>' +
+        sh.yarns.map(function (y) {
+          return '<tr><td><b>' + esc(y.role || '—') + '</b></td><td>' + esc(y.label) + '</td><td class="num">' + (y.count ? y.count + 's' : y.denier ? y.denier + 'D' : '—') + '</td><td class="num">' + y.share_pct + '%</td>' +
+            '<td class="num">' + f2(y.price) + ' ' + srcBadge({ kind: y.source.kind, label: shortSrc(y.source) }) + '</td></tr>';
+        }).join('') +
+        '<tr class="total"><td colspan="3">Blend price</td><td class="num">100%</td><td class="num">$' + f3(sh.prices.yarn.value) + '</td></tr>' +
+        (sh.yarn_plan_basis ? '<tr><td colspan="5" style="font-size:11px;color:var(--t3)">' + esc(sh.yarn_plan_basis) + '</td></tr>' : '');
       var box = document.querySelector('[data-shellres="' + i + '"]');
       if (box) box.innerHTML = (sh.auto_count ? '<div style="flex-basis:100%;font-size:11.5px;color:var(--t2)">Count chosen for the fabric: <b>' + esc(sh.auto_count.label.replace(/^auto: /, '')) + '</b>' + (sh.auto_count.reachable ? '' : ' — outside the factory\'s usual tightness: check it') + '</div>' : '') +
         'Fabric <b>$' + f3(sh.price_per_kg) + '</b>/kg ' + (last.loss_method === 'sheet' ? '(exact ÷(1−loss): $' + f3(sh.exact_per_kg) + ')' : '(sheet ×(1+loss): $' + f3(sh.sheet_per_kg) + ')') +
@@ -361,7 +377,21 @@
     schedule();
   }
   document.addEventListener('input', function (e) { if (e.target.closest && e.target.closest('#cs-form, .cs-bar')) onEdit(e); });
-  document.addEventListener('change', function (e) { if (e.target.closest && e.target.closest('#cs-form') && (e.target.tagName === 'SELECT' || e.target.type === 'checkbox')) onEdit(e); });
+  document.addEventListener('change', function (e) {
+    if (!(e.target.closest && e.target.closest('#cs-form'))) return;
+    var ym = e.target.getAttribute('data-ymode');
+    if (ym != null) { setYarnMode(+ym, e.target.value); return; }
+    if (e.target.tagName === 'SELECT' || e.target.type === 'checkbox') onEdit(e);
+  });
+  // own yarns start from the plan on screen, so switching never loses the breakdown
+  function setYarnMode(i, mode) {
+    var sh = S.shells[i];
+    if (mode === 'manual') {
+      var ans = last && last.success && last.shells[i];
+      if (ans && ans.yarn_mode === 'auto') sh.yarns = ans.yarns.map(function (y) { return { role: y.role || '', type: y.type, count: y.count || '', share_pct: y.share_pct, price: '' }; });
+    }
+    sh.yarn_mode = mode; renderShells(); schedule();
+  }
 
   document.addEventListener('click', function (e) {
     var b = e.target.closest('button'); if (!b || !b.closest('#cs-form')) return;
@@ -370,6 +400,8 @@
       setPath(S, a, '');
       var inp = document.querySelector('[data-k="' + a + '"]'); if (inp) inp.value = '';
       schedule(); return;
+    } else if ((a = b.getAttribute('data-edityarns'))) {
+      setYarnMode(+a, 'manual'); return;
     } else if ((a = b.getAttribute('data-fill'))) {
       var arr = getPath(S, a) || [], v0 = arr[0];
       if (v0 === '' || v0 == null) return;
@@ -380,7 +412,7 @@
       S.sizes.splice(i, 1);
       dropSizeColumn(i);
     } else if ((a = b.getAttribute('data-rmshell'))) { S.shells.splice(+a, 1); }
-    else if ((a = b.getAttribute('data-addyarn'))) { S.shells[+a].yarns.push({ type: 'spandex_40d', count: '', share_pct: 5, price: '' }); }
+    else if ((a = b.getAttribute('data-addyarn'))) { S.shells[+a].yarns.push({ role: '', type: 'spandex_40d', count: '', share_pct: 5, price: '' }); }
     else if ((a = b.getAttribute('data-rmyarn'))) { var q = a.split('.'); S.shells[+q[0]].yarns.splice(+q[1], 1); }
     else if ((a = b.getAttribute('data-addline'))) { S[a].push({ name: '', values: [] }); }
     else if ((a = b.getAttribute('data-rmline'))) { var r = a.split('.'); S[r[0]].splice(+r[1], 1); }
@@ -410,7 +442,20 @@
     if (!confirm('Replace the sizes with ' + this.value.split('|').join(', ') + '? Per-size figures are kept by position.')) { this.value = ''; return; }
     S.sizes = this.value.split('|'); this.value = ''; renderForm(); schedule();
   });
-  $('cs-shell-add').addEventListener('click', function () { if (S.shells.length < 8) { S.shells.push(blankShell(S.shells.length)); renderForm(); schedule(); } });
+  // the extra fabrics a garment carries, each costed as its own shell
+  var SHELL_KINDS = {
+    body: {},
+    rib: { application: 'Rib — cuff, collar, hem', fabric: 'lycra_rib_1x1', composition: '95% cotton 5% elastane', gsm: 260 },
+    rib_plain: { application: 'Rib — cuff, collar, hem', fabric: 'rib_1x1', composition: '100% cotton', gsm: 240 },
+    neck_tape: { application: 'Neck tape', fabric: 'single_jersey', composition: '100% cotton', gsm: 150, consumption: [] },
+    hood: { application: 'Hood lining', fabric: 'single_jersey', composition: '100% cotton', gsm: 160 },
+    pocket: { application: 'Pocket bag', fabric: 'single_jersey', composition: '100% cotton', gsm: 140 },
+  };
+  $('cs-shell-add').addEventListener('click', function () {
+    if (S.shells.length >= 8) return;
+    var sh = Object.assign(blankShell(S.shells.length), SHELL_KINDS[$('cs-shell-kind').value] || {});
+    S.shells.push(sh); renderForm(); schedule();
+  });
 
   // picture: shrunk to 640 px JPEG in the browser before it is kept
   function takePicture(file) {

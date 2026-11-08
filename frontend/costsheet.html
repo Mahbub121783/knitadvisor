@@ -75,6 +75,8 @@
     .cs-msg.ok { background: #E7F6EE; color: #17633f; }
     .cs-gap-ok { color: #17633f; } .cs-gap-bad { color: #9b1c1c; }
     .cs-busy { opacity: .55; transition: opacity .15s; }
+    .cs-yhead { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin: 10px 0 4px; font-size: 12.5px; }
+    .cs-yhead label { display: inline-flex; gap: 5px; align-items: center; cursor: pointer; }
     input.cs-auto { color: #1857C4; background: #F5F8FE; }
     .cs-asrc { display: block; font-size: 10.5px; line-height: 1.35; margin-top: 2px; min-height: 14px; }
     .cs-asrc .cs-src { margin-left: 0; }
@@ -163,7 +165,17 @@
         <div class="cs-card">
           <h2><b>3</b> Fabric shells</h2>
           <div id="cs-shells"></div>
-          <button class="cs-btn" type="button" id="cs-shell-add">+ Add fabric shell</button>
+          <div class="cs-bar" style="margin:0">
+            <select id="cs-shell-kind" class="cs-btn" aria-label="Kind of shell to add">
+              <option value="body">Body fabric</option>
+              <option value="rib">Rib — cuff, collar, hem (95/5 lycra)</option>
+              <option value="rib_plain">Rib — 100% cotton</option>
+              <option value="neck_tape">Neck tape (single jersey)</option>
+              <option value="hood">Hood lining (single jersey)</option>
+              <option value="pocket">Pocket bag (single jersey)</option>
+            </select>
+            <button class="cs-btn" type="button" id="cs-shell-add">+ Add fabric shell</button>
+          </div>
           <label class="cs-f" style="max-width:420px;margin-top:10px;">How the process loss enters the fabric price
             <select data-k="loss_method">
               <option value="sheet">Buyer-sheet way: × (1 + loss)</option>
@@ -235,6 +247,6 @@
   <footer class="footer"></footer>
 </div>
 <script src="assets/js/api.js"></script>
-<script src="assets/js/costsheet.js?v=20261108e"></script>
+<script src="assets/js/costsheet.js?v=20261108g"></script>
 </body>
 </html>

@@ -91,6 +91,33 @@ const YEAW7759 = {
   assert(!bad.success && /efficiency/.test(bad.error));
 }
 
+// yarns by role: a fleece is face + binder + loop, an elastane rib is cotton + spandex,
+// each priced at its own count and share, and the shares make 100 %
+{
+  const plan = (fabric, gsm, composition) => {
+    const r = cs.analyse({ sizes: ['M'], shells: [{ name: 'B', fabric, gsm, composition, yarn_mode: 'auto', consumption: 0.3 }], cm: { override: 1 } });
+    assert(r.success, r.error);
+    const s = r.shells[0];
+    assert(Math.abs(s.yarns.reduce((t, y) => t + y.share_pct, 0) - 100) < 0.6, `${fabric}: shares add to 100`);
+    assert(Math.abs(s.prices.yarn.value - s.yarns.reduce((t, y) => t + y.price * y.share_pct / 100, 0)) < 0.001, 'blend price = Σ share × price');
+    return s;
+  };
+  const f = plan('fleece_3_thread', 320, '80% cotton 20% polyester');
+  assert.deepStrictEqual(f.yarns.map((y) => y.role), ['face', 'binder', 'loop']);
+  assert(/filament/.test(f.yarns[1].type), 'a CVC fleece binds with polyester filament');
+  assert(f.yarns[2].count < f.yarns[0].count, 'the loop yarn is coarser than the face');
+  assert(f.yarns[0].count >= 24, 'the knitting tier follows the face count, not the loop');
+  const two = plan('fleece_2_thread', 280, '100% cotton');
+  assert.deepStrictEqual(two.yarns.map((y) => y.role), ['face', 'loop']);
+  const rib = plan('lycra_rib_2x2', 350, '95% cotton 5% elastane');
+  assert.deepStrictEqual(rib.yarns.map((y) => [y.role, y.share_pct]), [['ground', 95], ['elastane', 5]]);
+  assert(/spandex_40d/.test(rib.yarns[1].type), 'a double-knit rib takes 40D');
+  const cvc = plan('single_jersey', 160, '60% cotton 40% polyester');
+  assert.strictEqual(cvc.yarns[0].type, 'cvc_60_40');
+  const terry = plan('terry_fabric', 400, '100% cotton');
+  assert.deepStrictEqual(terry.yarns.map((y) => y.role), ['ground', 'pile']);
+}
+
 // the PDF is drawn from the same result
 {
   const r = cs.analyse(YEAW7759);
