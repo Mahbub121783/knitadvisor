@@ -26,7 +26,8 @@
  *   GET    /student/status      this account's student verification state
  *   POST   /student/apply       start a verification (a listed university + email, or "Other")
  *   POST   /student/verify-code confirm the code mailed to the university email
- *   POST   /student/document    upload the ID card / admission document
+ *   POST   /student/document    upload the ID card / admission document (read on the server, then decided)
+ *   POST   /student/resend-code, /student/change-email, /student/details, /student/withdraw, /student/renew
  *
  * Every route is behind requireUser and only ever reads or writes rows keyed to
  * req.user.id — there is no user id in any URL or body to tamper with.
@@ -512,30 +513,87 @@ router.post('/delete', securityLimiter, async (req, res) => {
   } catch (err) { fail(res, 'delete', err, 'Could not delete your account.'); }
 });
 
-// ── Student plan ─────────────────────────────────────────────────────────
+// ── Student plan (verification v2) ───────────────────────────────────────
+// The rules live in engine/domain/student-verify.js, the reading and the
+// decision in services/student-docs.js. These routes only move the applicant
+// through the steps: start → code → details + document → read → decided,
+// with resend, change of email, withdraw, re-apply after 30 days and renewal.
+const sv = require('../engine/domain/student-verify');
+const studentDocs = require('../services/student-docs');
 
-/**
- * Checks whether a verification now qualifies for the automatic path and, if
- * so, activates it — shared by the document-upload and verify-code routes
- * since either one can be the step that completes the set (the flow does
- * not force a strict order between "confirm the code" and "upload the
- * document").
- * @returns {Promise<boolean>} whether it was just auto-approved
- */
-async function tryAutoApprove(verification, user) {
-  const outcome = resolveOutcome({
-    universityMatched: !!verification.university_id,
-    emailVerified: !!verification.student_email_verified_at,
-    hasDocument: !!verification.document_path,
-  });
-  if (outcome !== 'active') return false;
-  const expiresAt = new Date(Date.now() + STUDENT_DURATION_DAYS * 86400000);
-  await studentRepo.decide(verification.id, 'active', { decidedBy: 'auto', expiresAt });
-  await userRepo.users.setStudentStatus(user.id, 'active', expiresAt);
-  const { subject, html } = studentApprovedEmail({ fullName: user.full_name, expiresAt });
-  mailClient.sendMail({ to: user.email, subject, html }).catch(() => {});
-  return true;
+const REAPPLY_DAYS = 30;
+const RENEW_WINDOW_DAYS = 45;
+const RESEND_COOLDOWN_S = 60;
+const RESEND_PER_DAY = 5;
+const MAX_EMAIL_CHANGES = 5;
+const DOC_WAIT_MS = 25000;
+
+/** What the applicant may do next, from their history. */
+function options(history) {
+  const latest = history[0] || null;
+  const now = Date.now();
+  const active = history.find((h) => h.status === 'active');
+  const out = { apply: false, apply_after: null, renew: false, withdraw: false, change_email: false };
+  if (latest && latest.status === 'pending') {
+    out.withdraw = true;
+    out.change_email = !latest.renewal_of && !!latest.university_id;
+    return out;
+  }
+  if (active) {
+    const left = active.expires_at ? new Date(active.expires_at).getTime() - now : Infinity;
+    out.renew = left <= RENEW_WINDOW_DAYS * 86400000 && !!active.student_email && !!active.university_id;
+    return out;
+  }
+  if (!latest || ['expired', 'withdrawn'].includes(latest.status)) {
+    out.apply = true;
+    out.renew = !!latest && latest.status === 'expired' && !!latest.student_email && !!latest.university_id;
+    return out;
+  }
+  // rejected / revoked: after the waiting period (or when an admin re-opens it)
+  const after = latest.reapply_after ? new Date(latest.reapply_after)
+    : new Date(new Date(latest.decided_at || latest.created_at).getTime() + REAPPLY_DAYS * 86400000);
+  out.apply = after.getTime() <= now;
+  out.apply_after = out.apply ? null : after.toISOString();
+  return out;
 }
+
+/** What the applicant is shown about their document — the findings, never the fraud rules. */
+function publicChecks(v) {
+  const c = v.doc_check || {};
+  const a = c.analysis;
+  const read = c.read || {};
+  if (!v.document_path) return null;
+  if (v.doc_state === 'queued' || v.doc_state === 'checking') return { state: 'checking' };
+  if (!a) return { state: v.doc_state, method: read.method || null };
+  const yn = (x) => (x == null ? null : x ? 'yes' : 'no');
+  return {
+    state: v.doc_state, method: a.method, readable: a.readable,
+    name: a.name && a.name.score != null ? (a.name.score >= 0.75 ? 'yes' : a.name.score >= 0.5 ? 'partly' : 'no') : null,
+    university: a.university ? yn(a.university.score >= 0.6) : null,
+    student_id: a.id_match == null ? null : yn(a.id_match),
+    valid_until: a.valid_until, expired: a.expired,
+    student_document: yn(a.keywords && a.keywords.length > 0),
+    qr: a.qr ? yn(a.qr.domain_match) : null,
+    notes: a.notes || [],
+  };
+}
+
+function publicVerification(v) {
+  if (!v) return null;
+  return {
+    id: v.id, status: v.status, university_id: v.university_id, university_name: v.university_name,
+    student_email: v.student_email, email_verified: !!v.student_email_verified_at,
+    has_document: !!v.document_path, doc_state: v.doc_state, checks: publicChecks(v),
+    student_id: v.student_id, department: v.department, grad_year: v.grad_year,
+    renewal: !!v.renewal_of, reason: v.reason, expires_at: v.expires_at, created_at: v.created_at,
+  };
+}
+
+async function liveEmailTaken(norm, exceptId) {
+  const other = await studentRepo.liveByEmailNorm(norm, exceptId);
+  return !!other;
+}
+const TAKEN_MSG = 'This university email is already verifying another KnitAdvisor account. Each university inbox can verify one account.';
 
 router.get('/universities', async (req, res) => {
   try {
@@ -545,82 +603,122 @@ router.get('/universities', async (req, res) => {
 
 router.get('/student/status', async (req, res) => {
   try {
-    const [verification, usedToday, row] = await Promise.all([
-      studentRepo.latestForUser(req.user.id),
+    const [history, usedToday, row, codes] = await Promise.all([
+      studentRepo.historyForUser(req.user.id),
       usageRepo.todayCount(req.user.id),
       userRepo.users.findById(req.user.id),
+      userRepo.codes.recentStats(req.user.id, 'student_email', 24),
     ]);
+    const latest = history.length ? await studentRepo.findById(history[0].id) : null;
+    const full = history.length ? [{ ...history[0], ...latest }, ...history.slice(1)] : [];
     const { plan, dailyLimit } = resolvePlanLimits(row);
+    const lastAt = codes && codes.last_at ? new Date(codes.last_at).getTime() : 0;
     res.json({
       success: true,
       plan, daily_limit: dailyLimit, used_today: usedToday,
-      verification: verification ? {
-        id: verification.id,
-        status: verification.status,
-        university_name: verification.university_name,
-        student_email: verification.student_email,
-        email_verified: !!verification.student_email_verified_at,
-        has_document: !!verification.document_path,
-        reason: verification.reason,
-        expires_at: verification.expires_at,
-        created_at: verification.created_at,
-      } : null,
+      verification: publicVerification(latest),
+      history: history.slice(0, 6).map((h) => ({ status: h.status, university_name: h.university_name, created_at: h.created_at, expires_at: h.expires_at, renewal: !!h.renewal_of, reason: h.reason })),
+      can: {
+        ...options(full),
+        resend_at: lastAt ? new Date(lastAt + RESEND_COOLDOWN_S * 1000).toISOString() : null,
+        resends_left: Math.max(0, RESEND_PER_DAY - ((codes && codes.sent) || 0)),
+      },
+      ocr: studentDocs.OCR_ON,
     });
   } catch (err) { fail(res, 'student status', err, 'Could not load your student status.'); }
 });
 
 router.post('/student/apply', studentApplyLimiter, async (req, res) => {
   try {
-    // Reachable from the "I'm a student" link on index.html — either inline
-    // during signup, or later from a live session on the landing page — but
-    // only ever once per account, signed in or not. A rejected/revoked/
-    // expired attempt is not a green light to just try again; an admin
-    // reopening it is the only way back in from there.
-    const current = await studentRepo.latestForUser(req.user.id);
-    if (current) {
-      const msg = current.status === 'active' ? 'Your student plan is already active.'
-        : current.status === 'pending' ? 'You already have an application awaiting review.'
-        : 'You’ve already applied for the student plan once. Contact us if you’d like it reconsidered.';
-      return res.status(409).json({ success: false, error: msg });
+    const history = await studentRepo.historyForUser(req.user.id);
+    const can = options(history.length ? [{ ...history[0], ...(await studentRepo.findById(history[0].id)) }, ...history.slice(1)] : []);
+    if (!can.apply) {
+      const latest = history[0];
+      const msg = latest && latest.status === 'pending' ? 'You already have an application in progress — continue it, change its email, or withdraw it.'
+        : history.some((h) => h.status === 'active') ? (can.renew ? 'Your student plan is active — use Renew to extend it.' : 'Your student plan is already active.')
+        : can.apply_after ? `You can apply again from ${new Date(can.apply_after).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}.`
+        : 'You cannot apply right now.';
+      return res.status(409).json({ success: false, error: msg, apply_after: can.apply_after });
     }
-
-    const universityId = req.body && req.body.university_id != null ? parseInt(req.body.university_id, 10) : null;
+    let details;
+    try { details = sv.cleanDetails(req.body || {}); } catch (e) { return res.status(400).json({ success: false, error: e.message }); }
+    const c = security.clientOf(req);
+    const universityId = req.body && req.body.university_id != null && req.body.university_id !== '' ? parseInt(req.body.university_id, 10) : null;
 
     if (universityId) {
       const uni = await universityRepo.findById(universityId);
-      if (!uni || !uni.active) return res.status(400).json({ success: false, error: 'Please choose a university from the list.' });
+      if (!uni || !uni.active || uni.kind === 'staff') return res.status(400).json({ success: false, error: 'Please choose a university from the list.' });
       const studentEmail = String((req.body && req.body.student_email) || '').trim().toLowerCase();
-      if (!studentEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(studentEmail)) {
-        return res.status(400).json({ success: false, error: 'Enter a valid university email address.' });
+      if (!sv.validEmail(studentEmail)) return res.status(400).json({ success: false, error: 'Enter a valid university email address.' });
+      if (!matchUniversityDomain(studentEmail, [uni])) {
+        return res.status(400).json({ success: false, error: `That email doesn't match ${uni.name}'s student domain (@${uni.domain}).` });
       }
-      const matched = matchUniversityDomain(studentEmail, [uni]);
-      if (!matched) {
-        return res.status(400).json({ success: false, error: `That email doesn't match ${uni.name}'s registered domain (@${uni.domain}).` });
+      const norm = sv.normalizeStudentEmail(studentEmail);
+      if (await liveEmailTaken(norm)) return res.status(409).json({ success: false, error: TAKEN_MSG });
+      if (details.student_id && await studentRepo.liveByStudentId(uni.id, details.student_id)) {
+        return res.status(409).json({ success: false, error: 'This student ID is already verifying another account.' });
       }
-      const row = await studentRepo.create({
-        userId: req.user.id, universityId: uni.id, universityName: uni.name, studentEmail,
-      });
+      let row;
+      try {
+        row = await studentRepo.create({ userId: req.user.id, universityId: uni.id, universityName: uni.name, studentEmail, studentEmailNorm: norm,
+          studentId: details.student_id, department: details.department, gradYear: details.grad_year, ip: c.ip, ua: c.userAgent });
+      } catch (e) {
+        if (e.code === '23505') return res.status(409).json({ success: false, error: /student_id/.test(e.constraint || '') ? 'This student ID is already verifying another account.' : TAKEN_MSG });
+        throw e;
+      }
       await issueAndSend(req.user.id, 'student_email', { to: studentEmail, fullName: req.user.full_name });
       return res.json({ success: true, verification_id: row.id, needs_code: true, needs_document: true });
     }
 
-    // "Other" — no domain to check, so no automatic path: document upload alone, reviewed by an admin.
+    // not on the list — no inbox to prove it, so the document and an admin decide
     const otherName = String((req.body && req.body.university_name_other) || '').trim().slice(0, 160);
     if (otherName.length < 2) return res.status(400).json({ success: false, error: 'Enter your university’s name.' });
-    const row = await studentRepo.create({ userId: req.user.id, universityId: null, universityName: otherName, studentEmail: null });
+    const row = await studentRepo.create({ userId: req.user.id, universityId: null, universityName: otherName,
+      studentId: details.student_id, department: details.department, gradYear: details.grad_year, ip: c.ip, ua: c.userAgent });
     res.json({ success: true, verification_id: row.id, needs_code: false, needs_document: true });
   } catch (err) { fail(res, 'student apply', err, 'Could not start your student application.'); }
 });
 
+router.post('/student/resend-code', studentCodeLimiter, async (req, res) => {
+  try {
+    const v = await studentRepo.latestForUser(req.user.id);
+    if (!v || v.status !== 'pending' || !v.student_email) return res.status(400).json({ success: false, error: 'There is no university email waiting for a code.' });
+    if (v.student_email_verified_at) return res.json({ success: true, already_verified: true });
+    const s = await userRepo.codes.recentStats(req.user.id, 'student_email', 24);
+    const wait = s && s.last_at ? Math.ceil((new Date(s.last_at).getTime() + RESEND_COOLDOWN_S * 1000 - Date.now()) / 1000) : 0;
+    if (wait > 0) return res.status(429).json({ success: false, error: `Wait ${wait} seconds before asking for another code.`, retry_in: wait });
+    if (s && s.sent >= RESEND_PER_DAY) return res.status(429).json({ success: false, error: 'That is the most codes for today. Try again tomorrow, or check the spam folder of your university email.' });
+    await issueAndSend(req.user.id, 'student_email', { to: v.student_email, fullName: req.user.full_name });
+    res.json({ success: true, sent_to: v.student_email, retry_in: RESEND_COOLDOWN_S });
+  } catch (err) { fail(res, 'student resend', err, 'Could not send a new code.'); }
+});
+
+router.post('/student/change-email', studentApplyLimiter, async (req, res) => {
+  try {
+    const v = await studentRepo.latestForUser(req.user.id);
+    if (!v || v.status !== 'pending' || v.renewal_of) return res.status(400).json({ success: false, error: 'There is no application whose email can be changed.' });
+    if (v.email_changes >= MAX_EMAIL_CHANGES) return res.status(429).json({ success: false, error: 'The email was changed too many times. Withdraw this application and start again.' });
+    const uniId = parseInt((req.body || {}).university_id, 10) || v.university_id;
+    const uni = uniId ? await universityRepo.findById(uniId) : null;
+    if (!uni || !uni.active || uni.kind === 'staff') return res.status(400).json({ success: false, error: 'Please choose a university from the list.' });
+    const email = String((req.body || {}).student_email || '').trim().toLowerCase();
+    if (!sv.validEmail(email) || !matchUniversityDomain(email, [uni])) return res.status(400).json({ success: false, error: `Enter your ${uni.name} email (@${uni.domain}).` });
+    const norm = sv.normalizeStudentEmail(email);
+    if (await liveEmailTaken(norm, v.id)) return res.status(409).json({ success: false, error: TAKEN_MSG });
+    try { await studentRepo.changeEmail(v.id, { universityId: uni.id, universityName: uni.name, email, norm }); }
+    catch (e) { if (e.code === '23505') return res.status(409).json({ success: false, error: TAKEN_MSG }); throw e; }
+    await issueAndSend(req.user.id, 'student_email', { to: email, fullName: req.user.full_name });
+    res.json({ success: true, sent_to: email });
+  } catch (err) { fail(res, 'student change-email', err, 'Could not change the email.'); }
+});
+
 router.post('/student/verify-code', studentCodeLimiter, async (req, res) => {
   try {
-    const verification = await studentRepo.latestForUser(req.user.id);
-    if (!verification || !verification.student_email || verification.status !== 'pending') {
+    const v = await studentRepo.latestForUser(req.user.id);
+    if (!v || !v.student_email || v.status !== 'pending') {
       return res.status(400).json({ success: false, error: 'No pending university email to verify.' });
     }
-    if (verification.student_email_verified_at) {
-      return res.json({ success: true, already_verified: true });
-    }
+    if (v.student_email_verified_at) return res.json({ success: true, already_verified: true, needs_document: !v.document_path && !v.renewal_of });
     const codeRow = await userRepo.codes.latest(req.user.id, 'student_email');
     const result = checkCode(String((req.body && req.body.code) || ''), codeRow);
     if (!result.ok) {
@@ -632,54 +730,95 @@ router.post('/student/verify-code', studentCodeLimiter, async (req, res) => {
         too_many_attempts: 'Too many wrong attempts. Request a new code.',
         mismatch: 'That code is incorrect.',
       };
-      return res.status(400).json({ success: false, error: messages[result.reason] || 'That code is incorrect.' });
+      return res.status(400).json({ success: false, error: messages[result.reason] || 'That code is incorrect.', can_resend: result.reason !== 'mismatch' });
+    }
+    if (v.renewal_of && await liveEmailTaken(sv.normalizeStudentEmail(v.student_email), v.renewal_of)) {
+      return res.status(409).json({ success: false, error: TAKEN_MSG });
     }
     await userRepo.codes.consume(codeRow.id);
-    await studentRepo.markEmailVerified(verification.id);
-
-    // A document uploaded before the code was verified (order isn't enforced)
-    // means every condition is now met — approve here rather than leaving it
-    // stuck at "pending" until some other action happens to re-check it.
-    if (verification.document_path) {
-      const approved = await tryAutoApprove({ ...verification, student_email_verified_at: new Date() }, req.user);
-      if (approved) return res.json({ success: true, needs_document: false, status: 'active' });
-    }
-    res.json({ success: true, needs_document: !verification.document_path });
+    await studentRepo.markEmailVerified(v.id);
+    const out = await studentDocs.evaluate(v.id, { notify: !!v.document_path });
+    res.json({ success: true, status: out.status, expires_at: out.expires_at || null, needs_document: !v.document_path && !v.renewal_of });
   } catch (err) { fail(res, 'student verify-code', err, 'Could not verify that code.'); }
+});
+
+router.post('/student/details', studentApplyLimiter, async (req, res) => {
+  try {
+    const v = await studentRepo.latestForUser(req.user.id);
+    if (!v || v.status !== 'pending') return res.status(400).json({ success: false, error: 'There is no application in progress.' });
+    let d;
+    try { d = sv.cleanDetails(req.body || {}); } catch (e) { return res.status(400).json({ success: false, error: e.message }); }
+    if (d.student_id && v.university_id) {
+      const other = await studentRepo.liveByStudentId(v.university_id, d.student_id, v.id);
+      if (other) return res.status(409).json({ success: false, error: 'This student ID is already verifying another account.' });
+    }
+    try { await studentRepo.setDetails(v.id, d); }
+    catch (e) { if (e.code === '23505') return res.status(409).json({ success: false, error: 'This student ID is already verifying another account.' }); throw e; }
+    const out = v.document_path && v.doc_state === 'done' ? await studentDocs.evaluate(v.id) : { status: 'pending' };
+    res.json({ success: true, status: out.status });
+  } catch (err) { fail(res, 'student details', err, 'Could not save your details.'); }
 });
 
 router.post('/student/document', studentDocLimiter, (req, res) => {
   studentDocUpload(req, res, async (uploadErr) => {
     if (uploadErr) {
-      const msg = uploadErr.code === 'LIMIT_FILE_SIZE' ? 'That file is too large (8MB max).' : 'Upload a JPG, PNG or PDF.';
+      const msg = uploadErr.code === 'LIMIT_FILE_SIZE' ? 'That file is too large (8MB max).' : 'Upload a JPG, PNG, WebP or PDF.';
       return res.status(400).json({ success: false, error: msg });
     }
     if (!req.file) return res.status(400).json({ success: false, error: 'Attach your ID card or admission document.' });
-
+    const drop = () => fs.unlink(req.file.path, () => {});
     try {
-      const verification = await studentRepo.latestForUser(req.user.id);
-      if (!verification || verification.status !== 'pending') {
-        fs.unlink(req.file.path, () => {});
-        return res.status(400).json({ success: false, error: 'Start an application first.' });
-      }
+      // the bytes decide what the file is, not the name or what the browser said
+      const head = Buffer.alloc(16);
+      const fd = fs.openSync(req.file.path, 'r');
+      fs.readSync(fd, head, 0, 16, 0);
+      fs.closeSync(fd);
+      const mime = sv.sniffMime(head);
+      if (!mime) { drop(); return res.status(400).json({ success: false, error: 'That file is not a real JPG, PNG, WebP or PDF.' }); }
 
-      // Replace, not accumulate — an old upload for this same attempt is dead weight.
-      if (verification.document_path) {
-        fs.unlink(absolutePath(verification.document_path), () => {});
-      }
-      await studentRepo.setDocument(verification.id, relativePath(req));
+      const v = await studentRepo.latestForUser(req.user.id);
+      if (!v || v.status !== 'pending' || v.renewal_of) { drop(); return res.status(400).json({ success: false, error: 'Start an application first.' }); }
+      if (v.document_path) fs.unlink(absolutePath(v.document_path), () => {});
+      await studentRepo.setDocument(v.id, relativePath(req), mime);
 
-      const approved = await tryAutoApprove({ ...verification, document_path: relativePath(req) }, req.user);
-      if (approved) {
-        const fresh = await studentRepo.findById(verification.id);
-        return res.json({ success: true, status: 'active', expires_at: fresh.expires_at });
-      }
-
-      const { subject, html } = studentPendingReviewEmail({ fullName: req.user.full_name });
-      mailClient.sendMail({ to: req.user.email, subject, html }).catch(() => {});
-      res.json({ success: true, status: 'pending' });
+      // read it now; answer as soon as it is decided, or say it is still being read
+      const out = await studentDocs.enqueue(v.id, DOC_WAIT_MS);
+      if (!out) return res.json({ success: true, status: 'checking' });
+      const fresh = await studentRepo.findById(v.id);
+      res.json({ success: true, status: out.status, expires_at: out.expires_at || null, checks: publicChecks(fresh), needs_code: !fresh.student_email_verified_at && !!fresh.student_email });
     } catch (err) { fail(res, 'student document', err, 'Could not save your document.'); }
   });
+});
+
+router.post('/student/withdraw', studentApplyLimiter, async (req, res) => {
+  try {
+    const v = await studentRepo.latestForUser(req.user.id);
+    if (!v || v.status !== 'pending') return res.status(400).json({ success: false, error: 'There is no application to withdraw.' });
+    await studentRepo.decide(v.id, 'withdrawn', { decidedBy: 'applicant' });
+    if (v.document_path) fs.unlink(absolutePath(v.document_path), () => {});
+    const row = await userRepo.users.findById(req.user.id);
+    if (row && row.student_status === 'pending') await userRepo.users.setStudentStatus(req.user.id, 'none', null);
+    res.json({ success: true });
+  } catch (err) { fail(res, 'student withdraw', err, 'Could not withdraw the application.'); }
+});
+
+// Renewal: one code to the same university inbox, no new document.
+router.post('/student/renew', studentApplyLimiter, async (req, res) => {
+  try {
+    const history = await studentRepo.historyForUser(req.user.id);
+    const full = history.length ? [{ ...history[0], ...(await studentRepo.findById(history[0].id)) }, ...history.slice(1)] : [];
+    const can = options(full);
+    if (!can.renew) return res.status(400).json({ success: false, error: 'Renewal opens in the last 45 days of your student plan.' });
+    const base = full.find((h) => h.status === 'active') || full[0];
+    const prev = await studentRepo.findById(base.id);
+    const uni = await universityRepo.findById(prev.university_id);
+    if (!uni || !uni.active || uni.kind === 'staff') return res.status(400).json({ success: false, error: 'Your university is no longer on the list — apply again instead.' });
+    const c = security.clientOf(req);
+    const row = await studentRepo.create({ userId: req.user.id, universityId: uni.id, universityName: uni.name, studentEmail: prev.student_email,
+      studentId: prev.student_id, department: prev.department, gradYear: prev.grad_year, ip: c.ip, ua: c.userAgent, renewalOf: prev.id });
+    await issueAndSend(req.user.id, 'student_email', { to: prev.student_email, fullName: req.user.full_name });
+    res.json({ success: true, verification_id: row.id, needs_code: true, sent_to: prev.student_email });
+  } catch (err) { fail(res, 'student renew', err, 'Could not start the renewal.'); }
 });
 
 module.exports = router;

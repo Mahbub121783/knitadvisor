@@ -61,6 +61,38 @@
     .frow input[readonly] { background: var(--bg2); color: var(--t2); }
     .frow input[type="file"] { padding: 9px 12px; }
     #student-card .msg:empty, #student-card .msg[role="status"]:empty { min-height: 0; margin-top: 0; }
+    /* student verification wizard */
+    .stu-plan { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; align-items: center; background: var(--bg2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 14px; font-size: 13px; }
+    .stu-steps { display: flex; gap: 4px; margin: 0 0 16px; padding: 0; list-style: none; counter-reset: s; }
+    .stu-steps li { flex: 1; font-size: 11.5px; color: var(--t3); text-align: center; position: relative; padding-top: 26px; }
+    .stu-steps li::before { counter-increment: s; content: counter(s); position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 22px; height: 22px; border-radius: 50%; background: var(--bg3); color: var(--t3); font: 700 11px/22px var(--head); }
+    .stu-steps li.done::before { content: '✓'; background: #E6F4EC; color: var(--good); }
+    .stu-steps li.on { color: var(--t1); font-weight: 600; }
+    .stu-steps li.on::before { background: var(--accent); color: #fff; }
+    .stu-box { border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin-bottom: 12px; }
+    .stu-box h3 { font-size: 14px; margin: 0 0 8px; }
+    .stu-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    @media (max-width: 560px) { .stu-grid { grid-template-columns: 1fr; } .stu-steps li { font-size: 0; } }
+    .stu-hint { font-size: 12px; color: var(--t3); margin-top: 4px; }
+    .stu-links { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; font-size: 12.5px; }
+    .stu-links button { background: none; border: none; padding: 0; color: var(--accent); font: 600 12.5px var(--head); cursor: pointer; }
+    .stu-links button:disabled { color: var(--t3); cursor: default; }
+    .stu-links button.danger { color: var(--danger); }
+    .stu-drop { border: 2px dashed var(--line2); border-radius: 10px; padding: 18px; text-align: center; cursor: pointer; color: var(--t2); font-size: 13px; background: var(--bg2); }
+    .stu-drop.over { border-color: var(--accent); background: var(--accent-tint); }
+    .stu-drop img { max-width: 100%; max-height: 220px; border-radius: 8px; display: block; margin: 0 auto 8px; }
+    .stu-tips { margin: 8px 0 0; padding-left: 18px; font-size: 12px; color: var(--t3); line-height: 1.6; }
+    .stu-checks { list-style: none; margin: 0; padding: 0; }
+    .stu-checks li { display: flex; gap: 10px; align-items: baseline; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+    .stu-checks li:last-child { border-bottom: none; }
+    .stu-checks b { width: 18px; flex: none; text-align: center; }
+    .stu-checks .y { color: var(--good); } .stu-checks .p { color: var(--warn); } .stu-checks .n { color: var(--danger); } .stu-checks .u { color: var(--t3); }
+    .stu-spin { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--accent-line); border-top-color: var(--accent); border-radius: 50%; animation: stu-r .8s linear infinite; vertical-align: -2px; margin-right: 6px; }
+    @keyframes stu-r { to { transform: rotate(360deg); } }
+    .stu-hist { font-size: 12px; color: var(--t3); margin-top: 10px; }
+    .stu-pill { display: inline-block; font: 700 10.5px/1 var(--head); text-transform: uppercase; letter-spacing: .04em; padding: 4px 7px; border-radius: 4px; }
+    .stu-pill.active { background: #E6F4EC; color: var(--good); } .stu-pill.pending { background: #FDF1DE; color: var(--warn); }
+    .stu-pill.rejected, .stu-pill.revoked { background: #FBE9E9; color: var(--danger); } .stu-pill.expired, .stu-pill.withdrawn { background: var(--bg3); color: var(--t2); }
     .msg { font-size: 13px; margin-top: 10px; min-height: 18px; }
     .msg.ok { color: var(--good); }
     .msg.err { color: var(--danger); }
@@ -134,32 +166,10 @@
         </form>
       </div>
 
-      <div class="card form-card" id="student-card">
+      <div class="card form-card" id="student-card" style="max-width:640px;">
         <h2>Student plan</h2>
-        <p class="sub" id="student-sub">Verify you're a student for 30 requests a day, free for one year.</p>
-        <div id="student-status-box" style="margin-bottom:14px;" hidden></div>
-
-        <p class="sub" id="student-no-entry" hidden>Not started here &mdash; look for <b>&ldquo;I&rsquo;m a student&rdquo;</b> on the <a href="/#plans">homepage</a> to begin (works while you&rsquo;re signed in too). It&rsquo;s a one-time application per account.</p>
-
-        <form id="student-code-form" novalidate hidden>
-          <div class="frow">
-            <label for="student-code">Code sent to your university email</label>
-            <input class="form-input" id="student-code" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code">
-            <p class="msg" style="margin-top:4px;">Can't find it? Check your spam folder — university mail servers sometimes file it there.</p>
-          </div>
-          <button class="btn btn-primary" type="submit" id="student-code-btn">Verify code</button>
-          <div class="msg" id="student-code-msg" role="status"></div>
-        </form>
-
-        <form id="student-doc-form" novalidate hidden>
-          <div class="frow">
-            <label for="student-doc">Student ID card or admission letter</label>
-            <input class="form-input" id="student-doc" type="file" accept="image/jpeg,image/png,image/webp,application/pdf">
-            <p class="msg" style="margin-top:4px;">JPG, PNG or PDF, up to 8MB.</p>
-          </div>
-          <button class="btn btn-primary" type="submit" id="student-doc-btn">Submit</button>
-          <div class="msg" id="student-doc-msg" role="status"></div>
-        </form>
+        <p class="sub" id="student-sub">Verify you're a student for 30 requests a day, free for up to a year.</p>
+        <div id="stu-app"><div class="msg">Loading…</div></div>
       </div>
 
       <div class="card form-card" id="security-card">
@@ -304,7 +314,7 @@
     $('tab-profile').setAttribute('aria-selected', hist ? 'false' : 'true');
     $('panel-history').hidden = !hist;
     $('panel-profile').hidden = hist;
-    var keep = !hist && window.location.hash === '#security';
+    var keep = !hist && (window.location.hash === '#security' || window.location.hash === '#student');
     if (!keep && window.location.hash !== (hist ? '' : '#profile')) {
       history.replaceState(null, '', hist ? window.location.pathname : '#profile');
     }
@@ -611,99 +621,263 @@
       .catch(function (err) { setMsg($('del-msg'), err.message, false); });
   });
 
-  /* ---------- student plan ---------- */
-  var studentVer = null;
+  /* ---------- student plan (verification wizard) ---------- */
+  var stu = { d: null, unis: null, pick: null, file: null, poll: null, tick: null, changing: false };
+  var STEPS = ['University email', 'Code', 'Details & document', 'Check', 'Active'];
 
-  function studentPlanLabel(plan) {
-    return plan === 'paid' ? 'Paid plan — unlimited' : plan === 'student' ? 'Student plan — 30/day' : 'Free plan — 5/day';
+  function fmtDate(iso) { return iso ? new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' }) : ''; }
+  function stuPlan(d) {
+    var label = d.plan === 'paid' ? 'Paid plan — unlimited' : d.plan === 'student' ? 'Student plan — 30 a day' : 'Free plan — 5 a day';
+    var use = d.daily_limit == null ? 'unlimited' : d.used_today + ' of ' + d.daily_limit + ' used today';
+    return '<div class="stu-plan"><b>' + esc(label) + '</b><span>' + esc(use) + '</span></div>';
+  }
+  function stepper(at) {
+    return '<ol class="stu-steps">' + STEPS.map(function (s, i) {
+      return '<li class="' + (i < at ? 'done' : i === at ? 'on' : '') + '">' + esc(s) + '</li>';
+    }).join('') + '</ol>';
+  }
+  function loadUnis() {
+    if (stu.unis) return Promise.resolve(stu.unis);
+    return j('/api/account/universities').then(function (d) { stu.unis = d.universities || []; return stu.unis; });
+  }
+  function uniPicker(prefix, selectedId) {
+    return '<div class="frow"><label for="' + prefix + '-q">University</label>' +
+      '<input class="form-input" id="' + prefix + '-q" placeholder="Type to search: BUTEX, Dhaka, BRAC…" autocomplete="off">' +
+      '<select class="form-input" id="' + prefix + '-uni" size="5" style="margin-top:6px;height:auto">' + uniOptions('', selectedId) + '</select>' +
+      '<div class="stu-hint" id="' + prefix + '-dom"></div></div>';
+  }
+  function uniOptions(q, selectedId) {
+    q = (q || '').toLowerCase();
+    return (stu.unis || []).filter(function (u) { return !q || u.name.toLowerCase().indexOf(q) > -1 || u.domain.indexOf(q) > -1; }).slice(0, 80).map(function (u) {
+      return '<option value="' + u.id + '"' + (String(u.id) === String(selectedId) ? ' selected' : '') + '>' + esc(u.name) + ' — @' + esc(u.domain) + '</option>';
+    }).join('');
+  }
+  function wirePicker(prefix) {
+    var q = $(prefix + '-q'), sel = $(prefix + '-uni');
+    var hint = function () {
+      var u = (stu.unis || []).filter(function (x) { return String(x.id) === sel.value; })[0];
+      $(prefix + '-dom').textContent = u ? 'Use your email ending in @' + u.domain : 'Pick your university from the list.';
+      var em = $(prefix + '-email'); if (em && u) em.placeholder = 'you@' + u.domain;
+    };
+    q.addEventListener('input', function () { sel.innerHTML = uniOptions(q.value, sel.value); hint(); });
+    sel.addEventListener('change', hint);
+    hint();
+  }
+  function detailsFields(v) {
+    v = v || {};
+    var y = new Date().getFullYear(), years = '<option value="">—</option>';
+    for (var k = y; k <= y + 8; k++) years += '<option' + (String(v.grad_year) === String(k) ? ' selected' : '') + '>' + k + '</option>';
+    return '<div class="stu-grid">' +
+      '<div class="frow"><label for="stu-sid">Student ID</label><input class="form-input" id="stu-sid" maxlength="40" value="' + esc(v.student_id || '') + '" placeholder="as printed on your card"></div>' +
+      '<div class="frow"><label for="stu-grad">Expected graduation year</label><select class="form-input" id="stu-grad">' + years + '</select></div>' +
+      '</div><div class="frow"><label for="stu-dept">Department</label><input class="form-input" id="stu-dept" maxlength="120" value="' + esc(v.department || '') + '" placeholder="e.g. Fabric Engineering"></div>' +
+      '<div class="stu-hint" style="margin:-6px 0 10px">The ID must match your card — it lets us approve you at once instead of waiting for a person.</div>';
+  }
+  function detailsBody() {
+    return { student_id: $('stu-sid').value.trim(), department: $('stu-dept').value.trim(), grad_year: $('stu-grad').value };
   }
 
-  function renderStudentUsage(d) {
-    var box = $('student-status-box');
-    var usage = d.daily_limit == null ? 'Unlimited requests.' : (d.used_today + ' of ' + d.daily_limit + ' requests used today.');
-    box.innerHTML = '<p class="sub" style="margin:0;"><b>' + esc(studentPlanLabel(d.plan)) + '</b> · ' + esc(usage) + '</p>';
-    box.hidden = false;
+  function checksHtml(c) {
+    if (!c) return '';
+    if (c.state === 'checking') return '<div class="stu-box"><span class="stu-spin"></span>Reading your document… this takes a few seconds.</div>';
+    if (c.state === 'failed') return '<div class="stu-box"><h3>Your document</h3><p class="stu-hint" style="margin:0">It could not be read automatically. A person will look at it.</p></div>';
+    var row = function (v, label, extra) {
+      var cls = v === 'yes' ? 'y' : v === 'partly' ? 'p' : v === 'no' ? 'n' : 'u';
+      var mark = v === 'yes' ? '✓' : v === 'partly' ? '~' : v === 'no' ? '✗' : '–';
+      return '<li><b class="' + cls + '">' + mark + '</b><span>' + esc(label) + (extra ? ' <span class="stu-hint" style="display:inline">' + esc(extra) + '</span>' : '') + '</span></li>';
+    };
+    var how = c.method === 'pdf-text' ? 'read from the PDF' : c.method === 'ocr' ? 'read from the photo' : '';
+    var items = c.readable === false
+      ? row('no', 'Readable', 'too little text could be read — a sharper, flat photo helps')
+      : row(c.name, 'Your name on the document') + row(c.university, 'Your university on the document') +
+        (c.student_id ? row(c.student_id, 'Your student ID on the document') : '') +
+        row(c.valid_until ? (c.expired ? 'no' : 'yes') : null, 'Valid', c.valid_until ? (c.expired ? 'expired ' : 'until ') + fmtDate(c.valid_until) : 'no validity date found') +
+        row(c.student_document, 'Reads like a student card or admission letter') +
+        (c.qr ? row(c.qr, 'QR code points to your university') : '');
+    return '<div class="stu-box"><h3>What we read' + (how ? ' <span class="stu-hint" style="display:inline;font-weight:400">— ' + how + '</span>' : '') + '</h3><ul class="stu-checks">' + items + '</ul></div>';
   }
 
-  // Resume-only: an application is only ever STARTED from the signup flow
-  // (index.html). This card can only continue one already in progress — a
-  // half-finished code or document step — or show its current/final state.
-  // There is deliberately no "start a new one" form here.
-  function showStudentStep(step) {
-    $('student-no-entry').hidden = step !== 'none-entry';
-    $('student-code-form').hidden = step !== 'code';
-    $('student-doc-form').hidden = step !== 'doc';
+  function docForm(v) {
+    return '<div class="stu-box"><h3>Your student document</h3>' + detailsFields(v) +
+      '<input type="file" id="stu-file" accept="image/jpeg,image/png,image/webp,application/pdf" hidden><div class="stu-drop" id="stu-drop" role="button" tabindex="0">' +
+      '<div id="stu-prev"><b>' + (v.has_document ? 'Upload a new photo or PDF' : 'Choose or drop your ID card / admission letter') + '</b><br><span class="stu-hint">JPG, PNG, WebP or PDF · up to 8 MB</span></div></div>' +
+      '<ul class="stu-tips"><li>The whole card, flat, in good light — your name, university and ID must be readable.</li><li>A PDF from your university portal is read best.</li><li>Location data in the photo is removed when it is saved.</li></ul>' +
+      '<button class="btn btn-primary" type="button" id="stu-send" style="margin-top:10px">' + (v.has_document ? 'Save and check again' : 'Submit for checking') + '</button>' +
+      '<div class="msg" id="stu-doc-msg" role="status"></div></div>';
+  }
+  function wireDoc() {
+    var input = $('stu-file'), drop = $('stu-drop');
+    var show = function (f) {
+      stu.file = f;
+      if (!f) return;
+      var mb = (f.size / 1048576).toFixed(1) + ' MB';
+      if (/^image\//.test(f.type)) {
+        var url = URL.createObjectURL(f);
+        $('stu-prev').innerHTML = '<img src="' + url + '" alt="Preview of your document"><span class="stu-hint">' + esc(f.name) + ' · ' + mb + ' — click to change</span>';
+      } else $('stu-prev').innerHTML = '<b>' + esc(f.name) + '</b><br><span class="stu-hint">' + mb + ' — click to change</span>';
+    };
+    input.addEventListener('change', function () { show(input.files[0]); });
+    drop.addEventListener('click', function () { input.click(); });
+    drop.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); } });
+    ['dragenter', 'dragover'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('over'); }); });
+    ['dragleave', 'drop'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove('over'); }); });
+    drop.addEventListener('drop', function (e) { if (e.dataTransfer.files[0]) show(e.dataTransfer.files[0]); });
+    $('stu-send').addEventListener('click', function () {
+      var msg = $('stu-doc-msg'), btn = this;
+      if (stu.file && stu.file.size > 8 * 1048576) { setMsg(msg, 'That file is over 8 MB.', false); return; }
+      btn.disabled = true; setMsg(msg, '', true);
+      j('/api/account/student/details', 'POST', detailsBody()).then(function () {
+        if (!stu.file) { if (stu.d.verification.has_document) { loadStudentStatus(); return null; } throw new Error('Choose your document first.'); }
+        msg.innerHTML = '<span class="stu-spin"></span>Uploading and reading your document…';
+        var fd = new FormData(); fd.append('document', stu.file);
+        return fetch(API_BASE + '/api/account/student/document', { method: 'POST', body: fd, credentials: 'same-origin' })
+          .then(function (res) { return res.json().then(function (d) { if (!res.ok) throw new Error(d.error || 'Upload failed.'); return d; }); });
+      }).then(function (d) {
+        if (!d) return;
+        stu.file = null;
+        if (d.status === 'active' && typeof showToast === 'function') showToast('Your student plan is active', 'success', 2500);
+        loadStudentStatus();
+      }).catch(function (e) { setMsg(msg, e.message, false); btn.disabled = false; });
+    });
+  }
+
+  function codeBox(v, can) {
+    return '<div class="stu-box"><h3>Code sent to ' + esc(v.student_email) + '</h3>' +
+      '<div class="frow"><input class="form-input" id="stu-code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="6-digit code" style="max-width:200px;font-family:var(--mono);letter-spacing:.2em"></div>' +
+      '<button class="btn btn-primary" type="button" id="stu-verify">Verify code</button>' +
+      '<div class="msg" id="stu-code-msg" role="status"></div>' +
+      '<p class="stu-hint">Not there? University mail often lands in spam or "Other" — search for KnitAdvisor.</p>' +
+      '<div class="stu-links"><button type="button" id="stu-resend">Send a new code</button>' +
+      (can.change_email ? '<button type="button" id="stu-change">Wrong email? Change it</button>' : '') + '</div>' +
+      '<div id="stu-change-box" hidden style="margin-top:12px"></div></div>';
+  }
+  function wireCode(can) {
+    $('stu-verify').addEventListener('click', function () {
+      var btn = this, msg = $('stu-code-msg'); btn.disabled = true; setMsg(msg, '', true);
+      j('/api/account/student/verify-code', 'POST', { code: $('stu-code').value.trim() })
+        .then(function (d) { if (d.status === 'active' && typeof showToast === 'function') showToast('Your student plan is active', 'success', 2500); loadStudentStatus(); })
+        .catch(function (e) { setMsg(msg, e.message, false); btn.disabled = false; });
+    });
+    $('stu-code').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('stu-verify').click(); });
+    var rb = $('stu-resend');
+    var paint = function () {
+      var left = can.resend_at ? Math.ceil((new Date(can.resend_at).getTime() - Date.now()) / 1000) : 0;
+      if (can.resends_left <= 0) { rb.disabled = true; rb.textContent = 'No more codes today'; return; }
+      rb.disabled = left > 0; rb.textContent = left > 0 ? 'Send a new code in ' + left + ' s' : 'Send a new code';
+    };
+    clearInterval(stu.tick); stu.tick = setInterval(paint, 1000); paint();
+    rb.addEventListener('click', function () {
+      rb.disabled = true;
+      j('/api/account/student/resend-code', 'POST', {}).then(function (d) {
+        can.resend_at = new Date(Date.now() + (d.retry_in || 60) * 1000).toISOString(); can.resends_left--;
+        setMsg($('stu-code-msg'), 'A new code is on its way to ' + (d.sent_to || 'your university email') + '.', true);
+      }).catch(function (e) { setMsg($('stu-code-msg'), e.message, false); paint(); });
+    });
+    if (can.change_email) $('stu-change').addEventListener('click', function () {
+      var box = $('stu-change-box'); box.hidden = !box.hidden;
+      if (box.hidden) return;
+      loadUnis().then(function () {
+        box.innerHTML = uniPicker('stc', stu.d.verification.university_id) +
+          '<div class="frow"><label for="stc-email">University email</label><input class="form-input" id="stc-email" type="email" autocomplete="off"></div>' +
+          '<button class="btn btn-primary" type="button" id="stc-go">Send the code there</button><div class="msg" id="stc-msg"></div>';
+        wirePicker('stc');
+        $('stc-go').addEventListener('click', function () {
+          j('/api/account/student/change-email', 'POST', { university_id: $('stc-uni').value, student_email: $('stc-email').value.trim() })
+            .then(function () { loadStudentStatus(); }).catch(function (e) { setMsg($('stc-msg'), e.message, false); });
+        });
+      });
+    });
+  }
+
+  function startForm() {
+    return '<div class="stu-box"><h3>Start your verification</h3>' + uniPicker('sts') +
+      '<label style="display:flex;gap:8px;align-items:center;font-size:13px;margin:-4px 0 10px"><input type="checkbox" id="sts-other"> My university is not on the list</label>' +
+      '<div class="frow" id="sts-email-row"><label for="sts-email">University email</label><input class="form-input" id="sts-email" type="email" autocomplete="off"><div class="stu-hint">We send a code there. Each university inbox can verify one account.</div></div>' +
+      '<div class="frow" id="sts-name-row" hidden><label for="sts-name">University name</label><input class="form-input" id="sts-name" maxlength="160"><div class="stu-hint">Without a university inbox, a person checks your document — this takes longer.</div></div>' +
+      detailsFields({}) +
+      '<button class="btn btn-primary" type="button" id="sts-go">Continue</button><div class="msg" id="sts-msg"></div></div>';
+  }
+  function wireStart() {
+    wirePicker('sts');
+    $('sts-other').addEventListener('change', function () {
+      var o = this.checked;
+      $('sts-email-row').hidden = o; $('sts-name-row').hidden = !o;
+      $('sts-uni').disabled = o; $('sts-q').disabled = o;
+    });
+    $('sts-go').addEventListener('click', function () {
+      var btn = this, msg = $('sts-msg'), other = $('sts-other').checked;
+      var body = detailsBody();
+      if (other) body.university_name_other = $('sts-name').value.trim();
+      else { body.university_id = $('sts-uni').value; body.student_email = $('sts-email').value.trim(); if (!body.university_id) { setMsg(msg, 'Pick your university, or tick "not on the list".', false); return; } }
+      btn.disabled = true; setMsg(msg, '', true);
+      j('/api/account/student/apply', 'POST', body).then(function () { loadStudentStatus(); })
+        .catch(function (e) { setMsg(msg, e.message, false); btn.disabled = false; });
+    });
+  }
+
+  function renderStudent() {
+    var d = stu.d, v = d.verification, can = d.can || {}, html = stuPlan(d), sub = '';
+    clearInterval(stu.tick); clearTimeout(stu.poll);
+    var after = [];
+    if (v && v.status === 'pending') {
+      var codeNeeded = !!v.student_email && !v.email_verified;
+      var docNeeded = !v.renewal && (!v.has_document || (v.checks && v.checks.readable === false));
+      var reading = v.doc_state === 'queued' || v.doc_state === 'checking';
+      var step = codeNeeded ? 1 : reading ? 3 : docNeeded ? 2 : 3;
+      html += stepper(v.renewal ? (codeNeeded ? 1 : 3) : step);
+      sub = v.renewal ? 'Renewing — confirm your university email once more.' : reading ? 'Reading your document…'
+        : codeNeeded ? 'Confirm your university email.' : docNeeded ? 'Add your student document.' : 'A person is checking your application. We will email you the result.';
+      if (codeNeeded) html += codeBox(v, can);
+      if (v.has_document) html += checksHtml(v.checks);
+      if (!v.renewal && !reading) html += docForm(v);
+      if (reading) stu.poll = setTimeout(loadStudentStatus, 3000);
+      after.push('<button type="button" class="danger" id="stu-withdraw">Withdraw this application</button>');
+    } else if (v && v.status === 'active') {
+      html += stepper(5);
+      sub = 'Active until ' + fmtDate(v.expires_at) + (v.university_name ? ' · ' + v.university_name : '') + '.';
+      if (can.renew) html += '<div class="stu-box"><h3>Renew for another year</h3><p class="stu-hint" style="margin:0 0 10px">One code to ' + esc(v.student_email || 'your university email') + ' — no new document.</p><button class="btn btn-primary" type="button" id="stu-renew">Renew now</button><div class="msg" id="stu-renew-msg"></div></div>';
+    } else {
+      if (v && (v.status === 'rejected' || v.status === 'revoked')) sub = 'Not approved' + (v.reason ? ': ' + v.reason : '.') + (can.apply_after ? ' You can apply again from ' + fmtDate(can.apply_after) + '.' : '');
+      else if (v && v.status === 'expired') sub = 'Your student plan ended on ' + fmtDate(v.expires_at) + '.';
+      else sub = 'Verify you\'re a student for 30 requests a day, free for up to a year.';
+      if (can.renew) html += '<div class="stu-box"><h3>Still studying?</h3><p class="stu-hint" style="margin:0 0 10px">Renew with one code to ' + esc(v.student_email) + '.</p><button class="btn btn-primary" type="button" id="stu-renew">Renew</button><div class="msg" id="stu-renew-msg"></div></div>';
+      if (can.apply) { html += stepper(0) + startForm(); }
+    }
+    if (after.length) html += '<div class="stu-links">' + after.join('') + '</div>';
+    if (d.history && d.history.length > 1) {
+      html += '<div class="stu-hist">Earlier: ' + d.history.slice(1, 5).map(function (h) {
+        return '<span class="stu-pill ' + esc(h.status) + '">' + esc(h.status) + '</span> ' + esc(h.university_name) + ' · ' + esc(fmtDate(h.created_at));
+      }).join(' &nbsp; ') + '</div>';
+    }
+    $('student-sub').textContent = sub;
+    $('stu-app').innerHTML = html;
+
+    if (v && v.status === 'pending' && v.student_email && !v.email_verified) wireCode(can);
+    if ($('stu-drop')) wireDoc();
+    if ($('sts-go')) loadUnis().then(function () { $('sts-uni').innerHTML = uniOptions(''); wireStart(); });
+    if ($('stu-renew')) $('stu-renew').addEventListener('click', function () {
+      var btn = this; btn.disabled = true;
+      j('/api/account/student/renew', 'POST', {}).then(loadStudentStatus).catch(function (e) { setMsg($('stu-renew-msg'), e.message, false); btn.disabled = false; });
+    });
+    if ($('stu-withdraw')) $('stu-withdraw').addEventListener('click', function () {
+      if (!confirm('Withdraw this student application? Your uploaded document is deleted, and you can start again.')) return;
+      j('/api/account/student/withdraw', 'POST', {}).then(loadStudentStatus).catch(function (e) { alert(e.message); });
+    });
   }
 
   function loadStudentStatus() {
-    j('/api/account/student/status').then(function (d) {
-      studentVer = d.verification;
-      renderStudentUsage(d);
-
-      if (studentVer && studentVer.status === 'active') {
-        showStudentStep('none');
-        $('student-sub').textContent = 'Active through ' +
-          new Date(studentVer.expires_at).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }) + '.';
-      } else if (studentVer && studentVer.status === 'pending' && studentVer.has_document) {
-        showStudentStep('none');
-        $('student-sub').textContent = 'Your application is under review. We’ll email you the result.';
-      } else if (studentVer && studentVer.status === 'pending' && !studentVer.email_verified && studentVer.student_email) {
-        showStudentStep('code');
-        $('student-sub').textContent = 'One more step — verify the code sent to ' + esc(studentVer.student_email) + '.';
-      } else if (studentVer && studentVer.status === 'pending') {
-        showStudentStep('doc');
-        $('student-sub').textContent = 'Upload your ID card or admission document to finish.';
-      } else {
-        showStudentStep('none-entry');
-        if (studentVer && ['rejected', 'revoked', 'expired'].indexOf(studentVer.status) > -1) {
-          $('student-sub').textContent = studentVer.status === 'expired'
-            ? 'Your student year ended.'
-            : 'Your application wasn’t approved' + (studentVer.reason ? ': ' + studentVer.reason : '.');
-        } else {
-          $('student-sub').textContent = 'Student verification is offered at signup.';
-        }
-      }
-    }).catch(function () {});
+    return j('/api/account/student/status').then(function (d) { stu.d = d; renderStudent(); })
+      .catch(function (e) { $('stu-app').innerHTML = '<div class="msg err">' + esc(e.message) + '</div>'; });
   }
-
-  $('student-code-form').addEventListener('submit', function (e) {
-    e.preventDefault();
-    var msg = $('student-code-msg');
-    var btn = $('student-code-btn'); btn.disabled = true; setMsg(msg, '', true);
-    j('/api/account/student/verify-code', 'POST', { code: $('student-code').value.trim() })
-      .then(function (d) {
-        if (d.status === 'active') { loadStudentStatus(); return; }
-        setMsg(msg, '', true);
-        showStudentStep('doc');
-        $('student-sub').textContent = 'Upload your ID card or admission document to finish.';
-      })
-      .catch(function (err) { setMsg(msg, err.message, false); })
-      .then(function () { btn.disabled = false; });
-  });
-
-  $('student-doc-form').addEventListener('submit', function (e) {
-    e.preventDefault();
-    var msg = $('student-doc-msg');
-    var file = $('student-doc').files[0];
-    if (!file) { setMsg(msg, 'Attach a file first.', false); return; }
-    var btn = $('student-doc-btn'); btn.disabled = true; setMsg(msg, '', true);
-    var fd = new FormData(); fd.append('document', file);
-    fetch(API_BASE + '/api/account/student/document', { method: 'POST', body: fd, credentials: 'same-origin' })
-      .then(function (res) { return res.json().then(function (d) { if (!res.ok) throw new Error(d.error || 'Upload failed.'); return d; }); })
-      .then(function () {
-        if (typeof showToast === 'function') showToast('Submitted', 'success', 1800);
-        loadStudentStatus();
-      })
-      .catch(function (err) { setMsg(msg, err.message, false); btn.disabled = false; });
-  });
 
   /* ---------- boot ---------- */
   (window.kaUserPromise || Promise.resolve(null)).then(function (u) { if (u) fillProfile(u); });
   // #profile opens the profile tab; #security opens it at the sign-in security card
   function fromHash() {
     var h = window.location.hash;
-    showTab(h === '#profile' || h === '#security' ? 'profile' : 'history');
-    if (h === '#security') setTimeout(function () { var c = $('security-card'); if (c) c.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 60);
+    showTab(h === '#profile' || h === '#security' || h === '#student' ? 'profile' : 'history');
+    var target = h === '#security' ? 'security-card' : h === '#student' ? 'student-card' : null;
+    if (target) setTimeout(function () { var c = $(target); if (c) c.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 60);
   }
   fromHash();
   window.addEventListener('hashchange', fromHash);

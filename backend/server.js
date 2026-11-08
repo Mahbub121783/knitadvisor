@@ -436,6 +436,8 @@ async function start() {
   // customer's code fails to arrive. Not in the listen callback: under
   // Passenger that callback does not run.
   require('./mail/client').warmUp().catch(() => {});
+  // student documents a restart left half-read go back in the reading queue
+  setTimeout(() => { require('./services/student-docs').resume().catch(() => {}); }, 20000).unref();
 }
 
 start();

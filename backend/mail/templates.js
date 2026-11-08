@@ -157,7 +157,7 @@ function studentApprovedEmail({ fullName, expiresAt }) {
 function studentPendingReviewEmail({ fullName }) {
   const html = shell('Your student application was received', `
     <p style="font-size:14px;line-height:1.6;">Hi ${esc(fullName || 'there')},</p>
-    <p style="font-size:14px;line-height:1.6;">We received your student verification and the document you uploaded. Someone on our team will review it shortly — we'll email you the result.</p>
+    <p style="font-size:14px;line-height:1.6;">We received your student verification and read the document you uploaded. A person on our team will check it shortly — we'll email you the result. You can follow it on your account page.</p>
   `);
   return { subject: 'Your KnitAdvisor student application was received', html };
 }
@@ -166,7 +166,7 @@ function studentRejectedEmail({ fullName, reason }) {
   const html = shell('Your student application was not approved', `
     <p style="font-size:14px;line-height:1.6;">Hi ${esc(fullName || 'there')},</p>
     <p style="font-size:14px;line-height:1.6;">We could not verify your student status${reason ? `: <b>${esc(reason)}</b>` : '.'}</p>
-    <p style="font-size:13px;color:#565C64;">You can apply again from your account page with a clearer document or a different university email.</p>
+    <p style="font-size:13px;color:#565C64;">You can apply again from your account page after 30 days, with a clearer document or your university email.</p>
   `);
   return { subject: 'Your KnitAdvisor student application was not approved', html };
 }
@@ -189,9 +189,16 @@ function studentExpiredEmail({ fullName }) {
   return { subject: 'Your KnitAdvisor student year has ended', html };
 }
 
+function studentRenewalReminderEmail({ fullName, expiresAt }) {
+  const until = new Date(expiresAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+  return noticeMail({ fullName, title: 'Your student plan ends soon', subject: 'Your KnitAdvisor student plan ends on ' + until,
+    lines: [`Your free student plan ends on ${until}.`, 'Still studying? Renewing takes one code sent to your university email — no new document needed.'],
+    action: 'Open Account → Student plan → Renew on knitadvisor.onlinetextileschool.com' });
+}
+
 module.exports = {
   activationEmail, passwordResetEmail, passwordChangedByAdminEmail, emailChangedNoticeEmail,
   studentEmailCodeEmail, studentApprovedEmail, studentPendingReviewEmail, studentRejectedEmail,
-  studentRevokedEmail, studentExpiredEmail, loginCodeEmail,
+  studentRevokedEmail, studentExpiredEmail, studentRenewalReminderEmail, loginCodeEmail,
   newSignInEmail, accountLockedEmail, emailChangedSelfEmail, accountDeletedEmail, emailChangeCodeEmail,
 };

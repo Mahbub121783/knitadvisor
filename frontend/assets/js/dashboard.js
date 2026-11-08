@@ -97,7 +97,7 @@
         '<text x="27" y="31" text-anchor="middle">' + left + '</text></svg>' +
         '<div><b>' + left + ' of ' + lim + ' requests left<span class="db-plan">' + esc(planName) + '</span></b>' +
         '<span>' + (left ? 'Resets at midnight, Dhaka time' : 'Back at midnight, Dhaka time') + '</span>' +
-        (us.plan === 'free' ? '<span><a href="/account.html#profile" style="color:var(--accent);font-weight:600;text-decoration:none">Student? Verify for 30 a day →</a></span>' : '') + '</div>';
+        (us.plan === 'free' ? '<span><a href="/account.html#student" style="color:var(--accent);font-weight:600;text-decoration:none">Student? Verify for 30 a day →</a></span>' : '') + '</div>';
       requestAnimationFrame(function () { var fg = $('db-ring-fg'); if (fg) fg.style.strokeDashoffset = String(C * (1 - frac)); });
     }
     box.hidden = false;

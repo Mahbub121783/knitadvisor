@@ -441,6 +441,15 @@ const calculations = {
 };
 
 const codes = {
+  /** How many codes of this purpose went out in the last `hours`, when the last did, and wrong tries on them. */
+  recentStats(userId, purpose, hours) {
+    return queryOne(
+      "SELECT count(*)::int AS sent, max(created_at) AS last_at, coalesce(sum(attempts), 0)::int AS wrong " +
+      "FROM app_user_codes WHERE user_id = $1 AND purpose = $2 AND created_at > now() - ($3 || ' hours')::interval",
+      [userId, purpose, String(hours)]
+    );
+  },
+
   /** Stores a freshly-issued code (see engine/domain/otp.js's issueCode()). */
   create(userId, purpose, hash, expiresAt) {
     return query(

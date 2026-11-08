@@ -192,6 +192,10 @@ router.get('/api/overview', adminAuth, async (req, res) => {
         tab: 'tab-rfq',
       });
     }
+    const reviewStudents = await studentRepo.listByStatus('review', { page: 1, limit: 1 }).catch(() => ({ total: 0 }));
+    if (reviewStudents.total > 0) {
+      alerts.push({ level: 'info', text: reviewStudents.total + ' automatic student approval' + (reviewStudents.total === 1 ? ' needs' : 's need') + ' a look.', tab: 'tab-students' });
+    }
     if (pendingStudents.total > 0) {
       alerts.push({
         level: 'info',
@@ -216,7 +220,7 @@ router.get('/api/overview', adminAuth, async (req, res) => {
       users: { total: userTotal, new_today: userNew.today, new_7d: userNew.last_7d, active_sessions: activeSessions },
       providers: { active: activeProviders, total: providers.length, health: providerHealth },
       cache: { mem_size: memStats.size, db_entries: Number(dbCacheStats.entries) || 0 },
-      students: { pending: pendingStudents.total },
+      students: { pending: pendingStudents.total, review: reviewStudents.total },
       funnel,
       alerts,
     });
@@ -747,7 +751,8 @@ router.post('/api/universities', adminAuth, async (req, res) => {
     if (name.length < 2 || !/^[a-z0-9.-]+\.[a-z]{2,}$/.test(domain)) {
       return res.status(400).json({ error: 'A university name and a valid email domain (e.g. g.bracu.ac.bd) are required.' });
     }
-    const { row, conflict } = await universityRepo.create({ name, domain });
+    const kind = ['student', 'staff', 'any'].includes((req.body || {}).kind) ? req.body.kind : 'any';
+    const { row, conflict } = await universityRepo.create({ name, domain, kind });
     if (conflict) return res.status(409).json({ error: 'That domain is already on the list.' });
     res.json({ ok: true, university: row });
   } catch (err) {
@@ -775,7 +780,8 @@ router.post('/api/universities/bulk', adminAuth, async (req, res) => {
         skipped.push({ name: name || '(blank)', domain, reason: 'invalid' });
         continue;
       }
-      const { conflict } = await universityRepo.create({ name, domain });
+      const kind = ['student', 'staff', 'any'].includes(r && r.kind) ? r.kind : 'any';
+      const { conflict } = await universityRepo.create({ name, domain, kind });
       if (conflict) { skipped.push({ name, domain, reason: 'duplicate' }); continue; }
       added++;
     }
@@ -836,11 +842,19 @@ router.get('/api/students/:id', adminAuth, async (req, res) => {
     // findById reads app_student_verifications alone (what decide()/tryAutoApprove
     // need); the admin detail view also wants who the applicant is.
     const user = await userRepo.users.findById(row.user_id);
+    const [related, uni] = await Promise.all([
+      studentRepo.related(row),
+      row.university_id ? universityRepo.findById(row.university_id) : null,
+    ]);
     res.json({
       ...row,
       account_email: user ? user.email : null,
       username: user ? user.username : null,
       full_name: user ? user.full_name : null,
+      account_created_at: user ? user.created_at : null,
+      account_email_verified: user ? !!user.email_verified : null,
+      university: uni ? { name: uni.name, domain: uni.domain, kind: uni.kind } : null,
+      related,
     });
   } catch (err) {
     console.error('[Students Detail Error]', err);
@@ -858,6 +872,9 @@ router.get('/api/students/:id/document', adminAuth, async (req, res) => {
     if (!row || !row.document_path) return res.status(404).json({ error: 'No document on file' });
     const full = absolutePath(row.document_path);
     if (!fs.existsSync(full)) return res.status(404).json({ error: 'Document file is missing' });
+    if (row.doc_mime) res.type(row.doc_mime);
+    res.set('Content-Security-Policy', "default-src 'none'; img-src 'self' data: blob:; style-src 'unsafe-inline'; plugin-types application/pdf");
+    res.set('X-Content-Type-Options', 'nosniff');
     res.sendFile(full);
   } catch (err) {
     console.error('[Students Document Error]', err);
@@ -873,8 +890,14 @@ router.post('/api/students/:id/approve', adminAuth, async (req, res) => {
     if (!row) return res.status(404).json({ error: 'Application not found' });
     if (row.status !== 'pending') return res.status(409).json({ error: `This application is already ${row.status}.` });
 
-    const expiresAt = new Date(Date.now() + STUDENT_DURATION_DAYS * 86400000);
+    if (row.student_email_norm) {
+      const other = await studentRepo.liveByEmailNorm(row.student_email_norm, id);
+      if (other && other.user_id !== row.user_id) return res.status(409).json({ error: 'That university email is live on another account — revoke that one first.' });
+    }
+    const a = row.doc_check && row.doc_check.analysis;
+    const { expiresAt } = require('../engine/domain/student-verify').expiryFor({ gradYear: row.grad_year, validUntil: a && !a.expired ? a.valid_until : null });
     await studentRepo.decide(id, 'active', { decidedBy: 'admin', expiresAt });
+    await studentRepo.markReviewed(id, 'admin');
     await userRepo.users.setStudentStatus(row.user_id, 'active', expiresAt);
 
     const user = await userRepo.users.findById(row.user_id);
@@ -898,7 +921,7 @@ router.post('/api/students/:id/reject', adminAuth, async (req, res) => {
     if (row.status !== 'pending') return res.status(409).json({ error: `This application is already ${row.status}.` });
 
     const reason = String((req.body && req.body.reason) || '').trim().slice(0, 300) || null;
-    await studentRepo.decide(id, 'rejected', { decidedBy: 'admin', reason });
+    await studentRepo.decide(id, 'rejected', { decidedBy: 'admin', reason, reapplyAfter: new Date(Date.now() + 30 * 86400000) });
     await userRepo.users.setStudentStatus(row.user_id, 'rejected', null);
 
     const user = await userRepo.users.findById(row.user_id);
@@ -924,7 +947,8 @@ router.post('/api/students/:id/revoke', adminAuth, async (req, res) => {
     if (row.status !== 'active') return res.status(409).json({ error: 'Only an active student plan can be revoked.' });
 
     const reason = String((req.body && req.body.reason) || '').trim().slice(0, 300) || null;
-    await studentRepo.decide(id, 'revoked', { decidedBy: 'admin', reason });
+    await studentRepo.decide(id, 'revoked', { decidedBy: 'admin', reason, reapplyAfter: new Date(Date.now() + 30 * 86400000) });
+    await studentRepo.markReviewed(id, 'admin');
     await userRepo.users.setStudentStatus(row.user_id, 'revoked', null);
 
     const user = await userRepo.users.findById(row.user_id);
@@ -937,6 +961,65 @@ router.post('/api/students/:id/revoke', adminAuth, async (req, res) => {
     console.error('[Students Revoke Error]', err);
     res.status(500).json({ error: 'Failed to revoke that plan' });
   }
+});
+
+// Post-approval queue: an admin looked at an automatic approval and it stands.
+router.post('/api/students/:id/reviewed', adminAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const row = Number.isInteger(id) ? await studentRepo.findById(id) : null;
+    if (!row) return res.status(404).json({ error: 'Application not found' });
+    await studentRepo.markReviewed(id, 'admin');
+    res.json({ ok: true });
+  } catch (err) { console.error('[Students Reviewed Error]', err); res.status(500).json({ error: 'Failed to mark it reviewed' }); }
+});
+
+// Read the document again (after an OCR improvement, or a failed first read).
+router.post('/api/students/:id/recheck', adminAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const row = Number.isInteger(id) ? await studentRepo.findById(id) : null;
+    if (!row || !row.document_path) return res.status(404).json({ error: 'No document on file' });
+    const studentDocs = require('../services/student-docs');
+    if (row.status === 'pending') {
+      await studentRepo.setDocState(id, 'queued');
+      const out = await studentDocs.enqueue(id, 60000);
+      return res.json({ ok: true, status: out ? out.status : 'checking' });
+    }
+    // decided already: read and score again, never change the decision
+    const r = await studentDocs.readDocument(require('../middleware/upload').absolutePath(row.document_path));
+    await studentRepo.saveReading(id, { state: 'done', sha256: r.sha256, phash: r.phash, text: r.text,
+      check: { read: { method: r.method, confidence: r.confidence, qr: r.qr, pages: r.pages, ms: r.ms, mime: r.mime, cleaned: r.cleaned } } });
+    await studentDocs.evaluate(id);
+    res.json({ ok: true, status: row.status });
+  } catch (err) { console.error('[Students Recheck Error]', err); res.status(500).json({ error: 'Could not read the document again: ' + err.message }); }
+});
+
+// Lets a rejected / revoked applicant apply again now instead of after 30 days.
+router.post('/api/students/:id/allow-reapply', adminAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const row = Number.isInteger(id) ? await studentRepo.findById(id) : null;
+    if (!row) return res.status(404).json({ error: 'Application not found' });
+    if (!['rejected', 'revoked'].includes(row.status)) return res.status(409).json({ error: 'Only a rejected or revoked application can be re-opened.' });
+    await studentRepo.allowReapply(id);
+    res.json({ ok: true });
+  } catch (err) { console.error('[Students Reapply Error]', err); res.status(500).json({ error: 'Failed to re-open it' }); }
+});
+
+// A university's kind (student / staff / any) and the names its documents use.
+router.patch('/api/universities/:id', adminAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid id' });
+    const b = req.body || {};
+    const kind = b.kind && ['student', 'staff', 'any'].includes(b.kind) ? b.kind : null;
+    const aliases = Array.isArray(b.aliases) ? b.aliases.map((x) => String(x).trim().slice(0, 120)).filter(Boolean).slice(0, 12) : undefined;
+    const name = b.name ? String(b.name).trim().slice(0, 160) : null;
+    const row = await universityRepo.update(id, { kind, aliases, name });
+    if (!row) return res.status(404).json({ error: 'University not found' });
+    res.json({ ok: true, university: row });
+  } catch (err) { console.error('[Universities Update Error]', err); res.status(500).json({ error: 'Failed to update the university' }); }
 });
 
 router.get('/api/rfq/:id', adminAuth, async (req, res) => {

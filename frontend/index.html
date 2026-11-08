@@ -1250,10 +1250,10 @@
       // they typed in forgot mode, and showing "we emailed <username>" reads
       // as a bug even though the code correctly went to their real email.
       reset: 'Enter the code we emailed to the address on file, and choose a new password.' + spamNote,
-      'student-code': 'Enter the code we emailed to ' + (studentChoice ? studentChoice.studentEmail : 'your university address') + '.' + spamNote,
-      'student-doc': 'Upload your student ID card or admission document to finish — this is what turns the plan on.',
+      'student-code': 'Enter the code we emailed to ' + (studentChoice ? studentChoice.studentEmail : 'your university address') + '.' + spamNote + ' A new code, or a corrected email, is one click away in Account → Student plan.',
+      'student-doc': 'Upload your student ID card or admission letter — the whole card, flat and readable. We read it on our server and match your name and university.',
       'student-retry': 'Double-check your university and its email below.',
-      'student-only': '30 requests/day, free for 1 year. Pick your university below — this can only be done once.',
+      'student-only': '30 requests/day, free for up to a year. Pick your university below — you can continue any step later in Account → Student plan.',
     };
     $('loginSub').textContent = subs[m];
 
@@ -1428,7 +1428,9 @@
       .then(function(r){
         btn.disabled = false; btn.textContent = 'Submit';
         if (!r.ok || !r.data || !r.data.success) { showError((r.data && r.data.error) || 'Could not save your document.'); return; }
-        finishStudentFlow(r.data.status === 'active' ? 'Your student plan is active — welcome in!' : 'Submitted — we’ll email you once it’s reviewed.');
+        finishStudentFlow(r.data.status === 'active' ? 'Your student plan is active — welcome in!'
+          : r.data.status === 'checking' ? 'We’re reading your document — follow it in Account → Student plan.'
+          : 'Submitted — a person will check it and we’ll email you. Details are in Account → Student plan.');
       })
       .catch(function(){ btn.disabled = false; btn.textContent = 'Submit'; showError('Could not reach the server.'); });
   }

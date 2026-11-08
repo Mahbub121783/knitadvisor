@@ -1385,6 +1385,10 @@ function renderUniversitiesList(filterText) {
   wrap.innerHTML = rows.map((u) => `
     <span class="badge ${u.active ? 'badge-blue' : 'badge-gray'}" style="font-size:11px;padding:5px 9px;display:inline-flex;gap:8px;align-items:center;">
       ${esc(u.name)} <span style="opacity:.7;">@${esc(u.domain)}</span>
+      ${u.kind && u.kind !== 'any' ? `<span style="font-size:9.5px;opacity:.8;">${esc(u.kind)}</span>` : ''}
+      ${u.source === 'seed' ? '<span title="Added by the system — confirm the domain is right" style="font-size:9.5px;color:var(--a4);">unconfirmed</span>' : ''}
+      ${u.aliases && u.aliases.length ? `<span title="${esc(u.aliases.join(' · '))}" style="font-size:9.5px;opacity:.7;">${u.aliases.length} names</span>` : ''}
+      <button class="btn-icon" data-uni-edit="${esc(u.id)}" title="Kind and names on cards" style="border:none;background:none;cursor:pointer;color:inherit;">✎</button>
       <button class="btn-icon" data-uni-toggle="${esc(u.id)}" data-uni-active="${u.active ? 'false' : 'true'}" title="${u.active ? 'Disable' : 'Enable'}" style="border:none;background:none;cursor:pointer;color:inherit;">${u.active ? '⏸' : '▶'}</button>
       <button class="btn-icon" data-uni-delete="${esc(u.id)}" title="Remove" style="border:none;background:none;cursor:pointer;color:var(--a3);">✕</button>
     </span>
@@ -1400,7 +1404,7 @@ async function addUniversity() {
   const btn = document.getElementById('uni-add-btn');
   btn.disabled = true;
   try {
-    await api('/admin/api/universities', 'POST', { name, domain });
+    await api('/admin/api/universities', 'POST', { name, domain, kind: document.getElementById('uni-kind-input').value });
     nameInput.value = ''; domainInput.value = '';
     msg.textContent = 'Added.'; msg.style.color = 'var(--a1)';
     loadUniversities();
@@ -1417,10 +1421,12 @@ function parseBulkUniversityText(text) {
     const t = line.trim();
     if (!t) return;
     const parts = t.split(/\t|,|\|/).map((s) => s.trim()).filter(Boolean);
+    // optional third column: student / staff / any
+    const kind = parts.length >= 3 && /^(student|staff|any)$/i.test(parts[parts.length - 1]) ? parts.pop().toLowerCase() : 'any';
     if (parts.length < 2) return;
     const domain = parts[parts.length - 1];
     const name = parts.slice(0, -1).join(', ');
-    rows.push({ name, domain });
+    rows.push({ name, domain, kind });
   });
   return rows;
 }
@@ -1442,6 +1448,20 @@ async function bulkImportUniversities() {
   } catch (e) {
     msg.textContent = e.message; msg.style.color = 'var(--a3)';
   } finally { btn.disabled = false; }
+}
+
+async function editUniversity(id) {
+  const u = universitiesCache.find((x) => String(x.id) === String(id));
+  if (!u) return;
+  const kind = window.prompt('Who is this domain for? Type: student, staff or any', u.kind || 'any');
+  if (kind == null) return;
+  const names = window.prompt('Names this university uses on its cards and letters, separated by ";" (e.g. BUTEX; Bangladesh University of Textiles)', (u.aliases || []).join('; '));
+  if (names == null) return;
+  try {
+    await api('/admin/api/universities/' + id, 'PATCH', { kind: kind.trim().toLowerCase(), aliases: names.split(';').map((x) => x.trim()).filter(Boolean) });
+    toast('Saved', 'success');
+    loadUniversities();
+  } catch (e) { toast(e.message, 'error'); }
 }
 
 async function toggleUniversity(id, active) {
@@ -1468,16 +1488,23 @@ async function loadStudents(page, filters) {
     const tbody = document.getElementById('stu-tbody');
     tbody.innerHTML = '';
     if (!d.rows.length) {
-      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--t3);">No applications</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--t3);">No applications</td></tr>';
     }
     for (const s of d.rows) {
+      const doc = !s.document_path ? '<span class="badge badge-gray">none</span>'
+        : s.doc_state === 'queued' || s.doc_state === 'checking' ? '<span class="badge badge-yellow">reading…</span>'
+        : s.doc_score != null ? `<span class="badge ${VERDICT_BADGE[s.doc_verdict] || 'badge-gray'}">${esc(s.doc_verdict || '')} ${esc(s.doc_score)}</span>`
+        : '<span class="badge badge-gray">unread</span>';
+      const risk = s.risk_score == null ? '<span style="color:var(--t3)">—</span>'
+        : `<span class="badge ${s.risk_score >= 60 ? 'badge-red' : s.risk_score >= 30 ? 'badge-yellow' : 'badge-green'}">${esc(s.risk_score)}</span>`;
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td style="padding:9px 10px;color:var(--t2);">${esc(s.full_name)}<div style="font-size:10px;color:var(--t3);">${esc(s.account_email)}</div></td>
-        <td style="padding:9px 10px;color:var(--t2);">${esc(s.university_name)}</td>
+        <td style="padding:9px 10px;color:var(--t2);">${esc(s.university_name)}${s.renewal_of ? ' <span class="badge badge-blue">renewal</span>' : ''}<div style="font-size:10px;color:var(--t3);">${esc(s.student_email || 'not listed')}</div></td>
         <td style="padding:9px 10px;">${s.student_email_verified_at ? '<span class="badge badge-green">yes</span>' : (s.student_email ? '<span class="badge badge-gray">no</span>' : '<span class="badge badge-gray">n/a</span>')}</td>
-        <td style="padding:9px 10px;">${s.document_path ? '<span class="badge badge-green">uploaded</span>' : '<span class="badge badge-gray">none</span>'}</td>
-        <td style="padding:9px 10px;"><span class="badge ${STU_STATUS_BADGE[s.status] || 'badge-gray'}">${esc(s.status)}</span></td>
+        <td style="padding:9px 10px;">${doc}</td>
+        <td style="padding:9px 10px;">${risk}</td>
+        <td style="padding:9px 10px;"><span class="badge ${STU_STATUS_BADGE[s.status] || 'badge-gray'}">${esc(s.status)}</span>${s.review_state === 'post_review' ? ' <span class="badge badge-yellow">needs a look</span>' : ''}</td>
         <td style="padding:9px 10px;color:var(--t3);font-family:var(--mono);">${esc(new Date(s.created_at).toLocaleDateString())}</td>
         <td style="padding:9px 10px;"><button class="btn btn-ghost btn-sm" data-stu-view="${esc(s.id)}">Review</button></td>
       `;
@@ -1487,7 +1514,11 @@ async function loadStudents(page, filters) {
   } catch (e) { toast('Failed to load student applications', 'error'); }
 }
 
+const VERDICT_BADGE = { strong: 'badge-green', partial: 'badge-yellow', weak: 'badge-red', expired: 'badge-red', unreadable: 'badge-gray' };
+const REASON_CHIPS = ['The name on the document does not match the account', 'The document is not readable — upload a clear photo of the whole card',
+  'The document has expired', 'This university email or ID is already used by another account', 'This is not a student document'];
 let openStudentId = null;
+let openStudentDocUrl = null;
 
 async function openStudentDetail(id) {
   try {
@@ -1495,18 +1526,80 @@ async function openStudentDetail(id) {
     openStudentId = id;
     document.getElementById('sd-name').textContent = s.full_name || '(no name)';
     document.getElementById('sd-email').textContent = (s.username ? '@' + s.username + '  ·  ' : '') + s.account_email;
+    const check = s.doc_check || {};
+    const a = check.analysis || null;
+    const read = check.read || {};
+    const risk = s.risk || {};
+
+    const heads = [`<span class="badge ${STU_STATUS_BADGE[s.status] || 'badge-gray'}">${esc(s.status)}</span>`];
+    if (s.review_state === 'post_review') heads.push('<span class="badge badge-yellow">auto-approved — needs a look</span>');
+    if (s.renewal_of) heads.push('<span class="badge badge-blue">renewal</span>');
+    if (s.risk_score != null) heads.push(`<span class="badge ${s.risk_score >= 60 ? 'badge-red' : s.risk_score >= 30 ? 'badge-yellow' : 'badge-green'}">risk ${esc(s.risk_score)}</span>`);
+    document.getElementById('sd-head-badges').innerHTML = heads.join('');
+
+    // the document, inline
+    const docBox = document.getElementById('sd-doc');
+    if (openStudentDocUrl) { URL.revokeObjectURL(openStudentDocUrl); openStudentDocUrl = null; }
+    docBox.innerHTML = '<div style="color:var(--t3);font-size:12px;">' + (s.document_path ? 'Loading…' : 'No document uploaded') + '</div>';
+    if (s.document_path) {
+      fetch(API_BASE + '/admin/api/students/' + id + '/document', { headers: { 'X-Admin-Token': getToken() } })
+        .then((r) => { if (!r.ok) throw new Error('missing'); return r.blob(); })
+        .then((b) => {
+          if (openStudentId !== id) return;
+          openStudentDocUrl = URL.createObjectURL(b);
+          docBox.innerHTML = /pdf/.test(b.type)
+            ? `<iframe src="${openStudentDocUrl}" title="Document" style="width:100%;height:420px;border:0;border-radius:6px;background:#fff;"></iframe>`
+            : `<img src="${openStudentDocUrl}" alt="Uploaded document" style="width:100%;border-radius:6px;display:block;">`;
+        }).catch(() => { docBox.innerHTML = '<div style="color:var(--a3);font-size:12px;">The file could not be loaded.</div>'; });
+    }
+    document.getElementById('sd-view-doc').disabled = !s.document_path;
+    document.getElementById('sd-text').textContent = s.doc_text || (s.document_path ? '(no text was read)' : '');
+
+    // recommendation
+    const rec = risk.recommend;
+    const recTxt = { approve: ['badge-green', 'Approve — inbox, document and account agree.'], reject: ['badge-red', 'Reject — the checks below argue against it.'], look: ['badge-yellow', 'Look at the document — the checks are mixed.'] }[rec];
+    document.getElementById('sd-rec').innerHTML = (recTxt ? `<span class="badge ${recTxt[0]}">${esc(rec)}</span> <span style="font-size:12px;">${esc(recTxt[1])}</span>` : '<span style="font-size:12px;color:var(--t3)">—</span>') +
+      (risk.decision ? `<div style="font-size:11px;color:var(--t3);margin-top:4px;">System: ${esc(risk.decision)}</div>` : '');
+
+    // checks
+    const yes = (v) => v === true ? '<b style="color:var(--ok)">✓</b>' : v === false ? '<b style="color:var(--a3)">✗</b>' : '<span style="color:var(--t3)">–</span>';
+    const rows = [];
+    rows.push(['Read by', esc(read.method === 'pdf-text' ? 'PDF text layer' : read.method === 'ocr' ? `OCR (confidence ${Math.round(read.confidence || 0)})` : read.error ? 'failed: ' + read.error : 'not read') + (read.ms ? ` · ${(read.ms / 1000).toFixed(1)} s` : '')]);
+    if (a) {
+      rows.push(['Score', `<b>${esc(a.score)}</b> / 100 · <span class="badge ${VERDICT_BADGE[a.verdict] || 'badge-gray'}">${esc(a.verdict)}</span>`]);
+      if (a.name) rows.push(['Name', `${yes(a.name.score >= 0.75)} ${Math.round((a.name.score || 0) * 100)}% ${a.name.line ? '· “' + esc(a.name.line) + '”' : ''}${a.name.missing && a.name.missing.length ? ' · missing: ' + esc(a.name.missing.join(', ')) : ''}`]);
+      if (a.university) rows.push(['University', `${yes(a.university.score >= 0.6)} ${a.university.matched ? esc(a.university.matched) : 'not found'}`]);
+      rows.push(['Student ID', `${yes(a.id_match)} typed: <code>${esc(s.student_id || '—')}</code> · on document: ${a.ids && a.ids.length ? a.ids.map((x) => '<code>' + esc(x) + '</code>').join(' ') : 'none found'}`]);
+      rows.push(['Valid until', a.valid_until ? `${yes(!a.expired)} ${esc(a.valid_until)}${a.expired ? ' (expired)' : ''}` : '<span style="color:var(--t3)">no date found</span>']);
+      if (a.session) rows.push(['Session', esc(a.session.from + '–' + a.session.to)]);
+      rows.push(['Student words', a.keywords && a.keywords.length ? esc(a.keywords.join(', ')) : yes(false)]);
+      if (a.qr) rows.push(['QR code', `${yes(a.qr.domain_match)} ${esc(a.qr.host || a.qr.text.slice(0, 60))}`]);
+    }
+    if (read.cleaned) rows.push(['Privacy', 'photo metadata removed on save']);
+    document.getElementById('sd-checks').innerHTML = rows.map((r) => `<tr><th>${r[0]}</th><td>${r[1]}</td></tr>`).join('');
+
+    document.getElementById('sd-risk').innerHTML = risk.reasons && risk.reasons.length
+      ? '<ul style="margin:0;padding-left:16px;font-size:12px;line-height:1.6;">' + risk.reasons.map((r) => '<li>' + esc(r) + '</li>').join('') + '</ul>'
+      : '<span style="font-size:12px;color:var(--ok)">Nothing unusual found.</span>';
 
     const meta = [];
-    meta.push('University: <b>' + esc(s.university_name) + '</b>' + (s.university_id ? ' (allow-listed)' : ' (not listed — manual review)'));
-    if (s.student_email) meta.push('University email: ' + esc(s.student_email) + (s.student_email_verified_at ? ' (verified)' : ' (not verified)'));
-    meta.push('Status: <b>' + esc(s.status) + '</b>' + (s.decided_by ? ' by ' + esc(s.decided_by) : ''));
-    if (s.expires_at) meta.push('Expires: ' + esc(new Date(s.expires_at).toLocaleDateString()));
+    meta.push('University: <b>' + esc(s.university_name) + '</b>' + (s.university ? ` (@${esc(s.university.domain)}, ${esc(s.university.kind)} domain)` : ' (not listed — no inbox proof)'));
+    if (s.student_email) meta.push('University email: ' + esc(s.student_email) + (s.student_email_verified_at ? ' <b style="color:var(--ok)">verified</b>' : ' (not verified)') + (s.email_changes ? ` · changed ${esc(s.email_changes)}×` : ''));
+    if (s.department || s.grad_year) meta.push('Department: ' + esc(s.department || '—') + ' · graduates ' + esc(s.grad_year || '—'));
+    meta.push('Account created ' + esc(new Date(s.account_created_at).toLocaleDateString()) + (s.account_email_verified ? '' : ' · account email not verified'));
+    meta.push('Applied ' + esc(new Date(s.created_at).toLocaleString()) + (s.apply_ip ? ' from ' + esc(s.apply_ip) : ''));
+    if (s.decided_by) meta.push('Decided by ' + esc(s.decided_by) + (s.decided_at ? ' on ' + esc(new Date(s.decided_at).toLocaleDateString()) : ''));
+    if (s.expires_at) meta.push('Plan until: <b>' + esc(new Date(s.expires_at).toLocaleDateString()) + '</b>');
     if (s.reason) meta.push('Reason on file: ' + esc(s.reason));
+    if (s.reviewed_by) meta.push('Reviewed by ' + esc(s.reviewed_by) + ' on ' + esc(new Date(s.reviewed_at).toLocaleDateString()));
     document.getElementById('sd-meta').innerHTML = meta.map((m) => '<div>' + m + '</div>').join('');
 
-    document.getElementById('sd-view-doc').disabled = !s.document_path;
-    document.getElementById('sd-view-doc').textContent = s.document_path ? 'View uploaded document' : 'No document uploaded';
+    document.getElementById('sd-related').innerHTML = s.related && s.related.length
+      ? s.related.map((r) => `<div style="padding:4px 0;border-bottom:1px solid var(--line);"><span class="badge ${STU_STATUS_BADGE[r.status] || 'badge-gray'}">${esc(r.status)}</span> ${esc(r.full_name || '')} <span style="color:var(--t3)">${esc(r.account_email)}</span> · <b>${esc((r.shares || []).join(', '))}</b> <button class="btn btn-ghost btn-sm" data-stu-view="${esc(r.id)}" style="padding:1px 6px;">open</button></div>`).join('')
+      : '<span style="color:var(--t3)">No other application shares its email, ID, file or network.</span>';
+
     document.getElementById('sd-reason').value = '';
+    document.getElementById('sd-reason-chips').innerHTML = REASON_CHIPS.map((c) => `<button type="button" class="btn btn-ghost btn-sm" data-sd-reason="${esc(c)}" style="font-size:10.5px;">${esc(c)}</button>`).join('');
     document.getElementById('sd-msg').textContent = '';
 
     const actions = document.getElementById('sd-actions');
@@ -1515,7 +1608,10 @@ async function openStudentDetail(id) {
       btns += '<button class="btn btn-primary" data-sd-act="approve">Approve</button>';
       btns += '<button class="btn btn-danger" data-sd-act="reject">Reject</button>';
     } else if (s.status === 'active') {
+      if (s.review_state === 'post_review') btns += '<button class="btn btn-primary" data-sd-act="reviewed">Looks right — keep it</button>';
       btns += '<button class="btn btn-danger" data-sd-act="revoke">Revoke</button>';
+    } else if (s.status === 'rejected' || s.status === 'revoked') {
+      btns += '<button class="btn btn-ghost" data-sd-act="allow-reapply">Let them apply again now</button>';
     }
     actions.innerHTML = btns;
 
@@ -1526,25 +1622,30 @@ async function openStudentDetail(id) {
 function closeStudentDetail() {
   document.getElementById('student-detail-modal').classList.add('hidden');
   openStudentId = null;
+  if (openStudentDocUrl) { URL.revokeObjectURL(openStudentDocUrl); openStudentDocUrl = null; }
 }
 
 async function viewStudentDocument() {
+  if (openStudentDocUrl) { window.open(openStudentDocUrl, '_blank'); return; }
   if (openStudentId == null) return;
   try {
     const res = await fetch(API_BASE + '/admin/api/students/' + openStudentId + '/document', { headers: { 'X-Admin-Token': getToken() } });
     if (!res.ok) throw new Error('Could not load the document');
-    const blob = await res.blob();
-    window.open(URL.createObjectURL(blob), '_blank');
+    window.open(URL.createObjectURL(await res.blob()), '_blank');
   } catch (e) { toast(e.message, 'error'); }
 }
 
+const STU_ACTION_DONE = { approve: 'Approved', reject: 'Rejected', revoke: 'Revoked', reviewed: 'Marked as reviewed', recheck: 'Document read again', 'allow-reapply': 'They can apply again now' };
 async function decideStudent(action) {
   if (openStudentId == null) return;
   const reason = document.getElementById('sd-reason').value.trim();
   const msg = document.getElementById('sd-msg');
+  if ((action === 'reject' || action === 'revoke') && !reason && !window.confirm('Send this without a reason? The applicant will not know what to fix.')) return;
+  if (action === 'recheck') { msg.textContent = 'Reading the document again…'; msg.style.color = 'var(--t3)'; }
   try {
     await api('/admin/api/students/' + openStudentId + '/' + action, 'POST', reason ? { reason } : undefined);
-    toast('Application ' + action + 'd', 'success');
+    toast(STU_ACTION_DONE[action] || 'Done', 'success');
+    if (action === 'recheck') { openStudentDetail(openStudentId); return; }
     closeStudentDetail();
     loadStudents(1, getStuFilters());
     loadOverview(); // refreshes the sidebar pending badge
@@ -2465,6 +2566,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('uni-list').addEventListener('click', (e) => {
     const t = e.target.closest('[data-uni-toggle]');
     if (t) { toggleUniversity(parseInt(t.dataset.uniToggle, 10), t.dataset.uniActive === 'true'); return; }
+    const ed = e.target.closest('[data-uni-edit]');
+    if (ed) { editUniversity(ed.dataset.uniEdit); return; }
     const d = e.target.closest('[data-uni-delete]');
     if (d) deleteUniversity(parseInt(d.dataset.uniDelete, 10));
   });
@@ -2486,6 +2589,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (e.target === e.currentTarget) closeStudentDetail();
   });
   document.getElementById('sd-view-doc').addEventListener('click', viewStudentDocument);
+  document.getElementById('student-detail-modal').addEventListener('click', (e) => {
+    const rel = e.target.closest('[data-stu-view]');
+    if (rel) { openStudentDetail(parseInt(rel.dataset.stuView, 10)); return; }
+    const chip = e.target.closest('[data-sd-reason]');
+    if (chip) document.getElementById('sd-reason').value = chip.dataset.sdReason;
+    const act = e.target.closest('.sd-grid [data-sd-act]');
+    if (act) decideStudent(act.dataset.sdAct);
+  });
   document.getElementById('sd-actions').addEventListener('click', (e) => {
     if (e.target.closest('#sd-cancel-2')) { closeStudentDetail(); return; }
     const btn = e.target.closest('[data-sd-act]');

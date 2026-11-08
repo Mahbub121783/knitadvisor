@@ -201,7 +201,24 @@ const JOBS = {
         await mailClient.sendMail({ to: user.email, subject: notice.subject, html: notice.html }).catch(() => {});
       }
     }
-    return { expired: expired.length };
+    // documents a restart left half-read go back in the reading queue
+    const requeued = await require('../services/student-docs').resume();
+    return { expired: expired.length, requeued };
+  },
+
+  /** Mail every student plan ending within 14 days, once, with the one-code renewal. */
+  async 'student-renewal-reminders'() {
+    const studentRepo = require('../db/repositories/student-repo');
+    const mailClient = require('../mail/client');
+    const { studentRenewalReminderEmail } = require('../mail/templates');
+    const due = await studentRepo.dueForReminder(14);
+    let sent = 0;
+    for (const row of due) {
+      const t = studentRenewalReminderEmail({ fullName: row.full_name, expiresAt: row.expires_at });
+      const r = await mailClient.sendMail({ to: row.email, subject: t.subject, html: t.html, text: t.text }).catch(() => ({ sent: false }));
+      if (r && r.sent !== false) { await studentRepo.markReminded(row.id); sent++; }
+    }
+    return { due: due.length, sent };
   },
 
   /**
