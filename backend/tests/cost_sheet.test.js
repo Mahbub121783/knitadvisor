@@ -73,4 +73,34 @@ const YEAW7759 = {
   const sql = fs.readFileSync(path.join(__dirname, '../db/migrations/038_cost_sheets.sql'), 'utf8');
   assert(/UNIQUE INDEX uq_cost_sheets_name ON cost_sheets \(user_id, lower\(name\)\)/.test(sql));
 }
-console.log('Cost sheet tests passed');
+// CM from manual SMV ÷ efficiency, a typed CM wins for its size; profit in money and margins
+{
+  const r = cs.analyse({ ...YEAW7759, cm: { smv: [12, 12, 12, 14], cpm: 0.05, efficiency_pct: 60, override: ['', '', 1.5, ''] },
+    markups: [{ name: 'Buying agent', kind: 'commission', pct: 4 }, { name: 'Profit', kind: 'profit', pct: 10 }], target_fob: [7, 8, 9, 10] });
+  assert.deepStrictEqual(r.per_size.map((p) => p.cm), [1, 1, 1.5, 1.1667]);
+  assert.deepStrictEqual(r.cm.basis, ['smv', 'smv', 'typed', 'smv']);
+  const p = r.per_size[0];
+  assert(Math.abs(p.commission + p.profit - (p.fob_pc - p.subtotal)) < 0.0002, 'commission + profit = the whole mark-up');
+  assert(Math.abs(p.profit / p.subtotal - 0.10) < 0.0005 && Math.abs(p.profit_margin_pct - p.profit / p.fob_pc * 100) < 0.01);
+  assert(Math.abs(p.factory_net - (p.fob_pc - p.commission)) < 0.0002);
+  // the profit % it reports for the target really lands on the target
+  const q = cs.analyse({ ...YEAW7759, cm: { smv: [12, 12, 12, 14], cpm: 0.05, efficiency_pct: 60, override: ['', '', 1.5, ''] },
+    markups: [{ name: 'Buying agent', kind: 'commission', pct: 4 }, { name: 'Profit', kind: 'profit', pct: p.profit_pct_at_target }] });
+  assert(Math.abs(q.per_size[0].fob_pc - 7) < 0.002, `profit at target lands on 7.00: ${q.per_size[0].fob_pc}`);
+  const bad = cs.analyse({ ...YEAW7759, cm: { smv: 12, cpm: 0.05, efficiency_pct: 5 } });
+  assert(!bad.success && /efficiency/.test(bad.error));
+}
+
+// the PDF is drawn from the same result
+{
+  const r = cs.analyse(YEAW7759);
+  const doc = require('../engine/domain/cost-sheet-pdf').render(r, YEAW7759);
+  const chunks = [];
+  doc.on('data', (c) => chunks.push(c));
+  doc.on('end', () => {
+    const buf = Buffer.concat(chunks);
+    assert(buf.slice(0, 4).toString() === '%PDF' && buf.length > 4000, 'a real PDF');
+    console.log('Cost sheet tests passed');
+  });
+  doc.end();
+}

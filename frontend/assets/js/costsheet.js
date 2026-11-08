@@ -28,11 +28,11 @@
       sizes: ['S', 'M', 'L', 'XL'], pack_of: 1, exchange_rate: '', loss_method: 'sheet', picture: null,
       shells: [blankShell(0)],
       trims: [{ name: 'Sewing thread', values: [] }, { name: 'Main label', values: [] }, { name: 'Care label', values: [] }],
-      embellishments: [{ name: 'Print', values: [] }],
+      embellishments: [{ name: 'Print', values: [] }, { name: 'Embroidery', values: [] }, { name: 'Other embellishment', values: [] }],
       washes: [],
       packaging: [{ name: 'Hang tag', values: [] }, { name: 'Poly bag', values: [] }, { name: 'Carton', values: [] }],
-      testing: [], cm: { mode: 'smv', cpm: '', smv: [], direct: [] },
-      markups: [{ name: 'Commission', pct: '' }, { name: 'Profit', pct: '' }], markup_mode: 'on_cost',
+      testing: [], cm: { cpm: '', efficiency_pct: '', smv: [], override: [] },
+      markups: [{ name: 'Buying commission', kind: 'commission', pct: '' }, { name: 'Profit', kind: 'profit', pct: '' }], markup_mode: 'on_cost',
       order: { quantity: '', ratio: [] }, target_fob: [],
     };
   }
@@ -56,8 +56,8 @@
     s.embellishments = [{ name: 'Print', values: all(0.12) }, { name: 'Embroidery', values: all(0.2) }];
     s.packaging = [['Hang tag', 0.018], ['Poly bag', 0.042], ['Carton', 0.06], ['Carton sticker', 0.002678], ['Tag pin + tapes', 0.001], ['Tissue + MD sticker', 0.001]].map(function (t) { return { name: t[0], values: all(t[1]) }; });
     s.testing = all(0.03);
-    s.cm = { mode: 'smv', cpm: 0.06, smv: all(15.53), direct: [] };
-    s.markups = [{ name: 'CCL commission', pct: 3.3 }, { name: 'SM', pct: 1.2 }, { name: 'Profit margin', pct: 1.5 }];
+    s.cm = { cpm: 0.06, efficiency_pct: '', smv: all(15.53), override: [] };
+    s.markups = [{ name: 'CCL commission', kind: 'commission', pct: 3.3 }, { name: 'SM', kind: 'other', pct: 1.2 }, { name: 'Profit margin', kind: 'profit', pct: 1.5 }];
     s.order = { quantity: '', ratio: [] };
     return s;
   }
@@ -147,18 +147,41 @@
       '<button class="cs-btn small" type="button" data-addline="' + key + '" style="margin-top:4px">+ Add line</button>';
   }
 
+  // CM shown as you type: SMV × CPM ÷ efficiency, unless a CM is typed for that size
+  function cmFor(k) {
+    var o = S.cm.override && S.cm.override[k];
+    if (o !== '' && o != null && isFinite(+o)) return { v: +o, typed: true };
+    var smv = num(S.cm.smv && S.cm.smv[k], 0), cpm = num(S.cm.cpm, 0), eff = num(S.cm.efficiency_pct, 100) || 100;
+    return { v: cpm ? smv * cpm / (eff / 100) : 0, typed: false };
+  }
+  function paintCM() {
+    for (var k = 0; k < n(); k++) {
+      var c = cmFor(k), el = document.querySelector('[data-cmout="' + k + '"]');
+      if (el) el.innerHTML = '$' + f3(c.v) + (c.typed ? ' <span class="cs-src yours">typed</span>' : '');
+      // the override box shows what SMV × CPM ÷ efficiency would give
+      var ov = document.querySelector('[data-k="cm.override.' + k + '"]');
+      var smv = num(S.cm.smv && S.cm.smv[k], 0), cpm = num(S.cm.cpm, 0), eff = num(S.cm.efficiency_pct, 100) || 100;
+      if (ov) ov.placeholder = cpm && smv ? f3(smv * cpm / (eff / 100)) : '';
+    }
+  }
   function renderCM() {
-    var direct = S.cm.mode === 'direct';
-    $('cs-cpm-wrap').hidden = direct;
-    $('cs-cm').innerHTML = '<div class="cs-scroll"><table class="cs-t">' + sizeHead(direct ? 'CM per piece' : 'SMV (minutes)') +
-      '<tr><td>' + (direct ? 'CM $' : 'SMV') + '</td>' + sizeCells(direct ? 'cm.direct' : 'cm.smv', direct ? S.cm.direct : S.cm.smv, direct ? '0.001' : '0.01') + '</tr></table></div>';
+    var cmRow = ''; for (var k = 0; k < n(); k++) cmRow += '<td class="num" data-cmout="' + k + '"></td>';
+    $('cs-cm').innerHTML = '<div class="cs-scroll"><table class="cs-t">' + sizeHead('') +
+      '<tr><td>SMV (minutes)</td>' + sizeCells('cm.smv', S.cm.smv, '0.01') + '</tr>' +
+      '<tr><td>Your CM $ <span style="font-weight:400;color:var(--t3)">(optional)</span></td>' + sizeCells('cm.override', S.cm.override, '0.001') + '</tr>' +
+      '<tr class="total"><td>CM used</td>' + cmRow + '<td></td></tr></table></div>';
     $('cs-testing').innerHTML = '<div class="cs-scroll"><table class="cs-t">' + sizeHead('') + '<tr><td>Testing $</td>' + sizeCells('testing', S.testing, '0.001') + '</tr></table></div>';
+    paintCM();
   }
 
   function renderMarkups() {
-    $('cs-markups').innerHTML = '<div class="cs-scroll"><table class="cs-t"><tr><th>Item</th><th class="num">%</th><th></th></tr>' +
+    var kinds = [['commission', 'Commission'], ['profit', 'Profit'], ['other', 'Other']];
+    $('cs-markups').innerHTML = '<div class="cs-scroll"><table class="cs-t"><tr><th>Item</th><th>Type</th><th class="num">%</th><th></th></tr>' +
       S.markups.map(function (m, i) {
-        return '<tr><td><input data-k="markups.' + i + '.name" value="' + esc(m.name) + '"></td><td style="width:110px"><input class="num" type="number" min="0" max="60" step="0.1" data-k="markups.' + i + '.pct" value="' + esc(m.pct) + '"></td>' +
+        var kind = m.kind || (/profit|margin/i.test(m.name || '') ? 'profit' : /comm|agent/i.test(m.name || '') ? 'commission' : 'other');
+        return '<tr><td><input data-k="markups.' + i + '.name" value="' + esc(m.name) + '"></td>' +
+          '<td style="width:130px"><select data-k="markups.' + i + '.kind">' + kinds.map(function (q) { return '<option value="' + q[0] + '"' + (kind === q[0] ? ' selected' : '') + '>' + q[1] + '</option>'; }).join('') + '</select></td>' +
+          '<td style="width:100px"><input class="num" type="number" min="0" max="60" step="0.1" data-k="markups.' + i + '.pct" value="' + esc(m.pct) + '"></td>' +
           '<td><button class="cs-btn small" type="button" data-rmline="markups.' + i + '">×</button></td></tr>';
       }).join('') + '</table></div><button class="cs-btn small" type="button" data-addmarkup="1" style="margin-top:4px">+ Add</button>';
   }
@@ -191,18 +214,21 @@
   function payload() {
     var p = JSON.parse(JSON.stringify(S));
     delete p.picture;
-    p.cm = S.cm.mode === 'direct' ? { direct: S.cm.direct } : { smv: S.cm.smv, cpm: S.cm.cpm };
+    // sheets saved before CM override: their CM-per-piece column becomes the override
+    p.cm = { smv: S.cm.smv || [], cpm: S.cm.cpm, efficiency_pct: S.cm.efficiency_pct, override: S.cm.override || (S.cm.mode === 'direct' ? S.cm.direct : []) };
     p.shells.forEach(function (sh) { sh.yarns.forEach(function (y) { if (y.price === '') delete y.price; }); });
     return p;
   }
-  function schedule() { clearTimeout(timer); timer = setTimeout(cost, 350); }
+  function schedule() { clearTimeout(timer); $('cs-res').classList.add('cs-busy'); paintCM(); timer = setTimeout(cost, 160); }
   function cost() {
     var my = ++seq;
     apiFetch('/api/cost-sheet/analyse', { method: 'POST', body: payload() }).then(function (r) {
       if (my !== seq) return;
+      $('cs-res').classList.remove('cs-busy');
       last = r; renderResult();
     }).catch(function (e) {
       if (my !== seq) return;
+      $('cs-res').classList.remove('cs-busy');
       last = null;
       $('cs-status').className = 'cs-msg err';
       $('cs-status').textContent = (e.data && e.data.error) || e.message || 'Could not cost the sheet.';
@@ -254,21 +280,36 @@
     var row = function (label, key, cls, fmt) { return '<tr' + (cls ? ' class="' + cls + '"' : '') + '><td>' + label + '</td>' + ps.map(function (p) { return '<td class="num">' + (fmt || f3)(p[key]) + '</td>'; }).join('') + '</tr>'; };
     var html = '<tr><th></th>' + sizes.map(function (s) { return '<th class="num">' + esc(s) + '</th>'; }).join('') + '</tr>' +
       row('Fabric', 'fabric') + row('Trims', 'trims') + row('Embellishment', 'embellishment') + row('Wash', 'wash') + row('CM', 'cm') + row('Packaging', 'packaging') + row('Testing', 'testing') +
-      row('Sub-total', 'subtotal', 'total') + row('Commission & profit', 'markup') + row('FOB / pc', 'fob_pc', 'fob', f2) +
+      row('Sub-total (cost)', 'subtotal', 'total') +
+      r.markups.map(function (m, i) { return '<tr><td>' + esc(m.name) + ' <span style="color:var(--t3)">' + m.pct + '%</span></td>' + ps.map(function (p) { return '<td class="num">' + f3(p.markups[i].usd) + '</td>'; }).join('') + '</tr>'; }).join('') +
+      row('FOB / pc', 'fob_pc', 'fob', f2) +
       (r.pack_of > 1 ? row('FOB / pack of ' + r.pack_of, 'fob_pack', '', f2) : '') + row('FOB / dozen', 'fob_dozen', '', f2) +
       '<tr><td>FOB / pc ৳</td>' + r.bdt.fob_pc.map(function (v) { return '<td class="num">' + Math.round(v) + '</td>'; }).join('') + '</tr>';
     if (ps.some(function (p) { return p.target; })) {
       html += '<tr><td>Target</td>' + ps.map(function (p) { return '<td class="num">' + (p.target ? f2(p.target) : '—') + '</td>'; }).join('') + '</tr>' +
         '<tr><td>Left at target</td>' + ps.map(function (p) { return '<td class="num ' + (p.target_gap == null ? '' : p.target_gap >= 0 ? 'cs-gap-ok' : 'cs-gap-bad') + '">' + (p.target_gap == null ? '—' : (p.target_gap >= 0 ? '+' : '') + f3(p.target_gap)) + '</td>'; }).join('') + '</tr>' +
-        '<tr><td>Margin at target</td>' + ps.map(function (p) { return '<td class="num">' + (p.margin_at_target_pct == null ? '—' : p.margin_at_target_pct + '%') + '</td>'; }).join('') + '</tr>';
+        '<tr><td>Margin at target</td>' + ps.map(function (p) { return '<td class="num">' + (p.margin_at_target_pct == null ? '—' : p.margin_at_target_pct + '%') + '</td>'; }).join('') + '</tr>' +
+        '<tr><td>Profit % to hit target</td>' + ps.map(function (p) { return '<td class="num">' + (p.profit_pct_at_target == null ? '—' : p.profit_pct_at_target + '%') + '</td>'; }).join('') + '</tr>';
     }
     $('cs-sum').innerHTML = html;
+    var prow = function (label, f, cls) { return '<tr' + (cls ? ' class="' + cls + '"' : '') + '><td>' + label + '</td>' + ps.map(function (p) { return '<td class="num">' + f(p) + '</td>'; }).join('') + '</tr>'; };
+    $('cs-profit').innerHTML = '<tr><th></th>' + sizes.map(function (s) { return '<th class="num">' + esc(s) + '</th>'; }).join('') + '</tr>' +
+      prow('Cost (sub-total)', function (p) { return f3(p.subtotal); }) +
+      prow('Commission $', function (p) { return f3(p.commission); }) +
+      prow('Profit $', function (p) { return f3(p.profit); }, 'total') +
+      (ps.some(function (p) { return p.other_markup; }) ? prow('Other mark-up $', function (p) { return f3(p.other_markup); }) : '') +
+      prow('Profit margin (on FOB)', function (p) { return p.profit_margin_pct + '%'; }) +
+      prow('Profit on cost', function (p) { return p.profit_on_cost_pct + '%'; }) +
+      prow('Gross margin (all mark-ups)', function (p) { return p.gross_margin_pct + '%'; }) +
+      prow('Factory net after commission', function (p) { return f3(p.factory_net); }, 'fob') +
+      prow('Profit / dozen', function (p) { return f2(p.profit * 12); });
     $('cs-sens').innerHTML = '<tr><th></th>' + sizes.map(function (s) { return '<th class="num">' + esc(s) + '</th>'; }).join('') + '</tr>' +
       r.sensitivity.map(function (s) { return '<tr><td>' + esc(s.label) + '</td>' + s.per_size.map(function (v) { return '<td class="num">+' + f3(v) + '</td>'; }).join('') + '</tr>'; }).join('');
     $('cs-ordercard').hidden = !r.order;
     if (r.order) {
       var o = r.order;
-      $('cs-orderres').innerHTML = '<div class="cs-big"><div><small>Weighted FOB</small><b>$' + f2(o.weighted_fob_pc) + '</b></div><div><small>Order value</small><b>$' + Math.round(o.value).toLocaleString() + '</b></div></div>' +
+      $('cs-orderres').innerHTML = '<div class="cs-big"><div><small>Weighted FOB</small><b>$' + f2(o.weighted_fob_pc) + '</b></div><div><small>Order value</small><b>$' + Math.round(o.value).toLocaleString() + '</b></div>' +
+        '<div><small>Order cost</small><b>$' + Math.round(o.cost).toLocaleString() + '</b></div><div><small>Commission</small><b>$' + Math.round(o.commission).toLocaleString() + '</b></div><div><small>Profit</small><b>$' + Math.round(o.profit).toLocaleString() + '</b></div></div>' +
         '<div style="font-size:12px;color:var(--t2);margin-bottom:6px">' + o.pieces_by_size.map(function (p) { return esc(p.size) + ' ' + p.pieces.toLocaleString(); }).join(' · ') + ' pcs</div>' +
         '<div class="cs-scroll"><table class="cs-t"><tr><th>Shell</th><th class="num">Finished kg</th><th class="num">Grey kg</th><th>Yarn to book</th></tr>' +
         o.fabric.map(function (f) { return '<tr><td>' + esc(f.shell) + '</td><td class="num">' + Math.round(f.finished_kg).toLocaleString() + '</td><td class="num">' + Math.round(f.grey_kg).toLocaleString() + '</td><td>' + f.yarn_kg.map(function (y) { return esc(y.yarn) + ': <b>' + Math.round(y.kg).toLocaleString() + ' kg</b>'; }).join('<br>') + '</td></tr>'; }).join('') + '</table></div>';
@@ -286,8 +327,7 @@
     var v = el.type === 'checkbox' ? el.checked : el.value;
     setPath(S, k, v);
     // a structural change redraws its part of the form
-    if (/^cm\.mode$/.test(k)) renderCM();
-    else if (/^shells\.\d+\.(yarns\.\d+\.type|aop|consumption_unit)$/.test(k)) renderShells();
+    if (/^shells\.\d+\.(yarns\.\d+\.type|aop|consumption_unit)$/.test(k)) renderShells();
     schedule();
   }
   document.addEventListener('input', function (e) { if (e.target.closest && e.target.closest('#cs-form, .cs-bar')) onEdit(e); });
@@ -310,7 +350,7 @@
     else if ((a = b.getAttribute('data-rmyarn'))) { var q = a.split('.'); S.shells[+q[0]].yarns.splice(+q[1], 1); }
     else if ((a = b.getAttribute('data-addline'))) { S[a].push({ name: '', values: [] }); }
     else if ((a = b.getAttribute('data-rmline'))) { var r = a.split('.'); S[r[0]].splice(+r[1], 1); }
-    else if (b.hasAttribute('data-addmarkup')) { S.markups.push({ name: '', pct: '' }); }
+    else if (b.hasAttribute('data-addmarkup')) { S.markups.push({ name: '', kind: 'other', pct: '' }); }
     else return;
     renderForm(); schedule();
   });
@@ -390,6 +430,30 @@
   $('cs-dup').addEventListener('click', function () { S.header.style = (S.header.style || 'Sheet') + ' (copy)'; currentId = null; $('cs-del').hidden = true; renderForm(); flash('Copy made — save it under its new name.'); });
   $('cs-example').addEventListener('click', function () { S = example(); currentId = null; $('cs-del').hidden = true; renderForm(); cost(); });
   $('cs-print').addEventListener('click', function () { window.print(); });
+  $('cs-pdf').addEventListener('click', function () {
+    var btn = this; btn.disabled = true; btn.textContent = 'Making PDF…';
+    var body = payload(); if (S.picture) body.picture = S.picture;
+    fetch(API_BASE + '/api/cost-sheet/pdf', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      .then(function (res) {
+        if (!res.ok) return res.json().then(function (d) { throw new Error(d.error || 'Could not make the PDF.'); });
+        return res.blob();
+      }).then(function (blob) {
+        var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'Costing-' + (S.header.style || 'sheet').replace(/[^\w.-]+/g, '_') + '.pdf';
+        document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 800);
+      }).catch(function (e) { flash(e.message); })
+      .then(function () { btn.disabled = false; btn.textContent = 'Download PDF'; });
+  });
+  function cpmCalc() {
+    var c = num($('cpm-cost').value), o = num($('cpm-ops').value), d = num($('cpm-days').value), hh = num($('cpm-hours').value);
+    var v = c && o && d && hh ? c / (o * d * hh * 60) : null;
+    $('cpm-out').textContent = v ? 'Cost per minute = ' + c + ' ÷ (' + o + ' × ' + d + ' × ' + hh + ' × 60) = $' + v.toFixed(4) : 'Cost per minute = monthly cost ÷ (operators × days × hours × 60).';
+    return v;
+  }
+  ['cpm-cost', 'cpm-ops', 'cpm-days', 'cpm-hours'].forEach(function (id) { $(id).addEventListener('input', cpmCalc); });
+  $('cpm-use').addEventListener('click', function () {
+    var v = cpmCalc(); if (!v) return;
+    S.cm.cpm = +v.toFixed(4); document.querySelector('[data-k="cm.cpm"]').value = S.cm.cpm; renderCM(); schedule();
+  });
 
   // ── Excel: SpreadsheetML in the quotation layout (opens in Excel / LibreOffice) ──
   $('cs-xls').addEventListener('click', function () {

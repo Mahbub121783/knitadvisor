@@ -150,7 +150,7 @@ function shellPrices(sh, live, idx) {
     name, application: String(sh.application || '').slice(0, 80), composition: comp ? comp.display : '', fabric: fabricId,
     gsm: pos(sh.gsm), shade, yarns,
     prices: {
-      yarn: { value: r4(yarnPrice), source: { kind: 'blend', label: yarns.map((y) => `${y.share_pct}% ${y.label}${y.count ? ' ' + y.count + 's' : ''} @ $${y.price} (${y.source.label})`).join(' + ') } },
+      yarn: { value: r4(yarnPrice), source: { kind: 'blend', label: yarns.map((y) => `${y.share_pct}% ${y.label.replace(/^100% /, '')}${y.count ? ' ' + y.count + 's' : ''} @ $${y.price} (${y.source.label})`).join(' + ') } },
       yarn_dyeing: yarnDye, knitting: knit, dyeing: dye, finishing: finish, aop, loss_pct: lossPick,
     },
     system: { knitting: knitSys, dyeing: dyeSys, finishing: finSys, loss_pct: lossSys, charge_item: q.ok ? q.item.label : null, alternatives: q.ok ? q.alternatives.slice(0, 4) : [] },
@@ -188,15 +188,28 @@ function build(input, opts = {}) {
   const pack = lines(input.packaging, n, 'Packaging');
   const testing = perSize(input.testing, n, 'Testing');
 
+  // CM per piece = SMV × cost per minute ÷ line efficiency. SMV is the
+  // industrial engineer's figure, typed per size; any size's CM can be typed
+  // over (a buyer-agreed CM, a sub-contract price) and then that figure is used.
   const cmIn = input.cm || {};
   const smv = perSize(cmIn.smv, n, 'SMV');
   const cpm = pos(cmIn.cpm);
-  const cmDirect = cmIn.direct != null && cmIn.direct !== '' ? perSize(cmIn.direct, n, 'CM') : null;
-  const cm = cmDirect || smv.map((s) => s * (cpm || 0));
-  if (!cmDirect && smv.some((s) => s > 0) && !(cpm > 0)) throw new SheetError('CM: give the cost per minute (CPM), or type CM per piece.');
+  const eff = pos(cmIn.efficiency_pct);
+  if (eff != null && (eff < 20 || eff > 100)) throw new SheetError('Line efficiency must be between 20% and 100%.');
+  const effK = eff ? eff / 100 : 1;
+  const overrideIn = cmIn.override != null ? cmIn.override : cmIn.direct;      // 'direct' kept for saved sheets
+  const override = Array.isArray(overrideIn) ? overrideIn.slice(0, n).map((v) => (v === '' || v == null ? null : pos(v)))
+    : overrideIn != null && overrideIn !== '' ? Array(n).fill(pos(overrideIn)) : Array(n).fill(null);
+  while (override.length < n) override.push(null);
+  const cmFromSmv = smv.map((v) => (cpm ? v * cpm / effK : 0));
+  const cm = cmFromSmv.map((v, k) => (override[k] != null ? override[k] : v));
+  const cmBasis = cm.map((_, k) => (override[k] != null ? 'typed' : smv[k] > 0 ? 'smv' : 'none'));
+  if (cmBasis.some((b, k) => b === 'none' && smv[k] === 0) && smv.some((v) => v > 0) && !(cpm > 0)) throw new SheetError('CM: give the cost per minute (CPM), or type CM per piece.');
+  if (smv.some((v) => v > 0) && !(cpm > 0) && cmBasis.some((b) => b === 'smv')) throw new SheetError('CM: give the cost per minute (CPM), or type CM per piece.');
 
   const markups = (Array.isArray(input.markups) ? input.markups : []).slice(0, 10)
-    .map((m) => ({ name: String(m.name || 'Mark-up').slice(0, 60), pct: pos(m.pct) || 0 })).filter((m) => m.pct > 0);
+    .map((m) => ({ name: String(m.name || 'Mark-up').slice(0, 60), pct: pos(m.pct) || 0, kind: ['commission', 'profit', 'other'].includes(m.kind) ? m.kind : /profit|margin/i.test(m.name || '') ? 'profit' : /comm|agent|ccl|buying/i.test(m.name || '') ? 'commission' : 'other' }))
+    .filter((m) => m.pct > 0);
   const markPct = markups.reduce((t, m) => t + m.pct, 0);
   if (markPct >= 100) throw new SheetError('Mark-ups add up to 100% or more.');
   const compound = input.markup_mode === 'on_price';           // margin on the selling price: ÷ (1 − Σ)
@@ -208,8 +221,24 @@ function build(input, opts = {}) {
   const fob = T((k) => (compound ? subtotal[k] / (1 - markPct / 100) : subtotal[k] * (1 + markPct / 100)));
   const target = Array.isArray(input.target_fob) || input.target_fob != null ? perSize(input.target_fob, n, 'Target FOB') : Array(n).fill(0);
 
+  const kindPct = (kd) => markups.filter((m) => m.kind === kd).reduce((t, m) => t + m.pct, 0);
+  const cPct = kindPct('commission'), pPct = kindPct('profit'), oPct = kindPct('other');
+  // each mark-up's money: its share of what the whole mark-up adds
+  const moneyOf = (pct, k) => (markPct ? (fob[k] - subtotal[k]) * pct / markPct : 0);
   const perSizeOut = sizes.map((size, k) => ({
     size,
+    cm_basis: cmBasis[k], smv: smv[k], cm_from_smv: r4(cmFromSmv[k]),
+    markups: markups.map((m) => ({ name: m.name, kind: m.kind, pct: m.pct, usd: r4(moneyOf(m.pct, k)) })),
+    commission: r4(moneyOf(cPct, k)), profit: r4(moneyOf(pPct, k)), other_markup: r4(moneyOf(oPct, k)),
+    // profit as a share of the price the buyer pays, and as a mark-up on cost
+    profit_margin_pct: fob[k] ? r2(moneyOf(pPct, k) / fob[k] * 100) : 0,
+    profit_on_cost_pct: subtotal[k] ? r2(moneyOf(pPct, k) / subtotal[k] * 100) : 0,
+    gross_margin_pct: fob[k] ? r2((fob[k] - subtotal[k]) / fob[k] * 100) : 0,
+    // what the factory keeps once the commission is paid
+    factory_net: r4(fob[k] - moneyOf(cPct, k)),
+    // the profit % (with the other mark-ups unchanged) that lands exactly on the target
+    profit_pct_at_target: target[k] && subtotal[k]
+      ? r2(compound ? (1 - subtotal[k] / target[k]) * 100 - (cPct + oPct) : (target[k] / subtotal[k] - 1) * 100 - (cPct + oPct)) : null,
     fabric: r4(fabric[k]), trims: r4(trimT[k]), embellishment: r4(embT[k]), wash: r4(washT[k]), cm: r4(cm[k]), packaging: r4(packT[k]), testing: r4(testing[k]),
     subtotal: r4(subtotal[k]), markup: r4(fob[k] - subtotal[k]), fob_pc: r4(fob[k]), fob_pack: r4(fob[k] * packOf), fob_dozen: r2(fob[k] * 12),
     fabric_share_pct: r2(subtotal[k] ? fabric[k] / subtotal[k] * 100 : 0),
@@ -245,6 +274,9 @@ function build(input, opts = {}) {
     order = {
       quantity: qty, pieces_by_size: sizes.map((s, k) => ({ size: s, pieces: pcs[k] })),
       weighted_fob_pc: r4(value / Math.max(1, pcs.reduce((t, p) => t + p, 0))), value: r2(value),
+      cost: r2(pcs.reduce((t, p, k) => t + p * subtotal[k], 0)),
+      commission: r2(pcs.reduce((t, p, k) => t + p * moneyOf(cPct, k), 0)),
+      profit: r2(pcs.reduce((t, p, k) => t + p * moneyOf(pPct, k), 0)),
       fabric: shells.map((s) => {
         const fin = pcs.reduce((t, p, k) => t + p * s.consumption_kg_pc[k], 0);
         const grey = fin / (1 - s.prices.loss_pct.value / 100);
@@ -266,7 +298,7 @@ function build(input, opts = {}) {
     sizes, pack_of: packOf, loss_method: method, markup_mode: compound ? 'on_price' : 'on_cost',
     shells,
     trims, embellishments: emb, washes: wash, packaging: pack,
-    testing: testing.map(r4), cm: { smv, cpm, direct: !!cmDirect, per_size: cm.map(r4) },
+    testing: testing.map(r4), cm: { smv, cpm, efficiency_pct: eff || 100, per_size: cm.map(r4), from_smv: cmFromSmv.map(r4), basis: cmBasis },
     markups, markup_pct: r2(markPct),
     per_size: perSizeOut,
     sensitivity, order, warnings,

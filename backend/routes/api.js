@@ -1300,6 +1300,24 @@ router.post('/cost-sheet/analyse', requireUser, (req, res) => {
   }
 });
 
+// The sheet as a PDF quotation — from the same analyse() result the page shows.
+router.post('/cost-sheet/pdf', requireUser, (req, res) => {
+  try {
+    const input = req.body || {};
+    const out = costSheet.analyse(input, { live: (key, ne, country) => yarnPrices.lookup(key, ne, undefined, { country }) });
+    if (!out.success) return res.status(400).json(out);
+    const doc = require('../engine/domain/cost-sheet-pdf').render(out, input);
+    const safe = String((out.header || {}).style || 'sheet').replace(/[^A-Za-z0-9_.-]+/g, '_').slice(0, 40) || 'sheet';
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="Costing-${safe}.pdf"`);
+    doc.pipe(res);
+    doc.end();
+  } catch (err) {
+    console.error('[cost-sheet] pdf failed:', err);
+    if (!res.headersSent) res.status(500).json({ success: false, error: 'Could not make the PDF.' });
+  }
+});
+
 router.get('/cost-sheet/sheets', requireUser, async (req, res) => {
   try { res.json({ success: true, sheets: await costSheetRepo.sheets.list(req.user.id) }); }
   catch (err) { console.error('[cost-sheet] list failed:', err); res.status(500).json({ success: false, error: 'Could not load your saved sheets.' }); }

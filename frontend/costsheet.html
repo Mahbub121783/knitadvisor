@@ -74,6 +74,7 @@
     .cs-msg.note { background: #F6F8FB; color: var(--t2); }
     .cs-msg.ok { background: #E7F6EE; color: #17633f; }
     .cs-gap-ok { color: #17633f; } .cs-gap-bad { color: #9b1c1c; }
+    .cs-busy { opacity: .55; transition: opacity .15s; }
     .cs-hint { font-size: 11.5px; color: var(--t3); margin: 4px 0 0; line-height: 1.45; }
     @media print {
       .ka-bar, header, footer, .cs-bar, .cs-noprint, .cs-btn { display: none !important; }
@@ -102,7 +103,8 @@
       <button class="cs-btn" type="button" id="cs-dup">Duplicate</button>
       <button class="cs-btn" type="button" id="cs-example">Load example (YEAW7759)</button>
       <button class="cs-btn" type="button" id="cs-xls">Export Excel</button>
-      <button class="cs-btn" type="button" id="cs-print">Print / PDF</button>
+      <button class="cs-btn" type="button" id="cs-pdf">Download PDF</button>
+      <button class="cs-btn" type="button" id="cs-print">Print</button>
       <button class="cs-btn danger" type="button" id="cs-del" hidden>Delete</button>
       <span id="cs-savemsg" style="font-size:12px;color:var(--t2)"></span>
     </div>
@@ -171,11 +173,23 @@
         <div class="cs-card"><h2><b>6</b> Wash (per piece)</h2><div id="cs-washes"></div></div>
 
         <div class="cs-card">
-          <h2><b>7</b> CM, packaging, testing</h2>
+          <h2><b>7</b> CM — making cost, packaging, testing</h2>
+          <p class="cs-hint" style="margin:0 0 8px">CM per piece = <b>SMV × cost per minute ÷ line efficiency</b>. Type the SMV for each size from your IE; type a CM in the last row for any size to use your own figure instead.</p>
           <div class="cs-row" style="margin-bottom:8px;">
-            <label class="cs-f">CM from<select data-k="cm.mode"><option value="smv">SMV × cost per minute</option><option value="direct">CM per piece</option></select></label>
-            <label class="cs-f" id="cs-cpm-wrap">Cost per minute (USD)<input data-k="cm.cpm" type="number" step="0.001" min="0" class="num" placeholder="0.060"></label>
+            <label class="cs-f">Cost per minute (USD)<input data-k="cm.cpm" type="number" step="0.0001" min="0" class="num" placeholder="0.060"></label>
+            <label class="cs-f">Line efficiency %<input data-k="cm.efficiency_pct" type="number" step="1" min="20" max="100" class="num" placeholder="100 = SMV already allows for it"></label>
           </div>
+          <details class="cs-noprint" style="margin:0 0 8px;font-size:12.5px;">
+            <summary style="cursor:pointer;color:var(--accent,#1857C4)">Work out the cost per minute from the factory's monthly cost</summary>
+            <div class="cs-row" style="margin-top:8px;">
+              <label class="cs-f">Monthly cost of the lines (USD)<input id="cpm-cost" type="number" min="0" class="num" placeholder="wages + overhead"></label>
+              <label class="cs-f">Operators<input id="cpm-ops" type="number" min="1" class="num"></label>
+              <label class="cs-f">Working days / month<input id="cpm-days" type="number" min="1" class="num" value="26"></label>
+              <label class="cs-f">Hours / day<input id="cpm-hours" type="number" min="1" step="0.5" class="num" value="10"></label>
+            </div>
+            <p class="cs-hint" id="cpm-out">Cost per minute = monthly cost ÷ (operators × days × hours × 60).</p>
+            <button class="cs-btn small" type="button" id="cpm-use">Use this cost per minute</button>
+          </details>
           <div id="cs-cm"></div>
           <h3 style="font-size:13px;margin:12px 0 4px;">Packaging</h3>
           <div id="cs-packaging"></div>
@@ -207,6 +221,7 @@
           <div id="cs-mixwrap"></div>
           <div class="cs-scroll"><table class="cs-t" id="cs-sum"></table></div>
         </div>
+        <div class="cs-card"><h2>Profit and margins</h2><div class="cs-scroll"><table class="cs-t" id="cs-profit"></table></div><p class="cs-hint">Profit margin = profit ÷ FOB. Profit on cost = profit ÷ sub-total. Factory net = FOB less the commission paid out.</p></div>
         <div class="cs-card"><h2>What moves the price</h2><div class="cs-scroll"><table class="cs-t" id="cs-sens"></table></div><p class="cs-hint">FOB change per piece if that one input moves.</p></div>
         <div class="cs-card" id="cs-ordercard" hidden><h2>Order and fabric booking</h2><div id="cs-orderres"></div></div>
         <div class="cs-card"><h2>Fabric price per kg</h2><div id="cs-shellres"></div><p class="cs-hint" id="cs-method"></p></div>
@@ -216,6 +231,6 @@
   <footer class="footer"></footer>
 </div>
 <script src="assets/js/api.js"></script>
-<script src="assets/js/costsheet.js?v=20261108b"></script>
+<script src="assets/js/costsheet.js?v=20261108c"></script>
 </body>
 </html>
