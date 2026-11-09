@@ -400,7 +400,9 @@ function solve(ctx, ground) {
   const phi = platingFraction(ctx);
   const fibre = fibreFactor(ground.fibre);
   const model = structureModel(ctx);
-  const KS0 = blend(KP.calFor('ks', family, false), KP.calFor('ks', family, true), phi);
+  // a rib with needles out of action (2-in-1-out, 2x2) is weighed on its own factory records
+  const ksFam = family === 'rib' && ctx.posNorm > 1.01 ? 'rib2x2' : family;
+  const KS0 = blend(KP.calFor('ks', ksFam, false), KP.calFor('ks', ksFam, true), phi);
   const KW0 = blend(KP.calFor('kw', family, false), KP.calFor('kw', family, true), phi);
   const pitch0 = 25.4 / (+mach.gauge > 0 ? +mach.gauge : 24);
   const pack = holdPacking(family, ctx.rate == null ? 1 : ctx.rate, pitch0, 3);

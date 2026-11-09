@@ -690,32 +690,10 @@
   var cellOf = function (x) { return x === 'K' ? 'K' : x === 'T' ? 'T' : 'M'; };   // transfer and empty needle read as a float
   /** The drawn programme as the 3D engine's construction, pattern and needle sampler. */
   function clothOpts() {
-    var C = S.C.map(function (r) { return r.map(cellOf); }), D = S.D ? S.D.map(function (r) { return r.map(cellOf); }) : null;
-    var hasT = C.some(function (r) { return r.indexOf('T') > -1; });
-    var loopFeed = S.feeds.some(function (fd) { return fd.role === 'loop'; });
-    var con;
-    if (S.bed === 'interlock') con = { type: 'interlock', base: 'double', label: 'interlock', mesh: false, brush: false };
-    else if (S.bed === 'rib' && S.D) {
-      // the rib's own set-out: cylinder needles that work, then dial needles that work
-      var a = S.C[0].filter(function (x) { return x !== '-'; }).length || 1, b = S.D[0].filter(function (x) { return x !== '-'; }).length || 1;
-      con = { type: 'rib', base: 'double', label: a + '×' + b + ' rib', mesh: false, brush: false, ribRepeat: { a: a, b: b } };
-    } else if (loopFeed && last && last.plush) con = { type: 'terry', base: 'single', label: $('st-cut').checked ? 'velour' : 'terry', mesh: false, brush: false };
-    else if (loopFeed) con = { type: 'fleece', base: 'single', label: 'fleece', mesh: false, brush: true, pile: 'brush' };
-    else if (hasT) con = { type: 'pique', base: 'single', label: 'single-bed tuck', mesh: false, brush: false };
-    else con = { type: 'jersey', base: 'single', label: 'single jersey', mesh: false, brush: false };
-    var pattern = { grid: C, rows: C.length, cols: C[0].length, hasTM: true, hasM: C.some(function (r) { return r.indexOf('M') > -1; }) };
-    if (D) { pattern.dial = D; pattern.dialRows = D.length; pattern.dialCols = D[0].length; }
-    var mod = function (n, m) { return ((n % m) + m) % m; };
-    var token = function (w, c, bed) {
-      var front = 'knit';
-      if (con.type === 'rib') front = mod(w, con.ribRepeat.a + con.ribRepeat.b) < con.ribRepeat.a ? 'knit' : 'purl';
-      if (front === 'knit') {
-        var g = bed === 'dial' && D ? D : C;
-        var cell = g[mod(c, g.length)][mod(w, g[0].length)];
-        if (cell === 'T') front = 'tuck'; else if (cell === 'M') front = 'miss';
-      }
-      return front;
-    };
+    // the notation → 3D mapping lives in studio-cloth-map.js (tested in node)
+    var cs = window.KAStudioCloth.clothSpec({ bed: S.bed, C: S.C, D: S.D, feeds: S.feeds,
+      plush: last && last.plush && S.feeds.some(function (fd) { return fd.role === 'loop'; }) ? { cut: $('st-cut').checked, arrangement: $('st-parr').value } : null });
+    var con = cs.construction, pattern = cs.pattern;
     // density from the engine's answer for this design (wales, courses, GSM, stitch length)
     var fab = (last && last.fabric) || {};
     var wpc = fab.wpc || shape.wpc, cpc = fab.cpc || shape.cpc;
@@ -725,9 +703,8 @@
     var clamp = function (v, lo, hi) { return Math.max(lo, Math.min(hi, v)); };
     var scalar = clamp(Math.sqrt(clamp(cpc / (dbl ? 9.5 : 8), 0.5, 2.6)) * clamp(gsm / (dbl ? 260 : 190), 0.85, 1.18), 0.7, 1.7);
     return {
-      photo: true, dyed: hexRgb($('st-col').value), construction: con, countNe: ne, gsm: gsm, tf: fab.tf || 14,
-      fiberType: FIBRE_3D[$('st-fibre').value] || 'cotton', pattern: pattern,
-      sample: function (w, c) { return token(w, c, 'cyl'); }, sampleBack: function (w, c) { return token(w, c, 'dial'); },
+      photo: cs.photo, notes: cs.notes, dyed: hexRgb($('st-col').value), construction: con, countNe: ne, gsm: gsm, tf: fab.tf || 14,
+      fiberType: FIBRE_3D[$('st-fibre').value] || 'cotton', pattern: pattern, sample: cs.sample, sampleBack: cs.sampleBack,
       density: { wpc: wpc, cpc: cpc, aspect: clamp(cpc / wpc, 0.9, con.type === 'pique' ? 3.2 : 1.6), scalar: scalar, llMm: fab.sl_mm || null, tex: 590.5 / ne, fibreDensityScale: 1 },
       elastanePct: $('st-lycra').checked ? 5 : 0, physics: null,
     };
@@ -735,7 +712,7 @@
   function renderCloth() {
     var host = $('st-cloth'), o = clothOpts(), my = ++clothSeq;
     // rebuild only when the structure or its numbers changed; a colour change repaints
-    var key = JSON.stringify([o.construction, o.pattern.grid, o.pattern.dial, Math.round(o.density.wpc * 10), Math.round(o.density.cpc * 10), Math.round(o.countNe), o.gsm, o.fiberType, o.elastanePct]);
+    var key = JSON.stringify([o.construction, o.pattern.grid, o.pattern.dial, o.pattern.feedYarns, Math.round(o.density.wpc * 10), Math.round(o.density.cpc * 10), Math.round(o.countNe), o.gsm, o.fiberType, o.elastanePct]);
     if (cloth && key === clothKey) { cloth.setColor($('st-col').value); return; }
     clothKey = key;
     $('st-cloth-wait').hidden = false;
@@ -749,7 +726,7 @@
       if (showBack) k.setView('back');
       $('st-cloth-wait').hidden = true;
       var con = o.construction;
-      $('st-3dnote').textContent = con.label + ' · ' + o.density.wpc.toFixed(1) + ' wales × ' + o.density.cpc.toFixed(1) + ' courses /cm · ' + Math.round(o.countNe) + 's · ' + Math.round(o.gsm) + ' GSM';
+      $('st-3dnote').textContent = con.label + ' · ' + o.density.wpc.toFixed(1) + ' wales × ' + o.density.cpc.toFixed(1) + ' courses /cm · ' + Math.round(o.countNe) + 's · ' + Math.round(o.gsm) + ' GSM' + (o.notes.length ? ' — ' + o.notes.join(' ') : '');
     }).catch(function (e) {
       if (window.console) console.error(e);
       $('st-cloth-wait').hidden = false;

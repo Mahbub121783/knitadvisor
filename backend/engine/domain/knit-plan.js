@@ -53,7 +53,16 @@ const CAL = (() => {
       if (r.fab === 'rib' && r.fdia / r.dia < 1.6) k *= 2 / 3;
       (kw[key] = kw[key] || []).push(k);
     }
-    if (r.sl > 0 && r.ne > 0 && r.fgsm > 0) (ks[key] = ks[key] || []).push(10 * r.fgsm * (r.sl / 10) / (590.5 / r.ne));
+    // the 1x1 rib's Ks from 1x1 ribs only; 2-in-1-out ribs get their own below
+    const openRib = r.fab === 'rib' && r.fdia > 0 && r.dia > 0 && r.fdia / r.dia < 1.6;
+    if (r.sl > 0 && r.ne > 0 && r.fgsm > 0 && !openRib) (ks[key] = ks[key] || []).push(10 * r.fgsm * (r.sl / 10) / (590.5 / r.ne));
+    // A rib knitted 2-in-1-out (finished width ≈ 1.3 × dia) packs differently
+    // from a 1x1 rib: its own Ks, kept apart so a needle-out set-out in the
+    // studio is weighed on its own records (GSM error 24 % → ~4 %).
+    if (r.fab === 'rib' && r.fdia > 0 && r.dia > 0 && r.fdia / r.dia < 1.6 && r.sl > 0 && r.ne > 0 && r.fgsm > 0) {
+      const k2 = `rib2x2|${isLycraSpin(r.spin) ? 'L' : 'P'}`;
+      (ks[k2] = ks[k2] || []).push(10 * r.fgsm * (r.sl / 10) / (590.5 / r.ne));
+    }
     if (r.g > 0 && r.ne > 0) (gauges[key] = gauges[key] || []).push({ ne: r.ne, g: r.g });
     if (r.dia > 0) (dias[key] = dias[key] || []).push(r.dia);
     if (r.g > 0 && r.ne > 0) (ratio[r.fab] = ratio[r.fab] || []).push((25.4 / r.g) / (Math.sqrt(590.5 / r.ne) / 28));

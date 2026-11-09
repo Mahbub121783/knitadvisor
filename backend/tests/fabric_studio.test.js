@@ -65,12 +65,18 @@ for (const t of T) {
   assert(ne >= 18 && ne <= 26, `solved ${ne}s`);
 }
 
-// 6. a rib's out-of-action needles are not cloth: 2×2 rib = 1×1 rib stitch length
+// 6. a 2-in-1-out rib is weighed on its own factory records: it draws in more
+// across the width, so the same GSM and count take a longer loop than a 1×1
+// (Ks 36 vs 27 in the records; one shared Ks had put its GSM out by ~24 %)
 {
   const a = run('rib_1x1', { yarn: { ne: 30 }, target: { gsm: 220 } });
   const b = run('rib_2x2', { yarn: { ne: 30 }, target: { gsm: 220 } });
-  assert(Math.abs(a.fabric.sl_mm - b.fabric.sl_mm) < 0.05, `${a.fabric.sl_mm} vs ${b.fabric.sl_mm}`);
-  assert(b.fabric.width_open_in < a.fabric.width_open_in * 0.75, '2x2 knits on two-thirds of the needles');
+  const ratio = b.fabric.sl_mm / a.fabric.sl_mm;
+  assert(ratio > 1.2 && ratio < 1.5, `2x2 / 1x1 stitch length ${b.fabric.sl_mm} / ${a.fabric.sl_mm}`);
+  assert(/rib2x2/.test(b.fabric.ks_basis), `2x2 constants from the 2x2 records: ${b.fabric.ks_basis}`);
+  // width: two-thirds of the needles, each loop longer by that ratio (Kw per working needle is the same in the records)
+  const wExpect = (2 / 3) * ratio;
+  assert(Math.abs(b.fabric.width_open_in / a.fabric.width_open_in / wExpect - 1) < 0.08, `width ${b.fabric.width_open_in} vs ${a.fabric.width_open_in} × ${wExpect.toFixed(2)}`);
 }
 
 // 7. checks the machine would otherwise find
