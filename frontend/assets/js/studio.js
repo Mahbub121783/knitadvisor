@@ -287,7 +287,8 @@
     if (sg !== lastSig) { lastSig = sg; rolls = readRolls(); renderRolls(); }
     clearTimeout(timer);
     timer = setTimeout(analyse, 280);
-    clearTimeout(timer3d); timer3d = setTimeout(render3D, 120);
+    // the real view is a heavy rebuild: wait for a pause in the editing
+    clearTimeout(timer3d); timer3d = setTimeout(render3D, mode3d === 'cloth' ? 700 : 120);
   }
 
   function num(id) { var v = parseFloat($(id).value); return isFinite(v) && v > 0 ? v : null; }
@@ -355,7 +356,7 @@
     });
     renderSetup(); renderResults(); renderMachine(); renderNotation();
     clearTimeout(timer3d); timer3d = setTimeout(render3D, 350);
-    race.reset();
+    race.reset(); cycle.refresh();
   }
 
   function kpi(label, value, sub, k) {
@@ -653,7 +654,66 @@
     };
   })();
 
+  // -- needle action: one needle's knitting cycle (studio-needle.js) --------
+  var cycle = (function () {
+    var view = null;
+    var NAME = { K: 'knit', T: 'tuck', M: 'miss', E: 'transfer', '-': 'no needle' };
+    var dial = function () { return $('st-anibed').value === 'D' && !!S.D; };
+    var bedG = function () { return dial() ? S.D : S.C; };
+    function fill() {
+      var g = bedG(), fs = $('st-cyf'), ns = $('st-cyn');
+      var fv = Math.min(+fs.value || 0, g.length - 1), nv = Math.min(+ns.value || 0, g[0].length - 1);
+      fs.innerHTML = g.map(function (_, i) { return '<option value="' + i + '">F' + (i + 1) + ' · ' + esc((S.feeds[i] || {}).role || 'ground') + '</option>'; }).join('');
+      ns.innerHTML = g[0].map(function (_, j) { return '<option value="' + j + '">' + (j + 1) + '</option>'; }).join('');
+      fs.value = String(Math.max(0, fv)); ns.value = String(Math.max(0, nv));
+    }
+    function cell() {
+      var g = bedG(), F = g.length, f = Math.min(+$('st-cyf').value || 0, F - 1), j = Math.min(+$('st-cyn').value || 0, g[0].length - 1);
+      var sym = g[f][j];
+      // loops on the needle before this feed: the old loop, plus one for every tuck since it last knitted
+      var held = 1;
+      for (var k = 1; k < F; k++) { var a = g[(f - k + F) % F][j]; if (a === 'K') break; if (a === 'T') held++; }
+      var role = (S.feeds[f] || {}).role || 'ground';
+      return { sym: sym === '-' ? 'M' : sym, held: Math.min(held, 4), double: !!S.D, feedRole: role, colour: '#1857C4',
+        label: 'Feeder ' + (f + 1) + ' (' + role + '), ' + (dial() ? 'dial' : 'cylinder') + ' needle ' + (j + 1) + ': ' + NAME[sym] + (held > 1 ? ', already holding ' + held + ' loops' : '') };
+    }
+    function phases(i) {
+      var d = cell(), N = window.KAStudioNeedle, T = N.TEXT[d.sym] || N.TEXT.M;
+      $('st-phases').innerHTML = N.PHASES.map(function (P, n) {
+        return '<li data-ph="' + n + '"' + (n === i ? ' class="on"' : '') + '><b>' + P.name + '</b></li>';
+      }).join('');
+      $('st-cynote').textContent = (i + 1) + '. ' + N.PHASES[i].name + ': ' + T[N.PHASES[i].k];
+      $('st-cysym').textContent = { K: 'K · knit', T: 'T · tuck', M: 'M · miss', E: 'E · transfer' }[d.sym] || d.sym;
+    }
+    return {
+      start: function () {
+        if (!window.KAStudioNeedle) return;
+        fill();
+        if (!view) view = new window.KAStudioNeedle.Cycle($('st-cycle'), cell, phases);
+        view._ph = null; view.speed = parseFloat($('st-cyspeed').value) || 0.6;
+        view.start();
+      },
+      stop: function () { if (view) view.stop(); },
+      refresh: function () { if (view) { fill(); view._ph = null; view.draw(); } },
+      bind: function () {
+        var restart = function () { if (view) { view._ph = null; view.seek(0); } };
+        $('st-cyf').addEventListener('change', restart);
+        $('st-cyn').addEventListener('change', restart);
+        $('st-cyplay').addEventListener('click', function () { if (view) this.textContent = view.toggle() ? 'Pause' : 'Play'; });
+        $('st-cyprev').addEventListener('click', function () { if (view) { view.stepPhase(-1); $('st-cyplay').textContent = 'Play'; } });
+        $('st-cynext').addEventListener('click', function () { if (view) { view.stepPhase(1); $('st-cyplay').textContent = 'Play'; } });
+        $('st-cyspeed').addEventListener('input', function () { if (view) view.speed = parseFloat(this.value) || 0.6; });
+        $('st-phases').addEventListener('click', function (e) {
+          var li = e.target.closest('[data-ph]'); if (!li || !view) return;
+          view.playing = false; $('st-cyplay').textContent = 'Play';
+          view.seek(window.KAStudioNeedle.PHASES[+li.getAttribute('data-ph')].t + 0.02);
+        });
+      },
+    };
+  })();
+
   function renderNeedleTypes() {
+    if (window.KAStudioNeedle) { $('st-needletypes').innerHTML = window.KAStudioNeedle.renderTypes(); return; }
     var fig = function (svg, cap) { return '<figure>' + svg + '<figcaption>' + cap + '</figcaption></figure>'; };
     var lbl = function (x, y, t) { return '<text x="' + x + '" y="' + y + '" font-size="10" fill="#565C64">' + t + '</text>'; };
     var latch = '<svg viewBox="0 0 200 150" width="100%" height="150"><rect x="94" y="30" width="6" height="110" fill="#6b7280"/><path d="M100 36 Q100 14 88 14 Q76 14 76 28 L76 36" fill="none" stroke="#374151" stroke-width="3"/><line x1="97" y1="58" x2="78" y2="36" stroke="#111" stroke-width="2.4"/><circle cx="97" cy="58" r="2.5" fill="#111"/><rect x="100" y="112" width="12" height="9" fill="#1857C4"/>' +
@@ -685,7 +745,7 @@
   }
 
   // ── 3D: the real fabric — the calculator's knit3d engine ──────────────
-  var cloth = null, clothSeq = 0, clothKey = '';
+  var cloth = null, clothSeq = 0, clothKey = '', zoom = 'loops';   // the real view opens on the loops: a drawn programme must be readable stitch by stitch
   var FIBRE_3D = { cotton: 'cotton', cvc: 'cotton', polyester_spun: 'polyester', polyester_filament: 'polyester', nylon_filament: 'nylon', viscose: 'viscose', modal: 'modal' };
   var cellOf = function (x) { return x === 'K' ? 'K' : x === 'T' ? 'T' : 'M'; };   // transfer and empty needle read as a float
   /** The drawn programme as the 3D engine's construction, pattern and needle sampler. */
@@ -703,7 +763,7 @@
     var clamp = function (v, lo, hi) { return Math.max(lo, Math.min(hi, v)); };
     var scalar = clamp(Math.sqrt(clamp(cpc / (dbl ? 9.5 : 8), 0.5, 2.6)) * clamp(gsm / (dbl ? 260 : 190), 0.85, 1.18), 0.7, 1.7);
     return {
-      photo: cs.photo, notes: cs.notes, dyed: hexRgb($('st-col').value), construction: con, countNe: ne, gsm: gsm, tf: fab.tf || 14,
+      photo: cs.photo, notes: cs.notes, start: zoom === 'loops' ? 'loops' : undefined, dyed: hexRgb($('st-col').value), construction: con, countNe: ne, gsm: gsm, tf: fab.tf || 14,
       fiberType: FIBRE_3D[$('st-fibre').value] || 'cotton', pattern: pattern, sample: cs.sample, sampleBack: cs.sampleBack,
       density: { wpc: wpc, cpc: cpc, aspect: clamp(cpc / wpc, 0.9, con.type === 'pique' ? 3.2 : 1.6), scalar: scalar, llMm: fab.sl_mm || null, tex: 590.5 / ne, fibreDensityScale: 1 },
       elastanePct: $('st-lycra').checked ? 5 : 0, physics: null,
@@ -716,7 +776,7 @@
     if (cloth && key === clothKey) { cloth.setColor($('st-col').value); return; }
     clothKey = key;
     $('st-cloth-wait').hidden = false;
-    import('/assets/js/knit3d/index.js?v=20260608g').then(function (mod) {
+    import('/assets/js/knit3d/index.js?v=20261110a').then(function (mod) {
       if (my !== clothSeq || mode3d !== 'cloth') return;
       if (cloth) { try { cloth.dispose(); } catch (_) {} cloth = null; }
       Array.prototype.forEach.call(host.querySelectorAll('canvas'), function (c) { c.remove(); });
@@ -724,6 +784,7 @@
       try { k.mount(host, o); } catch (e) { try { k.dispose(); } catch (_) {} throw e; }
       cloth = k;
       if (showBack) k.setView('back');
+      if (zoom !== 'loops') k.frame(zoom);
       $('st-cloth-wait').hidden = true;
       var con = o.construction;
       $('st-3dnote').textContent = con.label + ' · ' + o.density.wpc.toFixed(1) + ' wales × ' + o.density.cpc.toFixed(1) + ' courses /cm · ' + Math.round(o.countNe) + 's · ' + Math.round(o.gsm) + ' GSM' + (o.notes.length ? ' — ' + o.notes.join(' ') : '');
@@ -754,7 +815,8 @@
       h: clamp(f.wpc / f.cpc, 0.5, 1.4),
       // yarn diameter 0.907/√Ne mm (cotton), drawn a little flattened in the
       // relaxed loop; one wale = 10/wpc mm
-      radius: feeds.map(function (fd) { var ne = +fd.ne > 0 ? +fd.ne : groundNe; return clamp(0.5 * (0.907 / Math.sqrt(ne)) * f.wpc / 10, 0.06, 0.22); }),
+      // a spun yarn lies about 1.3 × its packed diameter wide in the relaxed loop (fibre bulk)
+      radius: feeds.map(function (fd) { var ne = +fd.ne > 0 ? +fd.ne : groundNe; return clamp(0.5 * 1.3 * (0.907 / Math.sqrt(ne)) * f.wpc / 10, 0.07, 0.24); }),
       plated: feeds.map(function (fd, i) { return !!ly && fd.role !== 'loop' && (ly === 'all' || i % 2 === 0); }),
       colourBy: real ? 'one' : $('st-colby').value, colour: $('st-col').value,
     };
@@ -776,7 +838,7 @@
   function renderLoops() {
     var host = $('st-loops');
     if (!loopPromise) {
-      loopPromise = import('/assets/js/studio-loops.js?v=20261107a').then(function (mod) {
+      loopPromise = import('/assets/js/studio-loops.js?v=20261110a').then(function (mod) {
         loopView = new mod.LoopView(host, showTip);
         loopView.feedColour = mod.feedColour;
         return loopView;
@@ -932,6 +994,12 @@
       if (el.type === 'number') el.addEventListener('input', schedule);
     });
     $('st-col').addEventListener('change', render3D);
+    $('st-zoom').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-z]'); if (!b) return;
+      zoom = b.getAttribute('data-z');
+      Array.prototype.forEach.call(this.children, function (x) { x.classList.toggle('on', x === b); });
+      if (cloth) cloth.frame(zoom);
+    });
     $('st-side').addEventListener('click', function () {
       showBack = !showBack; this.textContent = showBack ? 'Show face' : 'Show back';
       if (cloth) cloth.setView(showBack ? 'back' : 'front');
@@ -942,11 +1010,12 @@
       var t = b.getAttribute('data-tab');
       Array.prototype.forEach.call(this.children, function (x) { x.classList.toggle('on', x === b); });
       document.querySelectorAll('.st-pane').forEach(function (p) { p.classList.toggle('on', p.id === 'pane-' + t); });
-      if (t === 'needle') { race.reset(); race.start(); } else race.stop();
+      if (t === 'needle') { race.reset(); race.start(); cycle.start(); } else { race.stop(); cycle.stop(); }
       if (t === '3d') render3D();
     });
     $('st-play').addEventListener('click', function () { this.textContent = race.toggle() ? 'Pause' : 'Play'; });
-    $('st-anibed').addEventListener('change', function () { race.reset(); });
+    $('st-anibed').addEventListener('change', function () { race.reset(); cycle.refresh(); });
+    cycle.bind();
     $('st-save').addEventListener('click', function () {
       var btn = this, d = designNow();
       apiFetch('/api/studio/designs', { method: 'PUT', body: { name: d.name, design: d } }).then(function () {

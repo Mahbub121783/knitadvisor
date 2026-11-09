@@ -123,7 +123,10 @@ export class Knit3D {
     // With a macro view, the default is the whole cloth at ~14 cm across —
     // how a fabric is actually first looked at; zooming in reaches the loops.
     const el = (this._photo ? 3 : 24) * Math.PI / 180, az = (this._photo ? 0 : 8) * Math.PI / 180;
-    const d0 = this._macro ? this._distForWidth(this._photo ? this._macro.photoW : this._macro.viewW) : this._fitDist * 0.8;
+    // opts.start 'loops': open on the loop model itself (every stitch of the
+    // programme readable), the cloth one zoom-out away
+    const d0 = this.opts.start === 'loops' ? this._fitDist * 0.5
+      : this._macro ? this._distForWidth(this._photo ? this._macro.photoW : this._macro.viewW) : this._fitDist * 0.8;
     camera.position.set(
       d0 * Math.sin(az) * Math.cos(el),
       -d0 * Math.sin(el),
@@ -2066,6 +2069,18 @@ export class Knit3D {
   // to meet them is correctly in front of the backing and correctly lit, no
   // light-mirroring needed for this path (see _setLightSide's own doc — that
   // stays for the free-orbit case, where the CAMERA does move).
+  /** Zoom to a preset: 'loops' (the loop model, every stitch), 'swatch' (~4 cm), 'cloth' (~14 cm). */
+  frame(kind) {
+    if (!this.controls || !this.camera) return;
+    const m = this._macro;
+    const d = kind === 'loops' || !m ? this._fitDist * 0.5
+      : this._distForWidth(kind === 'swatch' ? (m.photoW || 4 * m.cm) : m.viewW);
+    const c = this.controls, dir = this.camera.position.clone().sub(c.target);
+    if (dir.lengthSq() < 1e-9) dir.set(0, 0, 1);
+    this.camera.position.copy(c.target).add(dir.setLength(Math.max(c.minDistance, Math.min(c.maxDistance, d))));
+    c.update();
+  }
+
   setView(which) {
     if (!this._pivot) return;
     const back = which === 'back';

@@ -111,21 +111,22 @@
           // the feet go behind everything on the needle: the old loop and any tucks
           var fz = z0 - s * (0.14 + 0.16 * Math.min(2, t));
           // keyhole: narrow feet (they pass inside the old head), legs
-          // widest at mid-height where they meet the next wale, round head
-          push(X - 0.15, y0 - 0.02 * h, fz, s);
-          push(X - 0.29, y0 + 0.14 * h, z0 + s * 0.12, s);
-          push(X - 0.38, y0 + 0.40 * h, z0 + s * 0.17, s);
-          if (n > c + 1) push(X - 0.37, yt - 0.64 * h, z0 + s * 0.15, s);
+          // widest at mid-height where they touch the next wale's legs (a
+          // knitted fabric has no gap between wales), round head
+          push(X - 0.17, y0 - 0.02 * h, fz, s);
+          push(X - 0.32, y0 + 0.14 * h, z0 + s * 0.12, s);
+          push(X - 0.43, y0 + 0.40 * h, z0 + s * 0.17, s);
+          if (n > c + 1) push(X - 0.42, yt - 0.64 * h, z0 + s * 0.15, s);
           // a transferred loop leans its head onto the needle that took it
-          push(X - 0.33 + sh * 0.6, yt - 0.40 * h, z0 + s * 0.10, s);
-          push(X - 0.23 + sh, yt - 0.12 * h, z0 - s * 0.04, s);
+          push(X - 0.39 + sh * 0.6, yt - 0.40 * h, z0 + s * 0.10, s);
+          push(X - 0.28 + sh, yt - 0.12 * h, z0 - s * 0.04, s);
           push(X + sh, yt, z0 - s * 0.12, s);
-          push(X + 0.23 + sh, yt - 0.12 * h, z0 - s * 0.04, s);
-          push(X + 0.33 + sh * 0.6, yt - 0.40 * h, z0 + s * 0.10, s);
-          if (n > c + 1) push(X + 0.37, yt - 0.64 * h, z0 + s * 0.15, s);
-          push(X + 0.38, y0 + 0.40 * h, z0 + s * 0.17, s);
-          push(X + 0.29, y0 + 0.14 * h, z0 + s * 0.12, s);
-          push(X + 0.15, y0 - 0.02 * h, fz, s);
+          push(X + 0.28 + sh, yt - 0.12 * h, z0 - s * 0.04, s);
+          push(X + 0.39 + sh * 0.6, yt - 0.40 * h, z0 + s * 0.10, s);
+          if (n > c + 1) push(X + 0.42, yt - 0.64 * h, z0 + s * 0.15, s);
+          push(X + 0.43, y0 + 0.40 * h, z0 + s * 0.17, s);
+          push(X + 0.32, y0 + 0.14 * h, z0 + s * 0.12, s);
+          push(X + 0.17, y0 - 0.02 * h, fz, s);
           rec.held = n - c - 1; rec.top = yt; rec.tucks = t;
         } else if (a === 'T') {
           var nt = nextKnit(b, p.j, c), ct = y(nt) + 0.30 * h;

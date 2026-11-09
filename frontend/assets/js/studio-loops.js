@@ -4,7 +4,7 @@
 // needle to needle; the geometry is in studio-loop-geom.js.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import './studio-loop-geom.js?v=20261107a';
+import './studio-loop-geom.js?v=20261110a';
 
 const FEED_COLOURS = ['#1857C4', '#0f9d76', '#c2410c', '#7a4fc2', '#b8860b', '#0e7490', '#be185d', '#4d7c0f', '#9a3412', '#334155', '#0369a1', '#a16207'];
 const ROLE_COLOURS = { ground: '#1857C4', face: '#1857C4', binder: '#7a4fc2', loop: '#c2410c' };

@@ -59,6 +59,23 @@
     .st-btn:hover { border-color: var(--accent); color: var(--accent); }
     .st-btn.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
     .st-btn:disabled { opacity: .45; cursor: default; }
+    .st-cycle { display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 8px; }
+    .st-phases { margin: 0; padding: 0; list-style: none; counter-reset: ph; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+    .st-phases li { counter-increment: ph; padding: 7px 9px 7px 30px; position: relative; border: 1px solid var(--line); border-radius: var(--radius-sm); font-size: 12px; color: var(--t2); cursor: pointer; }
+    .st-phases li::before { content: counter(ph); position: absolute; left: 10px; top: 7px; font-weight: 700; color: var(--t3); }
+    .st-phases li b { display: block; color: var(--t1); font-size: 12px; }
+    .st-phases li span { display: none; margin-top: 3px; line-height: 1.45; }
+    .st-phases li.on { border-color: var(--accent); }
+    .st-phases li.on { background: var(--accent); }
+    .st-phases li.on b, .st-phases li.on::before { color: var(--on-accent); }
+    .st-cysym { font: 700 12px var(--head); padding: 6px 10px; border-radius: var(--radius-sm); border: 1px solid var(--line2); }
+    .st-cynote { font-size: 13px; line-height: 1.5; color: var(--t1); padding: 9px 12px; border-left: 3px solid var(--accent); background: var(--bg); }
+    @media (max-width: 760px) { .st-phases { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    .st-zoom { display: inline-flex; gap: 0; }
+    .st-zoom .st-btn { border-radius: 0; margin-left: -1px; }
+    .st-zoom .st-btn:first-child { border-radius: var(--radius-sm) 0 0 var(--radius-sm); margin-left: 0; }
+    .st-zoom .st-btn:last-child { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+    .st-zoom .st-btn.on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
     .st-check { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--t1); margin: 4px 0 8px; }
 
     /* editor */
@@ -329,6 +346,7 @@
             <div class="st-3dbar" id="st-clothbar" hidden>
               <label>Colour <input type="color" id="st-col" value="#3d5a80"></label>
               <button type="button" class="st-btn" id="st-side">Show back</button>
+              <span class="st-zoom" id="st-zoom"><button type="button" class="st-btn on" data-z="loops" title="Every loop of your programme, in real yarn">Loops</button><button type="button" class="st-btn" data-z="swatch" title="A 4 cm swatch">4 cm</button><button type="button" class="st-btn" data-z="cloth" title="The whole piece of cloth">Cloth</button></span>
               <span id="st-3dnote"></span>
             </div>
             <div id="st-loops"><div class="st-tip" id="st-tip" hidden></div></div>
@@ -340,7 +358,7 @@
             </div>
             <div class="st-legend" id="st-feedkey"></div>
             <p class="st-hint" id="st-loophint">Each tube is one yarn; each course is one feeder's pass. A knit loop is drawn through the loop below it, back to front. A tuck is an open arch with no crossing at its foot, lying behind the held loop. A miss is a straight float behind the held loop. A held loop reaches up to the course where its needle next knits. Point at a yarn to read the stitch; click a feeder below to pick out its yarn. Drag to turn, scroll to zoom. Loop shape follows the finished wales and courses per cm; yarn thickness follows each feeder's count.</p>
-            <p class="st-hint" id="st-clothhint" hidden>The real view is the same 3D engine as the fabric calculator: real yarn (twist, hairiness, fibre sheen), lighting and cloth surface, knitted from exactly the programme you drew, at the fabric's own wales and courses per cm, yarn count and GSM. It redraws on every change. Drag to turn, scroll to zoom in to the single loop.</p>
+            <p class="st-hint" id="st-clothhint" hidden>The real view is the same 3D engine as the fabric calculator: real yarn (twist, hairiness, fibre sheen), lighting and cloth surface, knitted from exactly the programme you drew, at the fabric's own wales and courses per cm, yarn count and GSM. It redraws on every change. It opens on the loops so every K, T and M you drew can be read in real yarn; 4 cm and Cloth step back to the swatch and the whole piece. Drag to turn, scroll to zoom.</p>
           </div>
 
           <div class="st-pane" id="pane-notation">
@@ -351,6 +369,23 @@
           <div class="st-pane" id="pane-setup"></div>
 
           <div class="st-pane" id="pane-needle">
+            <div class="st-sub" style="margin-top:0">Knitting cycle — one needle of your programme</div>
+            <div class="st-tools">
+              <span style="font-size:12px;color:var(--t2)">Feeder <select id="st-cyf" class="st-btn"></select></span>
+              <span style="font-size:12px;color:var(--t2)">Needle <select id="st-cyn" class="st-btn"></select></span>
+              <span class="st-cysym" id="st-cysym"></span>
+              <button type="button" class="st-btn" id="st-cyprev" title="Previous position">&#9664;</button>
+              <button type="button" class="st-btn" id="st-cyplay">Pause</button>
+              <button type="button" class="st-btn" id="st-cynext" title="Next position">&#9654;</button>
+              <label style="font-size:12px;color:var(--t2)">Speed <input type="range" id="st-cyspeed" min="0.2" max="2" step="0.1" value="0.6"></label>
+            </div>
+            <div class="st-cycle">
+              <div class="st-svgwrap" id="st-cycle"></div>
+              <div class="st-cynote" id="st-cynote"></div>
+              <ol class="st-phases" id="st-phases"></ol>
+            </div>
+            <p class="st-hint">The needle you pick in your programme, seen in section, through the eight positions of the latch-needle cycle. Knit, tuck, miss and transfer each follow their own cam path; the loops already on the needle come from the cells above it in your notation. On a double bed (rib, interlock) there is no sinker: each bed knocks over across the edge of its trick and the other bed holds the fabric. Use the arrows, or click a position, to stop at it.</p>
+            <div class="st-sub">All needles past the cam box</div>
             <div class="st-tools">
               <button type="button" class="st-btn" id="st-play">Pause</button>
               <label style="font-size:12px;color:var(--t2)">Speed <input type="range" id="st-speed" min="0.2" max="2" step="0.1" value="0.6"></label>
@@ -375,6 +410,7 @@
 
 <script src="assets/js/api.js"></script>
 <script src="assets/js/studio-cloth-map.js?v=20261109a"></script>
-<script src="assets/js/studio.js?v=20261109d"></script>
+<script src="assets/js/studio-needle.js?v=20261110c"></script>
+<script src="assets/js/studio.js?v=20261110c"></script>
 </body>
 </html>

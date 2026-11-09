@@ -1238,10 +1238,26 @@ router.get('/studio/templates', requireUser, (req, res) => {
   res.json({ success: true, templates: fabricStudio.listTemplates(), fibres: fabricStudio.FIBRES, limits: fabricStudio.LIMITS });
 });
 
+// The answer depends only on the design and the reference data loaded at
+// boot, so identical designs (every user who opens the same template, every
+// undo back to a state already seen) are served from memory: a small LRU of
+// the serialised answer.
+const studioCache = new Map();
+const STUDIO_CACHE_MAX = 4000;
 router.post('/studio/analyse', requireUser, (req, res) => {
   try {
-    const out = fabricStudio.analyse(req.body || {});
-    res.status(out.success ? 200 : 400).json(out);
+    const key = JSON.stringify(req.body || {});
+    let hit = key.length < 32768 ? studioCache.get(key) : null;
+    if (hit) { studioCache.delete(key); studioCache.set(key, hit); }
+    else {
+      const out = fabricStudio.analyse(req.body || {});
+      hit = { status: out.success ? 200 : 400, body: JSON.stringify(out) };
+      if (key.length < 32768) {
+        studioCache.set(key, hit);
+        if (studioCache.size > STUDIO_CACHE_MAX) studioCache.delete(studioCache.keys().next().value);
+      }
+    }
+    res.status(hit.status).type('application/json').send(hit.body);
   } catch (err) {
     console.error('[studio] analyse failed:', err);
     res.status(500).json({ success: false, error: 'The studio could not analyse this structure.' });
