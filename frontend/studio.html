@@ -116,6 +116,10 @@
     #st-loops { width: 100%; height: 460px; border-radius: 12px; background: radial-gradient(circle at 50% 40%, #f4f5f7, #dfe2e7); position: relative; overflow: hidden; touch-action: none; }
     #st-loops[hidden], #st-3d[hidden], .st-build[hidden] { display: none; }
     @media (max-width: 640px) { #st-loops { height: 360px; } }
+    #st-cloth { width: 100%; min-height: 380px; border-radius: 12px; background: #e9ebef; position: relative; overflow: hidden; touch-action: none; }
+    #st-cloth canvas { height: 460px !important; }
+    @media (max-width: 640px) { #st-cloth canvas { height: 360px !important; } }
+    .st-cloth-wait { position: absolute; inset: 0; display: grid; place-items: center; color: var(--t3); font-size: 13px; pointer-events: none; }
     .st-3dmode { margin-bottom: 8px; }
     .st-tip { position: absolute; z-index: 2; pointer-events: none; background: rgba(17,24,39,.92); color: #fff; font-size: 11.5px; line-height: 1.45; padding: 6px 9px; border-radius: 6px; max-width: 260px; }
     .st-build { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; color: var(--t2); flex-wrap: wrap; }
@@ -328,6 +332,7 @@
               <span id="st-3dnote"></span>
             </div>
             <div id="st-loops"><div class="st-tip" id="st-tip" hidden></div></div>
+            <div id="st-cloth" hidden><div class="st-cloth-wait" id="st-cloth-wait">Knitting the swatch…</div></div>
             <div class="st-build" id="st-build">
               <button type="button" class="st-btn" id="st-bplay">Knit it feed by feed</button>
               <input type="range" id="st-bstep" min="0" max="1" value="1" aria-label="Courses knitted">
@@ -335,7 +340,7 @@
             </div>
             <div class="st-legend" id="st-feedkey"></div>
             <p class="st-hint" id="st-loophint">Each tube is one yarn; each course is one feeder's pass. A knit loop is drawn through the loop below it, back to front. A tuck is an open arch with no crossing at its foot, lying behind the held loop. A miss is a straight float behind the held loop. A held loop reaches up to the course where its needle next knits. Point at a yarn to read the stitch; click a feeder below to pick out its yarn. Drag to turn, scroll to zoom. Loop shape follows the finished wales and courses per cm; yarn thickness follows each feeder's count.</p>
-            <p class="st-hint" id="st-clothhint" hidden>The real view knits many repeats of exactly the programme you drew, in one colour, at the fabric's own wales and courses per cm and yarn thickness — the face (or back) as it will look on the table. It redraws on every change. Drag to turn, scroll to zoom.</p>
+            <p class="st-hint" id="st-clothhint" hidden>The real view is the same 3D engine as the fabric calculator: real yarn (twist, hairiness, fibre sheen), lighting and cloth surface, knitted from exactly the programme you drew, at the fabric's own wales and courses per cm, yarn count and GSM. It redraws on every change. Drag to turn, scroll to zoom in to the single loop.</p>
           </div>
 
           <div class="st-pane" id="pane-notation">
@@ -369,6 +374,6 @@
 </div>
 
 <script src="assets/js/api.js"></script>
-<script src="assets/js/studio.js?v=20261108a"></script>
+<script src="assets/js/studio.js?v=20261109c"></script>
 </body>
 </html>

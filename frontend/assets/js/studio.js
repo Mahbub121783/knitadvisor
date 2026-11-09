@@ -5,8 +5,10 @@
  * /api/studio/analyse (fabric-studio.js), which checks it and answers with
  * the set-out, the yarn per feeder, the fabric and the machine — the page
  * only renders that answer, so the numbers here and on the floor cannot drift
- * apart. The 3D swatch is the knit3d engine the result page uses, fed the
- * drawn programme directly.
+ * apart. Two 3D views: the loop diagram (studio-loops.js — every yarn as a
+ * coloured tube, to read each knit, tuck and miss) and the real fabric, which
+ * is the knit3d engine the result page uses (real yarn, light and cloth
+ * surface), fed the drawn programme and the engine's density directly.
  */
 (function () {
   'use strict';
@@ -679,7 +681,80 @@
   // jersey's) is used and the 3D still shows exactly what is drawn.
   function render3D() {
     if (!$('pane-3d').classList.contains('on')) return;
-    renderLoops();
+    if (mode3d === 'cloth') renderCloth(); else renderLoops();
+  }
+
+  // ── 3D: the real fabric — the calculator's knit3d engine ──────────────
+  var cloth = null, clothSeq = 0, clothKey = '';
+  var FIBRE_3D = { cotton: 'cotton', cvc: 'cotton', polyester_spun: 'polyester', polyester_filament: 'polyester', nylon_filament: 'nylon', viscose: 'viscose', modal: 'modal' };
+  var cellOf = function (x) { return x === 'K' ? 'K' : x === 'T' ? 'T' : 'M'; };   // transfer and empty needle read as a float
+  /** The drawn programme as the 3D engine's construction, pattern and needle sampler. */
+  function clothOpts() {
+    var C = S.C.map(function (r) { return r.map(cellOf); }), D = S.D ? S.D.map(function (r) { return r.map(cellOf); }) : null;
+    var hasT = C.some(function (r) { return r.indexOf('T') > -1; });
+    var loopFeed = S.feeds.some(function (fd) { return fd.role === 'loop'; });
+    var con;
+    if (S.bed === 'interlock') con = { type: 'interlock', base: 'double', label: 'interlock', mesh: false, brush: false };
+    else if (S.bed === 'rib' && S.D) {
+      // the rib's own set-out: cylinder needles that work, then dial needles that work
+      var a = S.C[0].filter(function (x) { return x !== '-'; }).length || 1, b = S.D[0].filter(function (x) { return x !== '-'; }).length || 1;
+      con = { type: 'rib', base: 'double', label: a + '×' + b + ' rib', mesh: false, brush: false, ribRepeat: { a: a, b: b } };
+    } else if (loopFeed && last && last.plush) con = { type: 'terry', base: 'single', label: $('st-cut').checked ? 'velour' : 'terry', mesh: false, brush: false };
+    else if (loopFeed) con = { type: 'fleece', base: 'single', label: 'fleece', mesh: false, brush: true, pile: 'brush' };
+    else if (hasT) con = { type: 'pique', base: 'single', label: 'single-bed tuck', mesh: false, brush: false };
+    else con = { type: 'jersey', base: 'single', label: 'single jersey', mesh: false, brush: false };
+    var pattern = { grid: C, rows: C.length, cols: C[0].length, hasTM: true, hasM: C.some(function (r) { return r.indexOf('M') > -1; }) };
+    if (D) { pattern.dial = D; pattern.dialRows = D.length; pattern.dialCols = D[0].length; }
+    var mod = function (n, m) { return ((n % m) + m) % m; };
+    var token = function (w, c, bed) {
+      var front = 'knit';
+      if (con.type === 'rib') front = mod(w, con.ribRepeat.a + con.ribRepeat.b) < con.ribRepeat.a ? 'knit' : 'purl';
+      if (front === 'knit') {
+        var g = bed === 'dial' && D ? D : C;
+        var cell = g[mod(c, g.length)][mod(w, g[0].length)];
+        if (cell === 'T') front = 'tuck'; else if (cell === 'M') front = 'miss';
+      }
+      return front;
+    };
+    // density from the engine's answer for this design (wales, courses, GSM, stitch length)
+    var fab = (last && last.fabric) || {};
+    var wpc = fab.wpc || shape.wpc, cpc = fab.cpc || shape.cpc;
+    var ne = +$('st-ne').value > 0 ? +$('st-ne').value : (last && last.yarn && last.yarn.ground && last.yarn.ground.tex ? 590.5 / last.yarn.ground.tex : 590.5 / shape.tex);
+    var gsm = fab.gsm || num('st-gsm') || 180;
+    var dbl = con.base === 'double';
+    var clamp = function (v, lo, hi) { return Math.max(lo, Math.min(hi, v)); };
+    var scalar = clamp(Math.sqrt(clamp(cpc / (dbl ? 9.5 : 8), 0.5, 2.6)) * clamp(gsm / (dbl ? 260 : 190), 0.85, 1.18), 0.7, 1.7);
+    return {
+      photo: true, dyed: hexRgb($('st-col').value), construction: con, countNe: ne, gsm: gsm, tf: fab.tf || 14,
+      fiberType: FIBRE_3D[$('st-fibre').value] || 'cotton', pattern: pattern,
+      sample: function (w, c) { return token(w, c, 'cyl'); }, sampleBack: function (w, c) { return token(w, c, 'dial'); },
+      density: { wpc: wpc, cpc: cpc, aspect: clamp(cpc / wpc, 0.9, con.type === 'pique' ? 3.2 : 1.6), scalar: scalar, llMm: fab.sl_mm || null, tex: 590.5 / ne, fibreDensityScale: 1 },
+      elastanePct: $('st-lycra').checked ? 5 : 0, physics: null,
+    };
+  }
+  function renderCloth() {
+    var host = $('st-cloth'), o = clothOpts(), my = ++clothSeq;
+    // rebuild only when the structure or its numbers changed; a colour change repaints
+    var key = JSON.stringify([o.construction, o.pattern.grid, o.pattern.dial, Math.round(o.density.wpc * 10), Math.round(o.density.cpc * 10), Math.round(o.countNe), o.gsm, o.fiberType, o.elastanePct]);
+    if (cloth && key === clothKey) { cloth.setColor($('st-col').value); return; }
+    clothKey = key;
+    $('st-cloth-wait').hidden = false;
+    import('/assets/js/knit3d/index.js?v=20260608g').then(function (mod) {
+      if (my !== clothSeq || mode3d !== 'cloth') return;
+      if (cloth) { try { cloth.dispose(); } catch (_) {} cloth = null; }
+      Array.prototype.forEach.call(host.querySelectorAll('canvas'), function (c) { c.remove(); });
+      var k = new mod.Knit3D();
+      try { k.mount(host, o); } catch (e) { try { k.dispose(); } catch (_) {} throw e; }
+      cloth = k;
+      if (showBack) k.setView('back');
+      $('st-cloth-wait').hidden = true;
+      var con = o.construction;
+      $('st-3dnote').textContent = con.label + ' · ' + o.density.wpc.toFixed(1) + ' wales × ' + o.density.cpc.toFixed(1) + ' courses /cm · ' + Math.round(o.countNe) + 's · ' + Math.round(o.gsm) + ' GSM';
+    }).catch(function (e) {
+      if (window.console) console.error(e);
+      $('st-cloth-wait').hidden = false;
+      $('st-cloth-wait').textContent = 'The real view could not draw this programme: ' + (e && e.message || e);
+    });
   }
 
   var shape = { wpc: 14, cpc: 19, tex: 590.5 / 30 };   // a 30s jersey until the engine answers
@@ -789,8 +864,10 @@
       var lp = mode3d === 'loops';
       $('st-loopbar').hidden = !lp; $('st-build').hidden = !lp; $('st-feedkey').hidden = !lp; $('st-loophint').hidden = !lp;
       $('st-clothbar').hidden = lp; $('st-clothhint').hidden = lp;
+      $('st-loops').hidden = !lp; $('st-cloth').hidden = lp;
+      if (lp && cloth) { try { cloth.dispose(); } catch (_) {} cloth = null; clothKey = ''; }
       render3D();
-      if (loopView) loopPromise.then(function (v) { v.view(lp ? 'angle' : (showBack ? 'back' : 'face')); });
+      if (lp && loopView) loopPromise.then(function (v) { v.view('angle'); });
     });
     $('st-loopbar').addEventListener('click', function (e) {
       var b = e.target.closest('[data-view]'); if (b && loopView) loopView.view(b.getAttribute('data-view'));
@@ -880,7 +957,8 @@
     $('st-col').addEventListener('change', render3D);
     $('st-side').addEventListener('click', function () {
       showBack = !showBack; this.textContent = showBack ? 'Show face' : 'Show back';
-      if (loopView) loopView.view(showBack ? 'back' : 'face');
+      if (cloth) cloth.setView(showBack ? 'back' : 'front');
+      else if (loopView) loopView.view(showBack ? 'back' : 'face');
     });
     document.querySelector('.st-tabs').addEventListener('click', function (e) {
       var b = e.target.closest('button'); if (!b) return;
