@@ -12,6 +12,10 @@
  *   4. The same with every crossing locked (infinite friction).
  *
  * What it found (ell = 17 d, plain jersey): see the printed table, and knitadvisor-yarn-twin in memory.
+ * Coulomb friction at the crossings (relax(..., { mu })) was also tried: slip through a crossing when the
+ * tension difference exceeds mu × the pressure there. From any start it relaxed to the same open state for
+ * every mu from 0.1 to 1.2 — the pressures at relaxed crossings are too small for friction to bind. A
+ * friction that holds a knit compact needs the tensions the knitting leaves in the cloth, i.e. calibration.
  */
 'use strict';
 const S = require('../engine/domain/yarn-solver');

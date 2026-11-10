@@ -73,15 +73,17 @@ function relax(topo, opt = {}) {
   };
 
   const joints = opt.joints ? Int32Array.from(opt.joints.flatMap((q) => [q[0], q[1], q[2], q[3], 0])) : new Int32Array(0), jr0 = opt.joints ? opt.joints.map((q) => q[4]) : [];
+  const l0s = new Float64Array(n).fill(l0), Tseg = new Float64Array(n), Nnode = new Float64Array(n);
   const g = new Float64Array(3 * n);
   let gLx = 0, gLy = 0, energy = 0;
   const kb = 1 / l0;
   function gradient() {
-    g.fill(0); gLx = 0; gLy = 0; energy = 0;
+    g.fill(0); gLx = 0; gLy = 0; energy = 0; Nnode.fill(0);
     for (let a = 0; a < n; a++) {                                       // stretch: e = x_b + s Lx − x_a
       const b = next[a], s = wrapNext[a];
       const ex = x[3 * b] + s * Lx - x[3 * a], ey = x[3 * b + 1] - x[3 * a + 1], ez = x[3 * b + 2] - x[3 * a + 2];
-      const len = Math.sqrt(ex * ex + ey * ey + ez * ez) || 1e-12, dl = len - l0;
+      const len = Math.sqrt(ex * ex + ey * ey + ez * ez) || 1e-12, dl = len - l0s[a];
+      Tseg[a] = KS * dl;
       energy += 0.5 * KS * dl * dl;
       const k = KS * dl / len, Gx = k * ex, Gy = k * ey, Gz = k * ez;     // dE/de
       g[3 * a] -= Gx; g[3 * a + 1] -= Gy; g[3 * a + 2] -= Gz;
@@ -111,6 +113,7 @@ function relax(topo, opt = {}) {
       const r = Math.sqrt(r2) || 1e-9, ov = d - r;
       energy += 0.5 * KC * ov * ov;
       const k2 = -KC * ov / r, Gx = k2 * rx, Gy = k2 * ry, Gz = k2 * rz;   // dE/dr
+      Nnode[i] += KC * ov; Nnode[j] += KC * ov;                              // the pressure each yarn feels at its crossing
       g[3 * j] += Gx; g[3 * j + 1] += Gy; g[3 * j + 2] += Gz;
       g[3 * i] -= Gx; g[3 * i + 1] -= Gy; g[3 * i + 2] -= Gz;
       if (sx) gLx += sx * Gx; if (sy) gLy += sy * Gy;
@@ -133,7 +136,11 @@ function relax(topo, opt = {}) {
   const MASS_L = 30, DTMAX = 0.03, MAXSTEP = 0.08;
   let dt = 0.01, alpha = 0.1, since = 0, converged = false, it = 0, fmax = 0;
   build();
-  for (; it < maxIter; it++) {
+  const mu = opt.mu || 0, rounds = mu > 0 ? (opt.slipRounds || 120) : 1;
+  let slipTotal = 0, calm = 0, round = 0;
+  for (round = 0; round < rounds; round++) {
+  it = 0; dt = 0.01; alpha = 0.1; since = 0; vel.fill(0); vLx = vLy = 0; converged = false;
+  for (; it < (mu > 0 ? (opt.chunk || 4000) : maxIter); it++) {
     if (stale()) build();
     gradient();
     if (opt.probe) return { g: Float64Array.from(g), gLx, gLy, energy };
@@ -157,7 +164,21 @@ function relax(topo, opt = {}) {
     for (let k = 0; k < 3 * n; k++) { let s = dt * vel[k]; if (s > MAXSTEP) s = MAXSTEP; else if (s < -MAXSTEP) s = -MAXSTEP; x[k] += s; }
     if (freeLx) Lx += Math.max(-MAXSTEP, Math.min(MAXSTEP, dt * vLx)); if (freeLy) Ly += Math.max(-MAXSTEP, Math.min(MAXSTEP, dt * vLy));
   }
-  return { x, Lx, Ly, energy, gLx, gLy, iterations: it, converged, maxForce: fmax, n, yarns: yarns.map((y) => y.n) };
+  if (!(mu > 0)) break;
+  // friction: yarn slides through a crossing when the tension on its two sides differs by more than mu × the pressure there
+  let q2 = 0;
+  for (let a = 0; a < n; a++) {
+    const pa = prev[a], dT = Tseg[a] - Tseg[pa], thr = mu * Nnode[a];
+    if (Math.abs(dT) > thr) {
+      const q = Math.min(0.25 * (Math.abs(dT) - thr) / KS, 0.2 * l0);
+      if (dT > 0) { l0s[a] += q; l0s[pa] -= q; } else { l0s[a] -= q; l0s[pa] += q; }
+      q2 = Math.max(q2, q);
+    }
+  }
+  slipTotal += q2;
+  if (q2 < 2e-4 * l0) { if (++calm >= 3 && converged) break; } else calm = 0;
+  }
+  return { x, Lx, Ly, energy, gLx, gLy, iterations: it, converged, maxForce: fmax, n, yarns: yarns.map((y) => y.n), slipRounds: round, l0s: Float64Array.from(l0s) };
 }
 
 /** Pairs of nodes touching (centre distance < cut) that are not arc neighbours: the crossings that friction locks. */
