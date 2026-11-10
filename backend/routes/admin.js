@@ -1559,7 +1559,7 @@ router.get('/api/api-keys', adminAuth, async (req, res) => {
 router.post('/api/api-keys', adminAuth, async (req, res) => {
   try {
     const b = req.body || {};
-    const row = await apiKeyRepo.keys.create({ email: b.email, name: b.name, plan: b.plan || 'beta', monthly_limit: b.monthly_limit, per_min_limit: b.per_min_limit, allowed_ips: b.allowed_ips, expires_at: b.expires_at, note: b.note }, apiCatalogue);
+    const row = await apiKeyRepo.keys.create({ email: b.email, name: b.name, plan: b.plan || 'beta', monthly_limit: b.monthly_limit, per_min_limit: b.per_min_limit, allowed_ips: b.allowed_ips, allowed_origins: b.allowed_origins, expires_at: b.expires_at, note: b.note }, apiCatalogue);
     res.json({ ok: true, key: row });
   } catch (err) {
     if (err instanceof apiKeyRepo.KeyError) return res.status(400).json({ error: err.message });
@@ -1589,6 +1589,47 @@ router.post('/api/api-keys/:id/revoke', adminAuth, async (req, res) => {
   } catch (err) {
     console.error('[API keys revoke]', err);
     res.status(500).json({ error: 'Failed to revoke the key' });
+  }
+});
+
+// Orders (a customer asks for a plan and says how they paid), the plan prices, and how to pay
+const apiOrderRepo = require('../db/repositories/api-order-repo');
+router.get('/api/api-orders', adminAuth, async (req, res) => {
+  try {
+    const st = ['pending', 'paid', 'rejected', 'cancelled'].includes(req.query.status) ? req.query.status : null;
+    res.json({ orders: await apiOrderRepo.orders.listAll(st), prices: await apiOrderRepo.prices.list(), instructions: await apiOrderRepo.settings.get('payment_instructions'), methods: apiOrderRepo.METHODS });
+  } catch (err) {
+    console.error('[API orders list]', err);
+    res.status(500).json({ error: 'Failed to load orders' });
+  }
+});
+router.post('/api/api-orders/:id/decide', adminAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'An order id is required' });
+    res.json({ ok: true, order: await apiOrderRepo.orders.decide(id, (req.body || {}).status, (req.body || {}).note, apiCatalogue) });
+  } catch (err) {
+    if (err instanceof apiKeyRepo.KeyError) return res.status(400).json({ error: err.message });
+    console.error('[API orders decide]', err);
+    res.status(500).json({ error: 'Failed to record the decision' });
+  }
+});
+router.put('/api/api-prices', adminAuth, async (req, res) => {
+  try {
+    const b = req.body || {};
+    res.json({ ok: true, price: await apiOrderRepo.prices.set(String(b.plan || ''), b.price, b.currency, apiCatalogue) });
+  } catch (err) {
+    if (err instanceof apiKeyRepo.KeyError) return res.status(400).json({ error: err.message });
+    console.error('[API prices]', err);
+    res.status(500).json({ error: 'Failed to save the price' });
+  }
+});
+router.put('/api/api-instructions', adminAuth, async (req, res) => {
+  try {
+    res.json({ ok: true, instructions: await apiOrderRepo.settings.set('payment_instructions', (req.body || {}).text) });
+  } catch (err) {
+    console.error('[API instructions]', err);
+    res.status(500).json({ error: 'Failed to save' });
   }
 });
 

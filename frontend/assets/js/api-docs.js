@@ -17,13 +17,13 @@
 
   fetch('/api/catalogue', { headers: { Accept: 'application/json' } }).then(function (r) { return r.json(); }).then(function (c) {
     var f = function (n) { return Number(n).toLocaleString('en'); };
-    $('ad-plans').innerHTML = '<tr><th>Plan</th><th>Calls a month</th><th>Calls a minute</th></tr>' + Object.keys(c.plans).map(function (k) { var p = c.plans[k]; return '<tr><td><b>' + esc(p.label) + '</b></td><td>' + f(p.monthly_calls) + '</td><td>' + f(p.calls_per_minute) + '</td></tr>'; }).join('') +
-      '<tr><td colspan="3" style="color:var(--t3);font-size:12px">A figure agreed for your account can differ from its plan’s; the headers always show the key’s own.</td></tr>';
+    $('ad-plans').innerHTML = '<tr><th>Plan</th><th>Calls a month</th><th>Calls a minute</th><th>Price</th></tr>' + Object.keys(c.plans).map(function (k) { var p = c.plans[k]; return '<tr><td><b>' + esc(p.label) + '</b></td><td>' + f(p.monthly_calls) + '</td><td>' + f(p.calls_per_minute) + '</td><td>' + (p.price_per_month != null ? f(p.price_per_month) + ' ' + esc(p.currency) + ' / month' : (k === 'beta' ? 'trial' : 'on request')) + '</td></tr>'; }).join('') +
+      '<tr><td colspan="4" style="color:var(--t3);font-size:12px">A figure agreed for your account can differ from its plan’s; the headers always show the key’s own.</td></tr>';
     var groups = {};
     c.endpoints.forEach(function (e) { (groups[e.group] = groups[e.group] || []).push(e); });
     $('ad-endpoints').innerHTML = Object.keys(groups).map(function (g) {
       return '<h3 style="font-size:14px;margin:16px 0 4px">' + esc(g) + '</h3><div class="ad-scroll"><table class="ad-t">' + groups[g].map(function (e) {
-        return '<tr><td style="white-space:nowrap"><span class="ad-m ' + esc(e.method) + '">' + esc(e.method) + '</span></td><td><code>' + esc(e.path) + '</code>' + (e.key_required ? ' <span class="ad-key">key</span>' : '') + '<div>' + esc(e.summary) + '</div></td></tr>';
+        return '<tr><td style="white-space:nowrap"><span class="ad-m ' + esc(e.method) + '">' + esc(e.method) + '</span></td><td><code>' + esc(e.path) + '</code>' + '' + '<div>' + esc(e.summary) + '</div></td></tr>';
       }).join('') + '</table></div>';
     }).join('');
   }).catch(function () { $('ad-endpoints').innerHTML = '<p>The endpoint list could not be loaded.</p>'; $('ad-plans').innerHTML = ''; });

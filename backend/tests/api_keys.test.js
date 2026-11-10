@@ -4,7 +4,8 @@ const fs = require('fs');
 const path = require('path');
 const R = require('../db/repositories/api-key-repo');
 const C = require('../engine/domain/api-catalogue');
-const { createGate, nextReset } = require('../middleware/api-key-auth');
+const { createGate, createV1Surface, preflight, nextReset } = require('../middleware/api-key-auth');
+const O = require('../db/repositories/api-order-repo');
 console.log('--- Running API Key Tests ---');
 
 // ── the key ──────────────────────────────────────────────────────────────
@@ -38,15 +39,16 @@ console.log('--- Running API Key Tests ---');
   // every endpoint's id names the versioned path, and the public list leaks no regex
   C.ENDPOINTS.forEach((e) => assert(e.id === `${e.method} /api/v1${e.path}` && /^\/[a-z]/.test(e.path)));
   assert(!JSON.stringify(C.publicList()).includes('re"'));
-  assert(C.publicList().filter((e) => e.key_required).length >= 15 && C.publicList().some((e) => !e.key_required));
-  // every metered endpoint really needs a sign-in in its route, and every public one does not (the catalogue is the contract)
+  assert(C.publicList().length >= 25 && C.publicList().every((e) => e.key_required), 'every API endpoint needs a key');
+  assert(C.ENDPOINTS.some((e) => e.web_open) && C.ENDPOINTS.some((e) => !e.web_open), 'some engines are open on the website, some are not');
+  // web_open says what the WEBSITE's own route is: signed-in only (false) or open to anyone (true). The API copy needs a key either way.
   const src = fs.readFileSync(path.join(__dirname, '../routes/api.js'), 'utf8');
   for (const e of C.ENDPOINTS) {
     const needle = `router.${e.method.toLowerCase()}('${e.path}'`;
     const at = src.indexOf(needle);
     assert(at > -1, `route for ${e.id} exists`);
     const line = src.slice(at, src.indexOf('\n', at));
-    assert.strictEqual(/requireUser/.test(line), e.metered, `${e.id}: key_required must match the route's requireUser`);
+    assert.strictEqual(/requireUser/.test(line), !e.web_open, `${e.id}: web_open must match the route's requireUser`);
   }
 }
 
@@ -62,6 +64,39 @@ console.log('--- Running API Key Tests ---');
   assert.throws(() => R.cleanIps(new Array(21).fill('1.1.1.1')), /At most 20/);
   assert.strictEqual(nextReset(new Date('2026-11-10T10:00:00Z')), '2026-11-30T18:00:00.000Z', 'the month rolls over at Dhaka midnight (UTC+6)');
   assert.strictEqual(nextReset(new Date('2026-12-31T19:00:00Z')), '2027-01-31T18:00:00.000Z', 'a call at 01:00 on 1 January Dhaka time is in January: it resets on 1 February');
+}
+
+// ── websites a key may be used from ─────────────────────────────────────
+{
+  assert.deepStrictEqual(R.cleanOrigins('https://erp.mill.com, https://ERP.mill.com/ ,http://localhost:3000'), ['https://erp.mill.com', 'http://localhost:3000']);
+  assert.strictEqual(R.cleanOrigins(''), null);
+  for (const bad of ['https://*.mill.com', 'http://mill.com', 'https://mill.com/app', 'mill.com', 'javascript:alert(1)']) assert.throws(() => R.cleanOrigins(bad), /site|https/, bad);
+  assert.throws(() => R.cleanOrigins(new Array(11).fill(0).map((_, i) => `https://s${i}.example.com`)), /At most 10/);
+}
+
+// ── orders: what a plan costs, and what is refused ──────────────────────
+{
+  const prices = [{ plan: 'starter', price: '29.50', currency: 'USD' }, { plan: 'pro', price: 99, currency: 'USD' }];
+  const ok = O.priceOrder({ plan: 'starter', months: 3, method: 'bkash', payment_ref: ' TX 8H2K9 ' }, prices, []);
+  assert.deepStrictEqual([ok.amount, ok.currency, ok.months, ok.payment_ref, ok.renew_key_id], [88.5, 'USD', 3, 'TX 8H2K9', null], 'the amount is price x months, to the cent');
+  assert.strictEqual(O.priceOrder({ plan: 'pro', months: 1, method: 'bank', payment_ref: 'REF12345', renew_key_id: '7' }, prices, [7, 9]).renew_key_id, 7, 'a renewal names one of their own keys');
+  const no = (b, re) => assert.throws(() => O.priceOrder(b, prices, [7]), re, JSON.stringify(b));
+  no({ plan: 'business', months: 1, method: 'bkash', payment_ref: 'abcd1234' }, /not for sale/);
+  no({ plan: 'beta', months: 1, method: 'bkash', payment_ref: 'abcd1234' }, /not for sale/);
+  no({ plan: 'pro', months: 0, method: 'bkash', payment_ref: 'abcd1234' }, /1 to 24/);
+  no({ plan: 'pro', months: 25, method: 'bkash', payment_ref: 'abcd1234' }, /1 to 24/);
+  no({ plan: 'pro', months: 1.5, method: 'bkash', payment_ref: 'abcd1234' }, /1 to 24/);
+  no({ plan: 'pro', months: 1, method: 'cash-in-hand', payment_ref: 'abcd1234' }, /how you paid/);
+  no({ plan: 'pro', months: 1, method: 'bkash', payment_ref: 'ab' }, /transaction id/);
+  no({ plan: 'pro', months: 1, method: 'bkash', payment_ref: 'x'.repeat(61) }, /transaction id/);
+  no({ plan: 'pro', months: 1, method: 'bkash', payment_ref: 'abcd1234', renew_key_id: 8 }, /not on your account/);
+  assert(O.METHODS.bkash && O.METHODS.nagad && O.METHODS.bank);
+  const sql = fs.readFileSync(path.join(__dirname, '../db/migrations/042_api_orders_origins.sql'), 'utf8');
+  assert(/ADD COLUMN allowed_origins text\[\]/.test(sql) && /CREATE TABLE api_orders/.test(sql) && /status IN \('pending', 'paid', 'rejected', 'cancelled'\)/.test(sql));
+  assert(/UNIQUE INDEX uq_api_orders_payment[\s\S]*WHERE status IN \('pending', 'paid'\)/.test(sql), 'one transaction id backs one order');
+  const orepo = fs.readFileSync(path.join(__dirname, '../db/repositories/api-order-repo.js'), 'utf8');
+  assert(/WHERE id = \$1 AND user_id = \$2 AND status = 'paid' AND key_id IS NULL AND issued_at IS NULL/.test(orepo), 'a key is claimed once, atomically');
+  assert(/status = 'pending' RETURNING id, user_id, plan/.test(orepo), 'only a pending order can be decided');
 }
 
 // ── the gate ────────────────────────────────────────────────────────────
@@ -126,6 +161,24 @@ console.log('--- Running API Key Tests ---');
   assert((await run(ipGate, { ip: '203.0.113.5' })).nextCalled);
   assert((await run(ipGate, { ip: '::ffff:203.0.113.5' })).nextCalled);
 
+  // a call from a browser: the site must be one of the key's, and the answer carries CORS for that site only
+  const sites = mk({ allowed_origins: ['https://erp.mill.com'] }).gate;
+  const runWith = async (gate, origin) => {
+    const req = { method: 'POST', path: '/calculate', ip: '203.0.113.5', headers: origin ? { origin } : {} };
+    const headers = {}; let code = null, body = null, nextCalled = false;
+    const res = { statusCode: 200, set(k, v) { headers[k] = v; return this; }, status(c) { code = c; return this; }, json(b) { body = b; return this; }, on() {} };
+    await gate(req, res, () => { nextCalled = true; }, good.key);
+    return { code, body, headers, nextCalled };
+  };
+  let b1 = await runWith(sites, 'https://erp.mill.com');
+  assert(b1.nextCalled && b1.headers['Access-Control-Allow-Origin'] === 'https://erp.mill.com' && b1.headers.Vary === 'Origin' && /X-Quota-Remaining/.test(b1.headers['Access-Control-Expose-Headers']));
+  b1 = await runWith(sites, 'https://evil.example');
+  assert(b1.code === 403 && b1.body.code === 'ORIGIN_NOT_ALLOWED' && !b1.nextCalled && !b1.headers['Access-Control-Allow-Origin'], 'another website is refused, with no CORS grant');
+  b1 = await runWith(mk().gate, 'https://erp.mill.com');
+  assert(b1.code === 403 && b1.body.code === 'ORIGIN_NOT_ALLOWED', 'a server key refuses any browser call');
+  assert((await runWith(mk().gate, null)).nextCalled, 'a server call has no Origin and works');
+  assert(sites && (await runWith(sites, null)).nextCalled, 'a browser key also works from a server');
+
   // per minute: the 31st call of a beta key
   const rate = mk(); let rr;
   for (let i = 0; i < 31; i++) rr = await run(rate.gate);
@@ -157,6 +210,32 @@ console.log('--- Running API Key Tests ---');
   assert(/status IN \('active', 'suspended', 'revoked'\)/.test(sql) && /api_key_usage/.test(sql) && /PRIMARY KEY \(key_id, period\)/.test(sql));
   const repo = fs.readFileSync(path.join(__dirname, '../db/repositories/api-key-repo.js'), 'utf8');
   assert(/WHERE api_key_usage\.calls < \$2/.test(repo), 'the monthly quota is one atomic statement');
+
+  // ── the /api/v1 surface: a key for EVERY listed endpoint, nothing unlisted, the catalogue open ──
+  const v1 = (over) => { const m = mk(over); return { surf: createV1Surface(m.gate), st: m.st }; };
+  const runV1 = async (surf, { method = 'POST', p = '/convert', key = null, via = true } = {}) => {
+    const req = { method, path: p, ip: '203.0.113.5', viaV1: via, headers: key ? { authorization: 'Bearer ' + key } : {} };
+    let code = null, body = null, nextCalled = false;
+    const res = { statusCode: 200, set() { return this; }, status(c) { code = c; return this; }, json(b) { body = b; return this; }, on() {} };
+    await surf(req, res, () => { nextCalled = true; });
+    return { req, code, body, nextCalled };
+  };
+  let vr = await runV1(v1().surf, { p: '/convert' });
+  assert(vr.code === 401 && vr.body.code === 'API_KEY_REQUIRED' && !vr.nextCalled, 'an engine the website serves openly still needs a key under /api/v1');
+  vr = await runV1(v1().surf, { p: '/convert', key: good.key });
+  assert(vr.nextCalled && vr.req.apiKey && vr.req.user.id === 42, 'with a key it runs, counted and acting as the owner');
+  vr = await runV1(v1().surf, { p: '/auth/login' });
+  assert(vr.code === 404 && vr.body.code === 'NOT_IN_API', 'nothing unlisted is reachable under /api/v1');
+  vr = await runV1(v1().surf, { p: '/studio/designs', method: 'GET', key: good.key });
+  assert(vr.code === 404 && vr.body.code === 'NOT_IN_API');
+  vr = await runV1(v1().surf, { p: '/catalogue', method: 'GET' });
+  assert(vr.nextCalled && !vr.req.apiKey, 'the documentation data is open');
+  vr = await runV1(v1().surf, { p: '/convert', via: false });
+  assert(vr.nextCalled, 'the website\'s own /api/convert is untouched');
+  // the browser's preflight carries no key: answered for the asking site
+  const pf = { headers: { origin: 'https://erp.mill.com' } }, ph = {}; let pcode = null;
+  preflight(pf, { set(k, v) { ph[k] = v; return this; }, status(c) { pcode = c; return this; }, end() {} });
+  assert(pcode === 204 && ph['Access-Control-Allow-Origin'] === 'https://erp.mill.com' && /Authorization/.test(ph['Access-Control-Allow-Headers']) && ph['Access-Control-Allow-Methods'] === 'GET, POST, OPTIONS');
 
   console.log('API key tests passed');
 })().catch((e) => { console.error(e); process.exit(1); });

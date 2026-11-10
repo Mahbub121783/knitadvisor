@@ -6,11 +6,13 @@
  * below. `path` is the route under /api; a customer calls the same path under
  * /api/v1 (server.js rewrites /api/v1/x to /api/x before routing).
  *
- * `metered: true` endpoints need a key (they already needed a signed-in
- * account); `metered: false` ones are public reference data and engines the web
- * pages call without an account — a key is not required, and they are limited by
- * IP only. The list is the contract: an endpoint added to a route file is not in
- * the API until it is added here.
+ * EVERY endpoint under /api/v1 needs a key — that is what is sold. Some of the
+ * engines (`web_open: true`) are also open on the website at /api/x, with no
+ * account, because the web pages use them that way; /api/v1/x is the metered
+ * copy of the same code. Anything under /api/v1 that is not listed here, or
+ * /api/v1/catalogue (the documentation's data), is refused.
+ * The list is the contract: an endpoint added to a route file is not in the API
+ * until it is added here.
  */
 'use strict';
 
@@ -27,7 +29,8 @@ const G = {
   calc: 'Fabric calculator', studio: 'Fabric Studio', cost: 'Costing', dye: 'Dyeing', yarn: 'Yarn and units', woven: 'Woven', ref: 'Reference data',
 };
 
-const E = (method, path, group, summary, metered, extra) => ({ method, path, group, summary, metered, ...(extra || {}) });
+// the last argument: true when the website's own route needs a sign-in (requireUser), false when it is open there
+const E = (method, path, group, summary, signedIn, extra) => ({ method, path, group, summary, web_open: !signedIn, ...(extra || {}) });
 const ENDPOINTS = [
   E('POST', '/calculate',                G.calc,   'Weft-knit fabric calculation: yarn, machine, stitch length, shrinkage, cost from one spec', true),
   E('POST', '/weft/calculate',           G.calc,   'Weft loop length, production and yarn per fabric', false),
@@ -86,7 +89,7 @@ function limitsFor(key) {
 
 /** The public face of the list: no regexes. */
 function publicList() {
-  return ENDPOINTS.map((e) => ({ id: e.id, method: e.method, path: `/api/v1${e.path}`, group: e.group, summary: e.summary, key_required: e.metered }));
+  return ENDPOINTS.map((e) => ({ id: e.id, method: e.method, path: `/api/v1${e.path}`, group: e.group, summary: e.summary, key_required: true }));
 }
 
 module.exports = { PLANS, ENDPOINTS, matchEndpoint, limitsFor, publicList };

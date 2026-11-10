@@ -1173,7 +1173,7 @@ async function loadApiKeys() {
           <select class="form-select" data-ak-plan="${esc(k.id)}" ${k.status === 'revoked' ? 'disabled' : ''} style="min-width:100px;">${Object.keys(apiKeyPlans).map((x) => `<option value="${esc(x)}" ${x === k.plan ? 'selected' : ''}>${esc(apiKeyPlans[x].label)}</option>`).join('')}</select></td>
         <td style="padding:9px 10px;font-family:var(--mono);white-space:nowrap;">${Number(k.calls_this_month).toLocaleString()} / ${Number(monthly).toLocaleString()}<div style="height:4px;background:var(--line);border-radius:2px;margin-top:3px;"><div style="height:4px;width:${pct}%;background:${pct >= 90 ? 'var(--red,#b23b3b)' : 'var(--a1)'};border-radius:2px;"></div></div></td>
         <td style="padding:9px 10px;font-family:var(--mono);">${esc(perMin)}</td>
-        <td style="padding:9px 10px;font-family:var(--mono);font-size:11px;color:var(--t3);">${k.allowed_ips && k.allowed_ips.length ? esc(k.allowed_ips.join(', ')) : 'any'}</td>
+        <td style="padding:9px 10px;font-family:var(--mono);font-size:11px;color:var(--t3);">${k.allowed_ips && k.allowed_ips.length ? esc(k.allowed_ips.join(', ')) : 'any IP'}${k.allowed_origins && k.allowed_origins.length ? '<div>' + esc(k.allowed_origins.join(', ')) + '</div>' : '<div>server only</div>'}${k.expires_at ? '<div>expires ' + esc(new Date(k.expires_at).toLocaleDateString()) + '</div>' : ''}</td>
         <td style="padding:9px 10px;color:var(--t3);font-family:var(--mono);font-size:11px;">${k.last_used_at ? esc(new Date(k.last_used_at).toLocaleString()) : 'never'}</td>
         <td style="padding:9px 10px;"><span class="badge ${st}">${esc(k.status)}</span></td>
         <td style="padding:9px 10px;white-space:nowrap;">
@@ -1185,17 +1185,60 @@ async function loadApiKeys() {
       tbody.appendChild(tr);
     }
   } catch (e) { toast('Failed to load API keys: ' + e.message, 'error'); }
+  loadApiOrders();
+}
+
+async function loadApiOrders() {
+  try {
+    const st = document.getElementById('ao-filter').value;
+    const d = await api('/admin/api/api-orders' + (st ? '?status=' + st : ''));
+    const money = (o) => esc(Number(o.amount).toLocaleString(undefined, { maximumFractionDigits: 2 })) + ' ' + esc(o.currency);
+    const tbody = document.getElementById('ao-tbody');
+    tbody.innerHTML = d.orders.length ? '' : '<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--t3);">No orders</td></tr>';
+    for (const o of d.orders) {
+      const badge = o.status === 'paid' ? 'badge-green' : o.status === 'pending' ? 'badge-yellow' : 'badge-red';
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="padding:9px 10px;color:var(--t3);font-family:var(--mono);font-size:11px;">${esc(new Date(o.created_at).toLocaleString())}</td>
+        <td style="padding:9px 10px;color:var(--t2);">${esc(o.full_name || o.email)}<div style="font-size:10px;color:var(--t3);">${esc(o.email)}${o.company ? ' · ' + esc(o.company) : ''}</div></td>
+        <td style="padding:9px 10px;"><b>${esc((apiKeyPlans[o.plan] || {}).label || o.plan)}</b> × ${esc(o.months)} month${o.months > 1 ? 's' : ''}${o.renew_key_id ? '<div style="font-size:10px;color:var(--t3);">renews key #' + esc(o.renew_key_id) + '</div>' : ''}</td>
+        <td style="padding:9px 10px;font-family:var(--mono);">${money(o)}</td>
+        <td style="padding:9px 10px;"><b>${esc(d.methods[o.method] || o.method)}</b><div style="font-family:var(--mono);font-size:11px;color:var(--t2);">${esc(o.payment_ref)}</div></td>
+        <td style="padding:9px 10px;"><span class="badge ${badge}">${esc(o.status)}</span>${o.status === 'paid' ? '<div style="font-size:10px;color:var(--t3);">' + (o.key_id ? 'key ' + (o.renew_key_id ? 'extended' : 'created') : 'customer has not made the key yet') + '</div>' : ''}${o.note ? '<div style="font-size:10px;color:var(--t3);">' + esc(o.note) + '</div>' : ''}</td>
+        <td style="padding:9px 10px;white-space:nowrap;">${o.status === 'pending' ? `<button class="btn btn-primary btn-sm" data-ao-paid="${esc(o.id)}">Payment received</button> <button class="btn btn-ghost btn-sm" data-ao-reject="${esc(o.id)}">Reject</button>` : ''}</td>`;
+      tbody.appendChild(tr);
+    }
+    // plan prices and the payment instructions
+    const priced = Object.fromEntries(d.prices.map((p) => [p.plan, p]));
+    const box = document.getElementById('ap-prices');
+    box.innerHTML = Object.keys(apiKeyPlans).filter((k) => k !== 'beta').map((k) => {
+      const p = priced[k];
+      return `<div class="form-group" style="min-width:170px;"><label class="form-label">${esc(apiKeyPlans[k].label)} <span style="color:var(--t3);">(${Number(apiKeyPlans[k].monthly).toLocaleString()} calls)</span></label>
+        <div style="display:flex;gap:4px;"><input type="number" min="0" step="0.01" class="form-input" data-ap-price="${esc(k)}" value="${p ? esc(+p.price) : ''}" placeholder="not for sale" style="width:100px;">
+        <input type="text" class="form-input" data-ap-cur="${esc(k)}" value="${esc(p ? p.currency : 'USD')}" maxlength="3" style="width:60px;text-transform:uppercase;">
+        <button class="btn btn-ghost btn-sm" data-ap-save="${esc(k)}">Save</button></div></div>`;
+    }).join('');
+    const ins = document.getElementById('ap-instructions');
+    if (document.activeElement !== ins) ins.value = d.instructions || '';
+  } catch (e) { toast('Failed to load orders: ' + e.message, 'error'); }
+}
+
+async function decideApiOrder(id, status) {
+  const note = status === 'rejected' ? prompt('Why is it rejected? (the customer sees this)', 'Payment not found') : '';
+  if (status === 'rejected' && note === null) return;
+  try { await api('/admin/api/api-orders/' + id + '/decide', 'POST', { status, note }); toast(status === 'paid' ? 'Marked paid — the customer can now create their key' : 'Order rejected', 'success'); loadApiKeys(); }
+  catch (e) { toast(e.message, 'error'); }
 }
 
 async function createApiKey() {
   const v = (id) => document.getElementById(id).value.trim();
-  const body = { email: v('ak-email'), name: v('ak-name'), plan: v('ak-plan') || 'beta', monthly_limit: v('ak-monthly'), per_min_limit: v('ak-permin'), allowed_ips: v('ak-ips'), expires_at: v('ak-exp') || null, note: v('ak-note') };
+  const body = { email: v('ak-email'), name: v('ak-name'), plan: v('ak-plan') || 'beta', monthly_limit: v('ak-monthly'), per_min_limit: v('ak-permin'), allowed_ips: v('ak-ips'), allowed_origins: v('ak-origins'), expires_at: v('ak-exp') || null, note: v('ak-note') };
   try {
     const d = await api('/admin/api/api-keys', 'POST', body);
     document.getElementById('ak-secret-val').textContent = d.key.key;
     document.getElementById('ak-secret-for').textContent = 'For ' + d.key.email + ' · ' + d.key.name + ' · ' + d.key.plan + ' plan. Send it to the customer over a private channel.';
     document.getElementById('ak-secret').classList.remove('hidden');
-    ['ak-email', 'ak-name', 'ak-monthly', 'ak-permin', 'ak-ips', 'ak-exp', 'ak-note'].forEach((id) => { document.getElementById(id).value = ''; });
+    ['ak-email', 'ak-name', 'ak-monthly', 'ak-permin', 'ak-ips', 'ak-origins', 'ak-exp', 'ak-note'].forEach((id) => { document.getElementById(id).value = ''; });
     toast('API key created', 'success');
     loadApiKeys();
   } catch (e) { toast(e.message, 'error'); }
@@ -1211,6 +1254,21 @@ function wireApiKeys() {
   if (!el('ak-new-btn')) return;
   el('ak-new-btn').addEventListener('click', () => el('ak-new-box').classList.toggle('hidden'));
   el('ak-create').addEventListener('click', createApiKey);
+  el('ao-filter').addEventListener('change', loadApiOrders);
+  el('ao-tbody').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.aoPaid) { if (confirm('Mark this order paid? Only do this once the money has really arrived.')) decideApiOrder(b.dataset.aoPaid, 'paid'); }
+    else if (b.dataset.aoReject) decideApiOrder(b.dataset.aoReject, 'rejected');
+  });
+  el('ap-prices').addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-ap-save]'); if (!b) return;
+    const k = b.dataset.apSave, price = document.querySelector('[data-ap-price="' + k + '"]').value, currency = document.querySelector('[data-ap-cur="' + k + '"]').value;
+    try { await api('/admin/api/api-prices', 'PUT', { plan: k, price: price === '' ? null : price, currency }); toast(price === '' ? 'Plan taken off sale' : 'Price saved', 'success'); loadApiOrders(); }
+    catch (x) { toast(x.message, 'error'); }
+  });
+  el('ap-instr-save').addEventListener('click', async () => {
+    try { await api('/admin/api/api-instructions', 'PUT', { text: el('ap-instructions').value }); toast('Instructions saved', 'success'); } catch (x) { toast(x.message, 'error'); }
+  });
   el('ak-copy').addEventListener('click', () => { navigator.clipboard.writeText(el('ak-secret-val').textContent).then(() => toast('Copied', 'success'), () => toast('Select the key and copy it by hand', 'info')); });
   el('ak-tbody').addEventListener('change', (e) => {
     const s = e.target.closest('[data-ak-plan]');

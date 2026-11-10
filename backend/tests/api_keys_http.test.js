@@ -18,8 +18,14 @@ Object.assign(R.keys, {
 });
 
 const app = express();
-app.use((req, res, next) => { if (req.url.startsWith('/api/v1/')) req.url = '/api' + req.url.slice('/api/v1'.length); next(); });   // as server.js does
+// as server.js does: /api/v1/x is /api/x, a browser's preflight is answered, then the v1 surface asks for the key
+app.use((req, res, next) => {
+  if (req.url.startsWith('/api/v1/')) { req.url = '/api' + req.url.slice('/api/v1'.length); req.viaV1 = true; }
+  if (req.viaV1 && req.method === 'OPTIONS') return require('../middleware/api-key-auth').preflight(req, res);
+  next();
+});
 app.use(express.json({ limit: '256kb' }));
+app.use('/api', require('../middleware/api-key-auth').v1Surface);
 app.use('/api/account', require('../routes/account'));   // as in the real server, the account router sits beside the engines
 app.use('/api', require('../routes/api'));
 
@@ -34,9 +40,9 @@ const call = (port, method, p, { key, body, headers } = {}) => new Promise((reso
 const server = app.listen(0, '127.0.0.1', async () => {
   const port = server.address().port;
   try {
-    // no key, no session: the engine still wants a sign-in
+    // no key: the API says so (the website's own /api/calculate asks for a sign-in)
     let r = await call(port, 'POST', '/api/v1/calculate', { body: { fabric: 'single_jersey', gsm: 160 } });
-    assert.strictEqual(r.status, 401); assert.strictEqual(r.body.code, 'AUTH_REQUIRED');
+    assert.strictEqual(r.status, 401); assert.strictEqual(r.body.code, 'API_KEY_REQUIRED');
 
     // a key: the real calculator answers
     r = await call(port, 'POST', '/api/v1/calculate', { key: good.key, body: { fabric: 'single_jersey', gsm: 160, composition: '100% Cotton' } });
@@ -62,9 +68,30 @@ const server = app.listen(0, '127.0.0.1', async () => {
     state.month = 0;
     for (const [m, p] of [['GET', '/api/v1/studio/designs'], ['GET', '/api/v1/account/security'], ['POST', '/api/v1/account/password'], ['GET', '/api/v1/cost-sheet/sheets'], ['POST', '/api/v1/studio/warp/cost']]) {
       r = await call(port, m, p, { key: good.key, body: m === 'POST' ? {} : undefined });
-      assert.strictEqual(r.status, 403, `${m} ${p}: ${r.status}`); assert.strictEqual(r.body.code, 'ENDPOINT_NOT_IN_API');
+      assert.strictEqual(r.status, 404, `${m} ${p}: ${r.status}`); assert.strictEqual(r.body.code, 'NOT_IN_API');
     }
     assert.strictEqual(state.month, 0, 'refused endpoints cost no quota');
+
+    // the engines the website serves openly are a sold, metered copy under /api/v1
+    r = await call(port, 'POST', '/api/convert', { body: { value: 30, from: 'ne', to: 'tex' } });
+    assert.notStrictEqual(r.status, 401, 'the website\'s own /api/convert stays open');
+    r = await call(port, 'POST', '/api/v1/convert', { body: { value: 30, from: 'ne', to: 'tex' } });
+    assert.strictEqual(r.status, 401); assert.strictEqual(r.body.code, 'API_KEY_REQUIRED');
+    r = await call(port, 'POST', '/api/v1/convert', { key: good.key, body: { value: 30, from: 'ne', to: 'tex' } });
+    assert.notStrictEqual(r.status, 401, r.text.slice(0, 200)); assert.strictEqual(r.headers['x-quota-remaining'], '2', 'a call to an open engine is counted');
+    state.month = 0;
+
+    // a web page: preflight for any site, the real call held to the key's sites
+    r = await call(port, 'OPTIONS', '/api/v1/calculate', { headers: { Origin: 'https://erp.mill.com', 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'authorization,content-type' } });
+    assert.strictEqual(r.status, 204); assert.strictEqual(r.headers['access-control-allow-origin'], 'https://erp.mill.com'); assert(/authorization/i.test(r.headers['access-control-allow-headers']));
+    r = await call(port, 'POST', '/api/v1/convert', { key: good.key, headers: { Origin: 'https://erp.mill.com' }, body: { value: 30, from: 'ne', to: 'tex' } });
+    assert.strictEqual(r.status, 403); assert.strictEqual(r.body.code, 'ORIGIN_NOT_ALLOWED'); assert(!r.headers['access-control-allow-origin']);
+    state.key.allowed_origins = ['https://erp.mill.com'];
+    r = await call(port, 'POST', '/api/v1/convert', { key: good.key, headers: { Origin: 'https://erp.mill.com' }, body: { value: 30, from: 'ne', to: 'tex' } });
+    assert.notStrictEqual(r.status, 403); assert.strictEqual(r.headers['access-control-allow-origin'], 'https://erp.mill.com'); assert(/X-Quota-Remaining/.test(r.headers['access-control-expose-headers']));
+    r = await call(port, 'POST', '/api/v1/convert', { key: good.key, headers: { Origin: 'https://evil.example' }, body: { value: 30, from: 'ne', to: 'tex' } });
+    assert.strictEqual(r.status, 403); assert(!r.headers['access-control-allow-origin']);
+    state.key.allowed_origins = null; state.month = 0;
 
     // a wrong key, and a key sent in X-API-Key
     r = await call(port, 'POST', '/api/v1/calculate', { key: 'ka_live_' + 'z'.repeat(43), body: { fabric: 'single_jersey', gsm: 160 } });

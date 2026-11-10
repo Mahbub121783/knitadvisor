@@ -10,6 +10,11 @@
  * CLOSED here (a paid API that silently stops metering is worse than a short
  * outage), unlike the web app's limiters.
  *
+ * A browser call: the request's Origin must be one of the key's allowed sites (a key used
+ * from a web page is visible to its visitors, so it is held to that site, and should carry
+ * a small quota); the answer then carries the CORS headers for that site only. A key with
+ * no allowed sites refuses any request that has an Origin — it is a server's key.
+ *
  * On success req.user is the key's owner (so the engine routes run unchanged)
  * and req.apiKey the key; the answer carries X-RateLimit-* (per minute) and
  * X-Quota-* (per month) headers.
@@ -46,6 +51,11 @@ function createGate(repo = apiRepo.keys, deps = {}) {
       if (key.status === 'suspended') return refuse(res, 403, 'KEY_SUSPENDED', 'This API key is suspended. Contact KnitAdvisor.');
       if (key.expires_at && new Date(key.expires_at) < now()) return refuse(res, 401, 'KEY_EXPIRED', 'This API key has expired.');
       if (key.user_disabled) return refuse(res, 403, 'ACCOUNT_DISABLED', 'The account this key belongs to is disabled.');
+      const origin = req.headers && req.headers.origin;
+      if (origin) {
+        if (!(key.allowed_origins || []).includes(String(origin).toLowerCase())) return refuse(res, 403, 'ORIGIN_NOT_ALLOWED', 'This key may not be used from this website. A key used in a browser must list the site (ask for it to be added); a server key is called from your server.', { your_origin: origin });
+        cors(res, origin);
+      }
       if (key.allowed_ips && key.allowed_ips.length) {
         const norm = (s) => String(s).replace(/^::ffff:/i, '');
         if (!key.allowed_ips.map(norm).includes(norm(ip))) return refuse(res, 403, 'IP_NOT_ALLOWED', 'This key may not be used from this IP address.', { your_ip: norm(ip) });
@@ -84,5 +94,39 @@ function createGate(repo = apiRepo.keys, deps = {}) {
   };
 }
 
+const EXPOSE = 'X-RateLimit-Limit, X-RateLimit-Remaining, X-Quota-Limit, X-Quota-Remaining, X-Quota-Reset, Retry-After';
+function cors(res, origin) {
+  res.set('Access-Control-Allow-Origin', origin);
+  res.set('Vary', 'Origin');
+  res.set('Access-Control-Expose-Headers', EXPOSE);
+}
+
+/** The browser's preflight for /api/v1: it carries no key, so it is answered for any site; the real call is held to the key's sites. */
+function preflight(req, res) {
+  const origin = req.headers.origin;
+  if (origin) cors(res, origin);
+  res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-API-Key');
+  res.set('Access-Control-Max-Age', '600');
+  res.status(204).end();
+}
+
+/**
+ * Everything under /api/v1 passes through here (server.js sets req.viaV1). The API is the catalogue and the
+ * listed endpoints, and each of those needs a key — including the engines the website serves openly at /api/x.
+ */
+function createV1Surface(g) {
+  return function v1Surface(req, res, next) {
+    if (!req.viaV1) return next();
+    if (req.method === 'OPTIONS') return preflight(req, res);
+    if (req.method === 'GET' && /^\/catalogue\/?$/.test(req.path)) return next();
+    if (!catalogue.matchEndpoint(req.method, req.path)) return refuse(res, 404, 'NOT_IN_API', 'No such endpoint in the KnitAdvisor API. See /api-docs.html for the list.');
+    const raw = apiRepo.keyFromRequest(req);
+    if (!raw) return refuse(res, 401, 'API_KEY_REQUIRED', 'This endpoint needs an API key: Authorization: Bearer <your key>. See /api-docs.html.');
+    return g(req, res, next, raw);
+  };
+}
+
 const gate = createGate();
-module.exports = { createGate, gate, nextReset, keyFromRequest: apiRepo.keyFromRequest };
+const v1Surface = createV1Surface(gate);
+module.exports = { createGate, createV1Surface, gate, v1Surface, preflight, nextReset, keyFromRequest: apiRepo.keyFromRequest };

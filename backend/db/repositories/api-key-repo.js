@@ -34,7 +34,7 @@ const keys = {
   /** Every key with its owner and this month's calls (admin). */
   list() {
     return query(
-      `SELECT k.id, k.name, k.prefix, k.plan, k.monthly_limit, k.per_min_limit, k.status, k.allowed_ips, k.note, k.expires_at, k.created_at, k.last_used_at, k.revoked_at,
+      `SELECT k.id, k.name, k.prefix, k.plan, k.monthly_limit, k.per_min_limit, k.status, k.allowed_ips, k.allowed_origins, k.note, k.expires_at, k.created_at, k.last_used_at, k.revoked_at,
               u.email, u.full_name, u.company, COALESCE(m.calls, 0) AS calls_this_month
          FROM api_keys k JOIN app_users u ON u.id = k.user_id
          LEFT JOIN api_key_usage m ON m.key_id = k.id AND m.period = to_char(now() AT TIME ZONE $1, 'YYYY-MM')
@@ -46,7 +46,7 @@ const keys = {
   /** One account's keys (its owner). */
   listForUser(userId) {
     return query(
-      `SELECT k.id, k.name, k.prefix, k.plan, k.monthly_limit, k.per_min_limit, k.status, k.allowed_ips, k.expires_at, k.created_at, k.last_used_at, COALESCE(m.calls, 0) AS calls_this_month
+      `SELECT k.id, k.name, k.prefix, k.plan, k.monthly_limit, k.per_min_limit, k.status, k.allowed_ips, k.allowed_origins, k.expires_at, k.created_at, k.last_used_at, COALESCE(m.calls, 0) AS calls_this_month
          FROM api_keys k
          LEFT JOIN api_key_usage m ON m.key_id = k.id AND m.period = to_char(now() AT TIME ZONE $2, 'YYYY-MM')
         WHERE k.user_id = $1 AND k.status <> 'revoked' ORDER BY k.created_at DESC`,
@@ -57,16 +57,27 @@ const keys = {
   /** The key behind a request, with its owner. Null if no such key. */
   findByHash(hash) {
     return queryOne(
-      `SELECT k.id, k.name, k.prefix, k.plan, k.monthly_limit, k.per_min_limit, k.status, k.allowed_ips, k.expires_at, ${OWNER}
+      `SELECT k.id, k.name, k.prefix, k.plan, k.monthly_limit, k.per_min_limit, k.status, k.allowed_ips, k.allowed_origins, k.expires_at, ${OWNER}
          FROM api_keys k JOIN app_users u ON u.id = k.user_id WHERE k.key_hash = $1`,
       [hash]
     );
   },
 
-  /** Issues a key for an account (found by email). Returns the row and the key, once. */
-  async create({ email, name, plan, monthly_limit, per_min_limit, allowed_ips, expires_at, note }, catalogue) {
-    const user = await queryOne('SELECT id, email, disabled FROM app_users WHERE lower(email) = lower($1)', [String(email || '').trim()]);
+  /** Issues a key for an account found by email (admin). Returns the row and the key, once. */
+  async create(opts, catalogue) {
+    const user = await queryOne('SELECT id, email, disabled FROM app_users WHERE lower(email) = lower($1)', [String(opts.email || '').trim()]);
     if (!user) throw new KeyError('No customer account has that email. They must sign up first.');
+    return keys.issue(user, opts, catalogue);
+  },
+
+  /** The same, for a known account (a paid order the customer turns into a key). */
+  async createForUser(userId, opts, catalogue) {
+    const user = await queryOne('SELECT id, email, disabled FROM app_users WHERE id = $1', [userId]);
+    if (!user) throw new KeyError('Account not found.');
+    return keys.issue(user, opts, catalogue);
+  },
+
+  async issue(user, { name, plan, monthly_limit, per_min_limit, allowed_ips, allowed_origins, expires_at, note }, catalogue) {
     if (user.disabled) throw new KeyError('That account is disabled.');
     const p = catalogue.PLANS[plan];
     if (!p) throw new KeyError(`Unknown plan "${plan}".`);
@@ -75,19 +86,19 @@ const keys = {
     const perMin = per_min_limit === '' || per_min_limit == null ? p.per_min : +per_min_limit;
     if (!Number.isInteger(monthly) || monthly < 0 || monthly > 1e9) throw new KeyError('The monthly limit must be a whole number from 0 up.');
     if (!Number.isInteger(perMin) || perMin < 1 || perMin > 100000) throw new KeyError('The per-minute limit must be a whole number of 1 or more.');
-    const ips = cleanIps(allowed_ips);
+    const ips = cleanIps(allowed_ips), origins = cleanOrigins(allowed_origins);
     let exp = null;
     if (expires_at) { exp = new Date(expires_at); if (isNaN(exp) || exp < new Date()) throw new KeyError('The expiry date must be in the future.'); }
     const g = generateKey();
     const row = await queryOne(
-      `INSERT INTO api_keys (user_id, name, prefix, key_hash, plan, monthly_limit, per_min_limit, allowed_ips, expires_at, note)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id, name, prefix, plan, monthly_limit, per_min_limit, status, allowed_ips, expires_at, created_at`,
-      [user.id, nm, g.prefix, g.hash, plan, monthly, perMin, ips, exp, note ? String(note).slice(0, 200) : null]
+      `INSERT INTO api_keys (user_id, name, prefix, key_hash, plan, monthly_limit, per_min_limit, allowed_ips, allowed_origins, expires_at, note)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id, name, prefix, plan, monthly_limit, per_min_limit, status, allowed_ips, allowed_origins, expires_at, created_at`,
+      [user.id, nm, g.prefix, g.hash, plan, monthly, perMin, ips, origins, exp, note ? String(note).slice(0, 200) : null]
     );
     return { ...row, email: user.email, key: g.key };
   },
 
-  /** Plan, limits, allowed IPs, expiry, status. A revoked key stays revoked. */
+  /** Plan, limits, allowed IPs / origins, status. A revoked key stays revoked. */
   async update(id, patch, catalogue) {
     const k = await queryOne('SELECT * FROM api_keys WHERE id = $1', [id]);
     if (!k) throw new KeyError('Key not found.');
@@ -100,21 +111,23 @@ const keys = {
     const status = patch.status != null ? patch.status : k.status;
     if (!['active', 'suspended'].includes(status)) throw new KeyError('Status is active or suspended (revoke is separate).');
     const ips = patch.allowed_ips !== undefined ? cleanIps(patch.allowed_ips) : k.allowed_ips;
+    const origins = patch.allowed_origins !== undefined ? cleanOrigins(patch.allowed_origins) : k.allowed_origins;
     const name = patch.name != null ? String(patch.name).replace(/\s+/g, ' ').trim().slice(0, 60) || k.name : k.name;
     return queryOne(
-      `UPDATE api_keys SET plan=$2, monthly_limit=$3, per_min_limit=$4, status=$5, allowed_ips=$6, name=$7 WHERE id=$1
-       RETURNING id, name, prefix, plan, monthly_limit, per_min_limit, status, allowed_ips`,
-      [id, plan, monthly, perMin, status, ips, name]
+      `UPDATE api_keys SET plan=$2, monthly_limit=$3, per_min_limit=$4, status=$5, allowed_ips=$6, allowed_origins=$7, name=$8 WHERE id=$1
+       RETURNING id, name, prefix, plan, monthly_limit, per_min_limit, status, allowed_ips, allowed_origins`,
+      [id, plan, monthly, perMin, status, ips, origins, name]
     );
   },
 
-  /** What the key's OWNER may change: its name and the IP addresses it may be used from. Never plan or limits. */
+  /** What the key's OWNER may change: its name and where it may be used from. Never plan or limits. */
   async updateOwn(userId, id, patch) {
-    const k = await queryOne('SELECT id, name, allowed_ips, status FROM api_keys WHERE id = $1 AND user_id = $2', [id, userId]);
+    const k = await queryOne('SELECT id, name, allowed_ips, allowed_origins, status FROM api_keys WHERE id = $1 AND user_id = $2', [id, userId]);
     if (!k || k.status === 'revoked') throw new KeyError('Key not found.');
     const ips = patch.allowed_ips !== undefined ? cleanIps(patch.allowed_ips) : k.allowed_ips;
+    const origins = patch.allowed_origins !== undefined ? cleanOrigins(patch.allowed_origins) : k.allowed_origins;
     const name = patch.name != null ? String(patch.name).replace(/\s+/g, ' ').trim().slice(0, 60) || k.name : k.name;
-    return queryOne('UPDATE api_keys SET name = $3, allowed_ips = $4 WHERE id = $1 AND user_id = $2 RETURNING id, name, prefix, allowed_ips', [id, userId, name, ips]);
+    return queryOne('UPDATE api_keys SET name = $3, allowed_ips = $4, allowed_origins = $5 WHERE id = $1 AND user_id = $2 RETURNING id, name, prefix, allowed_ips, allowed_origins', [id, userId, name, ips, origins]);
   },
 
   async revoke(id) {
@@ -177,4 +190,18 @@ function cleanIps(v) {
   return list;
 }
 
-module.exports = { keys, KeyError, generateKey, hashKey, keyFromRequest, cleanIps, KEY_RE };
+/** Sites a key may be used from in a browser: https://host[:port] exactly (http only for localhost), no path, no wildcard. */
+function cleanOrigins(v) {
+  if (v == null || v === '') return null;
+  const list = (Array.isArray(v) ? v : String(v).split(/[\s,;]+/)).map((x) => String(x).trim().replace(/\/+$/, '').toLowerCase()).filter(Boolean);
+  if (!list.length) return null;
+  if (list.length > 10) throw new KeyError('At most 10 allowed sites.');
+  list.forEach((o) => {
+    const m = o.match(/^(https?):\/\/([a-z0-9]([a-z0-9.-]*[a-z0-9])?)(:\d{1,5})?$/);
+    if (!m) throw new KeyError(`"${o}" is not a site address. Write it like https://erp.yourmill.com (no path, no * ).`);
+    if (m[1] === 'http' && !/^(localhost|127\.0\.0\.1)$/.test(m[2])) throw new KeyError(`"${o}": a site must use https (http is only allowed for localhost while you build).`);
+  });
+  return [...new Set(list)];
+}
+
+module.exports = { keys, KeyError, generateKey, hashKey, keyFromRequest, cleanIps, cleanOrigins, KEY_RE };

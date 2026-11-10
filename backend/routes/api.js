@@ -1245,8 +1245,11 @@ router.get('/studio/templates', requireUser, (req, res) => {
 const apiCatalogue = require('../engine/domain/api-catalogue');
 const apiKeyRepo = require('../db/repositories/api-key-repo');
 // what a key may call, the plans, and how to authenticate (public: it is the documentation's data)
-router.get('/catalogue', (req, res) => {
-  res.json({ success: true, version: 'v1', base_url: '/api/v1', auth: 'Authorization: Bearer <your key>  (or X-API-Key: <your key>)', plans: Object.fromEntries(Object.entries(apiCatalogue.PLANS).map(([k, p]) => [k, { label: p.label, monthly_calls: p.monthly, calls_per_minute: p.per_min }])), endpoints: apiCatalogue.publicList() });
+router.get('/catalogue', async (req, res) => {
+  let priced = {};
+  try { (await require('../db/repositories/api-order-repo').prices.list()).forEach((p) => { priced[p.plan] = { price_per_month: +p.price, currency: p.currency }; }); } catch (_) { /* prices are optional here */ }
+  res.json({ success: true, version: 'v1', base_url: '/api/v1', auth: 'Authorization: Bearer <your key>  (or X-API-Key: <your key>)',
+    plans: Object.fromEntries(Object.entries(apiCatalogue.PLANS).map(([k, p]) => [k, { label: p.label, monthly_calls: p.monthly, calls_per_minute: p.per_min, ...(priced[k] || {}) }])), endpoints: apiCatalogue.publicList() });
 });
 // the key's own plan and use
 router.get('/usage', requireUser, async (req, res) => {

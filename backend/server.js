@@ -107,6 +107,8 @@ app.set('trust proxy', 1);
 // the name customers are given, so the routes underneath can change without breaking their systems.
 app.use((req, res, next) => {
   if (req.url.startsWith('/api/v1/') || req.url === '/api/v1') { req.url = '/api' + req.url.slice('/api/v1'.length); req.viaV1 = true; }
+  // a browser's preflight to the API carries no key: answered here, before the website's own origin checks
+  if (req.viaV1 && req.method === 'OPTIONS') return require('./middleware/api-key-auth').preflight(req, res);
   next();
 });
 
@@ -203,6 +205,7 @@ const allowedOrigins = (process.env.CORS_ORIGINS || '')
 // when an old browser omits Origin). No header at all is curl or a server,
 // which carries no visitor's cookie anyway.
 app.use('/api', (req, res, next) => {
+  if (req.viaV1) return next();       // the API checks the caller's site against the key's allowed sites (api-key-auth.js)
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
   const src = req.headers.origin || req.headers.referer;
   if (!src) return next();
@@ -233,6 +236,8 @@ app.use(express.urlencoded({ extended: true, limit: '256kb' }));
 
 // Rate limiter on API routes
 app.use('/api', rateLimiter);
+// the versioned API: a key for every endpoint, listed endpoints only
+app.use('/api', require('./middleware/api-key-auth').v1Surface);
 
 // ============================================================
 // ROUTES

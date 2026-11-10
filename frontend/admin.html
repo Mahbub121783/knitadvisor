@@ -1652,6 +1652,7 @@
         </div>
         <div class="form-row" style="align-items:flex-end;flex-wrap:wrap;gap:10px;margin-top:8px;">
           <div class="form-group" style="min-width:260px;"><label class="form-label">Allowed IP addresses (optional, comma-separated)</label><input type="text" id="ak-ips" class="form-input" placeholder="203.0.113.5, 198.51.100.7"></div>
+          <div class="form-group" style="min-width:260px;"><label class="form-label">Allowed websites for browser use (optional)</label><input type="text" id="ak-origins" class="form-input" placeholder="https://erp.yourmill.com"></div>
           <div class="form-group" style="min-width:150px;"><label class="form-label">Expires (optional)</label><input type="date" id="ak-exp" class="form-input"></div>
           <div class="form-group" style="min-width:200px;"><label class="form-label">Note (invoice, agreement)</label><input type="text" id="ak-note" class="form-input" maxlength="200"></div>
           <button id="ak-create" class="btn btn-primary">Create key</button>
@@ -1664,9 +1665,34 @@
       </div>
       <div class="tbl-wrap">
         <table class="tbl">
-          <thead><tr><th>Customer</th><th>Key</th><th>Plan</th><th>This month</th><th>Per minute</th><th>IPs</th><th>Last used</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>Customer</th><th>Key</th><th>Plan</th><th>This month</th><th>Per minute</th><th>IPs / sites</th><th>Last used</th><th>Status</th><th></th></tr></thead>
           <tbody id="ak-tbody"></tbody>
         </table>
+      </div>
+
+      <div class="row-between mb-20" style="margin-top:28px;">
+        <div>
+          <div class="section-title">Orders</div>
+          <div class="section-sub">A customer asks for a plan and gives the payment's transaction id. Check the payment arrived, then mark it paid — the customer creates their own key (or an existing key is extended). No payment gateway is connected.</div>
+        </div>
+        <select id="ao-filter" class="form-select" style="max-width:160px;"><option value="">All orders</option><option value="pending" selected>Waiting for a check</option><option value="paid">Paid</option><option value="rejected">Rejected</option></select>
+      </div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr><th>When</th><th>Customer</th><th>Order</th><th>Amount</th><th>Paid by</th><th>Status</th><th></th></tr></thead>
+          <tbody id="ao-tbody"></tbody>
+        </table>
+      </div>
+
+      <div class="card mb-16" style="margin-top:20px;">
+        <div class="section-title" style="font-size:14px;">Plan prices (per month)</div>
+        <div class="section-sub">A plan with no price is not for sale on the site. The beta is given, not sold.</div>
+        <div id="ap-prices" style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;"></div>
+        <div class="form-group" style="margin-top:12px;max-width:640px;">
+          <label class="form-label">How customers pay (shown when they order)</label>
+          <textarea id="ap-instructions" class="form-input" rows="3" maxlength="1500" placeholder="e.g. Send the amount to bKash 01XXXXXXXXX (Personal) and write the transaction id in the order."></textarea>
+          <button id="ap-instr-save" class="btn btn-ghost btn-sm" style="margin-top:6px;align-self:flex-start;">Save instructions</button>
+        </div>
       </div>
     </div>
 
@@ -1968,6 +1994,6 @@
 </div><!-- /admin-app -->
 
 <script src="assets/js/password-toggle.js?v=20260922a"></script>
-<script src="assets/js/admin.js?v=20261111a"></script>
+<script src="assets/js/admin.js?v=20261111b"></script>
 </body>
 </html>

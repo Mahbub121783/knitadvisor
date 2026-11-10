@@ -112,11 +112,54 @@ router.patch('/api-keys/:id', async (req, res) => {
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return res.status(400).json({ success: false, error: 'Invalid key.' });
     const b = req.body || {};
-    res.json({ success: true, key: await apiKeyRepo.keys.updateOwn(req.user.id, id, { name: b.name, allowed_ips: b.allowed_ips }) });
+    res.json({ success: true, key: await apiKeyRepo.keys.updateOwn(req.user.id, id, { name: b.name, allowed_ips: b.allowed_ips, allowed_origins: b.allowed_origins }) });
   } catch (err) {
     if (err instanceof apiKeyRepo.KeyError) return res.status(400).json({ success: false, error: err.message });
     console.error('[Account] api key update failed:', err.message);
     res.status(500).json({ success: false, error: 'Could not update the key.' });
+  }
+});
+// Buying API access: what is for sale, how to pay, the customer's orders, and turning a paid order into a key.
+const apiOrderRepo = require('../db/repositories/api-order-repo');
+const apiOrderLimiter = createRateLimiter({ name: 'api_order', max: 10, windowMs: 3600 * 1000, message: 'Too many API orders from this account. Try again in an hour.' });
+router.get('/api-shop', async (req, res) => {
+  try {
+    const [priceRows, instructions, orders] = await Promise.all([apiOrderRepo.prices.list(), apiOrderRepo.settings.get('payment_instructions'), apiOrderRepo.orders.listForUser(req.user.id)]);
+    res.json({ success: true, instructions, methods: apiOrderRepo.METHODS, orders,
+      plans: priceRows.filter((p) => apiCatalogue.PLANS[p.plan]).map((p) => ({ plan: p.plan, label: apiCatalogue.PLANS[p.plan].label, price_per_month: +p.price, currency: p.currency, monthly_calls: apiCatalogue.PLANS[p.plan].monthly, calls_per_minute: apiCatalogue.PLANS[p.plan].per_min })) });
+  } catch (err) {
+    console.error('[Account] api shop failed:', err.message);
+    res.status(500).json({ success: false, error: 'Could not load the plans.' });
+  }
+});
+router.post('/api-orders', apiOrderLimiter, async (req, res) => {
+  try {
+    res.json({ success: true, order: await apiOrderRepo.orders.create(req.user.id, req.body, apiCatalogue) });
+  } catch (err) {
+    if (err instanceof apiKeyRepo.KeyError) return res.status(400).json({ success: false, error: err.message });
+    console.error('[Account] api order failed:', err.message);
+    res.status(500).json({ success: false, error: 'Could not place the order.' });
+  }
+});
+router.post('/api-orders/:id/cancel', async (req, res) => {
+  try {
+    await apiOrderRepo.orders.cancel(req.user.id, parseInt(req.params.id, 10));
+    res.json({ success: true });
+  } catch (err) {
+    if (err instanceof apiKeyRepo.KeyError) return res.status(400).json({ success: false, error: err.message });
+    console.error('[Account] api order cancel failed:', err.message);
+    res.status(500).json({ success: false, error: 'Could not cancel the order.' });
+  }
+});
+// the one moment a key is shown: the customer creates it themselves from a paid order
+router.post('/api-orders/:id/issue', async (req, res) => {
+  try {
+    const key = await apiOrderRepo.orders.issueKey(req.user.id, parseInt(req.params.id, 10), (req.body || {}).name, apiCatalogue);
+    res.json({ success: true, key });
+  } catch (err) {
+    if (err instanceof apiKeyRepo.KeyError) return res.status(400).json({ success: false, error: err.message });
+    console.error('[Account] api key issue failed:', err.message);
+    res.status(500).json({ success: false, error: 'Could not create the key.' });
   }
 });
 router.get('/api-keys/:id/usage', async (req, res) => {

@@ -43,8 +43,8 @@
     <p class="ad-lead">Use the same engines as the website — the fabric calculator, the Fabric Studio, the costing sheet and dyeing — from your own system: your ERP, your PLM, your quotation tool. You send JSON, you get JSON back.</p>
 
     <h2>1. Get a key</h2>
-    <p>API access is a plan. Once it is agreed, KnitAdvisor issues a key for your account. It looks like <code>ka_live_…</code>, is shown to you once, and acts as your account on the engines below. Keep it on your server — like a password.</p>
-    <p>You will find your keys, their plan and how much of the month is used under <a href="/account.html">your account</a>. There you can also name a key and say which IP addresses it may be used from.</p>
+    <p>API access is a plan, bought in <a href="/account.html">your account</a> under "API access": pick a plan and the months, pay as shown there, and give the transaction id. When KnitAdvisor has checked the payment, a button appears in your account that creates your key. It looks like <code>ka_live_…</code>, is shown to you once, and acts as your account on the engines below. Keep it on your server — like a password. Renewing or upgrading extends the same key.</p>
+    <p>Your keys, their plan, and how much of the month is used are in the same place. There you can also name a key, say which server IP addresses it may be used from, and which websites may use it from a browser.</p>
 
     <h2>2. Make a call</h2>
     <p>Send the key as a Bearer token. Every endpoint is under <code>/api/v1</code>.</p>
@@ -80,12 +80,12 @@
     </table></div>
 
     <h2>5. Endpoints</h2>
-    <p>Version <code>v1</code>. Endpoints marked <em>key</em> need your key; the others are reference data and engines open to everyone, limited by address only — a key is not required for them. A field not listed in a request is left at the engine's default.</p>
+    <p>Version <code>v1</code>. Every endpoint below needs your key. (Some of the same engines are also open on the KnitAdvisor website for people using the pages; the API at <code>/api/v1</code> is the metered copy.) A field not listed in a request is left at the engine's default.</p>
     <div id="ad-endpoints"><p>Loading…</p></div>
 
     <h2>6. Keep it safe</h2>
     <ul>
-      <li>Call the API from your server, never from a web page or an app you give to others — a key in a browser is a key anyone can copy. (Calls that come from another website's page are refused.)</li>
+      <li>Call the API from your server. A key that is called from a web page is visible to everyone who opens the page. If you must call from a browser, list the website on the key (in your account), give that key a small plan, and know that anyone can copy it from the page: it will only work from your website's pages, but it can be used up. A key with no website listed refuses every browser call.</li>
       <li>Ask for an allowed-IP list: then a copied key is useless from anywhere but your servers.</li>
       <li>A key found in the wrong hands is revoked by KnitAdvisor at once, and a new one issued; nothing else of yours changes.</li>
       <li>The API returns what your account would see on the website. Your saved designs, costing sheets and calculation history are not reachable with a key.</li>
@@ -94,6 +94,6 @@
   </main>
   <footer class="footer"></footer>
 </div>
-<script src="assets/js/api-docs.js?v=20261111a"></script>
+<script src="assets/js/api-docs.js?v=20261111b"></script>
 </body>
 </html>
