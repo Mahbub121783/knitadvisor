@@ -360,7 +360,7 @@
       stripes: $('st-stripe').value.trim() ? { sequence: $('st-stripe').value } : null,
       finish: { brush: $('st-brush').value, passes: num('st-passes'), sheared: $('st-shear').checked },
       elastane: $('st-lycra').checked ? { denier: +$('st-lyd').value, draft: num('st-lydraft') || 2.6, every: $('st-lyevery').value } : null,
-      target: { gsm: num('st-gsm'), width_in: num('st-width') },
+      target: { gsm: num('st-gsm'), width_in: num('st-width'), shrinkage_pct: num('st-shr') },
       calibration: $('st-userolls').checked && completeRolls().length ? { rolls: completeRolls() } : null,
       machine: {
         gauge: num('st-gauge'), dia: num('st-dia'), feeders: num('st-feeders'), rpm: num('st-rpm'),
@@ -434,6 +434,15 @@
         '<div class="st-scroll"><table class="st-t"><tr><th>Roll</th><th>Measured GSM</th><th>Model GSM</th><th>Measured width</th><th>Model width</th><th>Ks vs mean</th><th>Kw vs mean</th></tr>' +
         cb.rolls.map(function (x) { return '<tr' + (x.outlier ? ' style="background:rgba(154,91,0,.1)"' : '') + '><td>' + x.roll + (x.outlier ? ' ⚠' : '') + '</td><td>' + Math.round(x.gsm) + '</td><td>' + x.model_gsm + '</td><td>' + r1(x.width_in) + '"</td><td>' + x.model_width_in + '"</td><td>' + x.ks_off_pct + '%</td><td>' + x.kw_off_pct + '%</td></tr>'; }).join('') + '</table></div>' +
         (cb.rolls.some(function (x) { return x.outlier; }) ? '<p class="st-p">A flagged roll is more than 10% from the others: re-measure it, or it may be a different yarn lot or machine setting.</p>' : '');
+    }
+    if (f.relaxation) {
+      var RX = f.relaxation, rs = RX.residual, cp = RX.compaction;
+      html += '<div class="st-sub">Relaxation states and shrinkage ' + src('e') + '</div><p class="st-p">The loop length stays what the machine knitted; the shape of the loop — and with it wales, courses, weight and width — follows the state of relaxation (Munden: wales/cm = Kw ÷ ℓ, courses/cm = Kc ÷ ℓ).</p>' +
+        '<div class="st-scroll"><table class="st-t"><tr><th>State</th><th>Wales × courses /cm</th><th>GSM</th><th>Open width</th><th>Length vs finished</th><th>Width vs finished</th></tr>' +
+        RX.states.map(function (x) { return '<tr' + (x.state === 'finished' ? ' style="background:var(--accent-tint)"' : '') + '><td style="white-space:normal;font-family:inherit;min-width:190px">' + esc(x.label) + '</td><td>' + x.wpc + ' × ' + x.cpc + '</td><td>' + x.gsm + '</td><td>' + x.width_in + '"</td><td>' + (x.length_pct > 0 ? '+' : '') + x.length_pct + '%</td><td>' + (x.width_pct > 0 ? '+' : '') + x.width_pct + '%</td></tr>'; }).join('') + '</table></div>' +
+        '<p class="st-p"><b>Residual shrinkage</b> after home laundering (finished → fully relaxed): length <b>' + rs.length_pct[1] + '%</b> (' + rs.length_pct[0] + '–' + rs.length_pct[2] + '), width <b>' + rs.width_pct[1] + '%</b> (' + rs.width_pct[0] + '–' + rs.width_pct[2] + '). Greige to finished: length ' + RX.processing.length_pct + '%, width ' + RX.processing.width_pct + '%.</p>' +
+        '<p class="st-p"><b>Compaction for ' + cp.limit_pct + '%:</b> finish to at least ' + cp.min_cpc + ' courses/cm and ' + cp.min_wpc + ' wales/cm — open width ≤ ' + cp.max_width_in + '", about ' + cp.gsm_at_limit + ' GSM' + (cp.length_ok && cp.width_ok ? ' (the finished state already keeps it).' : ' — the finished state above does not keep it yet.') + '</p>' +
+        '<p class="st-p" style="font-size:12px">' + esc(RX.basis) + '. Fibre factor ' + RX.fibre_factor + ' (how fully this yarn relaxes against cotton).</p>';
     }
     html += '<p class="st-p">State: ' + esc(f.state) + '. Kw ' + f.kw + ' (' + esc(f.kw_basis) + '), Ks ' + f.ks + ' (' + esc(f.ks_basis) + ').</p>';
     html += '<p class="st-p" style="font-family:var(--mono);font-size:11px">' + esc(f.formulas.gsm) + '<br>' + esc(f.formulas.width) + '</p>';
@@ -1094,7 +1103,7 @@
   var STORE = 'ka_studio_designs';
   function readStore() { try { return JSON.parse(localStorage.getItem(STORE) || '[]'); } catch (_) { return []; } }
   function writeStore(a) { try { localStorage.setItem(STORE, JSON.stringify(a)); return true; } catch (_) { return false; } }
-  var FIELDS = ['st-ne', 'st-fibre', 'st-gsm', 'st-width', 'st-gauge', 'st-dia', 'st-feeders', 'st-rpm', 'st-sl', 'st-eff', 'st-tc', 'st-td', 'st-lyd', 'st-lydraft', 'st-lyevery', 'st-v1r', 'st-v1l', 'st-v2r', 'st-v2l', 'st-sinker', 'st-parr', 'st-mprof', 'st-brush', 'st-passes', 'st-pile', 'st-tdir', 'st-camd', 'st-timing', 'st-dgap', 'st-c1r', 'st-c1l', 'st-c2r', 'st-c2l', 'st-stripe', 'st-sc-A', 'st-sc-B', 'st-sc-C', 'st-sc-D', 'st-sc-E', 'st-sc-F'];
+  var FIELDS = ['st-ne', 'st-fibre', 'st-gsm', 'st-width', 'st-gauge', 'st-dia', 'st-feeders', 'st-rpm', 'st-sl', 'st-eff', 'st-tc', 'st-td', 'st-lyd', 'st-lydraft', 'st-lyevery', 'st-v1r', 'st-v1l', 'st-v2r', 'st-v2l', 'st-sinker', 'st-parr', 'st-mprof', 'st-brush', 'st-passes', 'st-pile', 'st-tdir', 'st-shr', 'st-camd', 'st-timing', 'st-dgap', 'st-c1r', 'st-c1l', 'st-c2r', 'st-c2l', 'st-stripe', 'st-sc-A', 'st-sc-B', 'st-sc-C', 'st-sc-D', 'st-sc-E', 'st-sc-F'];
   function designNow() {
     var o = { v: 2, name: $('st-name').value || 'Untitled design', bed: S.bed, C: S.C, D: S.D, feeds: S.feeds, rolls: rolls, lycra: $('st-lycra').checked, cut: $('st-cut').checked, colour: $('st-col').value, fields: {} };
     FIELDS.forEach(function (id) { o.fields[id] = $(id).value; });

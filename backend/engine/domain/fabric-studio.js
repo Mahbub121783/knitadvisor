@@ -36,6 +36,7 @@
 const KP = require('./knit-plan');
 const KM = require('./knit-machine');
 const KF = require('./knit-formation');
+const KR = require('./knit-relax');
 const TE = require('./terry-engine');
 const { FABRIC_DERIVATIVES } = require('../catalog/fabric-derivatives');
 const { FACTORY_RECORDS } = require('../catalog/factory-dataset');
@@ -1090,6 +1091,10 @@ function analyse(input) {
     // stitch formation: knock-over depth for every knitting feed, timing, cam scale
     const defTiming = profile.timing && profile.timing.length === 1 ? profile.timing[0]
       : gating === 'interlock' || (D && st.beds.D.some((row) => row.includes('T'))) ? 'synchronised' : 'delayed';
+    // relaxation states and residual shrinkage (Munden: dimensions follow the state, the loop length stays)
+    const relax = plush ? null : KR.states({ S, fibre: S.ground.fibre, elastane: !!elastane,
+      jersey: (() => { const ks = KP.calFor('ks', 'single_jersey', false).med, kw = KP.calFor('kw', 'single_jersey', false).med; return { kc: ks / kw, kw }; })(),
+      limitPct: +((input.target || {}).shrinkage_pct) });
     const formation = plush ? null : KF.plan({ st, gating, S, machine: input.machine, feedSystem: profile.selection === 'tracks' ? 'positive' : 'storage', defaultTiming: defTiming });
     {
       const mc = KM.fit(profile, req);
@@ -1109,6 +1114,7 @@ function analyse(input) {
         else add('ok', `Striper stripe: each feeder changes between up to ${sp.fingers_needed} yarns, the repeat takes ${sp.revolutions_per_repeat} revolution${sp.revolutions_per_repeat > 1 ? 's' : ''}.`);
         if (+((input.machine || {}).feeders) > 0 && sp.method === 'striper' && !profile.striper) add('note', 'Your feeder count is not a multiple of the stripe repeat, so the stripe cannot be threaded feeder by feeder.');
       }
+      if (relax) mc.push(...KR.checks(relax, family));
       if (formation) {
         mc.push(...formation.checks);
         if (formation.timing && profile.timing && !profile.timing.includes(formation.timing)) mc.push({ level: 'warn', text: `${profile.label} runs ${profile.timing.join(' / ')} timing; ${formation.timing} is set.` });
@@ -1224,6 +1230,7 @@ function analyse(input) {
         wpi: r1(S.wpc * 2.54), cpi: r1(S.cpc * 2.54), wpc: r1(S.wpc), cpc: r1(S.cpc),
         width_open_in: r1(S.width), width_range_in: S.widthRange.map(r1), tube_in: r1(S.width / 2), target_width_in: S.tW,
         kw: r2(S.KW.med), kw_basis: S.KW.basis, ks: r1(S.KS.med), ks_basis: S.KS.basis,
+        relaxation: relax,
         calibration: ctx.calib ? {
           n: ctx.calib.n, ks: r2(ctx.calib.ks), kw: r3(ctx.calib.kw), model_ks: r2(S.modelKS), model_kw: r3(S.modelKW),
           ks_vs_model_pct: r1((ctx.calib.ks / S.modelKS - 1) * 100), kw_vs_model_pct: r1((ctx.calib.kw / S.modelKW - 1) * 100),
