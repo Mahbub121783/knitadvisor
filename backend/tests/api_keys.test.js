@@ -182,23 +182,43 @@ console.log('--- Running API Key Tests ---');
   assert((await run(ipGate, { ip: '203.0.113.5' })).nextCalled);
   assert((await run(ipGate, { ip: '::ffff:203.0.113.5' })).nextCalled);
 
-  // a call from a browser: the site must be one of the key's, and the answer carries CORS for that site only
-  const sites = mk({ allowed_origins: ['https://erp.mill.com'] }).gate;
-  const runWith = async (gate, origin) => {
-    const req = { method: 'POST', path: '/calculate', ip: '203.0.113.5', headers: origin ? { origin, 'x-user-email': OWNER_EMAIL } : { 'x-user-email': OWNER_EMAIL } };
+  // the website: a browser's Origin, or X-Website from a server; the key, the email and the website must belong together
+  const SITE = 'https://erp.mill.com';
+  const sites = () => mk({ allowed_origins: [SITE] });
+  const runWith = async (gate, { origin, website, email = OWNER_EMAIL, ip = '203.0.113.5' } = {}) => {
+    const hd = { 'x-user-email': email }; if (origin) hd.origin = origin; if (website) hd['x-website'] = website;
+    const req = { method: 'POST', path: '/calculate', ip, headers: hd };
     const headers = {}; let code = null, body = null, nextCalled = false;
     const res = { statusCode: 200, set(k, v) { headers[k] = v; return this; }, status(c) { code = c; return this; }, json(b) { body = b; return this; }, on() {} };
     await gate(req, res, () => { nextCalled = true; }, good.key);
     return { code, body, headers, nextCalled };
   };
-  let b1 = await runWith(sites, 'https://erp.mill.com');
-  assert(b1.nextCalled && b1.headers['Access-Control-Allow-Origin'] === 'https://erp.mill.com' && b1.headers.Vary === 'Origin' && /X-Quota-Remaining/.test(b1.headers['Access-Control-Expose-Headers']));
-  b1 = await runWith(sites, 'https://evil.example');
-  assert(b1.code === 403 && b1.body.code === 'ORIGIN_NOT_ALLOWED' && !b1.nextCalled && !b1.headers['Access-Control-Allow-Origin'], 'another website is refused, with no CORS grant');
-  b1 = await runWith(mk().gate, 'https://erp.mill.com');
-  assert(b1.code === 403 && b1.body.code === 'ORIGIN_NOT_ALLOWED', 'a server key refuses any browser call');
-  assert((await runWith(mk().gate, null)).nextCalled, 'a server call has no Origin and works');
-  assert(sites && (await runWith(sites, null)).nextCalled, 'a browser key also works from a server');
+  // from a browser: the page's Origin is checked, and the answer carries CORS for that site only
+  let b1 = await runWith(sites().gate, { origin: SITE });
+  assert(b1.nextCalled && b1.headers['Access-Control-Allow-Origin'] === SITE && b1.headers.Vary === 'Origin' && /X-Quota-Remaining/.test(b1.headers['Access-Control-Expose-Headers']));
+  b1 = await runWith(sites().gate, { origin: 'https://evil.example' });
+  assert(b1.code === 401 && b1.body.code === 'WEBSITE_MISMATCH' && !b1.nextCalled && !b1.headers['Access-Control-Allow-Origin'], 'another website is refused, with no CORS grant');
+  b1 = await runWith(mk().gate, { origin: SITE });
+  assert(b1.code === 401 && b1.body.code === 'WEBSITE_MISMATCH' && /server key/.test(b1.body.error), 'a key with no website refuses any browser call');
+  // from a server: the key is registered to a website, so the call must name it
+  b1 = await runWith(sites().gate, {});
+  assert(b1.code === 401 && b1.body.code === 'WEBSITE_REQUIRED' && !b1.nextCalled, 'a key registered to a website needs the website with it');
+  b1 = await runWith(sites().gate, { website: SITE });
+  assert(b1.nextCalled && !b1.headers['Access-Control-Allow-Origin'], 'a server naming the right website is accepted (no CORS: it is not a browser)');
+  b1 = await runWith(sites().gate, { website: '  HTTPS://ERP.MILL.COM/ ' });
+  assert(b1.nextCalled, 'case, spaces and a trailing slash do not matter');
+  b1 = await runWith(sites().gate, { website: 'https://other.mill.com' });
+  assert(b1.code === 401 && b1.body.code === 'WEBSITE_MISMATCH' && !b1.nextCalled && b1.body.your_website === 'https://other.mill.com', 'the wrong website is refused');
+  assert((await runWith(mk().gate, {})).nextCalled, 'a key with no website registered needs none');
+  assert((await runWith(mk().gate, { website: 'https://anything.example' })).nextCalled, 'a website sent to a key that has none is ignored');
+  // all three: a wrong email is refused before the website is looked at, and neither uses quota; wrong sites are slowed like wrong emails
+  b1 = await runWith(sites().gate, { website: SITE, email: 'x@y.example' });
+  assert(b1.body.code === 'EMAIL_MISMATCH');
+  const sg = sites(); let sr;
+  for (let i = 0; i < 22; i++) sr = await runWith(sg.gate, { website: 'https://guess' + i + '.example' });
+  assert(sr.code === 429 && sr.body.code === 'TOO_MANY_BAD_KEYS' && sg.st.month === 0, 'guessing websites is slowed and costs no quota');
+  // a revoked key registered to a website still says revoked once key, email and website agree
+  assert((await runWith(mk({ status: 'revoked', allowed_origins: [SITE] }).gate, { website: SITE })).body.code === 'KEY_REVOKED');
 
   // per minute: the 31st call of a beta key
   const rate = mk(); let rr;

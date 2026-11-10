@@ -47,7 +47,7 @@
     <p>Always send the email you sign in with (the account that owns the key). Your keys, their plan, and how much of the month is used are in the same place. There you can also name a key, say which server IP addresses it may be used from, and which websites may use it from a browser.</p>
 
     <h2>2. Make a call</h2>
-    <p>Every call carries two things that must agree: your key (as a Bearer token) and <b>the email of the account that owns the key</b> in the <code>X-User-Email</code> header. A key with no email, or with another email, is refused. Every endpoint is under <code>/api/v1</code>.</p>
+    <p>Every call carries three things that must agree: your key (as a Bearer token), <b>the email of the account that owns the key</b> in <code>X-User-Email</code>, and <b>the website the key is registered to</b>. From a server you name the website in <code>X-Website</code> (for example <code>https://erp.yourmill.com</code>, no path); a web page sends it by itself as its <code>Origin</code>. A key with no email, another account's email, or another website, is refused. Every endpoint is under <code>/api/v1</code>.</p>
     <div class="ad-tabs" id="ad-tabs"><button class="on" data-l="curl">curl</button><button data-l="node">Node.js</button><button data-l="py">Python</button></div>
     <pre id="ad-code"></pre>
     <p>The answer is JSON. The calculator's answer has the yarn, stitch length, shrinkage, machine and cost sections; <code>success: false</code> and an <code>error</code> tell you what to fix.</p>
@@ -70,6 +70,8 @@
       <tr><td>401</td><td><code>INVALID_API_KEY</code></td><td>no such key — check it was copied whole</td></tr>
       <tr><td>401</td><td><code>EMAIL_REQUIRED</code></td><td>the <code>X-User-Email</code> header is missing</td></tr>
       <tr><td>401</td><td><code>EMAIL_MISMATCH</code></td><td>the email is not the one of the account this key was issued to — the key and the email must belong together</td></tr>
+      <tr><td>401</td><td><code>WEBSITE_REQUIRED</code></td><td>the key is registered to a website and the call named none (<code>X-Website</code>)</td></tr>
+      <tr><td>401</td><td><code>WEBSITE_MISMATCH</code></td><td>the website is not the one the key is registered to</td></tr>
       <tr><td>401</td><td><code>KEY_REVOKED</code> · <code>KEY_EXPIRED</code></td><td>the key no longer works; ask for a new one</td></tr>
       <tr><td>403</td><td><code>KEY_SUSPENDED</code> · <code>ACCOUNT_DISABLED</code></td><td>access paused — contact KnitAdvisor</td></tr>
       <tr><td>403</td><td><code>IP_NOT_ALLOWED</code></td><td>the key has an allowed-IP list and this address is not on it (the answer shows <code>your_ip</code>)</td></tr>
@@ -87,7 +89,7 @@
 
     <h2>6. Keep it safe</h2>
     <ul>
-      <li>Call the API from your server. A key that is called from a web page is visible to everyone who opens the page. If you must call from a browser, list the website on the key (in your account), give that key a small plan, and know that anyone can copy it from the page: it will only work from your website's pages, but it can be used up. A key with no website listed refuses every browser call.</li>
+      <li>The website is part of the key. From a browser it is checked against the page's real <code>Origin</code>, which a web page cannot fake; a call from a server names it in <code>X-Website</code>, which anyone holding the key could write — so it makes a wrong key and wrong system obvious, but the IP address list is what stops a stolen key. A key used in a web page is visible to its visitors: give it a small plan. A key with no website registered refuses every browser call.</li>
       <li>Ask for an allowed-IP list: then a copied key is useless from anywhere but your servers.</li>
       <li>A key found in the wrong hands is revoked by KnitAdvisor at once, and a new one issued; nothing else of yours changes.</li>
       <li>The API returns what your account would see on the website. Your saved designs, costing sheets and calculation history are not reachable with a key.</li>
@@ -96,6 +98,6 @@
   </main>
   <footer class="footer"></footer>
 </div>
-<script src="assets/js/api-docs.js?v=20261111c"></script>
+<script src="assets/js/api-docs.js?v=20261111d"></script>
 </body>
 </html>

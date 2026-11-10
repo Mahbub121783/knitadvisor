@@ -87,12 +87,19 @@ const server = app.listen(0, '127.0.0.1', async () => {
     r = await call(port, 'OPTIONS', '/api/v1/calculate', { headers: { Origin: 'https://erp.mill.com', 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'authorization,content-type' } });
     assert.strictEqual(r.status, 204); assert.strictEqual(r.headers['access-control-allow-origin'], 'https://erp.mill.com'); assert(/authorization/i.test(r.headers['access-control-allow-headers']));
     r = await call(port, 'POST', '/api/v1/convert', { key: good.key, headers: { Origin: 'https://erp.mill.com' }, body: { value: 30, from: 'ne', to: 'tex' } });
-    assert.strictEqual(r.status, 403); assert.strictEqual(r.body.code, 'ORIGIN_NOT_ALLOWED'); assert(!r.headers['access-control-allow-origin']);
+    assert.strictEqual(r.status, 401); assert.strictEqual(r.body.code, 'WEBSITE_MISMATCH'); assert(!r.headers['access-control-allow-origin']);
     state.key.allowed_origins = ['https://erp.mill.com'];
     r = await call(port, 'POST', '/api/v1/convert', { key: good.key, headers: { Origin: 'https://erp.mill.com' }, body: { value: 30, from: 'ne', to: 'tex' } });
-    assert.notStrictEqual(r.status, 403); assert.strictEqual(r.headers['access-control-allow-origin'], 'https://erp.mill.com'); assert(/X-Quota-Remaining/.test(r.headers['access-control-expose-headers']));
+    assert.notStrictEqual(r.status, 401); assert.strictEqual(r.headers['access-control-allow-origin'], 'https://erp.mill.com'); assert(/X-Quota-Remaining/.test(r.headers['access-control-expose-headers']));
     r = await call(port, 'POST', '/api/v1/convert', { key: good.key, headers: { Origin: 'https://evil.example' }, body: { value: 30, from: 'ne', to: 'tex' } });
-    assert.strictEqual(r.status, 403); assert(!r.headers['access-control-allow-origin']);
+    assert.strictEqual(r.status, 401); assert.strictEqual(r.body.code, 'WEBSITE_MISMATCH'); assert(!r.headers['access-control-allow-origin']);
+    // a server call: the key is registered to a website, so it must name it
+    r = await call(port, 'POST', '/api/v1/convert', { key: good.key, body: { value: 30, from: 'ne', to: 'tex' } });
+    assert.strictEqual(r.status, 401); assert.strictEqual(r.body.code, 'WEBSITE_REQUIRED');
+    r = await call(port, 'POST', '/api/v1/convert', { key: good.key, headers: { 'X-Website': 'https://erp.mill.com' }, body: { value: 30, from: 'ne', to: 'tex' } });
+    assert.notStrictEqual(r.status, 401, r.text.slice(0, 160));
+    r = await call(port, 'POST', '/api/v1/convert', { key: good.key, headers: { 'X-Website': 'https://other.example' }, body: { value: 30, from: 'ne', to: 'tex' } });
+    assert.strictEqual(r.status, 401); assert.strictEqual(r.body.code, 'WEBSITE_MISMATCH');
     state.key.allowed_origins = null; state.month = 0;
 
     // the key alone is not enough: the owner's email must come with it

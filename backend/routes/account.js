@@ -154,7 +154,11 @@ router.post('/api-orders/:id/cancel', async (req, res) => {
 // the one moment a key is shown: the customer creates it themselves from a paid order
 router.post('/api-orders/:id/issue', async (req, res) => {
   try {
-    const key = await apiOrderRepo.orders.issueKey(req.user.id, parseInt(req.params.id, 10), (req.body || {}).name, apiCatalogue);
+    const b = req.body || {};
+    // a key is created for a website: the customer says which one (and, if they like, the server addresses) BEFORE the key exists
+    const origins = apiKeyRepo.cleanOrigins(b.allowed_origins), ips = apiKeyRepo.cleanIps(b.allowed_ips);
+    if (!origins) return res.status(400).json({ success: false, error: 'Enter the website this key is for, e.g. https://erp.yourmill.com. A call must come from it (or name it) to be accepted.' });
+    const key = await apiOrderRepo.orders.issueKey(req.user.id, parseInt(req.params.id, 10), b.name, apiCatalogue, { allowed_origins: origins, allowed_ips: ips });
     res.json({ success: true, key });
   } catch (err) {
     if (err instanceof apiKeyRepo.KeyError) return res.status(400).json({ success: false, error: err.message });

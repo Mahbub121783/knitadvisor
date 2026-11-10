@@ -1248,7 +1248,7 @@ const apiKeyRepo = require('../db/repositories/api-key-repo');
 router.get('/catalogue', async (req, res) => {
   let priced = {};
   try { (await require('../db/repositories/api-order-repo').prices.list()).forEach((p) => { priced[p.plan] = { price_per_month: +p.price, currency: p.currency }; }); } catch (_) { /* prices are optional here */ }
-  res.json({ success: true, version: 'v1', base_url: '/api/v1', auth: 'Authorization: Bearer <your key>  (or X-API-Key: <your key>)  AND  X-User-Email: <the email of the account that owns the key>',
+  res.json({ success: true, version: 'v1', base_url: '/api/v1', auth: 'Authorization: Bearer <your key>  (or X-API-Key: <your key>)  AND  X-User-Email: <the email of the account that owns the key>  AND, for a key registered to a website, X-Website: <that website> (a browser sends its own Origin)',
     plans: Object.fromEntries(Object.entries(apiCatalogue.PLANS).map(([k, p]) => [k, { label: p.label, monthly_calls: p.monthly, calls_per_minute: p.per_min, ...(priced[k] || {}) }])), endpoints: apiCatalogue.publicList() });
 });
 // the key's own plan and use

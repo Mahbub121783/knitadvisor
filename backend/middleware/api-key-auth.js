@@ -3,10 +3,12 @@
  * X-API-Key) is a customer's own system calling the engines. requireUser hands
  * such a request here instead of looking for a browser session.
  *
- * A call carries TWO things that must agree: the key, and the email of the account the key was
- * issued to, in the X-User-Email header. A key with no email, or with another account's email,
- * is refused — so a key found on its own is not enough, and a customer who points the wrong key at
- * the wrong account finds out at once. Wrong emails count towards the same "too many bad keys" limit.
+ * A call carries THREE things that must agree: the key; the email of the account it was issued to
+ * (X-User-Email); and — when the key is registered to a website — that website. A browser sends its own
+ * Origin (a web page cannot forge it); a server names the site in X-Website. A key with no email, or
+ * another account's email, or the wrong website, is refused: a key found on its own is not enough, and a
+ * customer who points the wrong key at the wrong system finds out at once. Wrong emails and wrong websites
+ * count towards the same "too many bad keys" limit and use no quota.
  *
  * In order: the endpoint must be one the API sells (never the account itself);
  * the key must exist, be active, unexpired, its owner enabled, and — if the key
@@ -60,15 +62,26 @@ function createGate(repo = apiRepo.keys, deps = {}) {
         if (f && f.count > FAIL_PER_MIN) { res.set('Retry-After', '60'); return refuse(res, 429, 'TOO_MANY_BAD_KEYS', 'Too many invalid API keys from this address. Wait a minute.'); }
         return refuse(res, 401, 'EMAIL_MISMATCH', 'This email does not match the account this key was issued to. Use the email of the account that owns the key.');
       }
+      // the website: the key's own, from the browser's Origin (it cannot be forged by a page) or, from a server, the X-Website header
+      const sites = key.allowed_origins || [];
+      const origin = req.headers && req.headers.origin ? String(req.headers.origin).trim().toLowerCase() : '';
+      const declared = String((req.headers && req.headers['x-website']) || '').trim().toLowerCase().replace(/\/+$/, '');
+      const badSite = async (code, text, extra) => {
+        const f = await repo.hitWindow('apikey_fail', ip, 60);
+        if (f && f.count > FAIL_PER_MIN) { res.set('Retry-After', '60'); return refuse(res, 429, 'TOO_MANY_BAD_KEYS', 'Too many invalid API keys from this address. Wait a minute.'); }
+        return refuse(res, 401, code, text, extra);
+      };
+      if (origin && !sites.includes(origin)) return badSite('WEBSITE_MISMATCH', sites.length ? 'This key is registered to another website. A web page can use it only from the site it was registered for.' : 'This key is not registered for use from a web page. It is a server key: call the API from your server.', { your_origin: origin });
+      if (sites.length) {
+        const site = origin || declared;
+        if (!site) return refuse(res, 401, 'WEBSITE_REQUIRED', 'This key is registered to a website. Send that website in the X-Website header (a browser sends its own Origin), together with the key and the email.');
+        if (!sites.includes(site)) return badSite('WEBSITE_MISMATCH', 'This website is not the one this key is registered to. Use the key, the email and the website of the same registration.', { your_website: site });
+        if (origin) cors(res, origin);
+      }
       if (key.status === 'revoked') return refuse(res, 401, 'KEY_REVOKED', 'This API key has been revoked.');
       if (key.status === 'suspended') return refuse(res, 403, 'KEY_SUSPENDED', 'This API key is suspended. Contact KnitAdvisor.');
       if (key.expires_at && new Date(key.expires_at) < now()) return refuse(res, 401, 'KEY_EXPIRED', 'This API key has expired.');
       if (key.user_disabled) return refuse(res, 403, 'ACCOUNT_DISABLED', 'The account this key belongs to is disabled.');
-      const origin = req.headers && req.headers.origin;
-      if (origin) {
-        if (!(key.allowed_origins || []).includes(String(origin).toLowerCase())) return refuse(res, 403, 'ORIGIN_NOT_ALLOWED', 'This key may not be used from this website. A key used in a browser must list the site (ask for it to be added); a server key is called from your server.', { your_origin: origin });
-        cors(res, origin);
-      }
       if (key.allowed_ips && key.allowed_ips.length) {
         const norm = (s) => String(s).replace(/^::ffff:/i, '');
         if (!key.allowed_ips.map(norm).includes(norm(ip))) return refuse(res, 403, 'IP_NOT_ALLOWED', 'This key may not be used from this IP address.', { your_ip: norm(ip) });
@@ -119,7 +132,7 @@ function preflight(req, res) {
   const origin = req.headers.origin;
   if (origin) cors(res, origin);
   res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-API-Key, X-User-Email');
+  res.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-API-Key, X-User-Email, X-Website');
   res.set('Access-Control-Max-Age', '600');
   res.status(204).end();
 }

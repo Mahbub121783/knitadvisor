@@ -130,7 +130,7 @@ const orders = {
   },
 
   /** A paid order → its key, created once, by the customer. Claimed atomically so a double click makes one key. */
-  async issueKey(userId, id, name, catalogue) {
+  async issueKey(userId, id, name, catalogue, where) {
     const claim = await queryOne(
       "UPDATE api_orders SET issued_at = now() WHERE id = $1 AND user_id = $2 AND status = 'paid' AND key_id IS NULL AND issued_at IS NULL RETURNING id, plan, months",
       [id, userId]
@@ -138,7 +138,7 @@ const orders = {
     if (!claim) throw new KeyError('This order is not paid yet, or its key has already been created.');
     try {
       const exp = new Date(); exp.setMonth(exp.getMonth() + claim.months);
-      const key = await keys.createForUser(userId, { name: name || 'API key', plan: claim.plan, expires_at: exp.toISOString() }, catalogue);
+      const key = await keys.createForUser(userId, { name: name || 'API key', plan: claim.plan, expires_at: exp.toISOString(), allowed_origins: (where || {}).allowed_origins, allowed_ips: (where || {}).allowed_ips }, catalogue);
       await query('UPDATE api_orders SET key_id = $2 WHERE id = $1', [id, key.id]);
       return key;
     } catch (e) {

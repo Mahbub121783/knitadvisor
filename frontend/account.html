@@ -219,7 +219,7 @@
 
       <div class="card form-card" id="api-card">
         <h2>API access</h2>
-        <p class="sub">The keys KnitAdvisor has issued for your account, for your own systems to call the engines. How to use them: <a href="/api-docs.html">API documentation</a>. A key is shown once, when it is issued; here you see its plan and use, name it, and say which IP addresses may use it. Every call must send this account's own email in the <b>X-User-Email</b> header together with the key, or it is refused.</p>
+        <p class="sub">The keys KnitAdvisor has issued for your account, for your own systems to call the engines. How to use them: <a href="/api-docs.html">API documentation</a>. A key is shown once, when it is issued; here you see its plan and use, name it, and say which IP addresses may use it. Every call must send this account's own email in the <b>X-User-Email</b> header together with the key, and — for a key registered to a website — that website (a browser sends it by itself; a server sends it in <b>X-Website</b>). If the key, the email and the website do not belong together, the call is refused.</p>
         <div id="api-secret" hidden style="border:1px solid #1857C4;border-radius:8px;padding:10px 12px;margin-bottom:10px;background:#F6F9FF;">
           <b>Copy your key now — it is shown only once.</b>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px;"><code id="api-secret-val" style="word-break:break-all;"></code><button class="btn btn-ghost" type="button" id="api-copy">Copy</button></div>
@@ -628,7 +628,7 @@
           '<div style="height:5px;background:#EEF0F2;border-radius:3px;"><div style="height:5px;width:' + pct + '%;background:' + (pct >= 90 ? '#B23B3B' : '#1857C4') + ';border-radius:3px;"></div></div>' +
           (k.expires_at ? '<div style="font-size:12px;color:#565C64;margin-top:3px;">Valid until ' + esc(new Date(k.expires_at).toLocaleDateString()) + '</div>' : '') +
           '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center;"><input type="text" data-ips="' + k.id + '" value="' + esc((k.allowed_ips || []).join(', ')) + '" placeholder="Allowed IP addresses of your servers (empty = any)" style="flex:1;min-width:220px;">' +
-          '<input type="text" data-origins="' + k.id + '" value="' + esc((k.allowed_origins || []).join(', ')) + '" placeholder="Websites that may call it from a browser, e.g. https://erp.yourmill.com (empty = server only)" style="flex:1;min-width:220px;">' +
+          '<input type="text" data-origins="' + k.id + '" value="' + esc((k.allowed_origins || []).join(', ')) + '" placeholder="The website this key is for, e.g. https://erp.yourmill.com" style="flex:1;min-width:220px;">' +
           '<button class="btn btn-ghost" type="button" data-saveips="' + k.id + '">Save</button></div>' +
           '<div style="margin-top:6px;"><button class="btn btn-ghost" type="button" data-renew="' + k.id + '">Renew or upgrade this key</button></div></div>';
       }).join('');
@@ -670,7 +670,8 @@
       return '<div style="padding:8px 0;border-bottom:1px solid #EEF0F2;font-size:13px;"><b>' + esc((d.plans.filter(function (p) { return p.plan === o.plan; })[0] || { label: o.plan }).label) + '</b> \u00d7 ' + o.months + ' month' + (o.months > 1 ? 's' : '') + ' \u00b7 ' + money(o.amount, o.currency) + ' \u00b7 ' + esc(d.methods[o.method] || o.method) + ' ' + esc(o.payment_ref) +
         '<div style="font-size:12px;color:' + st[1] + ';">' + st[0] + (o.note ? ' \u2014 ' + esc(o.note) : '') + ' \u00b7 ' + esc(ago(o.created_at)) + '</div>' +
         (o.status === 'pending' ? '<button class="btn btn-ghost" type="button" data-ao-cancel="' + o.id + '" style="margin-top:4px;">Cancel</button>' : '') +
-        (o.status === 'paid' && !o.key_id ? '<button class="btn btn-primary" type="button" data-ao-issue="' + o.id + '" style="margin-top:4px;">Create my API key</button>' : '') +
+        (o.status === 'paid' && !o.key_id ? '<div style="margin-top:6px;display:grid;gap:6px;max-width:520px;"><input type="text" data-issue-site="' + o.id + '" placeholder="Your website, e.g. https://erp.yourmill.com (required)"><input type="text" data-issue-ips="' + o.id + '" placeholder="Your server IP addresses (optional)">' +
+          '<div><button class="btn btn-primary" type="button" data-ao-issue="' + o.id + '">Create my API key</button></div><div style="font-size:12px;color:#565C64;">The key will work only with your account email and this website. You can change them later.</div></div>' : '') +
         (o.status === 'paid' && o.key_id ? '<div style="font-size:12px;color:#565C64;">' + (o.renew_key_id ? 'Your key ' + esc(o.key_prefix || '') + '\u2026 is extended.' : 'Key ' + esc(o.key_prefix || '') + '\u2026 created.') + '</div>' : '') + '</div>';
     }).join('');
     $('api-shop').innerHTML = h;
@@ -694,8 +695,10 @@
     } else if (b.getAttribute('data-ao-cancel')) {
       j('/api/account/api-orders/' + b.getAttribute('data-ao-cancel') + '/cancel', 'POST', {}).then(loadShop).catch(function (err) { setMsg($('api-msg'), err.message, false); });
     } else if (b.getAttribute('data-ao-issue')) {
+      var oid = b.getAttribute('data-ao-issue'), site = document.querySelector('[data-issue-site="' + oid + '"]').value, ips = document.querySelector('[data-issue-ips="' + oid + '"]').value;
+      if (!site.trim()) { setMsg($('api-msg'), 'Enter the website this key is for.', false); return; }
       b.disabled = true;
-      j('/api/account/api-orders/' + b.getAttribute('data-ao-issue') + '/issue', 'POST', { name: 'API key' }).then(function (d) {
+      j('/api/account/api-orders/' + oid + '/issue', 'POST', { name: 'API key', allowed_origins: site, allowed_ips: ips }).then(function (d) {
         $('api-secret-val').textContent = d.key.key; $('api-secret').hidden = false; loadShop(); loadApiKeys();
       }).catch(function (err) { b.disabled = false; setMsg($('api-msg'), err.message, false); });
     }
