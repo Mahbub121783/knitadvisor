@@ -1236,7 +1236,7 @@ async function createApiKey() {
   try {
     const d = await api('/admin/api/api-keys', 'POST', body);
     document.getElementById('ak-secret-val').textContent = d.key.key;
-    document.getElementById('ak-secret-for').textContent = 'For ' + d.key.email + ' · ' + d.key.name + ' · ' + d.key.plan + ' plan. Send it to the customer over a private channel.';
+    document.getElementById('ak-secret-for').textContent = 'For ' + d.key.email + ' · ' + d.key.name + ' · ' + d.key.plan + ' plan. Send it to the customer over a private channel. Their calls must also send X-User-Email: ' + d.key.email + '.';
     document.getElementById('ak-secret').classList.remove('hidden');
     ['ak-email', 'ak-name', 'ak-monthly', 'ak-permin', 'ak-ips', 'ak-origins', 'ak-exp', 'ak-note'].forEach((id) => { document.getElementById(id).value = ''; });
     toast('API key created', 'success');

@@ -3,6 +3,11 @@
  * X-API-Key) is a customer's own system calling the engines. requireUser hands
  * such a request here instead of looking for a browser session.
  *
+ * A call carries TWO things that must agree: the key, and the email of the account the key was
+ * issued to, in the X-User-Email header. A key with no email, or with another account's email,
+ * is refused — so a key found on its own is not enough, and a customer who points the wrong key at
+ * the wrong account finds out at once. Wrong emails count towards the same "too many bad keys" limit.
+ *
  * In order: the endpoint must be one the API sells (never the account itself);
  * the key must exist, be active, unexpired, its owner enabled, and — if the key
  * has an allowed-IP list — the caller on it; then the per-minute rate and the
@@ -46,6 +51,14 @@ function createGate(repo = apiRepo.keys, deps = {}) {
         const f = await repo.hitWindow('apikey_fail', ip, 60);
         if (f && f.count > FAIL_PER_MIN) { res.set('Retry-After', '60'); return refuse(res, 429, 'TOO_MANY_BAD_KEYS', 'Too many invalid API keys from this address. Wait a minute.'); }
         return refuse(res, 401, 'INVALID_API_KEY', 'This API key is not valid. Check it was copied whole, and that it has not been revoked.');
+      }
+      // the key and the account email must agree
+      const sent = String((req.headers && req.headers['x-user-email']) || '').trim().toLowerCase();
+      if (!sent) return refuse(res, 401, 'EMAIL_REQUIRED', 'Send the email of the account this key was issued to in the X-User-Email header, together with the key.');
+      if (sent !== String(key.email || '').trim().toLowerCase()) {
+        const f = await repo.hitWindow('apikey_fail', ip, 60);
+        if (f && f.count > FAIL_PER_MIN) { res.set('Retry-After', '60'); return refuse(res, 429, 'TOO_MANY_BAD_KEYS', 'Too many invalid API keys from this address. Wait a minute.'); }
+        return refuse(res, 401, 'EMAIL_MISMATCH', 'This email does not match the account this key was issued to. Use the email of the account that owns the key.');
       }
       if (key.status === 'revoked') return refuse(res, 401, 'KEY_REVOKED', 'This API key has been revoked.');
       if (key.status === 'suspended') return refuse(res, 403, 'KEY_SUSPENDED', 'This API key is suspended. Contact KnitAdvisor.');
@@ -106,7 +119,7 @@ function preflight(req, res) {
   const origin = req.headers.origin;
   if (origin) cors(res, origin);
   res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-API-Key');
+  res.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-API-Key, X-User-Email');
   res.set('Access-Control-Max-Age', '600');
   res.status(204).end();
 }

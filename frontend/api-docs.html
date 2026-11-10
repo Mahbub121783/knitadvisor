@@ -44,10 +44,10 @@
 
     <h2>1. Get a key</h2>
     <p>API access is a plan, bought in <a href="/account.html">your account</a> under "API access": pick a plan and the months, pay as shown there, and give the transaction id. When KnitAdvisor has checked the payment, a button appears in your account that creates your key. It looks like <code>ka_live_…</code>, is shown to you once, and acts as your account on the engines below. Keep it on your server — like a password. Renewing or upgrading extends the same key.</p>
-    <p>Your keys, their plan, and how much of the month is used are in the same place. There you can also name a key, say which server IP addresses it may be used from, and which websites may use it from a browser.</p>
+    <p>Always send the email you sign in with (the account that owns the key). Your keys, their plan, and how much of the month is used are in the same place. There you can also name a key, say which server IP addresses it may be used from, and which websites may use it from a browser.</p>
 
     <h2>2. Make a call</h2>
-    <p>Send the key as a Bearer token. Every endpoint is under <code>/api/v1</code>.</p>
+    <p>Every call carries two things that must agree: your key (as a Bearer token) and <b>the email of the account that owns the key</b> in the <code>X-User-Email</code> header. A key with no email, or with another email, is refused. Every endpoint is under <code>/api/v1</code>.</p>
     <div class="ad-tabs" id="ad-tabs"><button class="on" data-l="curl">curl</button><button data-l="node">Node.js</button><button data-l="py">Python</button></div>
     <pre id="ad-code"></pre>
     <p>The answer is JSON. The calculator's answer has the yarn, stitch length, shrinkage, machine and cost sections; <code>success: false</code> and an <code>error</code> tell you what to fix.</p>
@@ -68,6 +68,8 @@
     <div class="ad-scroll"><table class="ad-t">
       <tr><th>Status</th><th>code</th><th>Meaning</th></tr>
       <tr><td>401</td><td><code>INVALID_API_KEY</code></td><td>no such key — check it was copied whole</td></tr>
+      <tr><td>401</td><td><code>EMAIL_REQUIRED</code></td><td>the <code>X-User-Email</code> header is missing</td></tr>
+      <tr><td>401</td><td><code>EMAIL_MISMATCH</code></td><td>the email is not the one of the account this key was issued to — the key and the email must belong together</td></tr>
       <tr><td>401</td><td><code>KEY_REVOKED</code> · <code>KEY_EXPIRED</code></td><td>the key no longer works; ask for a new one</td></tr>
       <tr><td>403</td><td><code>KEY_SUSPENDED</code> · <code>ACCOUNT_DISABLED</code></td><td>access paused — contact KnitAdvisor</td></tr>
       <tr><td>403</td><td><code>IP_NOT_ALLOWED</code></td><td>the key has an allowed-IP list and this address is not on it (the answer shows <code>your_ip</code>)</td></tr>
@@ -94,6 +96,6 @@
   </main>
   <footer class="footer"></footer>
 </div>
-<script src="assets/js/api-docs.js?v=20261111b"></script>
+<script src="assets/js/api-docs.js?v=20261111c"></script>
 </body>
 </html>

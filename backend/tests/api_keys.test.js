@@ -114,8 +114,9 @@ console.log('--- Running API Key Tests ---');
     };
     return { gate: createGate(repo, { now: () => new Date('2026-11-10T10:00:00Z') }), st };
   };
-  const run = async (gate, { method = 'POST', p = '/calculate', ip = '203.0.113.5', key = good.key } = {}) => {
-    const req = { method, path: p, ip }, headers = {};
+  const OWNER_EMAIL = 'buyer@mill.example';
+  const run = async (gate, { method = 'POST', p = '/calculate', ip = '203.0.113.5', key = good.key, email = OWNER_EMAIL } = {}) => {
+    const req = { method, path: p, ip, headers: email ? { 'x-user-email': email } : {} }, headers = {};
     let code = null, body = null, nextCalled = false, finish = null;
     const res = { statusCode: 200, set(k, v) { headers[k] = v; return this; }, status(c) { code = c; this.statusCode = c; return this; }, json(b) { body = b; return this; }, on(e, f) { if (e === 'finish') finish = f; } };
     await gate(req, res, () => { nextCalled = true; }, key);
@@ -141,6 +142,26 @@ console.log('--- Running API Key Tests ---');
   r = await run(spy, { p: '/studio/designs', method: 'GET' });
   assert(r.code === 403 && !touched, 'saved designs are not reachable with a key');
 
+  // the key and the account email must belong together
+  r = await run(mk().gate, { email: null });
+  assert(r.code === 401 && r.body.code === 'EMAIL_REQUIRED' && !r.nextCalled, 'a key with no email is refused');
+  r = await run(mk().gate, { email: 'someone.else@mill.example' });
+  assert(r.code === 401 && r.body.code === 'EMAIL_MISMATCH' && !r.nextCalled, "another account's email is refused");
+  assert(!/buyer@mill/.test(JSON.stringify(r.body)), "the refusal does not tell the real owner's email");
+  r = await run(mk().gate, { email: '  BUYER@Mill.Example ' });
+  assert(r.nextCalled, 'case and spaces in the email do not matter');
+  r = await run(mk().gate, { email: '' });
+  assert(r.body.code === 'EMAIL_REQUIRED');
+  const stm = mk(); let em;
+  for (let i = 0; i < 22; i++) em = await run(stm.gate, { email: 'guess' + i + '@x.example' });
+  assert(em.code === 429 && em.body.code === 'TOO_MANY_BAD_KEYS', 'guessing emails against a key is slowed too');
+  assert.strictEqual(stm.st.month, 0, 'a refused email costs no quota');
+  // a wrong key is "invalid key" whatever email it comes with, so the email check is no way to probe keys
+  r = await run(mk().gate, { key: 'ka_live_' + 'q'.repeat(43), email: 'whoever@x.example' });
+  assert(r.body.code === 'INVALID_API_KEY');
+  r = await run(mk().gate, { key: 'ka_live_' + 'q'.repeat(43), email: null });
+  assert(r.body.code === 'INVALID_API_KEY', 'a bad key is a bad key even with no email');
+
   // bad keys
   r = await run(mk().gate, { key: 'ka_live_' + 'x'.repeat(43) });
   assert(r.code === 401 && r.body.code === 'INVALID_API_KEY' && !r.nextCalled);
@@ -164,7 +185,7 @@ console.log('--- Running API Key Tests ---');
   // a call from a browser: the site must be one of the key's, and the answer carries CORS for that site only
   const sites = mk({ allowed_origins: ['https://erp.mill.com'] }).gate;
   const runWith = async (gate, origin) => {
-    const req = { method: 'POST', path: '/calculate', ip: '203.0.113.5', headers: origin ? { origin } : {} };
+    const req = { method: 'POST', path: '/calculate', ip: '203.0.113.5', headers: origin ? { origin, 'x-user-email': OWNER_EMAIL } : { 'x-user-email': OWNER_EMAIL } };
     const headers = {}; let code = null, body = null, nextCalled = false;
     const res = { statusCode: 200, set(k, v) { headers[k] = v; return this; }, status(c) { code = c; return this; }, json(b) { body = b; return this; }, on() {} };
     await gate(req, res, () => { nextCalled = true; }, good.key);
@@ -214,7 +235,7 @@ console.log('--- Running API Key Tests ---');
   // ── the /api/v1 surface: a key for EVERY listed endpoint, nothing unlisted, the catalogue open ──
   const v1 = (over) => { const m = mk(over); return { surf: createV1Surface(m.gate), st: m.st }; };
   const runV1 = async (surf, { method = 'POST', p = '/convert', key = null, via = true } = {}) => {
-    const req = { method, path: p, ip: '203.0.113.5', viaV1: via, headers: key ? { authorization: 'Bearer ' + key } : {} };
+    const req = { method, path: p, ip: '203.0.113.5', viaV1: via, headers: key ? { authorization: 'Bearer ' + key, 'x-user-email': OWNER_EMAIL } : {} };
     let code = null, body = null, nextCalled = false;
     const res = { statusCode: 200, set() { return this; }, status(c) { code = c; return this; }, json(b) { body = b; return this; }, on() {} };
     await surf(req, res, () => { nextCalled = true; });
@@ -235,7 +256,7 @@ console.log('--- Running API Key Tests ---');
   // the browser's preflight carries no key: answered for the asking site
   const pf = { headers: { origin: 'https://erp.mill.com' } }, ph = {}; let pcode = null;
   preflight(pf, { set(k, v) { ph[k] = v; return this; }, status(c) { pcode = c; return this; }, end() {} });
-  assert(pcode === 204 && ph['Access-Control-Allow-Origin'] === 'https://erp.mill.com' && /Authorization/.test(ph['Access-Control-Allow-Headers']) && ph['Access-Control-Allow-Methods'] === 'GET, POST, OPTIONS');
+  assert(pcode === 204 && ph['Access-Control-Allow-Origin'] === 'https://erp.mill.com' && /Authorization/.test(ph['Access-Control-Allow-Headers']) && /X-User-Email/.test(ph['Access-Control-Allow-Headers']) && ph['Access-Control-Allow-Methods'] === 'GET, POST, OPTIONS');
 
   console.log('API key tests passed');
 })().catch((e) => { console.error(e); process.exit(1); });

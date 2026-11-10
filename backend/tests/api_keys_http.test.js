@@ -29,9 +29,11 @@ app.use('/api', require('../middleware/api-key-auth').v1Surface);
 app.use('/api/account', require('../routes/account'));   // as in the real server, the account router sits beside the engines
 app.use('/api', require('../routes/api'));
 
-const call = (port, method, p, { key, body, headers } = {}) => new Promise((resolve, reject) => {
+const call = (port, method, p, { key, body, headers, email } = {}) => new Promise((resolve, reject) => {
   const data = body ? JSON.stringify(body) : null;
-  const req = http.request({ host: '127.0.0.1', port, method, path: p, headers: { 'Content-Type': 'application/json', ...(key ? { Authorization: 'Bearer ' + key } : {}), ...(headers || {}), ...(data ? { 'Content-Length': Buffer.byteLength(data) } : {}) } }, (res) => {
+  // a key is always sent with the email of the account that owns it, unless the test says otherwise
+  const mail = key && email !== null ? { 'X-User-Email': email || state.key.email } : {};
+  const req = http.request({ host: '127.0.0.1', port, method, path: p, headers: { 'Content-Type': 'application/json', ...(key ? { Authorization: 'Bearer ' + key } : {}), ...mail, ...(headers || {}), ...(data ? { 'Content-Length': Buffer.byteLength(data) } : {}) } }, (res) => {
     let b = ''; res.on('data', (c) => { b += c; }); res.on('end', () => { let j = null; try { j = JSON.parse(b); } catch (_) { /* not json */ } resolve({ status: res.statusCode, headers: res.headers, body: j, text: b }); });
   });
   req.on('error', reject); if (data) req.write(data); req.end();
@@ -93,10 +95,17 @@ const server = app.listen(0, '127.0.0.1', async () => {
     assert.strictEqual(r.status, 403); assert(!r.headers['access-control-allow-origin']);
     state.key.allowed_origins = null; state.month = 0;
 
+    // the key alone is not enough: the owner's email must come with it
+    r = await call(port, 'POST', '/api/v1/calculate', { key: good.key, email: null, body: { fabric: 'single_jersey', gsm: 160 } });
+    assert.strictEqual(r.status, 401); assert.strictEqual(r.body.code, 'EMAIL_REQUIRED');
+    r = await call(port, 'POST', '/api/v1/calculate', { key: good.key, email: 'other@account.example', body: { fabric: 'single_jersey', gsm: 160 } });
+    assert.strictEqual(r.status, 401); assert.strictEqual(r.body.code, 'EMAIL_MISMATCH');
+    assert.strictEqual(state.month, 0, 'refused calls are not counted');
+
     // a wrong key, and a key sent in X-API-Key
     r = await call(port, 'POST', '/api/v1/calculate', { key: 'ka_live_' + 'z'.repeat(43), body: { fabric: 'single_jersey', gsm: 160 } });
     assert.strictEqual(r.status, 401); assert.strictEqual(r.body.code, 'INVALID_API_KEY');
-    r = await call(port, 'POST', '/api/v1/calculate', { headers: { 'X-API-Key': good.key }, body: { fabric: 'single_jersey', gsm: 160 } });
+    r = await call(port, 'POST', '/api/v1/calculate', { headers: { 'X-API-Key': good.key, 'X-User-Email': state.key.email }, body: { fabric: 'single_jersey', gsm: 160 } });
     assert.strictEqual(r.status, 200);
 
     // suspended: stopped at once

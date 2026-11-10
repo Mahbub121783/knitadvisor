@@ -7,9 +7,9 @@
   var BODY = '{ "fabric": "single_jersey", "gsm": 160, "composition": "100% Cotton" }';
 
   var CODE = {
-    curl: 'curl -X POST ' + origin + '/api/v1/calculate \\\n  -H "Authorization: Bearer ka_live_YOUR_KEY" \\\n  -H "Content-Type: application/json" \\\n  -d \'' + BODY + '\'',
-    node: "const res = await fetch('" + origin + "/api/v1/calculate', {\n  method: 'POST',\n  headers: {\n    Authorization: 'Bearer ' + process.env.KNITADVISOR_KEY,\n    'Content-Type': 'application/json',\n  },\n  body: JSON.stringify(" + BODY + "),\n});\nconst data = await res.json();\nif (!res.ok) throw new Error(data.code + ': ' + data.error);\nconsole.log(data.yarn, res.headers.get('X-Quota-Remaining'));",
-    py: "import os, requests\n\nr = requests.post(\n    '" + origin + "/api/v1/calculate',\n    headers={'Authorization': 'Bearer ' + os.environ['KNITADVISOR_KEY']},\n    json={'fabric': 'single_jersey', 'gsm': 160, 'composition': '100% Cotton'},\n    timeout=30,\n)\ndata = r.json()\nr.raise_for_status()\nprint(data['yarn'], r.headers.get('X-Quota-Remaining'))",
+    curl: 'curl -X POST ' + origin + '/api/v1/calculate \\\n  -H "Authorization: Bearer ka_live_YOUR_KEY" \\\n  -H "X-User-Email: you@yourmill.com" \\\n  -H "Content-Type: application/json" \\\n  -d \'' + BODY + '\'',
+    node: "const res = await fetch('" + origin + "/api/v1/calculate', {\n  method: 'POST',\n  headers: {\n    Authorization: 'Bearer ' + process.env.KNITADVISOR_KEY,\n    'X-User-Email': process.env.KNITADVISOR_EMAIL,\n    'Content-Type': 'application/json',\n  },\n  body: JSON.stringify(" + BODY + "),\n});\nconst data = await res.json();\nif (!res.ok) throw new Error(data.code + ': ' + data.error);\nconsole.log(data.yarn, res.headers.get('X-Quota-Remaining'));",
+    py: "import os, requests\n\nr = requests.post(\n    '" + origin + "/api/v1/calculate',\n    headers={'Authorization': 'Bearer ' + os.environ['KNITADVISOR_KEY'], 'X-User-Email': os.environ['KNITADVISOR_EMAIL']},\n    json={'fabric': 'single_jersey', 'gsm': 160, 'composition': '100% Cotton'},\n    timeout=30,\n)\ndata = r.json()\nr.raise_for_status()\nprint(data['yarn'], r.headers.get('X-Quota-Remaining'))",
   };
   function code(l) { $('ad-code').textContent = CODE[l]; Array.prototype.forEach.call($('ad-tabs').children, function (b) { b.classList.toggle('on', b.getAttribute('data-l') === l); }); }
   $('ad-tabs').addEventListener('click', function (e) { var b = e.target.closest('[data-l]'); if (b) code(b.getAttribute('data-l')); });

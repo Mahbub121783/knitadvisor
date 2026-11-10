@@ -6,7 +6,7 @@
  * below. `path` is the route under /api; a customer calls the same path under
  * /api/v1 (server.js rewrites /api/v1/x to /api/x before routing).
  *
- * EVERY endpoint under /api/v1 needs a key — that is what is sold. Some of the
+ * EVERY endpoint under /api/v1 needs a key and the email of its owner (X-User-Email) — that is what is sold. Some of the
  * engines (`web_open: true`) are also open on the website at /api/x, with no
  * account, because the web pages use them that way; /api/v1/x is the metered
  * copy of the same code. Anything under /api/v1 that is not listed here, or

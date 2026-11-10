@@ -219,7 +219,7 @@
 
       <div class="card form-card" id="api-card">
         <h2>API access</h2>
-        <p class="sub">The keys KnitAdvisor has issued for your account, for your own systems to call the engines. How to use them: <a href="/api-docs.html">API documentation</a>. A key is shown once, when it is issued; here you see its plan and use, name it, and say which IP addresses may use it.</p>
+        <p class="sub">The keys KnitAdvisor has issued for your account, for your own systems to call the engines. How to use them: <a href="/api-docs.html">API documentation</a>. A key is shown once, when it is issued; here you see its plan and use, name it, and say which IP addresses may use it. Every call must send this account's own email in the <b>X-User-Email</b> header together with the key, or it is refused.</p>
         <div id="api-secret" hidden style="border:1px solid #1857C4;border-radius:8px;padding:10px 12px;margin-bottom:10px;background:#F6F9FF;">
           <b>Copy your key now — it is shown only once.</b>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px;"><code id="api-secret-val" style="word-break:break-all;"></code><button class="btn btn-ghost" type="button" id="api-copy">Copy</button></div>
