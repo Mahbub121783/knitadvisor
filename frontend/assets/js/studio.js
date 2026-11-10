@@ -383,6 +383,43 @@
     });
     $('st-userolls').addEventListener('change', schedule);
     bindFloor();
+    bindExport();
+  }
+
+  // ── machine files: set-up sheet, needle-programme bitmap, cam chart (/api/studio/export) ──
+  function xStat(msg, bad) { $('st-xstat').innerHTML = msg ? '<span style="color:' + (bad ? 'var(--bad, #b3261e)' : 'var(--t2)') + '">' + msg + '</span>' : ''; }
+  function exportState() {
+    var ok = !!(last && last.structure && last.structure.beds);
+    document.querySelectorAll('#st-xcard [data-xf]').forEach(function (b) { b.disabled = !ok; });
+    if (!ok) return;
+    var dial = !!last.structure.beds.D, sel = $('st-xbed');
+    sel.querySelector('option[value="D"]').disabled = !dial;
+    if (!dial) sel.value = 'C';
+    if (!last.ok_to_knit) xStat('This design will not knit as drawn yet — the sheet says so, and lists what to fix.', true); else if ($('st-xstat').textContent.indexOf('will not knit') > -1) xStat('');
+  }
+  function bindExport() {
+    $('st-xcard').addEventListener('click', function (e) {
+      var btn = e.target.closest('[data-xf]');
+      if (!btn || btn.disabled) return;
+      var fmt = btn.getAttribute('data-xf'), body = { design: payload(), name: $('st-name').value || '', format: fmt, bed: $('st-xbed').value, scope: $('st-xscope').value, scale: +$('st-xscale').value };
+      btn.disabled = true; xStat('Making the file…');
+      var base = typeof API_BASE !== 'undefined' ? API_BASE : '';
+      fetch(base + '/api/studio/export', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(function (res) {
+        if (res.ok) {
+          var m = (res.headers.get('Content-Disposition') || '').match(/filename="([^"]+)"/);
+          return res.blob().then(function (blob) { return { blob: blob, name: m ? m[1] : 'machine-file.' + fmt }; });
+        }
+        return res.json().catch(function () { return {}; }).then(function (d) {
+          if (res.status === 401 && d.code === 'AUTH_REQUIRED' && window.kaSignInRedirect) window.kaSignInRedirect();
+          throw new Error(d.error || 'Could not make the file (' + res.status + ').');
+        });
+      }).then(function (f) {
+        var a = document.createElement('a'); a.href = URL.createObjectURL(f.blob); a.download = f.name; document.body.appendChild(a); a.click();
+        setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+        xStat('Saved ' + esc(f.name) + '.');
+      }).catch(function (err) { xStat(esc(err.message || 'Could not make the file.'), true); })
+        .then(function () { btn.disabled = !last; });
+    });
   }
 
   // ── floor machines: every roll logged teaches that machine's profile (/api/studio/floor/*) ──
@@ -525,7 +562,7 @@
       var bed = td.closest('table').getAttribute('data-bed');
       td.classList.toggle('bad', !!bad[bed + td.getAttribute('data-i') + '_' + td.getAttribute('data-j')]);
     });
-    renderSetup(); renderResults(); renderMachine(); renderNotation(); showYarnEq();
+    renderSetup(); renderResults(); renderMachine(); renderNotation(); showYarnEq(); exportState();
     clearTimeout(timer3d); timer3d = setTimeout(render3D, 350);
     race.reset(); cycle.refresh();
   }

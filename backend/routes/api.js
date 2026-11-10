@@ -1420,30 +1420,38 @@ router.delete('/studio/floor/rolls/:id', requireUser, async (req, res) => {
   } catch (err) { floorFail(res, err, 'delete the roll'); }
 });
 
+// One answer for a design, from memory when the same design was answered before. A floor machine
+// named in the body: its rolls (the account's own) go in with the design, and the cache key with them.
+async function studioAnswer(userId, input) {
+  let body = input || {}, floor = null;
+  if (body.floor_machine_id != null) {
+    const { floor_machine_id, ...rest } = body;
+    body = rest;
+    const fm = idOf(floor_machine_id);
+    if (fm) {
+      const m = await floorRepo.machines.get(userId, fm);
+      if (!m) return { status: 404, body: JSON.stringify({ success: false, error: 'Floor machine not found.' }) };
+      body.floor = { name: m.name, rolls: floorRepo.asLearning(await floorRepo.rolls.forMachine(userId, fm)) };
+      floor = m.name;
+    }
+  }
+  const key = JSON.stringify(body);
+  let hit = key.length < 32768 ? studioCache.get(key) : null;
+  if (hit) { studioCache.delete(key); studioCache.set(key, hit); }
+  else {
+    const out = fabricStudio.analyse(body);
+    hit = { status: out.success ? 200 : 400, body: JSON.stringify(out) };
+    if (key.length < 32768) {
+      studioCache.set(key, hit);
+      if (studioCache.size > STUDIO_CACHE_MAX) studioCache.delete(studioCache.keys().next().value);
+    }
+  }
+  return { ...hit, floor };
+}
+
 router.post('/studio/analyse', requireUser, async (req, res) => {
   try {
-    // a floor machine named: its rolls (the account's own) go in with the design, and the cache key with them
-    const fm = req.body && req.body.floor_machine_id != null ? idOf(req.body.floor_machine_id) : null;
-    if (req.body && req.body.floor_machine_id != null) {
-      const { floor_machine_id: _x, ...rest } = req.body;
-      req.body = rest;
-      if (fm) {
-        const m = await floorRepo.machines.get(req.user.id, fm);
-        if (!m) return res.status(404).json({ success: false, error: 'Floor machine not found.' });
-        req.body.floor = { name: m.name, rolls: floorRepo.asLearning(await floorRepo.rolls.forMachine(req.user.id, fm)) };
-      }
-    }
-    const key = JSON.stringify(req.body || {});
-    let hit = key.length < 32768 ? studioCache.get(key) : null;
-    if (hit) { studioCache.delete(key); studioCache.set(key, hit); }
-    else {
-      const out = fabricStudio.analyse(req.body || {});
-      hit = { status: out.success ? 200 : 400, body: JSON.stringify(out) };
-      if (key.length < 32768) {
-        studioCache.set(key, hit);
-        if (studioCache.size > STUDIO_CACHE_MAX) studioCache.delete(studioCache.keys().next().value);
-      }
-    }
+    const hit = await studioAnswer(req.user.id, req.body);
     res.status(hit.status).type('application/json').send(hit.body);
   } catch (err) {
     console.error('[studio] analyse failed:', err);
@@ -1451,7 +1459,46 @@ router.post('/studio/analyse', requireUser, async (req, res) => {
   }
 });
 
-// Saved designs: private to the signed-in account, rolls included.
+// Machine files for a design: the set-up sheet (PDF), the needle programme as a bitmap (PNG / BMP)
+// and the cam chart (CSV) — drawn from the same answer the page shows (engine/domain/machine-export.js).
+const machineExport = require('../engine/domain/machine-export');
+const exportLimiter = createRateLimiter({ name: 'studio_export', max: 30, windowMs: 60 * 1000, message: 'Too many exports — wait a minute.' });
+router.post('/studio/export', requireUser, exportLimiter, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const hit = await studioAnswer(req.user.id, b.design);
+    if (hit.status !== 200) return res.status(hit.status).type('application/json').send(hit.body);
+    const out = JSON.parse(hit.body);
+    const fmt = ['pdf', 'png', 'bmp', 'csv'].includes(b.format) ? b.format : 'pdf';
+    const name = String(b.name || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+    const slug = machineExport.slug(name || (out.structure.match && out.structure.match.name));
+    if (fmt === 'pdf') {
+      const doc = machineExport.sheet(out, { name, floor: hit.floor });
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="SetupSheet-${slug}.pdf"`);
+      doc.pipe(res); doc.end();
+      return;
+    }
+    if (fmt === 'csv') {
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="CamChart-${slug}.csv"`);
+      return res.send(machineExport.csv(out, name));
+    }
+    const bed = b.bed === 'D' ? 'D' : 'C';
+    const scope = b.scope === 'revolution' ? 'revolution' : 'repeat';
+    const scale = Math.min(16, Math.max(1, parseInt(b.scale, 10) || 1));
+    const P = machineExport.programme(out, bed, scope);
+    if (P.W * scale * P.H * scale > 16e6) return res.status(400).json({ success: false, error: 'That bitmap would be too large — use a smaller scale.' });
+    res.setHeader('Content-Type', fmt === 'png' ? 'image/png' : 'image/bmp');
+    res.setHeader('Content-Disposition', `attachment; filename="Programme-${slug}-${bed === 'C' ? 'cylinder' : 'dial'}-${scope}.${fmt}"`);
+    res.send(fmt === 'png' ? machineExport.png(P, scale) : machineExport.bmp(P, scale));
+  } catch (err) {
+    if (err instanceof machineExport.ExportError) return res.status(400).json({ success: false, error: err.message });
+    console.error('[studio] export failed:', err);
+    if (!res.headersSent) res.status(500).json({ success: false, error: 'Could not make the machine file.' });
+  }
+});
+
 router.get('/studio/designs', requireUser, async (req, res) => {
   try {
     res.json({ success: true, designs: await studioRepo.designs.list(req.user.id) });

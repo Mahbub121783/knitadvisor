@@ -33,7 +33,7 @@ const runtime = { build: 'abc1234', mail: 'ok', cacheMem: 10, cacheDb: 20 };
 
 const base = () => ({
   users: { total: 120, new_range: 12, new_prev: 8, disabled: 1, paid: 5, students: 7, active_24h: 9, active_7d: 40 },
-  signups: [{ d: new Date().toISOString().slice(0, 10), signups: 3 }], calcs: [], 'api series': [], 'revenue series': [],
+  signups: [{ d: new Date().toLocaleDateString('en-CA', { timeZone: process.env.BUSINESS_TIMEZONE || 'Asia/Dhaka' }), signups: 3 }], calcs: [], 'api series': [], 'revenue series': [],
   'api now': { active_keys: 3, suspended_keys: 0, customers: 2, calls_month: 5000, calls_prev_month: 4000, calls_today: 120, errors_7d: 5, calls_7d: 900 },
   revenue: [{ currency: 'USD', month: '60.00', prev_month: '30.00', total: '180.00', orders: 4 }, { currency: 'BDT', month: '0', prev_month: '0', total: '5000', orders: 1 }],
   engines: { calculations: 300, calculation_runs: 900, warp_designs: 4, weft_designs: 22, cost_sheets: 9, scans: 6, designs_range: 5, sheets_range: 2, scans_range: 1, calcs_range: 40 },

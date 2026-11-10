@@ -459,6 +459,23 @@
             <button type="button" class="st-btn" id="st-print">Print job card</button>
           </div>
         </div>
+
+        <div class="st-card st-noprint" id="st-xcard">
+          <div class="st-step"><b>&#8681;</b> Machine files</div>
+          <p class="st-hint" style="margin-top:0">Take the design to the machine: a printable set-up sheet, the needle programme as a bitmap (one pixel per needle, per feed) and the cam chart as a spreadsheet. They are open formats — a pattern system imports the bitmap, a setter reads the sheet. A given machine's own file format is not written here.</p>
+          <div class="st-row">
+            <div class="st-f"><label for="st-xbed">Bitmap of</label><select id="st-xbed"><option value="C">Cylinder</option><option value="D">Dial</option></select></div>
+            <div class="st-f"><label for="st-xscope">Size</label><select id="st-xscope"><option value="repeat">One repeat</option><option value="revolution">One revolution (every needle, every feeder)</option></select></div>
+            <div class="st-f"><label for="st-xscale">Pixels per needle</label><select id="st-xscale"><option value="1">1 px (machine)</option><option value="8">8 px (to look at)</option></select></div>
+          </div>
+          <div class="st-tools" style="margin:0">
+            <button type="button" class="st-btn primary" data-xf="pdf" disabled>Set-up sheet (PDF)</button>
+            <button type="button" class="st-btn" data-xf="png" disabled>Programme (PNG)</button>
+            <button type="button" class="st-btn" data-xf="bmp" disabled>Programme (BMP)</button>
+            <button type="button" class="st-btn" data-xf="csv" disabled>Cam chart (CSV)</button>
+          </div>
+          <div id="st-xstat" class="st-hint"></div>
+        </div>
       </aside>
 
       <section>
@@ -678,6 +695,6 @@
 <script src="assets/js/studio-warp-geom.js?v=20261111a"></script>
 <script src="assets/js/studio-warp.js?v=20261111h"></script>
 <script src="assets/js/studio-needle.js?v=20261110d"></script>
-<script src="assets/js/studio.js?v=20261112a"></script>
+<script src="assets/js/studio.js?v=20261112c"></script>
 </body>
 </html>
