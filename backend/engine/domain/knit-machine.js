@@ -44,57 +44,62 @@ const LATCH = 'latch needle';
 const PROFILES = {
   sj_2track: {
     label: 'Single jersey, 2-track', kind: 'single', gatings: ['single'], selection: 'tracks', tracks: { C: 2 }, cams: { C: ['K', 'T', 'M'] },
-    needle: { C: LATCH }, sinker: 'jersey', transfer: false, fpi: 3.2, gauges: [14, 40], dia: [14, 44],
+    needle: { C: LATCH }, sinker: 'jersey', transfer: false, fpi: 3.2, sf: 960, gauges: [14, 40], dia: [14, 44],
     use: 'plain jersey and simple two-sequence tuck / miss structures (cross tuck, cross miss)',
   },
   sj_4track: {
     label: 'Single jersey, 4-track', kind: 'single', gatings: ['single'], selection: 'tracks', tracks: { C: 4 }, cams: { C: ['K', 'T', 'M'] },
-    needle: { C: LATCH }, sinker: 'jersey', transfer: false, fpi: 3.0, gauges: [14, 36], dia: [14, 44],
+    needle: { C: LATCH }, sinker: 'jersey', transfer: false, fpi: 3.0, sf: 900, gauges: [14, 36], dia: [14, 44],
     use: 'piqué, lacoste, honeycomb, twill and other repeats of up to four needle sequences',
   },
   fleece_3t: {
     label: 'Fleece, 3-thread (4-track)', kind: 'single', gatings: ['single'], selection: 'tracks', tracks: { C: 4 }, cams: { C: ['K', 'T', 'M'] },
-    needle: { C: LATCH }, sinker: 'fleece', transfer: false, loopYarn: true, fpi: 3.0, gauges: [12, 28], dia: [20, 42],
+    needle: { C: LATCH }, sinker: 'fleece', transfer: false, loopYarn: true, fpi: 3.0, sf: 800, gauges: [12, 28], dia: [20, 42],
     use: 'two- and three-thread fleece and French terry: the loop yarn is tucked in and floats behind',
   },
   terry: {
     label: 'Plush / terry, sinker loop (2-track)', kind: 'single', gatings: ['single'], selection: 'tracks', tracks: { C: 2 }, cams: { C: ['K', 'T', 'M'] },
-    needle: { C: LATCH }, sinker: 'terry', transfer: false, pile: true, fpi: 2.0, gauges: [12, 28], dia: [20, 38],
+    needle: { C: LATCH }, sinker: 'terry', transfer: false, pile: true, fpi: 2.0, sf: 650, gauges: [12, 28], dia: [20, 38],
     use: 'towel terry and velour: the pile yarn is plated over the high sinker nib',
   },
   sj_jacquard: {
     label: 'Single jersey, electronic jacquard', kind: 'single', gatings: ['single'], selection: 'needle', tracks: { C: Infinity }, cams: { C: ['K', 'T', 'M'] },
-    needle: { C: 'latch needle on a selector jack' }, sinker: 'jersey', transfer: false, fpi: 2.0, gauges: [16, 32], dia: [26, 38],
+    needle: { C: 'latch needle on a selector jack' }, sinker: 'jersey', transfer: false, technique: '3way', fpi: 2.0, sf: 700, gauges: [16, 32], dia: [26, 38],
     use: 'any knit / tuck / miss repeat, needle by needle at every feeder (3-way selection)',
+  },
+  sj_jacquard_2way: {
+    label: 'Single jersey, electronic jacquard, 2-way selection', kind: 'single', gatings: ['single'], selection: 'needle', tracks: { C: Infinity }, cams: { C: ['K', 'T', 'M'] },
+    needle: { C: 'latch needle on a selector jack' }, sinker: 'jersey', transfer: false, technique: '2way', fpi: 2.4, sf: 750, gauges: [16, 32], dia: [26, 38],
+    use: 'knit / miss or tuck / miss patterns needle by needle: each feeder\'s cam is knit OR tuck, the selection raises a needle to it or leaves it down',
   },
   pointelle: {
     label: 'Single jersey, transfer (pointelle)', kind: 'single', gatings: ['single'], selection: 'needle', tracks: { C: Infinity }, cams: { C: ['K', 'T', 'M', 'E'] },
-    needle: { C: 'latch needle with a transfer spring' }, sinker: 'jersey', transfer: true, fpi: 1.2, gauges: [18, 28], dia: [26, 34],
+    needle: { C: 'latch needle with a transfer spring' }, sinker: 'jersey', transfer: true, transferDirs: ['right', 'left'], technique: '3way', fpi: 1.2, sf: 450, gauges: [18, 28], dia: [26, 34],
     use: 'pointelle eyelets: loops transferred to the next needle, needle by needle',
   },
   rib_dj: {
     label: 'Double jersey, rib gating (cylinder 4 + dial 2 tracks)', kind: 'double', gatings: ['rib'], selection: 'tracks', tracks: { C: 4, D: 2 }, cams: { C: ['K', 'T', 'M'], D: ['K', 'T', 'M'] },
-    needle: { C: LATCH, D: LATCH }, sinker: 'none', transfer: false, timing: ['delayed', 'synchronised'], fpi: 2.0, gauges: [10, 40], dia: [14, 40],
+    needle: { C: LATCH, D: LATCH }, sinker: 'none', transfer: false, timing: ['delayed', 'synchronised'], fpi: 2.0, sf: 780, gauges: [10, 40], dia: [14, 40],
     use: 'rib, cardigan, milano and double piqué on rib gating',
   },
   interlock_2x2: {
     label: 'Interlock, classic (cylinder 2 + dial 2 tracks)', kind: 'double', gatings: ['interlock'], selection: 'tracks', tracks: { C: 2, D: 2 }, cams: { C: ['K', 'M'], D: ['K', 'M'] },
-    needle: { C: 'latch needle, long and short butts', D: 'latch needle, long and short butts' }, sinker: 'none', transfer: false, timing: ['synchronised'], fpi: 2.0, gauges: [14, 40], dia: [14, 40],
+    needle: { C: 'latch needle, long and short butts', D: 'latch needle, long and short butts' }, sinker: 'none', transfer: false, timing: ['synchronised'], butts: { A: 'long butt', B: 'short butt' }, fpi: 2.0, sf: 800, gauges: [14, 40], dia: [14, 40],
     use: 'interlock and its knit / miss derivatives (eight-lock, ponte with knit / miss only)',
   },
   dj_multi: {
     label: 'Double jersey, convertible rib / interlock (cylinder 4 + dial 2 tracks)', kind: 'double', gatings: ['rib', 'interlock'], selection: 'tracks', tracks: { C: 4, D: 2 }, cams: { C: ['K', 'T', 'M'], D: ['K', 'T', 'M'] },
-    needle: { C: LATCH, D: LATCH }, sinker: 'none', transfer: false, timing: ['delayed', 'synchronised'], fpi: 2.0, gauges: [14, 32], dia: [20, 38],
+    needle: { C: LATCH, D: LATCH }, sinker: 'none', transfer: false, timing: ['delayed', 'synchronised'], fpi: 2.0, sf: 750, gauges: [14, 32], dia: [20, 38],
     use: 'ponte di Roma, double piqué, Swiss piqué, milano on either gating',
   },
   dj_jacquard: {
     label: 'Double jersey, electronic jacquard (cylinder selection, dial 2 tracks)', kind: 'double', gatings: ['rib', 'interlock'], selection: 'needle', tracks: { C: Infinity, D: 2 }, cams: { C: ['K', 'T', 'M'], D: ['K', 'T', 'M'] },
-    needle: { C: 'latch needle on a selector jack', D: LATCH }, sinker: 'none', transfer: false, timing: ['delayed', 'synchronised'], fpi: 1.6, gauges: [14, 28], dia: [30, 38],
+    needle: { C: 'latch needle on a selector jack', D: LATCH }, sinker: 'none', transfer: false, timing: ['delayed', 'synchronised'], technique: '3way', fpi: 1.6, sf: 600, gauges: [14, 28], dia: [30, 38],
     use: 'double jacquard, blister, any cylinder repeat with a 2-track dial',
   },
 };
 // simplest first: auto picks the first that knits the design without an error
-const ORDER = ['sj_2track', 'sj_4track', 'fleece_3t', 'terry', 'sj_jacquard', 'pointelle', 'rib_dj', 'interlock_2x2', 'dj_multi', 'dj_jacquard'];
+const ORDER = ['sj_2track', 'sj_4track', 'fleece_3t', 'terry', 'sj_jacquard_2way', 'sj_jacquard', 'pointelle', 'rib_dj', 'interlock_2x2', 'dj_multi', 'dj_jacquard'];
 
 const SINKER = {
   jersey: 'Single-level jersey sinker: its throat holds the old loop down while the needle rises, its belly is the knock-over level the new loop is drawn over.',
@@ -133,6 +138,9 @@ function requirements(st, gating, feedRows, opts = {}) {
     empty: [C, D].filter(Boolean).some((g) => g[0].some((_, j) => g.every((r) => r[j] === '-'))),
     fleece: !D && roles.some((r, i) => r === 'loop' && !C[i].includes('K')),
     pile: !!opts.pile,
+    transferDir: opts.transferDir || 'right',
+    // the symbols each feed uses on the cylinder (for a 2-way selection)
+    feedSyms: C.map((r) => [...new Set(r)]),
     feeds: st.feeds, width: st.width,
   };
 }
@@ -154,6 +162,11 @@ function fit(P, req) {
       if (!P.cams[b].includes(s)) add('error', `${P.label}: the ${bed} takes ${P.cams[b].map((x) => SYM_NAME[x]).join(' and ')} cams only — no ${SYM_NAME[s]} cam for the ${SYM_NAME[s]} stitches drawn on it.`);
     }
   }
+  if (P.technique === '2way' && P.selection === 'needle') {
+    const mixed = (req.feedSyms || []).map((r, i) => (r.includes('K') && r.includes('T') ? i + 1 : 0)).filter(Boolean);
+    if (mixed.length) add('error', `${P.label}: a 2-way selection raises a selected needle to the ONE cam height of that feeder (knit or tuck) and leaves the rest down (miss) — feed${mixed.length > 1 ? 's' : ''} ${mixed.join(', ')} mix knit and tuck. Use a 3-way (knit / tuck / miss) machine, or split the feed.`);
+  }
+  if (req.transfer && P.transfer && req.transferDir && P.transferDirs && !P.transferDirs.includes(req.transferDir)) add('error', `${P.label}: transfers go ${P.transferDirs.join(' or ')} only.`);
   if (req.pile && P.sinker !== 'terry') add('error', `${P.label}: a sinker-loop pile needs terry sinkers with a high nib to draw the pile yarn over.`);
   if (!req.pile && P.sinker === 'terry') add('warn', `${P.label}: no pile is drawn — the terry sinkers knit a plain ground; a jersey machine is the usual choice.`);
   if (req.fleece && P.sinker !== 'fleece') add('warn', `${P.label}: a tied-in loop yarn (fleece back) is knitted with fleece sinkers, which lay it on a second, higher level. On jersey sinkers the coarse loop yarn is drawn down with the ground and grins through.`);
@@ -197,7 +210,7 @@ function plan(P, st, gating, needlesTotal, feeders) {
     const T = trackSeqs(b === 'C' && !P.transfer ? g.map((r) => r.map((x) => (x === 'E' ? 'M' : x))) : g);
     const perTrack = T.sequences.map((s) => {
       const n = T.setout.filter((x) => x === s.track).length;
-      return { track: s.track, sequence: s.sequence, needles_per_repeat: n, needles_on_machine: repeats ? Math.round(n * repeats) : null };
+      return { track: s.track, butt: (P.butts && P.butts[s.track]) || null, sequence: s.sequence, needles_per_repeat: n, needles_on_machine: repeats ? Math.round(n * repeats) : null };
     });
     const empty = T.setout.filter((x) => x === '-').length;
     // cams for one feeder repeat: what sits in each track at each feeder
@@ -219,7 +232,49 @@ function plan(P, st, gating, needlesTotal, feeders) {
         : `${T.sequences.length} of ${P.tracks[b]} cam tracks used. Each feeder carries one cam per track: ${Object.entries({ knit: totals.K, tuck: totals.T, miss: totals.M }).filter(([, v]) => v).map(([k, v]) => `${v} ${k}`).join(', ')} cam position${totals.K + totals.T + totals.M > 1 ? 's' : ''} per ${F}-feeder repeat${rounds ? ` — ${Math.round((totals.K + totals.T + totals.M) * scale)} round the machine` : ''}.`,
     };
   }
+  // interlock gating: each cylinder needle faces a dial needle; in a classic
+  // interlock a long-butt cylinder needle faces a short-butt dial needle, so
+  // the two knit on alternate feeds and never rise together
+  if (beds.C && beds.D && gating === 'interlock') {
+    const c = beds.C.setout.split(' '), d = beds.D.setout.split(' ');
+    const pairs = {};
+    c.forEach((t, j) => { if (t !== '-' && d[j] && d[j] !== '-') pairs[t] = pairs[t] || new Set(), pairs[t].add(d[j]); });
+    beds.facing = Object.entries(pairs).map(([t, set]) => ({ cylinder: t, dial: [...set] }));
+    // the dial needle facing a long-butt cylinder needle has the short butt, and the other way round
+    const OPP = { 'long butt': 'short butt', 'short butt': 'long butt' };
+    if (P.butts) beds.D.per_track.forEach((t) => { const f = beds.facing.find((x) => x.dial.includes(t.track)); t.butt = f && P.butts[f.cylinder] ? OPP[P.butts[f.cylinder]] : null; });
+    const dButt = (k) => { const t = beds.D.per_track.find((x) => x.track === k); return t && t.butt ? ` (${t.butt})` : ''; };
+    beds.facing_note = 'Interlock gating: each cylinder needle faces a dial needle. ' + beds.facing.map((f) => `Cylinder track ${f.cylinder}${P.butts && P.butts[f.cylinder] ? ` (${P.butts[f.cylinder]})` : ''} faces dial track ${f.dial.map((k) => k + dButt(k)).join(' / ')}`).join('; ') + '. Facing needles must never rise at the same feed, so each pair knits on alternate feeds.';
+  }
   return beds;
+}
+
+/**
+ * Feed system for every feeder: how the yarn is delivered.
+ *   positive tape feed   the yarn is metered at a set length per revolution
+ *                        (the quality pulley / VDQ) — every knitting feeder
+ *                        whose take is the same every revolution; feeders
+ *                        with the same course length share one belt
+ *   storage feeder       the needles take what they need from a wound store —
+ *                        a needle-selection (jacquard) feeder, whose take
+ *                        changes from course to course with the pattern
+ *   elastane feeder      a positive roller feeder for the bare elastane; the
+ *                        draft is the knitting speed over its delivery speed
+ *   plating feeder       one guide with two yarn holes, face yarn and the
+ *                        plated yarn laid at two heights
+ */
+function feedPlan(P, st, feeds, opts = {}) {
+  const sel = P.selection === 'needle';
+  return feeds.map((f, i) => {
+    const sys = sel ? 'storage feeder' : 'positive tape feed';
+    const why = sel
+      ? 'the needles selected at this feeder change with the pattern, so the yarn taken changes from course to course: a storage feeder lets the needles draw what they need'
+      : 'the yarn taken is the same every revolution, so it is metered at the course length by the quality pulley';
+    const extra = [];
+    if (opts.elastaneFeeds && opts.elastaneFeeds.includes(i)) extra.push('elastane positive roller feeder (bare elastane, draft set by the speed ratio), through a plating feeder with two yarn holes');
+    if (opts.pileFeed === i) extra.push('plating feeder: ground yarn and pile yarn laid at two heights, the pile over the sinker nib');
+    return { feed: i + 1, role: f.role, system: sys, why, extra };
+  });
 }
 
 /**
@@ -254,15 +309,20 @@ function compile(setup, P) {
   return { grid: grid.C ? { C: grid.C, D: grid.D || null } : null, errors };
 }
 
+// the cylinder's surface speed, m/s, at a speed factor (RPM × diameter in inches)
+const surface = (sf) => (Math.PI * 0.0254 * sf) / 60;
+function speedLimit(P) { return { sf: P.sf, rpm_at: (dia) => Math.round(P.sf / dia), surface_m_s: Math.round(surface(P.sf) * 100) / 100, max_m_s: Math.round(surface(P.sf) * 1.25 * 100) / 100 }; }
+
 function describe(P) {
   return {
     id: P.id, label: P.label, auto: !!P.auto, kind: P.kind, gatings: P.gatings, selection: P.selection,
     tracks: { C: Number.isFinite(P.tracks.C) ? P.tracks.C : 'needle selection', D: P.tracks.D == null ? null : Number.isFinite(P.tracks.D) ? P.tracks.D : 'needle selection' },
     cams: P.cams, needle: P.needle, sinker: { type: P.sinker, text: SINKER[P.sinker] }, transfer: P.transfer, timing: P.timing || null,
-    build: { feeders_per_inch: P.fpi, gauges: P.gauges, dia: P.dia, basis: 'typical build for this class of machine (modelled)' }, use: P.use,
+    build: { feeders_per_inch: P.fpi, speed_factor: P.sf, surface_speed_m_s: speedLimit(P).surface_m_s, gauges: P.gauges, dia: P.dia, basis: 'typical build for this class of machine (modelled)' }, use: P.use,
+    technique: P.technique || null, transfer_dirs: P.transferDirs || null, butts: P.butts || null,
   };
 }
 
 function list() { return ORDER.map((id) => describe({ ...PROFILES[id], id })); }
 
-module.exports = { PROFILES, ORDER, requirements, fit, autoProfile, resolve, plan, compile, describe, list, trackSeqs, SINKER };
+module.exports = { PROFILES, ORDER, requirements, fit, autoProfile, resolve, plan, compile, describe, list, trackSeqs, feedPlan, SINKER, speedLimit };

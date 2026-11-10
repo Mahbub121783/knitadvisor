@@ -55,6 +55,22 @@
   var CAT_LABEL = { single_jersey: 'Single jersey family', rib: 'Rib family (double bed)', interlock: 'Interlock family (double bed)' };
 
   var machines = [];
+  // the drawing palette follows the chosen machine: a symbol it has no cam
+  // (or no transfer needle) for is greyed out; Auto allows everything
+  function paletteFor() {
+    var m = machines.filter(function (x) { return x.id === $('st-mprof').value; })[0];
+    var ok = { K: true, T: true, M: true, E: true, '-': true };
+    if (m) {
+      var all = [].concat(m.cams.C || [], m.cams.D || []);
+      ok = { K: true, M: true, '-': true, T: all.indexOf('T') > -1, E: !!m.transfer };
+    }
+    Array.prototype.forEach.call($('st-pal').children, function (b) {
+      var sy = b.getAttribute('data-s');
+      b.disabled = !ok[sy];
+      b.title = ok[sy] ? '' : 'Your machine has no ' + (sy === 'E' ? 'transfer needles' : 'cam') + ' for this';
+    });
+    if (!ok[S.brush]) { S.brush = 'K'; Array.prototype.forEach.call($('st-pal').children, function (x) { x.classList.toggle('on', x.getAttribute('data-s') === 'K'); }); }
+  }
   function loadTemplates() {
     return apiFetch('/api/studio/templates').then(function (d) {
       templates = d.templates || [];
@@ -73,6 +89,7 @@
       var mp = $('st-mprof'), keep = mp.value;
       mp.innerHTML = '<option value="">Auto — the simplest machine that knits the design</option>' + machines.map(function (m) { return '<option value="' + esc(m.id) + '">' + esc(m.label) + '</option>'; }).join('');
       mp.value = keep;
+      paletteFor();
     });
   }
 
@@ -321,7 +338,7 @@
       calibration: $('st-userolls').checked && completeRolls().length ? { rolls: completeRolls() } : null,
       machine: {
         gauge: num('st-gauge'), dia: num('st-dia'), feeders: num('st-feeders'), rpm: num('st-rpm'),
-        sl_mm: num('st-sl'), efficiency: num('st-eff'), tracks_cyl: +$('st-tc').value || null, tracks_dial: +$('st-td').value || null, profile: $('st-mprof').value || null,
+        sl_mm: num('st-sl'), efficiency: num('st-eff'), tracks_cyl: +$('st-tc').value || null, tracks_dial: +$('st-td').value || null, profile: $('st-mprof').value || null, transfer_dir: $('st-tdir').value,
         vdq: { points: vdq },
       },
     };
@@ -432,6 +449,8 @@
     var r = last, ms = r.machine_setup, P = ms.profile, B = ms.beds;
     var html = '<div class="st-mcard"><b>' + esc(P.label) + '</b>' + (P.auto ? ' <span style="color:var(--t3)">— picked for this design (choose your own under Machine type)</span>' : '') +
       '<dl><dt>Needle selection</dt><dd>' + (P.selection === 'needle' ? 'needle by needle (electronic' + (P.transfer ? ', with loop transfer' : '') + ')' : 'cam tracks — cylinder ' + P.tracks.C + (P.tracks.D ? ', dial ' + P.tracks.D : '')) + '</dd>' +
+      (P.technique ? '<dt>Selection</dt><dd>' + (P.technique === '3way' ? '3-way: each needle to knit, tuck or miss at every feeder' : '2-way: each feeder has one cam height (knit or tuck); a needle is raised to it or left down (miss)') + '</dd>' : '') +
+      (P.transfer_dirs ? '<dt>Transfers</dt><dd>to the ' + P.transfer_dirs.join(' or ') + ' needle (set under Machine)</dd>' : '') +
       '<dt>Cams</dt><dd>' + Object.keys(P.cams).map(function (b) { return (b === 'C' ? 'cylinder: ' : 'dial: ') + P.cams[b].map(function (x) { return CAM[x].toLowerCase(); }).join(', '); }).join(' · ') + '</dd>' +
       '<dt>Needles</dt><dd>' + Object.keys(P.needle).map(function (b) { return (b === 'C' ? 'cylinder: ' : 'dial: ') + esc(P.needle[b]); }).join(' · ') + '</dd>' +
       '<dt>Sinker</dt><dd>' + esc(P.sinker.text) + '</dd>' +
@@ -450,10 +469,11 @@
       editable = true;
       html += '<label class="st-p" style="display:block">Needle set-out, one repeat (butt track per needle, – = needle out)<br><input class="st-setin" data-setout="' + b + '" value="' + esc(bd.setout.replace(/ /g, '')) + '" spellcheck="false" autocomplete="off"></label>' +
         '<div class="st-scroll"><table class="st-t"><tr><th>Track</th><th>Sequence, feeders 1 → ' + r.structure.feeds + '</th><th>Needles per repeat</th><th>On the machine</th></tr>' +
-        bd.per_track.map(function (t) { return '<tr><td>' + t.track + '</td><td style="letter-spacing:3px;font-family:var(--mono)">' + esc(t.sequence) + '</td><td>' + t.needles_per_repeat + '</td><td>' + (t.needles_on_machine == null ? '—' : t.needles_on_machine) + '</td></tr>'; }).join('') +
+        bd.per_track.map(function (t) { return '<tr><td>' + t.track + (t.butt ? ' <small>' + esc(t.butt) + '</small>' : '') + '</td><td style="letter-spacing:3px;font-family:var(--mono)">' + esc(t.sequence) + '</td><td>' + t.needles_per_repeat + '</td><td>' + (t.needles_on_machine == null ? '—' : t.needles_on_machine) + '</td></tr>'; }).join('') +
         (bd.empty_per_repeat ? '<tr><td>–</td><td>needles out</td><td>' + bd.empty_per_repeat + '</td><td>' + (bd.empty_on_machine == null ? '—' : bd.empty_on_machine) + '</td></tr>' : '') + '</table></div>';
       if (bd.cam_totals_machine) html += '<p class="st-p">Cams to fit round the machine: <b>' + bd.cam_totals_machine.knit + '</b> knit, <b>' + bd.cam_totals_machine.tuck + '</b> tuck, <b>' + bd.cam_totals_machine.miss + '</b> miss (' + r.machine.feeders + ' feeders × ' + bd.tracks_used + ' tracks).</p>';
     });
+    if (B.facing_note) html += '<p class="st-p">' + esc(B.facing_note) + '</p>';
     if (editable) {
       // cam chart: one select per feeder per track, both beds
       var cols = [];
@@ -467,6 +487,7 @@
             return '<td><select class="st-camsel ' + v + '" data-f="' + i + '" data-b="' + c[0] + '" data-t="' + c[1] + '">' + opts.map(function (x) { return '<option value="' + x + '"' + (x === v ? ' selected' : '') + '>' + CAM[x] + '</option>'; }).join('') + '</select></td>';
           }).join('') + '</tr>';
         }).join('') + '</table></div>' +
+        '<p class="st-p"><button type="button" class="st-btn" data-camop="addFeed">+ Feeder</button> <button type="button" class="st-btn" data-camop="delFeed">− Feeder</button> <button type="button" class="st-btn" data-camop="shiftU" title="Start the repeat one feeder later">Rotate feeders</button></p>' +
         '<p class="st-p"><button type="button" class="st-btn primary" id="st-camapply">Apply cam set-up to the notation</button> <span id="st-camnote" style="font-size:12px;color:var(--t2)">Change a cam or the set-out, then apply: the notation, the checks and both 3D views follow. A track you add in the set-out (e.g. C) takes miss cams until you set them.</span></p>';
     }
     html += '<p class="st-p">Repeat the cam chart round the machine: feeder ' + (r.structure.feeds + 1) + ' takes the cams of feeder 1, and so on. Needles with the same sequence share one butt track, so the set-out is the order to load the needles into the tricks.</p>';
@@ -526,6 +547,12 @@
       }).join('') + '</table></div>' +
       (v.method ? '<p class="st-p">VDQ reading: ' + esc(v.method) + '.</p>' : '') +
       (v.groups.length > 1 ? '<p class="st-p">The feeders take different yarn lengths, so they run on ' + v.groups.length + ' quality belts (or set each feeder\'s storage wheel accordingly). One belt for all would force one stitch length on every feeder.</p>' : '');
+    var MS = r.machine_setup;
+    if (MS) {
+      html += '<div class="st-sub">Speed ' + src('e') + '</div><p class="st-p">' + MS.speed.rpm + ' RPM on ' + m.dia + '" = <b>' + MS.speed.surface_m_s + ' m/s</b> at the cylinder surface (π × diameter × RPM). This class of machine runs at about ' + MS.speed.speed_factor + ' RPM × inch, up to ' + MS.speed.max_m_s + ' m/s — ' + esc(MS.speed.basis) + '. Production follows the speed.</p>';
+      html += '<div class="st-sub">Feed system</div><div class="st-scroll"><table class="st-t"><tr><th>Feeder</th><th>Yarn</th><th>Feed</th><th>Why</th></tr>' +
+        MS.feeds.map(function (f) { return '<tr><td>F' + f.feed + '</td><td>' + esc(f.role) + '</td><td>' + esc(f.system) + (f.extra.length ? '<br><small>+ ' + f.extra.map(esc).join('<br>+ ') + '</small>' : '') + '</td><td style="font-size:12px;white-space:normal;min-width:260px;font-family:inherit">' + esc(f.why) + '</td></tr>'; }).join('') + '</table></div>';
+    }
     html += '<div class="st-sub">Gauge against yarn</div><p class="st-p">Needle pitch ' + m.gauge_fit.pitch_mm + ' mm, yarn diameter ' + m.gauge_fit.yarn_d_mm + ' mm, ratio ' + m.gauge_fit.ratio + '. The factory knits this family between ' + m.gauge_fit.band.join(' and ') + ' ' + src('m') + '.</p>';
     $('pane-machine').innerHTML = html;
   }
@@ -872,7 +899,7 @@
     var groundNe = 590.5 / y.ground.tex;
     var clamp = function (v, a, b) { return Math.max(a, Math.min(b, v)); };
     var spec = {
-      C: C, D: D, bed: S.bed, feeds: feeds,
+      C: C, D: D, bed: S.bed, feeds: feeds, transferDir: $('st-tdir').value,
       // on a phone, fewer needles so each loop is big enough to read
       wales: real ? (S.D ? 20 : 32) : ($('st-loops').clientWidth < 520 ? 8 : null),
       courses: real ? (S.D ? 28 : 40) : null,
@@ -903,7 +930,7 @@
   function renderLoops() {
     var host = $('st-loops');
     if (!loopPromise) {
-      loopPromise = import('/assets/js/studio-loops.js?v=20261110a').then(function (mod) {
+      loopPromise = import('/assets/js/studio-loops.js?v=20261110b').then(function (mod) {
         loopView = new mod.LoopView(host, showTip);
         loopView.feedColour = mod.feedColour;
         return loopView;
@@ -996,7 +1023,7 @@
   var STORE = 'ka_studio_designs';
   function readStore() { try { return JSON.parse(localStorage.getItem(STORE) || '[]'); } catch (_) { return []; } }
   function writeStore(a) { try { localStorage.setItem(STORE, JSON.stringify(a)); return true; } catch (_) { return false; } }
-  var FIELDS = ['st-ne', 'st-fibre', 'st-gsm', 'st-width', 'st-gauge', 'st-dia', 'st-feeders', 'st-rpm', 'st-sl', 'st-eff', 'st-tc', 'st-td', 'st-lyd', 'st-lydraft', 'st-lyevery', 'st-v1r', 'st-v1l', 'st-v2r', 'st-v2l', 'st-sinker', 'st-parr', 'st-mprof', 'st-brush', 'st-passes', 'st-pile'];
+  var FIELDS = ['st-ne', 'st-fibre', 'st-gsm', 'st-width', 'st-gauge', 'st-dia', 'st-feeders', 'st-rpm', 'st-sl', 'st-eff', 'st-tc', 'st-td', 'st-lyd', 'st-lydraft', 'st-lyevery', 'st-v1r', 'st-v1l', 'st-v2r', 'st-v2l', 'st-sinker', 'st-parr', 'st-mprof', 'st-brush', 'st-passes', 'st-pile', 'st-tdir'];
   function designNow() {
     var o = { v: 2, name: $('st-name').value || 'Untitled design', bed: S.bed, C: S.C, D: S.D, feeds: S.feeds, rolls: rolls, lycra: $('st-lycra').checked, cut: $('st-cut').checked, colour: $('st-col').value, fields: {} };
     FIELDS.forEach(function (id) { o.fields[id] = $(id).value; });
@@ -1089,12 +1116,15 @@
         else if (m.kind === 'double' && (!S.D || m.gatings.indexOf(S.bed) < 0)) setBed(m.gatings.indexOf(S.bed) > -1 ? S.bed : m.gatings[0]);
         $('st-mprof-hint').textContent = m.use.charAt(0).toUpperCase() + m.use.slice(1) + '. ' + m.sinker.text;
       } else $('st-mprof-hint').textContent = 'The studio picks the simplest machine that knits what you draw.';
+      paletteFor();
       schedule();
     });
     $('pane-setup').addEventListener('click', function (e) {
       var a = e.target.closest('[data-prof]');
       if (a) { $('st-mprof').value = a.getAttribute('data-prof'); $('st-mprof').dispatchEvent(new Event('change')); return; }
       if (e.target.id === 'st-camapply') applyCams();
+      var co = e.target.closest('[data-camop]');
+      if (co) op(co.getAttribute('data-camop'));
     });
     $('pane-setup').addEventListener('change', function (e) {
       if (e.target.classList.contains('st-camsel')) e.target.className = 'st-camsel ' + e.target.value;

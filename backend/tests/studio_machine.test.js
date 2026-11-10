@@ -69,4 +69,42 @@ const bad = KM.compile({ setout: { C: 'ABC' }, cams: [{ C: { A: 'K', B: 'T', C: 
 assert(bad.errors.some((e) => /3 tracks/.test(e)) && bad.errors.some((e) => /not a cam/.test(e)));
 const il = KM.compile({ setout: { C: 'AB', D: 'AB' }, cams: [{ C: { A: 'K', B: 'M' }, D: { A: 'T', B: 'K' } }] }, KM.PROFILES.interlock_2x2);
 assert(il.errors.some((e) => /no tuck cam/.test(e)));
+// ── stage 1b ──
+// speed: RPM from the class's speed factor; a too-fast setting is flagged
+assert(run('pointelle').machine.rpm < run('single_jersey').machine.rpm, 'a transfer machine runs slower than a plain jersey');
+assert(run('single_jersey', { rpm: 60, dia: 30 }).checks.some((c) => c.level === 'warn' && /m\/s at the cylinder surface/.test(c.text)));
+// 2-way selection: one cam height per feeder
+assert(errs(run('lacoste_single', { profile: 'sj_jacquard_2way' })).some((t) => /2-way selection/.test(t)), '2-way: knit and tuck on one feeder');
+assert(!errs(run('birds_eye', { profile: 'sj_jacquard_2way' })).some((t) => /2-way/.test(t)), '2-way: knit / miss is fine');
+// transfer direction: the receiving needle is the left one
+{
+  const g = { bed: 'single', grid: { C: ['KKKK', 'KEKK', 'KKKK'] }, yarn: { fibre: 'cotton' }, target: { gsm: 150 } };
+  const right = S.analyse({ ...g, grid: { C: ['KKKK', 'MEKK', 'KKKK'] }, machine: { transfer_dir: 'right' } });
+  const left = S.analyse({ ...g, grid: { C: ['KKKK', 'MEKK', 'KKKK'] }, machine: { transfer_dir: 'left' } });
+  assert(!errs(right).some((t) => /transferred loop/.test(t)), 'right: needle 3 knits and takes it');
+  assert(errs(left).some((t) => /goes onto needle 1 \(left\)/.test(t)), 'left: needle 1 misses and cannot take it');
+  const geom = require('../../frontend/assets/js/studio-loop-geom.js');
+  const C = ['KKKK', 'KEKK', 'KKKK'].map((r) => r.split(''));
+  const top = (dir) => { const gg = geom.buildLoopPaths({ C, feeds: C.map(() => ({ role: 'ground' })), h: 0.75, transferDir: dir, wales: 8, courses: 6 }); const st = gg.courses[0].stitches.find((x) => x.wale === 1); const pts = gg.courses[0].points.slice(st.from, st.to + 1); return pts.reduce((b, p) => (p.y > b.y ? p : b)).x; };
+  assert(top('right') > 1.2 && top('left') < 0.8, 'the transferred loop leans its head onto the needle that takes it');
+}
+// interlock: long-butt cylinder needles face short-butt dial needles
+{
+  const r = run('interlock');
+  const b = r.machine_setup.beds;
+  assert.deepStrictEqual(b.C.per_track.map((t) => t.butt), ['long butt', 'short butt']);
+  b.facing.forEach((f) => { const cb = b.C.per_track.find((t) => t.track === f.cylinder).butt; f.dial.forEach((k) => assert.notStrictEqual(b.D.per_track.find((t) => t.track === k).butt, cb)); });
+}
+// feed system: needle selection takes storage feeders, a track machine positive feed
+assert(run('knitted_twill', { profile: 'sj_jacquard' }).machine_setup.feeds.every((f) => f.system === 'storage feeder'));
+assert(run('lacoste_single').machine_setup.feeds.every((f) => f.system === 'positive tape feed'));
+assert(S.analyse({ ...pay(T.find((x) => x.id === 'single_jersey')), elastane: { denier: 40, draft: 2.6, every: 'all' } }).machine_setup.feeds[0].extra.some((e) => /elastane/.test(e)));
+// hook load: each tucked loop at its own feeder's yarn — a coarse yarn on the tuck feeder loads the hook more
+{
+  const base = { bed: 'single', grid: { C: ['KK', 'TK', 'KK', 'KT'] }, yarn: { ne: 30, fibre: 'cotton' }, machine: { sl_mm: 2.8, gauge: 28 } };
+  const fine = S.analyse({ ...base, feeds: [{ role: 'ground' }, { role: 'ground' }, { role: 'ground' }, { role: 'ground' }] });
+  const coarse = S.analyse({ ...base, feeds: [{ role: 'ground' }, { role: 'ground', yarn: { ne: 10, fibre: 'cotton' } }, { role: 'ground' }, { role: 'ground', yarn: { ne: 10, fibre: 'cotton' } }] });
+  const idx = (r) => { const c = r.checks.find((x) => /hook load/.test(x.text)); return c ? +c.text.match(/hook load ([\d.]+)/)[1] : 0; };
+  assert(idx(coarse) > idx(fine), `hook load follows the tuck feeder's yarn (${idx(fine)} → ${idx(coarse)})`);
+}
 console.log('Studio machine tests passed');

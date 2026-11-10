@@ -589,7 +589,7 @@ function solve(ctx, ground) {
   const feedsRep = st.feeds;
   const fpi = ctx.profile && ctx.profile.fpi ? ctx.profile.fpi : M.fpi;
   const feeders = +mach.feeders > 0 ? +mach.feeders : Math.max(feedsRep, Math.round((fpi * dia) / feedsRep) * feedsRep);
-  const rpm = +mach.rpm > 0 ? +mach.rpm : Math.round(M.sf / dia);
+  const rpm = +mach.rpm > 0 ? +mach.rpm : Math.round((ctx.profile && ctx.profile.sf ? ctx.profile.sf : M.sf) / dia);
   const eff = (+mach.efficiency > 0 ? +mach.efficiency : 85) / 100;
 
   // yarn per feed
@@ -679,17 +679,33 @@ function calibrate(ctx, ground, rolls) {
 
 // ── checks the floor would otherwise find on the machine ───────────────────
 // hook load: loops held in one hook against the space between needles
-function hookLoad(st, S) {
-  const d = S.gfit.yarn_d_mm;
-  let worst = { idx: 0, loops: 1, where: '' };
+// The loops in one hook, each of its own feeder's yarn: the held loop and
+// every tuck laid on it since (and a loop transferred in). Yarn diameter
+// scales as √tex from the ground yarn's (Peirce: d ∝ √tex for one fibre).
+function hookLoad(st, S, dir = 1) {
+  const d0 = S.gfit.yarn_d_mm, t0 = S.ground.tex;
+  const own = S.feeds.length === st.feeds;
+  const dOf = (i) => (own && S.feeds[i] ? d0 * Math.sqrt(S.feeds[i].tex / t0) : d0);
+  let worst = { idx: 0, loops: 1, where: '', mm: d0 };
   for (const [b, name] of [['C', 'cylinder'], ['D', 'dial']]) {
     const g = st.beds[b]; if (!g) continue;
+    const F = g.length;
     for (let j = 0; j < st.width; j++) {
       const col = g.map((r) => r[j]); if (col.every((x) => x === '-')) continue;
-      const into = b === 'C' ? g.some((r) => r[(j - 1 + st.width) % st.width] === 'E') : false;
-      const loops = 1 + maxRun(col, 'T') + (into ? 1 : 0);
-      const idx = (loops * d) / S.pitch;
-      if (idx > worst.idx) worst = { idx, loops, where: `${name} needle ${j + 1}` };
+      const into = b === 'C' && g.some((r) => r[(j - dir + st.width) % st.width] === 'E');
+      for (let f = 0; f < F; f++) {
+        if (col[f] !== 'T') continue;
+        // back from this tuck to the last knit: those loops are all in the hook now
+        let mm = dOf(f), loops = 1;
+        for (let k = 1; k < F; k++) {
+          const i = (f - k + F) % F;
+          if (col[i] === 'T') { mm += dOf(i); loops++; } else if (col[i] === 'K') { mm += dOf(i); loops++; break; }
+        }
+        if (into) { mm += d0; loops++; }
+        const idx = mm / S.pitch;
+        if (idx > worst.idx) worst = { idx, loops, where: `${name} needle ${j + 1} at feed ${f + 1}`, mm };
+      }
+      if (!col.includes('T') && into && 2 * d0 / S.pitch > worst.idx) worst = { idx: 2 * d0 / S.pitch, loops: 2, where: `${name} needle ${j + 1}`, mm: 2 * d0 };
     }
   }
   return worst;
@@ -729,7 +745,7 @@ function chooseSetup(ctx, fibre) {
       if (W && s.tfGround > W.p95) broken.push(`tightness factor ${r1(s.tfGround)} above the factory's ${W.p95}`);
       if (W && s.tfGround < W.p5) broken.push(`tightness factor ${r1(s.tfGround)} below the factory's ${W.p5}`);
       if (s.gfit.fit !== 'good') broken.push(`${g} GG ${s.gfit.fit} for ${ne}s (pitch/yarn ${s.gfit.ratio}, factory ${s.gfit.band[0]}–${s.gfit.band[1]})`);
-      const hl = hookLoad(st, s);
+      const hl = hookLoad(st, s, ctx.transferDir === 'left' ? -1 : 1);
       if (hl.loops > 1 && hl.idx > 0.6) broken.push(`hook load ${r2(hl.idx)} (${hl.loops} loops) above 0.6`);
       if (s.lref < 1.8 || s.lref > 7) broken.push(`stitch length ${r2(s.lref)} mm outside 1.8–7`);
       const spread = W ? Math.max(0.3, W.q3 - W.q1) : 1;
@@ -789,8 +805,9 @@ function checksFor(ctx, S, T) {
     const C = st.beds.C, F = st.feeds, Wd = st.width;
     for (let i = 0; i < F; i++) for (let j = 0; j < Wd; j++) {
       if (C[i][j] !== 'E') continue;
-      const nb = C[i][(j + 1) % Wd], next = C[(i + 1) % F][j];
-      if (nb !== 'K' && nb !== 'T') add('error', `Feed ${i + 1}, needle ${j + 1}: the transferred loop goes onto needle ${(j + 1) % Wd + 1}, which must knit or tuck at this feed to take it (it is "${nb}").`);
+      const dir = ctx.transferDir === 'left' ? -1 : 1, to = (j + dir + Wd) % Wd;
+      const nb = C[i][to], next = C[(i + 1) % F][j];
+      if (nb !== 'K' && nb !== 'T') add('error', `Feed ${i + 1}, needle ${j + 1}: the transferred loop goes onto needle ${to + 1} (${dir > 0 ? 'right' : 'left'}), which must knit or tuck at this feed to take it (it is "${nb}").`);
       if (next !== 'K') add('warn', `Feed ${i + 1}, needle ${j + 1}: after a transfer the empty needle should knit at the next feed, or the eyelet does not close round a new loop (it is "${next}").`);
     }
   } else if (ctx.profile) { /* tracks, cams and needles: knit-machine.js fit() */ }
@@ -807,9 +824,9 @@ function checksFor(ctx, S, T) {
       if ((c === 'K' || c === 'T') && (d === 'K' || d === 'T')) add('error', `Feed ${i + 1}, needle ${j + 1}: on interlock gating the cylinder and dial needles face each other — both cannot rise at the same feed. Move one to the other track.`);
     }
   }
-  const worst = hookLoad(st, S);
+  const worst = hookLoad(st, S, ctx.transferDir === 'left' ? -1 : 1);
   if (worst.loops > 1) {
-    const msg = `${worst.where}: ${worst.loops} loops in one hook at ${S.gauge} GG with ${S.ground.label} — hook load ${r2(worst.idx)} (yarn Ø × loops ÷ needle pitch; estimate).`;
+    const msg = `${worst.where}: ${worst.loops} loops in one hook at ${S.gauge} GG — ${r2(worst.mm)} mm of yarn (each loop at its own feeder's count) in a ${r2(S.pitch)} mm needle pitch: hook load ${r2(worst.idx)} (estimate).`;
     if (worst.idx > 0.6) add('warn', `${msg} Above 0.6: press-off and needle damage are likely — use a finer yarn, a coarser gauge or fewer tucks in a row.`);
     else if (worst.idx > 0.45) add('note', `${msg} Close to the limit: keep the tuck feeders' tension low.`);
   }
@@ -934,7 +951,8 @@ function analyse(input) {
     // factory's terry records, the 2h pile geometry derived).
     const pileFeed = st.beds.D ? -1 : feedRows.findIndex((f, i) => f.role === 'loop' && st.beds.C[i].includes('K'));
     // ── the machine: profile chosen (or picked) for what the notation asks ──
-    const req = KM.requirements(st, gating, feedRows, { pile: pileFeed > -1 });
+    ctx.transferDir = (input.machine || {}).transfer_dir === 'left' ? 'left' : 'right';
+    const req = KM.requirements(st, gating, feedRows, { pile: pileFeed > -1, transferDir: ctx.transferDir });
     const profile = KM.resolve(input.machine, req);
     ctx.profile = profile;
     let plush = null;
@@ -1049,6 +1067,8 @@ function analyse(input) {
       if (S.gauge < g0 || S.gauge > g1) add('warn', `${S.gauge} GG is outside the gauges a ${profile.label.toLowerCase()} is usually built in (${g0}–${g1} GG, typical build).`);
       if (S.dia < d0 || S.dia > d1) add('warn', `${S.dia}" is outside the diameters this class of machine is usually built in (${d0}–${d1}").`);
       if (S.feeders > 1.6 * profile.fpi * S.dia) add('warn', `${S.feeders} feeders on ${S.dia}" is ${r1(S.feeders / S.dia)} per inch — more than this class of machine carries (about ${profile.fpi} per inch, typical build).`);
+      const v = (Math.PI * S.dia * 0.0254 * S.rpm) / 60, vmax = KM.speedLimit(profile).max_m_s;
+      if (v > vmax) add('warn', `${S.rpm} RPM on ${S.dia}" is ${r2(v)} m/s at the cylinder surface — above the ${vmax} m/s this class of machine runs at (${profile.sf} RPM × inch, typical). Expect press-off, needle and latch wear${profile.selection === 'needle' ? ', and selection errors' : ''}.`);
       if (D && profile.timing && profile.timing.length === 1 && gating === 'rib') add('note', `${profile.label} runs ${profile.timing[0]} timing only.`);
       checks = checks.concat(mc);
     }
@@ -1193,6 +1213,9 @@ function analyse(input) {
         requirements: req,
         alternatives: KM.ORDER.filter((id) => !KM.fit(KM.PROFILES[id], req).some((c) => c.level === 'error' || c.level === 'warn')).map((id) => ({ id, label: KM.PROFILES[id].label })),
         beds: mPlan,
+        transfer_dir: req.transfer ? ctx.transferDir : null,
+        speed: { rpm: S.rpm, surface_m_s: r2((Math.PI * S.dia * 0.0254 * S.rpm) / 60), max_m_s: KM.speedLimit(profile).max_m_s, speed_factor: profile.sf, basis: 'RPM × diameter of this class of machine (typical build, modelled)' },
+        feeds: KM.feedPlan(profile, st, feedRows, { elastaneFeeds: elastane ? elastane.feeds : [], pileFeed }),
       },
       finish: finish ? {
         brushed: finish.brush, passes: finish.passes, sheared: finish.sheared,

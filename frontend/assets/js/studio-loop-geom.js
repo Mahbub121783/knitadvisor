@@ -78,6 +78,7 @@
     var knitFrom = function (b, j, k) { for (var q = k; q <= k + 3 * F; q++) if (act(b, j, q) === 'K') return q; return k; };
     // sinker-loop plush: the pile yarn of these feeds stands over the high
     // sinker on the technical back, height H wales
+    var tdir = spec.transferDir === 'left' ? -1 : 1;   // a transfer hands the loop to the right (or left) neighbour
     var pileH = spec.pileH || 0;
     var PILE = { full: function () { return true; }, alternate: function (w) { return w % 2 === 0; }, checker: function (w, c) { return (w + c) % 2 === 0; }, diagonal: function (w, c) { return (w + c) % 3 === 0; } };
     var pileOn = PILE[spec.pileArrangement] || PILE.full;
@@ -106,7 +107,7 @@
         if (a === 'K') {
           var n = nextKnit(b, p.j, c), t = tucksOn(b, p.j, c);
           var tk = transferAt(b, p.j, c), sh = 0;
-          if (tk > -1) { n = knitFrom(b, p.j + 1, tk); sh = 0.5; rec.transferred = tk - c; }
+          if (tk > -1) { n = knitFrom(b, p.j + tdir, tk); sh = 0.5 * tdir; rec.transferred = tk - c; }
           var yt = y(n) + 0.38 * h;
           // the feet go behind everything on the needle: the old loop and any tucks
           var fz = z0 - s * (0.14 + 0.16 * Math.min(2, t));
