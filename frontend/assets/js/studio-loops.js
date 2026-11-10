@@ -11,6 +11,7 @@ const ROLE_COLOURS = { ground: '#1857C4', face: '#1857C4', binder: '#7a4fc2', lo
 const ELASTANE = '#f5f5f4';
 
 export function feedColour(spec, f) {
+  if (spec.colours && spec.colourBy !== 'one') return spec.colours[f % spec.colours.length];   // warp: one colour per guide bar
   if (spec.colourBy === 'role') return ROLE_COLOURS[(spec.feeds[f] || {}).role] || ROLE_COLOURS.ground;
   if (spec.colourBy === 'one') return spec.colour || '#3d5a80';
   return FEED_COLOURS[f % FEED_COLOURS.length];
@@ -52,7 +53,8 @@ export class LoopView {
   draw(spec) {
     this.spec = spec;
     this._clear();
-    const geo = globalThis.KALoopGeom.buildLoopPaths(spec);
+    // a ready-made geometry (warp: one path per end) or the weft programme's
+    const geo = spec.geo || globalThis.KALoopGeom.buildLoopPaths(spec);
     this.geo = geo;
     const cx = (geo.wales - 1) / 2 + (spec.D && geo.bed === 'rib' ? 0.25 : 0), cy = (geo.rows - 1) * geo.h / 2 + 0.4 * geo.h;
     this.centre = new THREE.Vector3(cx, cy, 0);

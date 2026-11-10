@@ -64,3 +64,35 @@ for (const t of W.TEMPLATES) {
   assert(!run([{ notation: '1-0/1-2//', yarn: {} }], { cpc: 20 }).success, 'a bar needs its yarn');
 }
 console.log('Studio warp tests passed');
+// 3D: every end's path from its own lapping (studio-warp-geom.js)
+{
+  const G = require('../../frontend/assets/js/studio-warp-geom.js');
+  const lk = G.buildWarpGeom({ bars: [{ pairs: W.parseNotation('2-3/1-0//', 1) }, { pairs: W.parseNotation('1-0/1-2//', 1) }], needles: 8, h: 0.75 });
+  const fr = lk.paths.find((p) => p.bar === 0 && p.guide === 2);
+  // guide 2 of 2-3/1-0: loops on needle 4 then needle 2 — a two-needle underlap, closed laps
+  assert.deepStrictEqual(fr.loops.slice(0, 4).map((l) => l.needle), [4, 2, 4, 2]);
+  assert(fr.loops.every((l) => l.closed), 'locknit front bar laps closed');
+  // each loop is drawn through the loop below: its head one course up
+  fr.loops.forEach((l) => assert(Math.abs(l.top - (l.course + 1.38) * 0.75) < 1e-9));
+  // the front bar's underlaps lie outermost on the back
+  const minZ = (b) => Math.min(...lk.paths.filter((p) => p.bar === b).flatMap((p) => p.points.map((q) => q.z)));
+  assert(minZ(0) < minZ(1), 'front-bar underlaps outermost');
+  // open laps where the underlap carries on the overlap's direction
+  const op = G.buildWarpGeom({ bars: [{ pairs: [[0, 1], [2, 3]] }], needles: 8 });
+  assert(op.paths[0].loops.some((l) => !l.closed));
+  // threading: one in, one out carries half the ends; an inlay bar makes no loops
+  const full = G.buildWarpGeom({ bars: [{ pairs: [[1, 0], [1, 2]] }], needles: 12 }).paths.length;
+  const half = G.buildWarpGeom({ bars: [{ pairs: [[1, 0], [1, 2]], threading: 'X.' }], needles: 12 }).paths.length;
+  assert(Math.abs(half - full / 2) <= 1, `half threading: ${half} of ${full}`);
+  const pi = G.buildWarpGeom({ bars: [{ pairs: [[1, 0], [0, 1]] }, { pairs: [[0, 0], [3, 3]] }], needles: 8 });
+  assert(pi.paths.filter((p) => p.bar === 1).every((p) => p.loops.length === 0), 'inlay: no loops');
+  assert(pi.paths.filter((p) => p.bar === 0).every((p) => new Set(p.loops.map((l) => l.needle)).size === 1), 'pillar: one needle');
+  // knit3d draws the same lapping (node, with the three.js loader)
+  const { spawnSync } = require('child_process');
+  const path = require('path');
+  const out = spawnSync(process.execPath, ['--import', './tests/helpers/knit3d-loader.mjs', 'tests/helpers/warp3d-check.mjs'], { cwd: path.join(__dirname, '..'), encoding: 'utf8' });
+  assert.strictEqual(out.status, 0, out.stderr);
+  const k = JSON.parse(out.stdout);
+  assert(k.paths > 10 && k.finite, `knit3d warp paths: ${out.stdout}`);
+}
+console.log('Studio warp 3D tests passed');

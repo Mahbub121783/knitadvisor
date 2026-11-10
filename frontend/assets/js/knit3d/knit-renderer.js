@@ -12,7 +12,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-import { buildYarnPaths, floatAnchorsFromPaths, structureRepeat } from './topology-builder.js?v=20261110c';
+import { buildYarnPaths, floatAnchorsFromPaths, structureRepeat } from './topology-builder.js?v=20261110e';
 import { bakeStructure, ClothSurface, fibreSurfaceTexture, wavePhase, melangeMaterial, fuzzTexture } from './macro.js?v=20260608g';
 import { ClothSim } from './cloth-physics.js?v=20260608g';
 import { fabricBody, fabricMechanics } from './fabric-body.js?v=20260608g';

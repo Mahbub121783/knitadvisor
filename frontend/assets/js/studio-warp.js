@@ -7,6 +7,7 @@
   var $ = function (id) { return document.getElementById(id); };
   var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
   var BAR_COL = ['#1857C4', '#c2410c', '#0f9d76', '#7a4fc2', '#b8860b', '#0e7490', '#be185d', '#4d7c0f'];
+  var HINT_LOOPS = 'Each tube is one warp end, coloured by its guide bar. Every loop is drawn through the loop below it on the same needle; the underlaps run across the technical back — the front bar’s outermost. Closed laps cross at the loop’s foot. Drag to turn, scroll to zoom.', HINT_CLOTH = 'The real view: the knit3d engine draws every end from the same lapping in real yarn, at the finished wales and courses. Drag to turn, scroll to zoom; Show back shows the underlaps.';
   var W = { bars: [], templates: [], fibres: {}, machines: {}, last: null, seq: 0, timer: null };
 
   function fibreOpts(sel) { return Object.keys(W.fibres).map(function (k) { return '<option value="' + k + '"' + (k === sel ? ' selected' : '') + '>' + esc(W.fibres[k]) + '</option>'; }).join(''); }
@@ -66,7 +67,54 @@
     h += '<p class="st-p" style="font-family:var(--mono);font-size:11px">' + esc(F.formula) + '</p><p class="st-p" style="font-size:12px">Finished state: ' + esc(F.relax.basis) + '. ' + esc(r.basis) + '. Needle pitch ' + M.pitch_mm + ' mm, ' + M.needles + ' needles, ' + esc(M.needle) + '.</p>';
     $('wp-out').innerHTML = h;
     drawLapping(r);
+    render3D();
   }
+
+  // -- 3D: the same lapping, every end's path (studio-warp-geom.js) --
+  var mode3d = 'loops', loopView = null, loopP = null, cloth = null, clothKey = '', clothSeq = 0, showBack = false;
+  var FIB3D = { nylon_filament: 'nylon', polyester_filament: 'polyester', elastane: 'nylon', polypropylene: 'polyester', cotton: 'cotton', polyester_spun: 'polyester', viscose: 'viscose' };
+  function lappingBars() { return W.last.lapping.map(function (b, i) { return { pairs: b.pairs, threading: (W.bars[i] || {}).threading || 'X' }; }); }
+  function render3D() {
+    if (!W.last || !W.last.success) return;
+    if (mode3d === 'loops') renderLoops(); else renderCloth();
+  }
+  function renderLoops() {
+    var r = W.last, F = r.fabric;
+    // loop shape from the finished wales and courses; yarn thickness from each bar's yarn
+    var h = Math.max(0.45, Math.min(1.3, F.wpc / F.cpc));
+    var R = r.structure.repeat_courses;
+    var g = window.KAWarpGeom.buildWarpGeom({ bars: lappingBars(), needles: 10, h: h, courses: Math.max(R, R * Math.ceil(10 / R)) });
+    var geo = { courses: g.paths.map(function (p) { return { course: p.guide, feed: p.bar, points: p.points, side: [], stitches: [] }; }), wales: g.needles, rows: g.courses, h: h, bed: 'single', F: 1, W: 1 };
+    var spec = { geo: geo, colours: BAR_COL, colourBy: 'feed', feeds: r.bars, plated: [], real: false,
+      radius: r.bars.map(function (b) { return Math.max(0.05, Math.min(0.2, 0.5 * 1.3 * (Math.sqrt(b.tex) / 28) / (10 / F.wpc))); }) };
+    if (!loopP) loopP = import('/assets/js/studio-loops.js?v=20261110d').then(function (mod) { loopView = new mod.LoopView($('wp-loops'), function () {}); return loopView; });
+    loopP.then(function (v) { v.draw(spec); if (v.view) v.view('angle'); }).catch(function (e) { $('wp-loops').innerHTML = '<p class="st-p" style="padding:12px">3D could not draw: ' + esc(e.message || e) + '</p>'; });
+  }
+  function renderCloth() {
+    var r = W.last, F = r.fabric, front = r.bars[0];
+    var o = {
+      photo: false, start: 'loops', dyed: hexRgb($('wp-col').value),
+      construction: { type: 'tricot', base: 'warp', label: r.structure.name || 'warp knit', mesh: false, brush: false },
+      pattern: { lapping: { bars: lappingBars() }, rows: r.structure.repeat_courses, cols: 1, grid: [['K']] },
+      sample: function () { return 'knit'; }, sampleBack: function () { return 'knit'; },
+      countNe: 590.5 / front.tex, gsm: F.gsm, tf: 14, fiberType: FIB3D[(W.bars[0].yarn || {}).fibre] || 'nylon',
+      density: { wpc: F.wpc, cpc: F.cpc, aspect: Math.max(0.9, Math.min(1.6, F.cpc / F.wpc)), scalar: 1, llMm: front.mm_per_course, tex: front.tex, fibreDensityScale: 1 },
+      elastanePct: r.bars.some(function (b) { return /lastane/.test(b.fibre); }) ? 15 : 0, physics: null,
+    };
+    var key = JSON.stringify([o.pattern.lapping, Math.round(F.wpc * 10), Math.round(F.cpc * 10), Math.round(front.tex * 10), o.fiberType]);
+    if (cloth && key === clothKey) { cloth.setColor($('wp-col').value); return; }
+    clothKey = key;
+    var my = ++clothSeq, host = $('wp-cloth');
+    import('/assets/js/knit3d/index.js?v=20261110e').then(function (mod) {
+      if (my !== clothSeq || mode3d !== 'cloth') return;
+      if (cloth) { try { cloth.dispose(); } catch (_) {} cloth = null; }
+      Array.prototype.forEach.call(host.querySelectorAll('canvas'), function (c) { c.remove(); });
+      var k = new mod.Knit3D(); k.mount(host, o); cloth = k;
+      if (showBack) k.setView('back');
+      $('wp-3dnote').textContent = (r.structure.name || 'warp knit') + ' \u00b7 ' + F.wpc + ' wales \u00d7 ' + F.cpc + ' courses /cm \u00b7 ' + F.gsm + ' GSM';
+    }).catch(function (e) { $('wp-3dnote').textContent = 'The real view could not draw this: ' + (e && e.message || e); });
+  }
+  function hexRgb(hx) { var n = parseInt(hx.slice(1), 16); return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 }; }
 
   // point paper: dots are needles, the guide's path is drawn course by course
   // (overlap round the needle above the dots, underlap down to the next course)
@@ -110,6 +158,18 @@
     $('wp-bars').addEventListener('click', function (e) { var d = e.target.closest('[data-del]'); if (!d) return; W.bars.splice(+d.getAttribute('data-del'), 1); renderBars(); schedule(); });
     $('wp-addbar').addEventListener('click', function () { if (W.bars.length >= 8) return; W.bars.push({ notation: '1-0/1-2//', threading: 'X', yarn: { count: 40, unit: 'denier', fibre: 'nylon_filament' } }); renderBars(); schedule(); });
     $('wp-template').addEventListener('change', function () { applyTemplate(this.value); });
+    $('wp-3dmode').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-m]'); if (!b) return;
+      mode3d = b.getAttribute('data-m');
+      Array.prototype.forEach.call(this.children, function (x) { x.classList.toggle('on', x === b); });
+      var lp = mode3d === 'loops';
+      $('wp-loops').hidden = !lp; $('wp-cloth').hidden = lp; $('wp-clothbar').hidden = lp;
+      $('wp-3dhint').textContent = lp ? HINT_LOOPS : HINT_CLOTH;
+      if (lp && cloth) { try { cloth.dispose(); } catch (_) {} cloth = null; clothKey = ''; }
+      render3D();
+    });
+    $('wp-col').addEventListener('change', function () { if (cloth) cloth.setColor(this.value); });
+    $('wp-side').addEventListener('click', function () { showBack = !showBack; this.textContent = showBack ? 'Show face' : 'Show back'; if (cloth) cloth.setView(showBack ? 'back' : 'front'); });
     ['wp-mtype', 'wp-gauge', 'wp-width', 'wp-speed', 'wp-eff', 'wp-cpc', 'wp-gsm', 'wp-fwidth'].forEach(function (id) { $(id).addEventListener('input', schedule); $(id).addEventListener('change', schedule); });
   }
   function onBar(e) {

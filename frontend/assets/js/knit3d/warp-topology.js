@@ -15,6 +15,8 @@ import * as THREE from 'three';
 import { knitLoop } from './loop-geometry.js?v=20260608g';
 import { stitchJitter } from './noise.js?v=20260608g';
 import { PITCH_X, PITCH_Y, JITTER, PATCH } from './constants.js?v=20260608g';
+// the studio's lapping geometry (plain script, sets globalThis.KAWarpGeom)
+import '../studio-warp-geom.js?v=20261110b';
 
 const UNDERLAP_Z = -0.30;   // underlaps run across the technical back
 
@@ -22,6 +24,19 @@ const UNDERLAP_Z = -0.30;   // underlaps run across the technical back
 function lap(c) { return c % 2; }            // 0,1,0,1 … → 1-0/0-1 movement
 
 export function buildWarpPaths(opts = {}) {
+  // a real guide-bar programme: every end's path from its own lapping and threading
+  if (opts.lapping && opts.lapping.bars && globalThis.KAWarpGeom) {
+    const pitchY = opts.pitchY || PITCH_Y;
+    const g = globalThis.KAWarpGeom.buildWarpGeom({ bars: opts.lapping.bars, needles: opts.ends || PATCH.wales, courses: opts.courses || PATCH.courses, h: pitchY / PITCH_X });
+    const tints = opts.lapping.tints || [];
+    return {
+      paths: g.paths.map((p) => {
+        const out = { points: p.points.map((q) => new THREE.Vector3(q.x * PITCH_X, q.y, q.z)), course: null };
+        if (tints[p.bar]) out.tint = tints[p.bar];
+        return out;
+      }),
+    };
+  }
   const ends = opts.ends || PATCH.wales;
   const courses = opts.courses || PATCH.courses;
   const net = !!opts.net;                    // powernet / marquisette → skip laps

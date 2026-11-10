@@ -17,7 +17,7 @@
 import { stitchPoints } from './loop-geometry.js?v=20260608g';
 import { stitchJitter } from './noise.js?v=20260608g';
 import { makePointelle, makePatternHoles } from './pointelle.js?v=20260608g';
-import { buildWarpPaths } from './warp-topology.js?v=20260608g';
+import { buildWarpPaths } from './warp-topology.js?v=20261110c';
 import {
   PITCH_X, PITCH_Y, RIB_PITCH_SCALE, RIB_DEPTH, LOOP, TUCK,
   INTERLOCK_DEPTH, INTERLOCK_GAIT, JITTER, PATCH,
@@ -369,7 +369,7 @@ export function buildYarnPaths(opts) {
   // WARP knit (tricot / raschel / warp net) — own topology (guide-bar zig-zag).
   if (con.base === 'warp' || con.type === 'tricot') {
     const net = con.type === 'mesh' || con.type === 'spacer' || con.mesh;
-    return buildWarpPaths({ ends: opts.wales || PATCH.wales, courses: opts.courses || PATCH.courses, net, pitchY });
+    return buildWarpPaths({ ends: opts.wales || PATCH.wales, courses: opts.courses || PATCH.courses, net, pitchY, lapping: opts.pattern && opts.pattern.lapping });
   }
 
   if (con.type === 'interlock') {
