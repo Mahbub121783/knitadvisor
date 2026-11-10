@@ -106,6 +106,8 @@ function toast(msg, type = 'info') {
 
 // ── INIT APP ────────────────────────────────────────────────
 function initApp() {
+  wireDashboard();
+  loadDashboard();
   loadOverview();
   loadLogStats();
   loadLogs(1, {});
@@ -138,6 +140,7 @@ function switchTab(tabId) {
     if (toggle) toggle.setAttribute('aria-expanded', 'false');
   }
 
+  if (tabId === 'tab-overview') loadDashboard();
   if (tabId === 'tab-providers' && !tabState.loaded.providers) {
     tabState.loaded.providers = true;
     loadProviders();
@@ -304,6 +307,136 @@ function renderTopFabrics(rows) {
         '<div style="height:3px;background:var(--a1);border-radius:2px;width:' + Math.round(r.count / max * 100) + '%;"></div>' +
       '</div></div>';
   }).join('');
+}
+
+// ── ADMIN HOME: the whole business and the system in one read (/admin/api/dashboard) ─────────
+let dashRange = 30, dashTimer = null;
+
+const nf = (v) => Number(v || 0).toLocaleString();
+function moneyOf(v, cur) { return nf(Math.round((+v || 0) * 100) / 100) + (cur ? ' ' + cur : ''); }
+function trendBadge(pct, goodWhenUp = true) {
+  if (pct == null) return '';
+  const up = pct > 0, flat = pct === 0;
+  const cls = flat ? 'badge-gray' : (up === goodWhenUp ? 'badge-green' : 'badge-red');
+  return `<span class="badge ${cls}" style="margin-left:6px;">${flat ? '±0%' : (up ? '↑ ' : '↓ ') + Math.abs(pct) + '%'}</span>`;
+}
+function timeAgo(iso) {
+  const s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+  if (s < 60) return 'just now';
+  if (s < 3600) return Math.floor(s / 60) + ' min ago';
+  if (s < 86400) return Math.floor(s / 3600) + ' h ago';
+  return Math.floor(s / 86400) + ' d ago';
+}
+
+/** A small bar chart (SVG) of one or two series over days or months. */
+function dashBars(elId, rows, keys, opts = {}) {
+  const el = document.getElementById(elId); if (!el) return;
+  const colours = opts.colours || ['var(--a1)', 'var(--a3)'];
+  const total = rows.reduce((t, r) => t + (r[keys[0]] || 0), 0);
+  if (!rows.length || !rows.some((r) => keys.some((k) => r[k] > 0))) { el.innerHTML = '<div style="color:var(--t3);font-size:11px;padding:22px 0;text-align:center;">' + esc(opts.empty || 'Nothing in this period yet.') + '</div>'; return total; }
+  const W = 360, H = 110, PB = 14, PT = 6, n = rows.length, gap = n > 40 ? 1 : 3;
+  const bw = Math.max(2, (W - gap * (n - 1)) / n), max = Math.max(1, ...rows.map((r) => r[keys[0]] || 0));
+  const sc = (H - PB - PT) / max;
+  const bars = rows.map((r, i) => {
+    const x = i * (bw + gap), h = (r[keys[0]] || 0) * sc, y = H - PB - h;
+    let out = `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(h, r[keys[0]] ? 1 : 0).toFixed(1)}" rx="1.5" fill="${colours[0]}" opacity=".85"><title>${esc(r.date || r.month)}: ${nf(r[keys[0]])}${keys[1] ? ' · ' + nf(r[keys[1]]) + ' ' + esc(keys[1]) : ''}</title></rect>`;
+    if (keys[1] && r[keys[1]]) { const eh = r[keys[1]] * sc; out += `<rect x="${x.toFixed(1)}" y="${(H - PB - eh).toFixed(1)}" width="${bw.toFixed(1)}" height="${eh.toFixed(1)}" rx="1.5" fill="${colours[1]}"/>`; }
+    return out;
+  }).join('');
+  const lab = (r) => String(r.date || r.month).slice(opts.month ? 2 : 5).replace('-', opts.month ? '/' : '/');
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;max-width:100%"><line x1="0" x2="${W}" y1="${H - PB}" y2="${H - PB}" stroke="var(--line)"/>${bars}` +
+    `<text x="0" y="${H - 2}" font-size="8" fill="var(--t3)">${esc(lab(rows[0]))}</text><text x="${W}" y="${H - 2}" font-size="8" fill="var(--t3)" text-anchor="end">${esc(lab(rows[n - 1]))}</text>` +
+    `<text x="${W}" y="9" font-size="8" fill="var(--t3)" text-anchor="end">max ${nf(max)}</text></svg>`;
+  return total;
+}
+
+async function loadDashboard() {
+  const box = document.getElementById('dh-root'); if (!box) return;
+  try {
+    const d = await api('/admin/api/dashboard?range=' + dashRange);
+    const $ = (id) => document.getElementById(id);
+    document.querySelectorAll('[data-dh-range]').forEach((b) => b.classList.toggle('btn-primary', +b.dataset.dhRange === dashRange));
+    $('dh-updated').textContent = 'Updated ' + new Date().toLocaleTimeString() + (d.partial_errors.length ? ' · some cards could not load: ' + d.partial_errors.join(', ') : '');
+    const u = d.users || {}, a = d.api || {}, o = d.orders || {}, e = d.engines || {};
+
+    // what needs attention
+    $('dh-attention').innerHTML = d.attention.length ? d.attention.map((x) =>
+      `<div class="alert-item ${esc(x.level)}" data-dh-tab="${esc(x.tab)}" style="cursor:pointer;"><span class="adot"></span><span>${esc(x.text)}</span><span class="ad-go">Open →</span></div>`).join('')
+      : '<div class="alert-item" style="cursor:default;"><span class="adot" style="background:var(--ok);"></span><span>Nothing needs attention right now.</span></div>';
+
+    // the pulse
+    const rv = (d.revenue || [])[0];
+    const kpi = (lbl, val, sub) => `<div class="kpi-card"><div class="kpi-lbl">${esc(lbl)}</div><div class="kpi-val">${val}</div><div class="kpi-sub">${sub}</div></div>`;
+    $('dh-kpis').innerHTML =
+      kpi('Customers', nf(u.total), `+${nf(u.new_range)} in ${d.range_days} days${trendBadge(u.trend_pct)}`) +
+      kpi('Active', nf(u.active_24h), `today · ${nf(u.active_7d)} this week · ${nf(u.paid)} paid · ${nf(u.students)} students`) +
+      kpi('API calls this month', nf(a.calls_month), `${nf(a.calls_today)} today${trendBadge(a.month_trend_pct)} · ${a.error_pct_7d}% errors (7 d)`) +
+      kpi('API customers', nf(a.customers), `${nf(a.active_keys)} active key${a.active_keys === 1 ? '' : 's'}${a.suspended_keys ? ' · ' + a.suspended_keys + ' suspended' : ''}`) +
+      kpi('API revenue this month', rv ? moneyOf(rv.month, rv.currency) : '—', rv ? `last month ${moneyOf(rv.prev_month)} · all time ${moneyOf(rv.total)} (${rv.orders} orders)${(d.revenue || []).length > 1 ? ' · +' + ((d.revenue || []).length - 1) + ' more currency' : ''}` : 'no paid order yet') +
+      kpi('Orders waiting', nf(o.pending), o.pending ? `oldest ${o.oldest_hours >= 48 ? Math.floor(o.oldest_hours / 24) + ' days' : o.oldest_hours + ' h'}` : 'all checked');
+
+    // growth
+    const s = d.series;
+    const t1 = dashBars('dh-ch-signups', s.signups, ['signups'], { empty: 'No sign-ups in this period.' }); $('dh-ch-signups-sub').textContent = nf(t1) + ' in ' + d.range_days + ' days';
+    const t2 = dashBars('dh-ch-calcs', s.calcs, ['calcs'], { empty: 'No new calculations in this period.' }); $('dh-ch-calcs-sub').textContent = nf(t2) + ' new';
+    const t3 = dashBars('dh-ch-api', s.api, ['calls', 'errors'], { empty: 'No API calls in this period.' }); $('dh-ch-api-sub').textContent = nf(t3) + ' calls';
+    const t4 = dashBars('dh-ch-rev', s.revenue, ['amount'], { month: true, empty: 'No paid order in the last 6 months.', colours: ['var(--ok)'] }); $('dh-ch-rev-sub').textContent = s.revenue_currency ? 'by month, ' + s.revenue_currency : '';
+
+    // who
+    const list = (rows, line) => rows && rows.length ? rows.map((r, i) => `<div class="ad-row"><span class="ad-rank">${i + 1}</span><span class="ad-who"><b>${esc(r.full_name || r.email)}</b><small>${esc(r.email)}${r.company ? ' · ' + esc(r.company) : ''}</small></span><span class="ad-num">${line(r)}</span></div>`).join('') : '<div style="color:var(--t3);font-size:11px;padding:10px 0;">Nothing yet.</div>';
+    $('dh-top-api').innerHTML = list(d.top_api, (r) => `${nf(r.calls)} calls<small>${esc(r.plan || '')}</small>`);
+    $('dh-top-calcs').innerHTML = list(d.top_calcs, (r) => `${nf(r.runs)} runs<small>${nf(r.calcs)} calculations</small>`);
+
+    // what customers make
+    const eng = (lbl, total, inRange) => `<div class="ad-eng"><div class="ad-eng-v">${nf(total)}</div><div class="ad-eng-l">${esc(lbl)}</div><div class="ad-eng-s">+${nf(inRange)} in ${d.range_days} d</div></div>`;
+    $('dh-engines').innerHTML = eng('Calculations', e.calculations, e.calcs_range) + eng('Studio designs', (e.weft_designs || 0) + (e.warp_designs || 0), e.designs_range) + eng('Costing sheets', e.cost_sheets, e.sheets_range) + eng('Fabric scans', e.scans, e.scans_range) +
+      `<div class="ad-eng-note">Studio: ${nf(e.weft_designs)} weft · ${nf(e.warp_designs)} warp. Calculation runs in total: ${nf(e.calculation_runs)}.</div>`;
+
+    // system
+    const h = d.health || {};
+    const up = h.uptime_s != null ? (h.uptime_s >= 86400 ? Math.floor(h.uptime_s / 86400) + ' d ' + Math.floor((h.uptime_s % 86400) / 3600) + ' h' : Math.floor(h.uptime_s / 3600) + ' h ' + Math.floor((h.uptime_s % 3600) / 60) + ' m') : '—';
+    const dot = (okay) => `<span class="ad-dot ${okay ? 'ok' : 'bad'}"></span>`;
+    const pf = d.price_feed, cg = d.charge_gaps;
+    $('dh-health').innerHTML = [
+      [dot(h.db_ms != null && h.db_ms < 400) + 'Database', h.db_ms != null ? h.db_ms + ' ms · pool ' + (h.pool ? h.pool.total + ' (' + h.pool.idle + ' idle, ' + h.pool.waiting + ' waiting)' : '—') : 'unreachable'],
+      [dot(h.mail === 'ok') + 'Mail', esc(h.mail || '—')],
+      ['Build', h.build ? '<code>' + esc(String(h.build).slice(0, 7)) + '</code> · up ' + esc(up) : '—'],
+      ['Server', esc(h.node || '') + ' · ' + (h.rss_mb != null ? h.rss_mb + ' MB' : '')],
+      ['Cache', h.cache_mem != null ? nf(h.cache_mem) + ' in memory · ' + nf(h.cache_db) + ' in database' : '—'],
+      [dot(!pf || (pf.ok && pf.age_s < 3 * 86400)) + 'Yarn price feed', pf ? (pf.ok ? 'synced ' + timeAgo(new Date(Date.now() - pf.age_s * 1000)) : 'last sync failed') + (pf.newest_quote ? ' · newest quote ' + esc(String(pf.newest_quote).slice(0, 10)) : '') : 'never synced'],
+      [dot(!cg || cg.open === 0) + 'Charge-book gaps', cg ? nf(cg.open) + ' open' + (cg.hits_7d ? ' · ' + nf(cg.hits_7d) + ' unanswered lookups (7 d)' : '') : '—'],
+    ].map((r) => `<div class="ad-kv"><span>${r[0]}</span><span>${r[1]}</span></div>`).join('');
+
+    // security
+    const sc = d.security || {};
+    $('dh-security').innerHTML =
+      `<div class="ad-kv"><span>Sign-ins (24 h)</span><span>${nf(sc.logins_24h)}</span></div>` +
+      `<div class="ad-kv"><span>${dot((sc.failed_24h || 0) < 10)}Failed sign-ins (24 h)</span><span>${nf(sc.failed_24h)} from ${nf(sc.failing_ips)} address${sc.failing_ips === 1 ? '' : 'es'} · ${nf(sc.failed_7d)} in 7 d</span></div>` +
+      `<div class="ad-kv"><span>${dot(!sc.bad_key_sources_1h)}Wrong API keys (1 h)</span><span>${nf(sc.bad_key_sources_1h)} address${sc.bad_key_sources_1h === 1 ? '' : 'es'}</span></div>` +
+      `<div class="ad-kv"><span>Disabled accounts</span><span>${nf(u.disabled)}</span></div>` +
+      (sc.events && sc.events.length ? '<div class="ad-sub">Latest security events</div>' + sc.events.map((x) => `<div class="ad-ev"><b>${esc(String(x.kind).replace(/_/g, ' '))}</b> · ${esc(x.email)}<small>${esc(x.ip || '')} · ${esc(timeAgo(x.created_at))}${x.detail ? ' · ' + esc(x.detail) : ''}</small></div>`).join('') : '');
+
+    // activity
+    const ico = { signup: '＋', rfq: '✉', api_order: '$', api_key: '⚿', design: '▦', costsheet: '▤' };
+    const lab = { signup: 'New customer', rfq: 'RFQ', api_order: 'API order', api_key: 'API key', design: 'Studio', costsheet: 'Costing' };
+    $('dh-activity').innerHTML = d.activity.length ? d.activity.map((x) => `<div class="ad-act" data-dh-tab="${esc(x.tab)}"><span class="ad-ico">${ico[x.kind] || '•'}</span><span class="ad-who"><b>${esc(lab[x.kind] || x.kind)}</b> ${esc(x.what || '')}<small>${esc(x.who || '')}</small></span><span class="ad-t">${esc(timeAgo(x.at))}</span></div>`).join('') : '<div style="color:var(--t3);font-size:11px;">Nothing yet.</div>';
+  } catch (err) {
+    document.getElementById('dh-attention').innerHTML = '<div class="alert-item warn"><span class="adot"></span><span>The dashboard could not load: ' + esc(err.message) + '</span></div>';
+  }
+}
+
+function wireDashboard() {
+  const root = document.getElementById('dh-root'); if (!root) return;
+  root.addEventListener('click', (e) => {
+    const t = e.target.closest('[data-dh-tab]'); if (t) { switchTab(t.dataset.dhTab); return; }
+    const r = e.target.closest('[data-dh-range]'); if (r) { dashRange = +r.dataset.dhRange; loadDashboard(); return; }
+    if (e.target.closest('#dh-refresh')) loadDashboard();
+  });
+  // keep it fresh while the home tab is open and the window is visible
+  if (!dashTimer) dashTimer = setInterval(() => {
+    const on = document.getElementById('tab-overview') && document.getElementById('tab-overview').classList.contains('active');
+    if (on && !document.hidden) loadDashboard();
+  }, 60000);
 }
 
 async function loadOverview() {

@@ -375,6 +375,7 @@ const BOOT_BUILD = (() => {
   }
 })();
 
+app.locals.bootBuild = () => BOOT_BUILD;
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',

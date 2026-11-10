@@ -230,6 +230,33 @@ router.get('/api/overview', adminAuth, async (req, res) => {
   }
 });
 
+// The admin home: attention queue, business and API pulse, growth, top customers, system and security
+const adminDashboard = require('../db/repositories/admin-dashboard-repo');
+router.get('/api/dashboard', adminAuth, async (req, res) => {
+  try {
+    const days = [7, 30, 90].includes(parseInt(req.query.range, 10)) ? parseInt(req.query.range, 10) : 30;
+    // the website's own queues join the attention list: RFQs, student applications, unhealthy AI providers
+    const [rfqCounts, pend, review, providers] = await Promise.all([
+      rfqRepo.counts().catch(() => ({})), studentRepo.listByStatus('pending', { page: 1, limit: 1 }).catch(() => ({ total: 0 })),
+      studentRepo.listByStatus('review', { page: 1, limit: 1 }).catch(() => ({ total: 0 })), providerManager.getProviders().catch(() => []),
+    ]);
+    const queues = [];
+    if (rfqCounts.pending > 0) queues.push({ level: rfqCounts.pending >= 5 ? 'warn' : 'info', text: `${rfqCounts.pending} RFQ${rfqCounts.pending > 1 ? 's are' : ' is'} awaiting review.`, tab: 'tab-rfq', count: rfqCounts.pending });
+    if (pend.total > 0) queues.push({ level: 'info', text: `${pend.total} student application${pend.total > 1 ? 's are' : ' is'} awaiting review.`, tab: 'tab-students', count: pend.total });
+    if (review.total > 0) queues.push({ level: 'info', text: `${review.total} automatic student approval${review.total > 1 ? 's need' : ' needs'} a look.`, tab: 'tab-students', count: review.total });
+    providers.filter((p) => p.is_enabled && !p.is_healthy).forEach((p) => queues.push({ level: 'warn', text: `${p.provider_name} is enabled but unhealthy — check its key or quota.`, tab: 'tab-providers', count: null }));
+    const d = await adminDashboard.build({
+      days, queues, apiCatalogue: require('../engine/domain/api-catalogue'),
+      runtime: { build: req.app.locals.bootBuild ? req.app.locals.bootBuild() : null, mail: require('../mail/client').status(), cacheMem: memCache.stats().size, cacheDb: Number((await resultCache.stats().catch(() => ({}))).entries) || 0 },
+    });
+    res.set('Cache-Control', 'no-store');
+    res.json(d);
+  } catch (err) {
+    console.error('[Dashboard Error]', err);
+    res.status(500).json({ error: 'Failed to load the dashboard' });
+  }
+});
+
 // Query Logs
 router.get('/api/logs/stats', adminAuth, async (req, res) => {
   try {
