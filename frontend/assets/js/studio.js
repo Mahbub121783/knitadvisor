@@ -92,6 +92,11 @@
     var g = last.yarn.ground;
     $('st-yeq-ground').textContent = eq(g.equivalents) + (g.d_mm ? ' · Ø ' + g.d_mm + ' mm' : '') + (g.source === 'solved' ? ' (solved: ' + g.count + ')' : '');
     ['binder', 'loop'].forEach(function (k) { var y = (last.yarn.roles || {})[k]; $('st-yeq-' + k).textContent = y ? eq(y.equivalents) + ' · Ø ' + y.d_mm + ' mm' + (y.source !== 'your input' ? ' — ' + y.source : '') : ''; });
+    (last.yarn.character || []).forEach(function (c) {
+      var k = c.role === 'face' || c.role === 'ground' ? 'ground' : c.role, el = $('st-yeq-' + k); if (!el) return;
+      var R = c.relative || {}, sg = function (v) { return v == null ? '—' : (v > 0 ? '+' : '') + v + '%'; };
+      el.textContent += ' | ' + c.system + ': strength ' + sg(R.strength_pct) + ', hairiness ' + sg(R.hairiness_pct) + ', torque ' + sg(R.spirality_pct) + ', pilling ' + (c.pilling_delta > 0 ? '+' : '') + c.pilling_delta + ' grade' + (c.spinnable ? '' : ' — not spinnable at this count');
+    });
   }
   var MYM = 'ka-studio-mymachine';
   function myMachine() {
@@ -208,7 +213,8 @@
           var f = S.feeds[i] || { role: 'ground' };
           html += '<td class="feedcell"><select data-feed="' + i + '" data-k="role" aria-label="Yarn role, feeder ' + (i + 1) + '">' +
             ['ground', 'face', 'binder', 'loop'].map(function (r) { return '<option value="' + r + '"' + (f.role === r ? ' selected' : '') + '>' + ROLE_LABEL[r] + '</option>'; }).join('') +
-            '</select> <input data-feed="' + i + '" data-k="ne" type="number" min="5" max="150" placeholder="Ne" value="' + esc(f.ne || '') + '" title="Count on this feeder (Ne). Empty = the ground count."> ' +
+            '</select> <input data-feed="' + i + '" data-k="count" type="number" min="1" max="2000" step="0.1" placeholder="count" value="' + esc(f.count || f.ne || '') + '" title="Count on this feeder, in the unit beside it. Empty = this role\'s yarn."> ' +
+            '<select data-feed="' + i + '" data-k="unit" title="Count unit">' + [['ne', 'Ne'], ['nm', 'Nm'], ['tex', 'tex'], ['dtex', 'dtex'], ['denier', 'D']].map(function (u) { return '<option value="' + u[0] + '"' + ((f.unit || 'ne') === u[0] ? ' selected' : '') + '>' + u[1] + '</option>'; }).join('') + '</select> ' +
             '<select class="st-feedcol" data-feed="' + i + '" data-k="colour" title="Stripe yarn on this feeder (colours under Yarn)"><option value="">—</option>' + ['A', 'B', 'C', 'D', 'E', 'F'].map(function (c) { return '<option' + (f.colour === c ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select> ' +
             '<input data-feed="' + i + '" data-k="sl_ratio" type="number" min="0.3" max="3" step="0.01" placeholder="×SL" value="' + esc(f.sl_ratio || '') + '" title="Stitch length on this feeder as a multiple of the ground stitch length (e.g. 0.92 for a tighter tuck feeder). Empty = 1."></td>';
         } else html += '<td></td>';
@@ -328,7 +334,7 @@
   // ── trial rolls ──────────────────────────────────────────────────────────
   var ROLLS = 'ka_studio_rolls';
   function signature() {
-    return JSON.stringify([S.bed, S.C, S.D, S.feeds.map(function (f) { return [f.role, f.ne || '', f.sl_ratio || '']; }),
+    return JSON.stringify([S.bed, S.C, S.D, S.feeds.map(function (f) { return [f.role, f.count || f.ne || '', f.unit || '', f.sl_ratio || '']; }),
       $('st-fibre').value, $('st-lycra').checked ? [$('st-lyd').value, $('st-lyevery').value] : 0]);
   }
   function readRolls() { try { return (JSON.parse(localStorage.getItem(ROLLS) || '{}')[signature()]) || []; } catch (_) { return []; } }
@@ -392,7 +398,8 @@
       gating: S.bed === 'interlock' ? 'interlock' : 'rib',
       grid: { C: S.C.map(function (r) { return r.join(''); }), D: S.D ? S.D.map(function (r) { return r.join(''); }) : null },
       feeds: S.feeds.map(function (f) {
-        return { role: f.role || 'ground', colour: f.colour || null, yarn: +f.ne > 0 ? { ne: +f.ne, fibre: $('st-fibre').value } : null, sl_ratio: +f.sl_ratio > 0 ? +f.sl_ratio : null };
+        var c = +f.count > 0 ? +f.count : +f.ne > 0 ? +f.ne : 0;
+        return { role: f.role || 'ground', colour: f.colour || null, yarn: c ? { count: c, unit: f.count ? (f.unit || 'ne') : 'ne' } : null, sl_ratio: +f.sl_ratio > 0 ? +f.sl_ratio : null };
       }),
       yarn: yarnOf(YROWS[0]),
       yarns: { binder: +$('yb-count').value > 0 ? yarnOf(YROWS[1]) : null, loop: +$('yl-count').value > 0 ? yarnOf(YROWS[2]) : null },
@@ -475,6 +482,20 @@
         '<div class="st-scroll"><table class="st-t"><tr><th>Roll</th><th>Measured GSM</th><th>Model GSM</th><th>Measured width</th><th>Model width</th><th>Ks vs mean</th><th>Kw vs mean</th></tr>' +
         cb.rolls.map(function (x) { return '<tr' + (x.outlier ? ' style="background:rgba(154,91,0,.1)"' : '') + '><td>' + x.roll + (x.outlier ? ' ⚠' : '') + '</td><td>' + Math.round(x.gsm) + '</td><td>' + x.model_gsm + '</td><td>' + r1(x.width_in) + '"</td><td>' + x.model_width_in + '"</td><td>' + x.ks_off_pct + '%</td><td>' + x.kw_off_pct + '%</td></tr>'; }).join('') + '</table></div>' +
         (cb.rolls.some(function (x) { return x.outlier; }) ? '<p class="st-p">A flagged roll is more than 10% from the others: re-measure it, or it may be a different yarn lot or machine setting.</p>' : '');
+    }
+    if (r.yarn && r.yarn.effects) {
+      var YF = r.yarn.effects;
+      html += '<div class="st-sub">Yarn character — what the kind of yarn does ' + src('e') + '</div><div class="st-kpis">' +
+        kpi('Pilling', 'grade ' + YF.pilling_grade, 'of 5, face yarn' + (r.finish && r.finish.brushed !== 'none' ? ' + brushing' : ''), 'e') +
+        kpi('Strength', YF.strength_vs_combed_pct == null ? '—' : (YF.strength_vs_combed_pct > 0 ? '+' : '') + YF.strength_vs_combed_pct + '%', 'bursting, against combed ring yarn', 'e') +
+        (YF.twist_spirality_deg != null ? kpi('Twist spirality', YF.twist_spirality_deg + '°', 'wale lean from the yarn\'s torque', 'e') : '') +
+        kpi('Surface', 'hairiness ' + YF.hairiness, YF.lustre + ' lustre', 'e') + '</div>' +
+        (YF.handle ? '<p class="st-p">Handle: ' + esc(YF.handle) + '</p>' : '') +
+        r.yarn.character.map(function (c) {
+          return '<details class="st-p"><summary><b>' + esc(c.role[0].toUpperCase() + c.role.slice(1)) + ' yarn</b> — ' + esc(c.count) + ', ' + esc(c.system) + (c.mass_pct ? ' (' + c.mass_pct + '% of the fabric)' : '') + '</summary><ul class="st-checks">' +
+            c.effects.map(function (e) { return '<li class="' + (e.kind === 'warn' ? 'warn' : e.kind === 'good' ? 'ok' : 'note') + '"><b>' + esc(e.area) + ':</b> ' + esc(e.text) + '</li>'; }).join('') +
+            (c.process.length ? '<li class="note"><b>Processing:</b> ' + c.process.map(esc).join(' ') + '</li>' : '') + '</ul></details>';
+        }).join('') + '<p class="st-p" style="font-size:12px">' + esc(YF.basis) + '.</p>';
     }
     if (f.relaxation) {
       var RX = f.relaxation, rs = RX.residual, cp = RX.compaction;
@@ -978,12 +999,13 @@
       fiberType: FIBRE_3D[$('st-fibre').value] || 'cotton', pattern: pattern, sample: cs.sample, sampleBack: cs.sampleBack,
       density: { wpc: wpc, cpc: cpc, aspect: clamp(cpc / wpc, 0.9, con.type === 'pique' ? 3.2 : 1.6), scalar: scalar, llMm: fab.sl_mm || null, tex: 590.5 / ne, fibreDensityScale: 1 },
       elastanePct: $('st-lycra').checked ? 5 : 0, physics: null,
+      yarnLook: (function () { var ch = last && last.yarn && last.yarn.character && last.yarn.character[0]; if (!ch || !ch.look) return undefined; var l = ch.look; return { hair: 1, hairAbs: l.hairAbs, hairLen: l.hairLen, gloss: l.gloss, bulk: l.bulk, ply: l.ply, slub: !!l.slub, filament: !!l.filament, dty: !!l.dty, lustre: l.lustre }; })(),
     };
   }
   function renderCloth() {
     var host = $('st-cloth'), o = clothOpts(), my = ++clothSeq;
     // rebuild only when the structure or its numbers changed; a colour change repaints
-    var key = JSON.stringify([stripeOf(), o.construction, o.pattern.grid, o.pattern.dial, o.pattern.feedYarns, Math.round(o.density.wpc * 10), Math.round(o.density.cpc * 10), Math.round(o.countNe), o.gsm, o.fiberType, o.elastanePct]);
+    var key = JSON.stringify([o.yarnLook || null, stripeOf(), o.construction, o.pattern.grid, o.pattern.dial, o.pattern.feedYarns, Math.round(o.density.wpc * 10), Math.round(o.density.cpc * 10), Math.round(o.countNe), o.gsm, o.fiberType, o.elastanePct]);
     if (cloth && key === clothKey) { cloth.setColor(o.baseHex); return; }
     clothKey = key;
     $('st-cloth-wait').hidden = false;
@@ -1027,7 +1049,7 @@
       // yarn diameter 0.907/√Ne mm (cotton), drawn a little flattened in the
       // relaxed loop; one wale = 10/wpc mm
       // a spun yarn lies about 1.3 × its packed diameter wide in the relaxed loop (fibre bulk)
-      radius: feeds.map(function (fd) { var ne = +fd.ne > 0 ? +fd.ne : groundNe; return clamp(0.5 * 1.3 * (0.907 / Math.sqrt(ne)) * f.wpc / 10, 0.07, 0.24); }),
+      radius: feeds.map(function (fd) { var c = +fd.count > 0 ? +fd.count : +fd.ne; var ne = c > 0 ? (fd.count ? 590.5 / TEX[fd.unit || 'ne'](c) : c) : groundNe; return clamp(0.5 * 1.3 * (0.907 / Math.sqrt(ne)) * f.wpc / 10, 0.07, 0.24); }),
       plated: feeds.map(function (fd, i) { return !!ly && fd.role !== 'loop' && (ly === 'all' || i % 2 === 0); }),
       colourBy: real ? 'one' : $('st-colby').value, colour: $('st-col').value,
       stripeColour: (function () { var st = stripeOf(); return st ? function (c) { return st.colours[st.seq[((c % st.seq.length) + st.seq.length) % st.seq.length]]; } : null; })(),

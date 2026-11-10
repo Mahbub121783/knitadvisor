@@ -38,6 +38,7 @@ const KM = require('./knit-machine');
 const KF = require('./knit-formation');
 const KR = require('./knit-relax');
 const YC = require('./yarn-character');
+const { SPINNING_SYSTEMS } = require('./yarn-engine');
 const TE = require('./terry-engine');
 const { FABRIC_DERIVATIVES } = require('../catalog/fabric-derivatives');
 const { FACTORY_RECORDS } = require('../catalog/factory-dataset');
@@ -217,12 +218,34 @@ function readYarn(y, fallback) {
   const typeLabel = filament ? YC.POLY_FORM[type].label : `${type.replace('_', '-')}${form !== 'single' ? ', ' + YC.FORM_LOOK[form].label : ''}`;
   const dpf = filament && +o.filaments > 0 ? (tex * 9) / +o.filaments : null;
   return {
-    tex, ne: 590.5 / tex, label, fibre, fibre_label: FIBRES[fibre].label, ply, type, type_label: typeLabel, bulk,
+    tex, ne: 590.5 / tex, single_ne: 590.5 / single, label, fibre, fibre_label: FIBRES[fibre].label, ply, type, form, type_label: typeLabel, bulk,
     // Peirce's diameter d = √tex / 28 mm, by fibre packing and by the yarn's own bulk
     d_mm: (Math.sqrt(tex) / 28) * FIBRES[fibre].dFactor * bulk,
     filaments: +o.filaments > 0 ? Math.round(+o.filaments) : null, dpf: dpf ? r2(dpf) : null,
     equivalents: { ne: r1(590.5 / tex), nm: r1(1000 / tex), tex: r2(tex), dtex: r1(tex * 10), denier: r1(tex * 9) },
   };
+}
+
+// ── what the KIND of yarn does (yarn-character.js, the calculator's engine) ──
+// Strength, evenness, hairiness and torque of the spinning system are the
+// yarn engine's tables (sourced); bulk, lustre, handle and the knitting and
+// finishing consequences are modelled there.
+const FIBRE_MIX = {
+  cotton: { cotton: 100 }, cvc: { cotton: 60, polyester: 40 }, polyester_spun: { polyester: 100 },
+  viscose: { viscose: 100 }, modal: { modal: 100 }, polyester_filament: { polyester: 100 }, nylon_filament: { nylon: 100 },
+};
+function characterOf(y) {
+  if (!y) return null;
+  const filament = FILAMENT_FIBRES.includes(y.fibre);
+  const spinKey = filament ? 'combed' : y.type;
+  const c = YC.yarnCharacter({
+    spinKey, spin: SPINNING_SYSTEMS[spinKey], form: y.form || 'single', fibers: FIBRE_MIX[y.fibre] || { cotton: 100 }, countNe: y.single_ne || y.ne,
+    poly_form: filament ? y.type : /polyester|cvc/.test(y.fibre) ? 'staple' : undefined, poly_lustre: 'semi_dull',
+  });
+  const spin = SPINNING_SYSTEMS[spinKey];
+  const ne1 = y.single_ne || y.ne;
+  const spinnable = filament || !spin || (ne1 >= spin.count_min && ne1 <= spin.count_max);
+  return { c, spinnable, range: spin && !filament ? [spin.count_min, spin.count_max] : null, label: filament ? c.polyester ? c.polyester.form_label : 'filament' : spin ? spin.label : spinKey };
 }
 
 // ── structure helpers ──────────────────────────────────────────────────────
@@ -1129,6 +1152,41 @@ function analyse(input) {
     // stitch formation: knock-over depth for every knitting feed, timing, cam scale
     const defTiming = profile.timing && profile.timing.length === 1 ? profile.timing[0]
       : gating === 'interlock' || (D && st.beds.D.some((row) => row.includes('T'))) ? 'synchronised' : 'delayed';
+    // yarn character per role, and what it does to the fabric
+    const yarnChars = (() => {
+      const seen = {}, out = [];
+      feedRows.forEach((f, i) => {
+        const key = f.role === 'face' || f.role === 'ground' ? 'face' : f.role;
+        if (seen[key] || !S.feeds[i]) return;
+        const y = f.yarn || (f.role === 'loop' ? null : S.ground);
+        const ch = characterOf(y || S.ground);
+        if (!ch) return;
+        seen[key] = true;
+        out.push({ role: key === 'face' ? (feedRows.some((x) => x.role === 'face') ? 'face' : 'ground') : key, count: (y || S.ground).label, system: ch.label, spinnable: ch.spinnable, range: ch.range,
+          mass_pct: S.feeds.filter((x, k) => (feedRows[k].role === f.role)).reduce((t, x) => t + (x.mass_share_pct || 0), 0), ch: ch.c });
+      });
+      return out;
+    })();
+    const yarnFx = (() => {
+      const face = yarnChars.find((x) => x.role === 'face' || x.role === 'ground');
+      if (!face) return null;
+      // strength of the knitting yarns (not the loop yarn), by mass; filament yarns are not in the spun tables
+      const knitting = yarnChars.filter((x) => x.role !== 'loop' && x.ch.relative_to_combed_ring.strength_pct != null);
+      const tot = knitting.reduce((t, x) => t + (x.mass_pct || 0), 0);
+      const strength = !knitting.length || !tot ? null : Math.round(knitting.reduce((t, x) => t + x.mass_pct * x.ch.relative_to_combed_ring.strength_pct, 0) / tot);
+      // pilling grade (1-5): a combed ring cotton jersey ~3.5, shifted by the face yarn and the finish
+      const br = finish ? finish.brush : 'none';
+      const pill = Math.max(1, Math.min(5, 3.5 + face.ch.pilling_delta - (br === 'face' || br === 'both' ? 0.5 : 0) - (family === 'fleece' && br !== 'none' ? 0.3 : 0)));
+      // spirality: on a single bed the singles yarn's twist torque leans the wales;
+      // a combed ring single yarn gives ~4° (modelled), scaled by the system's torque; ply yarns are balanced
+      const tq = face.ch.relative_to_combed_ring.spirality_pct;
+      const twistDeg = D || tq == null ? null : Math.max(0, 4 * (1 + tq / 100));
+      return {
+        pilling_grade: Math.round(pill * 2) / 2, strength_vs_combed_pct: strength, twist_spirality_deg: twistDeg == null ? null : r1(twistDeg),
+        hairiness: face.ch.hair_factor, lustre: face.ch.lustre.class, handle: (face.ch.effects.find((e) => e.area === 'Handle') || {}).text || null,
+        basis: 'yarn-character tables (spinning-system strength, hairiness and torque — sourced; pilling shift, lustre and handle — modelled); pilling grade from a 3.5 combed-ring jersey reference, spirality from ~4° for a combed singles jersey — modelled',
+      };
+    })();
     // relaxation states and residual shrinkage (Munden: dimensions follow the state, the loop length stays)
     const relax = plush ? null : KR.states({ S, fibre: S.ground.fibre, elastane: !!elastane,
       jersey: (() => { const ks = KP.calFor('ks', 'single_jersey', false).med, kw = KP.calFor('kw', 'single_jersey', false).med; return { kc: ks / kw, kw }; })(),
@@ -1153,6 +1211,12 @@ function analyse(input) {
         if (+((input.machine || {}).feeders) > 0 && sp.method === 'striper' && !profile.striper) add('note', 'Your feeder count is not a multiple of the stripe repeat, so the stripe cannot be threaded feeder by feeder.');
       }
       if (relax) mc.push(...KR.checks(relax, family));
+      yarnChars.forEach((y) => {
+        if (!y.spinnable && y.range) mc.push({ level: 'warn', text: `${y.role[0].toUpperCase() + y.role.slice(1)} yarn ${y.count}: ${y.system} spinning makes about ${y.range[0]}s–${y.range[1]}s Ne — this count is outside it. Choose another system or count.` });
+        y.ch.warnings.forEach((w) => mc.push({ level: 'warn', text: `${y.role[0].toUpperCase() + y.role.slice(1)} yarn: ${w}` }));
+      });
+      if (yarnFx && yarnFx.pilling_grade < 3) mc.push({ level: 'warn', text: `Pilling about grade ${yarnFx.pilling_grade} (modelled from the face yarn${finish && finish.brush !== 'none' ? ' and the brushing' : ''}) — below the usual 3–3.5 buyer minimum: a compact or siro face yarn, a ply yarn or a bio-polish lifts it.` });
+      if (yarnFx && yarnFx.twist_spirality_deg > 5) mc.push({ level: 'note', text: `The face yarn's twist leans the wales about ${yarnFx.twist_spirality_deg}° in a single jersey (modelled) — a lower-torque system, a ply yarn or alternate S/Z twist feeders reduce it.` });
       if (formation) {
         mc.push(...formation.checks);
         if (formation.timing && profile.timing && !profile.timing.includes(formation.timing)) mc.push({ level: 'warn', text: `${profile.label} runs ${profile.timing.join(' / ')} timing; ${formation.timing} is set.` });
@@ -1270,6 +1334,10 @@ function analyse(input) {
         })(),
         feeds: S.feeds.map(({ mass, elastane_mass, ...f }) => f),
         composition: S.composition,
+        character: yarnChars.map((y) => ({ role: y.role, count: y.count, system: y.system, spinnable: y.spinnable, range: y.range, mass_pct: r1(y.mass_pct),
+          hair_factor: y.ch.hair_factor, bulk: y.ch.bulk, lustre: y.ch.lustre, relative: y.ch.relative_to_combed_ring, pilling_delta: y.ch.pilling_delta,
+          effects: y.ch.effects, process: y.ch.process, warnings: y.ch.warnings, look: y.ch.look })),
+        effects: yarnFx,
       },
       fabric: {
         gsm: Math.round(S.gsm), gsm_range: S.gsmRange.map(Math.round), target_gsm: S.target,

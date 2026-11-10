@@ -45,4 +45,30 @@ assert(/0.3 tex is outside/.test(S.analyse({ ...base, yarn: { count: 3, unit: 'd
   const own = S.analyse({ bed: 'single', grid: { C: ['KK', 'KK'] }, feeds: [{ role: 'ground' }, { role: 'ground', yarn: { ne: 40 } }], yarn: { count: 30, unit: 'ne' }, target: { gsm: 160 }, machine: {} });
   assert.strictEqual(own.yarn.feeds[1].yarn, '40s Ne');
 }
+// a feeder's own count in any unit
+{
+  const r = S.analyse({ bed: 'single', grid: { C: ['KK', 'KK'] }, feeds: [{ role: 'ground' }, { role: 'ground', yarn: { count: 150, unit: 'denier' } }], yarn: { count: 30, unit: 'ne', fibre: 'polyester_filament', type: 'fdy' }, target: { gsm: 140 }, machine: {} });
+  assert(r.success, r.error); assert.strictEqual(r.yarn.feeds[1].yarn, '150 D');
+}
+// yarn character: the kind of yarn reaches the fabric
+{
+  const j = (yarn, extra) => S.analyse({ ...base, yarn, ...(extra || {}) });
+  const cp = j({ count: 30, unit: 'ne', type: 'compact' }), oe = j({ count: 30, unit: 'ne', type: 'open_end', fibre: 'cvc' });
+  assert(cp.yarn.character.length === 1 && cp.yarn.character[0].effects.length > 3, 'effects per yarn');
+  assert(cp.yarn.effects.pilling_grade > oe.yarn.effects.pilling_grade, 'compact pills less than open-end CVC');
+  assert(cp.yarn.effects.strength_vs_combed_pct > 0 && oe.yarn.effects.strength_vs_combed_pct < 0, 'compact stronger, open-end weaker than combed ring');
+  assert(oe.checks.some((c) => c.level === 'warn' && /pills heavily/.test(c.text)), 'the yarn engine warning reaches the checks');
+  // a face brushing lowers the pilling grade
+  assert(j({ count: 30, unit: 'ne', type: 'combed' }, { finish: { brush: 'face' } }).yarn.effects.pilling_grade < j({ count: 30, unit: 'ne', type: 'combed' }).yarn.effects.pilling_grade);
+  // twist spirality: a ply yarn is balanced; none on a double bed
+  assert(j({ count: 30, unit: 'ne', type: 'combed' }).yarn.effects.twist_spirality_deg > j({ count: 60, unit: 'ne', ply: 2, type: 'combed' }).yarn.effects.twist_spirality_deg);
+  assert.strictEqual(S.analyse({ bed: 'double', gating: 'rib', grid: { C: ['K'], D: ['K'] }, yarn: { count: 30, unit: 'ne' }, target: { gsm: 220 }, machine: {} }).yarn.effects.twist_spirality_deg, null);
+  // a count the system cannot spin is flagged
+  assert(j({ count: 8, unit: 'ne', type: 'compact' }).checks.some((c) => /spinning makes about/.test(c.text)));
+  // every role gets its own character
+  const f = (...r) => r.map((role) => ({ role }));
+  const fl = S.analyse({ bed: 'single', grid: { C: ['KKKK', 'KKKK', 'TMMM'] }, feeds: f('face', 'binder', 'loop'), target: { gsm: 280 }, machine: {}, yarn: { count: 30, unit: 'ne' }, yarns: { binder: { count: 75, unit: 'denier', fibre: 'polyester_filament' }, loop: { count: 10, unit: 'ne', type: 'open_end' } } });
+  assert.deepStrictEqual(fl.yarn.character.map((c) => c.role), ['face', 'binder', 'loop']);
+  assert(fl.yarn.character[1].look.filament, 'the binder is drawn as filament');
+}
 console.log('Studio yarn tests passed');
