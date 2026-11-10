@@ -206,3 +206,54 @@ console.log('Studio warp spacer / net / notation tests passed');
   assert(el.beams.per_bar[1].warp_length_m > 1.6 * el.beams.per_bar[1].kg_per_beam * 1e6 / (el.beams.per_bar[1].ends_per_beam * 40 / 9));
 }
 console.log('Studio warp beam tests passed');
+
+// beams: calibration on a weighed beam, the residue, waste in an order
+{
+  const bars = [{ notation: '1-0/2-3//', yarn: NY(40) }, { notation: '1-2/1-0//', yarn: NY(40) }];
+  const go = (beams, target) => W.analyse({ machine: { type: 'tricot', gauge: 28, cpc: 20 }, bars, beams, target: target || {} }).beams;
+  const base = go({});
+  // a weighed full beam on bar 2: that beam holds exactly what was weighed, bar 1 scales the same way
+  const c = go({ full_kg: 60, full_bar: 2 });
+  near(c.per_bar[1].kg_per_beam, 60, 0.05, 'calibrated beam holds what was weighed');
+  near(c.per_bar[0].kg_per_beam / base.per_bar[0].kg_per_beam, 60 / base.per_bar[1].kg_per_beam, 0.01, 'the other bars scale by the same factor');
+  assert(c.calibration && /calibrated/.test(c.basis));
+  // the same beam given as metres of warp
+  const m = go({ full_m: c.per_bar[1].warp_length_m, full_bar: 2 });
+  near(m.per_bar[1].kg_per_beam, 60, 0.1, 'metres on the beam give the same calibration');
+  // a weight that cannot fit this beam size is flagged
+  assert(/far heavier/.test(go({ full_kg: 400 }).warn));
+  // residue: what stays on the barrel is not knitted
+  const r0 = go({ residue_pct: 0 }), r3 = go({ residue_pct: 3 });
+  near(r3.per_bar[0].courses / r0.per_bar[0].courses, 0.97, 0.001, 'residue shortens the beam life');
+  // waste: the yarn to buy = net ÷ (1 − residue) ÷ (1 − waste)
+  const o = go({ residue_pct: 1.5, waste_pct: 2 }, { order_m: 1000 }).order;
+  near(o.yarn[0].kg_gross, o.yarn[0].kg / 0.985 / 0.98, 0.15, 'gross yarn for the order');
+  assert(o.kg_gross > o.kg_net);
+}
+console.log('Studio warp beam calibration tests passed');
+
+// the calculator's warp fabrics run on this engine (engine/formulas/warp-knit.js)
+{
+  const K = require('../engine/formulas/warp-knit');
+  const r = K.calculateWarpKnitSpec({ fabricId: 'locknit', denier: 40, gauge: 28, gsm: 115, courseSpeed: 2000, workWidth_cm: 330 });
+  assert.strictEqual(r.engine, 'warp-studio');
+  near(r.gsm_estimated, 115, 1, 'the calculator hits the GSM');
+  // an E28 locknit front runner is ~150–175 cm/rack (published charmeuse order); the old table gave ~2×
+  const run1 = r.calculations.course_length.runner_length_cm_per_rack;
+  assert(run1 > 140 && run1 < 185, `front runner ${run1} cm/rack`);
+  const old = K.calculateWarpKnitSpecLegacy({ fabricId: 'locknit', denier: 40, gauge: 28, gsm: 115 }).calculations.course_length.runner_length_cm_per_rack;
+  assert(old > 1.8 * run1, `legacy ${old} vs ${run1}`);
+  // gauge now matters: a finer gauge, a shorter loop
+  const fine = K.calculateWarpKnitSpec({ fabricId: 'locknit', denier: 40, gauge: 32, gsm: 115 });
+  assert(fine.calculations.course_length.value < r.calculations.course_length.value);
+  // GSM only: the denier is solved
+  const g = K.calculateWarpKnitSpec({ fabricId: 'tricot_plain', gsm: 100 });
+  assert(g.denier_estimated > 25 && g.denier_estimated < 60, `denier ${g.denier_estimated}`);
+  near(g.gsm_estimated, 100, 2);
+  // every catalogue warp fabric runs, with the fields the result page reads
+  for (const id of ['tricot_plain', 'locknit', 'sharkskin_tricot', 'spacer_fabric', 'powernet']) {
+    const x = K.calculateWarpKnitSpec({ fabricId: id, gsm: id === 'spacer_fabric' ? 500 : 150 });
+    assert(x.engine === 'warp-studio' && x.calculations.stitch_density.courses_per_cm > 0 && x.calculations.course_length.per_bar.bar_1 && x.calculations.yarn_consumption.total_weight_g > 0 && x.calculations.gsm_range, id);
+  }
+}
+console.log('Calculator warp on the studio engine: tests passed');

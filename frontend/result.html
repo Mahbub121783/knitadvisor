@@ -2924,7 +2924,7 @@ function renderWarpKnitCard(wk) {
     const gr = wk.gsm_range;
     html += `<div class="result-row">
       <span class="result-key">Expected GSM Range</span>
-      <span class="result-val">${gr.gsm_min}–${gr.gsm_max} g/m² <span style="font-size:10px;color:var(--t3);">(±12% tolerance)</span></span>
+      <span class="result-val">${gr.gsm_min}–${gr.gsm_max} g/m² <span style="font-size:10px;color:var(--t3);">(${gr.basis || '±12% tolerance'})</span></span>
     </div>`;
   }
 

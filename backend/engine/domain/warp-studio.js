@@ -300,14 +300,29 @@ function planBeams({ bars, per, barsOut, mType, widthIn, cpcM, kc, speed, eff, b
   const nBeams = Math.max(1, Math.ceil(widthIn / bw - 1e-9));
   const volCm3 = (Math.PI / 4) * ((flange * 2.54) ** 2 - (barrel * 2.54) ** 2) * bw * 2.54;
   const coursesPerMin = speed * eff;
+  const endsOf = (i) => Math.ceil(barsOut[i].ends / nBeams);
+  // CALIBRATION: a full beam weighed (net kg) or measured (metres) on one bar sets the
+  // packing for that yarn; the other bars keep their modelled packing scaled the same way
+  let k = 1, calib = null;
+  const cb = Math.min(bars.length, Math.max(1, Math.round(+beam.full_bar || 1))) - 1;
+  const modelKg = (volCm3 * packOf(bars[cb].yarn)) / 1000;
+  let measuredKg = +beam.full_kg > 0 ? +beam.full_kg : null;
+  if (!measuredKg && +beam.full_m > 0) measuredKg = (+beam.full_m * endsOf(cb) * bars[cb].yarn.tex / bars[cb].yarn.beamDraft) / 1e6;
+  if (measuredKg) {
+    k = measuredKg / modelKg;
+    calib = { bar: cb + 1, measured_kg: r1(measuredKg), modelled_kg: r1(modelKg), factor: r2(k), packing_g_cm3: r2(packOf(bars[cb].yarn) * k) };
+  }
+  // what stays on the beam (the last layers on the barrel) and what is lost in warping and knitting
+  const residue = Math.min(10, Math.max(0, Number.isFinite(+beam.residue_pct) && beam.residue_pct !== '' && beam.residue_pct != null ? +beam.residue_pct : 1.5)) / 100;
+  const waste = Math.min(25, Math.max(0, Number.isFinite(+beam.waste_pct) && beam.waste_pct !== '' && beam.waste_pct != null ? +beam.waste_pct : 2)) / 100;
   const rows = bars.map((b, i) => {
-    const x = per[i], o = barsOut[i];
-    const endsPerBeam = Math.ceil(o.ends / nBeams);
-    const density = packOf(b.yarn);
+    const x = per[i];
+    const endsPerBeam = endsOf(i);
+    const density = packOf(b.yarn) * k;
     const kgBeam = (volCm3 * density) / 1000;
     const texOnBeam = b.yarn.tex / b.yarn.beamDraft;
     const lengthM = (kgBeam * 1e6) / (endsPerBeam * texOnBeam);
-    const courses = (lengthM * 1000) / x.runin;
+    const courses = (lengthM * (1 - residue) * 1000) / x.runin;          // what can be knitted before the residue
     return {
       bar: b.n, beams: nBeams, ends_per_beam: endsPerBeam, density_g_cm3: r2(density), kg_per_beam: r1(kgBeam), kg_per_set: r1(kgBeam * nBeams),
       warp_length_m: Math.round(lengthM), runin_mm_per_rack: Math.round(x.runin * RACK), let_off_m_per_min: r2((coursesPerMin * x.runin) / 1000),
@@ -315,24 +330,34 @@ function planBeams({ bars, per, barsOut, mType, widthIn, cpcM, kc, speed, eff, b
     };
   });
   const lim = rows.reduce((a, r) => (r.courses < a.courses ? r : a), rows[0]);
-  // a matched set: every bar wound to the limiting bar's courses, all run out together
+  // a matched set: every bar wound to the limiting bar's courses (plus its residue), all run out together
   const matched = rows.map((r, i) => {
-    const lengthM = (lim.courses * per[i].runin) / 1000;
+    const lengthM = (lim.courses * per[i].runin) / 1000 / (1 - residue);
     return { bar: r.bar, warp_length_m: Math.round(lengthM), kg_per_beam: r1((lengthM * r.ends_per_beam * bars[i].yarn.tex / bars[i].yarn.beamDraft) / 1e6), full_pct: Math.round((lim.courses / r.courses) * 100) };
   });
   let order = null;
   if (orderM > 0) {
     const courses = orderM * kc * cpcM * 100;
     order = {
-      finished_m: orderM, courses: Math.round(courses), hours: r1(courses / coursesPerMin / 60), beam_sets: r2(courses / lim.courses),
-      yarn: rows.map((r, i) => ({ bar: r.bar, kg: r1((barsOut[i].ends * per[i].fed * courses * bars[i].yarn.tex) / 1e9), warp_length_m: Math.round((courses * per[i].runin) / 1000) })),
+      finished_m: orderM, courses: Math.round(courses), hours: r1(courses / coursesPerMin / 60), beam_sets: r2(courses / lim.courses), waste_pct: r1(waste * 100), residue_pct: r1(residue * 100),
+      yarn: rows.map((r, i) => {
+        const net = (barsOut[i].ends * per[i].fed * courses * bars[i].yarn.tex) / 1e9;
+        // to buy: the net yarn, the beam residue, then warping and knitting waste
+        const gross = net / (1 - residue) / (1 - waste);
+        return { bar: r.bar, kg: r1(net), kg_gross: r1(gross), warp_length_m: Math.round((courses * per[i].runin) / 1000 / (1 - residue)) };
+      }),
     };
+    order.kg_net = r1(order.yarn.reduce((t, y) => t + y.kg, 0));
+    order.kg_gross = r1(order.yarn.reduce((t, y) => t + y.kg_gross, 0));
   }
-  const warn = rows.some((r) => r.ends_per_beam > 1600) ? `Over 1,600 ends on one section beam (bar${rows.filter((r) => r.ends_per_beam > 1600).map((r) => ' ' + r.bar).join(',')}): beyond what a warping creel usually holds — use narrower section beams or more of them.` : null;
+  const warn = rows.some((r) => r.ends_per_beam > 1600) ? `Over 1,600 ends on one section beam (bar${rows.filter((r) => r.ends_per_beam > 1600).map((r) => ' ' + r.bar).join(',')}): beyond what a warping creel usually holds — use narrower section beams or more of them.`
+    : calib && (k < 0.5 || k > 1.6) ? `Your beam (${calib.measured_kg} kg) is ${k < 1 ? 'far lighter' : 'far heavier'} than this beam size holds at a normal packing (${calib.modelled_kg} kg modelled): check the flange, barrel and width, and that the weight is the yarn alone (net of the empty beam).` : null;
   return {
     flange_in: flange, barrel_in: barrel, width_in: bw, beams_per_bar: nBeams, per_bar: rows, limiting_bar: lim.bar,
-    set_hours: lim.hours, set_fabric_m: lim.fabric_m, matched, order, warn,
-    basis: `section beams ${flange}" flange × ${barrel}" barrel × ${bw}" wide (${D0 === BEAM_DEFAULTS.tricot ? 'tricot' : 'raschel'} defaults unless you set them); packing density modelled (flat filament 0.70, mono and elastane 0.75, spun 0.45 × fibre density); elastane wound at its beam draft`,
+    set_hours: lim.hours, set_fabric_m: lim.fabric_m, matched, order, warn, calibration: calib, residue_pct: r1(residue * 100),
+    basis: `section beams ${flange}" flange × ${barrel}" barrel × ${bw}" wide (${D0 === BEAM_DEFAULTS.tricot ? 'tricot' : 'raschel'} defaults unless you set them); `
+      + (calib ? `packing calibrated on your bar ${calib.bar} beam: ${calib.measured_kg} kg against ${calib.modelled_kg} kg modelled (× ${calib.factor})` : 'packing density modelled (flat filament 0.70, mono and elastane 0.75, spun 0.45 × fibre density) — weigh one full beam to calibrate it')
+      + `; ${r1(residue * 100)} % left on the beam; elastane wound at its beam draft`,
   };
 }
 
@@ -590,13 +615,13 @@ function analyse(input) {
 // ── starting points ───────────────────────────────────────────────────────
 const NY = (count, extra) => ({ count, unit: 'denier', fibre: 'nylon_filament', ...(extra || {}) });
 const TEMPLATES = [
-  { id: 'full_tricot', name: 'Full tricot (jersey)', machine: 'tricot', gauge: 28, gsm: 110, bars: [{ notation: '1-0/1-2//', yarn: NY(40) }, { notation: '1-2/1-0//', yarn: NY(40) }] },
-  { id: 'locknit', name: 'Locknit (charmeuse)', machine: 'tricot', gauge: 28, gsm: 130, bars: [{ notation: '1-0/2-3//', yarn: NY(40) }, { notation: '1-2/1-0//', yarn: NY(40) }] },
-  { id: 'reverse_locknit', name: 'Reverse locknit', machine: 'tricot', gauge: 28, gsm: 130, bars: [{ notation: '1-0/1-2//', yarn: NY(40) }, { notation: '2-3/1-0//', yarn: NY(40) }] },
-  { id: 'satin', name: 'Satin', machine: 'tricot', gauge: 28, gsm: 150, bars: [{ notation: '1-0/3-4//', yarn: NY(40) }, { notation: '1-2/1-0//', yarn: NY(40) }] },
+  { id: 'full_tricot', name: 'Full tricot (jersey)', machine: 'tricot', gauge: 28, gsm: 100, bars: [{ notation: '1-0/1-2//', yarn: NY(40) }, { notation: '1-2/1-0//', yarn: NY(40) }] },
+  { id: 'locknit', name: 'Locknit (charmeuse)', machine: 'tricot', gauge: 28, gsm: 115, bars: [{ notation: '1-0/2-3//', yarn: NY(40) }, { notation: '1-2/1-0//', yarn: NY(40) }] },
+  { id: 'reverse_locknit', name: 'Reverse locknit', machine: 'tricot', gauge: 28, gsm: 115, bars: [{ notation: '1-0/1-2//', yarn: NY(40) }, { notation: '2-3/1-0//', yarn: NY(40) }] },
+  { id: 'satin', name: 'Satin', machine: 'tricot', gauge: 28, gsm: 135, bars: [{ notation: '1-0/3-4//', yarn: NY(40) }, { notation: '1-2/1-0//', yarn: NY(40) }] },
   { id: 'velour', name: 'Velour (4-needle front, for raising)', machine: 'tricot', gauge: 28, gsm: 220, bars: [{ notation: '1-0/4-5//', yarn: NY(70) }, { notation: '1-2/1-0//', yarn: NY(40) }] },
-  { id: 'sharkskin', name: 'Sharkskin', machine: 'tricot', gauge: 28, gsm: 160, bars: [{ notation: '1-0/1-2//', yarn: NY(40) }, { notation: '3-4/1-0//', yarn: NY(40) }] },
-  { id: 'queenscord', name: 'Queenscord', machine: 'tricot', gauge: 28, gsm: 150, bars: [{ notation: '1-0/0-1//', yarn: NY(40) }, { notation: '3-4/1-0//', yarn: NY(40) }] },
+  { id: 'sharkskin', name: 'Sharkskin', machine: 'tricot', gauge: 28, gsm: 140, bars: [{ notation: '1-0/1-2//', yarn: NY(40) }, { notation: '3-4/1-0//', yarn: NY(40) }] },
+  { id: 'queenscord', name: 'Queenscord', machine: 'tricot', gauge: 28, gsm: 130, bars: [{ notation: '1-0/0-1//', yarn: NY(40) }, { notation: '3-4/1-0//', yarn: NY(40) }] },
   { id: 'swim_tricot', name: 'Swimwear tricot (nylon + elastane)', machine: 'tricot', gauge: 28, gsm: 190, bars: [{ notation: '1-0/2-3//', yarn: NY(40) }, { notation: '1-2/1-0//', yarn: { count: 40, unit: 'denier', fibre: 'elastane', draft: 2.2 } }] },
   { id: 'powernet', name: 'Powernet', machine: 'raschel', gauge: 28, gsm: 180, bars: [{ notation: '1-0/0-1//', threading: 'X.', yarn: NY(40) }, { notation: '1-0/1-2/2-3/2-1//', threading: '.X', yarn: NY(40) }, { notation: '0-0/2-2//', threading: 'X.', yarn: { count: 280, unit: 'denier', fibre: 'elastane', draft: 2.5 } }] },
   { id: 'pillar_inlay', name: 'Pillar-inlay (marquisette)', machine: 'raschel', gauge: 24, gsm: 90, bars: [{ notation: '1-0/0-1//', yarn: { count: 75, unit: 'denier', fibre: 'polyester_filament' } }, { notation: '0-0/3-3//', yarn: { count: 75, unit: 'denier', fibre: 'polyester_filament' } }] },
@@ -619,7 +644,7 @@ const TEMPLATES = [
     { notation: '1-0/0-1/0-1/1-0//', yarn: { count: 30, unit: 'denier', fibre: 'polyester_mono' } },
     { notation: '1-1/3-2/2-2/0-1//', yarn: { count: 70, unit: 'denier', fibre: 'polyester_filament', filaments: 34 } },
     { notation: '1-1/0-1/1-1/2-1//', yarn: { count: 40, unit: 'denier', fibre: 'elastane', draft: 2 } }] },
-  { id: 'atlas', name: 'Atlas (2 bars)', machine: 'tricot', gauge: 28, gsm: 95, bars: [{ notation: '1-0/1-2/2-3/3-4/3-2/2-1//', yarn: NY(40) }, { notation: '3-4/3-2/2-1/1-0/1-2/2-3//', yarn: NY(40) }] },
+  { id: 'atlas', name: 'Atlas (2 bars)', machine: 'tricot', gauge: 28, gsm: 85, bars: [{ notation: '1-0/1-2/2-3/3-4/3-2/2-1//', yarn: NY(40) }, { notation: '3-4/3-2/2-1/1-0/1-2/2-3//', yarn: NY(40) }] },
 ];
 
 module.exports = { analyse, MACHINES, FIBRES, TEMPLATES, parseNotation, lapping, courseLength, kindOf, dnbLength, bedRole, holdsTogether };

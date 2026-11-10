@@ -693,7 +693,7 @@ function recommendGauge(fabricId, denier) {
  * @param {number} [params.elastanePct]
  * @param {number} [params.efficiency]
  */
-function calculateWarpKnitSpec(params) {
+function calculateWarpKnitSpecLegacy(params) {
   const {
     fabricId,
     gsm,
@@ -810,6 +810,137 @@ function calculateWarpKnitSpec(params) {
   return result;
 }
 
+
+// ============================================================
+// SECTION 9: THE CALCULATOR ON THE STUDIO'S WARP ENGINE
+// ============================================================
+/**
+ * The calculator's five warp fabrics are knitted by the Fabric Studio's warp
+ * engine (domain/warp-studio.js): real lappings, runner geometry checked on
+ * 31 published constructions, finished state, beams. The old table-driven
+ * numbers above (fixed courses/cm, back-calculated loop lengths about twice
+ * a real runner, no effect of gauge) are kept only as calculateWarpKnitSpecLegacy.
+ *
+ *   both GSM and denier  → the machine quality (courses/cm) is solved for the GSM
+ *   denier only          → knitted at the fabric's usual quality
+ *   GSM only             → the denier is solved at that usual quality
+ */
+const STUDIO_DESIGN = {
+  tricot_plain: 'full_tricot', locknit: 'locknit', sharkskin_tricot: 'sharkskin', spacer_fabric: 'spacer', powernet: 'powernet',
+};
+function designFor(fabricId, denier, filaments, elastaneDenier) {
+  const W = require('../domain/warp-studio');
+  const t = W.TEMPLATES.find((x) => x.id === STUDIO_DESIGN[fabricId]);
+  if (!t) return null;
+  const elastic = elastaneDenier > 0 && ['tricot_plain', 'locknit'].includes(fabricId);
+  const bars = t.bars.map((b, i) => {
+    const y = { ...b.yarn };
+    const rigid = y.fibre !== 'elastane' && y.unit !== 'mm' && y.fibre !== 'polyester_mono';
+    if (rigid && denier > 0) Object.assign(y, { count: denier, unit: 'denier', filaments: filaments || y.filaments });
+    if (y.fibre === 'elastane' && elastaneDenier > 0) y.count = elastaneDenier;
+    // a tricot or locknit with elastane: the back bar carries it (swimwear tricot)
+    if (elastic && i === t.bars.length - 1) Object.assign(y, { count: elastaneDenier, unit: 'denier', fibre: 'elastane', draft: 2.2, filaments: undefined });
+    return { notation: b.notation, threading: b.threading, yarn: y };
+  });
+  return { W, t, bars };
+}
+function calculateWarpKnitSpec(params) {
+  const { fabricId, gsm, denier, filaments = 34, gauge, courseSpeed, workWidth_cm = 150, elastaneDenier = 0, elastanePct = 0, efficiency = 85 } = params;
+  if (!fabricId || (!gsm && !denier)) return { error: 'fabricId and (gsm OR denier) required' };
+  const D = designFor(fabricId, denier, filaments, elastaneDenier);
+  if (!D) return calculateWarpKnitSpecLegacy(params);
+  const { W, t } = D;
+  const E = gauge > 0 ? gauge : t.gauge;
+  const machine = { type: t.machine, gauge: E, gap_mm: t.gap, width_in: workWidth_cm / 2.54, speed_cpm: courseSpeed || null, efficiency };
+  const run = (bars, extra, target) => W.analyse({ machine: { ...machine, ...(extra || {}) }, bars, target: target || {} });
+  const warnings = [];
+  // the fabric's usual quality: its template knitted to its own weight
+  const usual = run(D.bars, null, { gsm: t.gsm });
+  const cpcUsual = usual.success ? usual.machine.cpc_machine : (W.TEMPLATES && 20);
+  let r, denierOut = denier || null, bars = D.bars;
+  if (denier > 0 && gsm > 0) {
+    r = run(bars, null, { gsm });
+    if (!r.success) {
+      warnings.push(`${r.error} Shown at the usual quality instead.`);
+      r = run(bars, { cpc: cpcUsual });
+    }
+  } else if (denier > 0) {
+    r = run(bars, { cpc: cpcUsual });
+  } else {
+    // GSM only: the denier that knits it at the usual quality (the weight rises with the denier)
+    const at = (d) => { bars = designFor(fabricId, d, filaments, elastaneDenier).bars; return run(bars, { cpc: cpcUsual }); };
+    let lo = 8, hi = 600;
+    const a = at(lo), b = at(hi);
+    if (!a.success || !b.success) return calculateWarpKnitSpecLegacy(params);
+    if (gsm <= a.fabric.gsm) hi = lo; else if (gsm >= b.fabric.gsm) lo = hi;
+    else for (let k = 0; k < 40; k++) { const mid = Math.sqrt(lo * hi); if (at(mid).fabric.gsm < gsm) lo = mid; else hi = mid; }
+    denierOut = Math.round(Math.sqrt(lo * hi));
+    r = at(denierOut);
+    // then the quality that hits the GSM exactly with that (rounded) denier
+    const exact = run(bars, null, { gsm });
+    if (exact.success) r = exact;
+  }
+  if (!r || !r.success) return calculateWarpKnitSpecLegacy(params);
+  r.checks.filter((c) => c.level === 'error' || c.level === 'warn').forEach((c) => warnings.push(c.text));
+  const F = r.fabric, M = r.machine;
+  const keyOf = (i) => `bar_${i + 1}`;
+  const per_bar = {}, ycBars = {};
+  r.bars.forEach((b, i) => {
+    per_bar[keyOf(i)] = {
+      notation: b.notation, type: b.kind, overlap_needles: Math.max(...b.laps.map((l) => l.overlap)), underlap_needles: Math.max(...b.laps.map((l) => l.underlap)),
+      sl_mm: b.mm_per_course, runner_mm_per_rack: b.runner_mm_per_rack, runner_cm_per_rack: round2(b.runner_mm_per_rack / 10), yarn: `${b.yarn} ${b.fibre}`,
+    };
+    ycBars[keyOf(i)] = { yarn_weight_g: b.gsm, ll_mm: b.mm_per_course, share_pct: b.pct };
+  });
+  const front = r.bars[0];
+  // the weight band this yarn knits across the machine qualities near this one (±20 %)
+  const band = [0.8, 1.2].map((k) => run(bars, { cpc: M.cpc_machine * k }));
+  const yarnLen = r.bars.reduce((tot, b) => tot + (b.gsm / b.tex) * 1000, 0);   // m of yarn per m² = g/m² ÷ tex × 1000
+  const elasticBars = r.bars.filter((b) => /lastane/i.test(b.fibre));
+  const elastanePctEngine = round2(elasticBars.reduce((tot, b) => tot + b.pct, 0));
+  const blend = elasticBars.length
+    ? calculateElasticBlend(denierOut || front.tex * 9, elastaneDenier || elasticBars[0].tex * 9, elastanePct || elastanePctEngine)
+    : (elastaneDenier > 0 && elastanePct > 0 ? calculateElasticBlend(denierOut || front.tex * 9, elastaneDenier, elastanePct) : null);
+  if (blend && elasticBars.length) blend.elastane_weight_pct = elastanePctEngine;
+  const shiftM = M.finished_m_per_hour * 8;
+  const m = W.MACHINES[t.machine];
+  return {
+    fabric_id: fabricId, fabric_category: 'warp_knit', engine: 'warp-studio', input_params: params,
+    denier_estimated: denierOut, gsm_estimated: F.gsm, warnings,
+    structure: r.structure, beams: r.beams, checks: r.checks,
+    calculations: {
+      stitch_density: { courses_per_cm: F.cpc, wales_per_cm: F.wpc, stitches_per_cm2: Math.round(F.cpc * F.wpc), machine_courses_per_cm: M.cpc_machine, basis: `finished; the machine knits ${M.cpc_machine} courses/cm (${M.cpc_source})` },
+      course_length: {
+        value: front.mm_per_course, unit: 'mm', per_bar, pitch_mm: M.pitch_mm, course_spacing_mm: round3(10 / M.cpc_machine), gauge: E, courses_per_cm: M.cpc_machine,
+        runner_length_mm_per_rack: front.runner_mm_per_rack, runner_length_cm_per_rack: round2(front.runner_mm_per_rack / 10), rack_courses: 480,
+        geometric_avg_mm: round2(r.bars.reduce((tot, b) => tot + b.mm_per_course, 0) / r.bars.length),
+        formula: 'yarn per course = 2c + π·rn + (o−1)·p + √((u·p)² + c²) ; runner = × 480 courses/rack',
+        formula_terms: 'p = 25.4/gauge (needle pitch), c = 10 / machine courses per cm, rn = (0.45p + yarn Ø)/2 (the wrap round the needle), o = overlap, u = underlap needles',
+        note: 'The front bar is the headline value. The geometry is checked on 31 published tricot and elastic constructions (runner median error about 4 %).',
+      },
+      gsm_range: band.every((x) => x.success) ? { gsm_min: Math.min(band[0].fabric.gsm, band[1].fabric.gsm), gsm_max: Math.max(band[0].fabric.gsm, band[1].fabric.gsm), basis: 'this yarn at ±20 % of the machine quality' } : null,
+      production: {
+        production_m_per_min: round3(M.finished_m_per_hour / 60), production_m_per_shift: round2(shiftM), production_m_per_day: round2(shiftM * 3),
+        kg_per_shift: round2(M.kg_per_hour * 8), kg_per_day: round2(M.kg_per_hour * 24), course_speed_per_min: M.speed_cpm, courses_per_cm: M.cpc_machine,
+        work_width_cm: Math.round(F.width_in * 2.54), machine_width_cm: Math.round(M.width_in * 2.54), efficiency_pct: M.efficiency_pct,
+        formula: 'finished m/min = courses/min × efficiency ÷ (machine courses/cm × 100) ÷ length shrinkage', machine_note: 'Flat beam machine — finished width is after the cloth narrows off the machine',
+      },
+      yarn_consumption: {
+        yarn_length_per_m2: Math.round(yarnLen), base_yarn_weight_g: round2(r.bars.filter((b) => !/lastane/i.test(b.fibre)).reduce((tot, b) => tot + b.gsm, 0)), total_weight_g: F.gsm, per_bar: ycBars,
+        formula: 'g/m² per bar = ends/cm × courses/cm × yarn per course (mm) × tex ÷ 100 (finished)',
+      },
+      elastic_blend: blend,
+      guide_bars: {
+        count: r.bars.length,
+        lapping: Object.fromEntries(r.bars.map((b, i) => [keyOf(i), { notation: b.notation, type: b.kind, description: `${b.kind}; ${b.yarn} ${b.fibre}${b.threading !== 'X' ? `, threaded ${b.threading}` : ''}` }])),
+        note: `${r.structure.name || t.name}: ${M.label}. Design and check any lapping in the Fabric Studio.`,
+      },
+      gauge_recommendation: denierOut ? recommendGauge(fabricId, denierOut) : null,
+      machine_speed_reference: { min: m.speed[0], max: m.speed[1], typical: Math.round((m.speed[0] + m.speed[1]) / 2), unit: 'courses/min' },
+    },
+  };
+}
+
 // ============================================================
 // EXPORTS
 // ============================================================
@@ -830,4 +961,5 @@ module.exports = {
   recommendGauge,
 
   calculateWarpKnitSpec,
+  calculateWarpKnitSpecLegacy,
 };

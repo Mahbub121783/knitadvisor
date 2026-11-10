@@ -564,6 +564,14 @@
             <div class="st-f"><label for="wp-bflange">Flange diameter (in)</label><input id="wp-bflange" type="number" min="10" max="40" step="0.5" placeholder="21 / 30"></div>
             <div class="st-f"><label for="wp-bbarrel">Barrel diameter (in)</label><input id="wp-bbarrel" type="number" min="3" max="20" step="0.5" placeholder="7 / 8"></div>
             <div class="st-f"><label for="wp-bwidth">Beam width (in)</label><input id="wp-bwidth" type="number" min="6" max="60" step="1" placeholder="21"></div>
+            <div class="st-f"><label for="wp-bresidue">Left on the beam (%)</label><input id="wp-bresidue" type="number" min="0" max="10" step="0.1" placeholder="1.5"></div>
+            <div class="st-f"><label for="wp-bwaste">Warping + knitting waste (%)</label><input id="wp-bwaste" type="number" min="0" max="25" step="0.1" placeholder="2"></div>
+          </div>
+          <p class="st-hint">Calibrate the beam: weigh one full beam of yarn (net of the empty beam) or read its warp length, and enter it with its bar.</p>
+          <div class="st-row">
+            <div class="st-f"><label for="wp-bkg">Your full beam: yarn (kg)</label><input id="wp-bkg" type="number" min="1" max="1000" step="0.1" placeholder="optional"></div>
+            <div class="st-f"><label for="wp-bm">…or its warp length (m)</label><input id="wp-bm" type="number" min="100" step="10" placeholder="optional"></div>
+            <div class="st-f"><label for="wp-bbar">Of bar (GB)</label><input id="wp-bbar" type="number" min="1" max="8" step="1" value="1"></div>
           </div>
         </div>
         <div class="st-card">
@@ -598,7 +606,7 @@
 <script src="assets/js/api.js"></script>
 <script src="assets/js/studio-cloth-map.js?v=20261110d"></script>
 <script src="assets/js/studio-warp-geom.js?v=20261111a"></script>
-<script src="assets/js/studio-warp.js?v=20261111b"></script>
+<script src="assets/js/studio-warp.js?v=20261111c"></script>
 <script src="assets/js/studio-needle.js?v=20261110d"></script>
 <script src="assets/js/studio.js?v=20261111a"></script>
 </body>

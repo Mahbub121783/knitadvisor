@@ -37,7 +37,7 @@
     return {
       machine: { type: $('wp-mtype').value, gauge: n('wp-gauge'), width_in: n('wp-width'), speed_cpm: n('wp-speed'), efficiency: n('wp-eff'), cpc: n('wp-cpc'), notation_step: +$('wp-nstep').value, gap_mm: n('wp-gap') },
       bars: W.bars.map(function (b) { return { notation: b.notation, threading: b.threading, yarn: b.yarn }; }), target: { gsm: n('wp-gsm'), width_in: n('wp-fwidth'), order_m: n('wp-order') },
-      beams: { flange_in: n('wp-bflange'), barrel_in: n('wp-bbarrel'), width_in: n('wp-bwidth') },
+      beams: { flange_in: n('wp-bflange'), barrel_in: n('wp-bbarrel'), width_in: n('wp-bwidth'), full_kg: n('wp-bkg'), full_m: n('wp-bm'), full_bar: n('wp-bbar'), residue_pct: $('wp-bresidue').value === '' ? null : +$('wp-bresidue').value, waste_pct: $('wp-bwaste').value === '' ? null : +$('wp-bwaste').value },
     };
   }
   function schedule() { clearTimeout(W.timer); W.timer = setTimeout(analyse, 280); }
@@ -85,7 +85,7 @@
         var m = B.matched[i];
         return '<tr><td><i style="display:inline-block;width:10px;height:10px;border-radius:2px;background:' + barCol(x.bar - 1) + '"></i> GB' + x.bar + (x.bar === B.limiting_bar ? ' <small>(runs out first)</small>' : '') + '</td><td>' + x.ends_per_beam + '</td><td>' + x.kg_per_beam + ' kg<br><small>' + x.kg_per_set + ' kg per set</small></td><td>' + fmt(x.warp_length_m) + ' m</td><td>' + x.runin_mm_per_rack + '</td><td>' + x.let_off_m_per_min + '</td><td>' + x.hours + ' h<br><small>' + fmt(x.fabric_m) + ' m fabric</small></td><td>' + fmt(m.warp_length_m) + ' m, ' + m.kg_per_beam + ' kg<br><small>' + m.full_pct + '% of a full beam</small></td></tr>';
       }).join('') + '</table></div>';
-    if (B.order) h += '<p class="st-p" style="font-size:12px">Order of <b>' + fmt(B.order.finished_m) + ' m</b> finished: ' + B.order.hours + ' h on the machine, ' + B.order.beam_sets + ' beam sets. Yarn (net, before waste): ' + B.order.yarn.map(function (y) { return 'GB' + y.bar + ' ' + fmt(y.kg) + ' kg'; }).join(', ') + '.</p>';
+    if (B.order) h += '<p class="st-p" style="font-size:12px">Order of <b>' + fmt(B.order.finished_m) + ' m</b> finished: ' + B.order.hours + ' h on the machine, ' + B.order.beam_sets + ' beam sets. Yarn to buy (with ' + B.order.residue_pct + '% left on the beams and ' + B.order.waste_pct + '% waste): ' + B.order.yarn.map(function (y) { return 'GB' + y.bar + ' <b>' + fmt(y.kg_gross) + ' kg</b> (' + fmt(y.kg) + ' kg in the fabric)'; }).join(', ') + ' — total ' + fmt(B.order.kg_gross) + ' kg.</p>';
     return h + '<p class="st-p" style="font-size:12px;color:var(--t3)">A matched set winds every bar to the courses of the bar that runs out first, so the whole set runs out together. ' + esc(B.basis.charAt(0).toUpperCase() + B.basis.slice(1)) + '.</p>';
   }
 
@@ -231,7 +231,7 @@
     });
     $('wp-mtype').addEventListener('change', syncMachine);
     $('wp-side').addEventListener('click', function () { showBack = !showBack; this.textContent = showBack ? 'Show face' : 'Show back'; if (cloth) cloth.setView(showBack ? 'back' : 'front'); });
-    ['wp-mtype', 'wp-gauge', 'wp-width', 'wp-speed', 'wp-eff', 'wp-cpc', 'wp-gsm', 'wp-fwidth', 'wp-nstep', 'wp-gap', 'wp-bflange', 'wp-bbarrel', 'wp-bwidth', 'wp-order'].forEach(function (id) { $(id).addEventListener('input', schedule); $(id).addEventListener('change', schedule); });
+    ['wp-mtype', 'wp-gauge', 'wp-width', 'wp-speed', 'wp-eff', 'wp-cpc', 'wp-gsm', 'wp-fwidth', 'wp-nstep', 'wp-gap', 'wp-bflange', 'wp-bbarrel', 'wp-bwidth', 'wp-order', 'wp-bresidue', 'wp-bwaste', 'wp-bkg', 'wp-bm', 'wp-bbar'].forEach(function (id) { $(id).addEventListener('input', schedule); $(id).addEventListener('change', schedule); });
   }
   function onBar(e) {
     var row = e.target.closest('.wp-bar'), k = e.target.getAttribute('data-k'); if (!row || !k) return;
