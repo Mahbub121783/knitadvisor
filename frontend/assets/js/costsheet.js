@@ -116,7 +116,8 @@
         (S.shells.length > 1 ? '<button class="cs-btn small danger" type="button" data-rmshell="' + i + '">Remove</button>' : '') + '</div>' +
         '<div class="cs-row">' +
           '<label class="cs-f" style="grid-column:span 2">Application in garment<input data-k="' + p + '.application" value="' + esc(sh.application) + '" placeholder="Body / rib for cuff, collar, hem / neck tape"></label>' +
-          '<label class="cs-f">Fabric<select data-k="' + p + '.fabric">' + fabricOptions(sh.fabric) + '</select></label>' +
+          (sh.warp ? '<label class="cs-f">Fabric<input value="Warp knit — from the Fabric Studio (' + esc(sh.fabric.replace(/_/g, ' ')) + ')" disabled></label>'
+            : '<label class="cs-f">Fabric<select data-k="' + p + '.fabric">' + fabricOptions(sh.fabric) + '</select></label>') +
           '<label class="cs-f">Composition<input data-k="' + p + '.composition" value="' + esc(sh.composition) + '" placeholder="95% cotton 5% elastane"></label>' +
           '<label class="cs-f">GSM<input class="num" type="number" min="60" max="800" data-k="' + p + '.gsm" value="' + esc(sh.gsm) + '"></label>' +
           '<label class="cs-f">Shade<select data-k="' + p + '.shade">' + [['white', 'White'], ['light_medium', 'Light / medium'], ['dark_navy', 'Dark / navy'], ['black', 'Black'], ['neon', 'Neon'], ['melange', 'Melange']].map(function (o) { return '<option value="' + o[0] + '"' + (sh.shade === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></label>' +
@@ -272,7 +273,7 @@
       var path = inp.getAttribute('data-k'), own = getPath(S, path), a = av[path];
       var mine = own !== '' && own != null;
       var srcEl = document.querySelector('[data-asrc="' + path + '"]');
-      if (!mine && a && document.activeElement !== inp) inp.value = a.v;
+      if (!mine && document.activeElement !== inp) inp.value = a ? a.v : '';   // no system figure: the box is empty, never a stale one
       inp.classList.toggle('cs-auto', !mine);
       if (srcEl) {
         var src = mine ? { kind: 'yours', label: 'yours' } : a ? a.src : null;
@@ -457,6 +458,32 @@
     S.shells.push(sh); renderForm(); schedule();
   });
 
+  // a warp design saved in the Fabric Studio, brought in as a fabric shell (the Studio designs, the sheet prices)
+  var studioDesigns = [];
+  function loadStudioDesigns() {
+    return apiFetch('/api/studio/designs').then(function (r) {
+      studioDesigns = (r.designs || []).filter(function (d) { return d.design && d.design.tech === 'warp'; });
+      $('cs-studio-pick').innerHTML = '<option value="">' + (studioDesigns.length ? 'A design from the Fabric Studio…' : 'No saved warp designs in the Studio yet') + '</option>' +
+        studioDesigns.map(function (d) { return '<option value="' + d.id + '">' + esc(d.name) + ' (warp)</option>'; }).join('');
+    }).catch(function () {});
+  }
+  function bringIn(id) {
+    var note = $('cs-studio-note');
+    if (!id) return Promise.resolve();
+    note.hidden = false; note.className = 'cs-msg note'; note.textContent = 'Bringing the design in…';
+    return apiFetch('/api/cost-sheet/shell-from-studio', { method: 'POST', body: { design_id: +id } }).then(function (r) {
+      var sh = Object.assign(blankShell(S.shells.length), r.shell);
+      // a sheet still holding only the untouched default shell takes the design in its place
+      var d = S.shells[0];
+      if (S.shells.length === 1 && d && d.name === '1st Shell' && !(d.consumption || []).some(Boolean) && d.fabric === 'single_jersey' && d.yarn_mode === 'auto') S.shells = [sh];
+      else if (S.shells.length >= 8) { note.className = 'cs-msg err'; note.textContent = 'At most 8 fabric shells on one sheet.'; return; }
+      else S.shells.push(sh);
+      note.textContent = 'Brought in “' + r.shell.name + '”. ' + r.notes.join(' ') + ' Enter its consumption per size below.';
+      renderForm(); schedule();
+    }, function (e) { note.className = 'cs-msg err'; note.textContent = (e.data && e.data.error) || 'Could not bring that design in.'; });
+  }
+  $('cs-studio-add').addEventListener('click', function () { bringIn($('cs-studio-pick').value); });
+
   // picture: shrunk to 640 px JPEG in the browser before it is kept
   function takePicture(file) {
     if (!file || !/^image\//.test(file.type)) return;
@@ -591,7 +618,10 @@
   // ── start ──────────────────────────────────────────────────────────────
   apiFetch('/api/cost-sheet/options').then(function (o) {
     OPTS = o; renderForm(); refreshSaved();
-    var want = new URLSearchParams(window.location.search).get('sheet');
+    var q = new URLSearchParams(window.location.search), want = q.get('sheet'), fromStudio = q.get('studio');
+    loadStudioDesigns().then(function () {
+      if (fromStudio && /^\d+$/.test(fromStudio)) { $('cs-studio-pick').value = fromStudio; return bringIn(fromStudio); }
+    });
     if (want && /^\d+$/.test(want)) openSaved(want); else cost();
   })
     .catch(function () { $('cs-status').className = 'cs-msg err'; $('cs-status').textContent = 'Could not load the price lists. Sign in and reload.'; });

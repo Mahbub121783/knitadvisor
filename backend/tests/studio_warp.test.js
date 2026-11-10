@@ -281,3 +281,37 @@ console.log('Calculator warp on the studio engine: tests passed');
   assert.strictEqual(W.costOf(a0, {}).success, false);
 }
 console.log('Studio warp costing tests passed');
+
+// a Studio warp design as a costing-sheet shell: the Studio designs, the sheet prices
+{
+  const CS = require('../engine/domain/cost-sheet');
+  const go = (id) => {
+    const t = W.TEMPLATES.find((x) => x.id === id);
+    const a = W.analyse({ machine: { type: t.machine, gauge: t.gauge, gap_mm: t.gap, notation_step: t.notation_step }, bars: t.bars, target: { gsm: t.gsm } });
+    const { shell, notes } = CS.shellFromWarp(a, 'My ' + id);
+    return { a, shell, notes, sheet: CS.analyse({ sizes: ['M'], shells: [{ ...shell, consumption: [0.3] }], cm: { cpm: 0.05, smv: [10] } }) };
+  };
+  const sw = go('swim_tricot');
+  assert.strictEqual(sw.shell.fabric, 'locknit');
+  assert.strictEqual(sw.shell.composition, '75% nylon 25% elastane');
+  assert.deepStrictEqual(sw.shell.yarns.map((y) => y.type), ['nylon_filament_40d', 'spandex_40d']);
+  assert(go('spacer_stretch').shell.yarns.length <= 6 && go('spacer').shell.yarns.length === 1, 'bars of one priced yarn become one line');
+  near(sw.shell.yarns.reduce((t, y) => t + y.share_pct, 0), 100, 0.05, 'yarn shares add up to 100');
+  near(sw.shell.gsm, sw.a.fabric.gsm, 0.5, 'the weight is the design\'s own');
+  assert(sw.sheet.success, sw.sheet.error);
+  assert(sw.shell.warp && sw.sheet.shells[0].prices.knitting.source.kind === 'missing', 'warp knitting is not priced from the circular-knit charge book');
+  assert(sw.sheet.shells[0].notes.some((n) => /Warp knitting has no rate/.test(n)) && !sw.sheet.shells[0].notes.some((n) => /priced as Single Jersey/.test(n)));
+  const typed = CS.analyse({ sizes: ['M'], shells: [{ ...sw.shell, knit_price: 1.2, consumption: [0.3] }], cm: { cpm: 0.05, smv: [10] } });
+  assert.strictEqual(typed.shells[0].prices.knitting.value, 1.2, 'a typed knitting price is used');
+  assert(sw.sheet.shells[0].price_per_kg > 0 && sw.sheet.per_size[0].fob_pc > 0, 'the sheet prices it');
+  // each structure lands on the nearest catalogue fabric, and says so
+  assert.strictEqual(go('powernet').shell.fabric, 'powernet');
+  assert.strictEqual(go('spacer').shell.fabric, 'spacer_fabric');
+  assert.strictEqual(go('full_tricot').shell.fabric, 'tricot_plain');
+  const sat = go('satin');
+  assert(sat.notes.some((n) => /no knitting charge of its own/.test(n)), 'a structure with no rate of its own is flagged');
+  // a yarn between listed deniers is priced as the nearest and flagged
+  assert(go('powernet').notes.some((n) => /nearest listed yarn/.test(n)));
+  for (const id of ['full_tricot', 'locknit', 'powernet', 'spacer', 'spacer_stretch', 'elastic_raschel', 'atlas']) assert(go(id).sheet.success, id + ': ' + go(id).sheet.error);
+}
+console.log('Studio design → costing sheet tests passed');

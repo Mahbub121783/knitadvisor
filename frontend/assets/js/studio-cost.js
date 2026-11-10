@@ -36,6 +36,7 @@
       return '<div class="st-f"><label>GB' + b.bar + ' · ' + esc(b.yarn) + ' ' + esc(b.fibre) + '</label><input type="number" min="0" step="0.01" data-bar="' + b.bar + '" value="' + esc(saved[b.bar] || '') + '" placeholder="price per kg"></div>';
     }).join('');
     $('sc-prices-card').hidden = false;
+    $('sc-sheet').hidden = !r.ok_to_knit; $('sc-sheet').href = '/costsheet.html?studio=' + encodeURIComponent($('sc-design').value);
   }
   function calc() {
     var yarn = Array.prototype.map.call($('sc-yarn').querySelectorAll('input'), function (i) { return parseFloat(i.value) || null; });

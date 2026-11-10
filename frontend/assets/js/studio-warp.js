@@ -98,7 +98,7 @@
     $('wp-saved').innerHTML = '<option value="">Saved warp designs…</option>' + account.map(function (d, i) { return '<option value="' + i + '">' + esc(d.name) + '</option>'; }).join('');
   }
   // costing is done in the Calculator, on the saved design — never in the Studio
-  function setCostLink(id) { var a = $('wp-cost'); a.hidden = !id; if (id) a.href = '/studio-cost.html?design=' + encodeURIComponent(id); }
+  function setCostLink(id) { var a = $('wp-cost'), b = $('wp-sheet'); a.hidden = b.hidden = !id; if (id) { a.href = '/studio-cost.html?design=' + encodeURIComponent(id); b.href = '/costsheet.html?studio=' + encodeURIComponent(id); } }
   function setSaved(list) { account = list || []; refreshSaved(); }
   function openById(id) {
     var i = account.findIndex(function (x) { return String(x.id) === String(id); });

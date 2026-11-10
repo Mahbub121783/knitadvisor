@@ -176,6 +176,11 @@
             </select>
             <button class="cs-btn" type="button" id="cs-shell-add">+ Add fabric shell</button>
           </div>
+          <div class="cs-bar" style="margin:8px 0 0">
+            <select id="cs-studio-pick" class="cs-btn" aria-label="A design saved in the Fabric Studio"><option value="">A design from the Fabric Studio…</option></select>
+            <button class="cs-btn" type="button" id="cs-studio-add">+ Bring it in as a fabric shell</button>
+          </div>
+          <div class="cs-msg note" id="cs-studio-note" hidden></div>
           <label class="cs-f" style="max-width:420px;margin-top:10px;">How the process loss enters the fabric price
             <select data-k="loss_method">
               <option value="sheet">Buyer-sheet way: × (1 + loss)</option>
@@ -247,6 +252,6 @@
   <footer class="footer"></footer>
 </div>
 <script src="assets/js/api.js"></script>
-<script src="assets/js/costsheet.js?v=20261108h"></script>
+<script src="assets/js/costsheet.js?v=20261111a"></script>
 </body>
 </html>

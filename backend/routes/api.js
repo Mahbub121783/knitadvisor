@@ -1357,6 +1357,24 @@ router.get('/cost-sheet/options', requireUser, (req, res) => {
   res.json({ success: true, ...costSheet.options() });
 });
 
+// A warp design saved in the Fabric Studio, as a fabric shell for the sheet (the Studio never prices; the sheet does).
+router.post('/cost-sheet/shell-from-studio', requireUser, async (req, res) => {
+  try {
+    const id = parseInt((req.body || {}).design_id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ success: false, error: 'Choose a saved Studio design.' });
+    const row = (await studioRepo.designs.list(req.user.id)).find((d) => d.id === id);
+    const w = row && row.design && row.design.tech === 'warp' ? row.design.warp : null;
+    if (!w) return res.status(404).json({ success: false, error: 'That warp design was not found in your account.' });
+    const a = warpStudio.analyse({ machine: w.machine, bars: w.bars.map((b) => ({ notation: b.notation, threading: b.threading, yarn: b.yarn })), target: w.target, beams: w.beams });
+    if (!a.success) return res.status(400).json({ success: false, error: a.error });
+    if (!a.ok_to_knit) return res.status(400).json({ success: false, error: 'This design does not knit as drawn — fix it in the Studio first.' });
+    res.json({ success: true, ...costSheet.shellFromWarp(a, row.name) });
+  } catch (err) {
+    console.error('[cost-sheet] studio shell failed:', err);
+    res.status(500).json({ success: false, error: 'Could not bring in that design.' });
+  }
+});
+
 router.post('/cost-sheet/analyse', requireUser, (req, res) => {
   try {
     const out = costSheet.analyse(req.body || {}, { live: (key, ne, country) => yarnPrices.lookup(key, ne, undefined, { country }) });
