@@ -75,6 +75,16 @@ function accuracyFor({ matchId, family, lycra, level }) {
       : `cross-validated on the factory records: ${nice(own.key)}, ${own.v.gsm.n} cloths the engine had not seen when it predicted them`;
   return { gsm: mix(own.v.gsm, unseen.v.gsm), width: mix(own.v.width, unseen.v.width), basis, group: own.key, method: ACCURACY.method, generated: ACCURACY.generated };
 }
+/** The structure group a design is weighed in: its catalogue twin, or its family's anchor, with or without elastane. */
+function groupKeyOf(matchId, family, lycra) { return (ACC_GROUP[matchId] || ACC_FAMILY_GROUP[family] || 'single_jersey') + (lycra ? '+L' : ''); }
+const ML = require('./machine-learning');
+/** A floor machine's rolls, as the caller passes them: kept only if they look like rolls. */
+function cleanFloor(f) {
+  if (!f || !Array.isArray(f.rolls)) return null;
+  const rolls = f.rolls.slice(-400).filter((r) => r && typeof r.group === 'string' && (+r.gsm_ratio > 0.5 && +r.gsm_ratio < 2 || +r.width_ratio > 0.5 && +r.width_ratio < 2))
+    .map((r) => ({ group: r.group, ne: +r.ne > 0 ? +r.ne : null, gsm_ratio: +r.gsm_ratio > 0.5 && +r.gsm_ratio < 2 ? +r.gsm_ratio : null, width_ratio: +r.width_ratio > 0.5 && +r.width_ratio < 2 ? +r.width_ratio : null }));
+  return { name: String(f.name || 'your machine').slice(0, 60), rolls };
+}
 /** Where 80 % of measured cloths land, given the prediction and the signed error quantiles (e = (pred − meas) / meas). */
 const rangeOf = (pred, e) => [pred / (1 + e.p90), pred / (1 + e.p10)];
 
@@ -584,6 +594,23 @@ function finishModel(ctx, S) {
   if (sheared) pile = Math.min(pile, fleece ? 1.2 : 0.4);
   return { k: (1 - loss) / (1 - base), brush, passes, p0, loss, loopShare, loopLost: fleece && back ? loopLoss(passes) : 0, pile, sheared, fleece, legacy, filament: /filament/.test(fib) };
 }
+// ── finish: open-width stenter setting ──────────────────────────────────
+// MODELLED, by conservation of mass: the cloth's weight per metre does not change
+// on the stenter, so pinning it wider or narrower than the width it finishes at
+// by itself spreads the same grams over more or less area. GSM × natural ÷ set.
+// The engine's own GSM and width stay those of the cloth finished as the factory
+// records were (dyed, compacted); this is what a different setting would give.
+function stenterSet(input, S) {
+  const set = +((input.finish || {}).set_width_in);
+  if (!(set > 0)) return null;
+  if (!(set >= 15 && set <= 120)) throw new StudioError('Stenter set width must be between 15 and 120 inches.');
+  const nat = S.width, change = set / nat - 1;
+  const gsm = S.gsm * nat / set;
+  const note = change > 0.08 ? `Pinned ${r1(change * 100)}% wider than it finishes by itself: the cloth is held stretched, so expect it to shrink back in width (and grow in length) at the first wash — residual shrinkage beyond buyer limits is likely past about 5–8%.`
+    : change < -0.08 ? `Set ${r1(-change * 100)}% narrower than it finishes by itself: the width is overfed, which risks crease marks and an uneven face; a tighter knit (shorter stitch length) is the cleaner route to this weight.`
+      : 'Within about ±8% of the width it finishes at by itself: a normal stenter adjustment.';
+  return { set_width_in: r1(set), natural_width_in: r1(nat), gsm_at_set: Math.round(gsm), change_pct: r1(change * 100), gsm_change_pct: r1((nat / set - 1) * 100), basis: 'modelled: the same grams per metre spread over the set width (mass conserved); the GSM and width above are the cloth as finished in the factory records', note };
+}
 function finishChecks(fin, family, plush) {
   const out = [];
   const add = (level, text) => out.push({ level, text });
@@ -618,6 +645,10 @@ function solve(ctx, ground) {
   if (pack.spread) KS = { ...KS, q1: KS.q1 / pack.spread, q3: KS.q3 * pack.spread };
   let KW = scaled(KW0, fibre.kw * model.kwF * pack.kw);
   const modelKS = KS.med, modelKW = KW.med;
+  if (ctx.floor && !ctx.calib) {
+    KS = { ...scaled(KS, ctx.floor.gsm_factor), basis: `${KS.basis}; × ${r3(ctx.floor.gsm_factor)} learned from ${ctx.floor.n_gsm} roll${ctx.floor.n_gsm === 1 ? '' : 's'} on ${ctx.floor.name}` };
+    KW = { ...scaled(KW, 1 / ctx.floor.width_factor), basis: `${KW.basis}; width × ${r3(ctx.floor.width_factor)} learned from ${ctx.floor.n_width} roll${ctx.floor.n_width === 1 ? '' : 's'} on ${ctx.floor.name}` };
+  }
   if (ctx.calib) {
     const sp = Math.max(0.015, ctx.calib.spread);
     KS = { ...KS, med: ctx.calib.ks, q1: ctx.calib.ks * (1 - sp), q3: ctx.calib.ks * (1 + sp), n: ctx.calib.n, basis: `${ctx.calib.n} trial roll${ctx.calib.n > 1 ? 's' : ''} measured at your mill` };
@@ -1086,6 +1117,17 @@ function analyse(input) {
     // structures the factory records under their own name
     const EXACT = { waffle_knit: 'waffle' };
     { const m0 = matchCatalogue(st); const ef = m0 && EXACT[m0.id]; if (ef && KP.calFor('ks', ef, false).n >= 12 && KP.calFor('kw', ef, false).n >= 12) ctx.exactFam = ef; }
+    // a floor machine's logged rolls: the profile this design's structure has learned on it (machine-learning.js)
+    const m1 = matchCatalogue(st);
+    const group = groupKeyOf(m1 && m1.id, family, lycra);
+    ctx.group = group;
+    const floor = cleanFloor(input.floor);
+    if (floor && floor.rolls.length) {
+      const G = ACCURACY && (ACCURACY.groups[group] || ACCURACY.groups[group.replace('+L', '')] || ACCURACY.groups._all);
+      const ne = (input.yarn || {}).count > 0 && String((input.yarn || {}).unit || 'ne').toLowerCase() === 'ne' ? +input.yarn.count : null;
+      const prof = ML.learnProfile(floor.rolls, { group, ne, gsmCV: G && G.gsm, widthCV: G && G.width });
+      if (prof.n > 0) ctx.floor = { ...prof, name: floor.name, group };
+    }
     const rolls = input.calibration && input.calibration.rolls;
     if (Array.isArray(rolls) && rolls.length) {
       const g0 = ground || readYarn({ ne: +rolls[0].ne, fibre: (input.yarn || {}).fibre }, null);
@@ -1391,6 +1433,7 @@ function analyse(input) {
         family: plush ? 'plush' : family, family_label: plush ? 'Sinker-loop plush (terry / velour)' : FAMILY[family].label,
         anchor: plush ? { id: 'terry', name: 'factory loopback terry (loop size)' } : { id: anchorDef.id, name: anchorDef.name },
         match: plush ? { id: plush.variant.id, name: plush.variant.name } : match ? { id: match.id, name: match.name } : null,
+        group: ctx.group,
         yarn_vs_anchor_pct: r1((ratio - 1) * 100),
         reduced: reduced.changed ? { from: `${reduced.from[0]} feeds × ${reduced.from[1]} needles`, to: `${st.feeds} feeds × ${st.width} needles` } : null,
         confidence,
@@ -1429,18 +1472,25 @@ function analyse(input) {
         effects: yarnFx,
       },
       fabric: {
-        accuracy: acc ? {
-          interval_pct: 80, level: confidence.level, basis: acc.basis, method: acc.method, generated: acc.generated, own_rolls: !!ctx.calib,
+        accuracy: acc && ctx.floor && !ctx.calib ? {
+          interval_pct: 80, level: 'machine', own_rolls: false, method: acc.method, generated: acc.generated,
+          supported_by_rolls: ctx.floor.n, machine: ctx.floor.name, gsm_factor: r3(ctx.floor.gsm_factor), width_factor: r3(ctx.floor.width_factor),
+          basis: `learned from ${ctx.floor.n} of your roll${ctx.floor.n === 1 ? '' : 's'} of this structure on ${ctx.floor.name} (the last ${ML.WINDOW}, weighed against ${ML.K} rolls' worth of the factory records' spread)`,
+          gsm: { range: ML.band(S.gsm, ctx.floor.gsm_sd).map(Math.round), typical_error_pct: r1((Math.exp(0.6745 * ctx.floor.gsm_sd) - 1) * 100), within_3_pct: ML.withinPct(ctx.floor.gsm_sd, 0.03), within_5_pct: ML.withinPct(ctx.floor.gsm_sd, 0.05), within_8_pct: ML.withinPct(ctx.floor.gsm_sd, 0.08) },
+          width: { range: ML.band(S.width, ctx.floor.width_sd).map(r1), typical_error_pct: r1((Math.exp(0.6745 * ctx.floor.width_sd) - 1) * 100), within_3_pct: ML.withinPct(ctx.floor.width_sd, 0.03), within_5_pct: ML.withinPct(ctx.floor.width_sd, 0.05), within_8_pct: ML.withinPct(ctx.floor.width_sd, 0.08) },
+        } : acc ? {
+          interval_pct: 80, level: confidence.level, basis: acc.basis, method: acc.method, generated: acc.generated, own_rolls: !!ctx.calib, supported_by_rolls: 0,
           gsm: { range: rangeOf(S.gsm, acc.gsm).map(Math.round), typical_error_pct: r1(acc.gsm.mae_med * 100), within_3_pct: Math.round(acc.gsm.within_3), within_5_pct: Math.round(acc.gsm.within_5), within_8_pct: Math.round(acc.gsm.within_8) },
           width: acc.width ? { range: rangeOf(S.width, acc.width).map(r1), typical_error_pct: r1(acc.width.mae_med * 100), within_3_pct: Math.round(acc.width.within_3), within_5_pct: Math.round(acc.width.within_5), within_8_pct: Math.round(acc.width.within_8) } : null,
         } : null,
-        gsm: Math.round(S.gsm), gsm_range: (acc && !ctx.calib ? rangeOf(S.gsm, acc.gsm) : S.gsmRange).map(Math.round), target_gsm: S.target,
+        gsm: Math.round(S.gsm), gsm_range: (ctx.floor && !ctx.calib ? ML.band(S.gsm, ctx.floor.gsm_sd) : acc && !ctx.calib ? rangeOf(S.gsm, acc.gsm) : S.gsmRange).map(Math.round), target_gsm: S.target,
         sl_mm: r2(S.lref), sl_source: S.slSource, sl_range_mm: S.slRange,
         tf: r1(S.tfGround), tf_window: W,
         wpi: r1(S.wpc * 2.54), cpi: r1(S.cpc * 2.54), wpc: r1(S.wpc), cpc: r1(S.cpc),
-        width_open_in: r1(S.width), width_range_in: (acc && acc.width && !ctx.calib ? rangeOf(S.width, acc.width) : S.widthRange).map(r1), tube_in: r1(S.width / 2), target_width_in: S.tW,
+        width_open_in: r1(S.width), width_range_in: (ctx.floor && !ctx.calib ? ML.band(S.width, ctx.floor.width_sd) : acc && acc.width && !ctx.calib ? rangeOf(S.width, acc.width) : S.widthRange).map(r1), tube_in: r1(S.width / 2), target_width_in: S.tW,
         kw: r2(S.KW.med), kw_basis: S.KW.basis, ks: r1(S.KS.med), ks_basis: S.KS.basis,
         relaxation: relax,
+        stenter: plush ? null : stenterSet(input, S),
         calibration: ctx.calib ? {
           n: ctx.calib.n, ks: r2(ctx.calib.ks), kw: r3(ctx.calib.kw), model_ks: r2(S.modelKS), model_kw: r3(S.modelKW),
           ks_vs_model_pct: r1((ctx.calib.ks / S.modelKS - 1) * 100), kw_vs_model_pct: r1((ctx.calib.kw / S.modelKW - 1) * 100),
@@ -1513,4 +1563,5 @@ function analyse(input) {
   }
 }
 
-module.exports = { analyse, listTemplates, FIBRES, ROLES, LIMITS, TF_WINDOW };
+module.exports = {
+  groupKeyOf, analyse, listTemplates, FIBRES, ROLES, LIMITS, TF_WINDOW };

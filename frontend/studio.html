@@ -325,6 +325,7 @@
             <div class="st-f"><label for="st-passes">Raising passes</label><input id="st-passes" type="number" min="1" max="12" step="1" placeholder="auto"></div>
             <label class="st-check" style="align-self:end"><input type="checkbox" id="st-shear"> Sheared level</label>
           </div>
+          <div class="st-f"><label for="st-setw">Finish: stenter set width (in, optional)</label><input id="st-setw" type="number" min="15" max="120" step="0.5" placeholder="as it finishes by itself"></div>
           <div class="st-f"><label for="st-stripe">Stripes (optional) — yarn per course, e.g. <code>A12 B4 C2</code></label><input id="st-stripe" type="text" placeholder="or set a colour per feeder in the design" autocomplete="off" spellcheck="false"></div>
           <div id="st-swatches" style="margin:-2px 0 8px">
             <span class="st-sw">A <input type="color" id="st-sc-A" value="#1f3b73"></span><span class="st-sw">B <input type="color" id="st-sc-B" value="#f2f2f2"></span><span class="st-sw">C <input type="color" id="st-sc-C" value="#c0392b"></span><span class="st-sw">D <input type="color" id="st-sc-D" value="#f1c40f"></span><span class="st-sw">E <input type="color" id="st-sc-E" value="#27ae60"></span><span class="st-sw">F <input type="color" id="st-sc-F" value="#2c3e50"></span>
@@ -418,6 +419,30 @@
           <div class="st-tools" style="margin:6px 0 0">
             <button type="button" class="st-btn" id="st-addroll">+ Trial roll</button>
             <label class="st-check" style="margin:0"><input type="checkbox" id="st-userolls" checked> Use my rolls</label>
+          </div>
+          <div class="st-floor">
+            <div class="st-sub" style="margin-top:10px">Floor machine — learn from every roll</div>
+            <p class="st-hint" style="margin-top:0">Log each roll you knit and measure against the machine it ran on. The Studio learns that machine's own bias for each structure (its last 10 rolls), and every design you check on it is corrected — with how many rolls back it up. Trial rolls above, when used, still win for this design.</p>
+            <div class="st-row">
+              <div class="st-f"><label for="st-fm">Machine</label><select id="st-fm"><option value="">— none (factory records only) —</option></select></div>
+              <div class="st-f"><label for="st-fmshade">Shade of the rolls</label><select id="st-fmshade"><option value="">—</option><option value="white">White / RFD</option><option value="light">Light</option><option value="medium">Medium</option><option value="dark">Dark</option><option value="black">Black</option></select></div>
+            </div>
+            <div class="st-tools" style="margin:4px 0 0">
+              <button type="button" class="st-btn" id="st-fmlog" disabled>Log the trial rolls to this machine</button>
+              <button type="button" class="st-btn" id="st-fmnew">+ Machine</button>
+            </div>
+            <div id="st-fmadd" hidden style="margin-top:6px">
+              <div class="st-row">
+                <div class="st-f"><label for="st-fmname">Name</label><input id="st-fmname" type="text" maxlength="60" placeholder="e.g. M-07" autocomplete="off"></div>
+                <div class="st-f"><label for="st-fmkind">Type</label><select id="st-fmkind"><option value="single">Single jersey</option><option value="rib">Rib</option><option value="interlock">Interlock</option></select></div>
+              </div>
+              <div class="st-row">
+                <div class="st-f"><label for="st-fmgg">Gauge</label><input id="st-fmgg" type="number" min="5" max="50" step="1"></div>
+                <div class="st-f"><label for="st-fmdia">Diameter (in)</label><input id="st-fmdia" type="number" min="8" max="60" step="1"></div>
+              </div>
+              <button type="button" class="st-btn" id="st-fmsave">Add machine</button>
+            </div>
+            <div id="st-fmstat" class="st-hint"></div>
           </div>
         </div>
 
@@ -653,6 +678,6 @@
 <script src="assets/js/studio-warp-geom.js?v=20261111a"></script>
 <script src="assets/js/studio-warp.js?v=20261111h"></script>
 <script src="assets/js/studio-needle.js?v=20261110d"></script>
-<script src="assets/js/studio.js?v=20261111f"></script>
+<script src="assets/js/studio.js?v=20261112a"></script>
 </body>
 </html>

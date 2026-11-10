@@ -90,7 +90,7 @@ function stats(errs) {
 
 function run({ folds = 5, records = ALL } = {}) {
   const use = records.filter(usable);
-  const out = { kfold: {}, family: {}, refused: 0 };
+  const out = { kfold: {}, family: {}, refused: 0, preds: [] };
   const add = (bucket, key, field, e) => { const b = (bucket[key] = bucket[key] || { gsm: [], width: [] }); b[field].push(e); };
 
   // 1. k-fold: a record is predicted by a Studio that never saw it
@@ -99,6 +99,7 @@ function run({ folds = 5, records = ALL } = {}) {
     const S = studioFrom(ALL.filter((r) => r.__fold !== f));     // records outside the usable set stay in training, as they do in production
     for (const r of use.filter((x) => x.__fold === f)) {
       const p = predict(S, r); if (!p) { out.refused++; continue; }
+      out.preds.push({ r, gsm: p.gsm, width: p.width });
       add(out.kfold, groupOf(r), 'gsm', (p.gsm - r.fgsm) / r.fgsm);
       add(out.kfold, '_all', 'gsm', (p.gsm - r.fgsm) / r.fgsm);
       if (r.fdia > 0) { add(out.kfold, groupOf(r), 'width', (p.width - r.fdia) / r.fdia); add(out.kfold, '_all', 'width', (p.width - r.fdia) / r.fdia); }
@@ -131,6 +132,8 @@ function run({ folds = 5, records = ALL } = {}) {
     method: `${folds}-fold cross-validation and leave-one-family-out on the factory records; every constant re-derived without the records predicted`,
     records: use.length, refused: out.refused, interval: 0.8,
     groups: summ(out.kfold), unseen: { pooled: { gsm: stats(unseen.gsm), width: stats(unseen.width) }, by_family: summ(out.family) },
+    // every record's out-of-fold prediction (not written to the file): the learning check replays them as rolls
+    _preds: out.preds,
   };
 }
 
@@ -147,7 +150,8 @@ if (require.main === module) {
   for (const [k, v] of Object.entries(res.unseen.by_family).sort()) console.log(k.padEnd(20), f(v.gsm).padEnd(36), f(v.width));
   console.log('pooled'.padEnd(20), f(res.unseen.pooled.gsm).padEnd(36), f(res.unseen.pooled.width));
   if (!process.argv.includes('--dry')) {
-    fs.writeFileSync(path.join(B, 'engine/catalog/studio-accuracy.json'), JSON.stringify(res, null, 1) + '\n');
+    const { _preds, ...save } = res;
+    fs.writeFileSync(path.join(B, 'engine/catalog/studio-accuracy.json'), JSON.stringify(save, null, 1) + '\n');
     console.log('\nwrote engine/catalog/studio-accuracy.json');
   }
 }

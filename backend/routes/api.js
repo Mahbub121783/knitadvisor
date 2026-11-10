@@ -1346,8 +1346,93 @@ router.post('/studio/invent', requireUser, inventLimiter, (req, res) => {
   } finally { inventRunning--; }
 });
 
-router.post('/studio/analyse', requireUser, (req, res) => {
+// Floor machines and their logged rolls (migration 043): the Studio learns each machine's own
+// bias, structure by structure (engine/domain/machine-learning.js). Private to the account.
+const floorRepo = require('../db/repositories/floor-repo');
+const floorFail = (res, err, what) => {
+  if (err instanceof floorRepo.FloorError) return res.status(400).json({ success: false, error: err.message });
+  console.error(`[studio] ${what} failed:`, err);
+  res.status(500).json({ success: false, error: `Could not ${what}.` });
+};
+const idOf = (v) => { const n = parseInt(v, 10); return Number.isInteger(n) && n > 0 ? n : null; };
+
+router.get('/studio/floor/machines', requireUser, async (req, res) => {
+  try { res.json({ success: true, machines: await floorRepo.machines.list(req.user.id) }); } catch (err) { floorFail(res, err, 'load your machines'); }
+});
+router.post('/studio/floor/machines', requireUser, async (req, res) => {
+  try { res.json({ success: true, machine: await floorRepo.machines.create(req.user.id, req.body || {}) }); } catch (err) { floorFail(res, err, 'add the machine'); }
+});
+router.delete('/studio/floor/machines/:id', requireUser, async (req, res) => {
+  const id = idOf(req.params.id); if (!id) return res.status(400).json({ success: false, error: 'Invalid id.' });
   try {
+    if (!(await floorRepo.machines.remove(req.user.id, id))) return res.status(404).json({ success: false, error: 'Machine not found.' });
+    res.json({ success: true });
+  } catch (err) { floorFail(res, err, 'remove the machine'); }
+});
+router.get('/studio/floor/machines/:id/rolls', requireUser, async (req, res) => {
+  const id = idOf(req.params.id); if (!id) return res.status(400).json({ success: false, error: 'Invalid id.' });
+  try {
+    const m = await floorRepo.machines.get(req.user.id, id);
+    if (!m) return res.status(404).json({ success: false, error: 'Machine not found.' });
+    res.json({ success: true, machine: m, rolls: await floorRepo.rolls.forMachine(req.user.id, id) });
+  } catch (err) { floorFail(res, err, 'load the rolls'); }
+});
+/**
+ * Log a roll knitted on a floor machine: { machine_id, design (the Studio design it was knitted to),
+ * roll: { sl_mm, gsm, width_in, ne?, gauge?, dia?, shade?, knitted_on? } }. The Studio predicts the
+ * cloth at exactly the roll's settings, with no learning applied, and the roll is stored with that
+ * prediction — measured ÷ predicted is what the machine's profile learns from.
+ */
+router.post('/studio/floor/rolls', requireUser, async (req, res) => {
+  const b = req.body || {};
+  const mid = idOf(b.machine_id); if (!mid) return res.status(400).json({ success: false, error: 'Choose the machine the roll was knitted on.' });
+  const r = b.roll || {};
+  try {
+    const m = await floorRepo.machines.get(req.user.id, mid);
+    if (!m) return res.status(404).json({ success: false, error: 'Machine not found.' });
+    const design = b.design && typeof b.design === 'object' ? b.design : null;
+    if (!design) return res.status(400).json({ success: false, error: 'Send the design the roll was knitted to.' });
+    const y = design.yarn || {};
+    const ne = +r.ne > 0 ? +r.ne : (+y.count > 0 && String(y.unit || 'ne').toLowerCase() === 'ne' ? +y.count : null);
+    const roll = { sl_mm: r.sl_mm, gsm: r.gsm, width_in: r.width_in, ne, gauge: +r.gauge > 0 ? +r.gauge : m.gauge, dia: +r.dia > 0 ? +r.dia : (m.dia != null ? +m.dia : null) };
+    if (!(+roll.width_in > 0)) roll.width_in = null;
+    // the prediction at the roll's own settings: run as a one-roll calibration, which reports the model's figures
+    const { floor: _f, floor_machine_id: _fm, calibration: _c, ...plain } = design;
+    const out = fabricStudio.analyse({ ...plain, calibration: { rolls: [{ ...roll, width_in: roll.width_in || 60 }] } });
+    if (!out.success) return res.status(400).json({ success: false, error: out.error || 'The Studio could not read this design.' });
+    const p = out.fabric.calibration && out.fabric.calibration.rolls[0];
+    if (!p) return res.status(400).json({ success: false, error: 'This structure is weighed on its own model (plush), not on machine rolls.' });
+    const row = await floorRepo.rolls.add(req.user.id, mid, {
+      group_key: out.structure.group, structure: out.structure.match ? out.structure.match.id : 'new',
+      design_name: b.design_name ? String(b.design_name).slice(0, 80) : null, ne, sl_mm: +roll.sl_mm, gauge: roll.gauge, dia: roll.dia,
+      shade: ['white', 'light', 'medium', 'dark', 'black'].includes(r.shade) ? r.shade : null,
+      gsm: +roll.gsm, width_in: roll.width_in ? +roll.width_in : null, gsm_model: p.model_gsm, width_model: roll.width_in ? p.model_width_in : null,
+      knitted_on: /^\d{4}-\d{2}-\d{2}$/.test(r.knitted_on || '') ? r.knitted_on : null,
+    });
+    res.json({ success: true, roll: row, off_gsm_pct: Math.round((+roll.gsm / p.model_gsm - 1) * 1000) / 10, off_width_pct: roll.width_in ? Math.round((+roll.width_in / p.model_width_in - 1) * 1000) / 10 : null });
+  } catch (err) { floorFail(res, err, 'log the roll'); }
+});
+router.delete('/studio/floor/rolls/:id', requireUser, async (req, res) => {
+  const id = idOf(req.params.id); if (!id) return res.status(400).json({ success: false, error: 'Invalid id.' });
+  try {
+    if (!(await floorRepo.rolls.remove(req.user.id, id))) return res.status(404).json({ success: false, error: 'Roll not found.' });
+    res.json({ success: true });
+  } catch (err) { floorFail(res, err, 'delete the roll'); }
+});
+
+router.post('/studio/analyse', requireUser, async (req, res) => {
+  try {
+    // a floor machine named: its rolls (the account's own) go in with the design, and the cache key with them
+    const fm = req.body && req.body.floor_machine_id != null ? idOf(req.body.floor_machine_id) : null;
+    if (req.body && req.body.floor_machine_id != null) {
+      const { floor_machine_id: _x, ...rest } = req.body;
+      req.body = rest;
+      if (fm) {
+        const m = await floorRepo.machines.get(req.user.id, fm);
+        if (!m) return res.status(404).json({ success: false, error: 'Floor machine not found.' });
+        req.body.floor = { name: m.name, rolls: floorRepo.asLearning(await floorRepo.rolls.forMachine(req.user.id, fm)) };
+      }
+    }
     const key = JSON.stringify(req.body || {});
     let hit = key.length < 32768 ? studioCache.get(key) : null;
     if (hit) { studioCache.delete(key); studioCache.set(key, hit); }

@@ -382,6 +382,61 @@
       rolls.splice(+d, 1); renderRolls(); writeRolls(); schedule();
     });
     $('st-userolls').addEventListener('change', schedule);
+    bindFloor();
+  }
+
+  // ── floor machines: every roll logged teaches that machine's profile (/api/studio/floor/*) ──
+  var FM = { list: [] };
+  var FMKEY = 'ka_studio_floor_machine';
+  function fmStat(msg, bad) { $('st-fmstat').innerHTML = msg ? '<span style="color:' + (bad ? 'var(--bad, #b3261e)' : 'var(--t2)') + '">' + msg + '</span>' : ''; }
+  function fmRender() {
+    var cur = $('st-fm').value || (function () { try { return localStorage.getItem(FMKEY) || ''; } catch (_) { return ''; } })();
+    $('st-fm').innerHTML = '<option value="">— none (factory records only) —</option>' + FM.list.map(function (m) {
+      return '<option value="' + m.id + '">' + esc(m.name) + ' · ' + m.kind + (m.gauge ? ' ' + m.gauge + 'G' : '') + (m.dia ? ' ' + Math.round(m.dia) + '"' : '') + ' · ' + m.rolls + ' roll' + (m.rolls === 1 ? '' : 's') + '</option>';
+    }).join('');
+    $('st-fm').value = FM.list.some(function (m) { return String(m.id) === String(cur); }) ? cur : '';
+    $('st-fmlog').disabled = !$('st-fm').value;
+  }
+  function fmLoad() {
+    return apiFetch('/api/studio/floor/machines').then(function (r) { FM.list = r.machines || []; fmRender(); }).catch(function () { FM.list = []; fmRender(); });
+  }
+  function bindFloor() {
+    fmLoad().then(function () { if ($('st-fm').value) schedule(); });
+    $('st-fm').addEventListener('change', function () {
+      try { localStorage.setItem(FMKEY, this.value); } catch (_) {}
+      $('st-fmlog').disabled = !this.value; fmStat('');
+    });
+    $('st-fmnew').addEventListener('click', function () {
+      $('st-fmadd').hidden = !$('st-fmadd').hidden;
+      if (!$('st-fmadd').hidden) { $('st-fmgg').value = num('st-gauge') || ''; $('st-fmdia').value = num('st-dia') || ''; $('st-fmkind').value = S.bed === 'single' ? 'single' : S.bed; }
+    });
+    $('st-fmsave').addEventListener('click', function () {
+      apiFetch('/api/studio/floor/machines', { method: 'POST', body: { name: $('st-fmname').value, kind: $('st-fmkind').value, gauge: num('st-fmgg'), dia: num('st-fmdia') } }).then(function (r) {
+        $('st-fmadd').hidden = true; $('st-fmname').value = '';
+        try { localStorage.setItem(FMKEY, String(r.machine.id)); } catch (_) {}
+        $('st-fm').value = '';
+        return fmLoad();
+      }).then(function () { fmStat('Machine added. Log rolls to it as you knit them.'); schedule(); })
+        .catch(function (e) { fmStat(esc((e.data && e.data.error) || e.message || 'Could not add the machine.'), true); });
+    });
+    $('st-fmlog').addEventListener('click', function () {
+      var mid = +$('st-fm').value, list = completeRolls();
+      if (!mid) return;
+      if (!list.length) { fmStat('Fill in at least one complete trial roll above (stitch length, GSM, width, diameter, gauge).', true); return; }
+      var design = payload(); delete design.floor_machine_id; delete design.calibration;
+      var btn = this; btn.disabled = true; fmStat('Logging ' + list.length + ' roll' + (list.length === 1 ? '' : 's') + '…');
+      var offs = [];
+      list.reduce(function (p, r) {
+        return p.then(function () {
+          return apiFetch('/api/studio/floor/rolls', { method: 'POST', body: { machine_id: mid, design: design, design_name: $('st-name').value || null, roll: { sl_mm: r.sl_mm, ne: r.ne, gsm: r.gsm, width_in: r.width_in, dia: r.dia, gauge: r.gauge, shade: $('st-fmshade').value || null } } })
+            .then(function (x) { offs.push(x.off_gsm_pct); });
+        });
+      }, Promise.resolve()).then(function () {
+        fmStat('Logged ' + offs.length + ' roll' + (offs.length === 1 ? '' : 's') + ' (GSM ' + offs.map(function (o) { return (o > 0 ? '+' : '') + o + '%'; }).join(', ') + ' against the factory model). Untick “Use my rolls” to see what the machine has learned on its own.');
+        return fmLoad();
+      }).then(schedule).catch(function (e) { fmStat(esc((e.data && e.data.error) || e.message || 'Could not log the rolls.'), true); })
+        .then(function () { btn.disabled = !$('st-fm').value; });
+    });
   }
 
   // ── engine call ──────────────────────────────────────────────────────────
@@ -419,7 +474,8 @@
       plush: { cut: $('st-cut').checked, sinker_mm: num('st-sinker'), arrangement: $('st-parr').value },
       pile: $('st-pile').value,
       stripes: $('st-stripe').value.trim() ? { sequence: $('st-stripe').value } : null,
-      finish: { brush: $('st-brush').value, passes: num('st-passes'), sheared: $('st-shear').checked },
+      finish: { brush: $('st-brush').value, passes: num('st-passes'), sheared: $('st-shear').checked, set_width_in: num('st-setw') },
+      floor_machine_id: $('st-fm').value ? +$('st-fm').value : null,
       elastane: $('st-lycra').checked ? { denier: +$('st-lyd').value, draft: num('st-lydraft') || 2.6, every: $('st-lyevery').value } : null,
       target: { gsm: num('st-gsm'), width_in: num('st-width'), shrinkage_pct: num('st-shr') },
       calibration: $('st-userolls').checked && completeRolls().length ? { rolls: completeRolls() } : null,
@@ -491,7 +547,8 @@
       kpi('Wales × courses', f.wpi + ' × ' + f.cpi, 'per inch · ' + f.wpc + ' × ' + f.cpc + ' per cm', est) +
       '</div>' +
       // how right it is: measured, not claimed — the cross-validation on the factory records
-      (A ? '<div class="st-acc"><b>How right is this?</b> When the Studio predicted ' + (A.level === 'estimate' ? 'structures it had no records for' : A.level === 'close' ? 'structures like this one' : 'cloths like this one') + ' without having seen them, the finished GSM was typically ' + A.gsm.typical_error_pct + '% off; ' +
+      (A && A.level === 'machine' ? '<div class="st-acc"><b>How right is this?</b> Learned on <b>' + esc(A.machine) + '</b> from ' + A.supported_by_rolls + ' of your roll' + (A.supported_by_rolls === 1 ? '' : 's') + ' of this structure: GSM × ' + A.gsm_factor + ', width × ' + A.width_factor + ' against the factory model. Expected: GSM typically ' + A.gsm.typical_error_pct + '% off (' + A.gsm.within_5_pct + '% within ±5%), width typically ' + A.width.typical_error_pct + '% off (' + A.width.within_5_pct + '% within ±5%). <span title="' + esc(A.method) + '">' + esc(A.basis) + '.</span> Each roll you log moves it; a few rolls move it a little, ten move it most of the way.</div>' :
+      A ? '<div class="st-acc"><b>How right is this?</b> When the Studio predicted ' + (A.level === 'estimate' ? 'structures it had no records for' : A.level === 'close' ? 'structures like this one' : 'cloths like this one') + ' without having seen them, the finished GSM was typically ' + A.gsm.typical_error_pct + '% off; ' +
         A.gsm.within_3_pct + '% landed within ±3%, ' + A.gsm.within_5_pct + '% within ±5%, ' + A.gsm.within_8_pct + '% within ±8%' + (A.width ? '. Width: typically ' + A.width.typical_error_pct + '% off, ' + A.width.within_5_pct + '% within ±5%' : '') + '. <span title="' + esc(A.method) + ' (' + esc(A.generated) + ')">' + esc(A.basis) + '.</span> Your own trial rolls narrow this (Trial rolls below).</div>' : '');
     if (f.calibration) {
       var cb = f.calibration;
@@ -533,6 +590,10 @@
         r.solver.options.map(function (o, i) {
           return '<tr' + (i === 0 ? ' style="background:var(--accent-tint)"' : '') + '><td>' + esc(o.count) + (i === 0 ? ' ✓' : '') + '</td><td>' + o.gauge + ' GG' + (o.practised ? ' ·&nbsp;factory' : '') + '</td><td>' + o.sl_mm + ' mm</td><td>' + o.tf + '</td><td>' + o.gsm + '</td><td>' + o.width_in + '"</td><td>' + (o.breaks && o.breaks.length ? '<span style="color:#9a5b00">' + esc(o.breaks.join('; ')) + '</span>' : 'all kept') + '</td></tr>';
         }).join('') + '</table></div><p class="st-p">“factory”: the gauge the factory records most often knit this count on for this family. Limits: tightness factor inside the factory\'s 5th–95th percentile, gauge fit, hook load, stitch length 1.8–7 mm.</p>';
+    }
+    if (f.stenter) {
+      var sw = f.stenter;
+      html += '<div class="st-sub">Finish: stenter setting ' + src('e') + '</div><p class="st-p">Set at ' + sw.set_width_in + '" against the ' + sw.natural_width_in + '" it finishes at by itself (' + (sw.change_pct > 0 ? '+' : '') + sw.change_pct + '%): about <b>' + sw.gsm_at_set + ' GSM</b> (' + (sw.gsm_change_pct > 0 ? '+' : '') + sw.gsm_change_pct + '%). ' + esc(sw.note) + ' <span style="color:var(--t3)">' + esc(sw.basis) + '.</span></p>';
     }
     if (r.finish && r.finish.brushed !== 'none') {
       var fz = r.finish;
@@ -1183,7 +1244,7 @@
   var STORE = 'ka_studio_designs';
   function readStore() { try { return JSON.parse(localStorage.getItem(STORE) || '[]'); } catch (_) { return []; } }
   function writeStore(a) { try { localStorage.setItem(STORE, JSON.stringify(a)); return true; } catch (_) { return false; } }
-  var FIELDS = ['st-ne', 'st-unit', 'st-ply', 'st-ytype', 'st-fil', 'yb-count', 'yb-unit', 'yb-fibre', 'yb-type', 'yb-ply', 'yb-fil', 'yl-count', 'yl-unit', 'yl-fibre', 'yl-type', 'yl-ply', 'yl-fil', 'st-fibre', 'st-gsm', 'st-width', 'st-gauge', 'st-dia', 'st-feeders', 'st-rpm', 'st-sl', 'st-eff', 'st-tc', 'st-td', 'st-lyd', 'st-lydraft', 'st-lyevery', 'st-v1r', 'st-v1l', 'st-v2r', 'st-v2l', 'st-sinker', 'st-parr', 'st-mprof', 'st-brush', 'st-passes', 'st-pile', 'st-tdir', 'st-shr', 'st-camd', 'st-timing', 'st-dgap', 'st-c1r', 'st-c1l', 'st-c2r', 'st-c2l', 'st-stripe', 'st-sc-A', 'st-sc-B', 'st-sc-C', 'st-sc-D', 'st-sc-E', 'st-sc-F'];
+  var FIELDS = ['st-ne', 'st-unit', 'st-ply', 'st-ytype', 'st-fil', 'yb-count', 'yb-unit', 'yb-fibre', 'yb-type', 'yb-ply', 'yb-fil', 'yl-count', 'yl-unit', 'yl-fibre', 'yl-type', 'yl-ply', 'yl-fil', 'st-fibre', 'st-gsm', 'st-width', 'st-gauge', 'st-dia', 'st-feeders', 'st-rpm', 'st-sl', 'st-eff', 'st-tc', 'st-td', 'st-lyd', 'st-lydraft', 'st-lyevery', 'st-v1r', 'st-v1l', 'st-v2r', 'st-v2l', 'st-sinker', 'st-parr', 'st-mprof', 'st-brush', 'st-passes', 'st-pile', 'st-tdir', 'st-shr', 'st-camd', 'st-timing', 'st-dgap', 'st-c1r', 'st-c1l', 'st-c2r', 'st-c2l', 'st-stripe', 'st-setw', 'st-sc-A', 'st-sc-B', 'st-sc-C', 'st-sc-D', 'st-sc-E', 'st-sc-F'];
   function designNow() {
     var o = { v: 2, name: $('st-name').value || 'Untitled design', bed: S.bed, C: S.C, D: S.D, feeds: S.feeds, rolls: rolls, lycra: $('st-lycra').checked, cut: $('st-cut').checked, colour: $('st-col').value, fields: {} };
     FIELDS.forEach(function (id) { o.fields[id] = $(id).value; });
