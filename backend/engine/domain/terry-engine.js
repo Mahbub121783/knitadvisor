@@ -236,7 +236,11 @@ function analyzePlushTerry(p) {
     const score = (r) => Math.abs(Math.log((r.exact_tex) / (ground.tex * ratioPref))) + 0.45 * Math.abs(r.h - hPref)
       + (Math.abs(r.gsm - gsm) / gsm > 0.06 ? 1 : 0);
     // velour is knitted with room to shear: at least 1.5 mm of loop
-    pick = table.filter(r => r.exact_tex > 3 && (v.kind !== 'velour' || r.h >= 1.5)).reduce((b, r) => (score(r) < score(b) ? r : b));
+    // no sinker that plates a sensible pile yarn at this weight: take the nearest the table has, or say it cannot be solved
+    let cand = table.filter(r => r.exact_tex > 3 && (v.kind !== 'velour' || r.h >= 1.5));
+    if (!cand.length) cand = table.filter(r => r.exact_tex > 0);
+    if (!cand.length) return null;
+    pick = cand.reduce((b, r) => (score(r) < score(b) ? r : b));
     basis = 'sinker chosen so the pile yarn plates cleanly behind the ground (modelled preference)';
   }
   const h = pick.h;

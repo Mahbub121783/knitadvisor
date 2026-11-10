@@ -183,6 +183,7 @@
       $('st-brush').value = /fleece/.test(id) ? 'back' : 'none';
       $('st-brush-box').hidden = $('st-brush').value === 'none';
       $('st-pile').value = 'sinker';
+      $('st-ply').value = String(t.ends || 1);
       if (t.gsm_range && t.gsm_range.min && !$('st-gsm').dataset.touched) {
         $('st-gsm').value = Math.round((t.gsm_range.min + t.gsm_range.max) / 2 / 5) * 5;
       }

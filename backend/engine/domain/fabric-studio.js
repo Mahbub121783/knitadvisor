@@ -149,7 +149,10 @@ function templateOf(f) {
     id: f.id, name: f.name, category: f.category,
     bed: D ? 'double' : 'single', gating: D ? (f.category === 'interlock' && !ilClash ? 'interlock' : 'rib') : 'single',
     note: ilClash ? 'Listed with the interlock family, but cylinder and dial needles rise together at one feed: this programme runs on rib gating.'
-      : eyelet ? 'Each eyelet is a loop transfer (E): knitted on a pointelle machine with transfer and electronic needle selection.' : null,
+      : eyelet ? 'Each eyelet is a loop transfer (E): knitted on a pointelle machine with transfer and electronic needle selection.'
+        : f.id === 'heavy_jersey' ? 'Heavy jersey is knitted with two ends per feeder (two yarns fed together into every loop): set as 2-ply. The heavy-jersey rows in the factory records weigh what two ends do — one end at that loop length would be about half.' : null,
+    // heavy jersey: two ends per feeder (the factory's rows: 22s at a 4 mm loop, ~280 GSM)
+    ends: f.id === 'heavy_jersey' ? 2 : 1,
     grid: { C: Cg, D },
     roles: Array.from({ length: feeds }, (_, i) => { const c = cam.find((x) => +x.feed === i + 1); return roleOf(c && c.yarn); }),
     typical_gauge: f.typical_gauge || null,
@@ -1064,7 +1067,7 @@ function analyse(input) {
         composition: { fibers: comp }, groundNe: ground ? ground.ne : null, pileNe: py0 ? py0.ne : null,
         pileHeightMm: +pl.sinker_mm > 0 ? +pl.sinker_mm : null, cut: !!pl.cut, loopArrangement: pl.arrangement,
       });
-      if (!plush) throw new StudioError('The plush model could not solve this weight.');
+      if (!plush) throw new StudioError(`No sinker height and pile yarn plate to ${tgt} GSM on this ground yarn: a terry or velour this light is not knittable — raise the target GSM or use a finer ground yarn.`);
       ctx.calib = null;
     }
 
