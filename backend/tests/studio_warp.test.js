@@ -45,7 +45,11 @@ for (const t of W.TEMPLATES) {
   assert.strictEqual(r4.bars[0].ends, Math.round(r.bars[0].ends / 2));
   // elastane is fed drafted
   const r5 = run([{ notation: '1-0/2-3//', yarn: NY(40) }, { notation: '1-2/1-0//', yarn: { count: 40, unit: 'denier', fibre: 'elastane', draft: 2 } }], { cpc: 20 });
-  near(r5.bars[1].fed_mm_per_rack * 2, r5.bars[1].runner_mm_per_rack, 2, 'fed = runner ÷ draft');
+  // total draft 2, of which 1.7 at warping (the default): the let-off draws 2 ÷ 1.7 off the beam
+  near(r5.bars[1].fed_mm_per_rack * 2 / 1.7, r5.bars[1].runner_mm_per_rack, 2, 'run-in = runner × beam draft ÷ total draft');
+  const r5b = run([{ notation: '1-0/2-3//', yarn: NY(40) }, { notation: '1-2/1-0//', yarn: { count: 40, unit: 'denier', fibre: 'elastane', draft: 2, beam_draft: 1 } }], { cpc: 20 });
+  near(r5b.bars[1].fed_mm_per_rack * 2, r5b.bars[1].runner_mm_per_rack, 2, 'no beam draft: run-in = runner ÷ draft');
+  near(r5b.fabric.gsm, r5.fabric.gsm, 0.5, 'the weight follows the total draft, not where it is put in');
   // a finished width given sets the narrowing
   const r6 = run([{ notation: '1-0/2-3//', yarn: NY(40) }, { notation: '1-2/1-0//', yarn: NY(40) }], { cpc: 20 }, { width_in: 80 });
   near(r6.fabric.width_in, 80, 0.1, 'finished width as given');
@@ -171,3 +175,34 @@ console.log('Studio warp 3D tests passed');
   assert(g.paths.filter((p) => p.bar === 1).every((p) => new Set(p.loops.map((l) => l.bed)).size === 2));
 }
 console.log('Studio warp spacer / net / notation tests passed');
+
+// beams and let-off
+{
+  const r = run([{ notation: '1-0/2-3//', yarn: NY(40) }, { notation: '1-2/1-0//', yarn: NY(40) }], { cpc: 20, width_in: 130, speed_cpm: 2000, efficiency: 85 }, {});
+  const B = r.beams;
+  assert.strictEqual(B.beams_per_bar, 7, '130" on 21" section beams');
+  // capacity: π/4 (D² − d²) W · 0.70 · 1.14 g/cm³
+  near(B.per_bar[0].kg_per_beam, Math.PI / 4 * ((21 * 2.54) ** 2 - (7 * 2.54) ** 2) * 21 * 2.54 * 0.7 * 1.14 / 1000, 0.1, 'beam capacity');
+  // the 2-needle front bar uses yarn faster: it runs out first
+  assert.strictEqual(B.limiting_bar, 1);
+  assert(B.per_bar[1].courses > B.per_bar[0].courses);
+  // warp length × ends × tex = the beam's mass
+  const f = B.per_bar[0];
+  near(f.warp_length_m * f.ends_per_beam * (40 / 9) / 1e6, f.kg_per_beam, 0.05, 'mass balance on the beam');
+  // a matched set runs out together: the back bar wound shorter, the front full
+  assert.strictEqual(B.matched[0].full_pct, 100);
+  assert(B.matched[1].full_pct < 100 && B.matched[1].warp_length_m < B.per_bar[1].warp_length_m);
+  // let-off: courses/min × run-in per course
+  near(f.let_off_m_per_min, 2000 * 0.85 * r.bars[0].fed_mm_per_rack / 480 / 1000, 0.01, 'let-off speed');
+  // an order: the yarn it takes matches kg per 1,000 m of machine fabric
+  const o = run([{ notation: '1-0/2-3//', yarn: NY(40) }, { notation: '1-2/1-0//', yarn: NY(40) }], { cpc: 20 }, { order_m: 5000 });
+  const machineM = 5000 * o.fabric.relax.kc;
+  near(o.beams.order.yarn[0].kg, o.bars[0].kg_per_1000m * machineM / 1000, 0.2, 'order yarn = kg/1,000 m × machine metres');
+  // bigger beams hold more
+  const big = W.analyse({ machine: { type: 'tricot', gauge: 28, cpc: 20 }, bars: [{ notation: '1-0/2-3//', yarn: NY(40) }, { notation: '1-2/1-0//', yarn: NY(40) }], beams: { flange_in: 30 }, target: {} });
+  assert(big.beams.set_hours > B.set_hours * 1.8);
+  // elastane is wound stretched: more metres on the same beam
+  const el = run([{ notation: '1-0/2-3//', yarn: NY(40) }, { notation: '1-2/1-0//', yarn: { count: 40, unit: 'denier', fibre: 'elastane', draft: 2.6, beam_draft: 1.7 } }], { cpc: 20 });
+  assert(el.beams.per_bar[1].warp_length_m > 1.6 * el.beams.per_bar[1].kg_per_beam * 1e6 / (el.beams.per_bar[1].ends_per_beam * 40 / 9));
+}
+console.log('Studio warp beam tests passed');

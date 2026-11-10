@@ -27,7 +27,7 @@
         '<div class="st-f"><label>Fibre</label><select data-k="fibre">' + fibreOpts(y.fibre || 'nylon_filament') + '</select></div>' +
         '<div class="st-f"><label>Filaments (F)</label><input data-k="filaments" type="number" min="1" step="1" value="' + esc(y.filaments || '') + '"></div>' +
         '<div class="st-f"><label>3D colour</label><input type="color" data-k="colour" value="' + esc(b.colour || barCol(i)) + '"></div>' +
-        (y.fibre === 'elastane' ? '<div class="st-f"><label>Draft</label><input data-k="draft" type="number" min="1.2" max="4" step="0.1" value="' + esc(y.draft || 2.2) + '"></div>' : '') +
+        (y.fibre === 'elastane' ? '<div class="st-f"><label title="Relaxed elastane to knitted: warping draft × let-off draft">Total draft</label><input data-k="draft" type="number" min="1.2" max="4.5" step="0.1" value="' + esc(y.draft || 2.2) + '"></div><div class="st-f"><label title="Put in at warping: the elastane is wound on the beam stretched">Beam draft</label><input data-k="beam_draft" type="number" min="1" max="3" step="0.1" placeholder="1.7" value="' + esc(y.beam_draft || '') + '"></div>' : '') +
         '</div></div>';
     }).join('');
   }
@@ -36,7 +36,8 @@
     var n = function (id) { var v = parseFloat($(id).value); return isFinite(v) && v > 0 ? v : null; };
     return {
       machine: { type: $('wp-mtype').value, gauge: n('wp-gauge'), width_in: n('wp-width'), speed_cpm: n('wp-speed'), efficiency: n('wp-eff'), cpc: n('wp-cpc'), notation_step: +$('wp-nstep').value, gap_mm: n('wp-gap') },
-      bars: W.bars.map(function (b) { return { notation: b.notation, threading: b.threading, yarn: b.yarn }; }), target: { gsm: n('wp-gsm'), width_in: n('wp-fwidth') },
+      bars: W.bars.map(function (b) { return { notation: b.notation, threading: b.threading, yarn: b.yarn }; }), target: { gsm: n('wp-gsm'), width_in: n('wp-fwidth'), order_m: n('wp-order') },
+      beams: { flange_in: n('wp-bflange'), barrel_in: n('wp-bbarrel'), width_in: n('wp-bwidth') },
     };
   }
   function schedule() { clearTimeout(W.timer); W.timer = setTimeout(analyse, 280); }
@@ -66,11 +67,26 @@
       r.bars.map(function (b) {
         return '<tr><td><i style="display:inline-block;width:10px;height:10px;border-radius:2px;background:' + barCol(b.bar - 1) + '"></i> GB' + b.bar + (r.structure.beds === 2 ? '<br><small>' + esc(b.bed) + '</small>' : '') + '</td><td style="font-family:var(--mono)">' + esc(b.notation) + '</td><td>' + esc(b.kind) + '<br><small>' + b.laps.map(function (l) { return l.lap; }).filter(function (v, k, a) { return a.indexOf(v) === k; }).join(' / ') + ' lap</small></td><td>' + esc(b.threading) + ' (' + b.threaded_pct + '%)</td><td>' + esc(b.yarn) + ' ' + esc(b.fibre) + (b.draft ? '<br><small>draft ' + b.draft + '</small>' : '') + '</td><td>' + b.mm_per_course + ' mm</td><td>' + b.runner_mm_per_rack + (b.draft ? '<br><small>fed ' + b.fed_mm_per_rack + '</small>' : '') + '</td><td>' + b.ends + '</td><td>' + b.pct + '%</td><td>' + b.kg_per_1000m + '</td></tr>';
       }).join('') + '</table></div>';
+    h += beamsHtml(r);
     h += '<div class="st-sub">What the lapping makes</div><ul class="st-checks">' + r.character.map(function (c) { return '<li class="note"><b>' + esc(c.area) + ':</b> ' + esc(c.text) + '</li>'; }).join('') + '</ul>';
     h += '<p class="st-p" style="font-family:var(--mono);font-size:11px">' + esc(F.formula) + '</p><p class="st-p" style="font-size:12px">Finished state: ' + esc(F.relax.basis) + '. ' + esc(r.basis) + '. Needle pitch ' + M.pitch_mm + ' mm, ' + M.needles + ' needles, ' + esc(M.needle) + '.</p>';
     $('wp-out').innerHTML = h;
     drawLapping(r);
     render3D();
+  }
+
+  // beams and let-off: what each bar's beam set holds, how long it runs, and an order's yarn
+  function beamsHtml(r) {
+    var B = r.beams; if (!B) return '';
+    var fmt = function (v) { return Number(v).toLocaleString('en'); };
+    var h = '<div class="st-sub">Beams and let-off</div><p class="st-p" style="font-size:12px">' + B.beams_per_bar + ' section beams per bar, ' + B.flange_in + '" flange × ' + B.barrel_in + '" barrel × ' + B.width_in + '" wide. A full set runs <b>' + B.set_hours + ' h</b> and knits <b>' + fmt(B.set_fabric_m) + ' m</b> of finished fabric before GB' + B.limiting_bar + ' runs out first.</p>';
+    h += '<div class="st-scroll"><table class="st-t"><tr><th>Bar</th><th>Ends / beam</th><th>Yarn / beam (full)</th><th>Warp length (full)</th><th>Run-in (mm/rack)</th><th>Let-off (m/min)</th><th>Full beam lasts</th><th>Matched set: wind</th></tr>' +
+      B.per_bar.map(function (x, i) {
+        var m = B.matched[i];
+        return '<tr><td><i style="display:inline-block;width:10px;height:10px;border-radius:2px;background:' + barCol(x.bar - 1) + '"></i> GB' + x.bar + (x.bar === B.limiting_bar ? ' <small>(runs out first)</small>' : '') + '</td><td>' + x.ends_per_beam + '</td><td>' + x.kg_per_beam + ' kg<br><small>' + x.kg_per_set + ' kg per set</small></td><td>' + fmt(x.warp_length_m) + ' m</td><td>' + x.runin_mm_per_rack + '</td><td>' + x.let_off_m_per_min + '</td><td>' + x.hours + ' h<br><small>' + fmt(x.fabric_m) + ' m fabric</small></td><td>' + fmt(m.warp_length_m) + ' m, ' + m.kg_per_beam + ' kg<br><small>' + m.full_pct + '% of a full beam</small></td></tr>';
+      }).join('') + '</table></div>';
+    if (B.order) h += '<p class="st-p" style="font-size:12px">Order of <b>' + fmt(B.order.finished_m) + ' m</b> finished: ' + B.order.hours + ' h on the machine, ' + B.order.beam_sets + ' beam sets. Yarn (net, before waste): ' + B.order.yarn.map(function (y) { return 'GB' + y.bar + ' ' + fmt(y.kg) + ' kg'; }).join(', ') + '.</p>';
+    return h + '<p class="st-p" style="font-size:12px;color:var(--t3)">A matched set winds every bar to the courses of the bar that runs out first, so the whole set runs out together. ' + esc(B.basis.charAt(0).toUpperCase() + B.basis.slice(1)) + '.</p>';
   }
 
   // -- 3D: the same lapping, every end's path (studio-warp-geom.js) --
@@ -215,7 +231,7 @@
     });
     $('wp-mtype').addEventListener('change', syncMachine);
     $('wp-side').addEventListener('click', function () { showBack = !showBack; this.textContent = showBack ? 'Show face' : 'Show back'; if (cloth) cloth.setView(showBack ? 'back' : 'front'); });
-    ['wp-mtype', 'wp-gauge', 'wp-width', 'wp-speed', 'wp-eff', 'wp-cpc', 'wp-gsm', 'wp-fwidth', 'wp-nstep', 'wp-gap'].forEach(function (id) { $(id).addEventListener('input', schedule); $(id).addEventListener('change', schedule); });
+    ['wp-mtype', 'wp-gauge', 'wp-width', 'wp-speed', 'wp-eff', 'wp-cpc', 'wp-gsm', 'wp-fwidth', 'wp-nstep', 'wp-gap', 'wp-bflange', 'wp-bbarrel', 'wp-bwidth', 'wp-order'].forEach(function (id) { $(id).addEventListener('input', schedule); $(id).addEventListener('change', schedule); });
   }
   function onBar(e) {
     var row = e.target.closest('.wp-bar'), k = e.target.getAttribute('data-k'); if (!row || !k) return;

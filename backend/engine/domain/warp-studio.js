@@ -110,8 +110,12 @@ function readYarn(y, bar) {
   const label = unit === 'mm' ? `${v} mm mono (${Math.round(tex * 9)} D)` : `${v} ${unit === 'ne' ? 'Ne' : unit === 'denier' ? 'D' : unit}${+o.filaments > 0 ? '/' + Math.round(+o.filaments) + 'F' : ''}`;
   // diameter: a monofilament is a solid round rod; a multifilament or spun yarn packs looser
   const dMono = Math.sqrt((4 * tex) / (1000 * Math.PI * RHO[fibre]));
+  // elastane: `draft` is the TOTAL draft (relaxed yarn → knitted); part of it is put in
+  // at warping (the beam draft, ~1.7 published), the rest by the let-off
+  const draft = FIBRES[fibre].elastic ? Math.min(4.5, Math.max(1.2, +o.draft > 0 ? +o.draft : 2.2)) : 1;
+  const beamDraft = FIBRES[fibre].elastic ? Math.min(draft, Math.max(1, +o.beam_draft > 0 ? +o.beam_draft : Math.min(1.7, draft))) : 1;
   return { tex, label, fibre, fibre_label: FIBRES[fibre].label, elastic: !!FIBRES[fibre].elastic, mono, d_mm: mono ? dMono : (Math.sqrt(tex) / 28) * FIBRES[fibre].d,
-    draft: FIBRES[fibre].elastic ? Math.min(4, Math.max(1.2, +o.draft > 0 ? +o.draft : 2.2)) : 1, denier: r1(tex * 9) };
+    draft, beamDraft, denier: r1(tex * 9) };
 }
 
 // ── notation ──────────────────────────────────────────────────────────────
@@ -275,6 +279,63 @@ function holdsTogether(bars, beds, repeatPairs) {
   return { pieces: roots.size, pressed, needles: central.length };
 }
 
+/**
+ * BEAMS AND LET-OFF. Each bar runs off its own set of section beams across the
+ * working width. A beam holds the yarn volume between barrel and flange at a
+ * packing density (fibre density × packing fraction — modelled: flat
+ * filament 0.70, monofilament 0.75, elastane 0.75, spun 0.45):
+ *   capacity (kg)   = π/4 (D² − d²) · W · φ ρ
+ *   warp length (m) = capacity ÷ (ends per beam · tex on the beam), tex on the beam = tex ÷ beam draft
+ *   courses         = warp length ÷ run-in per course
+ * The bar whose beams run out first sets the beam-set life; winding every bar
+ * to that many courses lets the whole set run out together (a matched set).
+ * Let-off speed = courses/min × run-in per course.
+ */
+const BEAM_DEFAULTS = { tricot: { flange_in: 21, barrel_in: 7, width_in: 21 }, raschel: { flange_in: 30, barrel_in: 8, width_in: 21 }, double_raschel: { flange_in: 30, barrel_in: 8, width_in: 21 } };
+function packOf(y) { return (y.elastic ? 0.75 : y.mono ? 0.75 : /filament|polypropylene/.test(y.fibre) ? 0.70 : 0.45) * (RHO[y.fibre] || 1.2); }
+function planBeams({ bars, per, barsOut, mType, widthIn, cpcM, kc, speed, eff, beam, orderM }) {
+  const D0 = BEAM_DEFAULTS[mType] || BEAM_DEFAULTS.tricot;
+  const pick = (k, lo, hi) => { const v = +beam[k]; return v >= lo && v <= hi ? v : D0[k]; };
+  const flange = pick('flange_in', 10, 40), barrel = Math.min(pick('barrel_in', 3, 20), flange - 1), bw = pick('width_in', 6, 60);
+  const nBeams = Math.max(1, Math.ceil(widthIn / bw - 1e-9));
+  const volCm3 = (Math.PI / 4) * ((flange * 2.54) ** 2 - (barrel * 2.54) ** 2) * bw * 2.54;
+  const coursesPerMin = speed * eff;
+  const rows = bars.map((b, i) => {
+    const x = per[i], o = barsOut[i];
+    const endsPerBeam = Math.ceil(o.ends / nBeams);
+    const density = packOf(b.yarn);
+    const kgBeam = (volCm3 * density) / 1000;
+    const texOnBeam = b.yarn.tex / b.yarn.beamDraft;
+    const lengthM = (kgBeam * 1e6) / (endsPerBeam * texOnBeam);
+    const courses = (lengthM * 1000) / x.runin;
+    return {
+      bar: b.n, beams: nBeams, ends_per_beam: endsPerBeam, density_g_cm3: r2(density), kg_per_beam: r1(kgBeam), kg_per_set: r1(kgBeam * nBeams),
+      warp_length_m: Math.round(lengthM), runin_mm_per_rack: Math.round(x.runin * RACK), let_off_m_per_min: r2((coursesPerMin * x.runin) / 1000),
+      courses: Math.round(courses), fabric_m: Math.round(courses / (cpcM * 100) / kc), hours: r1(courses / coursesPerMin / 60),
+    };
+  });
+  const lim = rows.reduce((a, r) => (r.courses < a.courses ? r : a), rows[0]);
+  // a matched set: every bar wound to the limiting bar's courses, all run out together
+  const matched = rows.map((r, i) => {
+    const lengthM = (lim.courses * per[i].runin) / 1000;
+    return { bar: r.bar, warp_length_m: Math.round(lengthM), kg_per_beam: r1((lengthM * r.ends_per_beam * bars[i].yarn.tex / bars[i].yarn.beamDraft) / 1e6), full_pct: Math.round((lim.courses / r.courses) * 100) };
+  });
+  let order = null;
+  if (orderM > 0) {
+    const courses = orderM * kc * cpcM * 100;
+    order = {
+      finished_m: orderM, courses: Math.round(courses), hours: r1(courses / coursesPerMin / 60), beam_sets: r2(courses / lim.courses),
+      yarn: rows.map((r, i) => ({ bar: r.bar, kg: r1((barsOut[i].ends * per[i].fed * courses * bars[i].yarn.tex) / 1e9), warp_length_m: Math.round((courses * per[i].runin) / 1000) })),
+    };
+  }
+  const warn = rows.some((r) => r.ends_per_beam > 1600) ? `Over 1,600 ends on one section beam (bar${rows.filter((r) => r.ends_per_beam > 1600).map((r) => ' ' + r.bar).join(',')}): beyond what a warping creel usually holds — use narrower section beams or more of them.` : null;
+  return {
+    flange_in: flange, barrel_in: barrel, width_in: bw, beams_per_bar: nBeams, per_bar: rows, limiting_bar: lim.bar,
+    set_hours: lim.hours, set_fabric_m: lim.fabric_m, matched, order, warn,
+    basis: `section beams ${flange}" flange × ${barrel}" barrel × ${bw}" wide (${D0 === BEAM_DEFAULTS.tricot ? 'tricot' : 'raschel'} defaults unless you set them); packing density modelled (flat filament 0.70, mono and elastane 0.75, spun 0.45 × fibre density); elastane wound at its beam draft`,
+  };
+}
+
 // the fabric name for the common two-bar structures (front bar first)
 function nameOf(bars) {
   const base = nameOf0(bars);
@@ -364,10 +425,11 @@ function analyse(input) {
       const per = bars.map((b) => {
         const dn = beds === 2 ? dnbLength(b.pairs, p, c, b.yarn.d_mm, G) : null;
         const lc = dn ? dn.perCourse : courseLength(b.laps, p, c, b.yarn.d_mm);      // mm of yarn per end per course (on the machine)
-        const fed = lc / b.yarn.draft;                           // elastane is fed drafted
+        const fed = lc / b.yarn.draft;                           // relaxed yarn per course (the mass): elastane is knitted drafted
+        const runin = fed * b.yarn.beamDraft;                    // off the beam, where it is already wound stretched
         const ends = wpcMachine * kw * b.thread.fraction;        // ends per cm, finished
         const gsm = (ends * cpcM * kc * fed * b.yarn.tex) / 100;
-        return { lc, fed, ends, gsm, dn };
+        return { lc, fed, runin, ends, gsm, dn };
       });
       return { per, gsm: per.reduce((t, x) => t + x.gsm, 0) };
     };
@@ -487,12 +549,14 @@ function analyse(input) {
         bar: b.n, notation: b.notation, kind: b.kind.label, bed: b.role || 'front', threading: b.thread.pattern, threaded_pct: r1(b.thread.fraction * 100),
         yarn: b.yarn.label, fibre: b.yarn.fibre_label, tex: r2(b.yarn.tex), draft: b.yarn.draft > 1 ? b.yarn.draft : null,
         laps: b.laps.map((l) => ({ course: l.course, overlap: l.inlay ? 0 : l.o, underlap: l.u, lap: l.inlay ? 'inlay' : l.closed ? 'closed' : 'open' })),
-        d_mm: r3(b.yarn.d_mm), mm_per_course: r3(x.lc), runner_mm_per_rack: Math.round(runner), fed_mm_per_rack: Math.round(x.fed * RACK),
+        d_mm: r3(b.yarn.d_mm), mm_per_course: r3(x.lc), runner_mm_per_rack: Math.round(runner), fed_mm_per_rack: Math.round(x.runin * RACK), beam_draft: b.yarn.beamDraft > 1 ? r2(b.yarn.beamDraft) : null,
         ends, gsm: r1(x.gsm), pct: r1((x.gsm / R.gsm) * 100),
         // yarn this bar takes per 1,000 m of fabric off the machine
         kg_per_1000m: r2((ends * (x.fed / 1000) * (cpcM * 100) * 1000 * b.yarn.tex) / 1e6),
       };
     });
+    const beamPlan = planBeams({ bars, per: R.per, barsOut, mType, widthIn, cpcM, kc, speed, eff, beam: input.beams || {}, orderM: +((input.target || {}).order_m) });
+    if (beamPlan.warn) add('warn', beamPlan.warn);
     const lappingPaths = bars.map((b) => ({ bar: b.n, pairs: b.pairs, role: b.role || null }));
     return {
       success: true,
@@ -512,6 +576,7 @@ function analyse(input) {
         formula: 'GSM = Σ bars [ends/cm × courses/cm × yarn per course (mm) × tex] ÷ 100 (finished); yarn per course = 2c + π·rn + √((u·p)² + c²)',
       },
       bars: barsOut,
+      beams: beamPlan,
       character,
       lapping: lappingPaths,
       basis: 'geometry derived (loop legs, needle wrap, diagonal underlap), checked on 31 published constructions — runner median error about 4 %; wrap radius and the pillar term fitted there; tricot finished-state factors from 15 published nylon tricots; raschel factors and shog limits modelled; no factory warp records yet',

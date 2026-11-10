@@ -17,7 +17,7 @@ for (const x of L.NYLON_TRICOT) {
   e.gsmCounts.push((g / x.finished.gsm - 1) * 100);
 }
 for (const x of L.ELASTIC_LOCKNIT) {
-  const r = W.analyse({ machine: { type: 'tricot', gauge: 32, cpc: x.cpc_machine }, bars: [{ notation: x.notations[0], yarn: { count: 50, unit: 'denier', fibre: 'polyester_filament' } }, { notation: x.notations[1], yarn: { count: 40, unit: 'denier', fibre: 'elastane', draft: x.total_draft / x.beam_draft } }], target: {} });
+  const r = W.analyse({ machine: { type: 'tricot', gauge: 32, cpc: x.cpc_machine }, bars: [{ notation: x.notations[0], yarn: { count: 50, unit: 'denier', fibre: 'polyester_filament' } }, { notation: x.notations[1], yarn: { count: 40, unit: 'denier', fibre: 'elastane', draft: x.total_draft, beam_draft: x.beam_draft } }], target: {} });
   e.runE.push((r.bars[0].runner_mm_per_rack / x.runin_mm[0] - 1) * 100);
   e.runS.push((r.bars[1].fed_mm_per_rack / x.runin_mm[1] - 1) * 100);
 }
