@@ -40,6 +40,7 @@ const { buildTechPackContent } = require('../engine/domain/techpack-content-buil
 const { renderTechPackPdf } = require('../engine/domain/techpack-pdf-renderer');
 const fabricStudio = require('../engine/domain/fabric-studio');
 const knitMachine = require('../engine/domain/knit-machine');
+const warpStudio = require('../engine/domain/warp-studio');
 const studioRepo = require('../db/repositories/studio-repo');
 
 const memCache = require('../cache/memory-cache');
@@ -1236,7 +1237,19 @@ router.get('/color/shade-check', (req, res) => {
 // calculation limit (the /api rate limiter still applies). Signed-in only,
 // like the calculator it sits beside.
 router.get('/studio/templates', requireUser, (req, res) => {
-  res.json({ success: true, templates: fabricStudio.listTemplates(), fibres: fabricStudio.FIBRES, limits: fabricStudio.LIMITS, machines: knitMachine.list() });
+  res.json({ success: true, templates: fabricStudio.listTemplates(), fibres: fabricStudio.FIBRES, limits: fabricStudio.LIMITS, machines: knitMachine.list(),
+    warp: { templates: warpStudio.TEMPLATES, machines: Object.fromEntries(Object.entries(warpStudio.MACHINES).map(([k, m]) => [k, { label: m.label, gauges: m.gauges, bars: m.bars, speed: m.speed, use: m.use }])), fibres: Object.fromEntries(Object.entries(warpStudio.FIBRES).map(([k, f]) => [k, f.label])) } });
+});
+
+// Warp knitting: guide-bar lapping, threading and yarns -> runner, weight, width, production, checks.
+router.post('/studio/warp/analyse', requireUser, (req, res) => {
+  try {
+    const out = warpStudio.analyse(req.body || {});
+    res.status(out.success ? 200 : 400).json(out);
+  } catch (err) {
+    console.error('[studio] warp analyse failed:', err);
+    res.status(500).json({ success: false, error: 'The studio could not analyse this warp design.' });
+  }
 });
 
 // A machine set-up (needle set-out + cam chart) compiled into needle notation.

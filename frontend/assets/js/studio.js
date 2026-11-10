@@ -54,7 +54,14 @@
   // ── templates ────────────────────────────────────────────────────────────
   var CAT_LABEL = { single_jersey: 'Single jersey family', rib: 'Rib family (double bed)', interlock: 'Interlock family (double bed)' };
 
-  var machines = [];
+  var machines = [], warpData = null;
+  // the technology comes first: weft (circular) or warp (tricot / raschel)
+  function setTech(t) {
+    Array.prototype.forEach.call($('st-tech').children, function (b) { b.classList.toggle('on', b.getAttribute('data-tech') === t); });
+    $('st-weft').hidden = t !== 'weft'; $('st-warp').hidden = t !== 'warp';
+    try { localStorage.setItem('ka-studio-tech', t); } catch (_) {}
+    if (t === 'warp' && warpData && window.KAStudioWarp) window.KAStudioWarp.start(warpData);
+  }
   // ── yarns: one row per role the design uses ────────────────────────────
   var YROWS = [
     { key: 'ground', c: 'st-ne', u: 'st-unit', f: 'st-fibre', t: 'st-ytype', p: 'st-ply', fil: 'st-fil' },
@@ -155,6 +162,7 @@
       }).join('');
       sel.value = S.templateId;
       machines = d.machines || [];
+      warpData = d.warp || null;
       var mp = $('st-mprof'), keep = mp.value;
       mp.innerHTML = '<option value="">Auto — the simplest machine that knits the design</option>' + machines.map(function (m) { return '<option value="' + esc(m.id) + '">' + esc(m.label) + '</option>'; }).join('') + '<option value="custom">My machine — enter its specification</option>';
       mp.value = keep;
@@ -1220,6 +1228,7 @@
   }
 
   function init() {
+    $('st-tech').addEventListener('click', function (e) { var b = e.target.closest('[data-tech]'); if (b && !b.disabled) setTech(b.getAttribute('data-tech')); });
     bindEditor();
     bindRolls();
     bindLoops();
@@ -1231,6 +1240,7 @@
     $('st-gsm').addEventListener('input', function () { this.dataset.touched = '1'; });
     $('st-name').addEventListener('input', function () { delete this.dataset.auto; });
     document.querySelectorAll('aside input, aside select').forEach(function (el) {
+      if (el.closest('#st-warp')) return;
       if (el.id === 'st-template' || el.id === 'st-saved' || el.id === 'st-name' || el.id === 'st-import') return;
       el.addEventListener('change', schedule);
       if (el.type === 'number') el.addEventListener('input', schedule);
@@ -1338,7 +1348,7 @@
     });
     $('st-print').addEventListener('click', function () { window.print(); });
     refreshSaved(); loadAccount();
-    loadTemplates().then(function () { applyTemplate(S.templateId); undo = []; })
+    loadTemplates().then(function () { applyTemplate(S.templateId); undo = []; var t0 = null; try { t0 = localStorage.getItem('ka-studio-tech'); } catch (_) {} if (t0 === 'warp') setTech('warp'); })
       .catch(function (e) { $('st-status').innerHTML = '<div class="st-err">' + esc(e.message || 'Could not load the fabric catalogue.') + '</div>'; renderAll(); });
   }
 

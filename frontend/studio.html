@@ -59,6 +59,18 @@
     .st-btn:hover { border-color: var(--accent); color: var(--accent); }
     .st-btn.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
     .st-btn:disabled { opacity: .45; cursor: default; }
+    .st-tech { margin-bottom: 14px; }
+    .st-techseg button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 12px; text-align: left; }
+    .st-techseg button b { font-size: 14px; }
+    .st-techseg button small { font-weight: 500; font-size: 11px; opacity: .8; }
+    .st-techseg button:disabled { opacity: .5; cursor: default; }
+    @media (max-width: 640px) { .st-techseg { flex-direction: column; } .st-techseg button { border-right: 0; border-bottom: 1px solid var(--line2); } }
+    .wp-bar { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px 10px 2px; margin-bottom: 8px; }
+    .wp-barhead { display: flex; align-items: center; gap: 6px; font-size: 12px; margin-bottom: 4px; }
+    .wp-barhead i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+    .wp-barhead span { color: var(--t3); }
+    .wp-del { margin-left: auto; border: 0; background: none; font-size: 16px; cursor: pointer; color: var(--t3); }
+    .wp-not { font: 600 13px var(--mono); letter-spacing: 1px; }
     .st-yrow { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px 10px 2px; margin-bottom: 8px; }
     .st-yrow[hidden] { display: none; }
     .st-yhead { font-size: 12px; margin-bottom: 4px; display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
@@ -205,7 +217,16 @@
       <p>Design a new weft-knitted fabric needle by needle. Pick the machine type, the yarns and the target, draw the knit, tuck and miss programme, and the studio checks it, sets out the cams and needles, works out the yarn on every feeder and shows the fabric in 3D. Every figure is tagged <span class="src m">measured</span> from factory records, <span class="src c">calculated</span> from your inputs, or <span class="src e">estimated</span>.</p>
     </div>
 
-    <div class="st-layout">
+    <div class="st-card st-tech">
+      <div class="st-step"><b>0</b> What are you making?</div>
+      <div class="st-seg st-techseg" id="st-tech" role="group" aria-label="Knitting technology">
+        <button type="button" data-tech="weft" class="on"><b>Weft knit</b><small>circular: jersey, rib, interlock, fleece, terry, jacquard…</small></button>
+        <button type="button" data-tech="warp"><b>Warp knit</b><small>tricot, raschel: locknit, satin, powernet, nets…</small></button>
+        <button type="button" data-tech="vbed" disabled title="Coming next"><b>Flat V-bed</b><small>cables, racking, shaping — coming next</small></button>
+      </div>
+    </div>
+
+    <div class="st-layout" id="st-weft">
       <aside>
         <div class="st-card">
           <div class="st-step"><b>1</b> Fabrication</div>
@@ -516,6 +537,41 @@
         </div>
       </section>
     </div>
+
+    <div class="st-layout" id="st-warp" hidden>
+      <aside>
+        <div class="st-card">
+          <div class="st-step"><b>1</b> Structure</div>
+          <div class="st-f st-row one"><div><label for="wp-template">Start from</label><select id="wp-template"></select></div></div>
+          <p class="st-hint">Each guide bar has its own warp ends. Write its lapping course by course: <code>1-0/1-2//</code> is tricot, <code>1-0/2-3//</code> a 2-needle underlap, <code>1-0/0-1//</code> pillar, <code>0-0/2-2//</code> an inlay. Bar 1 is the front bar.</p>
+          <div id="wp-bars"></div>
+          <button type="button" class="st-btn" id="wp-addbar">+ Guide bar</button>
+        </div>
+        <div class="st-card">
+          <div class="st-step"><b>2</b> Machine</div>
+          <div class="st-f st-row one"><div><label for="wp-mtype">Machine</label><select id="wp-mtype"></select></div></div>
+          <div class="st-row">
+            <div class="st-f"><label for="wp-gauge">Gauge (E, needles/inch)</label><input id="wp-gauge" type="number" min="6" max="50" step="1"></div>
+            <div class="st-f"><label for="wp-width">Working width (in)</label><input id="wp-width" type="number" min="20" max="250" step="1" placeholder="auto"></div>
+            <div class="st-f"><label for="wp-speed">Speed (courses/min)</label><input id="wp-speed" type="number" min="50" max="4000" step="10" placeholder="auto"></div>
+            <div class="st-f"><label for="wp-eff">Efficiency (%)</label><input id="wp-eff" type="number" min="30" max="100" step="1" value="85"></div>
+            <div class="st-f"><label for="wp-cpc">Quality (courses/cm on the machine)</label><input id="wp-cpc" type="number" min="2" max="80" step="0.1" placeholder="solve from GSM"></div>
+          </div>
+        </div>
+        <div class="st-card">
+          <div class="st-step"><b>3</b> Target</div>
+          <div class="st-row">
+            <div class="st-f"><label for="wp-gsm">Finished GSM</label><input id="wp-gsm" type="number" min="20" max="900" step="1"></div>
+            <div class="st-f"><label for="wp-fwidth">Finished width (in)</label><input id="wp-fwidth" type="number" min="10" max="200" step="0.5" placeholder="optional"></div>
+          </div>
+          <p class="st-hint">Give the GSM and the studio solves the quality (courses/cm); give the quality and it works out the GSM. A finished width you know replaces the modelled narrowing.</p>
+        </div>
+      </aside>
+      <section>
+        <div class="st-card"><div class="st-step"><b>4</b> Result</div><div id="wp-status"></div><div id="wp-out"></div></div>
+        <div class="st-card"><div class="st-step"><b>5</b> Lapping diagram</div><div id="wp-lap"></div></div>
+      </section>
+    </div>
   </main>
 
   <footer class="footer"></footer>
@@ -523,7 +579,8 @@
 
 <script src="assets/js/api.js"></script>
 <script src="assets/js/studio-cloth-map.js?v=20261110d"></script>
+<script src="assets/js/studio-warp.js?v=20261110b"></script>
 <script src="assets/js/studio-needle.js?v=20261110d"></script>
-<script src="assets/js/studio.js?v=20261110l"></script>
+<script src="assets/js/studio.js?v=20261110m"></script>
 </body>
 </html>
