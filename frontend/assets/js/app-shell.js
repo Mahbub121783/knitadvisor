@@ -64,6 +64,7 @@
       { href: '/dyeing.html',     t: 'Dyeing lab',        d: 'Recipes, process flow, costing and dyeing faults', i: 'drop', k: 'reactive disperse shade recipe' }
     ] },
     { id: 'learn', t: 'Knowledge', items: [
+      { href: '/api-docs.html',   t: 'API documentation', d: 'Use the engines from your own system with an API key', i: 'plus', k: 'api key integration erp json rest developer' },
       { href: '/assistant.html',  t: 'Knowledge assistant', d: 'Fibre, dyeing and costing questions answered from reference data', i: 'chat' },
       { href: '/diagnostics.html', t: 'Fault diagnostics',  d: 'From a symptom on the fabric to its cause and remedy', i: 'alert' },
       { href: '/academy.html',    t: 'Knitting academy',    d: 'Theory, formulas, formation cycles and quizzes', i: 'cap' }

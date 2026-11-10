@@ -103,6 +103,13 @@ const PORT = process.env.PORT || 3001;
 // looks like random per-fabric breakage but has nothing to do with the fabric.
 app.set('trust proxy', 1);
 
+// The versioned API: /api/v1/x is /api/x. The engines are the same code the web pages use; /api/v1 is
+// the name customers are given, so the routes underneath can change without breaking their systems.
+app.use((req, res, next) => {
+  if (req.url.startsWith('/api/v1/') || req.url === '/api/v1') { req.url = '/api' + req.url.slice('/api/v1'.length); req.viaV1 = true; }
+  next();
+});
+
 // ============================================================
 // MIDDLEWARE
 // ============================================================

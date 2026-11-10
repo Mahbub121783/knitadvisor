@@ -26,8 +26,16 @@ const WINDOW_MS = 60 * 1000;     // 1 minute
 // through the UI could hit, while still bounding scripted abuse.
 const MAX_PER_WINDOW = 240;
 
+// A customer's server calling with an API key is held by the key's own plan limits (api-key-auth.js).
+// The per-address ceiling still applies, but on its own, higher counter: one office address can host
+// a busy integration without spending the budget of the people browsing from the same address.
+const KEYED_MAX = 1500;
+
 function rateLimiter(req, res, next) {
-  const ip = req.ip || req.connection.remoteAddress || 'unknown';
+  const ipOnly = req.ip || req.connection.remoteAddress || 'unknown';
+  const keyed = /^Bearer\s+ka_/i.test(String(req.headers.authorization || '')) || String(req.headers['x-api-key'] || '').startsWith('ka_');
+  const ip = keyed ? 'key:' + ipOnly : ipOnly;
+  const MAX = keyed ? KEYED_MAX : MAX_PER_WINDOW;
   const now = Date.now();
 
   if (!limits.has(ip)) {
@@ -45,7 +53,7 @@ function rateLimiter(req, res, next) {
   }
 
   entry.count++;
-  if (entry.count > MAX_PER_WINDOW) {
+  if (entry.count > MAX) {
     const retryAfter = Math.ceil((entry.windowStart + WINDOW_MS - now) / 1000);
     res.set('Retry-After', retryAfter);
     return res.status(429).json({

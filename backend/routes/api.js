@@ -1241,6 +1241,26 @@ router.get('/studio/templates', requireUser, (req, res) => {
     warp: { templates: warpStudio.TEMPLATES, machines: Object.fromEntries(Object.entries(warpStudio.MACHINES).map(([k, m]) => [k, { label: m.label, gauges: m.gauges, bars: m.bars, speed: m.speed, use: m.use, beds: m.beds }])), fibres: Object.fromEntries(Object.entries(warpStudio.FIBRES).map(([k, f]) => [k, f.label])) } });
 });
 
+// ── The API as sold ──────────────────────────────────────────────────────
+const apiCatalogue = require('../engine/domain/api-catalogue');
+const apiKeyRepo = require('../db/repositories/api-key-repo');
+// what a key may call, the plans, and how to authenticate (public: it is the documentation's data)
+router.get('/catalogue', (req, res) => {
+  res.json({ success: true, version: 'v1', base_url: '/api/v1', auth: 'Authorization: Bearer <your key>  (or X-API-Key: <your key>)', plans: Object.fromEntries(Object.entries(apiCatalogue.PLANS).map(([k, p]) => [k, { label: p.label, monthly_calls: p.monthly, calls_per_minute: p.per_min }])), endpoints: apiCatalogue.publicList() });
+});
+// the key's own plan and use
+router.get('/usage', requireUser, async (req, res) => {
+  if (!req.apiKey) return res.status(400).json({ success: false, code: 'API_KEY_REQUIRED', error: 'Call this with an API key: it reports that key.' });
+  try {
+    const u = await apiKeyRepo.keys.usage(req.apiKey.id);
+    res.json({ success: true, key: { name: req.apiKey.name, prefix: req.apiKey.prefix, plan: req.apiKey.plan }, limits: { monthly_calls: req.apiKey.limits.monthly, calls_per_minute: req.apiKey.limits.per_min },
+      this_month: { calls: u.month_calls, remaining: Math.max(0, req.apiKey.limits.monthly - u.month_calls), resets_at: require('../middleware/api-key-auth').nextReset() }, last_30_days: u.days });
+  } catch (err) {
+    console.error('[api] usage failed:', err.message);
+    res.status(500).json({ success: false, error: 'Could not read the usage.' });
+  }
+});
+
 // Warp knitting: guide-bar lapping, threading and yarns -> runner, weight, width, production, checks.
 router.post('/studio/warp/analyse', requireUser, (req, res) => {
   try {

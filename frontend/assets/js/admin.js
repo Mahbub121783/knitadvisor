@@ -118,7 +118,7 @@ const TAB_TITLES = {
   'tab-overview': 'Dashboard', 'tab-logs': 'Query Logs', 'tab-providers': 'AI Providers',
   'tab-cache': 'Cache', 'tab-prices': 'Yarn Prices', 'tab-charges': 'Knit & Dye Charges', 'tab-dyeing-prices': 'Dyeing Prices',
   'tab-validation': 'Real-Order Validation', 'tab-inquiries': 'Inquiries', 'tab-rfq': 'RFQ / Quotes',
-  'tab-users': 'Users', 'tab-students': 'Student Plan', 'tab-settings': 'Settings',
+  'tab-users': 'Users', 'tab-students': 'Student Plan', 'tab-settings': 'Settings', 'tab-apikeys': 'API Keys',
 };
 
 function switchTab(tabId) {
@@ -147,6 +147,8 @@ function switchTab(tabId) {
   } else if (tabId === 'tab-inquiries' && !tabState.loaded.inquiries) {
     tabState.loaded.inquiries = true;
     loadInquiries(1, {});
+  } else if (tabId === 'tab-apikeys') {
+    loadApiKeys();
   } else if (tabId === 'tab-users' && !tabState.loaded.users) {
     tabState.loaded.users = true;
     loadUsers(1, {});
@@ -1144,6 +1146,88 @@ function userPlanBadge(u) {
 
 function getUsrFilters() {
   return { search: document.getElementById('usr-filter-search').value.trim() };
+}
+
+// ── API KEYS ─────────────────────────────────────────────────
+let apiKeyPlans = {};
+async function loadApiKeys() {
+  try {
+    const d = await api('/admin/api/api-keys');
+    apiKeyPlans = d.plans || {};
+    const sel = document.getElementById('ak-plan');
+    if (sel && !sel.options.length) sel.innerHTML = Object.keys(apiKeyPlans).map((k) => `<option value="${esc(k)}">${esc(apiKeyPlans[k].label)} (${Number(apiKeyPlans[k].monthly).toLocaleString()}/mo)</option>`).join('');
+    const tbody = document.getElementById('ak-tbody');
+    tbody.innerHTML = '';
+    if (!d.keys.length) tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--t3);">No API keys issued yet</td></tr>';
+    for (const k of d.keys) {
+      const p = apiKeyPlans[k.plan] || { monthly: 0, per_min: 0 };
+      const monthly = k.monthly_limit != null ? k.monthly_limit : p.monthly;
+      const perMin = k.per_min_limit != null ? k.per_min_limit : p.per_min;
+      const pct = monthly ? Math.min(100, Math.round((k.calls_this_month / monthly) * 100)) : 100;
+      const st = k.status === 'active' ? 'badge-green' : k.status === 'suspended' ? 'badge-yellow' : 'badge-red';
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="padding:9px 10px;color:var(--t2);">${esc(k.full_name || k.email)}<div style="font-size:10px;color:var(--t3);">${esc(k.email)}${k.company ? ' · ' + esc(k.company) : ''}</div></td>
+        <td style="padding:9px 10px;"><b>${esc(k.name)}</b><div style="font-family:var(--mono);font-size:11px;color:var(--t3);">${esc(k.prefix)}…</div></td>
+        <td style="padding:9px 10px;white-space:nowrap;">
+          <select class="form-select" data-ak-plan="${esc(k.id)}" ${k.status === 'revoked' ? 'disabled' : ''} style="min-width:100px;">${Object.keys(apiKeyPlans).map((x) => `<option value="${esc(x)}" ${x === k.plan ? 'selected' : ''}>${esc(apiKeyPlans[x].label)}</option>`).join('')}</select></td>
+        <td style="padding:9px 10px;font-family:var(--mono);white-space:nowrap;">${Number(k.calls_this_month).toLocaleString()} / ${Number(monthly).toLocaleString()}<div style="height:4px;background:var(--line);border-radius:2px;margin-top:3px;"><div style="height:4px;width:${pct}%;background:${pct >= 90 ? 'var(--red,#b23b3b)' : 'var(--a1)'};border-radius:2px;"></div></div></td>
+        <td style="padding:9px 10px;font-family:var(--mono);">${esc(perMin)}</td>
+        <td style="padding:9px 10px;font-family:var(--mono);font-size:11px;color:var(--t3);">${k.allowed_ips && k.allowed_ips.length ? esc(k.allowed_ips.join(', ')) : 'any'}</td>
+        <td style="padding:9px 10px;color:var(--t3);font-family:var(--mono);font-size:11px;">${k.last_used_at ? esc(new Date(k.last_used_at).toLocaleString()) : 'never'}</td>
+        <td style="padding:9px 10px;"><span class="badge ${st}">${esc(k.status)}</span></td>
+        <td style="padding:9px 10px;white-space:nowrap;">
+          ${k.status === 'revoked' ? '' : `
+            <button class="btn btn-ghost btn-sm" data-ak-limits="${esc(k.id)}" data-m="${esc(monthly)}" data-p="${esc(perMin)}">Limits</button>
+            <button class="btn btn-ghost btn-sm" data-ak-status="${esc(k.id)}" data-to="${k.status === 'active' ? 'suspended' : 'active'}">${k.status === 'active' ? 'Suspend' : 'Resume'}</button>
+            <button class="btn btn-ghost btn-sm" data-ak-revoke="${esc(k.id)}">Revoke</button>`}
+        </td>`;
+      tbody.appendChild(tr);
+    }
+  } catch (e) { toast('Failed to load API keys: ' + e.message, 'error'); }
+}
+
+async function createApiKey() {
+  const v = (id) => document.getElementById(id).value.trim();
+  const body = { email: v('ak-email'), name: v('ak-name'), plan: v('ak-plan') || 'beta', monthly_limit: v('ak-monthly'), per_min_limit: v('ak-permin'), allowed_ips: v('ak-ips'), expires_at: v('ak-exp') || null, note: v('ak-note') };
+  try {
+    const d = await api('/admin/api/api-keys', 'POST', body);
+    document.getElementById('ak-secret-val').textContent = d.key.key;
+    document.getElementById('ak-secret-for').textContent = 'For ' + d.key.email + ' · ' + d.key.name + ' · ' + d.key.plan + ' plan. Send it to the customer over a private channel.';
+    document.getElementById('ak-secret').classList.remove('hidden');
+    ['ak-email', 'ak-name', 'ak-monthly', 'ak-permin', 'ak-ips', 'ak-exp', 'ak-note'].forEach((id) => { document.getElementById(id).value = ''; });
+    toast('API key created', 'success');
+    loadApiKeys();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function patchApiKey(id, body, ok) {
+  try { await api('/admin/api/api-keys/' + id, 'PATCH', body); toast(ok, 'success'); loadApiKeys(); }
+  catch (e) { toast(e.message, 'error'); loadApiKeys(); }
+}
+
+function wireApiKeys() {
+  const el = (id) => document.getElementById(id);
+  if (!el('ak-new-btn')) return;
+  el('ak-new-btn').addEventListener('click', () => el('ak-new-box').classList.toggle('hidden'));
+  el('ak-create').addEventListener('click', createApiKey);
+  el('ak-copy').addEventListener('click', () => { navigator.clipboard.writeText(el('ak-secret-val').textContent).then(() => toast('Copied', 'success'), () => toast('Select the key and copy it by hand', 'info')); });
+  el('ak-tbody').addEventListener('change', (e) => {
+    const s = e.target.closest('[data-ak-plan]');
+    if (s) patchApiKey(s.dataset.akPlan, { plan: s.value, monthly_limit: null, per_min_limit: null }, 'Plan changed — the key now follows the plan\'s limits');
+  });
+  el('ak-tbody').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.akStatus) patchApiKey(b.dataset.akStatus, { status: b.dataset.to }, b.dataset.to === 'active' ? 'Key resumed' : 'Key suspended');
+    else if (b.dataset.akRevoke) {
+      if (!confirm('Revoke this key for good? The customer\'s system stops working at once, and the key cannot be restored.')) return;
+      api('/admin/api/api-keys/' + b.dataset.akRevoke + '/revoke', 'POST').then(() => { toast('Key revoked', 'success'); loadApiKeys(); }).catch((x) => toast(x.message, 'error'));
+    } else if (b.dataset.akLimits) {
+      const m = prompt('Calls per month for this key:', b.dataset.m); if (m === null) return;
+      const p = prompt('Calls per minute for this key:', b.dataset.p); if (p === null) return;
+      patchApiKey(b.dataset.akLimits, { monthly_limit: +m, per_min_limit: +p }, 'Limits updated');
+    }
+  });
 }
 
 async function loadUsers(page, filters) {
@@ -2516,6 +2600,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   // Add Provider button
+  wireApiKeys();
   document.getElementById('add-provider-btn').addEventListener('click', () => openAddProviderModal());
   document.getElementById('ap-cancel').addEventListener('click', () => closeAddProviderModal());
   document.getElementById('add-provider-modal').addEventListener('click', (e) => {

@@ -1541,4 +1541,66 @@ router.get('/api/charges/coverage', adminAuth, (req, res) => {
   res.json({ total: rows.length, approximate: rows.filter((r) => r.approximate).length, rows });
 });
 
+// ── API keys: the engines sold as an API (migration 041) ───────────────────
+// The admin issues a key to a customer account, sets its plan and limits, and can suspend or revoke
+// it. The full key is in the answer to POST once and never again (only its hash is stored).
+const apiKeyRepo = require('../db/repositories/api-key-repo');
+const apiCatalogue = require('../engine/domain/api-catalogue');
+
+router.get('/api/api-keys', adminAuth, async (req, res) => {
+  try {
+    res.json({ keys: await apiKeyRepo.keys.list(), plans: Object.fromEntries(Object.entries(apiCatalogue.PLANS).map(([k, p]) => [k, { label: p.label, monthly: p.monthly, per_min: p.per_min }])) });
+  } catch (err) {
+    console.error('[API keys list]', err);
+    res.status(500).json({ error: 'Failed to load API keys' });
+  }
+});
+
+router.post('/api/api-keys', adminAuth, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const row = await apiKeyRepo.keys.create({ email: b.email, name: b.name, plan: b.plan || 'beta', monthly_limit: b.monthly_limit, per_min_limit: b.per_min_limit, allowed_ips: b.allowed_ips, expires_at: b.expires_at, note: b.note }, apiCatalogue);
+    res.json({ ok: true, key: row });
+  } catch (err) {
+    if (err instanceof apiKeyRepo.KeyError) return res.status(400).json({ error: err.message });
+    console.error('[API keys create]', err);
+    res.status(500).json({ error: 'Failed to create the key' });
+  }
+});
+
+router.patch('/api/api-keys/:id', adminAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'A key id is required' });
+    res.json({ ok: true, key: await apiKeyRepo.keys.update(id, req.body || {}, apiCatalogue) });
+  } catch (err) {
+    if (err instanceof apiKeyRepo.KeyError) return res.status(400).json({ error: err.message });
+    console.error('[API keys update]', err);
+    res.status(500).json({ error: 'Failed to update the key' });
+  }
+});
+
+router.post('/api/api-keys/:id/revoke', adminAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'A key id is required' });
+    if (!(await apiKeyRepo.keys.revoke(id))) return res.status(404).json({ error: 'Key not found, or already revoked' });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[API keys revoke]', err);
+    res.status(500).json({ error: 'Failed to revoke the key' });
+  }
+});
+
+router.get('/api/api-keys/:id/usage', adminAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'A key id is required' });
+    res.json(await apiKeyRepo.keys.usage(id));
+  } catch (err) {
+    console.error('[API keys usage]', err);
+    res.status(500).json({ error: 'Failed to load usage' });
+  }
+});
+
 module.exports = router;

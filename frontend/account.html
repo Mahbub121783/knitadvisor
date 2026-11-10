@@ -217,6 +217,13 @@
         <div class="msg" id="dev-msg" role="status"></div>
       </div>
 
+      <div class="card form-card" id="api-card">
+        <h2>API access</h2>
+        <p class="sub">The keys KnitAdvisor has issued for your account, for your own systems to call the engines. How to use them: <a href="/api-docs.html">API documentation</a>. A key is shown once, when it is issued; here you see its plan and use, name it, and say which IP addresses may use it.</p>
+        <div id="api-list" class="text-dim">Loading…</div>
+        <div class="msg" id="api-msg" role="status"></div>
+      </div>
+
       <div class="card form-card" id="activity-card">
         <h2>Recent security activity</h2>
         <p class="sub">Sign-ins, wrong passwords and changes to how you sign in. Anything you do not recognise: change your password and turn on two-step sign-in.</p>
@@ -600,6 +607,30 @@
     }).catch(function () { $('act-list').textContent = 'Could not load your activity.'; });
   }
   loadDevices(); loadActivity();
+
+  /* ---------- API access ---------- */
+  function loadApiKeys() {
+    j('/api/account/api-keys').then(function (d) {
+      if (!d.keys.length) { $('api-list').innerHTML = 'No API keys on this account yet. To use KnitAdvisor from your own system, ask for API access (see the documentation).'; return; }
+      $('api-list').innerHTML = d.keys.map(function (k) {
+        var m = k.limits.monthly, pct = m ? Math.min(100, Math.round(k.calls_this_month / m * 100)) : 100;
+        return '<div style="padding:10px 0;border-bottom:1px solid #EEF0F2;" data-key="' + k.id + '">' +
+          '<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;"><div><b>' + esc(k.name) + '</b> <span style="font-family:monospace;font-size:12px;color:#868C94;">' + esc(k.prefix) + '\u2026</span> ' +
+          '<span style="font-size:12px;color:' + (k.status === 'active' ? '#1E7A54' : '#9a5b00') + ';">' + esc(k.status) + '</span></div><div style="font-size:12px;color:#565C64;">' + esc(k.plan_label) + ' \u00b7 ' + k.limits.per_min + ' calls/min</div></div>' +
+          '<div style="font-size:12px;color:#565C64;margin:4px 0 3px;">' + Number(k.calls_this_month).toLocaleString() + ' of ' + Number(m).toLocaleString() + ' calls this month' + (k.last_used_at ? ' \u00b7 last used ' + esc(ago(k.last_used_at)) : ' \u00b7 not used yet') + '</div>' +
+          '<div style="height:5px;background:#EEF0F2;border-radius:3px;"><div style="height:5px;width:' + pct + '%;background:' + (pct >= 90 ? '#B23B3B' : '#1857C4') + ';border-radius:3px;"></div></div>' +
+          '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center;"><input type="text" data-ips="' + k.id + '" value="' + esc((k.allowed_ips || []).join(', ')) + '" placeholder="Allowed IP addresses (empty = any)" style="flex:1;min-width:220px;">' +
+          '<button class="btn btn-ghost" type="button" data-saveips="' + k.id + '">Save addresses</button></div></div>';
+      }).join('');
+    }).catch(function () { $('api-list').textContent = 'Could not load your API keys.'; });
+  }
+  $('api-list').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-saveips]'); if (!b) return;
+    var id = b.getAttribute('data-saveips'), v = document.querySelector('[data-ips="' + id + '"]').value;
+    j('/api/account/api-keys/' + id, 'PATCH', { allowed_ips: v }).then(function () { setMsg($('api-msg'), v.trim() ? 'Saved: this key now works only from those addresses.' : 'Saved: this key works from any address.', true); loadApiKeys(); })
+      .catch(function (err) { setMsg($('api-msg'), err.message, false); });
+  });
+  loadApiKeys();
 
   /* ---------- change email, delete ---------- */
   $('em-send').addEventListener('click', function () {

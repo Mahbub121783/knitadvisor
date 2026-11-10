@@ -14,6 +14,8 @@ const usageRepo = require('../db/repositories/usage-repo');
 const { resolvePlanLimits } = require('../engine/domain/student-eligibility');
 
 async function enforceDailyLimit(req, res, next) {
+  // an API key has its own plan (monthly quota and per-minute rate, counted in api-key-auth)
+  if (req.apiKey) { req.plan = 'api'; return next(); }
   const { plan, dailyLimit } = resolvePlanLimits(req.user);
   req.plan = plan;
   if (dailyLimit == null) return next();

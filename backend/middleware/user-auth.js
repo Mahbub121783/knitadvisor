@@ -60,6 +60,9 @@ async function loadUser(req) {
 }
 
 async function requireUser(req, res, next) {
+  // a customer's own system calling the engines with an API key (never a browser session)
+  const rawKey = require('../db/repositories/api-key-repo').keyFromRequest(req);
+  if (rawKey) return require('./api-key-auth').gate(req, res, next, rawKey);
   try {
     const user = await loadUser(req);
     if (user) {

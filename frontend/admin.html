@@ -966,6 +966,10 @@
       </div>
       <div class="sb-group">
         <div class="sb-group-label">System</div>
+        <button class="tab-btn sb-link" data-tab="tab-apikeys">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><circle cx="8" cy="15" r="4"/><path d="M11 12.5 20 4M16 8l3 3M14 10l2 2" stroke-linecap="round"/></svg>
+          API Keys
+        </button>
         <button class="tab-btn sb-link" data-tab="tab-providers">
           <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><circle cx="7" cy="7.5" r="1"/><circle cx="7" cy="16.5" r="1"/></svg>
           AI Providers<span class="sb-count" id="sb-count-providers" hidden>0</span>
@@ -1630,6 +1634,42 @@
       <div id="usr-pagination" class="pagination"></div>
     </div>
 
+    <div id="tab-apikeys" class="tab-panel">
+      <div class="row-between mb-20">
+        <div>
+          <div class="section-title">API keys</div>
+          <div class="section-sub">The engines sold as an API. A customer buys access; you issue a key for their account, set its plan, and they call /api/v1 from their own system. Only a hash of each key is kept: the full key is shown once.</div>
+        </div>
+        <button id="ak-new-btn" class="btn btn-primary btn-sm">+ Issue a key</button>
+      </div>
+      <div id="ak-new-box" class="card mb-16 hidden">
+        <div class="form-row" style="align-items:flex-end;flex-wrap:wrap;gap:10px;">
+          <div class="form-group" style="min-width:230px;"><label class="form-label">Customer account email</label><input type="text" id="ak-email" class="form-input" placeholder="buyer@mill.com" autocomplete="off"></div>
+          <div class="form-group" style="min-width:160px;"><label class="form-label">Key name</label><input type="text" id="ak-name" class="form-input" placeholder="e.g. ERP production" maxlength="60"></div>
+          <div class="form-group" style="min-width:130px;"><label class="form-label">Plan</label><select id="ak-plan" class="form-select"></select></div>
+          <div class="form-group" style="min-width:130px;"><label class="form-label">Calls / month</label><input type="number" id="ak-monthly" class="form-input" min="0" placeholder="plan default"></div>
+          <div class="form-group" style="min-width:120px;"><label class="form-label">Calls / minute</label><input type="number" id="ak-permin" class="form-input" min="1" placeholder="plan default"></div>
+        </div>
+        <div class="form-row" style="align-items:flex-end;flex-wrap:wrap;gap:10px;margin-top:8px;">
+          <div class="form-group" style="min-width:260px;"><label class="form-label">Allowed IP addresses (optional, comma-separated)</label><input type="text" id="ak-ips" class="form-input" placeholder="203.0.113.5, 198.51.100.7"></div>
+          <div class="form-group" style="min-width:150px;"><label class="form-label">Expires (optional)</label><input type="date" id="ak-exp" class="form-input"></div>
+          <div class="form-group" style="min-width:200px;"><label class="form-label">Note (invoice, agreement)</label><input type="text" id="ak-note" class="form-input" maxlength="200"></div>
+          <button id="ak-create" class="btn btn-primary">Create key</button>
+        </div>
+      </div>
+      <div id="ak-secret" class="card mb-16 hidden" style="border-color:var(--a1);">
+        <div style="font-weight:600;margin-bottom:4px;">Copy this key now — it will not be shown again</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><code id="ak-secret-val" style="font-family:var(--mono);word-break:break-all;"></code><button id="ak-copy" class="btn btn-ghost btn-sm">Copy</button></div>
+        <div id="ak-secret-for" style="font-size:11px;color:var(--t3);margin-top:6px;"></div>
+      </div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr><th>Customer</th><th>Key</th><th>Plan</th><th>This month</th><th>Per minute</th><th>IPs</th><th>Last used</th><th>Status</th><th></th></tr></thead>
+          <tbody id="ak-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
     <div id="tab-students" class="tab-panel">
       <div class="row-between mb-20">
         <div>
@@ -1928,6 +1968,6 @@
 </div><!-- /admin-app -->
 
 <script src="assets/js/password-toggle.js?v=20260922a"></script>
-<script src="assets/js/admin.js?v=20261108s"></script>
+<script src="assets/js/admin.js?v=20261111a"></script>
 </body>
 </html>

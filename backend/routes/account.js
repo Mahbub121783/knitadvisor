@@ -93,6 +93,44 @@ const studentDocLimiter = createRateLimiter({
 
 router.use(requireUser);
 
+// ── API access: the keys an admin has issued to this account ─────────────────
+// The owner sees them (never the full key — it was shown once), reads their use, and may name a key and
+// say which IP addresses it may be used from. Plan and limits are the admin's.
+const apiKeyRepo = require('../db/repositories/api-key-repo');
+const apiCatalogue = require('../engine/domain/api-catalogue');
+router.get('/api-keys', async (req, res) => {
+  try {
+    const rows = await apiKeyRepo.keys.listForUser(req.user.id);
+    res.json({ success: true, keys: rows.map((k) => ({ ...k, limits: apiCatalogue.limitsFor(k), plan_label: (apiCatalogue.PLANS[k.plan] || {}).label || k.plan })) });
+  } catch (err) {
+    console.error('[Account] api keys failed:', err.message);
+    res.status(500).json({ success: false, error: 'Could not load your API keys.' });
+  }
+});
+router.patch('/api-keys/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ success: false, error: 'Invalid key.' });
+    const b = req.body || {};
+    res.json({ success: true, key: await apiKeyRepo.keys.updateOwn(req.user.id, id, { name: b.name, allowed_ips: b.allowed_ips }) });
+  } catch (err) {
+    if (err instanceof apiKeyRepo.KeyError) return res.status(400).json({ success: false, error: err.message });
+    console.error('[Account] api key update failed:', err.message);
+    res.status(500).json({ success: false, error: 'Could not update the key.' });
+  }
+});
+router.get('/api-keys/:id/usage', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const mine = (await apiKeyRepo.keys.listForUser(req.user.id)).find((k) => k.id === id);
+    if (!mine) return res.status(404).json({ success: false, error: 'Key not found.' });
+    res.json({ success: true, ...(await apiKeyRepo.keys.usage(id)) });
+  } catch (err) {
+    console.error('[Account] api key usage failed:', err.message);
+    res.status(500).json({ success: false, error: 'Could not load the usage.' });
+  }
+});
+
 function fail(res, label, err, message) {
   console.error(`[Account] ${label} failed:`, err.message);
   res.status(500).json({ success: false, error: message });

@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API — KnitAdvisor</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <meta name="description" content="Use KnitAdvisor's knitting engines from your own system: fabric calculator, Fabric Studio, costing sheet and dyeing, over a simple JSON API with a key.">
+  <meta name="theme-color" content="#FFFFFF">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css?v=20260603c">
+  <style>
+    [hidden] { display: none !important; }
+    .ad-main { padding: 22px 0 56px; max-width: 920px; }
+    .ad-main h1 { font-size: 28px; margin: 0 0 6px; }
+    .ad-main h2 { font-size: 18px; margin: 30px 0 8px; padding-top: 6px; border-top: 1px solid var(--line); }
+    .ad-main p, .ad-main li { font-size: 14px; line-height: 1.6; color: var(--t2); max-width: 760px; }
+    .ad-lead { font-size: 15px !important; color: var(--t1) !important; }
+    .ad-main code { font-family: var(--mono); font-size: 12.5px; background: var(--bg2, #f4f6f9); padding: 1px 5px; border-radius: 4px; }
+    .ad-main pre { background: #0f1b2d; color: #e6edf7; padding: 12px 14px; border-radius: 8px; overflow-x: auto; font: 12.5px/1.55 var(--mono); margin: 8px 0 14px; }
+    .ad-tabs { display: flex; gap: 6px; margin: 8px 0 0; }
+    .ad-tabs button { border: 1px solid var(--line2); background: var(--bg); padding: 5px 12px; border-radius: 6px 6px 0 0; font: 600 12px var(--head); color: var(--t2); cursor: pointer; }
+    .ad-tabs button.on { background: #0f1b2d; color: #fff; border-color: #0f1b2d; }
+    table.ad-t { width: 100%; border-collapse: collapse; font-size: 13px; margin: 8px 0 14px; }
+    table.ad-t th { text-align: left; font: 600 11px var(--head); text-transform: uppercase; letter-spacing: .4px; color: var(--t3); border-bottom: 1px solid var(--line); padding: 6px; }
+    table.ad-t td { border-bottom: 1px solid var(--line); padding: 7px 6px; vertical-align: top; }
+    .ad-m { font: 700 11px var(--mono); padding: 2px 6px; border-radius: 4px; }
+    .ad-m.GET { background: rgba(30,122,84,.12); color: #1e7a54; } .ad-m.POST { background: rgba(24,87,196,.12); color: #1857c4; }
+    .ad-key { font-size: 11px; color: var(--t3); }
+    .ad-note { background: #F6F8FB; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: 13px; color: var(--t2); margin: 10px 0; max-width: 760px; }
+    .ad-scroll { overflow-x: auto; }
+  </style>
+  <link rel="stylesheet" href="assets/css/theme-v2.css?v=20261108b">
+  <script src="assets/js/app-shell.js?v=20261111a" defer></script>
+</head>
+<body>
+<div class="page-wrap">
+  <header class="hdr"></header>
+  <main class="container ad-main">
+    <h1>The KnitAdvisor API</h1>
+    <p class="ad-lead">Use the same engines as the website — the fabric calculator, the Fabric Studio, the costing sheet and dyeing — from your own system: your ERP, your PLM, your quotation tool. You send JSON, you get JSON back.</p>
+
+    <h2>1. Get a key</h2>
+    <p>API access is a plan. Once it is agreed, KnitAdvisor issues a key for your account. It looks like <code>ka_live_…</code>, is shown to you once, and acts as your account on the engines below. Keep it on your server — like a password.</p>
+    <p>You will find your keys, their plan and how much of the month is used under <a href="/account.html">your account</a>. There you can also name a key and say which IP addresses it may be used from.</p>
+
+    <h2>2. Make a call</h2>
+    <p>Send the key as a Bearer token. Every endpoint is under <code>/api/v1</code>.</p>
+    <div class="ad-tabs" id="ad-tabs"><button class="on" data-l="curl">curl</button><button data-l="node">Node.js</button><button data-l="py">Python</button></div>
+    <pre id="ad-code"></pre>
+    <p>The answer is JSON. The calculator's answer has the yarn, stitch length, shrinkage, machine and cost sections; <code>success: false</code> and an <code>error</code> tell you what to fix.</p>
+
+    <h2>3. Plans, limits and the headers that tell you</h2>
+    <div class="ad-scroll"><table class="ad-t" id="ad-plans"><tr><td>Loading…</td></tr></table></div>
+    <p>Every answer carries your position:</p>
+    <table class="ad-t">
+      <tr><td><code>X-RateLimit-Limit</code> · <code>X-RateLimit-Remaining</code></td><td>calls allowed and left in the current minute</td></tr>
+      <tr><td><code>X-Quota-Limit</code> · <code>X-Quota-Remaining</code></td><td>calls allowed and left this month</td></tr>
+      <tr><td><code>X-Quota-Reset</code></td><td>when the month's count starts again (1st of the month, Dhaka time), ISO 8601</td></tr>
+      <tr><td><code>Retry-After</code></td><td>on a 429: seconds to wait</td></tr>
+    </table>
+    <p><code>GET /api/v1/usage</code> returns the same for the key you call it with, plus the last 30 days, day by day. A call that is refused (a bad key, over the rate) is not counted against the month; a call that reaches an engine and returns an error is.</p>
+
+    <h2>4. Errors</h2>
+    <p>Refusals have a <code>code</code> you can program against, and an <code>error</code> to show a person.</p>
+    <div class="ad-scroll"><table class="ad-t">
+      <tr><th>Status</th><th>code</th><th>Meaning</th></tr>
+      <tr><td>401</td><td><code>INVALID_API_KEY</code></td><td>no such key — check it was copied whole</td></tr>
+      <tr><td>401</td><td><code>KEY_REVOKED</code> · <code>KEY_EXPIRED</code></td><td>the key no longer works; ask for a new one</td></tr>
+      <tr><td>403</td><td><code>KEY_SUSPENDED</code> · <code>ACCOUNT_DISABLED</code></td><td>access paused — contact KnitAdvisor</td></tr>
+      <tr><td>403</td><td><code>IP_NOT_ALLOWED</code></td><td>the key has an allowed-IP list and this address is not on it (the answer shows <code>your_ip</code>)</td></tr>
+      <tr><td>403</td><td><code>ENDPOINT_NOT_IN_API</code></td><td>that path is not part of the API (a key never reaches your account, saved work or sign-in)</td></tr>
+      <tr><td>429</td><td><code>RATE_LIMITED</code></td><td>over the per-minute limit — wait <code>retry_after_seconds</code></td></tr>
+      <tr><td>429</td><td><code>QUOTA_EXCEEDED</code></td><td>the month's calls are used; <code>resets_at</code> says when it starts again, or ask for a bigger plan</td></tr>
+      <tr><td>429</td><td><code>TOO_MANY_BAD_KEYS</code></td><td>too many wrong keys from your address — wait a minute</td></tr>
+      <tr><td>400</td><td>(engine)</td><td>the request is missing something; <code>error</code> says what</td></tr>
+      <tr><td>503</td><td><code>API_UNAVAILABLE</code></td><td>try again in a moment</td></tr>
+    </table></div>
+
+    <h2>5. Endpoints</h2>
+    <p>Version <code>v1</code>. Endpoints marked <em>key</em> need your key; the others are reference data and engines open to everyone, limited by address only — a key is not required for them. A field not listed in a request is left at the engine's default.</p>
+    <div id="ad-endpoints"><p>Loading…</p></div>
+
+    <h2>6. Keep it safe</h2>
+    <ul>
+      <li>Call the API from your server, never from a web page or an app you give to others — a key in a browser is a key anyone can copy. (Calls that come from another website's page are refused.)</li>
+      <li>Ask for an allowed-IP list: then a copied key is useless from anywhere but your servers.</li>
+      <li>A key found in the wrong hands is revoked by KnitAdvisor at once, and a new one issued; nothing else of yours changes.</li>
+      <li>The API returns what your account would see on the website. Your saved designs, costing sheets and calculation history are not reachable with a key.</li>
+    </ul>
+    <div class="ad-note">Need access, a bigger plan, or an endpoint that is not here yet? Use <a href="/rfq.html">Quotes</a> or write from your account.</div>
+  </main>
+  <footer class="footer"></footer>
+</div>
+<script src="assets/js/api-docs.js?v=20261111a"></script>
+</body>
+</html>
