@@ -49,7 +49,7 @@ function relax(topo, opt = {}) {
     }
     o += y.n;
   });
-  const tol = opt.tol || 3e-4, maxIter = opt.maxIter || 30000, Fy = opt.Fy || 0;
+  const tol = opt.tol || 3e-4, maxIter = opt.maxIter || 30000, Fy = opt.Fy || 0, deadline = opt.timeMs ? Date.now() + opt.timeMs : Infinity;
   const freeLx = opt.fixedLx == null, freeLy = opt.fixedLy == null;
 
   // neighbour list: node pairs (i, j, image) within d + skin, rebuilt when anything has moved by skin/2
@@ -142,6 +142,7 @@ function relax(topo, opt = {}) {
   it = 0; dt = 0.01; alpha = 0.1; since = 0; vel.fill(0); vLx = vLy = 0; converged = false;
   for (; it < (mu > 0 ? (opt.chunk || 4000) : maxIter); it++) {
     if (stale()) build();
+    if ((it & 255) === 0 && Date.now() > deadline) break;
     gradient();
     if (opt.probe) return { g: Float64Array.from(g), gLx, gLy, energy };
     // convergence on the largest force

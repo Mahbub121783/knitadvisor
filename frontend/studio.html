@@ -161,7 +161,9 @@
     .st-pane { display: none; } .st-pane.on { display: block; }
     #st-3d { width: 100%; min-height: 380px; border-radius: 12px; background: #e9ebef; position: relative; }
     #st-loops { width: 100%; height: 460px; border-radius: 12px; background: radial-gradient(circle at 50% 40%, #f4f5f7, #dfe2e7); position: relative; overflow: hidden; touch-action: none; }
-    #st-loops[hidden], #st-3d[hidden], .st-build[hidden] { display: none; }
+    #st-loops[hidden], #st-3d[hidden], .st-build[hidden], #st-twin[hidden] { display: none; }
+    #st-twin { width: 100%; height: 460px; border-radius: 12px; background: radial-gradient(circle at 50% 40%, #f6f7f9, #d9dde3); position: relative; overflow: hidden; touch-action: none; }
+    @media (max-width: 640px) { #st-twin { height: 360px; } }
     @media (max-width: 640px) { #st-loops { height: 360px; } }
     #st-cloth { width: 100%; min-height: 380px; border-radius: 12px; background: #e9ebef; position: relative; overflow: hidden; touch-action: none; }
     #st-cloth canvas { height: 460px !important; }
@@ -476,8 +478,20 @@
             <button type="button" class="st-btn" data-xf="png" disabled>Programme (PNG)</button>
             <button type="button" class="st-btn" data-xf="bmp" disabled>Programme (BMP)</button>
             <button type="button" class="st-btn" data-xf="csv" disabled>Cam chart (CSV)</button>
+            <button type="button" class="st-btn" data-xf="calib" disabled title="The protocol for measuring this cloth, with what the Studio expects filled in">Calibration sheet (PDF)</button>
           </div>
           <div id="st-xstat" class="st-hint"></div>
+        </div>
+
+        <div class="st-card st-noprint" id="st-ccard">
+          <div class="st-step"><b>&#9878;</b> Calibration measurements</div>
+          <p class="st-hint" style="margin-top:0">The Studio's relaxed sizes, residual shrinkage and stretch are <b>modelled</b>. Measure one cloth properly &mdash; print the <b>Calibration sheet</b> above for this design &mdash; and enter it here: it is compared with the Studio's prediction at once, and kept (private to your account) as the data the models are fitted to. Nothing here changes the Studio's answers yet; it is the measured data they will be fitted to.</p>
+          <details id="st-cdet"><summary style="cursor:pointer;font-weight:600;font-size:13px">Enter measurements</summary>
+            <div id="st-cform" style="margin-top:8px"></div>
+            <button type="button" class="st-btn primary" id="st-csave" style="margin-top:8px">Save and compare with the Studio</button>
+          </details>
+          <div id="st-cstat" class="st-hint"></div>
+          <div id="st-clist" style="margin-top:6px"></div>
         </div>
       </aside>
 
@@ -544,6 +558,15 @@
             <div class="st-seg st-3dmode" id="st-3dmode">
               <button type="button" class="on" data-mode="loops">Loop structure</button>
               <button type="button" data-mode="cloth">Fabric (real view)</button>
+              <button type="button" data-mode="twin">Yarn physics</button>
+            </div>
+            <div class="st-3dbar" id="st-twinbar" hidden>
+              <span>View</span>
+              <button type="button" class="st-btn" data-tview="face">Face</button>
+              <button type="button" class="st-btn" data-tview="back">Back</button>
+              <button type="button" class="st-btn" data-tview="edge">Edge</button>
+              <button type="button" class="st-btn" data-tview="angle">Angle</button>
+              <label>Colour <input type="color" id="st-twcol" value="#3d5a80"></label>
             </div>
             <div class="st-3dbar" id="st-loopbar">
               <span>View</span>
@@ -561,6 +584,8 @@
             </div>
             <div id="st-loops"><div class="st-tip" id="st-tip" hidden></div></div>
             <div id="st-cloth" hidden><div class="st-cloth-wait" id="st-cloth-wait">Knitting the swatch…</div></div>
+            <div id="st-twin" hidden></div>
+            <div id="st-twinnote" class="st-hint" hidden></div>
             <div class="st-build" id="st-build">
               <button type="button" class="st-btn" id="st-bplay">Knit it feed by feed</button>
               <input type="range" id="st-bstep" min="0" max="1" value="1" aria-label="Courses knitted">
@@ -698,6 +723,6 @@
 <script src="assets/js/studio-warp-geom.js?v=20261111a"></script>
 <script src="assets/js/studio-warp.js?v=20261111h"></script>
 <script src="assets/js/studio-needle.js?v=20261110d"></script>
-<script src="assets/js/studio.js?v=20261113a"></script>
+<script src="assets/js/studio.js?v=20261114b"></script>
 </body>
 </html>

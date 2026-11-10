@@ -384,6 +384,63 @@
     $('st-userolls').addEventListener('change', schedule);
     bindFloor();
     bindExport();
+    bindCalibration();
+  }
+
+  // ── calibration measurements: one cloth, measured properly, compared with the Studio and kept (/api/studio/calibration) ──
+  var CSTATES = [['dry', 'Dry relaxed'], ['wet', 'Wet relaxed'], ['finished', 'Finished'], ['full', 'Fully relaxed']];
+  var CQ = [['wpc', 'Wales/cm'], ['cpc', 'Courses/cm'], ['gsm', 'GSM'], ['width_in', 'Width (in)']];
+  var CSTRAIN = [5, 10, 20, 30, 40, 50];
+  function cStat(msg, bad) { $('st-cstat').innerHTML = msg ? '<span style="color:' + (bad ? 'var(--bad, #b3261e)' : 'var(--t2)') + '">' + msg + '</span>' : ''; }
+  function cField(id, ph) { return '<input id="' + id + '" type="number" step="any" placeholder="' + (ph || '') + '" style="width:100%;min-width:0">'; }
+  function cForm() {
+    var h = '<div class="st-sub" style="margin-top:0">Dimensions in each state</div><table class="st-mini" style="width:100%;font-size:12px"><tr><th></th>' + CQ.map(function (q) { return '<th>' + q[1] + '</th>'; }).join('') + '</tr>' +
+      CSTATES.map(function (s) { return '<tr><td>' + s[1] + '</td>' + CQ.map(function (q) { return '<td>' + cField('st-c-' + s[0] + '-' + q[0]) + '</td>'; }).join('') + '</tr>'; }).join('') + '</table>' +
+      '<div class="st-sub">Force at each strain, N per 5 cm (first loading, average of three strips)</div><table class="st-mini" style="width:100%;font-size:12px"><tr><th>Strain</th><th>Course</th><th>Wale</th></tr>' +
+      CSTRAIN.map(function (e) { return '<tr><td>' + e + ' %</td><td>' + cField('st-cs-course-' + e) + '</td><td>' + cField('st-cs-wale-' + e) + '</td></tr>'; }).join('') + '</table>' +
+      '<div class="st-sub">Length left after the 50 % cycle (%), and thickness</div><table class="st-mini" style="width:100%;font-size:12px"><tr><th></th><th>1 min</th><th>30 min</th></tr>' +
+      ['course', 'wale'].map(function (d) { return '<tr><td>' + d + '</td><td>' + cField('st-cr-' + d + '-1min') + '</td><td>' + cField('st-cr-' + d + '-30min') + '</td></tr>'; }).join('') + '</table>' +
+      '<div class="st-row" style="margin-top:6px"><div class="st-f"><label for="st-cthick">Thickness at 1 kPa (mm)</label>' + cField('st-cthick') + '</div><div class="st-f"><label for="st-cnote">Note</label><input id="st-cnote" type="text" maxlength="300" placeholder="lot, tester, anything odd"></div></div>';
+    $('st-cform').innerHTML = h;
+  }
+  function cNum(id) { var v = $(id).value; return v === '' ? null : +v; }
+  function cMeasured() {
+    var m = { states: {}, stress: { course: [], wale: [] }, recovery: {}, thickness_mm: cNum('st-cthick'), note: $('st-cnote').value };
+    CSTATES.forEach(function (s) { m.states[s[0]] = {}; CQ.forEach(function (q) { m.states[s[0]][q[0]] = cNum('st-c-' + s[0] + '-' + q[0]); }); });
+    ['course', 'wale'].forEach(function (d) { CSTRAIN.forEach(function (e) { var n = cNum('st-cs-' + d + '-' + e); if (n != null) m.stress[d].push({ e: e, n: n }); }); m.recovery[d + '_1min_pct'] = cNum('st-cr-' + d + '-1min'); m.recovery[d + '_30min_pct'] = cNum('st-cr-' + d + '-30min'); });
+    return m;
+  }
+  function cCompare(c) {
+    if (!c || (!c.rows.length && !c.shrinkage)) return '';
+    var nameQ = { wpc: 'wales/cm', cpc: 'courses/cm', gsm: 'GSM', width_in: 'width' }, nameS = { dry: 'dry', wet: 'wet', finished: 'finished', full: 'fully relaxed' };
+    var h = c.rows.map(function (r) {
+      var col = r.off_pct == null ? 'var(--t3)' : Math.abs(r.off_pct) > 5 ? 'var(--bad, #b3261e)' : Math.abs(r.off_pct) > 2.5 ? '#9a6a00' : 'var(--ok, #0f7a4a)';
+      return '<span style="display:inline-block;margin:0 10px 2px 0">' + nameS[r.state] + ' ' + nameQ[r.quantity] + ' <b>' + r.measured + '</b> vs ' + (r.predicted == null ? '—' : r.predicted) + (r.off_pct == null ? '' : ' <b style="color:' + col + '">(' + (r.off_pct > 0 ? '+' : '') + r.off_pct + '%)</b>') + '</span>';
+    }).join('');
+    if (c.shrinkage) h += '<div>Residual shrinkage from your measurements: ' + (c.shrinkage.length_pct != null ? 'length ' + c.shrinkage.length_pct + '%' : '') + (c.shrinkage.width_pct != null ? ' width ' + c.shrinkage.width_pct + '%' : '') + (c.shrinkage.predicted ? ' &mdash; the Studio says length ' + c.shrinkage.predicted.length_pct[1] + '% (' + c.shrinkage.predicted.length_pct[0] + '–' + c.shrinkage.predicted.length_pct[2] + '), width ' + c.shrinkage.predicted.width_pct[1] + '% (' + c.shrinkage.predicted.width_pct[0] + '–' + c.shrinkage.predicted.width_pct[2] + ')' : '') + '</div>';
+    return h;
+  }
+  function cLoad() {
+    apiFetch('/api/studio/calibration').then(function (r) {
+      if (!r.records.length) { $('st-clist').innerHTML = ''; return; }
+      $('st-clist').innerHTML = '<div class="st-sub" style="margin-top:0">Your records (' + r.records.length + ') &middot; <a href="/api/studio/calibration/export.csv">export CSV</a></div>' + r.records.map(function (x) {
+        return '<div style="font-size:12px;border-top:1px solid var(--line);padding:5px 0"><b>' + esc(x.design_name || x.group) + '</b> &middot; ' + new Date(x.saved).toLocaleDateString() + ' <button type="button" class="st-btn" data-cdel="' + x.id + '" style="padding:1px 8px;font-size:11px">Delete</button><div style="color:var(--t2)">' + cCompare(x.comparison) + '</div></div>';
+      }).join('');
+    }).catch(function () {});
+  }
+  function bindCalibration() {
+    cForm(); cLoad();
+    $('st-csave').addEventListener('click', function () {
+      var btn = this; btn.disabled = true; cStat('Saving…');
+      apiFetch('/api/studio/calibration', { method: 'POST', body: { design: payload(), name: $('st-name').value || '', measured: cMeasured() } }).then(function (r) {
+        cStat('Saved. Against the Studio: ' + (cCompare(r.comparison) || 'no dimensions entered to compare.'));
+        return cLoad();
+      }).catch(function (e) { cStat(esc((e.data && e.data.error) || e.message || 'Could not save.'), true); }).then(function () { btn.disabled = false; });
+    });
+    $('st-clist').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-cdel]'); if (!b) return;
+      apiFetch('/api/studio/calibration/' + b.getAttribute('data-cdel'), { method: 'DELETE' }).then(cLoad).catch(function () {});
+    });
   }
 
   // ── machine files: set-up sheet, needle-programme bitmap, cam chart (/api/studio/export) ──
@@ -505,7 +562,7 @@
     clearTimeout(timer);
     timer = setTimeout(analyse, 280);
     // the real view is a heavy rebuild: wait for a pause in the editing
-    clearTimeout(timer3d); timer3d = setTimeout(render3D, mode3d === 'cloth' ? 700 : 120);
+    clearTimeout(timer3d); timer3d = setTimeout(render3D, mode3d === 'cloth' || mode3d === 'twin' ? 700 : 120);
   }
 
   function num(id) { var v = parseFloat($(id).value); return isFinite(v) && v > 0 ? v : null; }
@@ -1098,7 +1155,34 @@
   // jersey's) is used and the 3D still shows exactly what is drawn.
   function render3D() {
     if (!$('pane-3d').classList.contains('on')) return;
-    if (mode3d === 'cloth') renderCloth(); else renderLoops();
+    if (mode3d === 'cloth') renderCloth(); else if (mode3d === 'twin') renderTwin(); else renderLoops();
+  }
+
+  // ── the yarn view: the knit as interlocked yarn, its shape solved by the yarn model (POST /api/studio/twin) ──
+  var twinView = null, twinPromise = null, twinSeq = 0, twinKey = '';
+  function renderTwin() {
+    var note = $('st-twinnote'), host = $('st-twin');
+    var body = { design: payload() }, key = JSON.stringify(body) + $('st-twcol').value;
+    if (key === twinKey && twinView) return;
+    var my = ++twinSeq;
+    note.hidden = false; note.textContent = 'Threading the yarn and letting it settle…';
+    apiFetch('/api/studio/twin', { method: 'POST', body: body }).then(function (tw) {
+      if (my !== twinSeq || mode3d !== 'twin') return;
+      if (!tw.supported) { note.textContent = 'Not modelled yet: ' + tw.reason; host.hidden = true; twinKey = ''; return; }
+      host.hidden = false;
+      if (!twinPromise) twinPromise = import('/assets/js/studio-twin.js?v=20261114a').then(function (mod) { twinView = new mod.TwinView(host); return twinView; });
+      return twinPromise.then(function (v) {
+        if (my !== twinSeq) return;
+        v.draw(tw, { colour: $('st-twcol').value });
+        twinKey = key;
+        var f = tw.fit;
+        note.innerHTML = '<b>Interlocked yarn, ' + f.nodes + ' segments per repeat.</b> The cell &mdash; wales and courses per cm and width &mdash; is the Studio&rsquo;s own prediction; the yarn is threaded as a chain of loops and settled inside it as a bending-stiff rod that cannot pass through itself. The dimensions are not re-derived here, only the shape. Cloth thickness about ' + tw.thickness_mm + ' mm. Closest two yarns: ' + f.closest_yarns_d + ' yarn diameters (1.0 = touching, nothing passes through)' + (f.converged ? '.' : '; settled to a residual force of ' + f.residual_force + ' (a viewing-grade solution, not a converged one).') + ' Drag to turn, scroll to zoom.';
+      });
+    }).catch(function (e) {
+      if (my !== twinSeq) return;
+      host.hidden = true; twinKey = '';
+      note.textContent = (e.data && e.data.error) || e.message || 'The yarn view could not be built.';
+    });
   }
 
   // ── 3D: the real fabric — the calculator's knit3d engine ──────────────
@@ -1269,10 +1353,12 @@
       var b = e.target.closest('button'); if (!b) return;
       mode3d = b.getAttribute('data-mode');
       Array.prototype.forEach.call(this.children, function (x) { x.classList.toggle('on', x === b); });
-      var lp = mode3d === 'loops';
+      var lp = mode3d === 'loops', tw = mode3d === 'twin', cl = mode3d === 'cloth';
       $('st-loopbar').hidden = !lp; $('st-build').hidden = !lp; $('st-feedkey').hidden = !lp; $('st-loophint').hidden = !lp;
-      $('st-clothbar').hidden = lp; $('st-clothhint').hidden = lp;
-      $('st-loops').hidden = !lp; $('st-cloth').hidden = lp;
+      $('st-clothbar').hidden = !cl; $('st-clothhint').hidden = !cl;
+      $('st-loops').hidden = !lp; $('st-cloth').hidden = !cl;
+      $('st-twinbar').hidden = !tw; $('st-twin').hidden = !tw || !twinView; $('st-twinnote').hidden = !tw;
+      if (!tw) twinSeq++;
       if (lp && cloth) { try { cloth.dispose(); } catch (_) {} cloth = null; clothKey = ''; }
       render3D();
       if (lp && loopView) loopPromise.then(function (v) { v.view('angle'); });
@@ -1280,6 +1366,10 @@
     $('st-loopbar').addEventListener('click', function (e) {
       var b = e.target.closest('[data-view]'); if (b && loopView) loopView.view(b.getAttribute('data-view'));
     });
+    $('st-twinbar').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-tview]'); if (b && twinView) twinView.view(b.getAttribute('data-tview'));
+    });
+    $('st-twcol').addEventListener('input', function () { if (mode3d === 'twin') { twinKey = ''; renderTwin(); } });
     $('st-colby').addEventListener('change', render3D);
     $('st-feedkey').addEventListener('click', function (e) {
       var b = e.target.closest('[data-fk]'); if (!b || !loopView) return;

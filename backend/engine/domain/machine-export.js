@@ -249,6 +249,77 @@ function sheet(out, o = {}) {
   return doc;
 }
 
+// ── the calibration sheet (PDF): the protocol for measuring one cloth, pre-filled with what the Studio expects ──
+function calibrationSheet(out, o = {}) {
+  const doc = new PDFDocument({ size: 'A4', margin: M, bufferPages: true, info: { Title: `Calibration sheet ${latin(o.name || '')}`.trim(), Creator: 'KnitAdvisor' } });
+  const W = doc.page.width - M * 2, bottom = () => doc.page.height - M - 14;
+  const need = (h) => { if (doc.y + h > bottom()) doc.addPage(); };
+  const f = out.fabric || {}, st = out.structure, mc = out.machine || {}, y = out.yarn && out.yarn.ground;
+  const states = {}; for (const s of ((f.relaxation || {}).states || [])) states[s.state] = s;
+  const title = (t, h = 60) => { need(h); doc.moveDown(0.5); doc.font('Helvetica-Bold').fontSize(10.5).fillColor(ACCENT).text(latin(t), M, doc.y); doc.moveTo(M, doc.y + 1).lineTo(M + W, doc.y + 1).strokeColor(LINE).lineWidth(0.7).stroke(); doc.moveDown(0.35); };
+  const para = (t, c = INK, size = 8.6) => { need(14); doc.font('Helvetica').fontSize(size).fillColor(c).text(latin(t), M, doc.y, { width: W }); doc.moveDown(0.15); };
+  // a grid to fill in: a header row, then rows whose first cell names the row; grey cells print what the Studio expects
+  const grid = (cols, rows, rh = 21) => {
+    need((rows.length + 1) * rh + 6);
+    const y0 = doc.y, x0 = M;
+    doc.rect(x0, y0, W, rh).fill(BAND);
+    let x = x0; cols.forEach((c) => { doc.font('Helvetica-Bold').fontSize(7.6).fillColor(MUTED).text(latin(c.h), x + 3, y0 + 4, { width: c.w - 6, lineBreak: false, ellipsis: true }); x += c.w; });
+    rows.forEach((r, i) => {
+      const yy = y0 + rh * (i + 1); let xx = x0;
+      cols.forEach((c, j) => {
+        doc.rect(xx, yy, c.w, rh).strokeColor(LINE).lineWidth(0.5).stroke();
+        const v = r[j];
+        if (v) doc.font(j === 0 ? 'Helvetica-Bold' : 'Helvetica').fontSize(j === 0 ? 8 : 7.2).fillColor(j === 0 ? INK : '#9a9aa2').text(latin(v), xx + 3, yy + (j === 0 ? 6 : 7), { width: c.w - 6, lineBreak: false, ellipsis: true });
+        xx += c.w;
+      });
+    });
+    doc.y = y0 + rh * (rows.length + 1) + 6;
+  };
+
+  doc.font('Helvetica-Bold').fontSize(17).fillColor(ACCENT).text('CALIBRATION SHEET', M, M);
+  doc.font('Helvetica').fontSize(8.5).fillColor(MUTED).text(`KnitAdvisor  -  printed ${new Date().toISOString().slice(0, 10)}  -  measure ONE cloth properly; enter it in the Studio (Calibration measurements)`, M, M + 21, { width: W });
+  doc.font('Helvetica-Bold').fontSize(13).fillColor(INK).text(latin(o.name || (st.match && st.match.name) || 'Untitled design'), M, M + 38, { width: W });
+  doc.font('Helvetica').fontSize(9).fillColor(MUTED).text(latin(`${st.family_label}${st.match ? ' - same as ' + st.match.name : ''}`), M, M + 55, { width: W });
+  doc.y = M + 74;
+
+  title('The cloth to knit');
+  para(`Yarn ${y ? y.count : '-'} ${y ? y.fibre : ''} (${y ? y.type : '-'}), diameter ${y ? y.d_mm : '-'} mm.   Machine ${mc.gauge || '-'} GG x ${mc.dia || '-'} in, ${mc.feeders || '-'} feeders.   Stitch length set ${f.sl_mm || '-'} mm.   Studio expects, finished: ${f.gsm || '-'} GSM, ${f.wpc || '-'} wales/cm, ${f.cpc || '-'} courses/cm, ${f.width_open_in || '-'} in open width.`);
+  para('Knit at least 5 m of this exact design on one machine with one yarn lot, at the stitch length above. Log the stitch length you actually ran and the course length your meter reads. Cut three pieces of about 60 x 60 cm from the same stretch of cloth.');
+  grid([{ h: 'Run on the machine', w: 150 }, { h: 'Stitch length (mm)', w: 110 }, { h: 'Course length (m)', w: 110 }, { h: 'Yarn lot / date / machine', w: W - 370 }], [['Actual']], 24);
+
+  title('1. Dimensions in each state of relaxation', 150);
+  para('Condition every piece 24 h at 20 +/- 2 C, 65 % RH, lying flat, before measuring. Count wales and courses over a marked 10 cm in three places and average; weigh five 100 cm2 cuts; measure open width flat (or twice the tube width). Grey = what the Studio expects (modelled).');
+  const exp = (s, k) => (states[s] && states[s][k] != null ? `exp ${states[s][k]}` : '');
+  grid([{ h: 'State and how to reach it', w: 190 }, { h: 'Wales / cm', w: 80 }, { h: 'Courses / cm', w: 80 }, { h: 'GSM', w: 70 }, { h: 'Open width (in)', w: W - 420 }], [
+    ['Dry relaxed - as knitted, conditioned', exp('dry', 'wpc'), exp('dry', 'cpc'), exp('dry', 'gsm'), exp('dry', 'width_in')],
+    ['Wet relaxed - soaked 2 h, dried flat', exp('wet', 'wpc'), exp('wet', 'cpc'), exp('wet', 'gsm'), exp('wet', 'width_in')],
+    ['Finished - your production route', exp('finished', 'wpc'), exp('finished', 'cpc'), exp('finished', 'gsm'), exp('finished', 'width_in')],
+    ['Fully relaxed - finished, then 5 washes + tumble dry', exp('full', 'wpc'), exp('full', 'cpc'), exp('full', 'gsm'), exp('full', 'width_in')],
+  ], 24);
+
+  title('2. Load-extension, course and wale direction', 190);
+  para('Cut 5 cm x 20 cm strips from the FINISHED cloth: 3 along the courses, 3 along the wales. On a constant-rate-of-extension tester, 100 mm gauge length, 100 mm/min, 0.5 N preload, load each strip to 50 % and read the force at each strain on the FIRST loading. Enter the average of the three, in N per 5 cm of width.');
+  grid([{ h: 'Strain (%)', w: 90 }, { h: 'Course direction (N / 5 cm)', w: 190 }, { h: 'Wale direction (N / 5 cm)', w: 190 }, { h: 'Notes', w: W - 470 }], [5, 10, 20, 30, 40, 50].map((e) => [`${e} %`]), 20);
+
+  title('3. Recovery, growth and thickness', 110);
+  para('After the 50 % cycle hold the strip 60 s at 50 %, release, lay flat, and measure its length 1 minute and 30 minutes later. Growth = the length left, as a percentage of the original 100 mm gauge.');
+  grid([{ h: 'Direction', w: 120 }, { h: 'Length left after 1 min (%)', w: 160 }, { h: 'Length left after 30 min (%)', w: 170 }, { h: 'Thickness at 1 kPa (mm), 5 points', w: W - 450 }], [['Course'], ['Wale']], 22);
+
+  title('4. Sign-off', 90);
+  const fields = ['Tester and load cell', 'Room temperature / RH', 'Measured by / date'];
+  const fw = W / 3, yy = doc.y + 2;
+  fields.forEach((t, i) => { const x = M + i * fw; doc.font('Helvetica').fontSize(7.5).fillColor(MUTED).text(t, x, yy, { width: fw - 10, lineBreak: false }); doc.moveTo(x, yy + 24).lineTo(x + fw - 12, yy + 24).strokeColor('#999').lineWidth(0.6).stroke(); });
+  doc.y = yy + 34;
+  para("Why this: the Studio's relaxed sizes, residual shrinkage and stretch are MODELLED from family constants. These measurements, on your own cloth, are what fit them - and what fix the friction of the yarn model. One careful cloth is worth more than many rough ones; do the same for a rib and an interlock if you can.", MUTED, 8);
+
+  const range = doc.bufferedPageRange();
+  for (let i = 0; i < range.count; i++) {
+    doc.switchToPage(i); doc.page.margins.bottom = 0;
+    doc.font('Helvetica').fontSize(7).fillColor(MUTED).text(`KnitAdvisor calibration sheet   Page ${i + 1} of ${range.count}`, M, doc.page.height - M + 4, { width: W, align: 'center', lineBreak: false });
+  }
+  return doc;
+}
+
 const slug = (s) => String(s || 'design').replace(/[^A-Za-z0-9_.-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || 'design';
 
-module.exports = { programme, png, bmp, csv, sheet, slug, ExportError, SYMS, PALETTE };
+module.exports = { programme, png, bmp, csv, sheet, calibrationSheet, slug, ExportError, SYMS, PALETTE };

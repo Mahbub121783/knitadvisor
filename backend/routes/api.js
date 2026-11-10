@@ -1501,6 +1501,81 @@ router.post('/studio/analyse', requireUser, async (req, res) => {
   }
 });
 
+// Calibration measurements (migration 045): relaxed sizes, load-extension, recovery on one cloth, kept with the design and
+// what the Studio predicted for it, and compared with that prediction at once (engine/domain/calibration-intake.js).
+const calibration = require('../engine/domain/calibration-intake');
+const calibrationRepo = require('../db/repositories/calibration-repo');
+const calFail = (res, err, what) => {
+  if (err instanceof calibration.CalibrationError) return res.status(400).json({ success: false, error: err.message });
+  console.error(`[studio] ${what} failed:`, err);
+  res.status(500).json({ success: false, error: `Could not ${what}.` });
+};
+router.get('/studio/calibration', requireUser, async (req, res) => {
+  try {
+    const rows = await calibrationRepo.list(req.user.id);
+    res.json({ success: true, records: rows.map((r) => ({ id: r.id, design_name: r.design_name, group: r.group_key, saved: r.created_at, comparison: calibration.compare(r.predicted, r.measured) })) });
+  } catch (err) { calFail(res, err, 'load your calibration records'); }
+});
+router.get('/studio/calibration/export.csv', requireUser, async (req, res) => {
+  try {
+    const rows = await calibrationRepo.list(req.user.id);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="calibration-measurements.csv"');
+    res.send(calibration.csv(rows.map((r) => ({ ...r, design_name: r.design_name || '' }))));
+  } catch (err) { calFail(res, err, 'export your calibration records'); }
+});
+router.post('/studio/calibration', requireUser, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const measured = calibration.cleanMeasured(b.measured);
+    const hit = await studioAnswer(req.user.id, b.design);
+    if (hit.status !== 200) return res.status(hit.status).type('application/json').send(hit.body);
+    const out = JSON.parse(hit.body);
+    const predicted = calibration.snapshot(out);
+    const { floor_machine_id: _m, floor: _f, ...design } = b.design || {};
+    const row = await calibrationRepo.add(req.user.id, {
+      design_name: String(b.name || '').replace(/\s+/g, ' ').trim().slice(0, 80) || null, group_key: out.structure.group, structure: out.structure.match ? out.structure.match.id : 'new',
+      design, predicted, measured,
+    });
+    res.json({ success: true, id: row.id, comparison: calibration.compare(predicted, measured) });
+  } catch (err) { calFail(res, err, 'save the calibration'); }
+});
+router.delete('/studio/calibration/:id', requireUser, async (req, res) => {
+  const id = idOf(req.params.id); if (!id) return res.status(400).json({ success: false, error: 'Invalid id.' });
+  try {
+    if (!(await calibrationRepo.remove(req.user.id, id))) return res.status(404).json({ success: false, error: 'Record not found.' });
+    res.json({ success: true });
+  } catch (err) { calFail(res, err, 'delete the record'); }
+});
+
+// The yarn twin: the drawn knit as interlocked yarn, its shape solved inside the Studio's own predicted cell
+// (engine/domain/yarn-twin.js). CPU-bound (up to ~1.5 s), so it is limited per address, the same design is
+// answered from memory, and designs it cannot model are refused up front.
+const yarnTwin = require('../engine/domain/yarn-twin');
+const twinLimiter = createRateLimiter({ name: 'studio_twin', max: 12, windowMs: 60 * 1000, message: 'Too many yarn-model requests - wait a minute.' });
+const twinCache = new Map();
+router.post('/studio/twin', requireUser, twinLimiter, async (req, res) => {
+  try {
+    const hit = await studioAnswer(req.user.id, (req.body || {}).design);
+    if (hit.status !== 200) return res.status(hit.status).type('application/json').send(hit.body);
+    const out = JSON.parse(hit.body);
+    const pre = yarnTwin.walesOf(out);
+    if (!pre.wales) return res.json({ success: true, supported: false, reason: pre.reason });
+    const key = crypto.createHash('sha1').update(hit.body).digest('hex');
+    let v = twinCache.get(key);
+    if (v) { twinCache.delete(key); twinCache.set(key, v); }
+    else {
+      v = yarnTwin.twin(out, { timeMs: 1500 });
+      twinCache.set(key, v);
+      if (twinCache.size > 200) twinCache.delete(twinCache.keys().next().value);
+    }
+    res.json({ success: true, ...v });
+  } catch (err) {
+    console.error('[studio] twin failed:', err);
+    res.status(500).json({ success: false, error: 'The yarn model could not be built.' });
+  }
+});
+
 // Machine files for a design: the set-up sheet (PDF), the needle programme as a bitmap (PNG / BMP)
 // and the cam chart (CSV) — drawn from the same answer the page shows (engine/domain/machine-export.js).
 const machineExport = require('../engine/domain/machine-export');
@@ -1511,9 +1586,16 @@ router.post('/studio/export', requireUser, exportLimiter, async (req, res) => {
     const hit = await studioAnswer(req.user.id, b.design);
     if (hit.status !== 200) return res.status(hit.status).type('application/json').send(hit.body);
     const out = JSON.parse(hit.body);
-    const fmt = ['pdf', 'png', 'bmp', 'csv'].includes(b.format) ? b.format : 'pdf';
+    const fmt = ['pdf', 'png', 'bmp', 'csv', 'calib'].includes(b.format) ? b.format : 'pdf';
     const name = String(b.name || '').replace(/\s+/g, ' ').trim().slice(0, 60);
     const slug = machineExport.slug(name || (out.structure.match && out.structure.match.name));
+    if (fmt === 'calib') {
+      const doc = machineExport.calibrationSheet(out, { name });
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="CalibrationSheet-${slug}.pdf"`);
+      doc.pipe(res); doc.end();
+      return;
+    }
     if (fmt === 'pdf') {
       const doc = machineExport.sheet(out, { name, floor: hit.floor });
       res.setHeader('Content-Type', 'application/pdf');
