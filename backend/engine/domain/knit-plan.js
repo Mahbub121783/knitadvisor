@@ -79,11 +79,34 @@ const BOOK = {
   ks: { single_jersey: 19.7, rib: 28, interlock: 36.7, pique: 21.8, fleece: 65.5, terry: 67, waffle: 29, heavy_jersey: 41 },
 };
 
+// How elastane moves a constant: the median, over the structures with plenty of records both
+// with and without it, of (with ÷ without). Used only when one variant of a structure is thin.
+const LYCRA_RATIO = (() => {
+  const out = {};
+  for (const table of ['ks', 'kw']) {
+    const rs = [];
+    for (const k of Object.keys(CAL[table])) {
+      if (!k.endsWith('|P')) continue;
+      const fam = k.slice(0, -2), p = CAL[table][k], l = CAL[table][`${fam}|L`];
+      if (p && l && p.n >= 30 && l.n >= 30) rs.push(l.med / p.med);
+    }
+    out[table] = rs.length ? quant(rs, 0.5) : 1;
+  }
+  return out;
+})();
+
 function calFor(table, family, lycra) {
-  const k = `${family}|${lycra ? 'L' : 'P'}`, kp = `${family}|P`;
-  const c = CAL[table][k] && CAL[table][k].n >= 12 ? CAL[table][k] : CAL[table][kp] && CAL[table][kp].n >= 12 ? CAL[table][kp] : null;
-  if (c) return { ...c, basis: `${c.n} factory records (${family}${c === CAL[table][k] && lycra ? ', lycra' : ''})` };
-  const v = BOOK[table][family] || BOOK[table].single_jersey;
+  const own = CAL[table][`${family}|${lycra ? 'L' : 'P'}`];
+  const other = CAL[table][`${family}|${lycra ? 'P' : 'L'}`];
+  if (own && own.n >= 12) return { ...own, basis: `${own.n} factory records (${family}${lycra ? ', lycra' : ''})` };
+  // the same structure's other variant, carried across by how elastane moves this constant elsewhere
+  // (cross-validated: plain 2x2 rib from its 98 lycra records 13 % → instead of single jersey's book value, 46 %)
+  if (other && other.n >= 12) {
+    const f = lycra ? LYCRA_RATIO[table] : 1 / LYCRA_RATIO[table];
+    return { med: other.med * f, q1: other.q1 * f, q3: other.q3 * f, n: other.n, carried: true,
+      basis: `${other.n} factory records (${family}${lycra ? '' : ', lycra'}), carried ${lycra ? 'to' : 'from'} elastane by the median ratio ${r2(LYCRA_RATIO[table])} — ${own ? own.n : 0} records of this exact variant` };
+  }
+  const v = BOOK[table][family] || BOOK[table][family.replace(/\d.*$/, '')] || BOOK[table].single_jersey;
   return { med: v, q1: v * 0.96, q3: v * 1.04, n: 0, basis: 'book value (too few factory records)' };
 }
 
@@ -438,5 +461,5 @@ function buildKnitPlan(a) {
 module.exports = {
   buildKnitPlan, normaliseStructure, CAL, MACHINE, STANDARD_DIA,
   // shared with the fabric studio (fabric-studio.js)
-  calFor, tracksOf, camChart, structureChecks, feedConsumption, feedConsumptionCells,
+  calFor, LYCRA_RATIO, tracksOf, camChart, structureChecks, feedConsumption, feedConsumptionCells,
 };

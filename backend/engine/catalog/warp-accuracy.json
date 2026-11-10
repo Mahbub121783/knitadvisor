@@ -1,0 +1,29 @@
+{
+ "generated": "2026-11-10",
+ "method": "leave-one-out on 15 published nylon tricots: each predicted with finished-state factors from the other 14 (the needle-wrap constant was fitted once on all 31 published constructions)",
+ "tricot": {
+  "gsm": {
+   "n": 15,
+   "bias": -0.0539,
+   "p10": -0.2147,
+   "p50": -0.0825,
+   "p90": 0.1606,
+   "mae_med": 0.088,
+   "within_3": 13.3,
+   "within_5": 26.7,
+   "within_8": 33.3
+  },
+  "width": {
+   "n": 15,
+   "bias": 0.0336,
+   "p10": -0.1472,
+   "p50": -0.0123,
+   "p90": 0.2544,
+   "mae_med": 0.1327,
+   "within_3": 20,
+   "within_5": 26.7,
+   "within_8": 26.7
+  }
+ },
+ "not_checked": "Raschel, powernet, nets, spacer and elastic tricot: no published or factory finished cloth to check against yet — their weight and width are modelled."
+}

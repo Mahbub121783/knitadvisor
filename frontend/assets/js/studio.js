@@ -104,7 +104,7 @@
     (last.yarn.character || []).forEach(function (c) {
       var k = c.role === 'face' || c.role === 'ground' ? 'ground' : c.role === 'plated' ? 'plate' : c.role, el = $('st-yeq-' + k); if (!el) return;
       var R = c.relative || {}, sg = function (v) { return v == null ? '—' : (v > 0 ? '+' : '') + v + '%'; };
-      el.textContent += ' | ' + c.system + ': strength ' + sg(R.strength_pct) + ', hairiness ' + sg(R.hairiness_pct) + ', torque ' + sg(R.spirality_pct) + ', pilling ' + (c.pilling_delta > 0 ? '+' : '') + c.pilling_delta + ' grade' + (c.spinnable ? '' : ' — not spinnable at this count');
+      el.textContent += ' | ' + (c.system ? c.system + ' vs combed ring' : 'vs combed ring') + ': strength ' + sg(R.strength_pct) + ', hairiness ' + sg(R.hairiness_pct) + ', torque ' + sg(R.spirality_pct) + ', pilling ' + (c.pilling_delta > 0 ? '+' : '') + c.pilling_delta + ' grade' + (c.spinnable ? '' : ' — not spinnable at this count');
     });
   }
   var MYM = 'ka-studio-mymachine';
@@ -481,14 +481,18 @@
   function renderResults() {
     var r = last, f = r.fabric, y = r.yarn;
     var est = ({ calibrated: 'm', verified: 'm' })[r.structure.confidence.level] || 'e';
+    var A = f.accuracy && !f.accuracy.own_rolls ? f.accuracy : null;
     var html = '<div class="st-kpis">' +
       kpi('Ground yarn', esc(y.ground.count), esc(y.ground.fibre) + ' · ' + y.ground.tex + ' tex' + (y.ground.source === 'solved' ? ' · solved' : ''), r.solver ? 'm' : null) +
       kpi('Stitch length', f.sl_mm + ' mm', esc(f.sl_source) + (f.sl_range_mm ? ' · range ' + f.sl_range_mm.join('–') : ''), est) +
-      kpi('Finished GSM', f.gsm, 'likely ' + f.gsm_range.join('–') + (f.target_gsm ? ' · target ' + f.target_gsm : ''), est) +
-      kpi('Open width', f.width_open_in + '"', 'tube ' + f.tube_in + '" · likely ' + f.width_range_in.join('–') + '"', est) +
+      kpi('Finished GSM', f.gsm, (A ? '8 in 10 land ' + A.gsm.range.join('–') + ' · ±5%: ' + A.gsm.within_5_pct + '% of the time' : 'likely ' + f.gsm_range.join('–')) + (f.target_gsm ? ' · target ' + f.target_gsm : ''), est) +
+      kpi('Open width', f.width_open_in + '"', 'tube ' + f.tube_in + '" · ' + (A && A.width ? '8 in 10 land ' + A.width.range.join('–') + '" · ±5%: ' + A.width.within_5_pct + '%' : 'likely ' + f.width_range_in.join('–') + '"'), est) +
       kpi('Tightness factor', f.tf, f.tf_window ? 'factory middle ' + f.tf_window.q1 + '–' + f.tf_window.q3 : '', 'c') +
       kpi('Wales × courses', f.wpi + ' × ' + f.cpi, 'per inch · ' + f.wpc + ' × ' + f.cpc + ' per cm', est) +
-      '</div>';
+      '</div>' +
+      // how right it is: measured, not claimed — the cross-validation on the factory records
+      (A ? '<div class="st-acc"><b>How right is this?</b> When the Studio predicted ' + (A.level === 'estimate' ? 'structures it had no records for' : A.level === 'close' ? 'structures like this one' : 'cloths like this one') + ' without having seen them, the finished GSM was typically ' + A.gsm.typical_error_pct + '% off; ' +
+        A.gsm.within_3_pct + '% landed within ±3%, ' + A.gsm.within_5_pct + '% within ±5%, ' + A.gsm.within_8_pct + '% within ±8%' + (A.width ? '. Width: typically ' + A.width.typical_error_pct + '% off, ' + A.width.within_5_pct + '% within ±5%' : '') + '. <span title="' + esc(A.method) + ' (' + esc(A.generated) + ')">' + esc(A.basis) + '.</span> Your own trial rolls narrow this (Trial rolls below).</div>' : '');
     if (f.calibration) {
       var cb = f.calibration;
       html += '<div class="st-sub">Your trial rolls ' + src('m') + '</div><p class="st-p">Ks ' + cb.ks + ' against ' + cb.model_ks + ' from the factory constants (' + (cb.ks_vs_model_pct > 0 ? '+' : '') + cb.ks_vs_model_pct + '%), Kw ' + cb.kw + ' against ' + cb.model_kw + ' (' + (cb.kw_vs_model_pct > 0 ? '+' : '') + cb.kw_vs_model_pct + '%). Scatter between rolls ' + cb.scatter_pct + '%.</p>' +

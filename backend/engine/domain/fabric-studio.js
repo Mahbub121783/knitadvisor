@@ -43,6 +43,41 @@ const TE = require('./terry-engine');
 const { FABRIC_DERIVATIVES } = require('../catalog/fabric-derivatives');
 const { FACTORY_RECORDS } = require('../catalog/factory-dataset');
 
+// ── how right the Studio is: cross-validated on the factory records (tools/studio-crossval.js) ──
+// Every weight and width carries the range that 80 % of comparable cloths fell in when the
+// Studio predicted them WITHOUT having seen them, and how often it landed within ±5 %.
+let ACCURACY = null;
+try { ACCURACY = require('../catalog/studio-accuracy.json'); } catch (_) { ACCURACY = null; }
+const ACC_GROUP = { single_jersey: 'single_jersey', heavy_jersey: 'heavy_jersey', rib_1x1: 'rib_1x1', rib_2x2: 'rib_2x2', lacoste_single: 'lacoste_single', interlock: 'interlock', fleece_3_thread: 'fleece_3_thread', waffle_knit: 'waffle_knit' };
+const ACC_FAMILY_GROUP = { single_jersey: 'single_jersey', pique: 'lacoste_single', rib: 'rib_1x1', interlock: 'interlock', fleece: 'fleece_3_thread' };
+const ACC_FAMILY_FAB = { single_jersey: null, pique: 'pique', rib: 'rib', interlock: 'interlock', fleece: 'fleece' };
+const ACC_MIN_N = 15;
+/**
+ * The error distribution that applies to this answer.
+ *   calibrated  this structure's own cross-validated errors (its records, never the ones predicted)
+ *   close       half-way between those and the errors of a structure with no records
+ *   estimate    a structure with no records: its family left out of the records entirely
+ */
+function accuracyFor({ matchId, family, lycra, level }) {
+  if (!ACCURACY) return null;
+  const G = ACCURACY.groups, U = ACCURACY.unseen;
+  const base = ACC_GROUP[matchId] || ACC_FAMILY_GROUP[family] || 'single_jersey';
+  const pick = (k) => (G[k] && G[k].gsm && G[k].gsm.n >= ACC_MIN_N ? { key: k, v: G[k] } : null);
+  const own = pick(base + (lycra ? '+L' : '')) || pick(base) || { key: '_all', v: G._all };
+  const fab = ACC_FAMILY_FAB[family];
+  const unseen = fab && U.by_family[fab] && U.by_family[fab].gsm && U.by_family[fab].gsm.n >= ACC_MIN_N
+    ? { key: `a ${fab.replace('_', ' ')} structure with no records`, v: U.by_family[fab] } : { key: 'a structure with no records', v: U.pooled };
+  const w = level === 'estimate' ? 1 : level === 'close' ? 0.5 : 0;
+  const mix = (a, b) => (a && b ? Object.fromEntries(['p10', 'p90', 'mae_med', 'within_3', 'within_5', 'within_8'].map((k) => [k, a[k] * (1 - w) + b[k] * w])) : a || b);
+  const nice = (k) => (k === '_all' ? 'all structures' : k.replace('+L', ' with elastane').replace(/_/g, ' '));
+  const basis = w === 1 ? `cross-validated on the factory records: ${unseen.key} (its family left out), ${unseen.v.gsm.n} cloths`
+    : w === 0.5 ? `cross-validated on the factory records: between ${nice(own.key)} (${own.v.gsm.n} cloths) and a structure with no records`
+      : `cross-validated on the factory records: ${nice(own.key)}, ${own.v.gsm.n} cloths the engine had not seen when it predicted them`;
+  return { gsm: mix(own.v.gsm, unseen.v.gsm), width: mix(own.v.width, unseen.v.width), basis, group: own.key, method: ACCURACY.method, generated: ACCURACY.generated };
+}
+/** Where 80 % of measured cloths land, given the prediction and the signed error quantiles (e = (pred − meas) / meas). */
+const rangeOf = (pred, e) => [pred / (1 + e.p90), pred / (1 + e.p10)];
+
 const r1 = (v) => Math.round(v * 10) / 10;
 const r2 = (v) => Math.round(v * 100) / 100;
 const r3 = (v) => Math.round(v * 1000) / 1000;
@@ -1347,6 +1382,8 @@ function analyse(input) {
     const W = plush
       ? (() => { const t = plush.calibration.tightness_factor * 10, d = plush.calibration.tightness_sd * 10; return { p5: r2(t - 2 * d), q1: r2(t - 0.67 * d), med: r2(t), q3: r2(t + 0.67 * d), p95: r2(t + 2 * d), n: plush.calibration.factory_rows, basis: `${plush.calibration.factory_rows} factory terry rows, ground + pile plated` }; })()
       : tfWindow(family, lycra, ctx.rate);
+    // how right this answer is likely to be: measured by cross-validation (plush has its own model and no records)
+    const acc = accuracyFor({ matchId: match && match.id, family, lycra, level: plush ? 'estimate' : confidence.level });
     return {
       success: true,
       structure: {
@@ -1392,11 +1429,16 @@ function analyse(input) {
         effects: yarnFx,
       },
       fabric: {
-        gsm: Math.round(S.gsm), gsm_range: S.gsmRange.map(Math.round), target_gsm: S.target,
+        accuracy: acc ? {
+          interval_pct: 80, level: confidence.level, basis: acc.basis, method: acc.method, generated: acc.generated, own_rolls: !!ctx.calib,
+          gsm: { range: rangeOf(S.gsm, acc.gsm).map(Math.round), typical_error_pct: r1(acc.gsm.mae_med * 100), within_3_pct: Math.round(acc.gsm.within_3), within_5_pct: Math.round(acc.gsm.within_5), within_8_pct: Math.round(acc.gsm.within_8) },
+          width: acc.width ? { range: rangeOf(S.width, acc.width).map(r1), typical_error_pct: r1(acc.width.mae_med * 100), within_3_pct: Math.round(acc.width.within_3), within_5_pct: Math.round(acc.width.within_5), within_8_pct: Math.round(acc.width.within_8) } : null,
+        } : null,
+        gsm: Math.round(S.gsm), gsm_range: (acc && !ctx.calib ? rangeOf(S.gsm, acc.gsm) : S.gsmRange).map(Math.round), target_gsm: S.target,
         sl_mm: r2(S.lref), sl_source: S.slSource, sl_range_mm: S.slRange,
         tf: r1(S.tfGround), tf_window: W,
         wpi: r1(S.wpc * 2.54), cpi: r1(S.cpc * 2.54), wpc: r1(S.wpc), cpc: r1(S.cpc),
-        width_open_in: r1(S.width), width_range_in: S.widthRange.map(r1), tube_in: r1(S.width / 2), target_width_in: S.tW,
+        width_open_in: r1(S.width), width_range_in: (acc && acc.width && !ctx.calib ? rangeOf(S.width, acc.width) : S.widthRange).map(r1), tube_in: r1(S.width / 2), target_width_in: S.tW,
         kw: r2(S.KW.med), kw_basis: S.KW.basis, ks: r1(S.KS.med), ks_basis: S.KS.basis,
         relaxation: relax,
         calibration: ctx.calib ? {

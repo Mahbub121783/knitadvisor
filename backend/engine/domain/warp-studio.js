@@ -63,6 +63,9 @@ const lcm = (a, b) => (a / gcd(a, b)) * b;
 class WarpError extends Error {}
 
 const RACK = 480;
+// how right the finished weight and width are: leave-one-out on the published tricots (tools/warp-crossval.js)
+let WARP_ACCURACY = null;
+try { WARP_ACCURACY = require('../catalog/warp-accuracy.json'); } catch (_) { WARP_ACCURACY = null; }
 // the yarn's wrap round the needle (needle and the yarn under it) ≈ 0.45 × pitch:
 // fitted on 31 published constructions (see engine/catalog/warp-literature.js)
 const TN = 0.45;
@@ -631,6 +634,16 @@ function analyse(input) {
         cpc_machine: r2(cpcM), cpc_source: cpcSource, m_per_hour: r1(mPerH), finished_m_per_hour: r1(finishedMperH), kg_per_hour: r2(kgh), use: M.use,
       },
       fabric: {
+        accuracy: (() => {
+          const tg = +((input.target || {}).width_in) > 0;
+          if (WARP_ACCURACY && mType === 'tricot' && !elastic && beds === 1) {
+            const A = WARP_ACCURACY.tricot, rng = (v, e, d) => [v / (1 + e.p90), v / (1 + e.p10)].map((x) => Math.round(x * 10 ** d) / 10 ** d);
+            return { checked: true, interval_pct: 80, basis: `checked on ${A.gsm.n} published nylon tricots, each predicted without itself (leave-one-out)`, method: WARP_ACCURACY.method,
+              gsm: { range: rng(R.gsm, A.gsm, 0), typical_error_pct: r1(A.gsm.mae_med * 100), within_5_pct: Math.round(A.gsm.within_5), within_8_pct: Math.round(A.gsm.within_8) },
+              width: tg ? null : { range: rng(finishedWidthIn, A.width, 1), typical_error_pct: r1(A.width.mae_med * 100), within_5_pct: Math.round(A.width.within_5) } };
+          }
+          return { checked: false, basis: WARP_ACCURACY ? WARP_ACCURACY.not_checked : 'Not checked against measured cloth: modelled.' };
+        })(),
         spacer,
         gsm: Math.round(R.gsm), wpc: r2(wpcMachine * kw), cpc: r2(cpcM * kc), width_in: r1(finishedWidthIn),
         relax: { kw: r2(kw), kc: r2(kc), basis: tgtW > 0 ? 'width: your finished width; length: modelled' : `modelled for a ${mType.replace('_', ' ')}${elastic ? ' with elastane' : ''} (finished wales = machine × ${r2(kw)}, courses × ${r2(kc)})` },
