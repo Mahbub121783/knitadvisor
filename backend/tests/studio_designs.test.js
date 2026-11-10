@@ -23,6 +23,20 @@ refuse({ name: 'x', design: { ...ok.design, rolls: new Array(13).fill({}) } }, /
 refuse({ name: 'x', design: { ...ok.design, blob: 'y'.repeat(70000) } }, /too large/);
 assert(MAX_DESIGNS >= 50);
 
+// a warp design is stored with its bars, not a K/T/M grid
+{
+  const w = { tech: 'warp', warp: { machine: { type: 'tricot', gauge: 28 }, bars: [{ notation: '1-0/2-3//', threading: 'X', yarn: { count: 40, unit: 'denier' } }, { notation: '1-2/1-0//', yarn: { count: 40 } }], target: { gsm: 120 } } };
+  const c = cleanDesign({ name: ' Locknit  40D ', design: w });
+  assert.strictEqual(c.name, 'Locknit 40D');
+  assert.strictEqual(JSON.parse(c.json).warp.bars.length, 2);
+  refuse({ name: 'x', design: { ...w, warp: { ...w.warp, bars: [] } } }, /1 to 8 guide bars/);
+  refuse({ name: 'x', design: { ...w, warp: { ...w.warp, bars: new Array(9).fill(w.warp.bars[0]) } } }, /1 to 8 guide bars/);
+  refuse({ name: 'x', design: { ...w, warp: { ...w.warp, bars: [{ notation: '1-0; DROP TABLE', yarn: {} }] } } }, /lapping is not valid/);
+  refuse({ name: 'x', design: { ...w, warp: { ...w.warp, bars: [{ notation: '1-0/1-2//', threading: 'XYZ', yarn: {} }] } } }, /threading/);
+  refuse({ name: 'x', design: { ...w, warp: { ...w.warp, bars: [{ notation: '1-0/1-2//' }] } } }, /its yarn/);
+  refuse({ name: 'x', design: { ...w, warp: { ...w.warp, blob: 'y'.repeat(70000) } } }, /too large/);
+}
+
 // the migration matches what the repository writes: one name per account, any case
 const sql = fs.readFileSync(path.join(__dirname, '../db/migrations/035_studio_designs.sql'), 'utf8');
 assert(/CREATE TABLE studio_designs/.test(sql) && /REFERENCES app_users\(id\) ON DELETE CASCADE/.test(sql));

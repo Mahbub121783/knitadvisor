@@ -182,7 +182,8 @@
       return;
     }
     $('db-designs').innerHTML = '<div class="db-designs">' + list.map(function (d, n) {
-      var bits = [d.bed === 'rib' ? 'Double bed' : 'Single bed', d.feeds + ' feeds'];
+      var bits = d.tech === 'warp' ? ['Warp knit', d.feeds + ' guide bar' + (d.feeds > 1 ? 's' : '')] : [d.bed === 'rib' ? 'Double bed' : 'Single bed', d.feeds + ' feeds'];
+      if (d.tech === 'warp' && d.gauge) bits.push('E' + d.gauge);
       if (d.gsm) bits.push(d.gsm + ' GSM');
       if (d.count) bits.push(d.count + 's');
       return '<a class="db-design" href="/studio.html?design=' + encodeURIComponent(d.id) + '"><canvas data-grid="' + n + '" width="160" height="74"></canvas>' +

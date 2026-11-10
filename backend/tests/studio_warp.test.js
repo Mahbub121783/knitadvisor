@@ -257,3 +257,20 @@ console.log('Studio warp beam calibration tests passed');
   }
 }
 console.log('Calculator warp on the studio engine: tests passed');
+
+// yarn cost from the user's prices
+{
+  const t = W.TEMPLATES.find((x) => x.id === 'swim_tricot');
+  const priced = (p0, p1, beams) => W.analyse({ machine: { type: 'tricot', gauge: 28 }, bars: t.bars.map((b, i) => ({ ...b, price: i ? p1 : p0 })), beams, target: { gsm: 190 } });
+  const r = priced(6, 18, { residue_pct: 0, waste_pct: 0 });
+  // no waste: the yarn per metre is the fabric's mass per metre
+  near(r.cost.yarn_kg_per_m, 190 * r.fabric.width_in * 0.0254 / 1000, 0.002, 'yarn per metre = GSM × width');
+  near(r.cost.cost_per_m, r.cost.per_bar[0].kg_per_m * 6 + r.cost.per_bar[1].kg_per_m * 18, 0.01);
+  near(r.cost.cost_per_kg_fabric * 190 * r.fabric.width_in * 0.0254 / 1000, r.cost.cost_per_m, 0.01, 'cost per kg × kg per metre = cost per metre');
+  // waste and what stays on the beam raise it
+  assert(priced(6, 18, { residue_pct: 2, waste_pct: 3 }).cost.cost_per_m > r.cost.cost_per_m * 1.04);
+  // a price missing on one bar is asked for, not guessed
+  assert.deepStrictEqual(W.analyse({ machine: { type: 'tricot', gauge: 28 }, bars: t.bars.map((b, i) => (i ? b : { ...b, price: 6 })), target: { gsm: 190 } }).cost, { missing: [2] });
+  assert.strictEqual(W.analyse({ machine: { type: 'tricot', gauge: 28 }, bars: t.bars, target: { gsm: 190 } }).cost, null);
+}
+console.log('Studio warp cost tests passed');

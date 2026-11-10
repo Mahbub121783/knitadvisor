@@ -1198,7 +1198,8 @@
     writeRolls();
     renderAll();
   }
-  var account = [];          // designs saved to the signed-in account
+  var account = [], warpSaved = [], pendingWarp = null;          // designs saved to the signed-in account (weft here, warp on the warp page)
+  window.KAStudioReloadAccount = function () { return loadAccount(); };
   function refreshSaved() {
     var local = readStore();
     $('st-saved').innerHTML = '<option value="">Saved designs…</option>' +
@@ -1209,12 +1210,29 @@
   var wantDesign = new URLSearchParams(window.location.search).get('design');
   function loadAccount() {
     return apiFetch('/api/studio/designs').then(function (r) {
-      account = r.designs || []; refreshSaved();
+      // a warp design belongs to the warp page, a weft design to this one
+      var all = r.designs || [], isWarp = function (d) { return d.design && d.design.tech === 'warp'; };
+      account = all.filter(function (d) { return !isWarp(d); }); refreshSaved();
+      var warp = all.filter(isWarp);
       // ?design=<id> (from the dashboard or search) opens that saved design once
       if (wantDesign) {
-        var i = account.findIndex(function (x) { return String(x.id) === wantDesign; });
-        wantDesign = null;
-        if (i > -1) { loadDesign(account[i].design); $('st-del').dataset.id = account[i].id; $('st-del').hidden = false; }
+        var id = wantDesign; wantDesign = null;
+        var wi = warp.findIndex(function (x) { return String(x.id) === id; });
+        if (wi > -1) { pendingWarp = id; }
+        else {
+          var i = account.findIndex(function (x) { return String(x.id) === id; });
+          if (i > -1) { loadDesign(account[i].design); $('st-del').dataset.id = account[i].id; $('st-del').hidden = false; }
+        }
+      }
+      warpSaved = warp;
+      if (window.KAStudioWarp) window.KAStudioWarp.setSaved(warp);
+      if (pendingWarp) {
+        // the warp page needs its templates first: wait for them, then open the design
+        var pw = pendingWarp, tries = 0; pendingWarp = null;
+        var timer = setInterval(function () {
+          if (warpData && window.KAStudioWarp) { clearInterval(timer); setTech('warp'); setTimeout(function () { window.KAStudioWarp.openById(pw); }, 400); }
+          else if (++tries > 60) clearInterval(timer);
+        }, 150);
       }
     }).catch(function () { refreshSaved(); });
   }

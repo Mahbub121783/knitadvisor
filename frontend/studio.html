@@ -198,7 +198,12 @@
     .st-needles figure { margin: 0; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px; background: #fff; }
     .st-needles figcaption { font-size: 11px; color: var(--t2); line-height: 1.45; }
     .st-phase { font: 600 12px var(--mono); color: var(--accent); min-height: 18px; margin: 6px 0; }
+    .wp-jobhead { display: none; }
     @media print {
+      .wp-jobhead { display: block; margin-bottom: 8px; font-size: 12px; }
+      #st-warp .st-layout, #st-warp.st-layout { display: block; }
+      #st-warp > aside { display: block !important; }
+      #st-warp .st-btn, #wp-addbar, .wp-del, #wp-lview, #wp-3dmode, #wp-clothbar, #wp-loopbar { display: none !important; }
       .ka-bar, header, footer, .st-layout > aside, .st-tools, .st-tabs, #pane-3d, #pane-needle, .st-noprint { display: none !important; }
       .st-pane { display: block !important; }
       .st-layout { display: block; }
@@ -585,7 +590,7 @@
         </div>
       </aside>
       <section>
-        <div class="st-card"><div class="st-step"><b>4</b> Result</div><div id="wp-status"></div><div id="wp-out"></div></div>
+        <div class="st-card"><div class="st-step"><b>4</b> Result</div><div class="wp-jobhead" id="wp-jobhead"></div><div id="wp-status"></div><div id="wp-out"></div></div>
         <div class="st-card"><div class="st-step"><b>5</b> 3D fabric</div>
           <div class="st-seg" id="wp-3dmode" role="group" aria-label="3D view"><button type="button" data-m="loops" class="on">Loop structure</button><button type="button" data-m="cloth">Fabric (real view)</button></div>
           <div class="st-3dbar" id="wp-loopbar"><span class="st-zoom" id="wp-lview"><button type="button" class="st-btn" data-v="face">Face</button><button type="button" class="st-btn" data-v="back">Back</button><button type="button" class="st-btn" data-v="edge">Edge</button><button type="button" class="st-btn on" data-v="angle">Angle</button></span></div>
@@ -596,6 +601,18 @@
           <p class="st-hint" id="wp-3dhint">Each tube is one warp end, coloured by its guide bar. Every loop is drawn through the loop below it on the same needle; the underlaps run across the technical back — the front bar’s outermost. Closed laps cross at the loop’s foot. Drag to turn, scroll to zoom.</p>
         </div>
         <div class="st-card"><div class="st-step"><b>6</b> Lapping diagram</div><div id="wp-lap"></div></div>
+        <div class="st-card st-noprint">
+          <div class="st-step"><b>7</b> Save</div>
+          <div class="st-row one"><div class="st-f"><label for="wp-name">Design name</label><input id="wp-name" type="text" maxlength="60" placeholder="e.g. Locknit 40D E28"></div></div>
+          <div class="st-tools" style="margin:0">
+            <button type="button" class="st-btn primary" id="wp-save">Save to my account</button>
+            <select id="wp-saved" class="st-btn" style="max-width:170px"><option value="">Saved warp designs…</option></select>
+            <button type="button" class="st-btn" id="wp-del" hidden>Delete this design</button>
+            <button type="button" class="st-btn" id="wp-export">Export file</button>
+            <label class="st-btn" style="display:inline-block">Import<input type="file" id="wp-import" accept="application/json" hidden></label>
+            <button type="button" class="st-btn" id="wp-print">Print job card</button>
+          </div>
+        </div>
       </section>
     </div>
   </main>
@@ -606,8 +623,8 @@
 <script src="assets/js/api.js"></script>
 <script src="assets/js/studio-cloth-map.js?v=20261110d"></script>
 <script src="assets/js/studio-warp-geom.js?v=20261111a"></script>
-<script src="assets/js/studio-warp.js?v=20261111c"></script>
+<script src="assets/js/studio-warp.js?v=20261111d"></script>
 <script src="assets/js/studio-needle.js?v=20261110d"></script>
-<script src="assets/js/studio.js?v=20261111a"></script>
+<script src="assets/js/studio.js?v=20261111b"></script>
 </body>
 </html>

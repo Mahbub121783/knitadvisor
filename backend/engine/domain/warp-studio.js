@@ -354,10 +354,35 @@ function planBeams({ bars, per, barsOut, mType, widthIn, cpcM, kc, speed, eff, b
     : calib && (k < 0.5 || k > 1.6) ? `Your beam (${calib.measured_kg} kg) is ${k < 1 ? 'far lighter' : 'far heavier'} than this beam size holds at a normal packing (${calib.modelled_kg} kg modelled): check the flange, barrel and width, and that the weight is the yarn alone (net of the empty beam).` : null;
   return {
     flange_in: flange, barrel_in: barrel, width_in: bw, beams_per_bar: nBeams, per_bar: rows, limiting_bar: lim.bar,
-    set_hours: lim.hours, set_fabric_m: lim.fabric_m, matched, order, warn, calibration: calib, residue_pct: r1(residue * 100),
+    set_hours: lim.hours, set_fabric_m: lim.fabric_m, matched, order, warn, calibration: calib, residue_pct: r1(residue * 100), waste_pct: r1(waste * 100),
     basis: `section beams ${flange}" flange × ${barrel}" barrel × ${bw}" wide (${D0 === BEAM_DEFAULTS.tricot ? 'tricot' : 'raschel'} defaults unless you set them); `
       + (calib ? `packing calibrated on your bar ${calib.bar} beam: ${calib.measured_kg} kg against ${calib.modelled_kg} kg modelled (× ${calib.factor})` : 'packing density modelled (flat filament 0.70, mono and elastane 0.75, spun 0.45 × fibre density) — weigh one full beam to calibrate it')
       + `; ${r1(residue * 100)} % left on the beam; elastane wound at its beam draft`,
+  };
+}
+
+/**
+ * YARN COST from the prices the user gives (any currency, per kg of each bar's yarn).
+ * Per finished metre: Σ bars (machine-length kg per 1,000 m × kc ÷ 1,000) × price, grossed up
+ * for what stays on the beams and the warping/knitting waste (see planBeams). Dyeing,
+ * finishing and conversion are not here — this is the yarn only.
+ */
+function costPlan({ barsIn, barsOut, kc, widthM, gsm, beams }) {
+  const prices = barsIn.map((b) => (+b.price > 0 ? +b.price : null));
+  if (!prices.some((p) => p != null)) return null;
+  if (prices.some((p) => p == null)) return { missing: barsOut.filter((_, i) => prices[i] == null).map((b) => b.bar) };
+  const gross = 1 / (1 - (beams.residue_pct || 0) / 100) / (1 - (beams.waste_pct || 0) / 100);
+  const perBar = barsOut.map((b, i) => {
+    const kgM = (b.kg_per_1000m * kc) / 1000;                 // net yarn, kg per finished metre
+    return { bar: b.bar, price: prices[i], kg_per_m: r3(kgM * gross), cost_per_m: r3(kgM * gross * prices[i]) };
+  });
+  const perM = perBar.reduce((t, x) => t + x.cost_per_m, 0);
+  const kgFabricPerM = (gsm * widthM) / 1000;                 // finished fabric, kg per metre
+  const yarnKgPerM = perBar.reduce((t, x) => t + x.kg_per_m, 0);
+  return {
+    per_bar: perBar, cost_per_m: r3(perM), cost_per_m2: r3(perM / widthM), cost_per_kg_fabric: r3(perM / kgFabricPerM),
+    yarn_kg_per_m: r3(yarnKgPerM), gross_factor: r3(gross),
+    basis: `yarn only, at your prices; includes ${r1(((gross - 1) / gross) * 100)} % lost on the beam residue and waste. Dyeing, finishing and conversion are not included`,
   };
 }
 
@@ -582,6 +607,7 @@ function analyse(input) {
     });
     const beamPlan = planBeams({ bars, per: R.per, barsOut, mType, widthIn, cpcM, kc, speed, eff, beam: input.beams || {}, orderM: +((input.target || {}).order_m) });
     if (beamPlan.warn) add('warn', beamPlan.warn);
+    const cost = costPlan({ barsIn, barsOut, kc, widthM: finishedWidthIn * 0.0254, gsm: R.gsm, beams: beamPlan });
     const lappingPaths = bars.map((b) => ({ bar: b.n, pairs: b.pairs, role: b.role || null }));
     return {
       success: true,
@@ -602,6 +628,7 @@ function analyse(input) {
       },
       bars: barsOut,
       beams: beamPlan,
+      cost,
       character,
       lapping: lappingPaths,
       basis: 'geometry derived (loop legs, needle wrap, diagonal underlap), checked on 31 published constructions — runner median error about 4 %; wrap radius and the pillar term fitted there; tricot finished-state factors from 15 published nylon tricots; raschel factors and shog limits modelled; no factory warp records yet',

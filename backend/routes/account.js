@@ -159,8 +159,25 @@ function sheetCard(row) {
   return card;
 }
 
+// a warp design's thumbnail: bar 1's lapping on point paper (K where its guide wraps a needle)
+function warpGrid(w) {
+  const b = (w.bars || [])[0];
+  if (!b || typeof b.notation !== 'string') return [];
+  const pairs = b.notation.replace(/\s+/g, '').replace(/\/+$/, '').split('/').map((p) => p.split('-').map(Number)).filter((p) => p.length >= 2 && p.every(Number.isFinite)).slice(0, 8);
+  const step = +(w.machine || {}).notation_step === 2 ? 2 : 1;
+  return pairs.map(([x, y]) => { const lo = Math.min(x, y) / step, hi = Math.max(x, y) / step; return Array.from({ length: 10 }, (_, n) => (n >= lo && n < hi ? 'K' : x === y && n === lo ? 'T' : '-')).join(''); });
+}
+
 function designCard(row) {
   const d = row.design || {};
+  if (d.tech === 'warp') {
+    const w = d.warp || {}, m = w.machine || {}, t = w.target || {};
+    return {
+      id: row.id, name: row.name, updated_at: row.updated_at, tech: 'warp', bed: 'warp',
+      feeds: (w.bars || []).length, needles: 0, rolls: 0, gsm: +t.gsm || null, count: null, gauge: +m.gauge || null, lycra: false,
+      machine: m.type || null, grid: warpGrid(w),
+    };
+  }
   const f = d.fields || {};
   return {
     id: row.id, name: row.name, updated_at: row.updated_at,

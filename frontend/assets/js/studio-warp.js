@@ -26,6 +26,7 @@
         '<div class="st-f"><label>Unit</label><select data-k="unit">' + UNITS.map(function (u) { return '<option value="' + u[0] + '"' + ((y.unit || 'denier') === u[0] ? ' selected' : '') + '>' + u[1] + '</option>'; }).join('') + '</select></div>' +
         '<div class="st-f"><label>Fibre</label><select data-k="fibre">' + fibreOpts(y.fibre || 'nylon_filament') + '</select></div>' +
         '<div class="st-f"><label>Filaments (F)</label><input data-k="filaments" type="number" min="1" step="1" value="' + esc(y.filaments || '') + '"></div>' +
+        '<div class="st-f"><label title="Your price per kg of this yarn (any currency)">Price / kg</label><input data-k="price" type="number" min="0" step="0.01" value="' + esc(b.price || '') + '" placeholder="optional"></div>' +
         '<div class="st-f"><label>3D colour</label><input type="color" data-k="colour" value="' + esc(b.colour || barCol(i)) + '"></div>' +
         (y.fibre === 'elastane' ? '<div class="st-f"><label title="Relaxed elastane to knitted: warping draft × let-off draft">Total draft</label><input data-k="draft" type="number" min="1.2" max="4.5" step="0.1" value="' + esc(y.draft || 2.2) + '"></div><div class="st-f"><label title="Put in at warping: the elastane is wound on the beam stretched">Beam draft</label><input data-k="beam_draft" type="number" min="1" max="3" step="0.1" placeholder="1.7" value="' + esc(y.beam_draft || '') + '"></div>' : '') +
         '</div></div>';
@@ -36,7 +37,7 @@
     var n = function (id) { var v = parseFloat($(id).value); return isFinite(v) && v > 0 ? v : null; };
     return {
       machine: { type: $('wp-mtype').value, gauge: n('wp-gauge'), width_in: n('wp-width'), speed_cpm: n('wp-speed'), efficiency: n('wp-eff'), cpc: n('wp-cpc'), notation_step: +$('wp-nstep').value, gap_mm: n('wp-gap') },
-      bars: W.bars.map(function (b) { return { notation: b.notation, threading: b.threading, yarn: b.yarn }; }), target: { gsm: n('wp-gsm'), width_in: n('wp-fwidth'), order_m: n('wp-order') },
+      bars: W.bars.map(function (b) { return { notation: b.notation, threading: b.threading, yarn: b.yarn, price: b.price || null }; }), target: { gsm: n('wp-gsm'), width_in: n('wp-fwidth'), order_m: n('wp-order') },
       beams: { flange_in: n('wp-bflange'), barrel_in: n('wp-bbarrel'), width_in: n('wp-bwidth'), full_kg: n('wp-bkg'), full_m: n('wp-bm'), full_bar: n('wp-bbar'), residue_pct: $('wp-bresidue').value === '' ? null : +$('wp-bresidue').value, waste_pct: $('wp-bwaste').value === '' ? null : +$('wp-bwaste').value },
     };
   }
@@ -67,12 +68,91 @@
       r.bars.map(function (b) {
         return '<tr><td><i style="display:inline-block;width:10px;height:10px;border-radius:2px;background:' + barCol(b.bar - 1) + '"></i> GB' + b.bar + (r.structure.beds === 2 ? '<br><small>' + esc(b.bed) + '</small>' : '') + '</td><td style="font-family:var(--mono)">' + esc(b.notation) + '</td><td>' + esc(b.kind) + '<br><small>' + b.laps.map(function (l) { return l.lap; }).filter(function (v, k, a) { return a.indexOf(v) === k; }).join(' / ') + ' lap</small></td><td>' + esc(b.threading) + ' (' + b.threaded_pct + '%)</td><td>' + esc(b.yarn) + ' ' + esc(b.fibre) + (b.draft ? '<br><small>draft ' + b.draft + '</small>' : '') + '</td><td>' + b.mm_per_course + ' mm</td><td>' + b.runner_mm_per_rack + (b.draft ? '<br><small>fed ' + b.fed_mm_per_rack + '</small>' : '') + '</td><td>' + b.ends + '</td><td>' + b.pct + '%</td><td>' + b.kg_per_1000m + '</td></tr>';
       }).join('') + '</table></div>';
+    h += costHtml(r);
     h += beamsHtml(r);
     h += '<div class="st-sub">What the lapping makes</div><ul class="st-checks">' + r.character.map(function (c) { return '<li class="note"><b>' + esc(c.area) + ':</b> ' + esc(c.text) + '</li>'; }).join('') + '</ul>';
     h += '<p class="st-p" style="font-family:var(--mono);font-size:11px">' + esc(F.formula) + '</p><p class="st-p" style="font-size:12px">Finished state: ' + esc(F.relax.basis) + '. ' + esc(r.basis) + '. Needle pitch ' + M.pitch_mm + ' mm, ' + M.needles + ' needles, ' + esc(M.needle) + '.</p>';
     $('wp-out').innerHTML = h;
     drawLapping(r);
     render3D();
+  }
+
+  // ── save, load, export, import, print ─────────────────────────────────────
+  var FIELDS = ['wp-mtype', 'wp-gauge', 'wp-width', 'wp-speed', 'wp-eff', 'wp-cpc', 'wp-nstep', 'wp-gap', 'wp-bflange', 'wp-bbarrel', 'wp-bwidth', 'wp-bresidue', 'wp-bwaste', 'wp-bkg', 'wp-bm', 'wp-bbar', 'wp-gsm', 'wp-fwidth', 'wp-order'];
+  var account = [];
+  function designNow() {
+    var fields = {};
+    FIELDS.forEach(function (id) { fields[id] = $(id).value; });
+    return { v: 3, tech: 'warp', name: $('wp-name').value.trim() || ((W.last && W.last.structure && W.last.structure.name) || 'Warp design'),
+      warp: { machine: payload().machine, target: payload().target, beams: payload().beams, fields: fields, barcol: $('wp-barcol').checked, colour: $('wp-col').value,
+        bars: W.bars.map(function (b) { return { notation: b.notation, threading: b.threading || 'X', yarn: b.yarn || {}, colour: b.colour || null, price: b.price || null }; }) } };
+  }
+  function loadDesign(o) {
+    var w = o && o.warp;
+    if (!o || o.tech !== 'warp' || !w || !Array.isArray(w.bars) || !w.bars.length) throw new Error('Not a warp design file.');
+    W.bars = w.bars.slice(0, 8).map(function (b) { return { notation: b.notation, threading: b.threading || 'X', yarn: Object.assign({}, b.yarn), colour: b.colour || undefined, price: b.price || undefined }; });
+    $('wp-name').value = o.name || '';
+    Object.keys(w.fields || {}).forEach(function (id) { if ($(id)) $(id).value = w.fields[id]; });
+    $('wp-barcol').checked = !!w.barcol; if (w.colour) $('wp-col').value = w.colour;
+    syncMachine(); clothKey = ''; renderBars(); schedule();
+  }
+  function refreshSaved() {
+    $('wp-saved').innerHTML = '<option value="">Saved warp designs…</option>' + account.map(function (d, i) { return '<option value="' + i + '">' + esc(d.name) + '</option>'; }).join('');
+  }
+  function setSaved(list) { account = list || []; refreshSaved(); }
+  function openById(id) {
+    var i = account.findIndex(function (x) { return String(x.id) === String(id); });
+    if (i < 0) return false;
+    loadDesign(account[i].design); $('wp-del').dataset.id = account[i].id; $('wp-del').hidden = false; $('wp-saved').value = String(i);
+    return true;
+  }
+  function reload() { return window.apiFetch('/api/studio/designs').then(function (r) { setSaved((r.designs || []).filter(function (d) { return d.design && d.design.tech === 'warp'; })); }).catch(function () {}); }
+  function flash(btn, text, back) { btn.textContent = text; setTimeout(function () { btn.textContent = back; }, 1800); }
+  function bindSave() {
+    $('wp-save').addEventListener('click', function () {
+      var btn = this, d = designNow();
+      window.apiFetch('/api/studio/designs', { method: 'PUT', body: { name: d.name, design: d } }).then(function () {
+        $('wp-name').value = d.name; flash(btn, 'Saved to your account ✓', 'Save to my account'); return window.KAStudioReloadAccount ? window.KAStudioReloadAccount() : reload();
+      }).catch(function (e) { alert((e.data && e.data.error) || 'Could not save the design.'); });
+    });
+    $('wp-saved').addEventListener('change', function () {
+      if (this.value === '') { $('wp-del').hidden = true; return; }
+      var d = account[+this.value]; if (!d) return;
+      try { loadDesign(d.design); $('wp-del').dataset.id = d.id; $('wp-del').hidden = false; } catch (e) { alert(e.message); }
+    });
+    $('wp-del').addEventListener('click', function () {
+      var id = this.dataset.id; if (!id || !window.confirm('Delete this design from your account?')) return;
+      window.apiFetch('/api/studio/designs/' + id, { method: 'DELETE' }).then(function () { $('wp-del').hidden = true; return window.KAStudioReloadAccount ? window.KAStudioReloadAccount() : reload(); }).catch(function (e) { alert((e.data && e.data.error) || 'Could not delete.'); });
+    });
+    $('wp-export').addEventListener('click', function () {
+      var d = designNow(), a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([JSON.stringify(d, null, 1)], { type: 'application/json' }));
+      a.download = (d.name || 'warp-design').replace(/[^\w\-]+/g, '_') + '.warp.json'; a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
+    });
+    $('wp-import').addEventListener('change', function () {
+      var f = this.files && this.files[0]; if (!f) return;
+      var rd = new FileReader();
+      rd.onload = function () { try { loadDesign(JSON.parse(rd.result)); } catch (e) { alert(e.message || 'Could not read that file.'); } };
+      rd.readAsText(f); this.value = '';
+    });
+    $('wp-print').addEventListener('click', function () {
+      var m = W.last && W.last.machine;
+      $('wp-jobhead').innerHTML = '<b style="font-size:15px">' + esc($('wp-name').value || (W.last && W.last.structure && W.last.structure.name) || 'Warp design') + '</b><br>' + (m ? esc(m.label) + ' · E' + m.gauge + ' · ' + m.needles + ' needles · ' : '') + new Date().toLocaleDateString('en-GB');
+      window.print();
+    });
+  }
+
+  // yarn cost from the prices typed against each bar
+  function costHtml(r) {
+    var C = r.cost; if (!C) return '';
+    if (C.missing) return '<div class="st-sub">Yarn cost</div><p class="st-p" style="font-size:12px">Give a price for GB' + C.missing.join(', GB') + ' too and the studio adds up the yarn cost.</p>';
+    var f = function (v) { return Number(v).toLocaleString('en', { maximumFractionDigits: 3 }); };
+    return '<div class="st-sub">Yarn cost</div><div class="st-kpis">' +
+      '<div class="st-kpi"><div class="l">Per finished metre</div><div class="v">' + f(C.cost_per_m) + '</div><div class="s">' + f(C.yarn_kg_per_m) + ' kg of yarn</div></div>' +
+      '<div class="st-kpi"><div class="l">Per m²</div><div class="v">' + f(C.cost_per_m2) + '</div><div class="s">finished fabric</div></div>' +
+      '<div class="st-kpi"><div class="l">Per kg of fabric</div><div class="v">' + f(C.cost_per_kg_fabric) + '</div><div class="s">yarn only</div></div></div>' +
+      '<div class="st-scroll"><table class="st-t"><tr><th>Bar</th><th>Price / kg</th><th>Yarn / m</th><th>Cost / m</th></tr>' + C.per_bar.map(function (x) { return '<tr><td>GB' + x.bar + '</td><td>' + f(x.price) + '</td><td>' + f(x.kg_per_m) + ' kg</td><td>' + f(x.cost_per_m) + '</td></tr>'; }).join('') + '</table></div>' +
+      '<p class="st-p" style="font-size:12px;color:var(--t3)">In the currency of your prices; ' + esc(C.basis) + '.</p>';
   }
 
   // beams and let-off: what each bar's beam set holds, how long it runs, and an order's yarn
@@ -236,6 +316,7 @@
   function onBar(e) {
     var row = e.target.closest('.wp-bar'), k = e.target.getAttribute('data-k'); if (!row || !k) return;
     var b = W.bars[+row.getAttribute('data-i')];
+    if (k === 'price') { b.price = parseFloat(e.target.value) || null; schedule(); return; }
     if (k === 'colour') {
       // a colour is only drawn: no new analysis
       b.colour = e.target.value; row.querySelector('.wp-barhead i').style.background = b.colour;
@@ -255,9 +336,9 @@
     W.templates = data.templates || []; W.fibres = data.fibres || {}; W.machines = data.machines || {};
     $('wp-template').innerHTML = W.templates.map(function (t) { return '<option value="' + t.id + '">' + esc(t.name) + '</option>'; }).join('');
     $('wp-mtype').innerHTML = Object.keys(W.machines).map(function (k) { return '<option value="' + k + '">' + esc(W.machines[k].label) + '</option>'; }).join('');
-    bind();
+    bind(); bindSave(); reload();
     applyTemplate((W.templates[1] || W.templates[0]).id);
     $('wp-template').value = (W.templates[1] || W.templates[0]).id;
   }
-  window.KAStudioWarp = { start: start };
+  window.KAStudioWarp = { start: start, setSaved: setSaved, openById: openById };
 })();

@@ -18,6 +18,21 @@ function cleanDesign(body) {
   if (!name) throw new DesignError('Give the design a name.');
   const d = b.design;
   if (!d || typeof d !== 'object' || Array.isArray(d)) throw new DesignError('Nothing to save.');
+  // a warp-knit design: the guide bars, the machine and the target, read back by the warp page
+  if (d.tech === 'warp') {
+    const w = d.warp;
+    if (!w || typeof w !== 'object' || Array.isArray(w)) throw new DesignError('Nothing to save.');
+    if (!Array.isArray(w.bars) || !w.bars.length || w.bars.length > 8) throw new DesignError('A warp design has 1 to 8 guide bars.');
+    w.bars.forEach((b, i) => {
+      if (!b || typeof b.notation !== 'string' || !/^[0-9\-\/\s,]{1,400}$/.test(b.notation)) throw new DesignError(`Guide bar ${i + 1}: the lapping is not valid.`);
+      if (b.threading != null && !/^[Xx.]{1,16}$/.test(String(b.threading))) throw new DesignError(`Guide bar ${i + 1}: the threading is written with X and . only.`);
+      if (!b.yarn || typeof b.yarn !== 'object') throw new DesignError(`Guide bar ${i + 1}: give its yarn.`);
+    });
+    if (!w.machine || typeof w.machine !== 'object') throw new DesignError('Nothing to save.');
+    const json = JSON.stringify({ ...d, name });
+    if (Buffer.byteLength(json) > MAX_BYTES) throw new DesignError('This design is too large to save.');
+    return { name, json };
+  }
   const grid = (g, what) => {
     if (!Array.isArray(g) || !g.length || g.length > 48) throw new DesignError(`${what}: 1 to 48 feeds.`);
     const w = Array.isArray(g[0]) ? g[0].length : -1;
