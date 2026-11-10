@@ -52,6 +52,7 @@
     { id: 'calc', t: 'Calculate', items: [
       { href: '/app.html',        t: 'Fabric calculator', d: 'Yarn, machine, stitch length, shrinkage and cost from one spec', i: 'calc', pages: ['app.html', 'result.html'], k: 'jersey rib interlock fleece pique terry gsm yarn count stitch length gauge shrinkage' },
       { href: '/costsheet.html',  t: 'Costing sheet',     d: 'Buyer quotation by size: yarn by role, CM, FOB, margin, PDF', i: 'sheet', badge: 'New', k: 'fob quotation cm smv trims embroidery print margin profit fleece rib consumption' },
+      { href: '/studio-cost.html', t: 'Cost a Studio design', d: 'Open a design saved from the Fabric Studio and cost its yarn and processing', i: 'sheet', k: 'studio design warp cost price per metre kg yarn dyeing finishing' },
       { href: '/weft-calc.html',  t: 'Weft calculator',   d: 'Loop length, production and yarn per fabric', i: 'weft' },
       { href: '/converter.html',  t: 'Unit converter',    d: 'Count systems, GSM, length and weight', i: 'swap' }
     ] },

@@ -1252,6 +1252,30 @@ router.post('/studio/warp/analyse', requireUser, (req, res) => {
   }
 });
 
+// Costing is done in the Calculator, on a design saved from the Studio (the Studio never prices a design).
+router.post('/studio/warp/cost', requireUser, async (req, res) => {
+  try {
+    const id = parseInt((req.body || {}).design_id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ success: false, error: 'Choose a saved warp design.' });
+    const row = (await studioRepo.designs.list(req.user.id)).find((d) => d.id === id);
+    const w = row && row.design && row.design.tech === 'warp' ? row.design.warp : null;
+    if (!w) return res.status(404).json({ success: false, error: 'That warp design was not found in your account.' });
+    const a = warpStudio.analyse({ machine: w.machine, bars: w.bars.map((b) => ({ notation: b.notation, threading: b.threading, yarn: b.yarn })), target: w.target, beams: w.beams });
+    if (!a.success) return res.status(400).json({ success: false, error: a.error });
+    const prices = (req.body || {}).prices || {};
+    const cost = warpStudio.costOf(a, prices);
+    res.json({
+      success: true, name: row.name, structure: a.structure, machine: { label: a.machine.label, gauge: a.machine.gauge },
+      fabric: { gsm: a.fabric.gsm, width_in: a.fabric.width_in, wpc: a.fabric.wpc, cpc: a.fabric.cpc },
+      bars: a.bars.map((b) => ({ bar: b.bar, notation: b.notation, yarn: b.yarn, fibre: b.fibre, kg_per_1000m: b.kg_per_1000m })),
+      ok_to_knit: a.ok_to_knit, cost,
+    });
+  } catch (err) {
+    console.error('[studio] warp cost failed:', err);
+    res.status(500).json({ success: false, error: 'Could not cost this design.' });
+  }
+});
+
 // A machine set-up (needle set-out + cam chart) compiled into needle notation.
 router.post('/studio/compile', requireUser, (req, res) => {
   try {

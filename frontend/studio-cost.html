@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <script src="assets/js/auth-guard.js?v=20260922a"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cost a Studio design — KnitAdvisor</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <meta name="description" content="Cost a fabric you designed in the Fabric Studio: open the saved design, give the yarn and processing prices, and read the cost per metre, per square metre and per kg.">
+  <meta name="theme-color" content="#FFFFFF">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css?v=20260603c">
+  <style>
+    [hidden] { display: none !important; }
+    .sc-main { padding: 18px 0 48px; max-width: 980px; }
+    .sc-head h1 { font-size: 24px; margin: 0 0 4px; }
+    .sc-head p { margin: 0 0 16px; color: var(--t2); font-size: 13px; max-width: 760px; }
+    .st-card { background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; margin-bottom: 12px; }
+    .st-step { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: var(--t2); margin-bottom: 10px; }
+    .st-step b { display: inline-flex; width: 20px; height: 20px; border-radius: 50%; background: var(--accent); color: var(--on-accent); align-items: center; justify-content: center; font-size: 11px; }
+    .st-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; margin-bottom: 8px; }
+    .st-f label { display: block; font-size: 11px; color: var(--t2); margin-bottom: 3px; }
+    .st-f input, .st-f select { width: 100%; box-sizing: border-box; padding: 7px 8px; border: 1px solid var(--line2); border-radius: var(--radius-sm); font: 13px var(--head); background: var(--bg); color: var(--t1); }
+    .st-f input:focus, .st-f select:focus { outline: 2px solid var(--accent-line); border-color: var(--accent); }
+    .st-hint { font-size: 11px; color: var(--t3); margin: 2px 0 0; line-height: 1.45; }
+    .st-btn { padding: 8px 13px; border: 1px solid var(--line2); border-radius: var(--radius-sm); background: var(--bg); font: 600 12px var(--head); color: var(--t1); cursor: pointer; text-decoration: none; display: inline-block; }
+    .st-btn.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+    .st-kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; margin-bottom: 12px; }
+    .st-kpi { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 9px 10px; background: var(--bg); }
+    .st-kpi .l { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--t3); }
+    .st-kpi .v { font: 700 21px var(--head); color: var(--t1); margin: 2px 0; }
+    .st-kpi .s { font-size: 10px; color: var(--t3); line-height: 1.35; }
+    .st-scroll { overflow-x: auto; }
+    table.st-t { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 12px; }
+    table.st-t th { text-align: left; font: 600 10px var(--head); text-transform: uppercase; letter-spacing: .4px; color: var(--t3); border-bottom: 1px solid var(--line); padding: 6px; }
+    table.st-t td { border-bottom: 1px solid var(--line); padding: 6px; font-family: var(--mono); font-size: 12px; white-space: nowrap; }
+    .st-err { background: rgba(178,59,59,.08); color: var(--danger); padding: 9px 11px; border-radius: var(--radius-sm); font-size: 13px; }
+    .sc-meta { font-size: 12px; color: var(--t2); line-height: 1.6; }
+    @media (max-width: 700px) { .sc-main { padding-left: 16px; padding-right: 16px; } }
+  </style>
+  <link rel="stylesheet" href="assets/css/theme-v2.css?v=20261108b">
+  <script src="assets/js/app-shell.js?v=20261111a" defer></script>
+</head>
+<body>
+<div class="page-wrap">
+  <header class="hdr"></header>
+
+  <main class="container sc-main">
+    <div class="sc-head">
+      <h1>Cost a Studio design</h1>
+      <p>The Fabric Studio designs the fabric; the cost is worked out here. Save a design in the Studio, open it below, give the yarn and processing prices, and read the cost per metre, per square metre and per kg of fabric.</p>
+    </div>
+
+    <div class="st-card">
+      <div class="st-step"><b>1</b> Saved design</div>
+      <div class="st-row"><div class="st-f"><label for="sc-design">Design</label><select id="sc-design"></select></div></div>
+      <p class="st-hint" id="sc-empty" hidden>No saved warp designs yet. <a href="/studio.html">Open the Fabric Studio</a>, design a warp knit, and press Save to my account.</p>
+      <div class="sc-meta" id="sc-meta"></div>
+    </div>
+
+    <div class="st-card" id="sc-prices-card" hidden>
+      <div class="st-step"><b>2</b> Prices (any currency)</div>
+      <div class="st-sub" style="font-weight:600;font-size:12px;margin-bottom:4px">Yarn, per kg</div>
+      <div class="st-row" id="sc-yarn"></div>
+      <div class="st-sub" style="font-weight:600;font-size:12px;margin:6px 0 4px">Processing</div>
+      <div class="st-row">
+        <div class="st-f"><label for="sc-dye">Dyeing, per kg of fabric</label><input id="sc-dye" type="number" min="0" step="0.01" placeholder="0"></div>
+        <div class="st-f"><label for="sc-fin">Finishing, per kg of fabric</label><input id="sc-fin" type="number" min="0" step="0.01" placeholder="0"></div>
+        <div class="st-f"><label for="sc-oth">Other, per metre</label><input id="sc-oth" type="number" min="0" step="0.01" placeholder="0"></div>
+      </div>
+      <p class="st-hint">Waste and the yarn left on the beams are taken from the design's beam settings (Studio, Machine → Section beams).</p>
+      <button type="button" class="st-btn primary" id="sc-go">Calculate the cost</button>
+    </div>
+
+    <div class="st-card" id="sc-out-card" hidden><div class="st-step"><b>3</b> Cost</div><div id="sc-out"></div></div>
+  </main>
+  <footer class="footer"></footer>
+</div>
+<script src="assets/js/api.js"></script>
+<script src="assets/js/studio-cost.js?v=20261111a"></script>
+</body>
+</html>
