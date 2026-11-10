@@ -54,6 +54,7 @@
   // ── templates ────────────────────────────────────────────────────────────
   var CAT_LABEL = { single_jersey: 'Single jersey family', rib: 'Rib family (double bed)', interlock: 'Interlock family (double bed)' };
 
+  var machines = [];
   function loadTemplates() {
     return apiFetch('/api/studio/templates').then(function (d) {
       templates = d.templates || [];
@@ -68,6 +69,10 @@
         }).join('') + '</optgroup>';
       }).join('');
       sel.value = S.templateId;
+      machines = d.machines || [];
+      var mp = $('st-mprof'), keep = mp.value;
+      mp.innerHTML = '<option value="">Auto — the simplest machine that knits the design</option>' + machines.map(function (m) { return '<option value="' + esc(m.id) + '">' + esc(m.label) + '</option>'; }).join('');
+      mp.value = keep;
     });
   }
 
@@ -316,7 +321,7 @@
       calibration: $('st-userolls').checked && completeRolls().length ? { rolls: completeRolls() } : null,
       machine: {
         gauge: num('st-gauge'), dia: num('st-dia'), feeders: num('st-feeders'), rpm: num('st-rpm'),
-        sl_mm: num('st-sl'), efficiency: num('st-eff'), tracks_cyl: +$('st-tc').value, tracks_dial: +$('st-td').value,
+        sl_mm: num('st-sl'), efficiency: num('st-eff'), tracks_cyl: +$('st-tc').value || null, tracks_dial: +$('st-td').value || null, profile: $('st-mprof').value || null,
         vdq: { points: vdq },
       },
     };
@@ -421,34 +426,84 @@
     $('pane-results').innerHTML = html;
   }
 
+  // -- cam & needle set-out: the machine engine's plan, editable --------------
+  var CAM = { K: 'Knit', T: 'Tuck', M: 'Miss', E: 'Transfer' };
   function renderSetup() {
-    var r = last, t = r.setup.tracks;
-    var html = '<div class="st-kpis">' +
-      kpi('Feeds per repeat', r.structure.feeds, 'feeders must be a whole number of these', 'c') +
-      kpi('Needles per repeat', r.structure.needles_per_repeat, 'needles on the machine round to this', 'c') +
-      kpi('Cylinder tracks', t.C ? t.C.count : '—', 'different needle sequences = butt positions needed', 'c') +
-      (t.D ? kpi('Dial tracks', t.D.count, '', 'c') : '') + '</div>';
+    var r = last, ms = r.machine_setup, P = ms.profile, B = ms.beds;
+    var html = '<div class="st-mcard"><b>' + esc(P.label) + '</b>' + (P.auto ? ' <span style="color:var(--t3)">— picked for this design (choose your own under Machine type)</span>' : '') +
+      '<dl><dt>Needle selection</dt><dd>' + (P.selection === 'needle' ? 'needle by needle (electronic' + (P.transfer ? ', with loop transfer' : '') + ')' : 'cam tracks — cylinder ' + P.tracks.C + (P.tracks.D ? ', dial ' + P.tracks.D : '')) + '</dd>' +
+      '<dt>Cams</dt><dd>' + Object.keys(P.cams).map(function (b) { return (b === 'C' ? 'cylinder: ' : 'dial: ') + P.cams[b].map(function (x) { return CAM[x].toLowerCase(); }).join(', '); }).join(' · ') + '</dd>' +
+      '<dt>Needles</dt><dd>' + Object.keys(P.needle).map(function (b) { return (b === 'C' ? 'cylinder: ' : 'dial: ') + esc(P.needle[b]); }).join(' · ') + '</dd>' +
+      '<dt>Sinker</dt><dd>' + esc(P.sinker.text) + '</dd>' +
+      (P.timing ? '<dt>Timing</dt><dd>' + P.timing.join(' or ') + '</dd>' : '') +
+      '<dt>Built</dt><dd>' + P.build.gauges[0] + '–' + P.build.gauges[1] + ' GG, ' + P.build.dia[0] + '–' + P.build.dia[1] + '", about ' + P.build.feeders_per_inch + ' feeders per inch ' + src('e') + '</dd>' +
+      '<dt>Made for</dt><dd>' + esc(P.use) + '</dd></dl></div>';
+    if (ms.alternatives.length > 1) html += '<p class="st-p">Other machines that knit this design: ' + ms.alternatives.filter(function (a) { return a.id !== P.id; }).map(function (a) { return '<button type="button" class="st-btn st-alt" data-prof="' + esc(a.id) + '">' + esc(a.label) + '</button>'; }).join('') + '</p>';
+    else if (!ms.alternatives.length) html += '<p class="st-p" style="color:#9a5b00">No machine class in the studio knits this design as drawn — see the checks.</p>';
+
+    var editable = false;
     ['C', 'D'].forEach(function (b) {
-      if (!t[b]) return;
-      html += '<div class="st-sub">' + (b === 'C' ? 'Cylinder' : 'Dial') + ' needle set-out (butt track per needle, one repeat)</div>' +
-        '<p class="st-p" style="font-family:var(--mono);font-size:14px;letter-spacing:2px">' + esc(t[b].setout) + '</p>' +
-        '<div class="st-scroll"><table class="st-t"><tr><th>Track</th><th>What its needles do at feeders 1 → ' + r.structure.feeds + '</th></tr>' +
-        t[b].sequences.map(function (s) { return '<tr><td>' + s.track + '</td><td style="letter-spacing:3px">' + esc(s.sequence) + '</td></tr>'; }).join('') + '</table></div>';
+      var bd = B[b]; if (!bd) return;
+      var name = b === 'C' ? 'Cylinder' : 'Dial';
+      html += '<div class="st-sub">' + name + ' — ' + (bd.selection === 'needle' ? 'needle selection' : bd.tracks_used + ' of ' + bd.tracks_available + ' tracks') + '</div><p class="st-p">' + esc(bd.selection_note) + '</p>';
+      if (bd.selection === 'needle') return;
+      editable = true;
+      html += '<label class="st-p" style="display:block">Needle set-out, one repeat (butt track per needle, – = needle out)<br><input class="st-setin" data-setout="' + b + '" value="' + esc(bd.setout.replace(/ /g, '')) + '" spellcheck="false" autocomplete="off"></label>' +
+        '<div class="st-scroll"><table class="st-t"><tr><th>Track</th><th>Sequence, feeders 1 → ' + r.structure.feeds + '</th><th>Needles per repeat</th><th>On the machine</th></tr>' +
+        bd.per_track.map(function (t) { return '<tr><td>' + t.track + '</td><td style="letter-spacing:3px;font-family:var(--mono)">' + esc(t.sequence) + '</td><td>' + t.needles_per_repeat + '</td><td>' + (t.needles_on_machine == null ? '—' : t.needles_on_machine) + '</td></tr>'; }).join('') +
+        (bd.empty_per_repeat ? '<tr><td>–</td><td>needles out</td><td>' + bd.empty_per_repeat + '</td><td>' + (bd.empty_on_machine == null ? '—' : bd.empty_on_machine) + '</td></tr>' : '') + '</table></div>';
+      if (bd.cam_totals_machine) html += '<p class="st-p">Cams to fit round the machine: <b>' + bd.cam_totals_machine.knit + '</b> knit, <b>' + bd.cam_totals_machine.tuck + '</b> tuck, <b>' + bd.cam_totals_machine.miss + '</b> miss (' + r.machine.feeders + ' feeders × ' + bd.tracks_used + ' tracks).</p>';
     });
-    var cols = [];
-    if (t.C) t.C.sequences.forEach(function (s) { cols.push(['C', s.track]); });
-    if (t.D) t.D.sequences.forEach(function (s) { cols.push(['D', s.track]); });
-    html += '<div class="st-sub">Cam chart — the cam to fit in each track at each feeder</div><div class="st-scroll"><table class="st-t"><tr><th>Feeder</th><th>Yarn</th>' +
-      cols.map(function (c) { return '<th>' + (c[0] === 'C' ? 'Cyl ' : 'Dial ') + c[1] + '</th>'; }).join('') + '</tr>' +
-      r.setup.cam_chart.map(function (row) {
-        return '<tr><td>F' + row.feed + '</td><td style="color:' + ROLE_COL[row.role] + '">' + row.role + '</td>' + cols.map(function (c) {
-          var v = row[c[0]] && row[c[0]][c[1]];
-          return '<td>' + ({ K: 'Knit', T: 'Tuck', M: 'Miss' }[v] || '—') + '</td>';
-        }).join('') + '</tr>';
-      }).join('') + '</table></div>';
-    html += '<p class="st-p">Repeat the cam chart round the machine: feeder ' + (r.structure.feeds + 1) + ' takes the cams of feeder 1, and so on. Needles with the same sequence share one butt track, so the set-out above is the order to load the needles into the tricks.</p>';
+    if (editable) {
+      // cam chart: one select per feeder per track, both beds
+      var cols = [];
+      ['C', 'D'].forEach(function (b) { if (B[b] && B[b].selection !== 'needle') B[b].per_track.forEach(function (t) { cols.push([b, t.track]); }); });
+      html += '<div class="st-sub">Cam chart — the cam in each track at each feeder (edit, then apply)</div><div class="st-scroll"><table class="st-t" id="st-camtab"><tr><th>Feeder</th><th>Yarn</th>' +
+        cols.map(function (c) { return '<th>' + (c[0] === 'C' ? 'Cyl ' : 'Dial ') + c[1] + '</th>'; }).join('') + '</tr>' +
+        r.machine_setup.beds.C.cams_per_feeder.map(function (_, i) {
+          return '<tr><td>F' + (i + 1) + '</td><td style="color:' + (ROLE_COL[r.structure.roles[i]] || '') + '">' + esc(r.structure.roles[i] || '') + '</td>' + cols.map(function (c) {
+            var v = B[c[0]].cams_per_feeder[i][c[1]];
+            var opts = (P.cams[c[0]] || ['K', 'T', 'M']).filter(function (x) { return x !== 'E'; });
+            return '<td><select class="st-camsel ' + v + '" data-f="' + i + '" data-b="' + c[0] + '" data-t="' + c[1] + '">' + opts.map(function (x) { return '<option value="' + x + '"' + (x === v ? ' selected' : '') + '>' + CAM[x] + '</option>'; }).join('') + '</select></td>';
+          }).join('') + '</tr>';
+        }).join('') + '</table></div>' +
+        '<p class="st-p"><button type="button" class="st-btn primary" id="st-camapply">Apply cam set-up to the notation</button> <span id="st-camnote" style="font-size:12px;color:var(--t2)">Change a cam or the set-out, then apply: the notation, the checks and both 3D views follow. A track you add in the set-out (e.g. C) takes miss cams until you set them.</span></p>';
+    }
+    html += '<p class="st-p">Repeat the cam chart round the machine: feeder ' + (r.structure.feeds + 1) + ' takes the cams of feeder 1, and so on. Needles with the same sequence share one butt track, so the set-out is the order to load the needles into the tricks.</p>';
     if (r.setup.timing) html += '<div class="st-sub">Dial timing</div><p class="st-p">' + esc(r.setup.timing) + '</p>';
     $('pane-setup').innerHTML = html;
+  }
+
+  // the edited set-up compiled into notation by the machine engine
+  function applyCams() {
+    var B = last.machine_setup.beds, F = last.structure.feeds;
+    var setout = {}, cams = [];
+    document.querySelectorAll('#pane-setup [data-setout]').forEach(function (inp) { setout[inp.getAttribute('data-setout')] = inp.value; });
+    for (var i = 0; i < F; i++) {
+      var row = {};
+      ['C', 'D'].forEach(function (b) {
+        if (!B[b]) return;
+        row[b] = {};
+        B[b].per_track.forEach(function (t) { row[b][t.track] = B[b].cams_per_feeder[i][t.track]; });
+      });
+      cams.push(row);
+    }
+    document.querySelectorAll('#st-camtab select').forEach(function (sel) { cams[+sel.getAttribute('data-f')][sel.getAttribute('data-b')][sel.getAttribute('data-t')] = sel.value; });
+    // a dial on needle selection keeps its drawn programme
+    if (B.D && B.D.selection === 'needle') setout.D = '';
+    apiFetch('/api/studio/compile', { method: 'POST', body: { profile: last.machine_setup.profile.auto ? null : last.machine_setup.profile.id, setout: setout, cams: cams } }).then(function (o) {
+      snapshot();
+      var g = o.grid;
+      S.C = g.C.map(function (r) { return r.split(''); });
+      if (g.D) S.D = g.D.map(function (r) { return r.split(''); });
+      else if (S.D && B.D && B.D.selection === 'needle') { /* unchanged */ }
+      if (S.D && S.D[0].length !== S.C[0].length) S.D = S.D.map(function (r) { var o2 = []; for (var j = 0; j < S.C[0].length; j++) o2.push(r[j % r.length]); return o2; });
+      S.templateId = ''; $('st-template').value = '';
+      renderAll();
+      if (o.errors && o.errors.length) setTimeout(function () { var n = $('st-camnote'); if (n) n.textContent = o.errors.join(' '); }, 600);
+    }).catch(function (e) {
+      var n = $('st-camnote'); if (n) { n.style.color = '#b42318'; n.textContent = (e.data && e.data.errors ? e.data.errors.join(' ') : (e.data && e.data.error) || e.message); }
+    });
   }
 
   function renderMachine() {
@@ -941,7 +996,7 @@
   var STORE = 'ka_studio_designs';
   function readStore() { try { return JSON.parse(localStorage.getItem(STORE) || '[]'); } catch (_) { return []; } }
   function writeStore(a) { try { localStorage.setItem(STORE, JSON.stringify(a)); return true; } catch (_) { return false; } }
-  var FIELDS = ['st-ne', 'st-fibre', 'st-gsm', 'st-width', 'st-gauge', 'st-dia', 'st-feeders', 'st-rpm', 'st-sl', 'st-eff', 'st-tc', 'st-td', 'st-lyd', 'st-lydraft', 'st-lyevery', 'st-v1r', 'st-v1l', 'st-v2r', 'st-v2l', 'st-sinker', 'st-parr'];
+  var FIELDS = ['st-ne', 'st-fibre', 'st-gsm', 'st-width', 'st-gauge', 'st-dia', 'st-feeders', 'st-rpm', 'st-sl', 'st-eff', 'st-tc', 'st-td', 'st-lyd', 'st-lydraft', 'st-lyevery', 'st-v1r', 'st-v1l', 'st-v2r', 'st-v2l', 'st-sinker', 'st-parr', 'st-mprof', 'st-brush', 'st-passes', 'st-pile'];
   function designNow() {
     var o = { v: 2, name: $('st-name').value || 'Untitled design', bed: S.bed, C: S.C, D: S.D, feeds: S.feeds, rolls: rolls, lycra: $('st-lycra').checked, cut: $('st-cut').checked, colour: $('st-col').value, fields: {} };
     FIELDS.forEach(function (id) { o.fields[id] = $(id).value; });
@@ -1027,6 +1082,23 @@
     $('st-play').addEventListener('click', function () { this.textContent = race.toggle() ? 'Pause' : 'Play'; });
     $('st-anibed').addEventListener('change', function () { race.reset(); cycle.refresh(); });
     cycle.bind();
+    $('st-mprof').addEventListener('change', function () {
+      var m = machines.filter(function (x) { return x.id === this.value; }, this)[0];
+      if (m) {
+        if (m.kind === 'single' && S.D) setBed('single');
+        else if (m.kind === 'double' && (!S.D || m.gatings.indexOf(S.bed) < 0)) setBed(m.gatings.indexOf(S.bed) > -1 ? S.bed : m.gatings[0]);
+        $('st-mprof-hint').textContent = m.use.charAt(0).toUpperCase() + m.use.slice(1) + '. ' + m.sinker.text;
+      } else $('st-mprof-hint').textContent = 'The studio picks the simplest machine that knits what you draw.';
+      schedule();
+    });
+    $('pane-setup').addEventListener('click', function (e) {
+      var a = e.target.closest('[data-prof]');
+      if (a) { $('st-mprof').value = a.getAttribute('data-prof'); $('st-mprof').dispatchEvent(new Event('change')); return; }
+      if (e.target.id === 'st-camapply') applyCams();
+    });
+    $('pane-setup').addEventListener('change', function (e) {
+      if (e.target.classList.contains('st-camsel')) e.target.className = 'st-camsel ' + e.target.value;
+    });
     $('st-save').addEventListener('click', function () {
       var btn = this, d = designNow();
       apiFetch('/api/studio/designs', { method: 'PUT', body: { name: d.name, design: d } }).then(function () {

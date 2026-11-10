@@ -85,7 +85,7 @@ for (const t of T) {
   assert(clash.checks.some((c) => c.level === 'error' && /face each other/.test(c.text)), 'interlock clash');
   assert.strictEqual(clash.ok_to_knit, false);
   const tracks = S.analyse({ grid: { C: ['KTMK', 'TKKM', 'MKTK'] }, yarn: { ne: 30 }, target: { gsm: 180 }, machine: { tracks_cyl: 2 } });
-  assert(tracks.checks.some((c) => c.level === 'error' && /needs 4 needle tracks/.test(c.text)), 'track count');
+  assert(tracks.checks.some((c) => c.level === 'error' && /needs 4 different needle sequences \(tracks\) and the machine has 2/.test(c.text)), 'track count');
   const feeders = run('lacoste_single', { yarn: { ne: 24 }, target: { gsm: 210 }, machine: { feeders: 90 } });
   assert(feeders.checks.some((c) => c.level === 'error' && /not a whole number/.test(c.text)), 'feeders multiple');
   const held = S.analyse({ grid: { C: ['K', 'T', 'T', 'T', 'T', 'T'] }, yarn: { ne: 30 }, target: { gsm: 200 } });

@@ -39,6 +39,7 @@ const colorEngine = require('../engine/domain/color-engine');
 const { buildTechPackContent } = require('../engine/domain/techpack-content-builder');
 const { renderTechPackPdf } = require('../engine/domain/techpack-pdf-renderer');
 const fabricStudio = require('../engine/domain/fabric-studio');
+const knitMachine = require('../engine/domain/knit-machine');
 const studioRepo = require('../db/repositories/studio-repo');
 
 const memCache = require('../cache/memory-cache');
@@ -1235,7 +1236,20 @@ router.get('/color/shade-check', (req, res) => {
 // calculation limit (the /api rate limiter still applies). Signed-in only,
 // like the calculator it sits beside.
 router.get('/studio/templates', requireUser, (req, res) => {
-  res.json({ success: true, templates: fabricStudio.listTemplates(), fibres: fabricStudio.FIBRES, limits: fabricStudio.LIMITS });
+  res.json({ success: true, templates: fabricStudio.listTemplates(), fibres: fabricStudio.FIBRES, limits: fabricStudio.LIMITS, machines: knitMachine.list() });
+});
+
+// A machine set-up (needle set-out + cam chart) compiled into needle notation.
+router.post('/studio/compile', requireUser, (req, res) => {
+  try {
+    const b = req.body || {};
+    const P = knitMachine.PROFILES[b.profile] ? { ...knitMachine.PROFILES[b.profile], id: b.profile } : null;
+    const out = knitMachine.compile({ setout: b.setout || {}, cams: Array.isArray(b.cams) ? b.cams.slice(0, 48) : [] }, P);
+    res.status(out.grid ? 200 : 400).json({ success: !!out.grid, ...out });
+  } catch (err) {
+    console.error('[studio] compile failed:', err);
+    res.status(500).json({ success: false, error: 'Could not compile this set-up.' });
+  }
 });
 
 // The answer depends only on the design and the reference data loaded at

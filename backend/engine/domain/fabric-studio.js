@@ -34,6 +34,7 @@
 'use strict';
 
 const KP = require('./knit-plan');
+const KM = require('./knit-machine');
 const TE = require('./terry-engine');
 const { FABRIC_DERIVATIVES } = require('../catalog/fabric-derivatives');
 const { FACTORY_RECORDS } = require('../catalog/factory-dataset');
@@ -530,7 +531,9 @@ function solve(ctx, ground) {
   const npi = Math.sqrt((isDouble ? 770 : 1650) / ground.tex) * 2.54;
   const coverGauge = M.gauges.reduce((b, g) => (Math.abs(g - npi) < Math.abs(b - npi) ? g : b), M.gauges[0]);
   const recGauge = fg ? fg.gauge : coverGauge;
-  const gauge = +mach.gauge > 0 ? +mach.gauge : recGauge;
+  // the machine class bounds the gauge it is built in
+  const PG = ctx.profile && ctx.profile.gauges;
+  const gauge = +mach.gauge > 0 ? +mach.gauge : PG ? Math.min(PG[1], Math.max(PG[0], recGauge)) : recGauge;
   const pitch = 25.4 / gauge;
 
   // stitch length: per feed ℓᵢ = own setting, or ℓref × ratio
@@ -584,7 +587,8 @@ function solve(ctx, ground) {
   const needles = needlesAt(dia, gauge);
   const width = widthAt(dia);
   const feedsRep = st.feeds;
-  const feeders = +mach.feeders > 0 ? +mach.feeders : Math.max(feedsRep, Math.round((M.fpi * dia) / feedsRep) * feedsRep);
+  const fpi = ctx.profile && ctx.profile.fpi ? ctx.profile.fpi : M.fpi;
+  const feeders = +mach.feeders > 0 ? +mach.feeders : Math.max(feedsRep, Math.round((fpi * dia) / feedsRep) * feedsRep);
   const rpm = +mach.rpm > 0 ? +mach.rpm : Math.round(M.sf / dia);
   const eff = (+mach.efficiency > 0 ? +mach.efficiency : 85) / 100;
 
@@ -789,9 +793,10 @@ function checksFor(ctx, S, T) {
       if (nb !== 'K' && nb !== 'T') add('error', `Feed ${i + 1}, needle ${j + 1}: the transferred loop goes onto needle ${(j + 1) % Wd + 1}, which must knit or tuck at this feed to take it (it is "${nb}").`);
       if (next !== 'K') add('warn', `Feed ${i + 1}, needle ${j + 1}: after a transfer the empty needle should knit at the next feed, or the eyelet does not close round a new loop (it is "${next}").`);
     }
-  } else if (tC > capC) add('error', `Cylinder needs ${tC} needle tracks; the machine has ${capC}. Simplify the repeat or use an electronic (jacquard) selection machine.`);
+  } else if (ctx.profile) { /* tracks, cams and needles: knit-machine.js fit() */ }
+  else if (tC > capC) add('error', `Cylinder needs ${tC} needle tracks; the machine has ${capC}. Simplify the repeat or use an electronic (jacquard) selection machine.`);
   else if (T.C) add('ok', `Cylinder: ${tC} track${tC > 1 ? 's' : ''} needed, machine has ${capC}.`);
-  if (T.D) {
+  if (T.D && !ctx.profile) {
     if (tD > capD) add('error', `Dial needs ${tD} needle tracks; the machine has ${capD}.`);
     else add('ok', `Dial: ${tD} track${tD > 1 ? 's' : ''} needed, machine has ${capD}.`);
   }
@@ -928,6 +933,10 @@ function analyse(input) {
     // weighed on a fleece's constants: the plush model is (loop size from the
     // factory's terry records, the 2h pile geometry derived).
     const pileFeed = st.beds.D ? -1 : feedRows.findIndex((f, i) => f.role === 'loop' && st.beds.C[i].includes('K'));
+    // ── the machine: profile chosen (or picked) for what the notation asks ──
+    const req = KM.requirements(st, gating, feedRows, { pile: pileFeed > -1 });
+    const profile = KM.resolve(input.machine, req);
+    ctx.profile = profile;
     let plush = null;
     if (pileFeed > -1) {
       // plain courses between the pile courses: the pile is spread over them.
@@ -1029,6 +1038,19 @@ function analyse(input) {
       plush.risks.forEach((r) => add('note', `${r.topic}: ${r.note}`));
       const order = { error: 0, warn: 1, note: 2, ok: 3 };
       checks.sort((a, b) => order[a.level] - order[b.level]);
+    }
+    // machine fit, build range and the set-up it implies
+    const mPlan = KM.plan(profile, st, gating, S.needles, S.feeders);
+    {
+      const mc = KM.fit(profile, req);
+      const add = (level, text) => mc.push({ level, text });
+      if (!mc.some((c) => c.level === 'error' || c.level === 'warn')) add('ok', `${profile.label}${profile.auto ? ' (picked for this design)' : ''}: knits the design as drawn — ${req.tracks.C} cylinder sequence${req.tracks.C > 1 ? 's' : ''}${req.tracks.D ? `, ${req.tracks.D} dial` : ''}.`);
+      const [g0, g1] = profile.gauges, [d0, d1] = profile.dia;
+      if (S.gauge < g0 || S.gauge > g1) add('warn', `${S.gauge} GG is outside the gauges a ${profile.label.toLowerCase()} is usually built in (${g0}–${g1} GG, typical build).`);
+      if (S.dia < d0 || S.dia > d1) add('warn', `${S.dia}" is outside the diameters this class of machine is usually built in (${d0}–${d1}").`);
+      if (S.feeders > 1.6 * profile.fpi * S.dia) add('warn', `${S.feeders} feeders on ${S.dia}" is ${r1(S.feeders / S.dia)} per inch — more than this class of machine carries (about ${profile.fpi} per inch, typical build).`);
+      if (D && profile.timing && profile.timing.length === 1 && gating === 'rib') add('note', `${profile.label} runs ${profile.timing[0]} timing only.`);
+      checks = checks.concat(mc);
     }
     {
       const extra = [...roleNotes];
@@ -1150,7 +1172,7 @@ function analyse(input) {
         },
       },
       machine: {
-        machine_label: S.M.label, gauge: S.gauge, gauge_source: +((input.machine || {}).gauge) > 0 ? 'your machine' : S.fg ? `factory records (${S.fg.share_pct}% of ${S.fg.n} rows at this count)` : 'cover factor',
+        machine_label: profile.label, gauge: S.gauge, gauge_source: +((input.machine || {}).gauge) > 0 ? 'your machine' : S.fg ? `factory records (${S.fg.share_pct}% of ${S.fg.n} rows at this count)` : 'cover factor',
         gauge_recommended: S.recGauge, gauge_fit: S.gfit,
         dia: S.dia, dia_source: S.diaSource, needles: S.needles, feeders: S.feeders, feeders_per_repeat: st.feeds,
         repeats_round: r2(S.feeders / st.feeds), rpm: S.rpm, efficiency_pct: Math.round(S.eff * 100),
@@ -1166,6 +1188,12 @@ function analyse(input) {
         note: 'Course inclination from the number of feeders (geometry). Yarn twist adds to or offsets it — the main calculator models the twist part.',
       } : null,
       solver,
+      machine_setup: {
+        profile: KM.describe(profile),
+        requirements: req,
+        alternatives: KM.ORDER.filter((id) => !KM.fit(KM.PROFILES[id], req).some((c) => c.level === 'error' || c.level === 'warn')).map((id) => ({ id, label: KM.PROFILES[id].label })),
+        beds: mPlan,
+      },
       finish: finish ? {
         brushed: finish.brush, passes: finish.passes, sheared: finish.sheared,
         fabric_loss_pct: r1(finish.loss * 100), loop_yarn_raised_pct: finish.fleece ? r1(finish.loopLost * 100) : null,

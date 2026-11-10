@@ -59,6 +59,14 @@
     .st-btn:hover { border-color: var(--accent); color: var(--accent); }
     .st-btn.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
     .st-btn:disabled { opacity: .45; cursor: default; }
+    .st-mcard { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px 12px; margin: 8px 0; background: var(--bg); }
+    .st-mcard dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 6px 0 0; font-size: 12px; }
+    .st-mcard dt { color: var(--t3); }
+    .st-mcard dd { margin: 0; color: var(--t1); }
+    .st-camsel { font: 600 12px var(--head); padding: 3px 4px; border: 1px solid var(--line2); border-radius: 4px; background: var(--bg); }
+    .st-camsel.K { color: #1857C4; } .st-camsel.T { color: #c27a00; } .st-camsel.M { color: var(--t3); }
+    .st-setin { font: 600 14px var(--mono); letter-spacing: 3px; width: 100%; max-width: 420px; padding: 6px 8px; border: 1px solid var(--line2); border-radius: var(--radius-sm); }
+    .st-alt { display: inline-block; margin: 2px 4px 2px 0; }
     .st-cycle { display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 8px; }
     .st-phases { margin: 0; padding: 0; list-style: none; counter-reset: ph; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
     .st-phases li { counter-increment: ph; padding: 7px 9px 7px 30px; position: relative; border: 1px solid var(--line); border-radius: var(--radius-sm); font-size: 12px; color: var(--t2); cursor: pointer; }
@@ -242,6 +250,11 @@
 
         <div class="st-card">
           <div class="st-step"><b>4</b> Machine <span style="text-transform:none;font-weight:400;letter-spacing:0">(empty = recommended)</span></div>
+          <div class="st-f st-row one"><div>
+            <label for="st-mprof">Machine type</label>
+            <select id="st-mprof"><option value="">Auto — the simplest machine that knits the design</option></select>
+          </div></div>
+          <p class="st-hint" id="st-mprof-hint">The machine sets what can be knitted: its tracks, the cams on each bed, its needles and sinkers. Pick yours and the studio checks the design against it.</p>
           <div class="st-row">
             <div class="st-f"><label for="st-gauge">Gauge (GG)</label><input id="st-gauge" type="number" min="5" max="50" step="1" placeholder="auto"></div>
             <div class="st-f"><label for="st-dia">Diameter (in)</label><input id="st-dia" type="number" min="10" max="60" step="1" placeholder="auto"></div>
@@ -249,8 +262,8 @@
             <div class="st-f"><label for="st-rpm">RPM</label><input id="st-rpm" type="number" min="5" max="60" step="1" placeholder="auto"></div>
             <div class="st-f"><label for="st-sl">Stitch length (mm)</label><input id="st-sl" type="number" min="1" max="10" step="0.01" placeholder="solve"></div>
             <div class="st-f"><label for="st-eff">Efficiency (%)</label><input id="st-eff" type="number" min="40" max="100" step="1" value="85"></div>
-            <div class="st-f"><label for="st-tc">Cylinder tracks</label><select id="st-tc"><option>2</option><option>3</option><option selected>4</option></select></div>
-            <div class="st-f"><label for="st-td">Dial tracks</label><select id="st-td"><option>1</option><option selected>2</option></select></div>
+            <div class="st-f"><label for="st-tc">Cylinder tracks</label><select id="st-tc"><option value="" selected>machine's</option><option>1</option><option>2</option><option>3</option><option>4</option><option>6</option><option>8</option></select></div>
+            <div class="st-f"><label for="st-td">Dial tracks</label><select id="st-td"><option value="" selected>machine's</option><option>1</option><option>2</option><option>4</option></select></div>
           </div>
           <details>
             <summary style="font-size:12px;cursor:pointer;color:var(--t2)">VDQ scale (optional)</summary>
@@ -417,6 +430,6 @@
 <script src="assets/js/api.js"></script>
 <script src="assets/js/studio-cloth-map.js?v=20261110b"></script>
 <script src="assets/js/studio-needle.js?v=20261110c"></script>
-<script src="assets/js/studio.js?v=20261110d"></script>
+<script src="assets/js/studio.js?v=20261110e"></script>
 </body>
 </html>
