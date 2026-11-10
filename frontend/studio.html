@@ -295,6 +295,21 @@
             <div class="st-f"><label for="st-td">Dial tracks</label><select id="st-td"><option value="" selected>machine's</option><option>1</option><option>2</option><option>4</option></select></div>
           </div>
           <details>
+            <summary style="font-size:12px;cursor:pointer;color:var(--t2)">Stitch cam, sinker and timing (optional)</summary>
+            <div class="st-row">
+              <div class="st-f"><label for="st-camd">Stitch cam depth (mm below knock-over)</label><input id="st-camd" type="number" min="0.1" max="8" step="0.05" placeholder="solve from the loop"></div>
+              <div class="st-f"><label for="st-timing">Dial timing</label><select id="st-timing"><option value="">machine's / design's</option><option value="delayed">delayed (rib)</option><option value="synchronised">synchronised</option></select></div>
+              <div class="st-f"><label for="st-dgap">Dial height gap (mm)</label><input id="st-dgap" type="number" min="0.1" max="3" step="0.05" placeholder="0.5"></div>
+            </div>
+            <p class="st-hint">Give a stitch-cam depth and the studio works out the loop it forms (and uses it as the stitch length); leave it empty and it works out the depth your loop needs. Two settings you already run turn the depth into your machine's stitch-cam scale:</p>
+            <div class="st-row">
+              <div class="st-f"><label for="st-c1r">Cam reading 1</label><input id="st-c1r" type="number" step="0.1"></div>
+              <div class="st-f"><label for="st-c1l">Stitch length 1 (mm)</label><input id="st-c1l" type="number" step="0.01"></div>
+              <div class="st-f"><label for="st-c2r">Cam reading 2</label><input id="st-c2r" type="number" step="0.1"></div>
+              <div class="st-f"><label for="st-c2l">Stitch length 2 (mm)</label><input id="st-c2l" type="number" step="0.01"></div>
+            </div>
+          </details>
+          <details>
             <summary style="font-size:12px;cursor:pointer;color:var(--t2)">VDQ scale (optional)</summary>
             <p class="st-hint">Give one or two settings you already run: the VDQ reading and the course length a yarn-length meter shows for it (metres per revolution at one feeder). Two points make it exact on any make.</p>
             <div class="st-row">
@@ -461,6 +476,6 @@
 <script src="assets/js/api.js"></script>
 <script src="assets/js/studio-cloth-map.js?v=20261110d"></script>
 <script src="assets/js/studio-needle.js?v=20261110d"></script>
-<script src="assets/js/studio.js?v=20261110g"></script>
+<script src="assets/js/studio.js?v=20261110h"></script>
 </body>
 </html>

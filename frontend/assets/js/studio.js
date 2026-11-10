@@ -342,7 +342,9 @@
   function num(id) { var v = parseFloat($(id).value); return isFinite(v) && v > 0 ? v : null; }
 
   function payload() {
-    var vdq = [];
+    var vdq = [], cam = [];
+    if (num('st-c1r') && num('st-c1l')) cam.push({ reading: num('st-c1r'), sl_mm: num('st-c1l') });
+    if (num('st-c2r') && num('st-c2l')) cam.push({ reading: num('st-c2r'), sl_mm: num('st-c2l') });
     if (num('st-v1r') && num('st-v1l')) vdq.push({ reading: num('st-v1r'), course_length_m: num('st-v1l') });
     if (num('st-v2r') && num('st-v2l')) vdq.push({ reading: num('st-v2r'), course_length_m: num('st-v2l') });
     return {
@@ -364,6 +366,7 @@
         gauge: num('st-gauge'), dia: num('st-dia'), feeders: num('st-feeders'), rpm: num('st-rpm'),
         sl_mm: num('st-sl'), efficiency: num('st-eff'), tracks_cyl: +$('st-tc').value || null, tracks_dial: +$('st-td').value || null, profile: $('st-mprof').value || null, transfer_dir: $('st-tdir').value, custom: $('st-mprof').value === 'custom' ? myMachine() : null,
         vdq: { points: vdq },
+        cam_depth_mm: num('st-camd'), timing: $('st-timing').value || null, dial_gap_mm: num('st-dgap'), stitch_cam: { points: cam },
       },
     };
   }
@@ -585,6 +588,20 @@
       (v.method ? '<p class="st-p">VDQ reading: ' + esc(v.method) + '.</p>' : '') +
       (v.groups.length > 1 ? '<p class="st-p">The feeders take different yarn lengths, so they run on ' + v.groups.length + ' quality belts (or set each feeder\'s storage wheel accordingly). One belt for all would force one stitch length on every feeder.</p>' : '');
     var MS = r.machine_setup;
+    if (MS && MS.formation) {
+      var FM = MS.formation, dbl = !!r.structure.beds.D, geo = FM.geometry;
+      html += '<div class="st-sub">Stitch formation — knock-over depth ' + src('e') + '</div>' +
+        '<p class="st-p">The stitch cam draws each needle ' + (dbl ? 'past the verge of its trick' : 'below the sinker belly') + ' by the knock-over depth; the yarn drawn round the hook' + (dbl ? ' and to the needles of the other bed' : ' and over the sinkers') + ' is the loop. Needle pitch ' + geo.pitch_mm + ' mm, needle ≈ ' + geo.needle_mm + ' mm' + (geo.sinker_mm ? ', sinker ≈ ' + geo.sinker_mm + ' mm' : '') + ', yarn ' + geo.yarn_d_mm + ' mm' + (geo.dial_gap_mm ? ', dial gap ' + geo.dial_gap_mm + ' mm' : '') + '. ' +
+        (FM.feed_system === 'positive' ? 'Positive feed: the loop is the yarn fed, so the cam is set to form a little more than that.' : 'Storage feed: the cam depth sets the loop; part of the yarn is robbed back as the old loops knock over.') +
+        (FM.timing ? ' Timing: <b>' + FM.timing + '</b>' + (FM.timing === 'delayed' ? ' — the dial knocks over a few needles after the cylinder and takes part of its loop from the cylinder\'s, so the dial is set shallower.' : ' — both beds knock over together, each draws its own loop.') : '') + '</p>' +
+        '<div class="st-scroll"><table class="st-t"><tr><th>Feeder</th><th>Stitch length</th><th>Formed</th><th>Cylinder depth</th>' + (dbl ? '<th>Dial depth</th>' : '<th>Needle / sinker loop</th>') + (FM.scale_method ? '<th>Cam reading</th>' : '') + '</tr>' +
+        FM.feeds.map(function (f) {
+          return '<tr><td>F' + f.feed + '</td><td>' + r1(f.sl_mm * 100) / 100 + ' mm</td><td>' + f.formed_mm + ' mm</td><td>' + (f.cyl_depth_mm == null ? '—' : f.cyl_depth_mm + ' mm') + '</td>' +
+            (dbl ? '<td>' + (f.dial_depth_mm == null ? '—' : f.dial_depth_mm + ' mm') + '</td>' : '<td>' + (f.needle_loop_mm == null ? '—' : f.needle_loop_mm + ' / ' + f.sinker_loop_mm + ' mm') + '</td>') +
+            (FM.scale_method ? '<td>' + (f.cyl_reading == null ? '—' : f.cyl_reading) + '</td>' : '') + '</tr>';
+        }).join('') + '</table></div>' +
+        '<p class="st-p" style="font-family:var(--mono);font-size:11px">' + esc(FM.formula) + '</p><p class="st-p">' + esc(FM.basis) + (FM.scale_method ? '. Cam readings: ' + esc(FM.scale_method) : '. Give two stitch-cam settings you run (under Machine) to read these depths on your machine\'s scale') + '.</p>';
+    }
     if (MS) {
       html += '<div class="st-sub">Speed ' + src('e') + '</div><p class="st-p">' + MS.speed.rpm + ' RPM on ' + m.dia + '" = <b>' + MS.speed.surface_m_s + ' m/s</b> at the cylinder surface (π × diameter × RPM). This class of machine runs at about ' + MS.speed.speed_factor + ' RPM × inch, up to ' + MS.speed.max_m_s + ' m/s — ' + esc(MS.speed.basis) + '. Production follows the speed.</p>';
       html += '<div class="st-sub">Feed system</div><div class="st-scroll"><table class="st-t"><tr><th>Feeder</th><th>Yarn</th><th>Feed</th><th>Why</th></tr>' +
@@ -806,7 +823,11 @@
       for (var k = 1; k < F; k++) { var a = g[(f - k + F) % F][j]; if (a === 'K') break; if (a === 'T') held++; }
       var role = (S.feeds[f] || {}).role || 'ground';
       return { sym: sym === '-' ? 'M' : sym, held: Math.min(held, 4), double: !!S.D, feedRole: role, colour: '#1857C4',
-        label: 'Feeder ' + (f + 1) + ' (' + role + '), ' + (dial() ? 'dial' : 'cylinder') + ' needle ' + (j + 1) + ': ' + NAME[sym] + (held > 1 ? ', already holding ' + held + ' loops' : '') };
+        label: 'Feeder ' + (f + 1) + ' (' + role + '), ' + (dial() ? 'dial' : 'cylinder') + ' needle ' + (j + 1) + ': ' + NAME[sym] + (held > 1 ? ', already holding ' + held + ' loops' : '') + (function () {
+          var FM = last && last.machine_setup && last.machine_setup.formation; if (!FM || sym !== 'K') return '';
+          var row = FM.feeds.filter(function (x) { return x.feed === f + 1; })[0]; var dd = row && (dial() ? row.dial_depth_mm : row.cyl_depth_mm);
+          return dd != null ? ' · knock-over ' + dd + ' mm below ' + (S.D ? 'the verge' : 'the sinker belly') + ' for a ' + row.sl_mm.toFixed(2) + ' mm loop' : '';
+        })() };
     }
     function phases(i) {
       var d = cell(), N = window.KAStudioNeedle, T = N.TEXT[d.sym] || N.TEXT.M;
@@ -1073,7 +1094,7 @@
   var STORE = 'ka_studio_designs';
   function readStore() { try { return JSON.parse(localStorage.getItem(STORE) || '[]'); } catch (_) { return []; } }
   function writeStore(a) { try { localStorage.setItem(STORE, JSON.stringify(a)); return true; } catch (_) { return false; } }
-  var FIELDS = ['st-ne', 'st-fibre', 'st-gsm', 'st-width', 'st-gauge', 'st-dia', 'st-feeders', 'st-rpm', 'st-sl', 'st-eff', 'st-tc', 'st-td', 'st-lyd', 'st-lydraft', 'st-lyevery', 'st-v1r', 'st-v1l', 'st-v2r', 'st-v2l', 'st-sinker', 'st-parr', 'st-mprof', 'st-brush', 'st-passes', 'st-pile', 'st-tdir', 'st-stripe', 'st-sc-A', 'st-sc-B', 'st-sc-C', 'st-sc-D', 'st-sc-E', 'st-sc-F'];
+  var FIELDS = ['st-ne', 'st-fibre', 'st-gsm', 'st-width', 'st-gauge', 'st-dia', 'st-feeders', 'st-rpm', 'st-sl', 'st-eff', 'st-tc', 'st-td', 'st-lyd', 'st-lydraft', 'st-lyevery', 'st-v1r', 'st-v1l', 'st-v2r', 'st-v2l', 'st-sinker', 'st-parr', 'st-mprof', 'st-brush', 'st-passes', 'st-pile', 'st-tdir', 'st-camd', 'st-timing', 'st-dgap', 'st-c1r', 'st-c1l', 'st-c2r', 'st-c2l', 'st-stripe', 'st-sc-A', 'st-sc-B', 'st-sc-C', 'st-sc-D', 'st-sc-E', 'st-sc-F'];
   function designNow() {
     var o = { v: 2, name: $('st-name').value || 'Untitled design', bed: S.bed, C: S.C, D: S.D, feeds: S.feeds, rolls: rolls, lycra: $('st-lycra').checked, cut: $('st-cut').checked, colour: $('st-col').value, fields: {} };
     FIELDS.forEach(function (id) { o.fields[id] = $(id).value; });

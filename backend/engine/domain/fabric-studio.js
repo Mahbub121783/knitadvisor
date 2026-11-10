@@ -35,6 +35,7 @@
 
 const KP = require('./knit-plan');
 const KM = require('./knit-machine');
+const KF = require('./knit-formation');
 const TE = require('./terry-engine');
 const { FABRIC_DERIVATIVES } = require('../catalog/fabric-derivatives');
 const { FACTORY_RECORDS } = require('../catalog/factory-dataset');
@@ -1055,6 +1056,13 @@ function analyse(input) {
       // brushing tears yarn out: weigh the design again with what is left
       finish = finishModel(ctx, S);
       if (Math.abs(finish.k - 1) > 1e-6) { ctx.finishK = finish.k; S = run(); }
+      // the stitch cam set as a knock-over depth: the loop it forms is the stitch length
+      const camD = +((input.machine || {}).cam_depth_mm);
+      if (camD > 0 && !(+((input.machine || {}).sl_mm) > 0)) {
+        const fs = profile.selection === 'tracks' ? 'positive' : 'storage';
+        const sl = KF.loopFromDepth(camD, { st, gating, S, machine: input.machine, feedSystem: fs });
+        if (sl) { ctx.input = { ...ctx.input, machine: { ...(ctx.input.machine || {}), sl_mm: r2(sl) } }; ctx.camLoop = { depth: camD, sl }; S = run(); }
+      }
     }
 
     const transfers = st.beds.C.reduce((t, row) => t + row.filter((x) => x === 'E').length, 0);
@@ -1079,6 +1087,10 @@ function analyse(input) {
     }
     // machine fit, build range and the set-up it implies
     const mPlan = KM.plan(profile, st, gating, S.needles, S.feeders);
+    // stitch formation: knock-over depth for every knitting feed, timing, cam scale
+    const defTiming = profile.timing && profile.timing.length === 1 ? profile.timing[0]
+      : gating === 'interlock' || (D && st.beds.D.some((row) => row.includes('T'))) ? 'synchronised' : 'delayed';
+    const formation = plush ? null : KF.plan({ st, gating, S, machine: input.machine, feedSystem: profile.selection === 'tracks' ? 'positive' : 'storage', defaultTiming: defTiming });
     {
       const mc = KM.fit(profile, req);
       const add = (level, text) => mc.push({ level, text });
@@ -1097,6 +1109,12 @@ function analyse(input) {
         else add('ok', `Striper stripe: each feeder changes between up to ${sp.fingers_needed} yarns, the repeat takes ${sp.revolutions_per_repeat} revolution${sp.revolutions_per_repeat > 1 ? 's' : ''}.`);
         if (+((input.machine || {}).feeders) > 0 && sp.method === 'striper' && !profile.striper) add('note', 'Your feeder count is not a multiple of the stripe repeat, so the stripe cannot be threaded feeder by feeder.');
       }
+      if (formation) {
+        mc.push(...formation.checks);
+        if (formation.timing && profile.timing && !profile.timing.includes(formation.timing)) mc.push({ level: 'warn', text: `${profile.label} runs ${profile.timing.join(' / ')} timing; ${formation.timing} is set.` });
+        if (formation.timing === 'delayed' && gating === 'interlock') mc.push({ level: 'warn', text: 'Interlock gating runs synchronised timing: facing needles knock over together. Delayed timing is for rib gating.' });
+        if (ctx.camLoop) mc.push({ level: 'ok', text: `Stitch cam set to ${r2(ctx.camLoop.depth)} mm below the knock-over level: it forms a ${r2(ctx.camLoop.sl)} mm loop (geometry) — the stitch length used here.` });
+      } else if (plush) mc.push({ level: 'note', text: 'Plush: the pile loop is set by the terry sinker nib, not by the stitch cam — the stitch formation model is for needle loops.' });
       checks = checks.concat(mc);
     }
     {
@@ -1243,6 +1261,7 @@ function analyse(input) {
         transfer_dir: req.transfer ? ctx.transferDir : null,
         speed: { rpm: S.rpm, surface_m_s: r2((Math.PI * S.dia * 0.0254 * S.rpm) / 60), max_m_s: KM.speedLimit(profile).max_m_s, speed_factor: profile.sf, basis: 'RPM × diameter of this class of machine (typical build, modelled)' },
         feeds: KM.feedPlan(profile, st, feedRows, { elastaneFeeds: elastane ? elastane.feeds : [], pileFeed, striper: KM.needsStriper(req.stripe, profile) }),
+        formation: formation ? (({ checks: _c, ...f }) => f)(formation) : null,
         stripes: stripeSeq ? (() => {
           const sp = KM.stripePlan(stripeSeq, st.feeds, S.feeders, profile, S.feeds.length === st.feeds ? S.feeds.map((f) => f.mass || f.mass_share_pct || 1) : Array(st.feeds).fill(1));
           // stripe height in the cloth: the design repeat's feeds make its face courses
