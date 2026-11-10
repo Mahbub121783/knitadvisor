@@ -1163,7 +1163,7 @@ function analyse(input) {
         if (!ch) return;
         seen[key] = true;
         out.push({ role: key === 'face' ? (feedRows.some((x) => x.role === 'face') ? 'face' : 'ground') : key, count: (y || S.ground).label, system: ch.label, spinnable: ch.spinnable, range: ch.range,
-          mass_pct: S.feeds.filter((x, k) => (feedRows[k].role === f.role)).reduce((t, x) => t + (x.mass_share_pct || 0), 0), ch: ch.c });
+          mass_pct: S.feeds.filter((x, k) => ((feedRows[k] || {}).role === f.role)).reduce((t, x) => t + (x.mass_share_pct || 0), 0), ch: ch.c });
       });
       return out;
     })();
