@@ -103,6 +103,10 @@
     td.c.T { background: #E8A33A; color: #2a1a00; }
     td.c.M { background: #F1F3F5; color: #868C94; border-color: var(--line2); }
     td.c.E { background: #fff; color: #0e7490; border: 2px dashed #0e7490; }
+    td.c.R { background: #fff; color: #7a4fc2; border: 2px dashed #7a4fc2; }
+    .st-feedcol { width: 52px; }
+    .st-sw { display: inline-flex; align-items: center; gap: 3px; font: 600 11px var(--head); margin-right: 6px; }
+    .st-sw input { width: 26px; height: 22px; padding: 0; border: 1px solid var(--line2); border-radius: 4px; }
     td.c.X { background: repeating-linear-gradient(45deg, #fff, #fff 4px, #E4E6E9 4px, #E4E6E9 8px); color: #868C94; border-color: var(--line2); }
     td.c.bad { box-shadow: 0 0 0 2px var(--danger) inset; }
     td.feedcell { white-space: nowrap; padding-right: 6px; }
@@ -232,6 +236,10 @@
             <div class="st-f"><label for="st-passes">Raising passes</label><input id="st-passes" type="number" min="1" max="12" step="1" placeholder="auto"></div>
             <label class="st-check" style="align-self:end"><input type="checkbox" id="st-shear"> Sheared level</label>
           </div>
+          <div class="st-f"><label for="st-stripe">Stripes (optional) — yarn per course, e.g. <code>A12 B4 C2</code></label><input id="st-stripe" type="text" placeholder="or set a colour per feeder in the design" autocomplete="off" spellcheck="false"></div>
+          <div id="st-swatches" style="margin:-2px 0 8px">
+            <span class="st-sw">A <input type="color" id="st-sc-A" value="#1f3b73"></span><span class="st-sw">B <input type="color" id="st-sc-B" value="#f2f2f2"></span><span class="st-sw">C <input type="color" id="st-sc-C" value="#c0392b"></span><span class="st-sw">D <input type="color" id="st-sc-D" value="#f1c40f"></span><span class="st-sw">E <input type="color" id="st-sc-E" value="#27ae60"></span><span class="st-sw">F <input type="color" id="st-sc-F" value="#2c3e50"></span>
+          </div>
           <label class="st-check"><input type="checkbox" id="st-lycra"> Elastane plated</label>
           <div class="st-row" id="st-lycra-box" hidden>
             <div class="st-f"><label for="st-lyd">Elastane (denier)</label><select id="st-lyd"><option>20</option><option>30</option><option selected>40</option><option>70</option></select></div>
@@ -254,6 +262,26 @@
             <label for="st-mprof">Machine type</label>
             <select id="st-mprof"><option value="">Auto — the simplest machine that knits the design</option></select>
           </div></div>
+          <details id="st-mymach" hidden style="margin:4px 0 8px">
+            <summary style="font-size:12px;cursor:pointer;color:var(--t2)">My machine — its own specification</summary>
+            <div class="st-row">
+              <div class="st-f"><label for="mm-name">Name</label><input id="mm-name" type="text" placeholder="e.g. Line 3 SJ" maxlength="40"></div>
+              <div class="st-f"><label for="mm-kind">Beds</label><select id="mm-kind"><option value="single">single (cylinder)</option><option value="double">double (cylinder + dial)</option></select></div>
+              <div class="st-f"><label for="mm-gating">Gating</label><select id="mm-gating"><option value="rib">rib</option><option value="interlock">interlock</option><option value="both">both (convertible)</option></select></div>
+              <div class="st-f"><label for="mm-sel">Selection</label><select id="mm-sel"><option value="tracks">cam tracks</option><option value="needle">electronic, needle by needle</option><option value="wheel">pattern wheel / drum</option></select></div>
+              <div class="st-f"><label for="mm-tech">Selection technique</label><select id="mm-tech"><option value="3way">3-way (knit / tuck / miss)</option><option value="2way">2-way</option></select></div>
+              <div class="st-f"><label for="mm-tc">Cylinder tracks</label><input id="mm-tc" type="number" min="1" max="12" value="4"></div>
+              <div class="st-f"><label for="mm-td">Dial tracks</label><input id="mm-td" type="number" min="1" max="8" value="2"></div>
+              <div class="st-f"><label>Cylinder cams</label><span style="font-size:12px"><label><input type="checkbox" data-mmc="C" value="T" checked> tuck</label> <label><input type="checkbox" data-mmc="C" value="M" checked> miss</label> <label><input type="checkbox" data-mmc="C" value="E"> transfer</label> <label><input type="checkbox" data-mmc="C" value="R"> to dial</label></span></div>
+              <div class="st-f"><label>Dial cams</label><span style="font-size:12px"><label><input type="checkbox" data-mmc="D" value="T" checked> tuck</label> <label><input type="checkbox" data-mmc="D" value="M" checked> miss</label> <label><input type="checkbox" data-mmc="D" value="R"> to cylinder</label></span></div>
+              <div class="st-f"><label for="mm-sinker">Sinker</label><select id="mm-sinker"><option value="jersey">jersey</option><option value="fleece">fleece (two-level)</option><option value="terry">terry (high nib)</option></select></div>
+              <div class="st-f"><label for="mm-striper">Striper fingers</label><input id="mm-striper" type="number" min="0" max="12" value="0"></div>
+              <div class="st-f"><label for="mm-wheel">Pattern wheel slots</label><input id="mm-wheel" type="number" min="4" max="400" placeholder="48"></div>
+              <div class="st-f"><label for="mm-fpi">Feeders per inch</label><input id="mm-fpi" type="number" min="0.3" max="8" step="0.1" placeholder="from feeders ÷ diameter"></div>
+              <div class="st-f"><label for="mm-sf">Max RPM × diameter</label><input id="mm-sf" type="number" min="100" max="2000" step="10" placeholder="from RPM × diameter"></div>
+            </div>
+            <p class="st-hint">From the machine's plate or manual. Saved in this browser. The gauge, diameter, feeders and RPM above are this machine's too.</p>
+          </details>
           <p class="st-hint" id="st-mprof-hint">The machine sets what can be knitted: its tracks, the cams on each bed, its needles and sinkers. Pick yours and the studio checks the design against it.</p>
           <div class="st-row">
             <div class="st-f"><label for="st-gauge">Gauge (GG)</label><input id="st-gauge" type="number" min="5" max="50" step="1" placeholder="auto"></div>
@@ -312,6 +340,7 @@
               <button type="button" data-s="T">T<small>tuck</small></button>
               <button type="button" data-s="M">M<small>miss</small></button>
               <button type="button" data-s="E">E<small>transfer</small></button>
+              <button type="button" data-s="R">R<small>to other bed</small></button>
               <button type="button" data-s="-">–<small>no needle</small></button>
             </div>
             <button type="button" class="st-btn" data-op="addFeed">+ Feed</button>
@@ -330,6 +359,7 @@
             <span><i style="background:#E8A33A"></i>T tuck: takes the yarn, keeps the old loop</span>
             <span><i style="background:#F1F3F5;border:1px solid #D2D5DA"></i>M miss: yarn floats past</span>
             <span><i style="background:#fff;border:2px dashed #0e7490"></i>E transfer: the loop moves to the next needle — an eyelet (pointelle)</span>
+            <span><i style="background:#fff;border:2px dashed #7a4fc2"></i>R transfer to the other bed: the loop moves to the needle opposite</span>
             <span><i style="background:repeating-linear-gradient(45deg,#fff,#fff 3px,#E4E6E9 3px,#E4E6E9 6px);border:1px solid #D2D5DA"></i>– no needle in this slot</span>
           </div>
           <p class="st-hint">Rows are feeders in the order the needles meet them, columns are needles in one repeat. Click or drag to paint. On a double bed the dial needle sits between two cylinder needles on rib gating, and face to face with one on interlock gating.</p>
@@ -361,7 +391,7 @@
               <button type="button" class="st-btn" data-view="back">Back</button>
               <button type="button" class="st-btn" data-view="edge">Edge</button>
               <button type="button" class="st-btn" data-view="angle">Angle</button>
-              <label>Colour by <select id="st-colby" class="st-btn"><option value="feed">feeder</option><option value="role">yarn role</option><option value="one">one colour</option></select></label>
+              <label>Colour by <select id="st-colby" class="st-btn"><option value="feed">feeder</option><option value="role">yarn role</option><option value="one">one colour</option><option value="stripe">stripe yarns</option></select></label>
             </div>
             <div class="st-3dbar" id="st-clothbar" hidden>
               <label>Colour <input type="color" id="st-col" value="#3d5a80"></label>
@@ -429,8 +459,8 @@
 </div>
 
 <script src="assets/js/api.js"></script>
-<script src="assets/js/studio-cloth-map.js?v=20261110b"></script>
-<script src="assets/js/studio-needle.js?v=20261110c"></script>
-<script src="assets/js/studio.js?v=20261110f"></script>
+<script src="assets/js/studio-cloth-map.js?v=20261110d"></script>
+<script src="assets/js/studio-needle.js?v=20261110d"></script>
+<script src="assets/js/studio.js?v=20261110g"></script>
 </body>
 </html>

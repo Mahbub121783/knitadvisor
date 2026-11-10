@@ -4,7 +4,7 @@
 // needle to needle; the geometry is in studio-loop-geom.js.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import './studio-loop-geom.js?v=20261110b';
+import './studio-loop-geom.js?v=20261110c';
 
 const FEED_COLOURS = ['#1857C4', '#0f9d76', '#c2410c', '#7a4fc2', '#b8860b', '#0e7490', '#be185d', '#4d7c0f', '#9a3412', '#334155', '#0369a1', '#a16207'];
 const ROLE_COLOURS = { ground: '#1857C4', face: '#1857C4', binder: '#7a4fc2', loop: '#c2410c' };
@@ -64,7 +64,7 @@ export class LoopView {
       // real view: a spun yarn's soft sheen instead of the diagram's plastic
       const mat = spec.real
         ? new THREE.MeshPhysicalMaterial({ color: spec.colour || '#3d5a80', roughness: 0.88, metalness: 0, sheen: 1, sheenRoughness: 0.55, sheenColor: new THREE.Color(0xffffff).multiplyScalar(0.35), transparent: true, opacity: 1 })
-        : new THREE.MeshStandardMaterial({ color: feedColour(spec, co.feed), roughness: 0.62, metalness: 0.02, transparent: true, opacity: 1 });
+        : new THREE.MeshStandardMaterial({ color: spec.colourBy === 'stripe' && spec.stripeColour ? spec.stripeColour(co.course) : feedColour(spec, co.feed), roughness: 0.62, metalness: 0.02, transparent: true, opacity: 1 });
       const mesh = new THREE.Mesh(tube, mat);
       mesh.userData = { course: co.course, feed: co.feed };
       this.group.add(mesh); this.meshes.push(mesh);

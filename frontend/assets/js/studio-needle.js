@@ -49,6 +49,16 @@
     { k: 'hold', t: 0.84, name: 'Holding down' },
   ];
 
+  var TEXT_R = {
+    rest: 'The needle is at rest with its loop in the hook.',
+    open: 'The transfer cam lifts the needle above clearing height.',
+    clear: 'The loop opens the transfer spring on the side of the needle that faces the other bed.',
+    feed: 'The needle opposite, on the other bed, is pushed out into the spring and takes the loop.',
+    close: 'This needle comes down empty; its loop now hangs on the other bed.',
+    knock: 'Nothing is knocked over here: the needle has no loop.',
+    form: 'The wale goes on on the other bed: a face stitch becomes a reverse stitch (or a rib wale becomes jersey).',
+    hold: 'Transfers between the beds are made on double jersey transfer machines and on flat machines: rib-to-jersey changes and purl-like effects.',
+  };
   var TEXT = {
     K: {
       rest: 'The needle is at rest; the loop it knitted last time sits in the closed hook. The sinker is forward and holds that loop in its throat.',
@@ -94,7 +104,7 @@
 
   // needle lift above rest (px) through the cycle, by stitch
   function lift(sym, t) {
-    var top = sym === 'K' ? 66 : sym === 'T' ? 40 : sym === 'E' ? 90 : 0;
+    var top = sym === 'K' ? 66 : sym === 'T' ? 40 : sym === 'E' || sym === 'R' ? 90 : 0;
     if (sym === 'M' || sym === '-') return 0;
     var seg = [[0, 0], [0.10, 0], [0.28, top * 0.5], [0.36, top], [0.42, top], [0.55, top * 0.45], [0.65, top * 0.12],
       [0.70, -8], [0.80, -STITCH], [0.84, -STITCH], [1.0, 0]];
@@ -167,6 +177,7 @@
     // ── where the old loop is, and the latch angle (0 closed, 1 open) ──
     var rising = t < 0.42, oldY, latch, oldOn = true, castT = 0;
     var relOf = function (y) { return y - tip; };   // local y down the needle
+    if (sym === 'R') sym = 'E', d = Object.assign({}, d, { toBed: true });
     if (sym === 'K' || sym === 'E') {
       oldY = h > 0 || t < 0.1 ? YT : seat;
       var rel = relOf(oldY);
@@ -342,6 +353,7 @@
     return cards.map(function (c) { return '<figure>' + c[1] + '<figcaption><b>' + c[0] + '</b> — ' + c[2] + '</figcaption></figure>'; }).join('');
   }
 
+  TEXT.R = TEXT_R;
   var api = { Cycle: Cycle, renderTypes: renderTypes, PHASES: PHASES, lift: lift, TEXT: TEXT };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.KAStudioNeedle = api;

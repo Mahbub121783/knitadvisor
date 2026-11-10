@@ -55,19 +55,41 @@
   var CAT_LABEL = { single_jersey: 'Single jersey family', rib: 'Rib family (double bed)', interlock: 'Interlock family (double bed)' };
 
   var machines = [];
+  var MYM = 'ka-studio-mymachine';
+  function myMachine() {
+    var cams = function (b) { var a = ['K']; document.querySelectorAll('[data-mmc="' + b + '"]').forEach(function (x) { if (x.checked) a.push(x.value); }); return a; };
+    var g = $('mm-gating').value;
+    return {
+      name: $('mm-name').value || 'My machine', kind: $('mm-kind').value, gatings: g === 'both' ? ['rib', 'interlock'] : [g],
+      selection: $('mm-sel').value, technique: $('mm-tech').value, tracks_cyl: +$('mm-tc').value, tracks_dial: +$('mm-td').value,
+      cams_cyl: cams('C'), cams_dial: cams('D'), sinker: $('mm-sinker').value, striper: +$('mm-striper').value || 0, max_width: +$('mm-wheel').value || null,
+      fpi: +$('mm-fpi').value || (num('st-feeders') && num('st-dia') ? num('st-feeders') / num('st-dia') : null),
+      sf: +$('mm-sf').value || (num('st-rpm') && num('st-dia') ? num('st-rpm') * num('st-dia') : null),
+    };
+  }
+  function saveMyMachine() { try { localStorage.setItem(MYM, JSON.stringify(myMachine())); } catch (_) {} }
+  function loadMyMachine() {
+    var m; try { m = JSON.parse(localStorage.getItem(MYM) || 'null'); } catch (_) { m = null; }
+    if (!m) return;
+    var set = function (id, v) { if (v != null && $(id)) $(id).value = v; };
+    set('mm-name', m.name); set('mm-kind', m.kind); set('mm-gating', m.gatings && m.gatings.length > 1 ? 'both' : (m.gatings || ['rib'])[0]);
+    set('mm-sel', m.selection); set('mm-tech', m.technique); set('mm-tc', m.tracks_cyl); set('mm-td', m.tracks_dial); set('mm-sinker', m.sinker);
+    set('mm-striper', m.striper); set('mm-wheel', m.max_width || ''); set('mm-fpi', +m.fpi ? m.fpi : ''); set('mm-sf', +m.sf ? m.sf : '');
+    ['C', 'D'].forEach(function (b) { var a = b === 'C' ? m.cams_cyl : m.cams_dial; document.querySelectorAll('[data-mmc="' + b + '"]').forEach(function (x) { x.checked = (a || []).indexOf(x.value) > -1; }); });
+  }
   // the drawing palette follows the chosen machine: a symbol it has no cam
   // (or no transfer needle) for is greyed out; Auto allows everything
   function paletteFor() {
-    var m = machines.filter(function (x) { return x.id === $('st-mprof').value; })[0];
-    var ok = { K: true, T: true, M: true, E: true, '-': true };
+    var m = $('st-mprof').value === 'custom' ? (function () { var mm = myMachine(); return { cams: { C: mm.cams_cyl, D: mm.kind === 'double' ? mm.cams_dial : [] }, transfer: mm.cams_cyl.indexOf('E') > -1, bed_transfer: mm.cams_cyl.indexOf('R') > -1 || mm.cams_dial.indexOf('R') > -1 }; })() : machines.filter(function (x) { return x.id === $('st-mprof').value; })[0];
+    var ok = { K: true, T: true, M: true, E: true, R: true, '-': true };
     if (m) {
       var all = [].concat(m.cams.C || [], m.cams.D || []);
-      ok = { K: true, M: true, '-': true, T: all.indexOf('T') > -1, E: !!m.transfer };
+      ok = { K: true, M: true, '-': true, T: all.indexOf('T') > -1, E: !!m.transfer && (m.cams.C || []).indexOf('E') > -1, R: !!m.bed_transfer };
     }
     Array.prototype.forEach.call($('st-pal').children, function (b) {
       var sy = b.getAttribute('data-s');
       b.disabled = !ok[sy];
-      b.title = ok[sy] ? '' : 'Your machine has no ' + (sy === 'E' ? 'transfer needles' : 'cam') + ' for this';
+      b.title = ok[sy] ? '' : 'Your machine has no ' + (sy === 'E' || sy === 'R' ? 'transfer needles' : 'cam') + ' for this';
     });
     if (!ok[S.brush]) { S.brush = 'K'; Array.prototype.forEach.call($('st-pal').children, function (x) { x.classList.toggle('on', x.getAttribute('data-s') === 'K'); }); }
   }
@@ -87,7 +109,7 @@
       sel.value = S.templateId;
       machines = d.machines || [];
       var mp = $('st-mprof'), keep = mp.value;
-      mp.innerHTML = '<option value="">Auto — the simplest machine that knits the design</option>' + machines.map(function (m) { return '<option value="' + esc(m.id) + '">' + esc(m.label) + '</option>'; }).join('');
+      mp.innerHTML = '<option value="">Auto — the simplest machine that knits the design</option>' + machines.map(function (m) { return '<option value="' + esc(m.id) + '">' + esc(m.label) + '</option>'; }).join('') + '<option value="custom">My machine — enter its specification</option>';
       mp.value = keep;
       paletteFor();
     });
@@ -147,6 +169,7 @@
           html += '<td class="feedcell"><select data-feed="' + i + '" data-k="role" aria-label="Yarn role, feeder ' + (i + 1) + '">' +
             ['ground', 'face', 'binder', 'loop'].map(function (r) { return '<option value="' + r + '"' + (f.role === r ? ' selected' : '') + '>' + ROLE_LABEL[r] + '</option>'; }).join('') +
             '</select> <input data-feed="' + i + '" data-k="ne" type="number" min="5" max="150" placeholder="Ne" value="' + esc(f.ne || '') + '" title="Count on this feeder (Ne). Empty = the ground count."> ' +
+            '<select class="st-feedcol" data-feed="' + i + '" data-k="colour" title="Stripe yarn on this feeder (colours under Yarn)"><option value="">—</option>' + ['A', 'B', 'C', 'D', 'E', 'F'].map(function (c) { return '<option' + (f.colour === c ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select> ' +
             '<input data-feed="' + i + '" data-k="sl_ratio" type="number" min="0.3" max="3" step="0.01" placeholder="×SL" value="' + esc(f.sl_ratio || '') + '" title="Stitch length on this feeder as a multiple of the ground stitch length (e.g. 0.92 for a tighter tuck feeder). Empty = 1."></td>';
         } else html += '<td></td>';
         html += '</tr>';
@@ -327,18 +350,19 @@
       gating: S.bed === 'interlock' ? 'interlock' : 'rib',
       grid: { C: S.C.map(function (r) { return r.join(''); }), D: S.D ? S.D.map(function (r) { return r.join(''); }) : null },
       feeds: S.feeds.map(function (f) {
-        return { role: f.role || 'ground', yarn: +f.ne > 0 ? { ne: +f.ne, fibre: $('st-fibre').value } : null, sl_ratio: +f.sl_ratio > 0 ? +f.sl_ratio : null };
+        return { role: f.role || 'ground', colour: f.colour || null, yarn: +f.ne > 0 ? { ne: +f.ne, fibre: $('st-fibre').value } : null, sl_ratio: +f.sl_ratio > 0 ? +f.sl_ratio : null };
       }),
       yarn: num('st-ne') ? { ne: num('st-ne'), fibre: $('st-fibre').value } : { fibre: $('st-fibre').value },
       plush: { cut: $('st-cut').checked, sinker_mm: num('st-sinker'), arrangement: $('st-parr').value },
       pile: $('st-pile').value,
+      stripes: $('st-stripe').value.trim() ? { sequence: $('st-stripe').value } : null,
       finish: { brush: $('st-brush').value, passes: num('st-passes'), sheared: $('st-shear').checked },
       elastane: $('st-lycra').checked ? { denier: +$('st-lyd').value, draft: num('st-lydraft') || 2.6, every: $('st-lyevery').value } : null,
       target: { gsm: num('st-gsm'), width_in: num('st-width') },
       calibration: $('st-userolls').checked && completeRolls().length ? { rolls: completeRolls() } : null,
       machine: {
         gauge: num('st-gauge'), dia: num('st-dia'), feeders: num('st-feeders'), rpm: num('st-rpm'),
-        sl_mm: num('st-sl'), efficiency: num('st-eff'), tracks_cyl: +$('st-tc').value || null, tracks_dial: +$('st-td').value || null, profile: $('st-mprof').value || null, transfer_dir: $('st-tdir').value,
+        sl_mm: num('st-sl'), efficiency: num('st-eff'), tracks_cyl: +$('st-tc').value || null, tracks_dial: +$('st-td').value || null, profile: $('st-mprof').value || null, transfer_dir: $('st-tdir').value, custom: $('st-mprof').value === 'custom' ? myMachine() : null,
         vdq: { points: vdq },
       },
     };
@@ -444,13 +468,16 @@
   }
 
   // -- cam & needle set-out: the machine engine's plan, editable --------------
-  var CAM = { K: 'Knit', T: 'Tuck', M: 'Miss', E: 'Transfer' };
+  var CAM = { K: 'Knit', T: 'Tuck', M: 'Miss', E: 'Transfer', R: 'To other bed' };
   function renderSetup() {
     var r = last, ms = r.machine_setup, P = ms.profile, B = ms.beds;
     var html = '<div class="st-mcard"><b>' + esc(P.label) + '</b>' + (P.auto ? ' <span style="color:var(--t3)">— picked for this design (choose your own under Machine type)</span>' : '') +
-      '<dl><dt>Needle selection</dt><dd>' + (P.selection === 'needle' ? 'needle by needle (electronic' + (P.transfer ? ', with loop transfer' : '') + ')' : 'cam tracks — cylinder ' + P.tracks.C + (P.tracks.D ? ', dial ' + P.tracks.D : '')) + '</dd>' +
+      '<dl><dt>Needle selection</dt><dd>' + (P.selection === 'wheel' ? 'pattern wheel / drum at each feeder (mechanical jacquard)' : P.selection === 'needle' ? 'needle by needle (electronic' + (P.transfer ? ', with loop transfer' : '') + ')' : 'cam tracks — cylinder ' + P.tracks.C + (P.tracks.D ? ', dial ' + P.tracks.D : '')) + '</dd>' +
       (P.technique ? '<dt>Selection</dt><dd>' + (P.technique === '3way' ? '3-way: each needle to knit, tuck or miss at every feeder' : '2-way: each feeder has one cam height (knit or tuck); a needle is raised to it or left down (miss)') + '</dd>' : '') +
       (P.transfer_dirs ? '<dt>Transfers</dt><dd>to the ' + P.transfer_dirs.join(' or ') + ' needle (set under Machine)</dd>' : '') +
+      (P.striper ? '<dt>Stripers</dt><dd>' + P.striper + '-finger yarn changer at every feeder</dd>' : '') +
+      (P.max_width ? '<dt>Pattern wheel</dt><dd>' + P.max_width + ' slots: the repeat must fit the wheel</dd>' : '') +
+      (P.bed_transfer ? '<dt>Bed transfer</dt><dd>loops can be handed between the beds (R)</dd>' : '') +
       '<dt>Cams</dt><dd>' + Object.keys(P.cams).map(function (b) { return (b === 'C' ? 'cylinder: ' : 'dial: ') + P.cams[b].map(function (x) { return CAM[x].toLowerCase(); }).join(', '); }).join(' · ') + '</dd>' +
       '<dt>Needles</dt><dd>' + Object.keys(P.needle).map(function (b) { return (b === 'C' ? 'cylinder: ' : 'dial: ') + esc(P.needle[b]); }).join(' · ') + '</dd>' +
       '<dt>Sinker</dt><dd>' + esc(P.sinker.text) + '</dd>' +
@@ -464,8 +491,8 @@
     ['C', 'D'].forEach(function (b) {
       var bd = B[b]; if (!bd) return;
       var name = b === 'C' ? 'Cylinder' : 'Dial';
-      html += '<div class="st-sub">' + name + ' — ' + (bd.selection === 'needle' ? 'needle selection' : bd.tracks_used + ' of ' + bd.tracks_available + ' tracks') + '</div><p class="st-p">' + esc(bd.selection_note) + '</p>';
-      if (bd.selection === 'needle') return;
+      html += '<div class="st-sub">' + name + ' — ' + (bd.selection === 'wheel' ? 'pattern wheel selection' : bd.selection === 'needle' ? 'needle selection' : bd.tracks_used + ' of ' + bd.tracks_available + ' tracks') + '</div><p class="st-p">' + esc(bd.selection_note) + '</p>';
+      if (bd.selection === 'needle' || bd.selection === 'wheel') return;
       editable = true;
       html += '<label class="st-p" style="display:block">Needle set-out, one repeat (butt track per needle, – = needle out)<br><input class="st-setin" data-setout="' + b + '" value="' + esc(bd.setout.replace(/ /g, '')) + '" spellcheck="false" autocomplete="off"></label>' +
         '<div class="st-scroll"><table class="st-t"><tr><th>Track</th><th>Sequence, feeders 1 → ' + r.structure.feeds + '</th><th>Needles per repeat</th><th>On the machine</th></tr>' +
@@ -474,16 +501,26 @@
       if (bd.cam_totals_machine) html += '<p class="st-p">Cams to fit round the machine: <b>' + bd.cam_totals_machine.knit + '</b> knit, <b>' + bd.cam_totals_machine.tuck + '</b> tuck, <b>' + bd.cam_totals_machine.miss + '</b> miss (' + r.machine.feeders + ' feeders × ' + bd.tracks_used + ' tracks).</p>';
     });
     if (B.facing_note) html += '<p class="st-p">' + esc(B.facing_note) + '</p>';
+    var SP = ms.stripes;
+    if (SP) {
+      html += '<div class="st-sub">Stripes ' + src('c') + '</div><p class="st-p">' + SP.courses + '-course repeat, about ' + SP.repeat_mm + ' mm in the finished cloth: ' +
+        SP.runs.map(function (x) { return '<b>' + x.colour + '</b> ' + x.courses + ' (' + x.mm + ' mm)'; }).join(' · ') + '. Yarn by colour: ' +
+        Object.keys(SP.yarn_pct).map(function (k) { return k + ' ' + SP.yarn_pct[k] + '%'; }).join(', ') + '.</p>' +
+        (SP.method === 'feeder stripe'
+          ? '<p class="st-p"><b>Feeder stripe</b> — course c is knitted by feeder c (round the machine), so with ' + r.machine.feeders + ' feeders (a multiple of ' + SP.courses + ') every feeder keeps one yarn. Thread: ' + SP.threading.slice(0, 24).map(function (t) { return 'F' + t.feeder + ' ' + t.yarn; }).join(', ') + (SP.courses > 24 ? ' …' : '') + ', and so on round the machine.</p>'
+          : '<p class="st-p"><b>Striper</b> — the repeat does not divide the ' + r.machine.feeders + ' feeders, so each feeder changes yarn from revolution to revolution: up to ' + SP.fingers_needed + ' yarns on one feeder (the machine has ' + SP.fingers_available + ' finger' + (SP.fingers_available > 1 ? 's' : '') + '); the stripe repeats every ' + SP.revolutions_per_repeat + ' revolution' + (SP.revolutions_per_repeat > 1 ? 's' : '') + '.</p>');
+    }
     if (editable) {
       // cam chart: one select per feeder per track, both beds
       var cols = [];
-      ['C', 'D'].forEach(function (b) { if (B[b] && B[b].selection !== 'needle') B[b].per_track.forEach(function (t) { cols.push([b, t.track]); }); });
+      ['C', 'D'].forEach(function (b) { if (B[b] && B[b].selection === 'tracks') B[b].per_track.forEach(function (t) { cols.push([b, t.track]); }); });
       html += '<div class="st-sub">Cam chart — the cam in each track at each feeder (edit, then apply)</div><div class="st-scroll"><table class="st-t" id="st-camtab"><tr><th>Feeder</th><th>Yarn</th>' +
         cols.map(function (c) { return '<th>' + (c[0] === 'C' ? 'Cyl ' : 'Dial ') + c[1] + '</th>'; }).join('') + '</tr>' +
         r.machine_setup.beds.C.cams_per_feeder.map(function (_, i) {
           return '<tr><td>F' + (i + 1) + '</td><td style="color:' + (ROLE_COL[r.structure.roles[i]] || '') + '">' + esc(r.structure.roles[i] || '') + '</td>' + cols.map(function (c) {
             var v = B[c[0]].cams_per_feeder[i][c[1]];
             var opts = (P.cams[c[0]] || ['K', 'T', 'M']).filter(function (x) { return x !== 'E'; });
+            if (opts.indexOf(v) < 0) opts.push(v);
             return '<td><select class="st-camsel ' + v + '" data-f="' + i + '" data-b="' + c[0] + '" data-t="' + c[1] + '">' + opts.map(function (x) { return '<option value="' + x + '"' + (x === v ? ' selected' : '') + '>' + CAM[x] + '</option>'; }).join('') + '</select></td>';
           }).join('') + '</tr>';
         }).join('') + '</table></div>' +
@@ -582,6 +619,8 @@
         // it runs straight past
         if (sc === 'K') d += ' L' + (x - 6) + ' ' + yb + ' L' + (x + 4) + ' ' + (yC - 3) + ' A5 5 0 1 1 ' + (x - 4) + ' ' + (yC - 3) + ' L' + (x + 6) + ' ' + yb;
         else if (sc === 'T') d += ' L' + (x - 6) + ' ' + yb + ' L' + x + ' ' + (yC - 4) + ' L' + (x + 6) + ' ' + yb;
+        if (sc === 'R' && S.D) out += '<path d="M' + x + ' ' + (yC - 6) + ' L' + (S.bed === 'interlock' ? x : x + dx / 2) + ' ' + (yD + 8) + '" fill="none" stroke="#7a4fc2" stroke-width="1.6" marker-end="url(#st-arr)"/>';
+        if (S.D && S.D[i][j] === 'R') out += '<path d="M' + (S.bed === 'interlock' ? x : x + dx / 2) + ' ' + (yD + 6) + ' L' + x + ' ' + (yC - 8) + '" fill="none" stroke="#7a4fc2" stroke-width="1.6" marker-end="url(#st-arr)"/>';
         if (sc === 'E') out += '<path d="M' + x + ' ' + (yC + 6) + ' Q' + (x + dx / 2) + ' ' + (yC + 16) + ' ' + (x + dx - 3) + ' ' + (yC + 6) + '" fill="none" stroke="#0e7490" stroke-width="1.6" marker-end="url(#st-arr)"/>';
         if (S.D) {
           var xd = S.bed === 'interlock' ? x : x + dx / 2;
@@ -749,7 +788,7 @@
   // -- needle action: one needle's knitting cycle (studio-needle.js) --------
   var cycle = (function () {
     var view = null;
-    var NAME = { K: 'knit', T: 'tuck', M: 'miss', E: 'transfer', '-': 'no needle' };
+    var NAME = { K: 'knit', T: 'tuck', M: 'miss', E: 'transfer', R: 'transfer to the other bed', '-': 'no needle' };
     var dial = function () { return $('st-anibed').value === 'D' && !!S.D; };
     var bedG = function () { return dial() ? S.D : S.C; };
     function fill() {
@@ -775,7 +814,7 @@
         return '<li data-ph="' + n + '"' + (n === i ? ' class="on"' : '') + '><b>' + P.name + '</b></li>';
       }).join('');
       $('st-cynote').textContent = (i + 1) + '. ' + N.PHASES[i].name + ': ' + T[N.PHASES[i].k];
-      $('st-cysym').textContent = { K: 'K · knit', T: 'T · tuck', M: 'M · miss', E: 'E · transfer' }[d.sym] || d.sym;
+      $('st-cysym').textContent = { K: 'K · knit', T: 'T · tuck', M: 'M · miss', E: 'E · transfer', R: 'R · to the other bed' }[d.sym] || d.sym;
     }
     return {
       start: function () {
@@ -841,9 +880,18 @@
   var FIBRE_3D = { cotton: 'cotton', cvc: 'cotton', polyester_spun: 'polyester', polyester_filament: 'polyester', nylon_filament: 'nylon', viscose: 'viscose', modal: 'modal' };
   var cellOf = function (x) { return x === 'K' ? 'K' : x === 'T' ? 'T' : 'M'; };   // transfer and empty needle read as a float
   /** The drawn programme as the 3D engine's construction, pattern and needle sampler. */
+  function stripeOf() {
+    var seq = [], m = ($('st-stripe').value || '').toUpperCase().match(/[A-F]\s*\d+/g);
+    if (m) m.forEach(function (t) { var n = Math.min(500, +t.slice(1).trim()); for (var k = 0; k < n; k++) seq.push(t[0]); });
+    if (!seq.length && S.feeds.some(function (f) { return f && f.colour; })) S.C.forEach(function (_, i) { seq.push((S.feeds[i] && S.feeds[i].colour) || 'A'); });
+    if (!seq.length) return null;
+    var colours = {}; ['A', 'B', 'C', 'D', 'E', 'F'].forEach(function (c) { colours[c] = $('st-sc-' + c).value; });
+    return { seq: seq.slice(0, 2000), colours: colours };
+  }
   function clothOpts() {
     // the notation → 3D mapping lives in studio-cloth-map.js (tested in node)
-    var cs = window.KAStudioCloth.clothSpec({ bed: S.bed, C: S.C, D: S.D, feeds: S.feeds, brush: $('st-brush').value, pile: $('st-pile').value,
+    var stripe = stripeOf();
+    var cs = window.KAStudioCloth.clothSpec({ bed: S.bed, C: S.C, D: S.D, feeds: S.feeds, brush: $('st-brush').value, pile: $('st-pile').value, stripe: stripe,
       plush: last && last.plush && S.feeds.some(function (fd) { return fd.role === 'loop'; }) ? { cut: $('st-cut').checked, arrangement: $('st-parr').value } : null });
     var con = cs.construction, pattern = cs.pattern;
     // density from the engine's answer for this design (wales, courses, GSM, stitch length)
@@ -855,7 +903,7 @@
     var clamp = function (v, lo, hi) { return Math.max(lo, Math.min(hi, v)); };
     var scalar = clamp(Math.sqrt(clamp(cpc / (dbl ? 9.5 : 8), 0.5, 2.6)) * clamp(gsm / (dbl ? 260 : 190), 0.85, 1.18), 0.7, 1.7);
     return {
-      photo: cs.photo, notes: cs.notes, start: zoom === 'loops' ? 'loops' : undefined, dyed: hexRgb($('st-col').value), construction: con, countNe: ne, gsm: gsm, tf: fab.tf || 14,
+      photo: cs.photo, notes: cs.notes, start: zoom === 'loops' ? 'loops' : undefined, dyed: hexRgb(cs.baseColour || $('st-col').value), baseHex: cs.baseColour || $('st-col').value, courseTint: cs.courseTint, construction: con, countNe: ne, gsm: gsm, tf: fab.tf || 14,
       fiberType: FIBRE_3D[$('st-fibre').value] || 'cotton', pattern: pattern, sample: cs.sample, sampleBack: cs.sampleBack,
       density: { wpc: wpc, cpc: cpc, aspect: clamp(cpc / wpc, 0.9, con.type === 'pique' ? 3.2 : 1.6), scalar: scalar, llMm: fab.sl_mm || null, tex: 590.5 / ne, fibreDensityScale: 1 },
       elastanePct: $('st-lycra').checked ? 5 : 0, physics: null,
@@ -864,11 +912,11 @@
   function renderCloth() {
     var host = $('st-cloth'), o = clothOpts(), my = ++clothSeq;
     // rebuild only when the structure or its numbers changed; a colour change repaints
-    var key = JSON.stringify([o.construction, o.pattern.grid, o.pattern.dial, o.pattern.feedYarns, Math.round(o.density.wpc * 10), Math.round(o.density.cpc * 10), Math.round(o.countNe), o.gsm, o.fiberType, o.elastanePct]);
-    if (cloth && key === clothKey) { cloth.setColor($('st-col').value); return; }
+    var key = JSON.stringify([stripeOf(), o.construction, o.pattern.grid, o.pattern.dial, o.pattern.feedYarns, Math.round(o.density.wpc * 10), Math.round(o.density.cpc * 10), Math.round(o.countNe), o.gsm, o.fiberType, o.elastanePct]);
+    if (cloth && key === clothKey) { cloth.setColor(o.baseHex); return; }
     clothKey = key;
     $('st-cloth-wait').hidden = false;
-    import('/assets/js/knit3d/index.js?v=20261110a').then(function (mod) {
+    import('/assets/js/knit3d/index.js?v=20261110c').then(function (mod) {
       if (my !== clothSeq || mode3d !== 'cloth') return;
       if (cloth) { try { cloth.dispose(); } catch (_) {} cloth = null; }
       Array.prototype.forEach.call(host.querySelectorAll('canvas'), function (c) { c.remove(); });
@@ -911,6 +959,7 @@
       radius: feeds.map(function (fd) { var ne = +fd.ne > 0 ? +fd.ne : groundNe; return clamp(0.5 * 1.3 * (0.907 / Math.sqrt(ne)) * f.wpc / 10, 0.07, 0.24); }),
       plated: feeds.map(function (fd, i) { return !!ly && fd.role !== 'loop' && (ly === 'all' || i % 2 === 0); }),
       colourBy: real ? 'one' : $('st-colby').value, colour: $('st-col').value,
+      stripeColour: (function () { var st = stripeOf(); return st ? function (c) { return st.colours[st.seq[((c % st.seq.length) + st.seq.length) % st.seq.length]]; } : null; })(),
     };
     // plush: the ground yarn is drawn on the loop feeder, the pile behind it
     // over the sinker, as tall as the sinker sets it (mm → wales: × wpc ÷ 10)
@@ -930,7 +979,7 @@
   function renderLoops() {
     var host = $('st-loops');
     if (!loopPromise) {
-      loopPromise = import('/assets/js/studio-loops.js?v=20261110b').then(function (mod) {
+      loopPromise = import('/assets/js/studio-loops.js?v=20261110c').then(function (mod) {
         loopView = new mod.LoopView(host, showTip);
         loopView.feedColour = mod.feedColour;
         return loopView;
@@ -955,7 +1004,7 @@
     });
   }
 
-  var ACT = { K: 'knit', T: 'tuck', M: 'miss', E: 'transfer', '-': 'no needle' };
+  var ACT = { K: 'knit', T: 'tuck', M: 'miss', E: 'transfer', R: 'transfer to the other bed', '-': 'no needle' };
   function showTip(s) {
     var tip = $('st-tip');
     if (!s) { tip.hidden = true; return; }
@@ -963,6 +1012,7 @@
     var what = s.act === 'K' ? 'Knit loop' + (s.held ? ', held ' + s.held + ' course' + (s.held > 1 ? 's' : '') + ' (the needle tucks or misses above it)' : '') + (s.tucks ? '; drawn through ' + s.tucks + ' tuck' + (s.tucks > 1 ? 's' : '') + ' as well as the old loop' : '')
       : s.act === 'T' ? 'Tuck: the needle took the yarn but did not clear, so it is not knocked over. It is cleared with the held loop ' + (s.held + 1) + ' course' + (s.held ? 's' : '') + ' later'
         : s.act === 'M' ? 'Miss: the needle stayed down; the yarn floats behind the held loop'
+        : s.act === 'R' ? 'Transfer to the other bed: the loop was handed to the needle opposite, so this needle is empty and the wale goes on on the other bed'
         : s.act === 'E' ? 'Transfer: the loop was handed to the next needle, so this needle is empty — the yarn passes and the eyelet opens; it starts a new loop at the next feed'
           : 'No needle in this slot: the yarn passes straight across';
     tip.innerHTML = '<b>F' + (s.feed + 1) + ' · ' + bed + ' needle ' + s.needle + ' · ' + ACT[s.act] + '</b>' + (s.elastane ? ' (elastane)' : '') + '<br>' + what + '.';
@@ -1023,7 +1073,7 @@
   var STORE = 'ka_studio_designs';
   function readStore() { try { return JSON.parse(localStorage.getItem(STORE) || '[]'); } catch (_) { return []; } }
   function writeStore(a) { try { localStorage.setItem(STORE, JSON.stringify(a)); return true; } catch (_) { return false; } }
-  var FIELDS = ['st-ne', 'st-fibre', 'st-gsm', 'st-width', 'st-gauge', 'st-dia', 'st-feeders', 'st-rpm', 'st-sl', 'st-eff', 'st-tc', 'st-td', 'st-lyd', 'st-lydraft', 'st-lyevery', 'st-v1r', 'st-v1l', 'st-v2r', 'st-v2l', 'st-sinker', 'st-parr', 'st-mprof', 'st-brush', 'st-passes', 'st-pile', 'st-tdir'];
+  var FIELDS = ['st-ne', 'st-fibre', 'st-gsm', 'st-width', 'st-gauge', 'st-dia', 'st-feeders', 'st-rpm', 'st-sl', 'st-eff', 'st-tc', 'st-td', 'st-lyd', 'st-lydraft', 'st-lyevery', 'st-v1r', 'st-v1l', 'st-v2r', 'st-v2l', 'st-sinker', 'st-parr', 'st-mprof', 'st-brush', 'st-passes', 'st-pile', 'st-tdir', 'st-stripe', 'st-sc-A', 'st-sc-B', 'st-sc-C', 'st-sc-D', 'st-sc-E', 'st-sc-F'];
   function designNow() {
     var o = { v: 2, name: $('st-name').value || 'Untitled design', bed: S.bed, C: S.C, D: S.D, feeds: S.feeds, rolls: rolls, lycra: $('st-lycra').checked, cut: $('st-cut').checked, colour: $('st-col').value, fields: {} };
     FIELDS.forEach(function (id) { o.fields[id] = $(id).value; });
@@ -1109,8 +1159,21 @@
     $('st-play').addEventListener('click', function () { this.textContent = race.toggle() ? 'Pause' : 'Play'; });
     $('st-anibed').addEventListener('change', function () { race.reset(); cycle.refresh(); });
     cycle.bind();
+    loadMyMachine();
+    $('st-mymach').addEventListener('change', function () { saveMyMachine(); $('st-mprof').dispatchEvent(new Event('change')); });
+    $('st-mymach').addEventListener('input', function (e) { if (e.target.type === 'number' || e.target.type === 'text') { saveMyMachine(); schedule(); } });
+    $('st-stripe').addEventListener('input', schedule);
+    $('st-swatches').addEventListener('input', function () { render3D(); });
     $('st-mprof').addEventListener('change', function () {
-      var m = machines.filter(function (x) { return x.id === this.value; }, this)[0];
+      $('st-mymach').hidden = this.value !== 'custom';
+      if (this.value === 'custom') {
+        $('st-mymach').open = true;
+        // a new machine starts from the beds drawn now
+        var saved = null; try { saved = localStorage.getItem(MYM); } catch (_) {}
+        if (!saved) { $('mm-kind').value = S.D ? 'double' : 'single'; $('mm-gating').value = S.bed === 'interlock' ? 'interlock' : 'rib'; saveMyMachine(); }
+      }
+      var mm = this.value === 'custom' ? myMachine() : null;
+      var m = mm ? { kind: mm.kind, gatings: mm.kind === 'double' ? mm.gatings : ['single'], use: 'your machine, from its own specification', sinker: { text: '' }, cams: { C: mm.cams_cyl, D: mm.cams_dial }, transfer: mm.cams_cyl.indexOf('E') > -1, bed_transfer: mm.cams_cyl.indexOf('R') > -1 || mm.cams_dial.indexOf('R') > -1 } : machines.filter(function (x) { return x.id === this.value; }, this)[0];
       if (m) {
         if (m.kind === 'single' && S.D) setBed('single');
         else if (m.kind === 'double' && (!S.D || m.gatings.indexOf(S.bed) < 0)) setBed(m.gatings.indexOf(S.bed) > -1 ? S.bed : m.gatings[0]);

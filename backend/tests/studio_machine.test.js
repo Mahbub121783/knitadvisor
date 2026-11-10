@@ -107,4 +107,52 @@ assert(S.analyse({ ...pay(T.find((x) => x.id === 'single_jersey')), elastane: { 
   const idx = (r) => { const c = r.checks.find((x) => /hook load/.test(x.text)); return c ? +c.text.match(/hook load ([\d.]+)/)[1] : 0; };
   assert(idx(coarse) > idx(fine), `hook load follows the tuck feeder's yarn (${idx(fine)} → ${idx(coarse)})`);
 }
+// ── stripes, transfers between the beds, mechanical jacquard, my machine ──
+{
+  const base = { bed: 'single', grid: { C: ['KK', 'KK', 'KK', 'KK'] }, feeds: [0, 1, 2, 3].map(() => ({ role: 'ground' })), yarn: { fibre: 'cotton' }, target: { gsm: 160 }, machine: {} };
+  // a feeder stripe: the repeat divides the feeders, every feeder keeps one yarn
+  const fs = S.analyse({ ...base, stripes: { sequence: 'A2 B2' } });
+  assert.strictEqual(fs.machine_setup.stripes.method, 'feeder stripe');
+  assert.strictEqual(fs.machine.feeders % 4, 0);
+  // colours drawn per feeder survive the repeat reduction
+  const fc = S.analyse({ ...base, feeds: ['A', 'B', 'A', 'C'].map((colour) => ({ role: 'ground', colour })) });
+  assert.deepStrictEqual(fc.machine_setup.stripes.yarn_pct, { A: 50, B: 25, C: 25 });
+  // a long engineered stripe: auto takes a striper machine; a plain machine is refused
+  const long = S.analyse({ ...base, stripes: { sequence: 'A100 B20 C7' } });
+  assert.strictEqual(long.machine_setup.profile.id, 'sj_striper');
+  assert(long.ok_to_knit && long.machine_setup.stripes.method === 'striper' && long.machine_setup.stripes.fingers_needed <= 6);
+  assert(errs(S.analyse({ ...base, stripes: { sequence: 'A100 B20 C7' }, machine: { profile: 'sj_4track' } })).some((t) => /needs stripers/.test(t)));
+  const rib = S.analyse({ bed: 'double', gating: 'rib', grid: { C: ['K'], D: ['K'] }, yarn: { fibre: 'cotton' }, target: { gsm: 250 }, machine: {}, stripes: { sequence: 'A60 B10 C5 D3' } });
+  assert.strictEqual(rib.machine_setup.profile.id, 'dj_striper', 'a rib stripe longer than the feeders: double jersey stripers');
+  // the stripe: course c on feeder c mod n — the fingers a feeder needs
+  const sp = KM.stripePlan(['A', 'A', 'B'], 1, 4, { striper: 6 }, [1]);
+  assert.strictEqual(sp.method, 'striper'); assert.strictEqual(sp.fingers_needed, 2); assert.strictEqual(sp.revolutions_per_repeat, 3);
+}
+{
+  // R: the loop to the needle opposite on the other bed
+  const ok = S.analyse({ bed: 'double', gating: 'rib', grid: { C: ['KK', 'RK', 'KK'], D: ['KK', 'KK', 'KK'] }, yarn: { fibre: 'cotton' }, target: { gsm: 250 }, machine: {} });
+  assert.strictEqual(ok.machine_setup.profile.id, 'dj_transfer');
+  assert(!errs(ok).some((t) => /opposite|other bed/.test(t)));
+  const bad = S.analyse({ bed: 'double', gating: 'rib', grid: { C: ['KK', 'RK', 'KK'], D: ['KK', 'MK', 'KK'] }, yarn: { fibre: 'cotton' }, target: { gsm: 250 }, machine: {} });
+  assert(errs(bad).some((t) => /must knit or tuck at this feed to take it/.test(t)));
+  assert(errs(S.analyse({ bed: 'double', gating: 'rib', grid: { C: ['KK', 'RK', 'KK'], D: ['KK', 'KK', 'KK'] }, yarn: { fibre: 'cotton' }, target: { gsm: 250 }, machine: { profile: 'rib_dj' } })).some((t) => /transfer machine/.test(t)));
+  const geom = require('../../frontend/assets/js/studio-loop-geom.js');
+  const g = geom.buildLoopPaths({ C: ['KK', 'RK', 'KK', 'KK'].map((r) => r.split('')), D: ['KK', 'KK', 'KK', 'KK'].map((r) => r.split('')), bed: 'rib', feeds: [0, 1, 2, 3].map(() => ({ role: 'ground' })), h: 0.75, wales: 4, courses: 8 });
+  const st = g.courses[0].stitches.find((x) => x.bed === 'C' && x.wale === 0);
+  assert.strictEqual(st.toBed, 'D', 'the loop before an R leans onto the dial');
+}
+{
+  // mechanical jacquard: 2-way, a pattern wheel per feeder
+  assert(errs(run('lacoste_single', { profile: 'sj_mech_jacquard' })).some((t) => /2-way/.test(t)));
+  assert.strictEqual(run('birds_eye', { profile: 'sj_mech_jacquard' }).machine_setup.beds.C.selection, 'wheel');
+  const narrow = KM.fit(KM.customProfile({ kind: 'single', selection: 'wheel', max_width: 8 }), { kind: 'single', gating: 'single', tracks: { C: 2 }, cams: { C: ['K', 'M'], D: [] }, width: 12 });
+  assert(narrow.some((c) => c.level === 'error' && /pattern wheel has 8 slots/.test(c.text)));
+}
+{
+  // my machine: its own figures, no class estimates
+  const r = run('lacoste_single', { profile: 'custom', custom: { name: 'Line 3', kind: 'single', selection: 'tracks', tracks_cyl: 2, cams_cyl: ['K', 'T', 'M'], fpi: 3.2, sf: 1000 }, dia: 30 });
+  assert(r.success && r.machine_setup.profile.custom && /your machine/.test(r.machine_setup.profile.build.basis));
+  assert.strictEqual(r.machine.rpm, Math.round(1000 / 30));
+  assert(errs(run('lacoste_single', { profile: 'custom', custom: { kind: 'single', tracks_cyl: 2, cams_cyl: ['K', 'M'] } })).some((t) => /no tuck cam/.test(t)));
+}
 console.log('Studio machine tests passed');

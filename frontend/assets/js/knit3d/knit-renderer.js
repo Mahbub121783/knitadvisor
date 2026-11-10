@@ -12,7 +12,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-import { buildYarnPaths, floatAnchorsFromPaths, structureRepeat } from './topology-builder.js?v=20260608g';
+import { buildYarnPaths, floatAnchorsFromPaths, structureRepeat } from './topology-builder.js?v=20261110c';
 import { bakeStructure, ClothSurface, fibreSurfaceTexture, wavePhase, melangeMaterial, fuzzTexture } from './macro.js?v=20260608g';
 import { ClothSim } from './cloth-physics.js?v=20260608g';
 import { fabricBody, fabricMechanics } from './fabric-body.js?v=20260608g';
@@ -22,7 +22,7 @@ import { fibreGeometry } from './hairiness.js?v=20260608g';
 import { createYarnMaterial, setYarnColorHex, twistPitch, applyYarnLook } from './yarn-material.js?v=20260608g';
 import { finishedLook, greigeLook, GREIGE_HEX } from './finish-profile.js?v=20260608g';
 import { patchDye, melangeSplit } from './dye-shader.js?v=20260608g';
-import { buildFabricMesh, yarnRadius } from './fabric-mesh.js?v=20260608g';
+import { buildFabricMesh, yarnRadius } from './fabric-mesh.js?v=20261110c';
 // Yarn in a piqué is drawn thicker against its (spread) wale pitch: the held
 // loops are pulled flat and the tuck arches fill the sideways gaps a jersey
 // does not have, so the cloth reads as dense as it is.
@@ -1070,6 +1070,7 @@ export class Knit3D {
       pattern: this.opts.pattern, wales, courses, pitchY,
       pique: this.opts.pique, yarnRadius: radius, loopHeight: this._plushLoopUnits(con, density), ...this._loopShape(con),
     });
+    this._tint(paths);
     // Real 3-thread fleece (see topology-builder.js): the binding+fleecy
     // yarn's floats already give the back real structural coverage, so the
     // flat opaque "backing board" every other construction needs (to hide
@@ -1226,6 +1227,7 @@ export class Knit3D {
       jitterPeriod: { w: rep.wales, c: rep.courses },
     });
     this._applyYarnScales(paths);
+    this._tint(paths);
     const tmp = new THREE.MeshBasicMaterial();
     const roleSeed = { fleecy: 3, binder: 5 };
     const tile = buildFabricMesh(paths, tmp, {
@@ -2069,6 +2071,13 @@ export class Knit3D {
   // to meet them is correctly in front of the backing and correctly lit, no
   // light-mirroring needed for this path (see _setLightSide's own doc — that
   // stays for the free-orbit case, where the CAMERA does move).
+  /** Stripes: opts.courseTint(c) → [r,g,b] multiplier on the base colour for course c. */
+  _tint(paths) {
+    const f = this.opts.courseTint;
+    if (typeof f !== 'function') return;
+    for (const p of paths) if (p && p.course != null) { const t = f(p.course); if (t) p.tint = t; }
+  }
+
   /** Zoom to a preset: 'loops' (the loop model, every stitch), 'swatch' (~4 cm), 'cloth' (~14 cm). */
   frame(kind) {
     if (!this.controls || !this.camera) return;

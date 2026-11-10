@@ -72,6 +72,16 @@ const PROFILES = {
     needle: { C: 'latch needle on a selector jack' }, sinker: 'jersey', transfer: false, technique: '2way', fpi: 2.4, sf: 750, gauges: [16, 32], dia: [26, 38],
     use: 'knit / miss or tuck / miss patterns needle by needle: each feeder\'s cam is knit OR tuck, the selection raises a needle to it or leaves it down',
   },
+  sj_mech_jacquard: {
+    label: 'Single jersey, mechanical jacquard (pattern wheel / drum)', kind: 'single', gatings: ['single'], selection: 'wheel', tracks: { C: Infinity }, cams: { C: ['K', 'T', 'M'] },
+    needle: { C: 'latch needle, selected by the pattern wheel (or drum pegs)' }, sinker: 'jersey', transfer: false, technique: '2way', maxWidth: 48, fpi: 1.6, sf: 650, gauges: [14, 28], dia: [26, 34],
+    use: 'knit / miss and tuck / miss repeats set by hand on a pattern wheel or drum at each feeder — up to the wheel\'s slots wide; a new design means re-pegging every feeder',
+  },
+  sj_striper: {
+    label: 'Single jersey, 4-track with 6-colour stripers', kind: 'single', gatings: ['single'], selection: 'tracks', tracks: { C: 4 }, cams: { C: ['K', 'T', 'M'] },
+    needle: { C: LATCH }, sinker: 'jersey', transfer: false, striper: 6, fpi: 1.6, sf: 700, gauges: [14, 32], dia: [26, 34],
+    use: 'engineered stripes: a yarn changer at every feeder picks one of 6 yarns each revolution, so a stripe repeat is not limited to the number of feeders',
+  },
   pointelle: {
     label: 'Single jersey, transfer (pointelle)', kind: 'single', gatings: ['single'], selection: 'needle', tracks: { C: Infinity }, cams: { C: ['K', 'T', 'M', 'E'] },
     needle: { C: 'latch needle with a transfer spring' }, sinker: 'jersey', transfer: true, transferDirs: ['right', 'left'], technique: '3way', fpi: 1.2, sf: 450, gauges: [18, 28], dia: [26, 34],
@@ -92,6 +102,16 @@ const PROFILES = {
     needle: { C: LATCH, D: LATCH }, sinker: 'none', transfer: false, timing: ['delayed', 'synchronised'], fpi: 2.0, sf: 750, gauges: [14, 32], dia: [20, 38],
     use: 'ponte di Roma, double piqué, Swiss piqué, milano on either gating',
   },
+  dj_striper: {
+    label: 'Double jersey with 4-colour stripers (cylinder 4 + dial 2 tracks)', kind: 'double', gatings: ['rib', 'interlock'], selection: 'tracks', tracks: { C: 4, D: 2 }, cams: { C: ['K', 'T', 'M'], D: ['K', 'T', 'M'] },
+    needle: { C: LATCH, D: LATCH }, sinker: 'none', transfer: false, striper: 4, timing: ['delayed', 'synchronised'], fpi: 1.2, sf: 600, gauges: [14, 28], dia: [26, 34],
+    use: 'engineered stripes in rib and interlock (collar, cuff and body stripes)',
+  },
+  dj_transfer: {
+    label: 'Double jersey, electronic with loop transfer between the beds', kind: 'double', gatings: ['rib'], selection: 'needle', tracks: { C: Infinity, D: Infinity }, cams: { C: ['K', 'T', 'M', 'R'], D: ['K', 'T', 'M', 'R'] },
+    needle: { C: 'latch needle with a transfer spring, on a selector jack', D: 'latch needle with a transfer spring, on a selector jack' }, sinker: 'none', transfer: true, bedTransfer: true, transferDirs: ['right', 'left'], technique: '3way', timing: ['delayed', 'synchronised'], fpi: 1.0, sf: 450, gauges: [12, 24], dia: [20, 34],
+    use: 'rib-to-jersey changes and purl-like effects: a loop handed from one bed to the needle opposite on the other bed',
+  },
   dj_jacquard: {
     label: 'Double jersey, electronic jacquard (cylinder selection, dial 2 tracks)', kind: 'double', gatings: ['rib', 'interlock'], selection: 'needle', tracks: { C: Infinity, D: 2 }, cams: { C: ['K', 'T', 'M'], D: ['K', 'T', 'M'] },
     needle: { C: 'latch needle on a selector jack', D: LATCH }, sinker: 'none', transfer: false, timing: ['delayed', 'synchronised'], technique: '3way', fpi: 1.6, sf: 600, gauges: [14, 28], dia: [30, 38],
@@ -99,7 +119,7 @@ const PROFILES = {
   },
 };
 // simplest first: auto picks the first that knits the design without an error
-const ORDER = ['sj_2track', 'sj_4track', 'fleece_3t', 'terry', 'sj_jacquard_2way', 'sj_jacquard', 'pointelle', 'rib_dj', 'interlock_2x2', 'dj_multi', 'dj_jacquard'];
+const ORDER = ['sj_2track', 'sj_4track', 'fleece_3t', 'terry', 'sj_striper', 'sj_mech_jacquard', 'sj_jacquard_2way', 'sj_jacquard', 'pointelle', 'rib_dj', 'interlock_2x2', 'dj_multi', 'dj_striper', 'dj_jacquard', 'dj_transfer'];
 
 const SINKER = {
   jersey: 'Single-level jersey sinker: its throat holds the old loop down while the needle rises, its belly is the knock-over level the new loop is drawn over.',
@@ -107,7 +127,7 @@ const SINKER = {
   terry: 'Terry sinker with a high nib: the pile yarn is drawn over the nib, the ground yarn over the belly — the nib height sets the pile loop.',
   none: 'No sinkers: the two beds hold the fabric for each other, and each needle knocks over across the edge (verge) of its own trick.',
 };
-const SYM_NAME = { K: 'knit', T: 'tuck', M: 'miss', E: 'transfer' };
+const SYM_NAME = { K: 'knit', T: 'tuck', M: 'miss', E: 'transfer', R: 'transfer to the other bed' };
 
 function trackSeqs(g) {
   if (!g) return null;
@@ -127,14 +147,17 @@ function requirements(st, gating, feedRows, opts = {}) {
   const used = (g) => (g ? [...new Set(g.flat().filter((x) => x !== '-'))] : []);
   const C = st.beds.C, D = st.beds.D || null;
   // a transfer is selection, not a cam track: count tracks without it
-  const tC = trackSeqs(C.map((r) => r.map((x) => (x === 'E' ? 'M' : x))));
-  const tD = trackSeqs(D);
+  const asMiss = (g) => g && g.map((r) => r.map((x) => (x === 'E' || x === 'R' ? 'M' : x)));
+  const tC = trackSeqs(asMiss(C));
+  const tD = trackSeqs(asMiss(D));
   const roles = feedRows.map((f) => f.role);
   return {
     kind: D ? 'double' : 'single', gating: D ? gating : 'single',
     tracks: { C: tC.sequences.length, D: tD ? tD.sequences.length : 0 },
     cams: { C: used(C), D: used(D) },
     transfer: C.some((r) => r.includes('E')),
+    bedTransfer: [C, D].filter(Boolean).some((g) => g.some((r) => r.includes('R'))),
+    stripe: opts.stripe || null,
     empty: [C, D].filter(Boolean).some((g) => g[0].some((_, j) => g.every((r) => r[j] === '-'))),
     fleece: !D && roles.some((r, i) => r === 'loop' && !C[i].includes('K')),
     pile: !!opts.pile,
@@ -159,10 +182,14 @@ function fit(P, req) {
     if (req.tracks[b] > cap) add('error', `${P.label}: the ${bed} needs ${req.tracks[b]} different needle sequences (tracks) and the machine has ${cap} cam tracks. Simplify the repeat to ${cap}, or use needle-by-needle (jacquard) selection.`);
     for (const s of req.cams[b]) {
       if (s === 'E') { if (!P.transfer) add('error', `${P.label}: a transfer (E) needs transfer needles (with a spring) and loop-transfer selection — a pointelle machine.`); continue; }
+      if (s === 'R') { if (!P.bedTransfer) add('error', `${P.label}: a transfer to the other bed (R) needs transfer needles on both beds and electronic selection — a double jersey transfer machine.`); continue; }
       if (!P.cams[b].includes(s)) add('error', `${P.label}: the ${bed} takes ${P.cams[b].map((x) => SYM_NAME[x]).join(' and ')} cams only — no ${SYM_NAME[s]} cam for the ${SYM_NAME[s]} stitches drawn on it.`);
     }
   }
-  if (P.technique === '2way' && P.selection === 'needle') {
+  if (P.maxWidth && req.width > P.maxWidth) add('error', `${P.label}: the repeat is ${req.width} needles wide; the pattern wheel has ${P.maxWidth} slots (typical) — the repeat must fit the wheel.`);
+  if (req.stripe && needsStriper(req.stripe, P) && !(P.striper >= req.stripe.colours)) add('error', `${P.label}: the stripe repeat is ${req.stripe.courses} courses in ${req.stripe.colours} yarns — longer than the feeders round the machine can thread one yarn each (${req.stripe.lcm} feeders would be needed). It needs stripers (yarn changers) with at least ${req.stripe.colours} fingers${P.striper ? `; this machine has ${P.striper}` : ''}.`);
+  if (req.stripe && !needsStriper(req.stripe, P) && P.striper) add('note', `${P.label}: this stripe is a feeder stripe (each feeder threaded with one yarn) — the stripers are not needed for it.`);
+  if (P.technique === '2way' && (P.selection === 'needle' || P.selection === 'wheel')) {
     const mixed = (req.feedSyms || []).map((r, i) => (r.includes('K') && r.includes('T') ? i + 1 : 0)).filter(Boolean);
     if (mixed.length) add('error', `${P.label}: a 2-way selection raises a selected needle to the ONE cam height of that feeder (knit or tuck) and leaves the rest down (miss) — feed${mixed.length > 1 ? 's' : ''} ${mixed.join(', ')} mix knit and tuck. Use a 3-way (knit / tuck / miss) machine, or split the feed.`);
   }
@@ -180,9 +207,42 @@ function autoProfile(req) {
   return req.kind === 'double' ? 'dj_jacquard' : 'pointelle';
 }
 
+// The user's own machine, from its maker's specification: no class figures.
+const CAMS = ['K', 'T', 'M', 'E', 'R'];
+const SINKERS = ['jersey', 'fleece', 'terry', 'none'];
+function customProfile(c) {
+  const kind = c.kind === 'double' ? 'double' : 'single';
+  const num = (v, lo, hi, d) => (Number.isFinite(+v) && +v >= lo && +v <= hi ? +v : d);
+  const sel = ['tracks', 'needle', 'wheel'].includes(c.selection) ? c.selection : 'tracks';
+  const camsOf = (a, d) => { const x = (Array.isArray(a) ? a : d).map((v) => String(v).toUpperCase()).filter((v) => CAMS.includes(v)); return x.includes('K') ? [...new Set(x)] : ['K', ...new Set(x)]; };
+  const P = {
+    label: String(c.name || 'My machine').slice(0, 60) + ' (your machine)', kind,
+    gatings: kind === 'double' ? (Array.isArray(c.gatings) && c.gatings.length ? c.gatings.filter((g) => ['rib', 'interlock'].includes(g)) : ['rib']) : ['single'],
+    selection: sel, technique: sel === 'tracks' ? null : c.technique === '2way' ? '2way' : '3way',
+    tracks: { C: sel === 'tracks' ? num(c.tracks_cyl, 1, 12, 4) : Infinity, ...(kind === 'double' ? { D: num(c.tracks_dial, 1, 8, 2) } : {}) },
+    cams: { C: camsOf(c.cams_cyl, ['K', 'T', 'M']), ...(kind === 'double' ? { D: camsOf(c.cams_dial, ['K', 'T', 'M']) } : {}) },
+    needle: { C: 'latch needle', ...(kind === 'double' ? { D: 'latch needle' } : {}) },
+    sinker: kind === 'double' ? 'none' : SINKERS.includes(c.sinker) ? c.sinker : 'jersey',
+    transfer: (Array.isArray(c.cams_cyl) && c.cams_cyl.includes('E')) || false,
+    bedTransfer: [c.cams_cyl, c.cams_dial].some((a) => Array.isArray(a) && a.includes('R')),
+    transferDirs: ['right', 'left'], striper: num(c.striper, 0, 12, 0) || null,
+    maxWidth: sel === 'wheel' ? num(c.max_width, 4, 400, 48) : null,
+    timing: kind === 'double' ? ['delayed', 'synchronised'] : null,
+    fpi: num(c.fpi, 0.3, 8, kind === 'double' ? 2 : 3), sf: num(c.sf, 100, 2000, kind === 'double' ? 750 : 900),
+    gauges: [num(c.gauge_min, 3, 60, 5), num(c.gauge_max, 3, 60, 50)], dia: [num(c.dia_min, 3, 60, 8), num(c.dia_max, 3, 60, 60)],
+    use: 'your machine, from its own specification', custom: true,
+  };
+  if (P.sinker === 'terry') P.pile = true;
+  return P;
+}
+
 /** The profile in use: the user's choice, or auto; the user's track counts override it. */
 function resolve(machine, req) {
   const m = machine || {};
+  if (m.profile === 'custom' && m.custom && typeof m.custom === 'object') {
+    const P = { ...customProfile(m.custom), id: 'custom', auto: false };
+    return P;
+  }
   const asked = PROFILES[m.profile] ? m.profile : null;
   const id = asked || autoProfile(req);
   const base = PROFILES[id];
@@ -206,8 +266,8 @@ function plan(P, st, gating, needlesTotal, feeders) {
   for (const b of ['C', 'D']) {
     const g = st.beds[b];
     if (!g) continue;
-    const sel = P.selection === 'needle' && b === 'C' ? 'needle' : 'tracks';
-    const T = trackSeqs(b === 'C' && !P.transfer ? g.map((r) => r.map((x) => (x === 'E' ? 'M' : x))) : g);
+    const sel = (P.selection === 'needle' || P.selection === 'wheel') && !Number.isFinite(P.tracks[b]) ? P.selection : 'tracks';
+    const T = trackSeqs(g.map((r) => r.map((x) => ((x === 'E' && !(b === 'C' && P.transfer)) || (x === 'R' && !P.bedTransfer) ? 'M' : x))));
     const perTrack = T.sequences.map((s) => {
       const n = T.setout.filter((x) => x === s.track).length;
       return { track: s.track, butt: (P.butts && P.butts[s.track]) || null, sequence: s.sequence, needles_per_repeat: n, needles_on_machine: repeats ? Math.round(n * repeats) : null };
@@ -227,7 +287,9 @@ function plan(P, st, gating, needlesTotal, feeders) {
       per_track: perTrack, empty_per_repeat: empty, empty_on_machine: repeats ? Math.round(empty * repeats) : null,
       cams_per_feeder: perFeeder,
       cam_totals_machine: sel === 'tracks' ? { knit: totals.K * scale, tuck: totals.T * scale, miss: totals.M * scale } : null,
-      selection_note: sel === 'needle'
+      selection_note: sel === 'wheel'
+        ? `Pattern wheel (or drum) at each of the ${feeders || F} feeders: pins / pegs in its slots select the needles — 2-way, each feeder raises the selected needles to its one cam (knit or tuck), the rest miss. The ${W}-needle repeat is pegged by hand on every wheel.`
+        : sel === 'needle'
         ? `Needle-by-needle selection: at each of the ${feeders || F} feeders an actuator sets every needle to ${P.transfer ? 'knit, tuck, miss or transfer' : 'knit, tuck or miss'} — the ${F}-feed × ${W}-needle repeat is a selection file, not a cam set-up.`
         : `${T.sequences.length} of ${P.tracks[b]} cam tracks used. Each feeder carries one cam per track: ${Object.entries({ knit: totals.K, tuck: totals.T, miss: totals.M }).filter(([, v]) => v).map(([k, v]) => `${v} ${k}`).join(', ')} cam position${totals.K + totals.T + totals.M > 1 ? 's' : ''} per ${F}-feeder repeat${rounds ? ` — ${Math.round((totals.K + totals.T + totals.M) * scale)} round the machine` : ''}.`,
     };
@@ -249,6 +311,61 @@ function plan(P, st, gating, needlesTotal, feeders) {
   return beds;
 }
 
+// ── stripes ───────────────────────────────────────────────────────────────
+// A stripe is the yarn each course is knitted in. Course c of the cloth is
+// knitted by feeder c mod n (n feeders round the machine), one revolution
+// after another. So:
+//   FEEDER STRIPE   when the stripe repeat (N courses) divides the feeders,
+//                   every feeder always knits the same yarn: thread feeder k
+//                   with yarn seq[k mod N] — any machine, no striper.
+//   STRIPER         otherwise feeder k must change yarn from revolution to
+//                   revolution; it needs a yarn changer (striper) with as many
+//                   fingers as the yarns that fall on it.
+// N courses here are feeds of the design (one feeder pass each).
+const gcd = (a, b) => (b ? gcd(b, a % b) : a);
+const lcm = (a, b) => (a / gcd(a, b)) * b;
+function parseStripe(text, feedColours) {
+  const seq = [];
+  const toks = String(text || '').toUpperCase().match(/[A-F]\s*\d+/g);
+  if (toks) toks.forEach((t) => { const c = t[0], n = Math.min(500, +t.slice(1).trim()); for (let k = 0; k < n; k++) seq.push(c); });
+  if (!seq.length && feedColours && feedColours.some(Boolean)) feedColours.forEach((c) => seq.push(c || 'A'));
+  return seq.length ? seq.slice(0, 2000) : null;
+}
+function stripeRequirement(seq, F, dia) {
+  if (!seq) return null;
+  const N = seq.length, L = lcm(F, N);
+  return { courses: N, colours: new Set(seq).size, lcm: L, dia: dia || 30 };
+}
+// a feeder stripe needs lcm(feeds, stripe) feeders: more than the machine carries → stripers
+const needsStriper = (st, P) => !!st && st.colours > 1 && st.lcm > Math.floor(1.25 * P.fpi * st.dia);
+function stripePlan(seq, F, feeders, P, mass) {
+  const N = seq.length, L = lcm(F, N);
+  const feederStripe = feeders % N === 0 && feeders % F === 0;
+  let fingers = 1;
+  if (!feederStripe) {
+    const reps = N / gcd(N, feeders);
+    for (let k = 0; k < Math.min(feeders, 400); k++) {
+      const set = new Set();
+      for (let r = 0; r < reps; r++) set.add(seq[(k + r * feeders) % N]);
+      fingers = Math.max(fingers, set.size);
+    }
+  }
+  // yarn per stripe colour: each course carries its feed's yarn (mass per feed of the design repeat)
+  const share = {};
+  let tot = 0;
+  for (let c = 0; c < L; c++) { const m = mass[c % F] || 0; share[seq[c % N]] = (share[seq[c % N]] || 0) + m; tot += m; }
+  const runs = [];
+  seq.forEach((c) => { if (runs.length && runs[runs.length - 1].colour === c) runs[runs.length - 1].courses++; else runs.push({ colour: c, courses: 1 }); });
+  if (runs.length > 1 && runs[0].colour === runs[runs.length - 1].colour) { runs[0].courses += runs.pop().courses; }
+  return {
+    courses: N, method: feederStripe ? 'feeder stripe' : 'striper',
+    threading: feederStripe ? Array.from({ length: Math.min(N, 48) }, (_, k) => ({ feeder: k + 1, yarn: seq[k] })) : null,
+    fingers_needed: feederStripe ? 1 : fingers, fingers_available: P.striper || 1,
+    revolutions_per_repeat: feederStripe ? null : lcm(N, feeders) / feeders,
+    runs, yarn_pct: Object.fromEntries(Object.entries(share).map(([k, v]) => [k, Math.round((v / (tot || 1)) * 1000) / 10])),
+  };
+}
+
 /**
  * Feed system for every feeder: how the yarn is delivered.
  *   positive tape feed   the yarn is metered at a set length per revolution
@@ -266,7 +383,7 @@ function plan(P, st, gating, needlesTotal, feeders) {
 function feedPlan(P, st, feeds, opts = {}) {
   const sel = P.selection === 'needle';
   return feeds.map((f, i) => {
-    const sys = sel ? 'storage feeder' : 'positive tape feed';
+    const sys = sel || P.selection === 'wheel' ? 'storage feeder' : P.striper && opts.striper ? 'positive tape feed through the striper' : 'positive tape feed';
     const why = sel
       ? 'the needles selected at this feeder change with the pattern, so the yarn taken changes from course to course: a storage feeder lets the needles draw what they need'
       : 'the yarn taken is the same every revolution, so it is metered at the course length by the quality pulley';
@@ -299,7 +416,7 @@ function compile(setup, P) {
       const c = row && row[b] && row[b][t];
       if (!c) { errors.push(`Feeder ${i + 1}: no cam given for ${b === 'C' ? 'cylinder' : 'dial'} track ${t} — taken as miss.`); return 'M'; }
       const s = String(c).toUpperCase()[0];
-      if (!['K', 'T', 'M'].includes(s)) { errors.push(`Feeder ${i + 1}, track ${t}: "${c}" is not a cam — use knit, tuck or miss.`); return 'M'; }
+      if (!['K', 'T', 'M', 'R'].includes(s)) { errors.push(`Feeder ${i + 1}, track ${t}: "${c}" is not a cam — use knit, tuck or miss.`); return 'M'; }
       if (P && P.cams[b] && !P.cams[b].includes(s)) errors.push(`Feeder ${i + 1}, ${b === 'C' ? 'cylinder' : 'dial'} track ${t}: the machine has no ${SYM_NAME[s]} cam on this bed.`);
       return s;
     }).join(''));
@@ -318,11 +435,12 @@ function describe(P) {
     id: P.id, label: P.label, auto: !!P.auto, kind: P.kind, gatings: P.gatings, selection: P.selection,
     tracks: { C: Number.isFinite(P.tracks.C) ? P.tracks.C : 'needle selection', D: P.tracks.D == null ? null : Number.isFinite(P.tracks.D) ? P.tracks.D : 'needle selection' },
     cams: P.cams, needle: P.needle, sinker: { type: P.sinker, text: SINKER[P.sinker] }, transfer: P.transfer, timing: P.timing || null,
-    build: { feeders_per_inch: P.fpi, speed_factor: P.sf, surface_speed_m_s: speedLimit(P).surface_m_s, gauges: P.gauges, dia: P.dia, basis: 'typical build for this class of machine (modelled)' }, use: P.use,
+    build: { feeders_per_inch: P.fpi, speed_factor: P.sf, surface_speed_m_s: speedLimit(P).surface_m_s, gauges: P.gauges, dia: P.dia, basis: P.custom ? 'your machine\'s own specification' : 'typical build for this class of machine (modelled)' }, use: P.use,
+    striper: P.striper || null, bed_transfer: !!P.bedTransfer, max_width: P.maxWidth || null, custom: !!P.custom,
     technique: P.technique || null, transfer_dirs: P.transferDirs || null, butts: P.butts || null,
   };
 }
 
 function list() { return ORDER.map((id) => describe({ ...PROFILES[id], id })); }
 
-module.exports = { PROFILES, ORDER, requirements, fit, autoProfile, resolve, plan, compile, describe, list, trackSeqs, feedPlan, SINKER, speedLimit };
+module.exports = { PROFILES, ORDER, requirements, fit, autoProfile, resolve, plan, compile, describe, list, trackSeqs, feedPlan, SINKER, speedLimit, parseStripe, stripeRequirement, stripePlan, customProfile, needsStriper };

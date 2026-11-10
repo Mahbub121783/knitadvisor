@@ -15,6 +15,9 @@
 //      needle is drawn through both.
 //   M  a miss: the yarn floats straight past, behind the held loop.
 //   -  no needle in that slot: the yarn passes straight across.
+//   E / R  a transfer to the next needle / to the needle opposite on the
+//      other bed: the needle is left empty, the loop's head leans onto the
+//      needle that took it.
 //
 // Units: one wale (needle pitch on a bed) = 1. Course spacing h = wales per cm
 // ÷ courses per cm of the finished fabric, so the loops have the fabric's own
@@ -69,8 +72,8 @@
     // a transfer (E): the loop on this needle is handed to the next needle at
     // that feed. Returns the feed of the transfer, or -1 if the loop is
     // knitted off here as usual.
-    var transferAt = function (b, j, c) {
-      for (var k = c + 1; k <= c + 3 * F; k++) { var a = act(b, j, k); if (a === 'K') return -1; if (a === 'E') return k; }
+    var transferAt = function (b, j, c, sym) {
+      for (var k = c + 1; k <= c + 3 * F; k++) { var a = act(b, j, k); if (a === 'K') return -1; if (a === (sym || 'E')) return k; }
       return -1;
     };
     // the receiving needle clears the transferred loop at its next knit, at
@@ -88,13 +91,14 @@
       var feed = c % F;
       var pos = [];
       beds.forEach(function (b, bi) { for (var j = 0; j < nW; j++) pos.push({ b: b, bi: bi, j: j, x: j + b.xoff }); });
+      var bedIndex = function (b) { return beds.indexOf(b); };
       pos.sort(function (p, q) { return p.x - q.x || p.bi - q.bi; });
 
       var pts = [], side = [], stitches = [];
       var push = function (x, yy, z, s) { pts.push({ x: x, y: yy, z: z }); side.push(s); };
       var prev = null;
       for (var i = 0; i < pos.length; i++) {
-        var p = pos[i], b = p.b, s = b.s, z0 = b.z0, X = p.x, y0 = y(c);
+        var p = pos[i], b = p.b, bi = bedIndex(b), s = b.s, z0 = b.z0, X = p.x, y0 = y(c);
         var a = act(b, p.j, c);
         if (prev) {
           // between two needles of one bed the yarn dips into a sinker loop;
@@ -108,6 +112,9 @@
           var n = nextKnit(b, p.j, c), t = tucksOn(b, p.j, c);
           var tk = transferAt(b, p.j, c), sh = 0;
           if (tk > -1) { n = knitFrom(b, p.j + tdir, tk); sh = 0.5 * tdir; rec.transferred = tk - c; }
+          // R: the loop is handed to the needle opposite on the other bed — its head leans across to it
+          var rk = beds.length > 1 ? transferAt(b, p.j, c, 'R') : -1, hz = 0;
+          if (rk > -1 && tk < 0) { var ob = beds[1 - bi]; n = knitFrom(ob, p.j, rk); hz = (ob.z0 - z0) * 0.8; rec.transferred = rk - c; rec.toBed = ob.key; }
           var yt = y(n) + 0.38 * h;
           // the feet go behind everything on the needle: the old loop and any tucks
           var fz = z0 - s * (0.14 + 0.16 * Math.min(2, t));
@@ -120,9 +127,9 @@
           if (n > c + 1) push(X - 0.42, yt - 0.64 * h, z0 + s * 0.15, s);
           // a transferred loop leans its head onto the needle that took it
           push(X - 0.39 + sh * 0.6, yt - 0.40 * h, z0 + s * 0.10, s);
-          push(X - 0.28 + sh, yt - 0.12 * h, z0 - s * 0.04, s);
-          push(X + sh, yt, z0 - s * 0.12, s);
-          push(X + 0.28 + sh, yt - 0.12 * h, z0 - s * 0.04, s);
+          push(X - 0.28 + sh, yt - 0.12 * h, z0 + hz - s * 0.04, s);
+          push(X + sh, yt, z0 + hz - s * 0.12, s);
+          push(X + 0.28 + sh, yt - 0.12 * h, z0 + hz - s * 0.04, s);
           push(X + 0.39 + sh * 0.6, yt - 0.40 * h, z0 + s * 0.10, s);
           if (n > c + 1) push(X + 0.42, yt - 0.64 * h, z0 + s * 0.15, s);
           push(X + 0.43, y0 + 0.40 * h, z0 + s * 0.17, s);

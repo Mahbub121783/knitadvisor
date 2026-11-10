@@ -168,7 +168,7 @@ function buildAxisGrid(pts, cell) {
   return { minX, minY, minZ, nx, ny, nz, cell, starts, sorted };
 }
 
-function contactOcclusionColours(geo, g, radius, reach, loopSeed, shade = 1) {
+function contactOcclusionColours(geo, g, radius, reach, loopSeed, shade = 1, tint = null) {
   const P = geo.attributes.position.array;
   const N = geo.attributes.normal.array;
   const count = geo.attributes.position.count;
@@ -205,7 +205,9 @@ function contactOcclusionColours(geo, g, radius, reach, loopSeed, shade = 1) {
     }
     const ao = 1 - Math.min(0.78, occ * 0.24);
     const kk = ao * variation * shade;     // shade: a yarn that reads lighter (a soft loop yarn)
-    col[o] = kk; col[o + 1] = kk; col[o + 2] = kk;
+    // tint: a striped course's own yarn colour, relative to the cloth's base colour
+    if (tint) { col[o] = kk * tint[0]; col[o + 1] = kk * tint[1]; col[o + 2] = kk * tint[2]; }
+    else { col[o] = kk; col[o + 1] = kk; col[o + 2] = kk; }
     // Abrasion and washing reach the outermost yarn first, on either face:
     // unoccluded AND facing out of the fabric plane.
     expo[v] = (1 - Math.min(1, occ * 0.31)) * Math.sqrt(Math.abs(qz));
@@ -259,7 +261,7 @@ export function buildFabricMesh(paths, material, opts = {}) {
   const grid = buildAxisGrid(axis, radius + reach);
 
   for (const { geo, path, seed, r } of built) {
-    contactOcclusionColours(geo, grid, r, reach, seed, path.shade || 1);
+    contactOcclusionColours(geo, grid, r, reach, seed, path.shade || 1, path.tint || null);
     const mesh = new THREE.Mesh(geo, material);
     if (shadows) { mesh.castShadow = true; mesh.receiveShadow = true; }
     group.add(mesh);

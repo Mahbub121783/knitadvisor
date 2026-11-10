@@ -171,7 +171,7 @@ function readBed(rows, name) {
   g.forEach((row, i) => {
     if (row.length !== w) throw new StudioError(`${name}: feed ${i + 1} has ${row.length} needles, feed 1 has ${w}. Every feed must cover the same needles.`);
     row.forEach((x, j) => {
-      if (!['K', 'T', 'M', 'E', '-'].includes(x)) throw new StudioError(`${name}: feed ${i + 1}, needle ${j + 1} is "${x}". Use K, T, M, E or -.`);
+      if (!['K', 'T', 'M', 'E', 'R', '-'].includes(x)) throw new StudioError(`${name}: feed ${i + 1}, needle ${j + 1} is "${x}". Use K, T, M, E, R or -.`);
       if (x === 'E' && name === 'Dial') throw new StudioError(`Dial: feed ${i + 1}, needle ${j + 1}: a transfer (E) is drawn on the cylinder — the loop moves to the next cylinder needle.`);
     });
   });
@@ -195,7 +195,7 @@ const shiftRows = (g, r, c) => g.map((_, i) => { const row = g[(i + r) % g.lengt
 const same = (a, b) => (!a && !b) || (a && b && a.length === b.length && a.every((row, i) => row.join('') === b[i].join('')));
 
 function matchCatalogue(st0) {
-  const st = { ...st0, beds: { C: st0.beds.C.map((r) => r.map((x) => (x === 'E' ? 'M' : x))), D: st0.beds.D } };
+  const st = { ...st0, beds: { C: st0.beds.C.map((r) => r.map((x) => (x === 'E' || x === 'R' ? 'M' : x))), D: st0.beds.D && st0.beds.D.map((r) => r.map((x) => (x === 'R' ? 'M' : x))) } };
   for (const f of CATALOGUE) {
     const t = KP.normaliseStructure(f);
     if (!t || t.feeds !== st.feeds || t.width !== st.width || !!t.beds.D !== !!st.beds.D) continue;
@@ -323,7 +323,7 @@ function loopRate(st, feedRows) {
     const g = st.beds[b]; if (!g) continue;
     for (let j = 0; j < st.width; j++) {
       if (feeds.every((i) => g[i][j] === '-')) continue;
-      n++; k += feeds.filter((i) => g[i][j] === 'K' || g[i][j] === 'T' || g[i][j] === 'E').length / feeds.length;
+      n++; k += feeds.filter((i) => g[i][j] === 'K' || g[i][j] === 'T' || g[i][j] === 'E' || g[i][j] === 'R').length / feeds.length;
     }
   }
   return n ? k / n : 1;
@@ -588,7 +588,8 @@ function solve(ctx, ground) {
   const width = widthAt(dia);
   const feedsRep = st.feeds;
   const fpi = ctx.profile && ctx.profile.fpi ? ctx.profile.fpi : M.fpi;
-  const feeders = +mach.feeders > 0 ? +mach.feeders : Math.max(feedsRep, Math.round((fpi * dia) / feedsRep) * feedsRep);
+  const unit = ctx.feederUnit || feedsRep;
+  const feeders = +mach.feeders > 0 ? +mach.feeders : Math.max(unit, Math.round((fpi * dia) / unit) * unit);
   const rpm = +mach.rpm > 0 ? +mach.rpm : Math.round((ctx.profile && ctx.profile.sf ? ctx.profile.sf : M.sf) / dia);
   const eff = (+mach.efficiency > 0 ? +mach.efficiency : 85) / 100;
 
@@ -817,6 +818,17 @@ function checksFor(ctx, S, T) {
     if (tD > capD) add('error', `Dial needs ${tD} needle tracks; the machine has ${capD}.`);
     else add('ok', `Dial: ${tD} track${tD > 1 ? 's' : ''} needed, machine has ${capD}.`);
   }
+  // transfers between the beds (R): the loop goes to the needle opposite
+  for (const [b, o, name, other] of [['C', 'D', 'cylinder', 'dial'], ['D', 'C', 'dial', 'cylinder']]) {
+    const g = st.beds[b]; if (!g) continue;
+    for (let i = 0; i < st.feeds; i++) for (let j = 0; j < st.width; j++) {
+      if (g[i][j] !== 'R') continue;
+      if (!st.beds[o]) { add('error', `Feed ${i + 1}, needle ${j + 1}: R hands the loop to the other bed — there is no dial. Draw on rib or interlock gating.`); continue; }
+      const rx = st.beds[o][i][j], next = g[(i + 1) % st.feeds][j];
+      if (rx !== 'K' && rx !== 'T') add('error', `Feed ${i + 1}, ${name} needle ${j + 1}: the loop goes to the ${other} needle opposite, which must knit or tuck at this feed to take it (it is "${rx}").`);
+      if (next !== 'K' && next !== 'T') add('note', `Feed ${i + 1}, ${name} needle ${j + 1}: after the transfer this needle stays empty — its wale continues on the ${other} (rib to jersey, or a reverse stitch in a face wale).`);
+    }
+  }
   // interlock gating: needle j of the cylinder faces needle j of the dial
   if (st.beds.D && ctx.gating === 'interlock') {
     for (let i = 0; i < st.feeds; i++) for (let j = 0; j < st.width; j++) {
@@ -903,6 +915,8 @@ function analyse(input) {
         sl_ratio: +f.sl_ratio > 0 ? Math.min(3, Math.max(0.3, +f.sl_ratio)) : 1,
       };
     });
+    // stripe colours as drawn, feed by feed (before the repeat is reduced)
+    const feedColours = C.map((_, i) => { const c = ((input.feeds || [])[i] || {}).colour; return /^[A-F]$/.test(c || '') ? c : null; });
     const elIn = input.elastane || {};
     // part-plating on alternate feeders needs an even number of feeds to be a repeat
     if (elIn.every === 'alternate' && C.length % 2) {
@@ -952,9 +966,14 @@ function analyse(input) {
     const pileFeed = st.beds.D ? -1 : feedRows.findIndex((f, i) => f.role === 'loop' && st.beds.C[i].includes('K'));
     // ── the machine: profile chosen (or picked) for what the notation asks ──
     ctx.transferDir = (input.machine || {}).transfer_dir === 'left' ? 'left' : 'right';
-    const req = KM.requirements(st, gating, feedRows, { pile: pileFeed > -1, transferDir: ctx.transferDir });
+    // stripes: the yarn each course is knitted in
+    const stripeSeq = KM.parseStripe((input.stripes || {}).sequence, feedColours);
+    const diaIn = +((input.machine || {}).dia) || 30;
+    const req = KM.requirements(st, gating, feedRows, { pile: pileFeed > -1, transferDir: ctx.transferDir, stripe: KM.stripeRequirement(stripeSeq, st.feeds, diaIn) });
     const profile = KM.resolve(input.machine, req);
     ctx.profile = profile;
+    // a feeder stripe needs a whole number of stripe repeats round the machine
+    if (req.stripe && !KM.needsStriper(req.stripe, profile)) ctx.feederUnit = req.stripe.lcm;
     let plush = null;
     if (pileFeed > -1) {
       // plain courses between the pile courses: the pile is spread over them.
@@ -1039,7 +1058,8 @@ function analyse(input) {
     }
 
     const transfers = st.beds.C.reduce((t, row) => t + row.filter((x) => x === 'E').length, 0);
-    const T = { C: KP.tracksOf(transfers ? st.beds.C.map((r) => r.map((x) => (x === 'E' ? 'M' : x))) : st.beds.C), D: KP.tracksOf(st.beds.D) };
+    const noR = (g) => g && g.map((r) => r.map((x) => (x === 'E' || x === 'R' ? 'M' : x)));
+    const T = { C: KP.tracksOf(noR(st.beds.C)), D: KP.tracksOf(noR(st.beds.D)) };
     ctx.transfers = transfers;
     let checks = checksFor(ctx, S, T);
     if (plush) {
@@ -1070,6 +1090,13 @@ function analyse(input) {
       const v = (Math.PI * S.dia * 0.0254 * S.rpm) / 60, vmax = KM.speedLimit(profile).max_m_s;
       if (v > vmax) add('warn', `${S.rpm} RPM on ${S.dia}" is ${r2(v)} m/s at the cylinder surface — above the ${vmax} m/s this class of machine runs at (${profile.sf} RPM × inch, typical). Expect press-off, needle and latch wear${profile.selection === 'needle' ? ', and selection errors' : ''}.`);
       if (D && profile.timing && profile.timing.length === 1 && gating === 'rib') add('note', `${profile.label} runs ${profile.timing[0]} timing only.`);
+      if (stripeSeq) {
+        const sp = KM.stripePlan(stripeSeq, st.feeds, S.feeders, profile, Array(st.feeds).fill(1));
+        if (sp.method === 'striper' && sp.fingers_needed > (profile.striper || 1)) add('error', `Stripes on ${S.feeders} feeders: a feeder has to change between ${sp.fingers_needed} yarns — ${profile.striper ? `the stripers have ${profile.striper} fingers` : 'this machine has no stripers'}.${!profile.striper && sp.courses <= 200 ? ` Or make the feeders a multiple of ${KM.stripeRequirement(stripeSeq, st.feeds).lcm} so every feeder keeps one yarn.` : ''}`);
+        else if (sp.method === 'feeder stripe') add('ok', `Feeder stripe: ${sp.courses}-course repeat in ${new Set(stripeSeq).size} yarns — every feeder keeps one yarn (${S.feeders} feeders = ${S.feeders / sp.courses} stripe repeats per revolution).`);
+        else add('ok', `Striper stripe: each feeder changes between up to ${sp.fingers_needed} yarns, the repeat takes ${sp.revolutions_per_repeat} revolution${sp.revolutions_per_repeat > 1 ? 's' : ''}.`);
+        if (+((input.machine || {}).feeders) > 0 && sp.method === 'striper' && !profile.striper) add('note', 'Your feeder count is not a multiple of the stripe repeat, so the stripe cannot be threaded feeder by feeder.');
+      }
       checks = checks.concat(mc);
     }
     {
@@ -1215,7 +1242,16 @@ function analyse(input) {
         beds: mPlan,
         transfer_dir: req.transfer ? ctx.transferDir : null,
         speed: { rpm: S.rpm, surface_m_s: r2((Math.PI * S.dia * 0.0254 * S.rpm) / 60), max_m_s: KM.speedLimit(profile).max_m_s, speed_factor: profile.sf, basis: 'RPM × diameter of this class of machine (typical build, modelled)' },
-        feeds: KM.feedPlan(profile, st, feedRows, { elastaneFeeds: elastane ? elastane.feeds : [], pileFeed }),
+        feeds: KM.feedPlan(profile, st, feedRows, { elastaneFeeds: elastane ? elastane.feeds : [], pileFeed, striper: KM.needsStriper(req.stripe, profile) }),
+        stripes: stripeSeq ? (() => {
+          const sp = KM.stripePlan(stripeSeq, st.feeds, S.feeders, profile, S.feeds.length === st.feeds ? S.feeds.map((f) => f.mass || f.mass_share_pct || 1) : Array(st.feeds).fill(1));
+          // stripe height in the cloth: the design repeat's feeds make its face courses
+          const kf = Array.from({ length: st.feeds }, (_, i) => i).filter((i) => [st.beds.C, st.beds.D].filter(Boolean).some((g) => g[i].includes('K'))).length;
+          const coursesPerFeed = kf / st.feeds / (st.beds.D ? 2 : 1) * (st.beds.D ? 2 : 1);
+          sp.repeat_mm = r1((sp.courses * coursesPerFeed / S.cpc) * 10);
+          sp.runs = sp.runs.map((x) => ({ ...x, mm: r1((x.courses * coursesPerFeed / S.cpc) * 10) }));
+          return sp;
+        })() : null,
       },
       finish: finish ? {
         brushed: finish.brush, passes: finish.passes, sheared: finish.sheared,

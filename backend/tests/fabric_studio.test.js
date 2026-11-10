@@ -93,7 +93,7 @@ for (const t of T) {
   const nothing = S.analyse({ grid: { C: ['KM', 'KM'] }, yarn: { ne: 30 }, target: { gsm: 160 } });
   assert(nothing.success);
   const bad = S.analyse({ grid: { C: ['KX'] }, yarn: { ne: 30 }, target: { gsm: 160 } });
-  assert(!bad.success && /Use K, T, M, E or -/.test(bad.error));
+  assert(!bad.success && /Use K, T, M, E, R or -/.test(bad.error));
 }
 
 // 8. elastane by mass balance: 20 D at draft 2.6 in 30s, full plating

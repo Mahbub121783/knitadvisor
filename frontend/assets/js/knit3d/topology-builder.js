@@ -132,7 +132,7 @@ function buildCourse(c, p) {
     const stitch = stitchPoints(token, ctx);
     for (const pt of stitch) points.push(pt);
   }
-  return { points, starts };
+  return { points, starts, course: c };
 }
 
 // Loop height of an unraised terry back, in wale units (one wale ≈ 0.85 mm

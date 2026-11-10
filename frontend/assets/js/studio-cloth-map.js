@@ -70,7 +70,7 @@
         sample = cell(C);
       }
       sampleBack = sample;
-    } else if (d.bed !== 'interlock' && !has(C, ['T', 'M', 'E']) && !has(D, ['T', 'M', 'E'])) {
+    } else if (d.bed !== 'interlock' && !has(C, ['T', 'M', 'E', 'R']) && !has(D, ['T', 'M', 'E', 'R'])) {
       // plain rib: its own needle set-out, cylinder needles then dial needles
       var a = C[0].filter(function (x) { return x !== '-'; }).length || 1, b = D[0].filter(function (x) { return x !== '-'; }).length || 1;
       con = { type: 'rib', base: 'double', label: a + '×' + b + ' rib' + (brushed ? ' — brushed' : ''), mesh: false, brush: brushed, ribRepeat: { a: a, b: b } };
@@ -81,10 +81,25 @@
       con = { type: 'interlock', base: 'double', label: (d.bed === 'interlock' ? (has(C, ['T', 'M']) || has(D, ['T', 'M']) ? 'patterned interlock' : 'interlock') : 'double jersey (rib gating)') + (brushed ? ' — brushed' : ''), mesh: false, brush: brushed };
       sample = cell(C); sampleBack = cell(D);
       pattern.hasTM = has(C, ['T', 'M']) || d.bed !== 'interlock';
-      if (has(C, ['E', '-']) || has(D, ['E', '-'])) notes.push('Empty needles and transfers on a double bed are drawn as misses in the real view.');
+      if (has(C, ['E', '-', 'R']) || has(D, ['E', '-', 'R'])) notes.push('Empty needles and transfers on a double bed are drawn as misses in the real view; the loop structure view draws the transfer.');
     }
     if (brush === 'back' || brush === 'both') notes.push('Brushed on the back: press "Show back" to see the nap.');
-    return { construction: con, pattern: pattern, sample: sample, sampleBack: sampleBack, photo: photo, notes: notes };
+    // stripes: each course in its own yarn colour, as a tint on the base colour
+    var courseTint = null, base = null;
+    if (d.stripe && d.stripe.seq && d.stripe.seq.length) {
+      var seq = d.stripe.seq, cols = d.stripe.colours || {};
+      var rgb = function (hx) { var n = parseInt(String(hx || '#888888').slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+      // a neutral grey base (a white base would take a white finish's optical
+      // brightener), each course scaled to its own yarn's colour in linear light
+      base = '#b4b4b4';
+      var lin = function (v) { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+      var g0 = lin(0xb4);
+      courseTint = function (c) { var k = rgb(cols[seq[mod(c, seq.length)]]); return [lin(k[0]), lin(k[1]), lin(k[2])].map(function (x) { return Math.max(0.004, x) / g0; }); };
+      // the baked swatch repeats over the structure: a longer stripe cannot be baked, the turnable 3D shows it
+      var L = (function (a, b) { var g = function (x, y) { return y ? g(y, x % y) : x; }; return a / g(a, b) * b; })(pattern.rows, seq.length);
+      if (L <= 32) pattern.rows = L; else { photo = false; notes.push('The stripe repeat is ' + seq.length + ' courses: shown on the turnable 3D (the swatch photo repeats over 32 courses at most).'); }
+    }
+    return { construction: con, pattern: pattern, sample: sample, sampleBack: sampleBack, photo: photo, notes: notes, courseTint: courseTint, baseColour: base };
   }
 
   var api = { clothSpec: clothSpec };
