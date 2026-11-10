@@ -22,8 +22,9 @@
  * GEOMETRY (derived — Spencer, Knitting Technology, warp-knit yarn path):
  * per course the yarn forms the loop round the needle and runs the underlap
  * to the next loop; with needle pitch p = 25.4/E, course spacing c = 10/cpc,
- * needle radius rn = (0.40 p + δ)/2:
+ * wrap radius rn = (0.45 p + δ)/2 (fitted on 31 published constructions):
  *   overlap   2c + π rn + (o − 1) p        (two legs, the head, a wider overlap)
+ *             + π δ on a pillar (the chain loop wraps the loop below it)
  *   underlap  √((u p)² + c²)               (diagonally across u needles over one course)
  *   inlay     √((u p)² + c²)               (no loop: it only crosses)
  *   runner    Σ over the repeat ÷ courses × 480   (mm per rack of 480 courses)
@@ -35,8 +36,10 @@
  * WEIGHT: GSM = Σ bars [ends/cm × courses/cm × ℓ_course(mm) × tex] / 100,
  * in the FINISHED state: a warp knit narrows and closes up off the machine
  * (heat setting, relaxation). Finished wales = machine wales × kw, courses
- * × kc — kw, kc per machine class MODELLED (tricot 1.4 / 1.1, raschel 1.2 /
- * 1.1, with elastane 1.8 / 1.6); a finished width you give replaces kw.
+ * × kc: rigid tricot 1.28 / 1.07 (medians of 15 published nylon tricots);
+ * with elastane 1.8 (a published elastic locknit: 330 cm knitted, 140–150 cm
+ * greige, widened 20–30 % in pre-setting) / 1.6 (modelled); raschel 1.2 / 1.1
+ * modelled. A finished width you give replaces kw.
  * Elastane is fed drafted: its runner is the geometric length ÷ draft.
  */
 'use strict';
@@ -50,13 +53,16 @@ const lcm = (a, b) => (a / gcd(a, b)) * b;
 class WarpError extends Error {}
 
 const RACK = 480;
-const TN = 0.40;            // compound / latch needle thickness ≈ 0.40 × pitch (modelled)
+// the yarn's wrap round the needle (needle and the yarn under it) ≈ 0.45 × pitch:
+// fitted on 31 published constructions (see engine/catalog/warp-literature.js)
+const TN = 0.45;
 
 // ── machine classes ─────────────────────────────────────────────────────
 const MACHINES = {
   tricot: {
     label: 'Tricot (compound needles, 2–4 guide bars)', bars: [2, 4], gauges: [24, 44], speed: [1500, 3300], shog: 6, needle: 'compound needle', beds: 1,
-    kw: 1.4, kc: 1.1, use: 'lingerie, sportswear, linings, brushed and printed tricot, swimwear (with elastane)',
+    // finished / machine wales and courses: medians of 15 published 30 d nylon tricots (kw 1.06–1.64, kc 0.68–1.32)
+    kw: 1.28, kc: 1.07, use: 'lingerie, sportswear, linings, brushed and printed tricot, swimwear (with elastane)',
   },
   raschel: {
     label: 'Raschel (2–8 guide bars)', bars: [1, 8], gauges: [12, 32], speed: [800, 2000], shog: 10, needle: 'compound (or latch) needle', beds: 1,
@@ -139,7 +145,9 @@ function courseLength(laps, p, c, delta) {
   const rn = (TN * p + delta) / 2;
   let sum = 0;
   for (const l of laps) {
-    const over = l.inlay ? 0 : 2 * c + Math.PI * rn + Math.max(0, l.o - 1) * p;
+    // a pillar (no underlap) draws each loop straight through the loop below it on the
+    // same needle: its yarn turns once more round that loop's yarn (+ π·δ) — fitted: −9.8 % → 0 %
+    const over = l.inlay ? 0 : 2 * c + Math.PI * rn + Math.max(0, l.o - 1) * p + (l.u === 0 ? Math.PI * delta : 0);
     const under = Math.sqrt((l.u * p) ** 2 + c * c);
     sum += over + under;
   }
@@ -308,7 +316,7 @@ function analyse(input) {
       bars: barsOut,
       character,
       lapping: lappingPaths,
-      basis: 'geometry derived (loop legs, needle wrap, diagonal underlap); needle thickness 0.40 × pitch, finished-state factors and shog limits modelled — no factory warp records yet',
+      basis: 'geometry derived (loop legs, needle wrap, diagonal underlap), checked on 31 published constructions — runner median error about 4 %; wrap radius and the pillar term fitted there; tricot finished-state factors from 15 published nylon tricots; raschel factors and shog limits modelled; no factory warp records yet',
     };
   } catch (e) {
     if (e instanceof WarpError) return { success: false, error: e.message };
