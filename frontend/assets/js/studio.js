@@ -434,11 +434,29 @@
     $('st-fm').value = FM.list.some(function (m) { return String(m.id) === String(cur); }) ? cur : '';
     $('st-fmlog').disabled = !$('st-fm').value;
   }
+  // the pool: join / leave, and what it covers (only structures with at least min_mills other mills behind them)
+  function poolShow(r) {
+    $('st-pool').checked = !!r.member;
+    var nice = function (g) { return String(g).replace(/_/g, ' ').replace('+L', ' + elastane'); };
+    $('st-poolstat').innerHTML = !r.member ? (r.my_rolls ? 'Not in the pool. You have ' + r.my_rolls + ' roll' + (r.my_rolls === 1 ? '' : 's') + ' logged; joining shares only the one number per structure described above.' : '')
+      : r.covered.length ? 'In the pool' + (r.mills ? ' with ' + r.mills + ' mills' : '') + '. It can start a new machine on: ' + r.covered.map(function (c) { return esc(nice(c.group)) + ' (' + c.accounts + ' mills)'; }).join(', ') + '.'
+      : 'In the pool. Fewer than ' + r.min_mills + ' other mills have rolls on any one structure yet, so nothing comes back yet &mdash; your rolls still count towards others once there are enough of you.';
+  }
+  function poolLoad() {
+    apiFetch('/api/studio/pool').then(poolShow).catch(function () {});
+  }
   function fmLoad() {
     return apiFetch('/api/studio/floor/machines').then(function (r) { FM.list = r.machines || []; fmRender(); }).catch(function () { FM.list = []; fmRender(); });
   }
   function bindFloor() {
     fmLoad().then(function () { if ($('st-fm').value) schedule(); });
+    poolLoad();
+    $('st-pool').addEventListener('change', function () {
+      var box = this, want = box.checked; box.disabled = true;
+      apiFetch('/api/studio/pool', { method: 'PUT', body: { join: want } }).then(function (r) { poolShow(r); schedule(); })
+        .catch(function (e) { box.checked = !want; $('st-poolstat').innerHTML = '<span style="color:var(--bad, #b3261e)">' + esc((e.data && e.data.error) || e.message || 'Could not update the pool.') + '</span>'; })
+        .then(function () { box.disabled = false; });
+    });
     $('st-fm').addEventListener('change', function () {
       try { localStorage.setItem(FMKEY, this.value); } catch (_) {}
       $('st-fmlog').disabled = !this.value; fmStat('');
@@ -584,7 +602,8 @@
       kpi('Wales × courses', f.wpi + ' × ' + f.cpi, 'per inch · ' + f.wpc + ' × ' + f.cpc + ' per cm', est) +
       '</div>' +
       // how right it is: measured, not claimed — the cross-validation on the factory records
-      (A && A.level === 'machine' ? '<div class="st-acc"><b>How right is this?</b> Learned on <b>' + esc(A.machine) + '</b> from ' + A.supported_by_rolls + ' of your roll' + (A.supported_by_rolls === 1 ? '' : 's') + ' of this structure: GSM × ' + A.gsm_factor + ', width × ' + A.width_factor + ' against the factory model. Expected: GSM typically ' + A.gsm.typical_error_pct + '% off (' + A.gsm.within_5_pct + '% within ±5%), width typically ' + A.width.typical_error_pct + '% off (' + A.width.within_5_pct + '% within ±5%). <span title="' + esc(A.method) + '">' + esc(A.basis) + '.</span> Each roll you log moves it; a few rolls move it a little, ten move it most of the way.</div>' :
+      (A && A.level === 'pooled' ? '<div class="st-acc"><b>How right is this?</b> You have no roll of your own on this structure yet, so the Studio started from the pooled rolls of other mills (' + Math.max(A.pooled.gsm_mills, A.pooled.width_mills) + ' of them, none of them yours): GSM × ' + A.gsm_factor + ', width × ' + A.width_factor + ' against the factory model. The range is the factory records\' own &mdash; the pool moves the centre, not the confidence. Expected: GSM typically ' + A.gsm.typical_error_pct + '% off, width typically ' + A.width.typical_error_pct + '% off. Log a roll on a floor machine and it takes over.</div>' :
+      A && A.level === 'machine' ? '<div class="st-acc"><b>How right is this?</b> Learned on <b>' + esc(A.machine || 'your machine') + '</b> from ' + A.supported_by_rolls + ' of your roll' + (A.supported_by_rolls === 1 ? '' : 's') + ' of this structure: GSM × ' + A.gsm_factor + ', width × ' + A.width_factor + ' against the factory model. Expected: GSM typically ' + A.gsm.typical_error_pct + '% off (' + A.gsm.within_5_pct + '% within ±5%), width typically ' + A.width.typical_error_pct + '% off (' + A.width.within_5_pct + '% within ±5%). <span title="' + esc(A.method) + '">' + esc(A.basis) + '.</span> Each roll you log moves it; a few rolls move it a little, ten move it most of the way.</div>' :
       A ? '<div class="st-acc"><b>How right is this?</b> When the Studio predicted ' + (A.level === 'estimate' ? 'structures it had no records for' : A.level === 'close' ? 'structures like this one' : 'cloths like this one') + ' without having seen them, the finished GSM was typically ' + A.gsm.typical_error_pct + '% off; ' +
         A.gsm.within_3_pct + '% landed within ±3%, ' + A.gsm.within_5_pct + '% within ±5%, ' + A.gsm.within_8_pct + '% within ±8%' + (A.width ? '. Width: typically ' + A.width.typical_error_pct + '% off, ' + A.width.within_5_pct + '% within ±5%' : '') + '. <span title="' + esc(A.method) + ' (' + esc(A.generated) + ')">' + esc(A.basis) + '.</span> Your own trial rolls narrow this (Trial rolls below).</div>' : '');
     if (f.calibration) {
@@ -1315,12 +1334,13 @@
     if (!r.candidates.length) { box.innerHTML = '<p class="st-p">No knittable structure reached ' + r.goal.gsm + ' GSM with these limits. Allow more needles or feeds, or another bed.</p>'; return; }
     var bar = function (v) { return '<span class="inv-bar"><i style="width:' + Math.round(v * 100) + '%"></i></span>'; };
     box.innerHTML = '<p class="st-hint" style="margin:0 0 8px">' + r.stats.structures_seen + ' structures looked at, ' + r.stats.knittable + ' knit at ' + r.goal.gsm + ' GSM' + (r.cached ? ' (from memory)' : '') + '. ' + esc(r.basis) + '</p>' +
+      (r.machine_profile ? '<p class="st-hint" style="margin:0 0 8px;color:var(--t1)"><b>Weighed for ' + esc(r.machine_profile.name || 'your pool') + '</b>: ' + (r.machine_profile.rolls ? r.machine_profile.rolls + ' of its logged roll' + (r.machine_profile.rolls === 1 ? '' : 's') : 'no rolls of its own yet') + (r.machine_profile.pooled ? (r.machine_profile.rolls ? ', started from the pool' : ', started from the pool of other mills') : '') + '. Each card says how many rolls stand behind it.</p>' : '') +
       '<div class="inv-grid">' + r.candidates.map(function (c, i) {
         var a = c.accuracy;
         return '<div class="inv-card"><div class="inv-head"><b>' + esc(c.name) + '</b>' + (c.is_new ? '<span class="st-badge estimate">new</span>' : '<span class="st-badge calibrated">known</span>') + '</div>' +
           '<div class="inv-body">' + progThumb(c.grid) + '<div class="inv-traits">' + Object.keys(TRAIT_LABEL).map(function (t) { return '<div' + (INV.prefs[t] ? ' class="want"' : '') + '><span>' + TRAIT_SHORT[t] + '</span>' + bar(c.traits[t]) + '</div>'; }).join('') + '</div></div>' +
           '<div class="inv-meta">' + (c.bed === 'single' ? 'Single bed' : c.gating === 'interlock' ? 'Interlock gating' : 'Rib gating') + ' · ' + c.feeds + ' feeds × ' + c.needles + ' needles · ' + esc(c.settings.yarn) + ', ' + c.settings.gauge + ' GG, ' + c.settings.sl_mm + ' mm</div>' +
-          (a ? '<div class="inv-meta">8 in 10 land <b>' + a.gsm_range.join('–') + ' GSM</b> · ±5%: ' + a.within_5_pct + '% of the time</div>' : '') +
+          (a ? '<div class="inv-meta">8 in 10 land <b>' + a.gsm_range.join('–') + ' GSM</b> · ±5%: ' + a.within_5_pct + '% of the time' + (a.level === 'machine' ? ' · <b>' + a.supported_by_rolls + ' of your roll' + (a.supported_by_rolls === 1 ? '' : 's') + '</b> behind it' : a.level === 'pooled' ? ' · from the pool' : '') + '</div>' : '') +
           (c.warnings.length ? '<div class="inv-meta" style="color:var(--warn)">' + c.warnings.length + ' warning' + (c.warnings.length > 1 ? 's' : '') + ': ' + esc(c.warnings[0]) + '</div>' : '') +
           '<button type="button" class="st-btn primary" data-inv-use="' + i + '">Open in the designer</button></div>';
       }).join('') + '</div>';
@@ -1332,7 +1352,8 @@
     INV.busy = true; $('inv-go').disabled = true; $('inv-go').textContent = 'Searching…';
     $('inv-out').innerHTML = '<p class="st-hint">The Studio is knitting hundreds of programmes to find the best…</p>';
     var body = { gsm: gsm, width_in: num('st-width') || null, bed: INV.bed, prefs: INV.prefs, novelty: INV.novelty, max_needles: +$('inv-needles').value, max_feeds: +$('inv-feeds').value,
-      yarn: { fibre: $('st-fibre').value }, machine: { gauge: num('st-gauge') || null, dia: num('st-dia') || null } };
+      yarn: { fibre: $('st-fibre').value }, machine: { gauge: num('st-gauge') || null, dia: num('st-dia') || null },
+      floor_machine_id: $('st-fm').value ? +$('st-fm').value : null };
     apiFetch('/api/studio/invent', { method: 'POST', body: body }).then(function (r) { INV.last = r; renderInventResults(); }, function (e) {
       $('inv-out').innerHTML = '<div class="st-err">' + esc((e.data && e.data.error) || e.message || 'The search failed.') + '</div>';
     }).then(function () { INV.busy = false; $('inv-go').disabled = false; $('inv-go').textContent = 'Find structures'; });

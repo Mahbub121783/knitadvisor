@@ -443,6 +443,9 @@
               <button type="button" class="st-btn" id="st-fmsave">Add machine</button>
             </div>
             <div id="st-fmstat" class="st-hint"></div>
+            <label class="st-check" style="margin-top:8px"><input type="checkbox" id="st-pool"> Learn with other mills (the pool)</label>
+            <p class="st-hint" style="margin:2px 0 0">Shares <b>one number per structure</b> &mdash; how far your rolls fall from the Studio's prediction &mdash; and never a roll, a design, a machine or a name. In return a machine with no rolls of its own starts from what other mills' rolls say, where at least <b>5 other mills</b> have rolls on that structure (their median, kept within &plusmn;10% for weight and &plusmn;8% for width). Your own rolls take over as you log them. Leave whenever you like: your rolls drop out of the number at once.</p>
+            <div id="st-poolstat" class="st-hint"></div>
           </div>
         </div>
 
@@ -481,7 +484,7 @@
       <section>
         <div class="st-card" id="inv-card">
           <div class="st-step"><b>&#10022;</b> Design from a goal</div>
-          <p class="st-hint" style="margin:0 0 8px">Say what the cloth must be, and the Studio designs it: it knits hundreds of needle programmes — the catalogue's and new ones it breeds — and shows the ones that reach your GSM (from Target) on a real yarn, gauge and stitch length, best for what you ask. Open one in the designer to keep going.</p>
+          <p class="st-hint" style="margin:0 0 8px">Say what the cloth must be, and the Studio designs it: it knits hundreds of needle programmes — the catalogue's and new ones it breeds — and shows the ones that reach your GSM (from Target) on a real yarn, gauge and stitch length, best for what you ask. Open one in the designer to keep going. Pick a <b>floor machine</b> (Trial rolls, on the left) and every candidate is weighed the way <i>that machine</i> knits: its own rolls, and the pool's if you have joined.</p>
           <div class="inv-row"><span class="inv-lbl">Machine</span><span class="st-seg inv-seg" data-inv-bed><button type="button" data-v="single">Single bed</button><button type="button" data-v="double">Double bed</button><button type="button" data-v="any" class="on">Either</button></span></div>
           <div id="inv-traits"></div>
           <div class="inv-row"><span class="inv-lbl">Structure</span><span class="st-seg inv-seg" data-inv-nov><button type="button" data-v="proven">Proven</button><button type="button" data-v="balanced" class="on">Balanced</button><button type="button" data-v="new">Surprise me</button></span></div>
@@ -695,6 +698,6 @@
 <script src="assets/js/studio-warp-geom.js?v=20261111a"></script>
 <script src="assets/js/studio-warp.js?v=20261111h"></script>
 <script src="assets/js/studio-needle.js?v=20261110d"></script>
-<script src="assets/js/studio.js?v=20261112c"></script>
+<script src="assets/js/studio.js?v=20261113a"></script>
 </body>
 </html>

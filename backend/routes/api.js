@@ -1325,17 +1325,31 @@ const studioInvent = require('../engine/domain/studio-invent');
 const inventLimiter = createRateLimiter({ name: 'studio_invent', max: 8, windowMs: 60 * 1000, message: 'Too many design searches — wait a minute.' });
 const inventCache = new Map();
 let inventRunning = 0;
-router.post('/studio/invent', requireUser, inventLimiter, (req, res) => {
-  let key;
-  try { key = JSON.stringify(studioInvent.cleanGoal(req.body || {})); } catch (err) {
+router.post('/studio/invent', requireUser, inventLimiter, async (req, res) => {
+  let body, key;
+  try {
+    // the machine the design is for: its learned profile (and the pool's numbers) weigh every candidate, and its gauge / diameter fill in what the goal left open
+    const { floor_machine_id, floor: _f, ...goal } = req.body || {};
+    const ff = await floorFor(req.user.id, floor_machine_id);
+    if (ff.notFound) return res.status(404).json({ success: false, error: 'Floor machine not found.' });
+    body = goal;
+    if (ff.floor) body.floor = ff.floor;
+    if (ff.machine) {
+      const mm = { ...(goal.machine || {}) };
+      for (const k of ['gauge', 'dia']) if (!(+mm[k] > 0) && +ff.machine[k] > 0) mm[k] = +ff.machine[k];
+      body.machine = mm;
+    }
+    key = crypto.createHash('sha1').update(JSON.stringify(studioInvent.cleanGoal(body))).digest('hex');
+  } catch (err) {
     if (err instanceof studioInvent.InventError) return res.status(400).json({ success: false, error: err.message });
+    console.error('[studio] invent goal failed:', err);
     return res.status(400).json({ success: false, error: 'Could not read the goal.' });
   }
   if (inventCache.has(key)) { const v = inventCache.get(key); inventCache.delete(key); inventCache.set(key, v); return res.json({ ...v, cached: true }); }
-  if (inventRunning >= 2) return res.status(503).json({ success: false, code: 'BUSY', error: 'The design search is busy right now — try again in a few seconds.' });
+  if (inventRunning >= 2) return res.status(503).json({ success: false, code: 'BUSY', error: 'The design search is busy right now - try again in a few seconds.' });
   inventRunning++;
   try {
-    const out = studioInvent.invent(req.body || {}, { maxEvals: 320, timeMs: 3500 });
+    const out = studioInvent.invent(body, { maxEvals: 320, timeMs: 3500 });
     inventCache.set(key, out);
     if (inventCache.size > 100) inventCache.delete(inventCache.keys().next().value);
     res.json(out);
@@ -1349,12 +1363,27 @@ router.post('/studio/invent', requireUser, inventLimiter, (req, res) => {
 // Floor machines and their logged rolls (migration 043): the Studio learns each machine's own
 // bias, structure by structure (engine/domain/machine-learning.js). Private to the account.
 const floorRepo = require('../db/repositories/floor-repo');
+// The pool (migration 044): mills that opt in share one clamped number per structure, and receive the
+// same from the others - only from cells where 5 other accounts stand behind it (engine/domain/machine-pool.js).
+const poolRepo = require('../db/repositories/pool-repo');
 const floorFail = (res, err, what) => {
   if (err instanceof floorRepo.FloorError) return res.status(400).json({ success: false, error: err.message });
   console.error(`[studio] ${what} failed:`, err);
   res.status(500).json({ success: false, error: `Could not ${what}.` });
 };
 const idOf = (v) => { const n = parseInt(v, 10); return Number.isInteger(n) && n > 0 ? n : null; };
+
+// Join or leave the pool, and see what it covers. Leaving takes the account's rolls out of every number at once.
+router.get('/studio/pool', requireUser, async (req, res) => {
+  try { res.json({ success: true, ...(await poolRepo.status(req.user.id)), min_mills: poolRepo.MIN_ACCOUNTS }); } catch (err) { floorFail(res, err, 'read the pool'); }
+});
+router.put('/studio/pool', requireUser, async (req, res) => {
+  try {
+    if (typeof (req.body || {}).join !== 'boolean') return res.status(400).json({ success: false, error: 'Say whether to join or leave.' });
+    await (req.body.join ? poolRepo.members.join(req.user.id) : poolRepo.members.leave(req.user.id));
+    res.json({ success: true, ...(await poolRepo.status(req.user.id)), min_mills: poolRepo.MIN_ACCOUNTS });
+  } catch (err) { floorFail(res, err, 'update the pool'); }
+});
 
 router.get('/studio/floor/machines', requireUser, async (req, res) => {
   try { res.json({ success: true, machines: await floorRepo.machines.list(req.user.id) }); } catch (err) { floorFail(res, err, 'load your machines'); }
@@ -1409,6 +1438,7 @@ router.post('/studio/floor/rolls', requireUser, async (req, res) => {
       gsm: +roll.gsm, width_in: roll.width_in ? +roll.width_in : null, gsm_model: p.model_gsm, width_model: roll.width_in ? p.model_width_in : null,
       knitted_on: /^\d{4}-\d{2}-\d{2}$/.test(r.knitted_on || '') ? r.knitted_on : null,
     });
+    poolRepo.invalidate();
     res.json({ success: true, roll: row, off_gsm_pct: Math.round((+roll.gsm / p.model_gsm - 1) * 1000) / 10, off_width_pct: roll.width_in ? Math.round((+roll.width_in / p.model_width_in - 1) * 1000) / 10 : null });
   } catch (err) { floorFail(res, err, 'log the roll'); }
 });
@@ -1416,25 +1446,37 @@ router.delete('/studio/floor/rolls/:id', requireUser, async (req, res) => {
   const id = idOf(req.params.id); if (!id) return res.status(400).json({ success: false, error: 'Invalid id.' });
   try {
     if (!(await floorRepo.rolls.remove(req.user.id, id))) return res.status(404).json({ success: false, error: 'Roll not found.' });
+    poolRepo.invalidate();
     res.json({ success: true });
   } catch (err) { floorFail(res, err, 'delete the roll'); }
 });
 
-// One answer for a design, from memory when the same design was answered before. A floor machine
-// named in the body: its rolls (the account's own) go in with the design, and the cache key with them.
-async function studioAnswer(userId, input) {
-  let body = input || {}, floor = null;
-  if (body.floor_machine_id != null) {
-    const { floor_machine_id, ...rest } = body;
-    body = rest;
-    const fm = idOf(floor_machine_id);
-    if (fm) {
-      const m = await floorRepo.machines.get(userId, fm);
-      if (!m) return { status: 404, body: JSON.stringify({ success: false, error: 'Floor machine not found.' }) };
-      body.floor = { name: m.name, rolls: floorRepo.asLearning(await floorRepo.rolls.forMachine(userId, fm)) };
-      floor = m.name;
-    }
+/**
+ * What the Studio knows about THIS account's machine for a design: the named floor machine's rolls (the
+ * account's own) and, for a member of the pool, the pool's numbers for new structures. Both go in with the
+ * design - and so into the cache key. A caller can never supply either itself.
+ */
+async function floorFor(userId, machineId) {
+  const fm = idOf(machineId);
+  let m = null, rolls = [], pool = null;
+  if (fm) {
+    m = await floorRepo.machines.get(userId, fm);
+    if (!m) return { notFound: true };
+    rolls = floorRepo.asLearning(await floorRepo.rolls.forMachine(userId, fm));
   }
+  try { if (await poolRepo.members.isMember(userId)) pool = await poolRepo.tableFor(userId); } catch (err) { console.error('[studio] pool unavailable:', err.message); }
+  if (!m && !pool) return { floor: null, machine: null };
+  return { floor: { name: m ? m.name : null, rolls, ...(pool ? { pool } : {}) }, machine: m };
+}
+
+// One answer for a design, from memory when the same design was answered before.
+async function studioAnswer(userId, input) {
+  const { floor_machine_id, floor: _f, ...rest } = input || {};
+  const body = rest;
+  const ff = await floorFor(userId, floor_machine_id);
+  if (ff.notFound) return { status: 404, body: JSON.stringify({ success: false, error: 'Floor machine not found.' }) };
+  if (ff.floor) body.floor = ff.floor;
+  const floor = ff.machine ? ff.machine.name : null;
   const key = JSON.stringify(body);
   let hit = key.length < 32768 ? studioCache.get(key) : null;
   if (hit) { studioCache.delete(key); studioCache.set(key, hit); }

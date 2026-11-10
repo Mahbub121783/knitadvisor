@@ -20,9 +20,17 @@
  *                                         towards "no effect" by K = 8 rolls' worth
  *   spread   the rolls' scatter around the factor, pooled with the cross-validated
  *            spread (K rolls' worth): a few rolls narrow the range a little, many more
+ *
+ *   a pool   a machine with no rolls of its own need not start from "no effect": other mills'
+ *            rolls, shared as one clamped median per structure (machine-pool.js), are a prior
+ *            worth w = a/(a+5) of the K rolls' worth, a = the mills behind it:
+ *                factor = exp( (Σ ln r + K · w · ln prior) ÷ (n + K) )
+ *            so with no rolls it is prior^w, and every roll of its own pulls it away from the pool.
+ *            The spread is never narrowed by the pool.
  */
 'use strict';
 
+const MP = require('./machine-pool');
 const K = 8, WINDOW = 10, COUNT_TOL = 0.1;
 const Z80 = 1.2816;
 
@@ -32,11 +40,12 @@ function sigmaFromCV(e) {
   return Math.max(0.01, (Math.log(1 + e.p90) - Math.log(1 + e.p10)) / (2 * Z80));
 }
 
-function learn(ratios, sigma0) {
+function learn(ratios, sigma0, prior) {
   const n = ratios.length;
-  if (!n) return { factor: 1, sd: sigma0, n: 0 };
+  const lp = prior ? MP.weight(prior.a) * Math.log(prior.f) : 0;     // the pool's pseudo-observation, ln
+  if (!n) return { factor: Math.exp(lp), sd: sigma0, n: 0 };
   const l = ratios.map(Math.log);
-  const m = l.reduce((t, v) => t + v, 0) / (n + K);
+  const m = (l.reduce((t, v) => t + v, 0) + K * lp) / (n + K);
   const s2 = n >= 2 ? l.reduce((t, v) => t + (v - m) ** 2, 0) / (n - 1) : 0;
   const dof = Math.max(0, n - 1);
   const pooled = (K * sigma0 * sigma0 + dof * s2) / (K + dof);
@@ -50,9 +59,13 @@ function learn(ratios, sigma0) {
 function learnProfile(rolls, ctx) {
   const same = (rolls || []).filter((r) => r.group === ctx.group).slice(-WINDOW);
   const near = same.filter((r) => r.gsm_ratio > 0 && (!(ctx.ne > 0) || !(r.ne > 0) || Math.abs(r.ne / ctx.ne - 1) <= COUNT_TOL));
-  const g = learn(near.map((r) => r.gsm_ratio), sigmaFromCV(ctx.gsmCV));
-  const w = learn(same.filter((r) => r.width_ratio > 0).map((r) => r.width_ratio), sigmaFromCV(ctx.widthCV));
-  return { gsm_factor: g.factor, width_factor: w.factor, gsm_sd: g.sd, width_sd: w.sd, n: same.length, n_gsm: g.n, n_width: w.n, n_machine: (rolls || []).length, k: K, window: WINDOW };
+  const pool = ctx.pool || { gsm: null, width: null };
+  const g = learn(near.map((r) => r.gsm_ratio), sigmaFromCV(ctx.gsmCV), pool.gsm);
+  const w = learn(same.filter((r) => r.width_ratio > 0).map((r) => r.width_ratio), sigmaFromCV(ctx.widthCV), pool.width);
+  return {
+    gsm_factor: g.factor, width_factor: w.factor, gsm_sd: g.sd, width_sd: w.sd, n: same.length, n_gsm: g.n, n_width: w.n, n_machine: (rolls || []).length, k: K, window: WINDOW,
+    pooled_gsm: pool.gsm ? { accounts: pool.gsm.a, factor: pool.gsm.f } : null, pooled_width: pool.width ? { accounts: pool.width.a, factor: pool.width.f } : null,
+  };
 }
 
 /** Share of cloths within ±x of the prediction, for a log-normal spread sd. */

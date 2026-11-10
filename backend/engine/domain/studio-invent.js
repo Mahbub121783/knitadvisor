@@ -48,6 +48,8 @@ function cleanGoal(input) {
     max_needles: lim(g.max_needles, 2, 8, 6), max_feeds: lim(g.max_feeds, 2, 8, 6), max_float: lim(g.max_float, 1, 6, 3),
     yarn: { fibre: (g.yarn || {}).fibre || 'cotton', ...((g.yarn || {}).count ? { count: +g.yarn.count, unit: g.yarn.unit || 'ne' } : {}) },
     machine: { ...(+((g.machine || {}).gauge) > 0 ? { gauge: +g.machine.gauge } : {}), ...(+((g.machine || {}).dia) > 0 ? { dia: +g.machine.dia } : {}) },
+    // a floor machine's learned profile (and the pool's numbers): every candidate is weighed the way THIS machine knits
+    floor: S.cleanFloor(g.floor) || null,
   };
 }
 
@@ -117,7 +119,7 @@ function invent(input, opts = {}) {
       evals++;
       let a = null;
       try {
-        a = S.analyse({ bed: ind.D ? 'double' : 'single', gating: ind.gating || 'rib', grid: { C: ind.C, D: ind.D }, feeds: ind.C.map(() => ({ role: 'ground' })), yarn: goal.yarn, machine: goal.machine, target: { gsm: goal.gsm, ...(goal.width_in ? { width_in: goal.width_in } : {}) } });
+        a = S.analyse({ bed: ind.D ? 'double' : 'single', gating: ind.gating || 'rib', grid: { C: ind.C, D: ind.D }, feeds: ind.C.map(() => ({ role: 'ground' })), yarn: goal.yarn, machine: goal.machine, ...(goal.floor ? { floor: goal.floor } : {}), target: { gsm: goal.gsm, ...(goal.width_in ? { width_in: goal.width_in } : {}) } });
       } catch (_) { a = null; }
       if (a && a.success && a.ok_to_knit && Math.abs(a.fabric.gsm - goal.gsm) / goal.gsm <= 0.04) {
         knittable++;
@@ -129,6 +131,7 @@ function invent(input, opts = {}) {
         TRAITS.forEach((t) => { score += goal.prefs[t] * (tr[t] - 0.5) * 2; });
         score += novW * (novelty - 0.5) * 1.2;
         score += 0.3 * ((acc ? acc.gsm.within_5_pct : 50) / 100);                     // a likelier first trial counts
+        if (goal.floor && acc && acc.supported_by_rolls) score += 0.25 * Math.min(1, acc.supported_by_rolls / 10);   // a structure this machine has already knitted is surer
         if (goal.width_in) score -= 3 * Math.abs(a.fabric.width_open_in - goal.width_in) / goal.width_in;
         const warns = a.checks.filter((c) => c.level === 'warn');
         // a warning is a real risk on the floor; no setting inside every factory limit (hook load, tightness) is a serious one
@@ -171,8 +174,10 @@ function invent(input, opts = {}) {
     const parts = TRAITS.filter((t) => goal.prefs[t]).map((t) => `${goal.prefs[t] > 0 ? 'more' : 'less'} ${t}: ${Math.round(s.tr[t] * 100)}/100`);
     return parts.length ? parts.join(' · ') : 'meets the weight on a proven setting';
   };
+  const { floor: floorUsed, ...goalOut } = goal;
   return {
-    success: true, goal,
+    success: true, goal: goalOut,
+    machine_profile: floorUsed ? { name: floorUsed.name, rolls: floorUsed.rolls.length, pooled: !!floorUsed.pool } : null,
     stats: { evaluated: evals, knittable, structures_seen: cache.size, ms: Math.max(0, (opts.timeMs || 3500) - (deadline - Date.now())) },
     candidates: chosen.map((s, i) => {
       const f = s.a.fabric, acc = f.accuracy;
@@ -184,7 +189,7 @@ function invent(input, opts = {}) {
         why: why(s),
         fabric: { gsm: f.gsm, width_open_in: f.width_open_in, tf: f.tf, wpc: f.wpc, cpc: f.cpc, sl_mm: f.sl_mm },
         settings: { yarn: s.a.yarn.ground.count, gauge: s.a.machine.gauge, sl_mm: f.sl_mm, machine: s.a.machine.machine_label },
-        accuracy: acc ? { level: acc.level, gsm_range: acc.gsm.range, within_5_pct: acc.gsm.within_5_pct, typical_error_pct: acc.gsm.typical_error_pct, basis: acc.basis } : null,
+        accuracy: acc ? { level: acc.level, gsm_range: acc.gsm.range, within_5_pct: acc.gsm.within_5_pct, typical_error_pct: acc.gsm.typical_error_pct, basis: acc.basis, supported_by_rolls: acc.supported_by_rolls || 0 } : null,
         confidence: s.a.structure.confidence.level,
         warnings: s.warns.map((w) => w.text).slice(0, 3),
       };

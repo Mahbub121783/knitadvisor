@@ -78,12 +78,21 @@ function accuracyFor({ matchId, family, lycra, level }) {
 /** The structure group a design is weighed in: its catalogue twin, or its family's anchor, with or without elastane. */
 function groupKeyOf(matchId, family, lycra) { return (ACC_GROUP[matchId] || ACC_FAMILY_GROUP[family] || 'single_jersey') + (lycra ? '+L' : ''); }
 const ML = require('./machine-learning');
-/** A floor machine's rolls, as the caller passes them: kept only if they look like rolls. */
+const MP = require('./machine-pool');
+/** A floor machine's rolls (and the pool's numbers for new structures), as the caller passes them: kept only if they look like it. */
 function cleanFloor(f) {
-  if (!f || !Array.isArray(f.rolls)) return null;
-  const rolls = f.rolls.slice(-400).filter((r) => r && typeof r.group === 'string' && (+r.gsm_ratio > 0.5 && +r.gsm_ratio < 2 || +r.width_ratio > 0.5 && +r.width_ratio < 2))
+  if (!f || typeof f !== 'object') return null;
+  const pool = MP.cleanTable(f.pool);
+  const rolls = (Array.isArray(f.rolls) ? f.rolls : []).slice(-400).filter((r) => r && typeof r.group === 'string' && (+r.gsm_ratio > 0.5 && +r.gsm_ratio < 2 || +r.width_ratio > 0.5 && +r.width_ratio < 2))
     .map((r) => ({ group: r.group, ne: +r.ne > 0 ? +r.ne : null, gsm_ratio: +r.gsm_ratio > 0.5 && +r.gsm_ratio < 2 ? +r.gsm_ratio : null, width_ratio: +r.width_ratio > 0.5 && +r.width_ratio < 2 ? +r.width_ratio : null }));
-  return { name: String(f.name || 'your machine').slice(0, 60), rolls };
+  if (!rolls.length && !pool) return null;
+  return { name: f.name ? String(f.name).slice(0, 60) : null, rolls, pool };
+}
+/** Where a machine's correction came from, in words: its own rolls, the pool of other mills, or both. */
+function floorSource(floor, n, pooled) {
+  const own = n ? `${n} roll${n === 1 ? '' : 's'} on ${floor.name || 'your machine'}` : null;
+  const pool = pooled ? `${pooled.accounts} mills' pooled rolls` : null;
+  return [own, pool].filter(Boolean).join(' and ');
 }
 /** Where 80 % of measured cloths land, given the prediction and the signed error quantiles (e = (pred − meas) / meas). */
 const rangeOf = (pred, e) => [pred / (1 + e.p90), pred / (1 + e.p10)];
@@ -646,8 +655,8 @@ function solve(ctx, ground) {
   let KW = scaled(KW0, fibre.kw * model.kwF * pack.kw);
   const modelKS = KS.med, modelKW = KW.med;
   if (ctx.floor && !ctx.calib) {
-    KS = { ...scaled(KS, ctx.floor.gsm_factor), basis: `${KS.basis}; × ${r3(ctx.floor.gsm_factor)} learned from ${ctx.floor.n_gsm} roll${ctx.floor.n_gsm === 1 ? '' : 's'} on ${ctx.floor.name}` };
-    KW = { ...scaled(KW, 1 / ctx.floor.width_factor), basis: `${KW.basis}; width × ${r3(ctx.floor.width_factor)} learned from ${ctx.floor.n_width} roll${ctx.floor.n_width === 1 ? '' : 's'} on ${ctx.floor.name}` };
+    KS = { ...scaled(KS, ctx.floor.gsm_factor), basis: `${KS.basis}; × ${r3(ctx.floor.gsm_factor)} learned from ${floorSource(ctx.floor, ctx.floor.n_gsm, ctx.floor.pooled_gsm)}` };
+    KW = { ...scaled(KW, 1 / ctx.floor.width_factor), basis: `${KW.basis}; width × ${r3(ctx.floor.width_factor)} learned from ${floorSource(ctx.floor, ctx.floor.n_width, ctx.floor.pooled_width)}` };
   }
   if (ctx.calib) {
     const sp = Math.max(0.015, ctx.calib.spread);
@@ -1122,11 +1131,11 @@ function analyse(input) {
     const group = groupKeyOf(m1 && m1.id, family, lycra);
     ctx.group = group;
     const floor = cleanFloor(input.floor);
-    if (floor && floor.rolls.length) {
+    if (floor) {
       const G = ACCURACY && (ACCURACY.groups[group] || ACCURACY.groups[group.replace('+L', '')] || ACCURACY.groups._all);
       const ne = (input.yarn || {}).count > 0 && String((input.yarn || {}).unit || 'ne').toLowerCase() === 'ne' ? +input.yarn.count : null;
-      const prof = ML.learnProfile(floor.rolls, { group, ne, gsmCV: G && G.gsm, widthCV: G && G.width });
-      if (prof.n > 0) ctx.floor = { ...prof, name: floor.name, group };
+      const prof = ML.learnProfile(floor.rolls, { group, ne, gsmCV: G && G.gsm, widthCV: G && G.width, pool: MP.lookup(floor.pool, group, ne) });
+      if (prof.n > 0 || prof.pooled_gsm || prof.pooled_width) ctx.floor = { ...prof, name: floor.name, group };
     }
     const rolls = input.calibration && input.calibration.rolls;
     if (Array.isArray(rolls) && rolls.length) {
@@ -1473,9 +1482,13 @@ function analyse(input) {
       },
       fabric: {
         accuracy: acc && ctx.floor && !ctx.calib ? {
-          interval_pct: 80, level: 'machine', own_rolls: false, method: acc.method, generated: acc.generated,
+          interval_pct: 80, level: ctx.floor.n > 0 ? 'machine' : 'pooled', own_rolls: false, method: acc.method, generated: acc.generated,
           supported_by_rolls: ctx.floor.n, machine: ctx.floor.name, gsm_factor: r3(ctx.floor.gsm_factor), width_factor: r3(ctx.floor.width_factor),
-          basis: `learned from ${ctx.floor.n} of your roll${ctx.floor.n === 1 ? '' : 's'} of this structure on ${ctx.floor.name} (the last ${ML.WINDOW}, weighed against ${ML.K} rolls' worth of the factory records' spread)`,
+          pooled: ctx.floor.pooled_gsm || ctx.floor.pooled_width ? { gsm_mills: ctx.floor.pooled_gsm ? ctx.floor.pooled_gsm.accounts : 0, width_mills: ctx.floor.pooled_width ? ctx.floor.pooled_width.accounts : 0 } : null,
+          basis: (ctx.floor.n > 0
+            ? `learned from ${ctx.floor.n} of your roll${ctx.floor.n === 1 ? '' : 's'} of this structure on ${ctx.floor.name || 'your machine'} (the last ${ML.WINDOW}, weighed against ${ML.K} rolls' worth of the factory records' spread)`
+            : "no roll of your own on this structure yet: started from other mills' pooled rolls (anonymous, none of them yours); the range is the factory records' own") +
+            (ctx.floor.n > 0 && (ctx.floor.pooled_gsm || ctx.floor.pooled_width) ? `, started from ${Math.max(ctx.floor.pooled_gsm ? ctx.floor.pooled_gsm.accounts : 0, ctx.floor.pooled_width ? ctx.floor.pooled_width.accounts : 0)} other mills' pooled rolls` : ''),
           gsm: { range: ML.band(S.gsm, ctx.floor.gsm_sd).map(Math.round), typical_error_pct: r1((Math.exp(0.6745 * ctx.floor.gsm_sd) - 1) * 100), within_3_pct: ML.withinPct(ctx.floor.gsm_sd, 0.03), within_5_pct: ML.withinPct(ctx.floor.gsm_sd, 0.05), within_8_pct: ML.withinPct(ctx.floor.gsm_sd, 0.08) },
           width: { range: ML.band(S.width, ctx.floor.width_sd).map(r1), typical_error_pct: r1((Math.exp(0.6745 * ctx.floor.width_sd) - 1) * 100), within_3_pct: ML.withinPct(ctx.floor.width_sd, 0.03), within_5_pct: ML.withinPct(ctx.floor.width_sd, 0.05), within_8_pct: ML.withinPct(ctx.floor.width_sd, 0.08) },
         } : acc ? {
@@ -1564,4 +1577,4 @@ function analyse(input) {
 }
 
 module.exports = {
-  groupKeyOf, analyse, listTemplates, FIBRES, ROLES, LIMITS, TF_WINDOW };
+  groupKeyOf, cleanFloor, analyse, listTemplates, FIBRES, ROLES, LIMITS, TF_WINDOW };
