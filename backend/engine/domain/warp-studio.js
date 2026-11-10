@@ -41,6 +41,16 @@
  * greige, widened 20–30 % in pre-setting) / 1.6 (modelled); raschel 1.2 / 1.1
  * modelled. A finished width you give replaces kw.
  * Elastane is fed drafted: its runner is the geometric length ÷ draft.
+ *
+ * NOTATION STYLE: tricot style counts one per needle space (1-0/1-2), raschel
+ * style two (2-0/2-4); both are read.
+ * DOUBLE-NEEDLE-BAR (spacer): the pairs alternate front bed, back bed (or a
+ * course is written whole, 1-0-0-1); a bar looping on both beds is a spacer
+ * yarn and crosses the bed gap G between its loops — see dnbLength. Thickness
+ * = G + both faces (modelled).
+ * HOLDS TOGETHER: every end is followed across a band of needles; loops,
+ * underlaps and inlays join the wales they touch — more than one piece is an
+ * error, a needle left without a loop is a pressed-off hole (holdsTogether).
  */
 'use strict';
 
@@ -69,7 +79,7 @@ const MACHINES = {
     kw: 1.2, kc: 1.1, use: 'powernet, nets, curtains, technical fabrics, pillar-inlay, lace grounds',
   },
   double_raschel: {
-    label: 'Double-needle-bar raschel (two beds)', bars: [4, 6], gauges: [12, 24], speed: [300, 900], shog: 6, needle: 'latch / compound needles, two bars', beds: 2,
+    label: 'Double-needle-bar raschel (two beds)', bars: [3, 8], gauges: [12, 24], speed: [300, 900], shog: 6, needle: 'latch / compound needles, two bars', beds: 2,
     kw: 1.1, kc: 1.05, use: 'spacer fabrics, plush (cut between the beds), tubular articles',
   },
 };
@@ -80,30 +90,50 @@ const FIBRES = {
   nylon_filament: { label: 'Nylon (polyamide) filament', d: 0.99 }, polyester_filament: { label: 'Polyester filament', d: 0.90 },
   elastane: { label: 'Elastane (spandex)', d: 1.10, elastic: true }, polypropylene: { label: 'Polypropylene filament', d: 1.15 },
   cotton: { label: 'Cotton (spun)', d: 1.00 }, polyester_spun: { label: 'Polyester (spun)', d: 1.05 }, viscose: { label: 'Viscose', d: 1.00 },
+  // monofilaments (spacer yarns, nets): one round filament, its diameter from the density
+  polyester_mono: { label: 'Polyester monofilament', d: 1.0, mono: true, rho: 1.38 }, nylon_mono: { label: 'Nylon monofilament', d: 1.0, mono: true, rho: 1.14 },
 };
+// fibre densities (g/cm³), for a count given as a monofilament diameter
+const RHO = { nylon_filament: 1.14, polyester_filament: 1.38, elastane: 1.2, polypropylene: 0.91, cotton: 1.52, polyester_spun: 1.38, viscose: 1.5, polyester_mono: 1.38, nylon_mono: 1.14 };
 function readYarn(y, bar) {
   const o = y || {};
-  const unit = UNITS[String(o.unit || 'denier').toLowerCase()] ? String(o.unit || 'denier').toLowerCase() : 'denier';
+  const uIn = String(o.unit || 'denier').toLowerCase();
+  const unit = UNITS[uIn] || uIn === 'mm' ? uIn : 'denier';
   const v = +o.count;
   if (!(v > 0)) throw new WarpError(`Bar ${bar}: give the yarn count.`);
-  const tex = UNITS[unit](v) * ([1, 2, 3].includes(+o.ply) ? +o.ply : 1);
-  if (tex < 0.5 || tex > 120) throw new WarpError(`Bar ${bar}: ${r1(tex)} tex is outside 0.5–120 tex — check the count and the unit.`);
   const fibre = FIBRES[o.fibre] ? o.fibre : 'nylon_filament';
-  const label = `${v} ${unit === 'ne' ? 'Ne' : unit === 'denier' ? 'D' : unit}${+o.filaments > 0 ? '/' + Math.round(+o.filaments) + 'F' : ''}`;
-  return { tex, label, fibre, fibre_label: FIBRES[fibre].label, elastic: !!FIBRES[fibre].elastic, d_mm: (Math.sqrt(tex) / 28) * FIBRES[fibre].d,
+  // a monofilament is often given by its diameter: tex = ρ · π d²/4 · 1000
+  if (unit === 'mm' && !(v >= 0.02 && v <= 1.2)) throw new WarpError(`Bar ${bar}: a monofilament diameter of ${v} mm is outside 0.02–1.2 mm.`);
+  const tex = (unit === 'mm' ? RHO[fibre] * Math.PI * v * v / 4 * 1000 : UNITS[unit](v)) * ([1, 2, 3].includes(+o.ply) ? +o.ply : 1);
+  if (tex < 0.5 || tex > 300) throw new WarpError(`Bar ${bar}: ${r1(tex)} tex is outside 0.5–300 tex — check the count and the unit.`);
+  const mono = !!FIBRES[fibre].mono || +o.filaments === 1 || unit === 'mm';
+  const label = unit === 'mm' ? `${v} mm mono (${Math.round(tex * 9)} D)` : `${v} ${unit === 'ne' ? 'Ne' : unit === 'denier' ? 'D' : unit}${+o.filaments > 0 ? '/' + Math.round(+o.filaments) + 'F' : ''}`;
+  // diameter: a monofilament is a solid round rod; a multifilament or spun yarn packs looser
+  const dMono = Math.sqrt((4 * tex) / (1000 * Math.PI * RHO[fibre]));
+  return { tex, label, fibre, fibre_label: FIBRES[fibre].label, elastic: !!FIBRES[fibre].elastic, mono, d_mm: mono ? dMono : (Math.sqrt(tex) / 28) * FIBRES[fibre].d,
     draft: FIBRES[fibre].elastic ? Math.min(4, Math.max(1.2, +o.draft > 0 ? +o.draft : 2.2)) : 1, denier: r1(tex * 9) };
 }
 
 // ── notation ──────────────────────────────────────────────────────────────
-function parseNotation(text, bar) {
-  const raw = String(text || '').replace(/\s+/g, '').replace(/\/\/+$/, '').replace(/\/+$/, '');
+// opts.step: 1 = tricot style (one number per needle space: 1-0/1-2), 2 = raschel
+// style (two: 2-0/2-4). A four-number group "1-0-2-3" is one double-needle-bar
+// course written whole: front bed 1-0, back bed 2-3.
+function parseNotation(text, bar, opts) {
+  const step = (opts && opts.step) === 2 ? 2 : 1;
+  const raw = String(text || '').replace(/\s+/g, '').replace(/,/g, '/').replace(/\/\/+$/, '').replace(/\/+$/, '');
   if (!raw) throw new WarpError(`Bar ${bar}: write its lapping, e.g. 1-0/1-2//.`);
-  const pairs = raw.split('/').map((p, k) => {
-    const m = p.match(/^(\d{1,2})-(\d{1,2})$/);
-    if (!m) throw new WarpError(`Bar ${bar}, course ${k + 1}: "${p}" is not a lapping pair — write two guide positions, e.g. 1-0.`);
-    return [+m[1], +m[2]];
+  const pairs = [];
+  raw.split('/').forEach((p, k) => {
+    const m = p.match(/^(\d{1,2})-(\d{1,2})(?:-(\d{1,2})-(\d{1,2}))?$/);
+    if (!m) throw new WarpError(`Bar ${bar}, course ${k + 1}: "${p}" is not a lapping pair — write two guide positions, e.g. 1-0 (or four on a double-needle-bar machine, e.g. 1-0-2-3).`);
+    pairs.push([+m[1], +m[2]]);
+    if (m[3] != null) pairs.push([+m[3], +m[4]]);
   });
-  if (pairs.length > 48) throw new WarpError(`Bar ${bar}: at most 48 courses in a repeat.`);
+  if (step === 2) {
+    if (pairs.some((q) => q[0] % 2 || q[1] % 2)) throw new WarpError(`Bar ${bar}: raschel-style notation counts two steps per needle space (2-0/2-4), so every number must be even — or switch the notation to tricot style.`);
+    pairs.forEach((q) => { q[0] /= 2; q[1] /= 2; });
+  }
+  if (pairs.length > 96) throw new WarpError(`Bar ${bar}: at most 48 courses in a repeat.`);
   return pairs;
 }
 function threadingOf(text, bar) {
@@ -154,14 +184,113 @@ function courseLength(laps, p, c, delta) {
   return sum / laps.length;
 }
 
+/**
+ * DOUBLE-NEEDLE-BAR raschel: the pairs alternate front bed, back bed (one
+ * machine course = two pairs); a pair with no swing (1-1) is no loop on that
+ * bed. Yarn per machine course (mm) for one bar, the beds G mm apart:
+ *   each loop          2c + π rn + (o − 1) p (+ π δ on a chain loop)
+ *   to its next loop   same bed:  √((u p)² + (Δ c)²)
+ *                      other bed: √((u p)² + G² + (Δ c)²)   — the spacer yarn crossing
+ * Δ = machine courses between the two loops (half a course from one bed to the other).
+ */
+function dnbLength(pairs, p, c, delta, G) {
+  const n = pairs.length, courses = n / 2, rn = (TN * p + delta) / 2;
+  const ev = [];
+  pairs.forEach(([a, b], i) => { if (a !== b) ev.push({ i, bed: i % 2, a, b, n: Math.min(a, b), o: Math.abs(b - a) }); });
+  if (!ev.length) {
+    // laid in: it only crosses inside its layer
+    let s = 0;
+    for (let i = 0; i < n; i++) { const u = Math.abs(pairs[(i + 1) % n][0] - pairs[i][1]); s += Math.sqrt((u * p) ** 2 + (c / 2) ** 2); }
+    return { perCourse: s / courses, cross: 0, crossings: 0, slant: 0 };
+  }
+  let s = 0, cross = 0, crossings = 0, slant = 0;
+  ev.forEach((e, k) => {
+    const nx = ev[(k + 1) % ev.length];
+    let dI = nx.i - e.i; if (dI <= 0) dI += n;
+    const u = Math.abs(nx.a - e.b), dy = (c * dI) / 2;
+    const same = nx.bed === e.bed;
+    s += 2 * c + Math.PI * rn + Math.max(0, e.o - 1) * p + (same && dI === 2 && nx.n === e.n ? Math.PI * delta : 0);
+    if (same) s += Math.sqrt((u * p) ** 2 + dy * dy);
+    else {
+      const L = Math.sqrt((u * p) ** 2 + G * G + dy * dy);
+      s += L; cross += L; crossings++;
+      slant += Math.abs(nx.n - e.n);
+    }
+  });
+  return { perCourse: s / courses, cross: cross / courses, crossings: crossings / courses, slant: crossings ? slant / crossings : 0 };
+}
+/** Which bed(s) a bar loops on: 'front', 'back', 'spacer' (both) or 'inlay'. */
+function bedRole(pairs) {
+  const f = pairs.some(([a, b], i) => i % 2 === 0 && a !== b), bk = pairs.some(([a, b], i) => i % 2 === 1 && a !== b);
+  return f && bk ? 'spacer' : f ? 'front' : bk ? 'back' : 'inlay';
+}
+const bedPairs = (pairs, bed) => pairs.filter((_, i) => i % 2 === bed);
+
+/**
+ * Does the cloth hold together? Every threaded end is followed across a band
+ * of needles: a loop joins the needle it is on to the needle of the end's
+ * next loop; an inlaid end ties the needles it lies across. The knitting
+ * needles in the middle of the band must form ONE connected net (else the
+ * cloth falls apart into strips — pillars with nothing laid across them).
+ * A needle that knits but gets no loop at some course presses its loop off:
+ * an open hole (a net's eyelet; in a closed cloth, a fault).
+ */
+function holdsTogether(bars, beds, repeatPairs) {
+  const W = 44, LO = 14, HI = 30;
+  const parent = new Map();
+  const find = (k) => { while (parent.get(k) !== k) { parent.set(k, parent.get(parent.get(k))); k = parent.get(k); } return k; };
+  const node = (k) => { if (!parent.has(k)) parent.set(k, k); return k; };
+  const union = (a, b) => { const ra = find(node(a)), rb = find(node(b)); if (ra !== rb) parent.set(ra, rb); };
+  const knit = new Map();
+  bars.forEach((b) => {
+    const P = b.pairs.length, thr = b.thread.pattern, T = thr.length;
+    const hi = Math.max(...b.pairs.flat());
+    for (let g = -hi - 2; g <= W + 2; g++) {
+      if (thr[((g % T) + T) % T] !== 'X') continue;
+      let prev = null, lo = Infinity, top = -Infinity, loops = 0;
+      for (let i = 0; i < 2 * repeatPairs; i++) {
+        const [a, z] = b.pairs[i % P], bed = beds === 2 ? i % 2 : 0;
+        lo = Math.min(lo, a + g, z + g); top = Math.max(top, a + g, z + g);
+        if (a === z) continue;
+        const key = `${bed}:${Math.min(a, z) + g}`;
+        node(key); loops++;
+        if (!knit.has(key)) knit.set(key, new Set());
+        knit.get(key).add(i % repeatPairs);
+        if (prev) union(prev, key);
+        prev = key;
+        // the underlap to the next pair lies across the needles between: their loops bind it
+        const na = b.pairs[(i + 1) % P][0] + g, from = z + g;
+        for (let m = Math.min(na, from); m + 1 < Math.max(na, from); m++) union(`${bed}:${m}`, `${bed}:${m + 1}`);
+      }
+      if (!loops) for (let n = lo; n + 1 < top; n++) union(`0:${n}`, `0:${n + 1}`);
+    }
+  });
+  const central = [...knit.keys()].filter((k) => { const n = +k.split(':')[1]; return n >= LO && n < HI; });
+  const roots = new Set(central.map(find));
+  const pressed = [];
+  central.forEach((k) => {
+    const [bed, n] = k.split(':').map(Number), got = knit.get(k);
+    for (let i = 0; i < repeatPairs; i++) if ((beds === 1 || i % 2 === bed) && !got.has(i)) { pressed.push({ bed, n, course: beds === 2 ? Math.floor(i / 2) + 1 : i + 1 }); break; }
+  });
+  return { pieces: roots.size, pressed, needles: central.length };
+}
+
 // the fabric name for the common two-bar structures (front bar first)
 function nameOf(bars) {
   const base = nameOf0(bars);
   const el = bars.filter((b) => b.yarn.elastic);
-  return base && el.length && !/Powernet/.test(base) ? `${base} with elastane (bar${el.map((b) => ' ' + b.n).join(',')})` : base;
+  return base && el.length && !/Powernet|Elastic/.test(base) ? `${base} with elastane (bar${el.map((b) => ' ' + b.n).join(',')})` : base;
 }
 function nameOf0(bars) {
+  if (bars[0].role) {
+    const ground = bars.filter((b) => b.role === 'front' || b.role === 'back');
+    const open = ground.some((b) => b.thread.fraction < 1);
+    const sp = bars.filter((b) => b.role === 'spacer');
+    if (!sp.length) return null;
+    return `${open ? 'Spacer mesh (open face)' : 'Spacer fabric'}${sp.every((b) => b.yarn.mono) ? ', monofilament spacer yarns' : ''}`;
+  }
   const loop = bars.filter((b) => b.kind.key !== 'inlay');
+  if (!bars.some((b) => b.yarn.elastic) && loop.length >= 2 && loop.every((b) => b.thread.fraction < 1)) return loop.some((b) => b.laps.length >= 6) ? 'Hexagonal net (sandfly / tulle type)' : 'Net (part-threaded ground: marquisette / tulle type)';
   const sig = bars.map((b) => b.kind.key).join('+');
   const counter = bars.length >= 2 && bars[0].laps[0].dir !== 0 && bars[1].laps[0].dir !== 0 && bars[0].laps[0].dir === -bars[1].laps[0].dir;
   if (bars.length === 2 && sig === 'u1+u1') return counter ? 'Full tricot (jersey)' : 'Tricot, both bars lapping the same way';
@@ -172,6 +301,8 @@ function nameOf0(bars) {
   if (bars.length === 2 && sig === 'u1+u3') return 'Sharkskin';
   if (bars.length === 2 && sig === 'pillar+u3') return 'Queenscord';
   if (bars.some((b) => b.yarn.elastic) && bars.some((b) => b.thread.fraction < 1)) return 'Powernet (net with elastane)';
+  if (loop.length >= 2 && loop.every((b) => b.thread.fraction < 1)) return loop.every((b) => b.kind.key !== 'pillar') && loop.some((b) => b.laps.length >= 6) ? 'Hexagonal net (sandfly / tulle type)' : 'Net (part-threaded ground: marquisette / tulle type)';
+  if (bars.some((b) => b.yarn.elastic && (b.kind.key === 'inlay' || b.kind.key === 'part_inlay'))) return 'Elastic raschel (elastane laid in)';
   if (sig.startsWith('pillar') && bars.slice(1).some((b) => b.kind.key === 'inlay')) return 'Pillar-inlay (marquisette / raschel ground)';
   if (bars.every((b) => b.kind.key === 'atlas')) return 'Atlas';
   if (loop.length === 1 && bars.length === 1) return `Single-bar ${bars[0].kind.label}`;
@@ -193,14 +324,31 @@ function analyse(input) {
     const E = +m.gauge > 0 ? +m.gauge : mType === 'tricot' ? 28 : 24;
     const p = 25.4 / E;
     const widthIn = +m.width_in > 0 ? +m.width_in : mType === 'tricot' ? 130 : 136;
+    const beds = M.beds;
+    const step = +m.notation_step === 2 ? 2 : 1;
+    // the gap between the two needle beds (double-needle-bar): sets the spacer's thickness
+    const G = beds === 2 ? (+m.gap_mm > 0 ? +m.gap_mm : 6) : 0;
+    if (beds === 2 && (G < 1 || G > 65)) throw new WarpError(`A ${G} mm gap between the needle beds is outside what double-needle-bar machines set (about 1–65 mm).`);
     const bars = barsIn.map((b, i) => {
-      const pairs = parseNotation(b.notation, i + 1);
-      const laps = lapping(pairs);
+      const pairs = parseNotation(b.notation, i + 1, { step });
+      if (beds === 2 && pairs.length % 2) throw new WarpError(`Bar ${i + 1}: on a double-needle-bar machine every course has two pairs — the front bed, then the back bed (e.g. 1-0/1-1/0-1/1-1// or 1-0-1-1/0-1-1-1//). This lapping has ${pairs.length}.`);
       const yarn = readYarn(b.yarn, i + 1);
       const thread = threadingOf(b.threading, i + 1);
+      if (beds === 2) {
+        // each bed's own lapping, read as a single-bed one
+        const role = bedRole(pairs);
+        const own = role === 'back' ? bedPairs(pairs, 1) : bedPairs(pairs, 0);
+        const laps = lapping(own.some(([a, z]) => a !== z) ? own : pairs);
+        const kind = role === 'spacer' ? { key: 'spacer', label: 'spacer yarn (loops on both beds, crosses between the faces)' }
+          : role === 'inlay' ? { key: 'inlay', label: 'inlay (laid in, no loops)' }
+          : { key: kindOf(laps).key, label: `${role} face: ${kindOf(laps).label}` };
+        return { n: i + 1, notation: pairs.map((q) => q.join('-')).join('/') + '//', pairs, laps, yarn, thread, kind, role };
+      }
+      const laps = lapping(pairs);
       return { n: i + 1, notation: pairs.map((q) => q.join('-')).join('/') + '//', pairs, laps, yarn, thread, kind: kindOf(laps) };
     });
-    const repeat = bars.reduce((t, b) => lcm(t, b.pairs.length), 1);
+    const repeatPairs = bars.reduce((t, b) => lcm(t, b.pairs.length), 1);
+    const repeat = beds === 2 ? repeatPairs / 2 : repeatPairs;
     const elastic = bars.some((b) => b.yarn.elastic);
     // finished state: the cloth narrows and closes up off the machine
     let kw = elastic ? 1.8 : M.kw;
@@ -214,11 +362,12 @@ function analyse(input) {
     const at = (cpcM) => {
       const c = 10 / cpcM;
       const per = bars.map((b) => {
-        const lc = courseLength(b.laps, p, c, b.yarn.d_mm);      // mm of yarn per end per course (on the machine)
+        const dn = beds === 2 ? dnbLength(b.pairs, p, c, b.yarn.d_mm, G) : null;
+        const lc = dn ? dn.perCourse : courseLength(b.laps, p, c, b.yarn.d_mm);      // mm of yarn per end per course (on the machine)
         const fed = lc / b.yarn.draft;                           // elastane is fed drafted
         const ends = wpcMachine * kw * b.thread.fraction;        // ends per cm, finished
         const gsm = (ends * cpcM * kc * fed * b.yarn.tex) / 100;
-        return { lc, fed, ends, gsm };
+        return { lc, fed, ends, gsm, dn };
       });
       return { per, gsm: per.reduce((t, x) => t + x.gsm, 0) };
     };
@@ -245,19 +394,45 @@ function analyse(input) {
       if (b.laps.some((l) => l.o > 2)) add('warn', `Bar ${b.n}: an overlap across more than 2 needles is not a normal loop — check the notation.`);
     });
     // every course must form loops on every needle, or the fabric falls apart
-    for (let k = 0; k < repeat; k++) {
+    if (beds === 1) for (let k = 0; k < repeat; k++) {
       const looping = bars.filter((b) => !b.laps[k % b.laps.length].inlay);
       if (!looping.length) add('error', `Course ${k + 1}: no bar makes a loop — every bar inlays or rests, so the fabric is not held together at that course.`);
       else if (!looping.some((b) => b.thread.fraction === 1) && looping.every((b) => b.thread.pattern === looping[0].thread.pattern)) add('note', `Course ${k + 1}: every loop-forming bar is part-threaded the same way — the empty needles knit no loop: an open net.`);
     }
-    if (bars[0].kind.key === 'inlay') add('error', 'Bar 1 (the front bar) inlays: an inlay is held by the loops and underlaps of the bars in front of it, so it must be on a bar further back.');
-    bars.forEach((b, i) => { if (b.kind.key === 'inlay' && !bars.slice(0, i).some((x) => x.kind.key !== 'inlay')) add('error', `Bar ${b.n} inlays with no loop-forming bar in front of it to hold it.`); });
-    if (bars.length >= 2) {
+    if (beds === 1 && bars[0].kind.key === 'inlay') add('error', 'Bar 1 (the front bar) inlays: an inlay is held by the loops and underlaps of the bars in front of it, so it must be on a bar further back.');
+    if (beds === 1) bars.forEach((b, i) => { if (b.kind.key === 'inlay' && !bars.slice(0, i).some((x) => x.kind.key !== 'inlay')) add('error', `Bar ${b.n} inlays with no loop-forming bar in front of it to hold it.`); });
+    if (beds === 1 && bars.length >= 2) {
       const [f, b2] = bars;
       if (f.kind.key !== 'inlay' && b2.kind.key !== 'inlay' && f.laps[0].dir !== 0 && f.laps[0].dir === b2.laps[0].dir)
         add('warn', 'Bars 1 and 2 lap the same way: the loops lean (a skew in the cloth) and the structure splits along the wales more easily. Counter-lap them (one bar underlaps left while the other underlaps right).');
     }
-    const shortLoops = R.per.some((x, i) => !bars[i].laps.every((l) => l.inlay) && x.lc < Math.PI * ((TN * p + bars[i].yarn.d_mm) / 2) + 2 * (10 / cpcM) - 1e-9);
+    if (beds === 2) {
+      // both faces must be knitted every course, and joined
+      for (let k = 0; k < repeat; k++) for (const bed of [0, 1]) {
+        if (!bars.some((b) => { const q = b.pairs[(2 * k + bed) % b.pairs.length]; return q[0] !== q[1]; }))
+          add('error', `Course ${k + 1}: no bar makes a loop on the ${bed ? 'back' : 'front'} bed — that face is not knitted at that course.`);
+      }
+      const sp = bars.filter((b) => b.role === 'spacer');
+      if (!sp.length) add('error', 'No bar knits on both beds: nothing joins the two faces — the machine knits two separate fabrics. Give a spacer bar loops on both beds (e.g. 1-0/0-1// on a pair: front 1-0, back 0-1).');
+      if (!bars.some((b) => b.role === 'front' || b.role === 'back') && sp.length) add('note', 'Every looping bar is a spacer bar: the spacer yarns knit both faces themselves (a pile-only spacer).');
+      sp.forEach((b) => {
+        if (!b.yarn.mono && G > 6) add('warn', `Bar ${b.n}: a ${G} mm spacer with a multifilament spacer yarn will not stand up — it collapses under its own weight; spacers above ~5 mm use a monofilament (0.1–0.25 mm).`);
+        if (b.yarn.mono && b.yarn.d_mm > 0.45 * p) add('warn', `Bar ${b.n}: a ${r2(b.yarn.d_mm)} mm monofilament is thick for E${E} (${r2(p)} mm needle pitch) — the needle hook and the guides are too tight for it.`);
+      });
+      if (G > 20) add('note', `${G} mm between the beds: a high-distance machine (most double-needle-bar raschels set about 2–20 mm).`);
+    }
+    // does the cloth hold together, and where are its holes?
+    {
+      const h = holdsTogether(bars, beds, repeatPairs);
+      if (h.needles && h.pieces > 1) add('error', `The wales are not joined sideways: this lapping knits ${h.pieces} separate pieces (strips or chains with nothing laid across them). Give a bar an underlap or an inlay that crosses between them.`);
+      if (h.pressed.length) {
+        const net = bars.some((b) => b.thread.fraction < 1);
+        const ex = h.pressed.slice(0, 3).map((x) => `needle ${x.n}${beds === 2 ? (x.bed ? ' (back)' : ' (front)') : ''} at course ${x.course}`).join(', ');
+        add(net ? 'note' : 'warn', `Some needles get no new loop at some courses (${ex}…): their loop is pressed off — ${net ? "the net's open holes" : 'a hole or a dropped stitch in a closed cloth; check the lapping'}.`);
+      }
+    }
+    // (per looped course: a bar that inlays on some courses averages fewer loops)
+    const shortLoops = beds === 1 && R.per.some((x, i) => { const L = bars[i].laps, k = L.filter((l) => !l.inlay).length / L.length; return k > 0 && x.lc < k * (Math.PI * ((TN * p + bars[i].yarn.d_mm) / 2) + 2 * (10 / cpcM)) - 1e-9; });
     if (shortLoops) add('warn', 'Very short loops for this gauge — check the quality.');
     if (cpcM > 35) add('warn', `${r1(cpcM)} courses/cm on the machine is a very close quality — a stiff cloth and slow running.`);
     if (cpcM < 6) add('warn', `${r1(cpcM)} courses/cm on the machine is a very open quality — an unstable cloth.`);
@@ -268,12 +443,34 @@ function analyse(input) {
     const counter = bars.length >= 2 && bars[0].laps[0].dir !== 0 && bars[1].laps[0].dir !== 0 && bars[0].laps[0].dir === -bars[1].laps[0].dir;
     const character = [];
     const say = (area, text) => character.push({ area, text });
-    say('Face and back', `The front bar (bar 1) shows most: its underlaps lie outermost on the technical back and its loops on the face — ${front.yarn.label} ${front.yarn.fibre_label.toLowerCase()} decides the look${fU >= 2 ? '; its long underlaps give a smooth, covered back that raises or brushes well' : ''}.`);
+    if (beds === 2) say('Face and back', `Two faces knitted at once, one on each needle bed, ${G} mm apart, joined by the spacer yarns of bar${bars.filter((b) => b.role === 'spacer').map((b) => ' ' + b.n).join(',')}; each face's technical back (its underlaps) faces inwards.`);
+    else say('Face and back', `The front bar (bar 1) shows most: its underlaps lie outermost on the technical back and its loops on the face — ${front.yarn.label} ${front.yarn.fibre_label.toLowerCase()} decides the look${fU >= 2 ? '; its long underlaps give a smooth, covered back that raises or brushes well' : ''}.`);
     say('Stability', bars.some((b) => b.kind.key === 'pillar') ? 'Pillar stitches hold the length: little lengthwise stretch.' : fU >= 2 ? `The ${fU}-needle front underlap ties the wales together: firm across the width, little widthwise stretch.` : 'Short underlaps: the cloth stretches in both directions.');
     say('Runs and splitting', counter ? 'Counter-lapped bars lock each loop: the cloth does not ladder, and resists splitting.' : bars.length === 1 ? 'One bar: the loops of a wale are joined only by their own underlaps — it unravels and splits easily.' : 'Bars lapping the same way: the loops are not locked against each other — prone to splitting along the wales.');
     if (elastic) say('Stretch', `Elastane on bar${bars.filter((b) => b.yarn.elastic).map((b) => ' ' + b.n).join(',')}, fed at a draft of ${bars.find((b) => b.yarn.elastic).yarn.draft}: power stretch and recovery; the cloth closes up strongly off the machine.`);
     if (bars.some((b) => b.laps.some((l) => !l.inlay && !l.closed))) say('Laps', `Open laps on bar${bars.filter((b) => b.laps.some((l) => !l.inlay && !l.closed)).map((b) => ' ' + b.n).join(',')}: the yarn does not cross at the loop's foot — a softer, more open loop.`);
-    say('Curling', 'Like all single-faced warp knits, the edges curl towards the technical face lengthwise and the back crosswise — heat-set to flatten.');
+    let spacer = null;
+    if (beds === 2) {
+      // the spacer: thickness from the bed gap, its yarns' slant and how many stand per cm²
+      const sp = bars.map((b, i) => ({ b, x: R.per[i] })).filter((o) => o.b.role === 'spacer');
+      const skin = (role) => Math.max(0, ...bars.filter((b) => b.role === role || b.role === 'spacer').map((b) => b.yarn.d_mm));
+      const greige = G + 2 * skin('front') + 2 * skin('back');
+      const mono = sp.length && sp.every((o) => o.b.yarn.mono);
+      // a monofilament spacer stands nearly at the gap; a multifilament one sags (modelled)
+      const stand = mono ? 0.95 : Math.max(0.45, 1 - 0.04 * G);
+      const perCm2 = sp.reduce((t, o) => t + o.x.ends * (o.x.dn ? o.x.dn.crossings : 0) * cpcM * kc, 0);
+      const slant = sp.length ? sp.reduce((t, o) => t + (o.x.dn ? o.x.dn.slant : 0), 0) / sp.length : 0;
+      const angle = Math.atan((slant * p) / G) * 180 / Math.PI;
+      spacer = {
+        gap_mm: G, thickness_mm: r1(greige * stand), greige_thickness_mm: r1(greige), spacer_yarns_per_cm2: r1(perCm2), slant_needles: r1(slant), angle_deg: r1(angle),
+        share_pct: r1(sp.reduce((t, o) => t + o.x.gsm, 0) / R.gsm * 100),
+        basis: `thickness = bed gap + both faces (2 yarn diameters each)${mono ? ', a monofilament standing at ~95 %' : ', a multifilament spacer sagging'} — modelled`,
+      };
+      say('Thickness', `${spacer.thickness_mm} mm (bed gap ${G} mm${mono ? '' : '; multifilament spacer yarns sag, so it is less than the gap'}): ${r1(perCm2)} spacer yarns cross per cm².`);
+      say('Compression', slant < 0.5 ? 'The spacer yarns stand straight across (each loops on the same needle on both beds): stiff at first touch, then they buckle all together — a firm but collapsing cushion; the faces shear easily against each other.'
+        : `The spacer yarns lean ${r1(angle)}° (across ${r1(slant)} needle${slant >= 1.5 ? 's' : ''}): they bend rather than buckle — a softer, progressive cushion that holds the faces from shearing${sp.length >= 2 ? ', best when two spacer bars lean opposite ways (crossed, an X)' : ''}.`);
+      say('Air and moisture', 'The open middle layer moves air and moisture across the cloth — mattress covers, shoe uppers, car seats, bra cups and medical pads.');
+    } else say('Curling', 'Like all single-faced warp knits, the edges curl towards the technical face lengthwise and the back crosswise — heat-set to flatten.');
 
     // ── production and beams ──
     const speed = +m.speed_cpm > 0 ? +m.speed_cpm : Math.round((M.speed[0] + M.speed[1]) / 2);
@@ -287,20 +484,20 @@ function analyse(input) {
       const ends = Math.round(needles * b.thread.fraction);
       const runner = x.lc * RACK;
       return {
-        bar: b.n, notation: b.notation, kind: b.kind.label, threading: b.thread.pattern, threaded_pct: r1(b.thread.fraction * 100),
+        bar: b.n, notation: b.notation, kind: b.kind.label, bed: b.role || 'front', threading: b.thread.pattern, threaded_pct: r1(b.thread.fraction * 100),
         yarn: b.yarn.label, fibre: b.yarn.fibre_label, tex: r2(b.yarn.tex), draft: b.yarn.draft > 1 ? b.yarn.draft : null,
         laps: b.laps.map((l) => ({ course: l.course, overlap: l.inlay ? 0 : l.o, underlap: l.u, lap: l.inlay ? 'inlay' : l.closed ? 'closed' : 'open' })),
-        mm_per_course: r3(x.lc), runner_mm_per_rack: Math.round(runner), fed_mm_per_rack: Math.round(x.fed * RACK),
+        d_mm: r3(b.yarn.d_mm), mm_per_course: r3(x.lc), runner_mm_per_rack: Math.round(runner), fed_mm_per_rack: Math.round(x.fed * RACK),
         ends, gsm: r1(x.gsm), pct: r1((x.gsm / R.gsm) * 100),
         // yarn this bar takes per 1,000 m of fabric off the machine
         kg_per_1000m: r2((ends * (x.fed / 1000) * (cpcM * 100) * 1000 * b.yarn.tex) / 1e6),
       };
     });
-    const lappingPaths = bars.map((b) => ({ bar: b.n, pairs: b.pairs }));
+    const lappingPaths = bars.map((b) => ({ bar: b.n, pairs: b.pairs, role: b.role || null }));
     return {
       success: true,
       tech: 'warp',
-      structure: { name: nameOf(bars), bars: bars.length, repeat_courses: repeat, counter_lapped: counter },
+      structure: { name: nameOf(bars), bars: bars.length, repeat_courses: repeat, counter_lapped: counter, beds, gap_mm: G || null },
       checks: checks.sort((a, b) => ({ error: 0, warn: 1, note: 2, ok: 3 }[a.level] - { error: 0, warn: 1, note: 2, ok: 3 }[b.level])),
       ok_to_knit: !checks.some((c) => c.level === 'error'),
       machine: {
@@ -308,6 +505,7 @@ function analyse(input) {
         cpc_machine: r2(cpcM), cpc_source: cpcSource, m_per_hour: r1(mPerH), finished_m_per_hour: r1(finishedMperH), kg_per_hour: r2(kgh), use: M.use,
       },
       fabric: {
+        spacer,
         gsm: Math.round(R.gsm), wpc: r2(wpcMachine * kw), cpc: r2(cpcM * kc), width_in: r1(finishedWidthIn),
         relax: { kw: r2(kw), kc: r2(kc), basis: tgtW > 0 ? 'width: your finished width; length: modelled' : `modelled for a ${mType.replace('_', ' ')}${elastic ? ' with elastane' : ''} (finished wales = machine × ${r2(kw)}, courses × ${r2(kc)})` },
         composition: barsOut.map((b) => ({ part: `bar ${b.bar}: ${b.yarn} ${b.fibre}`, pct: b.pct })),
@@ -337,7 +535,26 @@ const TEMPLATES = [
   { id: 'swim_tricot', name: 'Swimwear tricot (nylon + elastane)', machine: 'tricot', gauge: 28, gsm: 190, bars: [{ notation: '1-0/2-3//', yarn: NY(40) }, { notation: '1-2/1-0//', yarn: { count: 40, unit: 'denier', fibre: 'elastane', draft: 2.2 } }] },
   { id: 'powernet', name: 'Powernet', machine: 'raschel', gauge: 28, gsm: 180, bars: [{ notation: '1-0/0-1//', threading: 'X.', yarn: NY(40) }, { notation: '1-0/1-2/2-3/2-1//', threading: '.X', yarn: NY(40) }, { notation: '0-0/2-2//', threading: 'X.', yarn: { count: 280, unit: 'denier', fibre: 'elastane', draft: 2.5 } }] },
   { id: 'pillar_inlay', name: 'Pillar-inlay (marquisette)', machine: 'raschel', gauge: 24, gsm: 90, bars: [{ notation: '1-0/0-1//', yarn: { count: 75, unit: 'denier', fibre: 'polyester_filament' } }, { notation: '0-0/3-3//', yarn: { count: 75, unit: 'denier', fibre: 'polyester_filament' } }] },
+  { id: 'sandfly', name: 'Sandfly net (hexagonal, half set)', machine: 'raschel', gauge: 24, gsm: 25, bars: [{ notation: '1-0/0-1/1-0/1-2/2-1/1-2//', threading: 'X.', yarn: NY(40) }, { notation: '1-2/2-1/1-2/1-0/0-1/1-0//', threading: '.X', yarn: NY(40) }] },
+  // raschel-style notation (two numbers per needle space): a published three-bar elastic raschel
+  { id: 'elastic_raschel', name: 'Elastic raschel (raschel notation 2-0/2-4)', machine: 'raschel', gauge: 28, gsm: 150, notation_step: 2, bars: [{ notation: '4-2/0-0/2-4/6-6//', yarn: NY(40, { filaments: 13 }) }, { notation: '2-2/2-4/2-2/2-0//', yarn: NY(40, { filaments: 13 }) }, { notation: '0-0/2-2/4-4/2-2//', yarn: { count: 140, unit: 'denier', fibre: 'elastane', draft: 2 } }] },
+  // double-needle-bar: pairs alternate front bed, back bed
+  { id: 'spacer', name: 'Spacer fabric (crossed monofilament, 6 bars)', machine: 'double_raschel', gauge: 18, gap: 5, gsm: 520, bars: [
+    { notation: '1-0/1-1/1-2/2-2//', yarn: { count: 150, unit: 'denier', fibre: 'polyester_filament', filaments: 48 } },
+    { notation: '1-0/0-0/0-1/1-1//', yarn: { count: 150, unit: 'denier', fibre: 'polyester_filament', filaments: 48 } },
+    { notation: '1-0/1-2//', threading: 'X...', yarn: { count: 0.2, unit: 'mm', fibre: 'polyester_mono' } },
+    { notation: '1-2/1-0//', threading: '..X.', yarn: { count: 0.2, unit: 'mm', fibre: 'polyester_mono' } },
+    { notation: '0-0/1-0/1-1/0-1//', yarn: { count: 150, unit: 'denier', fibre: 'polyester_filament', filaments: 48 } },
+    { notation: '1-1/1-0/2-2/1-2//', yarn: { count: 150, unit: 'denier', fibre: 'polyester_filament', filaments: 48 } }] },
+  { id: 'spacer_stretch', name: 'Stretch spacer (7 bars, elastane faces)', machine: 'double_raschel', gauge: 22, gap: 3, gsm: 500, bars: [
+    { notation: '2-1/1-1/0-1/1-1//', yarn: { count: 40, unit: 'denier', fibre: 'elastane', draft: 2 } },
+    { notation: '0-1/1-1/3-2/2-2//', yarn: { count: 70, unit: 'denier', fibre: 'polyester_filament', filaments: 34 } },
+    { notation: '1-0/1-2/2-3/2-1//', yarn: { count: 30, unit: 'denier', fibre: 'polyester_mono' } },
+    { notation: '2-3/2-1/1-0/1-2//', yarn: { count: 30, unit: 'denier', fibre: 'polyester_mono' } },
+    { notation: '1-0/0-1/0-1/1-0//', yarn: { count: 30, unit: 'denier', fibre: 'polyester_mono' } },
+    { notation: '1-1/3-2/2-2/0-1//', yarn: { count: 70, unit: 'denier', fibre: 'polyester_filament', filaments: 34 } },
+    { notation: '1-1/0-1/1-1/2-1//', yarn: { count: 40, unit: 'denier', fibre: 'elastane', draft: 2 } }] },
   { id: 'atlas', name: 'Atlas (2 bars)', machine: 'tricot', gauge: 28, gsm: 95, bars: [{ notation: '1-0/1-2/2-3/3-4/3-2/2-1//', yarn: NY(40) }, { notation: '3-4/3-2/2-1/1-0/1-2/2-3//', yarn: NY(40) }] },
 ];
 
-module.exports = { analyse, MACHINES, FIBRES, TEMPLATES, parseNotation, lapping, courseLength, kindOf };
+module.exports = { analyse, MACHINES, FIBRES, TEMPLATES, parseNotation, lapping, courseLength, kindOf, dnbLength, bedRole, holdsTogether };

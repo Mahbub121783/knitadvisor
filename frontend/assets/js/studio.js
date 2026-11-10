@@ -1022,7 +1022,7 @@
     if (cloth && key === clothKey) { cloth.setColor(o.baseHex); return; }
     clothKey = key;
     $('st-cloth-wait').hidden = false;
-    import('/assets/js/knit3d/index.js?v=20261110e').then(function (mod) {
+    import('/assets/js/knit3d/index.js?v=20261111a').then(function (mod) {
       if (my !== clothSeq || mode3d !== 'cloth') return;
       if (cloth) { try { cloth.dispose(); } catch (_) {} cloth = null; }
       Array.prototype.forEach.call(host.querySelectorAll('canvas'), function (c) { c.remove(); });

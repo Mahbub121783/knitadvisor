@@ -12,7 +12,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-import { buildYarnPaths, floatAnchorsFromPaths, structureRepeat } from './topology-builder.js?v=20261110e';
+import { buildYarnPaths, floatAnchorsFromPaths, structureRepeat } from './topology-builder.js?v=20261111a';
 import { bakeStructure, ClothSurface, fibreSurfaceTexture, wavePhase, melangeMaterial, fuzzTexture } from './macro.js?v=20260608g';
 import { ClothSim } from './cloth-physics.js?v=20260608g';
 import { fabricBody, fabricMechanics } from './fabric-body.js?v=20260608g';
@@ -1000,7 +1000,7 @@ export class Knit3D {
       gsm: this.opts.gsm, construction: con, fiberType: this.opts.fiberType,
       elastanePct: this.opts.elastanePct, physics: this.opts.physics,
       countNe: this.opts.countNe, loopNe: this.opts.loopNe,
-      thicknessMm: (this.opts.pique && this.opts.pique.thicknessMm) || (this.opts.plush && this.opts.plush.thicknessMm),
+      thicknessMm: (this.opts.pique && this.opts.pique.thicknessMm) || (this.opts.plush && this.opts.plush.thicknessMm) || this.opts.thicknessMm,
       napMm: this.opts.plush && this.opts.plush.cut ? this.opts.plush.finishedMm : null,
     });
     const DENSITY_DEFAULTS = { aspect: 1.22, scalar: 1, wpc: 9, tex: 20 };

@@ -543,7 +543,7 @@
         <div class="st-card">
           <div class="st-step"><b>1</b> Structure</div>
           <div class="st-f st-row one"><div><label for="wp-template">Start from</label><select id="wp-template"></select></div></div>
-          <p class="st-hint">Each guide bar has its own warp ends. Write its lapping course by course: <code>1-0/1-2//</code> is tricot, <code>1-0/2-3//</code> a 2-needle underlap, <code>1-0/0-1//</code> pillar, <code>0-0/2-2//</code> an inlay. Bar 1 is the front bar.</p>
+          <p class="st-hint">Each guide bar has its own warp ends. Write its lapping course by course: <code>1-0/1-2//</code> is tricot, <code>1-0/2-3//</code> a 2-needle underlap, <code>1-0/0-1//</code> pillar, <code>0-0/2-2//</code> an inlay. Bar 1 is the front bar. On a double-needle-bar machine the pairs alternate front bed, back bed (<code>1-0/1-1//</code> = a loop on the front bed only; <code>1-0/0-1//</code> = a spacer yarn looping on both), or write a course as four numbers, <code>1-0-0-1</code>.</p>
           <div id="wp-bars"></div>
           <button type="button" class="st-btn" id="wp-addbar">+ Guide bar</button>
         </div>
@@ -556,6 +556,8 @@
             <div class="st-f"><label for="wp-speed">Speed (courses/min)</label><input id="wp-speed" type="number" min="50" max="4000" step="10" placeholder="auto"></div>
             <div class="st-f"><label for="wp-eff">Efficiency (%)</label><input id="wp-eff" type="number" min="30" max="100" step="1" value="85"></div>
             <div class="st-f"><label for="wp-cpc">Quality (courses/cm on the machine)</label><input id="wp-cpc" type="number" min="2" max="80" step="0.1" placeholder="solve from GSM"></div>
+            <div class="st-f"><label for="wp-nstep">Notation</label><select id="wp-nstep"><option value="1">Tricot style (1-0/1-2)</option><option value="2">Raschel style (2-0/2-4)</option></select></div>
+            <div class="st-f" id="wp-gapf" hidden><label for="wp-gap">Gap between the beds (mm)</label><input id="wp-gap" type="number" min="1" max="65" step="0.5" value="6"></div>
           </div>
         </div>
         <div class="st-card">
@@ -571,7 +573,9 @@
         <div class="st-card"><div class="st-step"><b>4</b> Result</div><div id="wp-status"></div><div id="wp-out"></div></div>
         <div class="st-card"><div class="st-step"><b>5</b> 3D fabric</div>
           <div class="st-seg" id="wp-3dmode" role="group" aria-label="3D view"><button type="button" data-m="loops" class="on">Loop structure</button><button type="button" data-m="cloth">Fabric (real view)</button></div>
-          <div class="st-3dbar" id="wp-clothbar" hidden><label>Colour <input type="color" id="wp-col" value="#2f4a7a"></label> <button type="button" class="st-btn" id="wp-side">Show back</button> <span id="wp-3dnote" style="font-size:12px;color:var(--t2)"></span></div>
+          <div class="st-3dbar" id="wp-loopbar"><span class="st-zoom" id="wp-lview"><button type="button" class="st-btn" data-v="face">Face</button><button type="button" class="st-btn" data-v="back">Back</button><button type="button" class="st-btn" data-v="edge">Edge</button><button type="button" class="st-btn on" data-v="angle">Angle</button></span></div>
+          <div class="st-3dbar" id="wp-clothbar" hidden><span class="st-zoom" id="wp-zoom"><button type="button" class="st-btn on" data-z="loops" title="Every loop, in real yarn">Loops</button><button type="button" class="st-btn" data-z="swatch" title="A 4 cm swatch">4 cm</button><button type="button" class="st-btn" data-z="cloth" title="The whole piece of cloth">Cloth</button></span>
+            <label>Colour <input type="color" id="wp-col" value="#2f4a7a"></label> <label title="Each guide bar's yarn in its own colour (a two-colour warp knit)"><input type="checkbox" id="wp-barcol"> Colour by bar</label> <span id="wp-barcols"></span> <button type="button" class="st-btn" id="wp-side">Show back</button> <span id="wp-3dnote" style="font-size:12px;color:var(--t2);display:block"></span></div>
           <div id="wp-loops" style="height:420px;position:relative;border-radius:10px;overflow:hidden;background:var(--bg2,#f4f6f9)"></div>
           <div id="wp-cloth" hidden style="height:420px;position:relative;border-radius:10px;overflow:hidden"></div>
           <p class="st-hint" id="wp-3dhint">Each tube is one warp end, coloured by its guide bar. Every loop is drawn through the loop below it on the same needle; the underlaps run across the technical back — the front bar’s outermost. Closed laps cross at the loop’s foot. Drag to turn, scroll to zoom.</p>
@@ -586,9 +590,9 @@
 
 <script src="assets/js/api.js"></script>
 <script src="assets/js/studio-cloth-map.js?v=20261110d"></script>
-<script src="assets/js/studio-warp-geom.js?v=20261110b"></script>
-<script src="assets/js/studio-warp.js?v=20261110d"></script>
+<script src="assets/js/studio-warp-geom.js?v=20261111a"></script>
+<script src="assets/js/studio-warp.js?v=20261111a"></script>
 <script src="assets/js/studio-needle.js?v=20261110d"></script>
-<script src="assets/js/studio.js?v=20261110o"></script>
+<script src="assets/js/studio.js?v=20261111a"></script>
 </body>
 </html>

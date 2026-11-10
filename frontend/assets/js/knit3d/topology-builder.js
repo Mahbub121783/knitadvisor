@@ -17,7 +17,7 @@
 import { stitchPoints } from './loop-geometry.js?v=20260608g';
 import { stitchJitter } from './noise.js?v=20260608g';
 import { makePointelle, makePatternHoles } from './pointelle.js?v=20260608g';
-import { buildWarpPaths } from './warp-topology.js?v=20261110c';
+import { buildWarpPaths } from './warp-topology.js?v=20261111a';
 import {
   PITCH_X, PITCH_Y, RIB_PITCH_SCALE, RIB_DEPTH, LOOP, TUCK,
   INTERLOCK_DEPTH, INTERLOCK_GAIT, JITTER, PATCH,
@@ -291,6 +291,17 @@ function fleeceFeeds(pattern) {
  * (synthetic eyelet motifs, warp knits), which the macro view then skips.
  */
 export function structureRepeat(con, pattern) {
+  // a warp knit drawn from its guide-bar lapping repeats across the threading and down the lapping
+  if (con && (con.base === 'warp' || con.type === 'tricot') && pattern && pattern.lapping && pattern.lapping.bars) {
+    const L = pattern.lapping;
+    let w = 1, c = 1;
+    for (const b of L.bars) {
+      w = lcm(w, String(b.threading || 'X').replace(/[^Xx.]/g, '').length || 1);
+      c = lcm(c, b.pairs.length);
+    }
+    if (L.beds === 2) c = Math.max(1, c / 2);
+    return { wales: w, courses: c, xPitch: PITCH_X };
+  }
   if (!con || con.base === 'warp' || con.type === 'tricot' || con.type === 'mesh' || con.type === 'spacer') return null;
   const pc = (pattern && pattern.cols) || 1, pr = (pattern && pattern.rows) || 1;
   // the loops' own irregularity repeats over 16 × 16 stitches (~1.5 cm), long

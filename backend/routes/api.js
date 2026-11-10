@@ -1238,7 +1238,7 @@ router.get('/color/shade-check', (req, res) => {
 // like the calculator it sits beside.
 router.get('/studio/templates', requireUser, (req, res) => {
   res.json({ success: true, templates: fabricStudio.listTemplates(), fibres: fabricStudio.FIBRES, limits: fabricStudio.LIMITS, machines: knitMachine.list(),
-    warp: { templates: warpStudio.TEMPLATES, machines: Object.fromEntries(Object.entries(warpStudio.MACHINES).map(([k, m]) => [k, { label: m.label, gauges: m.gauges, bars: m.bars, speed: m.speed, use: m.use }])), fibres: Object.fromEntries(Object.entries(warpStudio.FIBRES).map(([k, f]) => [k, f.label])) } });
+    warp: { templates: warpStudio.TEMPLATES, machines: Object.fromEntries(Object.entries(warpStudio.MACHINES).map(([k, m]) => [k, { label: m.label, gauges: m.gauges, bars: m.bars, speed: m.speed, use: m.use, beds: m.beds }])), fibres: Object.fromEntries(Object.entries(warpStudio.FIBRES).map(([k, f]) => [k, f.label])) } });
 });
 
 // Warp knitting: guide-bar lapping, threading and yarns -> runner, weight, width, production, checks.

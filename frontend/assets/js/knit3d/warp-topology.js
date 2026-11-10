@@ -16,7 +16,7 @@ import { knitLoop } from './loop-geometry.js?v=20260608g';
 import { stitchJitter } from './noise.js?v=20260608g';
 import { PITCH_X, PITCH_Y, JITTER, PATCH } from './constants.js?v=20260608g';
 // the studio's lapping geometry (plain script, sets globalThis.KAWarpGeom)
-import '../studio-warp-geom.js?v=20261110b';
+import '../studio-warp-geom.js?v=20261111a';
 
 const UNDERLAP_Z = -0.30;   // underlaps run across the technical back
 
@@ -27,7 +27,8 @@ export function buildWarpPaths(opts = {}) {
   // a real guide-bar programme: every end's path from its own lapping and threading
   if (opts.lapping && opts.lapping.bars && globalThis.KAWarpGeom) {
     const pitchY = opts.pitchY || PITCH_Y;
-    const g = globalThis.KAWarpGeom.buildWarpGeom({ bars: opts.lapping.bars, needles: opts.ends || PATCH.wales, courses: opts.courses || PATCH.courses, h: pitchY / PITCH_X });
+    const L = opts.lapping;
+    const g = globalThis.KAWarpGeom.buildWarpGeom({ bars: L.bars, needles: opts.ends || PATCH.wales, courses: opts.courses || PATCH.courses, h: pitchY / PITCH_X, beds: L.beds, gap: L.gap });
     const tints = opts.lapping.tints || [];
     return {
       paths: g.paths.map((p) => {

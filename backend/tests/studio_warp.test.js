@@ -21,7 +21,7 @@ assert.strictEqual(W.kindOf(W.lapping(W.parseNotation('1-0/1-2/2-3/3-4/3-2/2-1//
 
 // every template knits and is named
 for (const t of W.TEMPLATES) {
-  const r = W.analyse({ machine: { type: t.machine, gauge: t.gauge }, bars: t.bars, target: { gsm: t.gsm } });
+  const r = W.analyse({ machine: { type: t.machine, gauge: t.gauge, gap_mm: t.gap, notation_step: t.notation_step }, bars: t.bars, target: { gsm: t.gsm } });
   assert(r.success, `${t.id}: ${r.error}`);
   assert(r.ok_to_knit, `${t.id}: ${r.checks.filter((c) => c.level === 'error').map((c) => c.text)}`);
   assert(r.structure.name, `${t.id}: named`);
@@ -94,5 +94,80 @@ console.log('Studio warp tests passed');
   assert.strictEqual(out.status, 0, out.stderr);
   const k = JSON.parse(out.stdout);
   assert(k.paths > 10 && k.finite, `knit3d warp paths: ${out.stdout}`);
+  assert.deepStrictEqual(k.repeat, { wales: 2, courses: 6, xPitch: 1 }, 'the macro view tiles a half-set 6-course net by its own repeat');
+  assert.deepStrictEqual(k.spacerRepeat, { wales: 4, courses: 2, xPitch: 1 }, 'a spacer repeats over its machine courses, not its pairs');
+  assert(k.depth > 3.5, 'knit3d draws both faces of the spacer, the gap apart');
 }
 console.log('Studio warp 3D tests passed');
+
+// raschel-style notation, four-number courses, monofilament diameters
+{
+  assert.deepStrictEqual(W.parseNotation('2-0/2-4//', 1, { step: 2 }), W.parseNotation('1-0/1-2//', 1), 'raschel style counts two per needle space');
+  assert.throws(() => W.parseNotation('3-0/2-4//', 1, { step: 2 }), /even/);
+  assert.deepStrictEqual(W.parseNotation('1-0-2-3/1-1-0-1//', 1), [[1, 0], [2, 3], [1, 1], [0, 1]], 'a four-number course is front bed then back bed');
+  const mono = run([{ notation: '1-0/1-2//', yarn: { count: 0.2, unit: 'mm', fibre: 'polyester_mono' } }, { notation: '1-2/1-0//', yarn: NY(40) }], { cpc: 20 });
+  near(mono.bars[0].tex, 1.38 * Math.PI * 0.01 * 1000, 0.1, '0.2 mm PET monofilament ≈ 43.4 tex');
+  near(mono.bars[0].d_mm, 0.2, 0.001, 'a monofilament is as thick as its diameter');
+}
+
+// does the cloth hold together?
+{
+  const lvl = (r, re) => r.checks.filter((c) => re.test(c.text)).map((c) => c.level);
+  // pillars alone: separate chains
+  const pil = run([{ notation: '1-0/0-1//', yarn: NY(40) }], { cpc: 20 });
+  assert.deepStrictEqual(lvl(pil, /not joined sideways/), ['error'], 'pillars with nothing across them fall apart');
+  // queenscord: the back bar's 3-needle underlaps tie the pillars
+  const qc = W.TEMPLATES.find((t) => t.id === 'queenscord');
+  assert(!lvl(W.analyse({ machine: { type: 'tricot', gauge: 28 }, bars: qc.bars, target: { gsm: 150 } }), /not joined/).length, 'underlaps bind the wales they cross');
+  // pillar + inlay (marquisette): held by the inlay
+  assert(!lvl(run([{ notation: '1-0/0-1//', yarn: NY(40) }, { notation: '0-0/3-3//', yarn: NY(40) }], { cpc: 15 }), /not joined/).length);
+  // a hexagonal net presses loops off on purpose (a note); a full-set fabric with an idle needle is warned
+  const sf = W.TEMPLATES.find((t) => t.id === 'sandfly');
+  const sfr = W.analyse({ machine: { type: 'raschel', gauge: 24 }, bars: sf.bars, target: { gsm: sf.gsm } });
+  assert.deepStrictEqual(lvl(sfr, /pressed off/), ['note']);
+  assert(/Hexagonal net/.test(sfr.structure.name));
+  assert(!run([{ notation: '1-0/1-2//', yarn: NY(40) }, { notation: '1-2/1-0//', yarn: NY(40) }], { cpc: 20 }).checks.some((c) => /pressed off/.test(c.text)), 'full tricot: every needle knits every course');
+}
+
+// double-needle-bar spacer
+{
+  const sp = (bars, gap, extra) => W.analyse({ machine: { type: 'double_raschel', gauge: 18, gap_mm: gap, cpc: 10, ...(extra || {}) }, bars, target: {} });
+  const PET = (d) => ({ count: d, unit: 'denier', fibre: 'polyester_filament', filaments: 48 });
+  const MONO = { count: 0.2, unit: 'mm', fibre: 'polyester_mono' };
+  const base = (spacer, gapYarn) => [
+    { notation: '1-0/1-1/1-2/2-2//', yarn: PET(150) },        // front bed only
+    { notation: '1-0/0-1//', yarn: gapYarn || MONO, threading: 'X.', ...(spacer || {}) },   // both beds
+    { notation: '1-1/1-0/2-2/1-2//', yarn: PET(150) },        // back bed only
+  ];
+  const r = sp(base(), 5);
+  assert(r.success && r.ok_to_knit, r.error || JSON.stringify(r.checks));
+  assert.deepStrictEqual(r.bars.map((b) => b.bed), ['front', 'spacer', 'back']);
+  assert(/Spacer fabric/.test(r.structure.name) && r.structure.beds === 2);
+  // thickness from the gap; a wider gap needs more spacer yarn, the faces do not change
+  const r10 = sp(base(), 10);
+  assert(r10.fabric.spacer.thickness_mm > r.fabric.spacer.thickness_mm + 4.5);
+  assert(r10.bars[1].mm_per_course - r.bars[1].mm_per_course > 2 * 4.9, 'two crossings per course, each ~5 mm longer');
+  near(r10.bars[0].mm_per_course, r.bars[0].mm_per_course, 1e-9, 'the faces do not depend on the gap');
+  // straight spacer (pillar on both beds) vs one that leans across a needle
+  assert.strictEqual(r.fabric.spacer.angle_deg, 0);
+  assert(sp(base({ notation: '1-0/1-2//' }), 5).fabric.spacer.angle_deg > 10);
+  // nothing joins the faces: two fabrics
+  assert(sp([base()[0], base()[2]], 5).checks.some((c) => c.level === 'error' && /two separate fabrics/.test(c.text)));
+  // a multifilament spacer at 10 mm will not stand up
+  assert(sp(base(null, PET(150)), 10).checks.some((c) => c.level === 'warn' && /collapses/.test(c.text)));
+  // a lapping with an odd number of pairs is not a double-needle-bar lapping
+  assert(/two pairs/.test(sp([{ notation: '1-0/1-2/2-3//', yarn: PET(150) }], 5).error));
+  assert(/gap/.test(sp(base(), 90).error));
+}
+
+// 3D: two beds — the back face mirrored behind the front, spacer yarns across
+{
+  const G = require('../../frontend/assets/js/studio-warp-geom.js');
+  const g = G.buildWarpGeom({ bars: [{ pairs: [[1, 0], [1, 1], [1, 2], [2, 2]] }, { pairs: [[1, 0], [0, 1]] }, { pairs: [[1, 1], [1, 0], [2, 2], [1, 2]] }], beds: 2, gap: 4, needles: 8 });
+  const zs = (b) => g.paths.filter((p) => p.bar === b).flatMap((p) => p.points.map((q) => q.z));
+  assert(Math.min(...zs(0)) > 1, 'front-bed bar stays on the front face');
+  assert(Math.max(...zs(2)) < -1, 'back-bed bar stays on the back face');
+  assert(Math.min(...zs(1)) < -1.5 && Math.max(...zs(1)) > 1.5, 'the spacer yarn crosses between them');
+  assert(g.paths.filter((p) => p.bar === 1).every((p) => new Set(p.loops.map((l) => l.bed)).size === 2));
+}
+console.log('Studio warp spacer / net / notation tests passed');
