@@ -156,3 +156,17 @@ assert(S.analyse({ ...pay(T.find((x) => x.id === 'single_jersey')), elastane: { 
   assert(errs(run('lacoste_single', { profile: 'custom', custom: { kind: 'single', tracks_cyl: 2, cams_cyl: ['K', 'M'] } })).some((t) => /no tuck cam/.test(t)));
 }
 console.log('Studio machine tests passed');
+// a reduced repeat still matches its catalogue structure; waffle on its own factory records
+{
+  const w = T.find((x) => x.id === 'waffle_knit');
+  const r = S.analyse({ bed: 'double', gating: w.gating, grid: { C: rows(w.grid.C), D: rows(w.grid.D) }, yarn: { count: 34, unit: 'ne' }, machine: { gauge: 18, dia: 34, sl_mm: 2.7 }, target: {} });
+  assert.strictEqual(r.structure.match.id, 'waffle_knit');
+  assert(/waffle/.test(r.fabric.kw_basis) && r.structure.confidence.level === 'calibrated');
+  assert(r.fabric.width_open_in > 55 && r.fabric.width_open_in < 75, `waffle on 34" 18 GG finishes about 64-68": ${r.fabric.width_open_in}`);
+}
+// a plush too light to plate: a message, never a crash
+{
+  const r = S.analyse({ bed: 'single', grid: { C: ['K', 'K'] }, feeds: [{ role: 'loop' }, { role: 'ground' }], pile: 'sinker', yarn: { count: 10, unit: 'ne' }, target: { gsm: 60 }, machine: {} });
+  assert(typeof r.success === 'boolean');
+}
+console.log('Studio machine extra tests passed');

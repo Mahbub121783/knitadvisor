@@ -150,9 +150,12 @@ function templateOf(f) {
     bed: D ? 'double' : 'single', gating: D ? (f.category === 'interlock' && !ilClash ? 'interlock' : 'rib') : 'single',
     note: ilClash ? 'Listed with the interlock family, but cylinder and dial needles rise together at one feed: this programme runs on rib gating.'
       : eyelet ? 'Each eyelet is a loop transfer (E): knitted on a pointelle machine with transfer and electronic needle selection.'
+        : f.id === 'plated_jersey' ? 'Plating: a second yarn is fed through the same guide into every loop and held to the back — set the Plated (back) yarn under Yarn (e.g. a cotton face on a polyester back).'
         : f.id === 'heavy_jersey' ? 'Heavy jersey is knitted with two ends per feeder (two yarns fed together into every loop): set as 2-ply. The heavy-jersey rows in the factory records weigh what two ends do — one end at that loop length would be about half.' : null,
     // heavy jersey: two ends per feeder (the factory's rows: 22s at a 4 mm loop, ~280 GSM)
     ends: f.id === 'heavy_jersey' ? 2 : 1,
+    // plated jersey: two yarns through one plating feeder, face and back
+    plated: f.id === 'plated_jersey',
     grid: { C: Cg, D },
     roles: Array.from({ length: feeds }, (_, i) => { const c = cam.find((x) => +x.feed === i + 1); return roleOf(c && c.yarn); }),
     typical_gauge: f.typical_gauge || null,
@@ -259,9 +262,12 @@ function matchCatalogue(st0) {
   const st = { ...st0, beds: { C: st0.beds.C.map((r) => r.map((x) => (x === 'E' || x === 'R' ? 'M' : x))), D: st0.beds.D && st0.beds.D.map((r) => r.map((x) => (x === 'R' ? 'M' : x))) } };
   for (const f of CATALOGUE) {
     const t = KP.normaliseStructure(f);
-    if (!t || t.feeds !== st.feeds || t.width !== st.width || !!t.beds.D !== !!st.beds.D) continue;
-    for (let r = 0; r < st.feeds; r++) for (let c = 0; c < st.width; c++) {
-      if (same(shiftRows(st.beds.C, r, c), t.beds.C) && (!st.beds.D || same(shiftRows(st.beds.D, r, c), t.beds.D))) return f;
+    if (!t || !!t.beds.D !== !!st.beds.D || t.feeds % st.feeds || t.width % st.width) continue;
+    // the design's repeat may be reduced: tile it up to the catalogue's before comparing
+    const tile = (g) => g && Array.from({ length: t.feeds }, (_, i) => Array.from({ length: t.width }, (__, j) => g[i % st.feeds][j % st.width]));
+    const C = tile(st.beds.C), D = tile(st.beds.D);
+    for (let r = 0; r < t.feeds; r++) for (let c = 0; c < t.width; c++) {
+      if (same(shiftRows(C, r, c), t.beds.C) && (!D || same(shiftRows(D, r, c), t.beds.D))) return f;
     }
   }
   return null;
@@ -276,17 +282,22 @@ function classify(st, roles, gating) {
 
 // the anchor's yarn per needle position, in ground-tex units
 // (memoised: the setup search asks for it thousands of times)
-const anchorCache = new Map();
+// (the anchor structure is read once per family; its consumption is cheap — counted once — so it is not cached per loop)
+const anchorDefs = new Map();
 function anchorMass(family, pitchMm, slMm) {
-  const key = `${family}|${pitchMm}|${slMm}`;
-  if (anchorCache.has(key)) return anchorCache.get(key);
-  let a = anchorCache.get(family);
-  if (!a) { const f = byId(FAMILY[family].anchor); a = { f, t: KP.normaliseStructure(f), roles: templateOf(f).roles }; anchorCache.set(family, a); }
-  const cons = KP.feedConsumption(a.t, pitchMm, slMm);
-  const out = { def: a.f, M: mean(cons.map((c, i) => c.share * (a.roles[i] === 'loop' ? ANCHOR_LOOP_TEX_RATIO : 1))) };
-  if (anchorCache.size > 5000) anchorCache.clear();
-  anchorCache.set(key, out);
-  return out;
+  let a = anchorDefs.get(family);
+  if (!a) {
+    // M is linear in the miss float share: M = A + B·missShare, the two read once from the anchor's cells
+    const f = byId(FAMILY[family].anchor), t = KP.normaliseStructure(f), roles = templateOf(f).roles;
+    const c0 = KP.feedConsumptionCells(t, 1, 1e9), c1 = KP.feedConsumptionCells(t, 1, 1.1);   // missShare 0.15 and 0.6 (clamped ends)
+    const w = (i) => (roles[i] === 'loop' ? ANCHOR_LOOP_TEX_RATIO : 1);
+    const m0 = mean(c0.map((c, i) => c.share * w(i))), m1 = mean(c1.map((c, i) => c.share * w(i)));
+    const B = (m1 - m0) / (0.6 - 0.15);
+    a = { f, A: m0 - B * 0.15, B };
+    anchorDefs.set(family, a);
+  }
+  const miss = Math.max(0.15, Math.min(0.6, (pitchMm * 1.1) / slMm));
+  return { def: a.f, M: a.A + a.B * miss };
 }
 
 function maxRun(col, sym) {
@@ -559,13 +570,15 @@ function solve(ctx, ground) {
   const M = KP.MACHINE[FAMILY[family].machine];
   const phi = platingFraction(ctx);
   const fibre = fibreFactor(ground.fibre);
-  const model = structureModel(ctx);
+  const model = ctx.exactFam ? { ...structureModel(ctx), ksF: 1, kwF: 1, notes: [`measured on this exact structure (${ctx.exactFam} factory records)`] } : structureModel(ctx);
   // a rib with needles out of action (2-in-1-out, 2x2) is weighed on its own factory records
   const ksFam = family === 'rib' && ctx.posNorm > 1.01 ? 'rib2x2' : family;
-  const KS0 = blend(KP.calFor('ks', ksFam, false), KP.calFor('ks', ksFam, true), phi);
-  const KW0 = blend(KP.calFor('kw', family, false), KP.calFor('kw', family, true), phi);
+  // a design that IS a structure the factory has measured: its own constants, no carrying over
+  const ex = ctx.exactFam;
+  const KS0 = ex ? blend(KP.calFor('ks', ex, false), KP.calFor('ks', ex, true), phi) : blend(KP.calFor('ks', ksFam, false), KP.calFor('ks', ksFam, true), phi);
+  const KW0 = ex ? blend(KP.calFor('kw', ex, false), KP.calFor('kw', ex, true), phi) : blend(KP.calFor('kw', family, false), KP.calFor('kw', family, true), phi);
   const pitch0 = 25.4 / (+mach.gauge > 0 ? +mach.gauge : 24);
-  const pack = holdPacking(family, ctx.rate == null ? 1 : ctx.rate, pitch0, 3);
+  const pack = ctx.exactFam ? { ks: 1, kw: 1, basis: null, measured: true } : holdPacking(family, ctx.rate == null ? 1 : ctx.rate, pitch0, 3);
   let KS = scaled(KS0, fibre.ks * model.ksF * pack.ks);
   if (pack.spread) KS = { ...KS, q1: KS.q1 / pack.spread, q3: KS.q3 * pack.spread };
   let KW = scaled(KW0, fibre.kw * model.kwF * pack.kw);
@@ -581,7 +594,14 @@ function solve(ctx, ground) {
     const ne = COUNTS.reduce((b, c) => (Math.abs(590.5 / c - tex) < Math.abs(590.5 / b - tex) ? c : b), COUNTS[0]);
     return { tex: 590.5 / ne, ne, label: `${ne}s Ne (assumed)`, fibre: ground.fibre, fibre_label: ground.fibre_label };
   })();
-  const yarns = feedRows.map((f) => f.yarn || (f.role === 'loop' ? loopYarn : ground));
+  const yarns = feedRows.map((f) => {
+    const y = f.yarn || (f.role === 'loop' ? loopYarn : ground);
+    if (!f.plate) return y;
+    // plated: both yarns follow the same loop; the back yarn has no plated yarn given → the ground yarn again
+    const pY = f.plate === 'ground' ? ground : f.plate;
+    const d1 = y.d_mm || (Math.sqrt(y.tex) / 28), d2 = pY.d_mm || (Math.sqrt(pY.tex) / 28);
+    return { ...y, tex: y.tex + pY.tex, label: `${y.label} + ${pY.label} plated`, d_mm: d1 + d2, plated: { face: y, back: pY, share: pY.tex / (y.tex + pY.tex) } };
+  });
   // a rib's out-of-action needles are not cloth: the family constants are per
   // working needle (the same basis as its width), so is the yarn here
   const posNorm = ctx.posNorm;
@@ -608,7 +628,8 @@ function solve(ctx, ground) {
     const A = anchorMass(family, pitch, lref);
     const cons = KP.feedConsumption(st, pitch, lref);
     const Y = posNorm * mean(cons.map((c, i) => c.share * (slOf0(i, lref) / 10) * yarns[i].tex));
-    const den = A.M * mb(model.e) / mb(model.eFam);
+    // exact structure: Ks was measured as 10·GSM·ℓ/tex on it, so weigh it on its own yarn per needle
+    const den = ctx.exactFam ? posNorm * mean(cons.map((c) => c.share)) : A.M * mb(model.e) / mb(model.eFam);
     return { gsm: (ks * Y) / (10 * (lk(lref) / 10) ** 2 * den) * (ctx.finishK || 1), cons, A };
   };
   const target = +((input.target || {}).gsm) || null;
@@ -616,14 +637,14 @@ function solve(ctx, ground) {
   if (+mach.sl_mm > 0) { lref = +mach.sl_mm; slSource = 'your setting'; }
   else if (target) {
     let lo = 1.0, hi = 12;
-    for (let k = 0; k < 60; k++) { const mid = (lo + hi) / 2; if (gsmAt(mid).gsm > target) lo = mid; else hi = mid; }
+    for (let k = 0; k < 36; k++) { const mid = (lo + hi) / 2; if (gsmAt(mid).gsm > target) lo = mid; else hi = mid; }
     lref = (lo + hi) / 2; slSource = `solved for ${target} GSM`;
   } else throw new StudioError('Give a target GSM, or your machine stitch length.');
   const at = gsmAt(lref);
   const gsm = at.gsm;
   const gsmRange = [gsmAt(lref, KS.q1).gsm, gsmAt(lref, KS.q3).gsm];
   const slRange = target && slSource.startsWith('solved')
-    ? [KS.q1, KS.q3].map((ks) => { let lo = 1, hi = 12; for (let k = 0; k < 50; k++) { const m = (lo + hi) / 2; if (gsmAt(m, ks).gsm > target) lo = m; else hi = m; } return r2((lo + hi) / 2); })
+    ? [KS.q1, KS.q3].map((ks) => { let lo = 1, hi = 12; for (let k = 0; k < 32; k++) { const m = (lo + hi) / 2; if (gsmAt(m, ks).gsm > target) lo = m; else hi = m; } return r2((lo + hi) / 2); })
     : null;
   const lcm = lk(lref) / 10;
   const slOf = (i) => feedRows[i].sl_mm || lref * feedRows[i].sl_ratio;
@@ -665,7 +686,7 @@ function solve(ctx, ground) {
     return {
       feed: i + 1, role: f.role, role_drawn: f.drawn || f.role, yarn: yarns[i].label, yarn_type: yarns[i].type_label || null, d_mm: yarns[i].d_mm ? r3(yarns[i].d_mm) : null, fibre: yarns[i].fibre_label, tex: r2(yarns[i].tex),
       sl_mm: r3(l), sl_source: f.sl_mm ? 'your setting' : f.sl_ratio !== 1 ? `${f.sl_ratio} × ground` : 'ground stitch length',
-      tf: knitsHere ? r2(Math.sqrt(yarns[i].tex) / (l / 10)) : null,
+      tf: knitsHere ? r2(Math.sqrt(yarns[i].tex) / (l / 10)) : null, plated: yarns[i].plated ? { back: yarns[i].plated.back.label, back_pct: r1(yarns[i].plated.share * 100) } : null,
       share: r2(s), course_length_m: r3(courseM), yarn_speed_m_min: r1(courseM * rpm),
       mass: s * l * yarns[i].tex, // relative, per needle position
       elastane_mass: elast ? s * (l / elast.draft) * (elast.denier / 9) : 0,
@@ -678,7 +699,16 @@ function solve(ctx, ground) {
 
   // composition by role
   const byRole = {};
-  feeds.forEach((f) => { const k = `${f.role}: ${f.yarn} ${f.fibre}`; byRole[k] = (byRole[k] || 0) + f.mass; });
+  feeds.forEach((f, i) => {
+    const P = yarns[i] && yarns[i].plated;
+    if (P) {
+      // a plated feed: the face yarn and the back yarn, by their tex
+      const kf = `${f.role} (face): ${P.face.label} ${P.face.fibre_label}`, kb = `plated (back): ${P.back.label} ${P.back.fibre_label}`;
+      byRole[kf] = (byRole[kf] || 0) + f.mass * (1 - P.share); byRole[kb] = (byRole[kb] || 0) + f.mass * P.share;
+      return;
+    }
+    const k = `${f.role}: ${f.yarn} ${f.fibre}`; byRole[k] = (byRole[k] || 0) + f.mass;
+  });
   const composition = Object.entries(byRole).map(([k, m]) => ({ part: k, pct: r1((m / (massTot + elastTot)) * 100) }));
   if (elastTot > 0) composition.push({ part: `elastane ${ctx.elastane.denier} D (draft ${ctx.elastane.draft})`, pct: r1((elastTot / (massTot + elastTot)) * 100) });
 
@@ -935,7 +965,7 @@ function checksFor(ctx, S, T) {
 function reduceRepeat(C, D, feedRows, altPlating) {
   const beds = [C, D].filter(Boolean);
   const F = C.length, W = C[0].length;
-  const key = (i) => { const f = feedRows[i]; return JSON.stringify([f.role, f.yarn && f.yarn.tex, f.yarn && f.yarn.fibre, f.sl_mm, f.sl_ratio, altPlating ? i % 2 : 0]); };
+  const key = (i) => { const f = feedRows[i]; return JSON.stringify([f.role, f.yarn && f.yarn.tex, f.yarn && f.yarn.fibre, f.sl_mm, f.sl_ratio, f.plate ? f.plate.tex : 0, altPlating ? i % 2 : 0]); };
   let q = F;
   for (let d = 1; d < F; d++) {
     if (F % d) continue;
@@ -966,7 +996,7 @@ function analyse(input) {
 
     const ground = readYarn(input.yarn, null);
     const roleYarn = {};
-    for (const role of ['binder', 'loop']) {
+    for (const role of ['binder', 'loop', 'plate']) {
       const y = input.yarns && input.yarns[role];
       if (y) roleYarn[role] = readYarn({ fibre: (input.yarn || {}).fibre, ...y }, null);
     }
@@ -979,6 +1009,8 @@ function analyse(input) {
         yarn: readYarn(f.yarn ? { ...(input.yarn || {}), ne: null, count: null, unit: null, ...f.yarn } : null, null) || roleYarn[role] || null,
         sl_mm: +f.sl_mm > 0 ? +f.sl_mm : null,
         sl_ratio: +f.sl_ratio > 0 ? Math.min(3, Math.max(0.3, +f.sl_ratio)) : 1,
+        // plating: a second yarn fed through the same guide into every loop of this feed, held to the back
+        plate: f.plate ? (readYarn(input.yarns && input.yarns.plate ? { fibre: (input.yarn || {}).fibre, ...input.yarns.plate } : null, null) || 'ground') : null,
       };
     });
     // stripe colours as drawn, feed by feed (before the repeat is reduced)
@@ -1016,6 +1048,9 @@ function analyse(input) {
     const working = [st.beds.C, st.beds.D].filter(Boolean).reduce((t, g) => t + g[0].filter((x) => x !== '-').length, 0);
     const posNorm = (nb * st.width) / Math.max(1, working);
     const ctx = { st, family, lycra, feedRows, input, gating, elastane, posNorm, calib: null, rate: loopRate(st, feedRows) };
+    // structures the factory records under their own name
+    const EXACT = { waffle_knit: 'waffle' };
+    { const m0 = matchCatalogue(st); const ef = m0 && EXACT[m0.id]; if (ef && KP.calFor('ks', ef, false).n >= 12 && KP.calFor('kw', ef, false).n >= 12) ctx.exactFam = ef; }
     const rolls = input.calibration && input.calibration.rolls;
     if (Array.isArray(rolls) && rolls.length) {
       const g0 = ground || readYarn({ ne: +rolls[0].ne, fibre: (input.yarn || {}).fibre }, null);
@@ -1168,13 +1203,16 @@ function analyse(input) {
         out.push({ role: key === 'face' ? (feedRows.some((x) => x.role === 'face') ? 'face' : 'ground') : key, count: (y || S.ground).label, system: ch.label, spinnable: ch.spinnable, range: ch.range,
           mass_pct: S.feeds.filter((x, k) => ((feedRows[k] || {}).role === f.role)).reduce((t, x) => t + (x.mass_share_pct || 0), 0), ch: ch.c });
       });
+      // the plated (back) yarn, when there is one
+      const pf = feedRows.find((f) => f.plate && f.plate !== 'ground');
+      if (pf) { const ch = characterOf(pf.plate); if (ch) out.push({ role: 'plated', count: pf.plate.label, system: ch.label, spinnable: ch.spinnable, range: ch.range, mass_pct: (S.yarnPlatedPct || 0), ch: ch.c }); }
       return out;
     })();
     const yarnFx = (() => {
       const face = yarnChars.find((x) => x.role === 'face' || x.role === 'ground');
       if (!face) return null;
       // strength of the knitting yarns (not the loop yarn), by mass; filament yarns are not in the spun tables
-      const knitting = yarnChars.filter((x) => x.role !== 'loop' && x.ch.relative_to_combed_ring.strength_pct != null);
+      const knitting = yarnChars.filter((x) => x.role !== 'loop' && x.role !== 'plated' && x.ch.relative_to_combed_ring.strength_pct != null);
       const tot = knitting.reduce((t, x) => t + (x.mass_pct || 0), 0);
       const strength = !knitting.length || !tot ? null : Math.round(knitting.reduce((t, x) => t + x.mass_pct * x.ch.relative_to_combed_ring.strength_pct, 0) / tot);
       // pilling grade (1-5): a combed ring cotton jersey ~3.5, shifted by the face yarn and the finish
@@ -1214,6 +1252,14 @@ function analyse(input) {
         if (+((input.machine || {}).feeders) > 0 && sp.method === 'striper' && !profile.striper) add('note', 'Your feeder count is not a multiple of the stripe repeat, so the stripe cannot be threaded feeder by feeder.');
       }
       if (relax) mc.push(...KR.checks(relax, family));
+      // plating: which yarn shows where
+      feedRows.forEach((f, i) => {
+        if (!f.plate || !S.feeds[i] || !S.feeds[i].plated) return;
+        const face = f.yarn || (f.role === 'loop' ? null : S.ground), back = f.plate === 'ground' ? S.ground : f.plate;
+        if (!face) return;
+        if (back.tex > 1.3 * face.tex) mc.push({ level: 'warn', text: `Feed ${i + 1}: the plated back yarn (${back.label}) is much coarser than the face yarn (${face.label}) — a coarse back yarn grins through to the face. Plating is cleanest with the face yarn as coarse as the back yarn or coarser.` });
+        else mc.push({ level: 'ok', text: `Feed ${i + 1} plated: ${face.label} on the face, ${back.label} on the back (${S.feeds[i].plated.back_pct}% of that feed's yarn) — fed through a plating feeder with two yarn holes, the face yarn's tension kept a little above the back yarn's so it stays in front.` });
+      });
       yarnChars.forEach((y) => {
         if (!y.spinnable && y.range) mc.push({ level: 'warn', text: `${y.role[0].toUpperCase() + y.role.slice(1)} yarn ${y.count}: ${y.system} spinning makes about ${y.range[0]}s–${y.range[1]}s Ne — this count is outside it. Choose another system or count.` });
         y.ch.warnings.forEach((w) => mc.push({ level: 'warn', text: `${y.role[0].toUpperCase() + y.role.slice(1)} yarn: ${w}` }));
@@ -1259,7 +1305,10 @@ function analyse(input) {
     const reasons = [...M0.notes, ...(S.pack.basis ? [S.pack.basis] : [])];
     if (S.ground.fibre !== 'cotton') reasons.push(`fibre: ${S.fibre.basis}`);
     if (partPlated) reasons.push(S.KS.basis);
-    const confidence = plush
+    const exactN = ctx.exactFam ? KP.calFor('ks', ctx.exactFam, lycra).n : 0;
+    const confidence = ctx.exactFam && !ctx.calib && !plush
+      ? { level: 'calibrated', why: `${match ? match.name : 'This structure'} — measured on this exact structure: ${exactN} factory records (${ctx.exactFam}) give its own Ks and Kw.` }
+      : plush
       ? { level: 'estimate', why: `Sinker-loop plush: ${plush.calibration.note}` }
       : ctx.calib
       ? { level: 'verified', why: `Calibrated on your ${ctx.calib.n} trial roll${ctx.calib.n > 1 ? 's' : ''}: Ks ${r1(ctx.calib.ks)} (the factory constants alone would give ${r1(S.modelKS)}), Kw ${r2(ctx.calib.kw)} (${r2(S.modelKW)}). Valid for this structure, fibre and plating, finished state.` }

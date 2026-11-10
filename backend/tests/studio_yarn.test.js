@@ -72,3 +72,18 @@ assert(/0.3 tex is outside/.test(S.analyse({ ...base, yarn: { count: 3, unit: 'd
   assert(fl.yarn.character[1].look.filament, 'the binder is drawn as filament');
 }
 console.log('Studio yarn tests passed');
+// plating: a second yarn in the same loops, face and back
+{
+  const b = { bed: 'single', grid: { C: ['K'] }, yarn: { count: 30, unit: 'ne', fibre: 'cotton' }, machine: { gauge: 24, sl_mm: 2.7 }, target: {} };
+  const plain = S.analyse({ ...b, feeds: [{ role: 'ground' }] });
+  const pl = S.analyse({ ...b, feeds: [{ role: 'ground', plate: true }], yarns: { plate: { count: 75, unit: 'denier', fibre: 'polyester_filament' } } });
+  near(pl.fabric.gsm / plain.fabric.gsm, (19.68 + 8.33) / 19.68, 0.02, 'plated weight = both yarns in the same loops');
+  assert(pl.yarn.composition.some((c) => /plated \(back\): 75 D/.test(c.part)), 'the back yarn is in the composition');
+  const same = S.analyse({ ...b, feeds: [{ role: 'ground', plate: true }] });
+  near(same.fabric.gsm / plain.fabric.gsm, 2, 0.02, 'no plated yarn given: the ground yarn again (two ends)');
+  const coarse = S.analyse({ ...b, feeds: [{ role: 'ground', plate: true }], yarns: { plate: { count: 12, unit: 'ne' } } });
+  assert(coarse.checks.some((c) => c.level === 'warn' && /grins through/.test(c.text)));
+  const tp = S.listTemplates().find((x) => x.id === 'plated_jersey');
+  assert(tp.plated, 'the plated jersey template plates');
+}
+console.log('Studio plating tests passed');

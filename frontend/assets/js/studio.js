@@ -60,6 +60,7 @@
     { key: 'ground', c: 'st-ne', u: 'st-unit', f: 'st-fibre', t: 'st-ytype', p: 'st-ply', fil: 'st-fil' },
     { key: 'binder', c: 'yb-count', u: 'yb-unit', f: 'yb-fibre', t: 'yb-type', p: 'yb-ply', fil: 'yb-fil' },
     { key: 'loop', c: 'yl-count', u: 'yl-unit', f: 'yl-fibre', t: 'yl-type', p: 'yl-ply', fil: 'yl-fil' },
+    { key: 'plate', c: 'yp-count', u: 'yp-unit', f: 'yp-fibre', t: 'yp-type', p: 'yp-ply', fil: 'yp-fil' },
   ];
   var SPUN = [['combed', 'Combed ring'], ['carded', 'Carded ring'], ['compact', 'Compact'], ['siro', 'Siro'], ['siro_compact', 'Siro-compact'], ['open_end', 'Open-end (rotor)'], ['vortex', 'Vortex (air-jet)']];
   var FILA = [['dty', 'Textured (DTY)'], ['fdy', 'Flat (FDY)']];
@@ -84,6 +85,7 @@
     var roles = S.feeds.map(function (f) { return (f && f.role) || 'ground'; });
     document.querySelector('[data-yrole="binder"]').hidden = roles.indexOf('binder') < 0;
     document.querySelector('[data-yrole="loop"]').hidden = roles.indexOf('loop') < 0;
+    document.querySelector('[data-yrole="plate"]').hidden = !S.feeds.some(function (f) { return f && f.plate; });
     document.querySelector('[data-yrole="ground"] .st-yhead b').textContent = roles.indexOf('face') > -1 ? 'Face yarn' : 'Ground yarn';
   }
   function showYarnEq() {
@@ -91,9 +93,9 @@
     var eq = function (e) { return e ? '= ' + e.tex + ' tex · ' + e.ne + 's Ne · ' + e.nm + ' Nm · ' + e.dtex + ' dtex · ' + e.denier + ' D' : ''; };
     var g = last.yarn.ground;
     $('st-yeq-ground').textContent = eq(g.equivalents) + (g.d_mm ? ' · Ø ' + g.d_mm + ' mm' : '') + (g.source === 'solved' ? ' (solved: ' + g.count + ')' : '');
-    ['binder', 'loop'].forEach(function (k) { var y = (last.yarn.roles || {})[k]; $('st-yeq-' + k).textContent = y ? eq(y.equivalents) + ' · Ø ' + y.d_mm + ' mm' + (y.source !== 'your input' ? ' — ' + y.source : '') : ''; });
+    ['binder', 'loop', 'plate'].forEach(function (k) { if (k === 'plate') { var pf = (last.yarn.feeds || []).filter(function (x) { return x.plated; })[0]; $('st-yeq-plate').textContent = pf ? 'back yarn ' + pf.plated.back + ' — ' + pf.plated.back_pct + '% of the plated feed' : ''; return; } var y = (last.yarn.roles || {})[k]; $('st-yeq-' + k).textContent = y ? eq(y.equivalents) + ' · Ø ' + y.d_mm + ' mm' + (y.source !== 'your input' ? ' — ' + y.source : '') : ''; });
     (last.yarn.character || []).forEach(function (c) {
-      var k = c.role === 'face' || c.role === 'ground' ? 'ground' : c.role, el = $('st-yeq-' + k); if (!el) return;
+      var k = c.role === 'face' || c.role === 'ground' ? 'ground' : c.role === 'plated' ? 'plate' : c.role, el = $('st-yeq-' + k); if (!el) return;
       var R = c.relative || {}, sg = function (v) { return v == null ? '—' : (v > 0 ? '+' : '') + v + '%'; };
       el.textContent += ' | ' + c.system + ': strength ' + sg(R.strength_pct) + ', hairiness ' + sg(R.hairiness_pct) + ', torque ' + sg(R.spirality_pct) + ', pilling ' + (c.pilling_delta > 0 ? '+' : '') + c.pilling_delta + ' grade' + (c.spinnable ? '' : ' — not spinnable at this count');
     });
@@ -178,7 +180,7 @@
       var w = Math.max(S.C[0].length, S.D ? S.D[0].length : 0);
       var fit = function (g) { return g.map(function (r) { var o = []; for (var j = 0; j < w; j++) o.push(r[j % r.length]); return o; }); };
       S.C = fit(S.C); if (S.D) S.D = fit(S.D);
-      S.feeds = t.roles.map(function (r) { return { role: r }; });
+      S.feeds = t.roles.map(function (r) { return { role: r, plate: !!t.plated }; });
       $('st-cut').checked = id === 'velour_plush';
       $('st-brush').value = /fleece/.test(id) ? 'back' : 'none';
       $('st-brush-box').hidden = $('st-brush').value === 'none';
@@ -216,6 +218,7 @@
             ['ground', 'face', 'binder', 'loop'].map(function (r) { return '<option value="' + r + '"' + (f.role === r ? ' selected' : '') + '>' + ROLE_LABEL[r] + '</option>'; }).join('') +
             '</select> <input data-feed="' + i + '" data-k="count" type="number" min="1" max="2000" step="0.1" placeholder="count" value="' + esc(f.count || f.ne || '') + '" title="Count on this feeder, in the unit beside it. Empty = this role\'s yarn."> ' +
             '<select data-feed="' + i + '" data-k="unit" title="Count unit">' + [['ne', 'Ne'], ['nm', 'Nm'], ['tex', 'tex'], ['dtex', 'dtex'], ['denier', 'D']].map(function (u) { return '<option value="' + u[0] + '"' + ((f.unit || 'ne') === u[0] ? ' selected' : '') + '>' + u[1] + '</option>'; }).join('') + '</select> ' +
+            '<label class="st-plate" title="Plate a second yarn behind this feeder\'s yarn (Plated yarn row under Yarn)"><input type="checkbox" data-feed="' + i + '" data-k="plate"' + (f.plate ? ' checked' : '') + '> plated</label> ' +
             '<select class="st-feedcol" data-feed="' + i + '" data-k="colour" title="Stripe yarn on this feeder (colours under Yarn)"><option value="">—</option>' + ['A', 'B', 'C', 'D', 'E', 'F'].map(function (c) { return '<option' + (f.colour === c ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select> ' +
             '<input data-feed="' + i + '" data-k="sl_ratio" type="number" min="0.3" max="3" step="0.01" placeholder="×SL" value="' + esc(f.sl_ratio || '') + '" title="Stitch length on this feeder as a multiple of the ground stitch length (e.g. 0.92 for a tighter tuck feeder). Empty = 1."></td>';
         } else html += '<td></td>';
@@ -266,7 +269,8 @@
       var el = e.target, i = el.getAttribute('data-feed'); if (i == null) return;
       snapshot();
       S.feeds[+i] = S.feeds[+i] || { role: 'ground' };
-      S.feeds[+i][el.getAttribute('data-k')] = el.value;
+      S.feeds[+i][el.getAttribute('data-k')] = el.type === 'checkbox' ? el.checked : el.value;
+      if (el.getAttribute('data-k') === 'plate') showYarnRows();
       schedule();
     });
     $('st-pal').addEventListener('click', function (e) {
@@ -400,10 +404,10 @@
       grid: { C: S.C.map(function (r) { return r.join(''); }), D: S.D ? S.D.map(function (r) { return r.join(''); }) : null },
       feeds: S.feeds.map(function (f) {
         var c = +f.count > 0 ? +f.count : +f.ne > 0 ? +f.ne : 0;
-        return { role: f.role || 'ground', colour: f.colour || null, yarn: c ? { count: c, unit: f.count ? (f.unit || 'ne') : 'ne' } : null, sl_ratio: +f.sl_ratio > 0 ? +f.sl_ratio : null };
+        return { role: f.role || 'ground', colour: f.colour || null, plate: !!f.plate, yarn: c ? { count: c, unit: f.count ? (f.unit || 'ne') : 'ne' } : null, sl_ratio: +f.sl_ratio > 0 ? +f.sl_ratio : null };
       }),
       yarn: yarnOf(YROWS[0]),
-      yarns: { binder: +$('yb-count').value > 0 ? yarnOf(YROWS[1]) : null, loop: +$('yl-count').value > 0 ? yarnOf(YROWS[2]) : null },
+      yarns: { binder: +$('yb-count').value > 0 ? yarnOf(YROWS[1]) : null, loop: +$('yl-count').value > 0 ? yarnOf(YROWS[2]) : null, plate: +$('yp-count').value > 0 ? yarnOf(YROWS[3]) : null },
       plush: { cut: $('st-cut').checked, sinker_mm: num('st-sinker'), arrangement: $('st-parr').value },
       pile: $('st-pile').value,
       stripes: $('st-stripe').value.trim() ? { sequence: $('st-stripe').value } : null,

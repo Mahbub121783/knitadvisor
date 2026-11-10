@@ -110,6 +110,7 @@
     td.c.E { background: #fff; color: #0e7490; border: 2px dashed #0e7490; }
     td.c.R { background: #fff; color: #7a4fc2; border: 2px dashed #7a4fc2; }
     .st-feedcol { width: 52px; }
+    .st-plate { font-size: 11px; color: var(--t2); white-space: nowrap; }
     .st-sw { display: inline-flex; align-items: center; gap: 3px; font: 600 11px var(--head); margin-right: 6px; }
     .st-sw input { width: 26px; height: 22px; padding: 0; border: 1px solid var(--line2); border-radius: 4px; }
     td.c.X { background: repeating-linear-gradient(45deg, #fff, #fff 4px, #E4E6E9 4px, #E4E6E9 8px); color: #868C94; border-color: var(--line2); }
@@ -254,6 +255,17 @@
                 <div class="st-f"><label for="yl-fibre">Fibre</label><select id="yl-fibre" class="st-yfibre"></select></div>
                 <div class="st-f"><label for="yl-type">Yarn type</label><select id="yl-type" class="st-ytype"></select></div>
                 <div class="st-f st-yfil"><label for="yl-fil">Filaments (F)</label><input id="yl-fil" type="number" min="1" max="600" step="1" placeholder="e.g. 48"></div>
+              </div>
+            </div>
+            <div class="st-yrow" data-yrole="plate">
+              <div class="st-yhead"><b>Plated (back) yarn</b> <span class="st-yeq" id="st-yeq-plate"></span></div>
+              <div class="st-row">
+                <div class="st-f"><label for="yp-count">Count</label><input id="yp-count" type="number" min="1" max="2000" step="0.1" placeholder="ground yarn"></div>
+                <div class="st-f"><label for="yp-unit">Unit</label><select id="yp-unit"><option value="ne">Ne</option><option value="nm">Nm</option><option value="tex">tex</option><option value="dtex">dtex</option><option value="denier">denier</option><option value="nw">Nw (worsted)</option></select></div>
+                <div class="st-f"><label for="yp-ply">Ply</label><select id="yp-ply"><option value="1">single</option><option value="2">2-ply</option><option value="3">3-ply</option></select></div>
+                <div class="st-f"><label for="yp-fibre">Fibre</label><select id="yp-fibre" class="st-yfibre"></select></div>
+                <div class="st-f"><label for="yp-type">Yarn type</label><select id="yp-type" class="st-ytype"></select></div>
+                <div class="st-f st-yfil"><label for="yp-fil">Filaments (F)</label><input id="yp-fil" type="number" min="1" max="600" step="1" placeholder="e.g. 48"></div>
               </div>
             </div>
           <p class="st-hint">Leave the ground count empty and the studio picks it from the target GSM. A feeder can still take its own count (Ne) in the design; elastane is set below.</p>
@@ -512,6 +524,6 @@
 <script src="assets/js/api.js"></script>
 <script src="assets/js/studio-cloth-map.js?v=20261110d"></script>
 <script src="assets/js/studio-needle.js?v=20261110d"></script>
-<script src="assets/js/studio.js?v=20261110k"></script>
+<script src="assets/js/studio.js?v=20261110l"></script>
 </body>
 </html>

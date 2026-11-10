@@ -204,7 +204,30 @@ function structureChecks(st, T, machine) {
 
 // yarn length used per needle at a feed, as a share of one knitted loop
 const TUCK_SHARE = 0.7;
+// The cell counts of a structure, per feed: counted once per structure (the
+// solver asks for the consumption thousands of times at different loops).
+const consCounts = new WeakMap();
+function feedCounts(st) {
+  let c = consCounts.get(st);
+  if (c) return c;
+  const dbl = !!st.beds.D;
+  c = Array.from({ length: st.feeds }, (_, i) => {
+    let k = 0, t = 0, m = 0;
+    for (const b of ['C', 'D']) {
+      if (!st.beds[b]) continue;
+      st.beds[b][i].forEach((x) => { if (x === '-') return; if (x === 'K') k++; else if (x === 'T') t++; else if (!dbl) m++; });
+    }
+    return { k, t, m };
+  });
+  consCounts.set(st, c);
+  return c;
+}
 function feedConsumption(st, pitchMm, slMm) {
+  const missShare = clamp((pitchMm * 1.1) / slMm, 0.15, 0.6);
+  // the same as the cell-by-cell sum below: a knit 1, a tuck TUCK_SHARE, a single-bed miss its float, a double-bed miss nothing
+  return feedCounts(st).map((n) => ({ share: (n.k + n.t * TUCK_SHARE + n.m * missShare) / st.width }));
+}
+function feedConsumptionCells(st, pitchMm, slMm) {
   const missShare = clamp((pitchMm * 1.1) / slMm, 0.15, 0.6);
   return Array.from({ length: st.feeds }, (_, i) => {
     let s = 0, n = 0;
@@ -415,5 +438,5 @@ function buildKnitPlan(a) {
 module.exports = {
   buildKnitPlan, normaliseStructure, CAL, MACHINE, STANDARD_DIA,
   // shared with the fabric studio (fabric-studio.js)
-  calFor, tracksOf, camChart, structureChecks, feedConsumption,
+  calFor, tracksOf, camChart, structureChecks, feedConsumption, feedConsumptionCells,
 };
