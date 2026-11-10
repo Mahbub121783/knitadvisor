@@ -1189,6 +1189,77 @@
     FIELDS.forEach(function (id) { o.fields[id] = $(id).value; });
     return o;
   }
+  // ── design from a goal: the Studio searches needle programmes itself (POST /api/studio/invent) ─────────
+  var INV = { prefs: { stretch: 0, open: 0, texture: 0, flat: 0, smooth: 0 }, bed: 'any', novelty: 'balanced', last: null, busy: false };
+  var TRAIT_LABEL = { stretch: 'Stretch (width)', open: 'Open / breathable', texture: 'Texture / relief', flat: 'Lies flat (no curl)', smooth: 'Smooth face' };
+  var TRAIT_SHORT = { stretch: 'Stretch', open: 'Open', texture: 'Texture', flat: 'Flat', smooth: 'Smooth' };
+  function renderInventControls() {
+    $('inv-traits').innerHTML = Object.keys(TRAIT_LABEL).map(function (t) {
+      return '<div class="inv-tr"><span>' + TRAIT_LABEL[t] + '</span><span class="st-seg inv-seg" data-inv-trait="' + t + '">' +
+        [[-1, 'Less'], [0, 'Any'], [1, 'More']].map(function (o) { return '<button type="button" data-v="' + o[0] + '" class="' + (INV.prefs[t] === o[0] ? 'on' : '') + '">' + o[1] + '</button>'; }).join('') + '</span></div>';
+    }).join('');
+    Array.prototype.forEach.call(document.querySelectorAll('[data-inv-bed] button'), function (b) { b.classList.toggle('on', b.getAttribute('data-v') === INV.bed); });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-inv-nov] button'), function (b) { b.classList.toggle('on', b.getAttribute('data-v') === INV.novelty); });
+  }
+  /** A small picture of a programme: knit blue, tuck amber, miss pale, transfer outlined, empty white; the dial below the cylinder. */
+  function progThumb(grid) {
+    var C = grid.C, D = grid.D, cell = 9, W = C[0].length, rowsN = C.length + (D ? D.length + 1 : 0), reps = Math.max(1, Math.floor(8 / W));
+    var col = { K: '#1857C4', T: '#E3A008', M: '#E3E7EC', E: '#ffffff', '-': '#ffffff' };
+    var s = '<svg viewBox="0 0 ' + (W * reps * cell) + ' ' + (rowsN * cell) + '" width="' + Math.min(140, W * reps * cell) + '" style="display:block;border:1px solid var(--line);border-radius:4px;background:#fff">';
+    var draw = function (rows, y0) { rows.forEach(function (r, i) { for (var k = 0; k < reps; k++) for (var j = 0; j < W; j++) { var c = r[j]; s += '<rect x="' + ((k * W + j) * cell + 0.5) + '" y="' + ((y0 + i) * cell + 0.5) + '" width="' + (cell - 1) + '" height="' + (cell - 1) + '" fill="' + (col[c] || '#fff') + '"' + (c === 'E' ? ' stroke="#0f9d76" stroke-width="1.4"' : '') + '/>'; } }); };
+    draw(C.slice().reverse(), 0);
+    if (D) draw(D.slice().reverse(), C.length + 1);
+    return s + '</svg>';
+  }
+  function renderInventResults() {
+    var r = INV.last, box = $('inv-out');
+    if (!r) { box.innerHTML = ''; return; }
+    if (!r.candidates.length) { box.innerHTML = '<p class="st-p">No knittable structure reached ' + r.goal.gsm + ' GSM with these limits. Allow more needles or feeds, or another bed.</p>'; return; }
+    var bar = function (v) { return '<span class="inv-bar"><i style="width:' + Math.round(v * 100) + '%"></i></span>'; };
+    box.innerHTML = '<p class="st-hint" style="margin:0 0 8px">' + r.stats.structures_seen + ' structures looked at, ' + r.stats.knittable + ' knit at ' + r.goal.gsm + ' GSM' + (r.cached ? ' (from memory)' : '') + '. ' + esc(r.basis) + '</p>' +
+      '<div class="inv-grid">' + r.candidates.map(function (c, i) {
+        var a = c.accuracy;
+        return '<div class="inv-card"><div class="inv-head"><b>' + esc(c.name) + '</b>' + (c.is_new ? '<span class="st-badge estimate">new</span>' : '<span class="st-badge calibrated">known</span>') + '</div>' +
+          '<div class="inv-body">' + progThumb(c.grid) + '<div class="inv-traits">' + Object.keys(TRAIT_LABEL).map(function (t) { return '<div' + (INV.prefs[t] ? ' class="want"' : '') + '><span>' + TRAIT_SHORT[t] + '</span>' + bar(c.traits[t]) + '</div>'; }).join('') + '</div></div>' +
+          '<div class="inv-meta">' + (c.bed === 'single' ? 'Single bed' : c.gating === 'interlock' ? 'Interlock gating' : 'Rib gating') + ' · ' + c.feeds + ' feeds × ' + c.needles + ' needles · ' + esc(c.settings.yarn) + ', ' + c.settings.gauge + ' GG, ' + c.settings.sl_mm + ' mm</div>' +
+          (a ? '<div class="inv-meta">8 in 10 land <b>' + a.gsm_range.join('–') + ' GSM</b> · ±5%: ' + a.within_5_pct + '% of the time</div>' : '') +
+          (c.warnings.length ? '<div class="inv-meta" style="color:var(--warn)">' + c.warnings.length + ' warning' + (c.warnings.length > 1 ? 's' : '') + ': ' + esc(c.warnings[0]) + '</div>' : '') +
+          '<button type="button" class="st-btn primary" data-inv-use="' + i + '">Open in the designer</button></div>';
+      }).join('') + '</div>';
+  }
+  function runInvent() {
+    if (INV.busy) return;
+    var gsm = num('st-gsm');
+    if (!(gsm >= 80)) { $('inv-out').innerHTML = '<div class="st-err">Give the target GSM (in Target, on the left) first.</div>'; return; }
+    INV.busy = true; $('inv-go').disabled = true; $('inv-go').textContent = 'Searching…';
+    $('inv-out').innerHTML = '<p class="st-hint">The Studio is knitting hundreds of programmes to find the best…</p>';
+    var body = { gsm: gsm, width_in: num('st-width') || null, bed: INV.bed, prefs: INV.prefs, novelty: INV.novelty, max_needles: +$('inv-needles').value, max_feeds: +$('inv-feeds').value,
+      yarn: { fibre: $('st-fibre').value }, machine: { gauge: num('st-gauge') || null, dia: num('st-dia') || null } };
+    apiFetch('/api/studio/invent', { method: 'POST', body: body }).then(function (r) { INV.last = r; renderInventResults(); }, function (e) {
+      $('inv-out').innerHTML = '<div class="st-err">' + esc((e.data && e.data.error) || e.message || 'The search failed.') + '</div>';
+    }).then(function () { INV.busy = false; $('inv-go').disabled = false; $('inv-go').textContent = 'Find structures'; });
+  }
+  function useCandidate(i) {
+    var c = INV.last && INV.last.candidates[i]; if (!c) return;
+    var arr = function (rows) { return rows.map(function (r) { return r.split(''); }); };
+    loadDesign({ name: c.name + ' (from a goal)', bed: c.bed === 'single' ? 'single' : c.gating, C: arr(c.grid.C), D: c.grid.D ? arr(c.grid.D) : null,
+      feeds: c.grid.C.map(function () { return { role: 'ground' }; }), fields: { 'st-gsm': INV.last.goal.gsm } });
+    var t = document.querySelector('.st-card [data-k], #st-grid, #pane-design'); if (t && t.scrollIntoView) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  function wireInvent() {
+    if (!$('inv-card')) return;
+    renderInventControls();
+    $('inv-card').addEventListener('click', function (e) {
+      var b = e.target.closest('button'); if (!b) return;
+      var seg = b.parentNode;
+      if (seg && seg.getAttribute('data-inv-trait')) { INV.prefs[seg.getAttribute('data-inv-trait')] = +b.getAttribute('data-v'); renderInventControls(); }
+      else if (seg && seg.hasAttribute('data-inv-bed')) { INV.bed = b.getAttribute('data-v'); renderInventControls(); }
+      else if (seg && seg.hasAttribute('data-inv-nov')) { INV.novelty = b.getAttribute('data-v'); renderInventControls(); }
+      else if (b.id === 'inv-go') runInvent();
+      else if (b.hasAttribute('data-inv-use')) useCandidate(+b.getAttribute('data-inv-use'));
+    });
+  }
+
   function loadDesign(o) {
     if (!o || !Array.isArray(o.C) || !o.C.length) throw new Error('Not a Fabric Studio design file.');
     snapshot();
@@ -1204,6 +1275,7 @@
   }
   var account = [], warpSaved = [], pendingWarp = null;          // designs saved to the signed-in account (weft here, warp on the warp page)
   window.KAStudioReloadAccount = function () { return loadAccount(); };
+  setTimeout(function () { try { wireInvent(); } catch (e) { if (window.console) console.error(e); } }, 0);
   function refreshSaved() {
     var local = readStore();
     $('st-saved').innerHTML = '<option value="">Saved designs…</option>' +

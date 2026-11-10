@@ -179,6 +179,21 @@
 
     /* results */
     .st-acc { font-size: 12px; color: var(--t2); background: var(--bg2, #f4f6f9); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px 10px; margin: -4px 0 12px; line-height: 1.5; }
+    .inv-row, .inv-tr { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; font-size: 12px; }
+    .inv-lbl, .inv-tr > span:first-child { color: var(--t2); }
+    .inv-seg { margin: 0; min-width: 210px; }
+    .inv-seg button { padding: 5px 4px; }
+    .inv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; }
+    .inv-card { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px; display: flex; flex-direction: column; gap: 6px; background: var(--bg); }
+    .inv-head { display: flex; justify-content: space-between; gap: 6px; align-items: center; font-size: 13px; }
+    .inv-body { display: flex; gap: 10px; align-items: flex-start; }
+    .inv-traits { flex: 1; display: grid; gap: 3px; font-size: 10px; color: var(--t3); }
+    .inv-traits > div { display: grid; grid-template-columns: 52px 1fr; align-items: center; gap: 4px; }
+    .inv-traits > div.want { color: var(--t1); font-weight: 600; }
+    .inv-bar { height: 6px; background: var(--bg2, #eef1f5); border-radius: 3px; overflow: hidden; display: block; }
+    .inv-bar i { display: block; height: 6px; background: var(--accent); }
+    .inv-meta { font-size: 11px; color: var(--t2); }
+    @media (max-width: 520px) { .inv-row, .inv-tr { flex-direction: column; align-items: stretch; } .inv-seg { min-width: 0; } }
     .st-kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-bottom: 12px; }
     .st-kpi { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 9px 10px; background: var(--bg); }
     .st-kpi .l { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--t3); }
@@ -422,6 +437,16 @@
       </aside>
 
       <section>
+        <div class="st-card" id="inv-card">
+          <div class="st-step"><b>&#10022;</b> Design from a goal</div>
+          <p class="st-hint" style="margin:0 0 8px">Say what the cloth must be, and the Studio designs it: it knits hundreds of needle programmes — the catalogue's and new ones it breeds — and shows the ones that reach your GSM (from Target) on a real yarn, gauge and stitch length, best for what you ask. Open one in the designer to keep going.</p>
+          <div class="inv-row"><span class="inv-lbl">Machine</span><span class="st-seg inv-seg" data-inv-bed><button type="button" data-v="single">Single bed</button><button type="button" data-v="double">Double bed</button><button type="button" data-v="any" class="on">Either</button></span></div>
+          <div id="inv-traits"></div>
+          <div class="inv-row"><span class="inv-lbl">Structure</span><span class="st-seg inv-seg" data-inv-nov><button type="button" data-v="proven">Proven</button><button type="button" data-v="balanced" class="on">Balanced</button><button type="button" data-v="new">Surprise me</button></span></div>
+          <div class="inv-row"><span class="inv-lbl">Repeat up to</span><span><select id="inv-needles"><option value="2">2 needles</option><option value="3">3 needles</option><option value="4">4 needles</option><option value="5">5 needles</option><option value="6" selected>6 needles</option><option value="7">7 needles</option><option value="8">8 needles</option></select> <select id="inv-feeds"><option value="2">2 feeds</option><option value="3">3 feeds</option><option value="4">4 feeds</option><option value="5">5 feeds</option><option value="6" selected>6 feeds</option><option value="7">7 feeds</option><option value="8">8 feeds</option></select></span></div>
+          <button type="button" class="st-btn primary" id="inv-go">Find structures</button>
+          <div id="inv-out" style="margin-top:10px"></div>
+        </div>
         <div class="st-card">
           <div class="st-step"><b>7</b> Design the needle programme</div>
           <div class="st-tools" id="st-edtools">
@@ -628,6 +653,6 @@
 <script src="assets/js/studio-warp-geom.js?v=20261111a"></script>
 <script src="assets/js/studio-warp.js?v=20261111h"></script>
 <script src="assets/js/studio-needle.js?v=20261110d"></script>
-<script src="assets/js/studio.js?v=20261111d"></script>
+<script src="assets/js/studio.js?v=20261111f"></script>
 </body>
 </html>

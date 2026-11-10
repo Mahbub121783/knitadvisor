@@ -44,6 +44,7 @@ const ENDPOINTS = [
 
   E('GET',  '/studio/templates',         G.studio, 'Starting structures, machines and warp templates', true),
   E('POST', '/studio/analyse',           G.studio, 'Weft design: checks, cam set-out, yarn per feeder, GSM, width, stitch length', true),
+  E('POST', '/studio/invent',           G.studio, 'Design from a goal: knittable structures that meet a weight and the qualities asked for, ranked, with settings and accuracy', true),
   E('POST', '/studio/compile',           G.studio, 'A machine set-out and cam chart compiled into needle notation', true),
   E('POST', '/studio/warp/analyse',      G.studio, 'Warp design: lapping, runner, GSM, width, beams, production, checks', true),
 

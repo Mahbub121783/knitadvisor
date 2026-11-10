@@ -1318,6 +1318,34 @@ router.post('/studio/compile', requireUser, (req, res) => {
 // the serialised answer.
 const studioCache = new Map();
 const STUDIO_CACHE_MAX = 4000;
+// Design from a goal: the Studio searches needle programmes itself (studio-invent.js). Bounded per call
+// (evaluations and time), limited per address, at most two searches at once per worker, and the same
+// goal is answered from memory — so a busy hour cannot stall the engine for everyone else.
+const studioInvent = require('../engine/domain/studio-invent');
+const inventLimiter = createRateLimiter({ name: 'studio_invent', max: 8, windowMs: 60 * 1000, message: 'Too many design searches — wait a minute.' });
+const inventCache = new Map();
+let inventRunning = 0;
+router.post('/studio/invent', requireUser, inventLimiter, (req, res) => {
+  let key;
+  try { key = JSON.stringify(studioInvent.cleanGoal(req.body || {})); } catch (err) {
+    if (err instanceof studioInvent.InventError) return res.status(400).json({ success: false, error: err.message });
+    return res.status(400).json({ success: false, error: 'Could not read the goal.' });
+  }
+  if (inventCache.has(key)) { const v = inventCache.get(key); inventCache.delete(key); inventCache.set(key, v); return res.json({ ...v, cached: true }); }
+  if (inventRunning >= 2) return res.status(503).json({ success: false, code: 'BUSY', error: 'The design search is busy right now — try again in a few seconds.' });
+  inventRunning++;
+  try {
+    const out = studioInvent.invent(req.body || {}, { maxEvals: 320, timeMs: 3500 });
+    inventCache.set(key, out);
+    if (inventCache.size > 100) inventCache.delete(inventCache.keys().next().value);
+    res.json(out);
+  } catch (err) {
+    if (err instanceof studioInvent.InventError) return res.status(400).json({ success: false, error: err.message });
+    console.error('[studio] invent failed:', err);
+    res.status(500).json({ success: false, error: 'The design search failed.' });
+  } finally { inventRunning--; }
+});
+
 router.post('/studio/analyse', requireUser, (req, res) => {
   try {
     const key = JSON.stringify(req.body || {});
