@@ -211,12 +211,18 @@
           </div>
           <p class="st-hint">Leave the count empty and the studio picks it from the target GSM. Other yarns (face, binder, loop) are set per feed in the design.</p>
           <div id="st-plush-box" hidden>
-            <p class="st-hint"><b>Plush pile.</b> A loop-yarn feeder that knits is plated behind the ground yarn and drawn over the high sinker: terry or velour. The ground count above is the ground yarn; the loop feeder's count is the pile.</p>
+            <div class="st-f"><label for="st-pile">A loop-yarn feeder that knits</label><select id="st-pile"><option value="sinker">Sinker-loop pile (terry / velour)</option><option value="none">Knits in as a yarn (no pile)</option></select></div>
+            <p class="st-hint"><b>Sinker-loop pile:</b> the loop yarn is plated behind the ground yarn and drawn over the high sinker — terry, or velour when sheared. Feeds without the loop yarn knit plain ground courses between the pile courses. <b>Knits in:</b> the loop yarn forms ordinary needle loops — a jersey course of that yarn.</p>
             <label class="st-check"><input type="checkbox" id="st-cut"> Shear the loops open (velour)</label>
             <div class="st-row">
               <div class="st-f"><label for="st-sinker">Sinker height (mm)</label><input id="st-sinker" type="number" min="0.8" max="4" step="0.1" placeholder="auto"></div>
               <div class="st-f"><label for="st-parr">Pile loop on</label><select id="st-parr"><option value="full">every needle</option><option value="alternate">alternate needles</option><option value="checker">checker</option><option value="diagonal">diagonal</option></select></div>
             </div>
+          </div>
+          <div class="st-f"><label for="st-brush">Finish: brushing (raising)</label><select id="st-brush"><option value="none">Not brushed</option><option value="back">Brushed back (raised)</option><option value="face">Brushed face (peach)</option><option value="both">Brushed both sides</option></select></div>
+          <div class="st-row" id="st-brush-box" hidden>
+            <div class="st-f"><label for="st-passes">Raising passes</label><input id="st-passes" type="number" min="1" max="12" step="1" placeholder="auto"></div>
+            <label class="st-check" style="align-self:end"><input type="checkbox" id="st-shear"> Sheared level</label>
           </div>
           <label class="st-check"><input type="checkbox" id="st-lycra"> Elastane plated</label>
           <div class="st-row" id="st-lycra-box" hidden>
@@ -409,8 +415,8 @@
 </div>
 
 <script src="assets/js/api.js"></script>
-<script src="assets/js/studio-cloth-map.js?v=20261109a"></script>
+<script src="assets/js/studio-cloth-map.js?v=20261110b"></script>
 <script src="assets/js/studio-needle.js?v=20261110c"></script>
-<script src="assets/js/studio.js?v=20261110c"></script>
+<script src="assets/js/studio.js?v=20261110d"></script>
 </body>
 </html>

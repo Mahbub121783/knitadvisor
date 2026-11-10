@@ -393,6 +393,104 @@ function isKnitFeed(st, feedRows, i) {
   return feedRows[i].role !== 'loop' && [st.beds.C, st.beds.D].filter(Boolean).some((g) => g[i].includes('K'));
 }
 
+// ── feeder roles: what each one does on the machine ──────────────────────
+// A role names the yarn a feeder carries; the cells say what its needles do.
+// Every combination has a mechanical meaning — none is refused:
+//   ground / face  a knitting yarn (face = the one that shows on the face)
+//   binder         knits behind the face and ties a loop yarn in; with no
+//                  loop yarn in the repeat it is simply another ground course
+//   loop           the fleecy yarn: tucks on some needles (tied in), floats
+//                  over the rest. Where it KNITS it is either a sinker-loop
+//                  pile (terry / velour, when a pile is chosen) or it knits
+//                  in like any ground yarn — a jersey course of that yarn
+// The drawn role is kept (role_drawn); the engine weighs the effective one.
+function resolveRoles(C, D, feedRows, pileWanted) {
+  const notes = [];
+  const add = (level, text) => notes.push({ level, text });
+  const W = C[0].length;
+  feedRows.forEach((f, i) => {
+    f.drawn = f.role;
+    if (f.role !== 'loop') return;
+    const cells = D ? C[i].concat(D[i]) : C[i];
+    const knits = cells.includes('K'), tucks = cells.includes('T');
+    if (knits && (D || !pileWanted)) {
+      f.role = 'ground';
+      add('warn', `Feed ${i + 1} carries the loop yarn but knits${D ? ' on a double bed' : ''}: on the machine that yarn forms needle loops and shows in the fabric as a ${D ? 'double-jersey' : 'jersey'} course of the coarse loop yarn — it is weighed as a knitting course. For a fleece back, let the loop yarn tuck on 1 needle in 3–6 and miss the rest${D ? '' : '; for terry / velour choose "Sinker-loop pile"'}.`);
+      return;
+    }
+    if (!knits && !tucks) {
+      add('error', `Feed ${i + 1}: the loop yarn never tucks or knits, so nothing ties it in — it would lie loose behind the fabric and fall out. Give it a tuck on at least 1 needle in 6.`);
+      return;
+    }
+    if (!knits) {
+      const t = C[i].filter((x) => x === 'T').length + (D ? D[i].filter((x) => x === 'T').length : 0);
+      // the longest float of the loop yarn on the cylinder, round the repeat
+      let run = 0, best = 0;
+      for (let k = 0; k < 2 * W; k++) { if (C[i][k % W] === 'T' || C[i][k % W] === 'K') run = 0; else { run++; best = Math.max(best, run); } }
+      best = Math.min(best, W);
+      if (D) add('note', `Feed ${i + 1}: the loop yarn tucks on ${t} needle${t > 1 ? 's' : ''} and lies between the two beds — a laid-in (inlay) yarn: it adds weight and bulk, no loops of its own.`);
+      else add('ok', `Feed ${i + 1}: loop yarn tied in by a tuck on ${t} of ${W} needles, floating over ${best} needle${best === 1 ? '' : 's'} at most between tucks.`);
+      if (!D && t / W > 0.5) add('warn', `Feed ${i + 1}: the loop yarn tucks on more than half the needles — it is held like a tuck course, its floats are short and there is little to raise into a fleece.`);
+    }
+  });
+  const hasLoop = feedRows.some((f) => f.role === 'loop');
+  feedRows.forEach((f, i) => {
+    if (f.role === 'binder' && !hasLoop) add('note', `Feed ${i + 1} is a binder, but no feeder lays a loop yarn for it to tie in — it knits as a plain ground course.`);
+  });
+  const fleecy = feedRows.some((f, i) => f.role === 'loop' && !C[i].includes('K'));
+  if (fleecy && !D && !feedRows.some((f) => f.role === 'binder')) add('note', 'No binder feeder: the loop yarn is tied in by the knitting course itself (two-thread fleece). It can grin through to the face; a binder behind the face (three-thread) hides it.');
+  return notes;
+}
+
+// ── finish: brushing (raising) ──────────────────────────────────────────
+// MODELLED, from the fleece engine: each pass of the raising rollers tears
+// ~3.5% of the loop yarn's fibre into the nap; the nap length grows with the
+// staple and the passes. A fabric with no floats (jersey, piqué, rib) only
+// loses surface fibre — taken here as ~1.2% of that side's yarn per pass.
+// The fleece family's factory records are RAISED fleece (back, the usual
+// passes), so an unbrushed (loopback) fleece is heavier than they say.
+const PASS_LOSS = 0.035, SURF_LOSS = 0.012;
+const STAPLE = { cotton: 28, cvc: 32, polyester_spun: 38, viscose: 38, modal: 38, polyester_filament: 0, nylon_filament: 0 };
+function finishModel(ctx, S) {
+  const f = ctx.input.finish || {};
+  const fleece = ctx.family === 'fleece';
+  const legacy = !f.brush;
+  const brush = legacy ? (fleece ? 'back' : 'none') : (['none', 'back', 'face', 'both'].includes(f.brush) ? f.brush : 'none');
+  const fib = S.ground.fibre;
+  const poly = /polyester|nylon/.test(fib) ? 1 : fib === 'cvc' ? 0.4 : 0;
+  const p0 = poly >= 0.6 ? 5 : poly > 0.1 ? 4 : 3;
+  const passes = brush === 'none' ? 0 : (+f.passes > 0 ? Math.min(12, Math.round(+f.passes)) : p0);
+  const loopLoss = (p) => 1 - Math.pow(1 - PASS_LOSS, p);
+  const surfLoss = (p) => 1 - Math.pow(1 - SURF_LOSS, p);
+  const tot = S.feeds.reduce((t, x) => t + x.mass, 0) || 1;
+  const loopShare = S.feeds.filter((x) => x.role === 'loop').reduce((t, x) => t + x.mass, 0) / tot;
+  const back = brush === 'back' || brush === 'both', face = brush === 'face' || brush === 'both';
+  let loss = 0;
+  if (back) loss += fleece && loopShare > 0 ? loopLoss(passes) * loopShare : surfLoss(passes) * 0.5;
+  if (face) loss += surfLoss(passes) * 0.5;
+  const base = fleece ? loopLoss(p0) * loopShare : 0;
+  const staple = STAPLE[fib] != null ? STAPLE[fib] : 28;
+  let pile = passes && staple ? 0.065 * staple * (1 - Math.exp(-passes / 2.5)) : 0;
+  if (!(fleece && back && loopShare > 0)) pile *= 0.35;            // no floats to raise: a short peach nap
+  const sheared = !!f.sheared && passes > 0;
+  if (sheared) pile = Math.min(pile, fleece ? 1.2 : 0.4);
+  return { k: (1 - loss) / (1 - base), brush, passes, p0, loss, loopShare, loopLost: fleece && back ? loopLoss(passes) : 0, pile, sheared, fleece, legacy, filament: /filament/.test(fib) };
+}
+function finishChecks(fin, family, plush) {
+  const out = [];
+  const add = (level, text) => out.push({ level, text });
+  if (plush) { if (fin.brush !== 'none' && !fin.legacy) add('note', 'Plush is not raised: a terry keeps its loops, a velour is cut and sheared (the "Shear the loops open" option). The brushing choice is not applied.'); return out; }
+  const pct = (x) => r1(x * 100);
+  if (fin.fleece) {
+    if (fin.brush === 'none') add('note', `Not brushed: the loop yarn's floats stay as loops on the back — a loopback (French terry). Nothing is torn out, so it weighs ${pct(fin.k - 1)}% more than a raised fleece of the same knitting (modelled).`);
+    else add('note', `Raised ${fin.brush === 'both' ? 'on both sides' : fin.brush === 'face' ? 'on the face only — the loop yarn on the back is not raised' : 'on the back'}: ${fin.passes} passes tear about ${pct(fin.loopLost)}% of the loop yarn into a nap about ${r1(fin.pile)} mm long${fin.sheared ? ' (sheared level)' : ''} — ${pct(fin.loss)}% of the fabric weight (modelled). Dry it on the stenter 15–18% wider than finish before raising: raising pulls the width in.`);
+  } else if (fin.brush !== 'none') {
+    add('note', `Brushed ${fin.brush === 'both' ? 'on both sides' : 'on the ' + fin.brush} (peach / raised ${family === 'single_jersey' ? 'jersey' : family}): there are no floats to raise, so the nap is short (about ${r1(fin.pile)} mm) and comes from the loops' own surface fibre; about ${pct(fin.loss)}% of the weight is lost (modelled). Expect lower bursting strength and more pilling than unbrushed.`);
+  }
+  if (fin.brush !== 'none' && fin.filament) add('warn', 'Filament yarn: raising breaks the filaments instead of pulling out fibre — it is sanded (peached), not brushed; strength drops.');
+  return out;
+}
+
 function solve(ctx, ground) {
   const { st, family, lycra, feedRows, input } = ctx;
   const mach = input.machine || {};
@@ -447,7 +545,7 @@ function solve(ctx, ground) {
     const cons = KP.feedConsumption(st, pitch, lref);
     const Y = posNorm * mean(cons.map((c, i) => c.share * (slOf0(i, lref) / 10) * yarns[i].tex));
     const den = A.M * mb(model.e) / mb(model.eFam);
-    return { gsm: (ks * Y) / (10 * (lk(lref) / 10) ** 2 * den), cons, A };
+    return { gsm: (ks * Y) / (10 * (lk(lref) / 10) ** 2 * den) * (ctx.finishK || 1), cons, A };
   };
   const target = +((input.target || {}).gsm) || null;
   let lref, slSource;
@@ -499,7 +597,7 @@ function solve(ctx, ground) {
     const loopy = f.role === 'loop' || !knitsHere;
     const elast = ctx.elastane && ctx.elastane.feeds.includes(i) ? ctx.elastane : null;
     return {
-      feed: i + 1, role: f.role, yarn: yarns[i].label, fibre: yarns[i].fibre_label, tex: r2(yarns[i].tex),
+      feed: i + 1, role: f.role, role_drawn: f.drawn || f.role, yarn: yarns[i].label, fibre: yarns[i].fibre_label, tex: r2(yarns[i].tex),
       sl_mm: r3(l), sl_source: f.sl_mm ? 'your setting' : f.sl_ratio !== 1 ? `${f.sl_ratio} × ground` : 'ground stitch length',
       tf: knitsHere ? r2(Math.sqrt(yarns[i].tex) / (l / 10)) : null,
       share: r2(s), course_length_m: r3(courseM), yarn_speed_m_min: r1(courseM * rpm),
@@ -795,6 +893,10 @@ function analyse(input) {
       if (D) { D.splice(reduced.feeds); D.forEach((row) => row.splice(reduced.needles)); }
       feedRows.splice(reduced.feeds);
     }
+    // a loop yarn that knits is a sinker-loop pile only when a pile is chosen
+    // (older clients send no choice: there it always was a pile)
+    const pileWanted = input.pile == null ? true : input.pile === 'sinker';
+    const roleNotes = resolveRoles(C, D, feedRows, pileWanted);
     const fabricDef = {
       id: 'studio_custom', category: D ? (gating === 'interlock' ? 'interlock' : 'rib') : 'single_jersey',
       structure: { pattern: { C, D }, cam: feedRows.map((f, i) => ({ feed: i + 1, yarn: f.role === 'ground' ? null : f.role })) },
@@ -828,10 +930,23 @@ function analyse(input) {
     const pileFeed = st.beds.D ? -1 : feedRows.findIndex((f, i) => f.role === 'loop' && st.beds.C[i].includes('K'));
     let plush = null;
     if (pileFeed > -1) {
-      if (feedRows.some((f, i) => i !== pileFeed && isKnitFeed(st, feedRows, i))) throw new StudioError('A plush (terry / velour) design here is plush on every feed: the ground yarn is plated with the pile on the same feed. Plain jersey courses between plush courses are not modelled.');
+      // plain courses between the pile courses: the pile is spread over them.
+      // Weight follows the number of pile loops per cm², so the course share is
+      // carried as the needle arrangement with the same pile density.
+      const plainFeeds = feedRows.filter((f, i) => i !== pileFeed && isKnitFeed(st, feedRows, i)).length;
+      const pileFeeds = feedRows.filter((f, i) => f.role === 'loop' && st.beds.C[i].includes('K')).length;
+      var pileShare = pileFeeds / (pileFeeds + plainFeeds);
       const tgt = +((input.target || {}).gsm);
       if (!(tgt > 0)) throw new StudioError('Plush terry and velour are solved from the finished weight: give a target GSM.');
-      const pl = input.plush || {};
+      const pl = { ...(input.plush || {}) };
+      var plushSpread = null;
+      if (pileShare < 1) {
+        const DENS = { full: 1, alternate: 0.5, checker: 0.5, diagonal: 1 / 3 };
+        const want = (DENS[pl.arrangement] || 1) * pileShare;
+        const arr = Object.keys(DENS).reduce((b, k) => (Math.abs(DENS[k] - want) < Math.abs(DENS[b] - want) - 1e-9 ? k : b), pl.arrangement && DENS[pl.arrangement] ? pl.arrangement : 'full');
+        plushSpread = { pileFeeds, plainFeeds, share: pileShare, want, arrangement: arr, density: DENS[arr] };
+        pl.arrangement = arr;
+      }
       const fib = FIBRES[(input.yarn || {}).fibre] ? input.yarn.fibre : 'cotton';
       const comp = fib === 'cvc' ? { cotton: 60, polyester: 40 } : /polyester/.test(fib) ? { polyester: 100 } : { [['viscose', 'modal'].includes(fib) ? fib : 'cotton']: 100 };
       const py0 = feedRows[pileFeed].yarn;
@@ -845,7 +960,7 @@ function analyse(input) {
     }
 
     // solver over counts when no ground yarn is given
-    let solver = null, S;
+    let solver = null, S, finish = null;
     if (plush) {
       const fib = FIBRES[(input.yarn || {}).fibre] ? input.yarn.fibre : 'cotton';
       const yOf = (y) => readYarn(y.denier ? { denier: y.denier, fibre: 'polyester_filament' } : { ne: y.ne, fibre: fib }, null);
@@ -876,15 +991,25 @@ function analyse(input) {
         row('ground (plated)', groundP, gY.sl_mm, gY.share_pct, r1(S.tfGround), [0.12, 0.16]),
         row('pile', pileY, pY.sl_mm, pY.share_pct, null, [0.08, 0.10]),
       ].map((f) => ({ ...f, mass: 0, elastane_mass: 0 }));
+      // plain courses between the pile courses: ground yarn alone, same loop
+      feedRows.forEach((f, i) => {
+        if (i === pileFeed || !isKnitFeed(st, feedRows, i)) return;
+        const r = row('ground (plain course)', groundP, gY.sl_mm, null, r1(Math.sqrt(groundP.tex) / (gY.sl_mm / 10)), [0.12, 0.16]);
+        S.feeds.push({ ...r, feed: i + 1, mass: 0, elastane_mass: 0 });
+      });
       S.composition = plush.yarns.filter((y) => y.share_pct).map((y) => ({ part: y.role === 'elastane' ? y.label : `${y.role}: ${y.label}`, pct: y.share_pct }));
       const gPerRev = (S.feeders / st.feeds) * S.feeds.reduce((t, f) => t + f.course_length_m * f.tex, 0) / 1000;
       S.kgh = (gPerRev * S.rpm * 60 * S.eff) / 1000;
-    } else if (auto) {
-      if (!((input.target || {}).gsm > 0)) throw new StudioError('Give the ground yarn count, or a target GSM so the count can be solved.');
+    } else {
+      if (auto && !((input.target || {}).gsm > 0)) throw new StudioError('Give the ground yarn count, or a target GSM so the count can be solved.');
       const fibre = FIBRES[(input.yarn || {}).fibre] ? input.yarn.fibre : 'cotton';
-      const pick = chooseSetup(ctx, fibre);
-      S = pick.S; solver = pick.solver;
-    } else S = solve(ctx, ground);
+      const run = () => { if (auto) { const pick = chooseSetup(ctx, fibre); solver = pick.solver; return pick.S; } return solve(ctx, ground); };
+      ctx.finishK = 1;
+      S = run();
+      // brushing tears yarn out: weigh the design again with what is left
+      finish = finishModel(ctx, S);
+      if (Math.abs(finish.k - 1) > 1e-6) { ctx.finishK = finish.k; S = run(); }
+    }
 
     const transfers = st.beds.C.reduce((t, row) => t + row.filter((x) => x === 'E').length, 0);
     const T = { C: KP.tracksOf(transfers ? st.beds.C.map((r) => r.map((x) => (x === 'E' ? 'M' : x))) : st.beds.C), D: KP.tracksOf(st.beds.D) };
@@ -905,16 +1030,31 @@ function analyse(input) {
       const order = { error: 0, warn: 1, note: 2, ok: 3 };
       checks.sort((a, b) => order[a.level] - order[b.level]);
     }
+    {
+      const extra = [...roleNotes];
+      if (plush && plushSpread) extra.push({ level: 'warn', text: `Pile on ${plushSpread.pileFeeds} of ${plushSpread.pileFeeds + plushSpread.plainFeeds} knitting feeds: the plain feeds knit ground-only jersey courses between the pile courses. Weighed as ${Math.round(plushSpread.want * 100)}% pile loops per cm² — the plush model's "${plushSpread.arrangement}" arrangement (${Math.round(plushSpread.density * 100)}%); the pile stands in bands, one pile course in ${r1(1 / plushSpread.share)}.` });
+      if (finish || plush) extra.push(...finishChecks(finish || { brush: ((input.finish || {}).brush) || 'none', legacy: !(input.finish || {}).brush }, family, plush));
+      if (extra.length) {
+        checks = checks.concat(extra);
+        const order = { error: 0, warn: 1, note: 2, ok: 3 };
+        checks.sort((a, b) => order[a.level] - order[b.level]);
+      }
+    }
     if (solver) {
       const v = { level: solver.verdict.level === 'ok' ? 'ok' : 'warn', text: solver.verdict.text };
       const at = checks.findIndex((c) => c.level !== 'error');
       checks.splice(at < 0 ? checks.length : at, 0, v);
     }
-    const match = matchCatalogue(st);
+    let match = matchCatalogue(st);
+    // a loopback and a raised fleece are knitted alike: the finish tells them apart
+    if (match && family === 'fleece' && finish && ['french_terry', 'fleece_3_thread'].includes(match.id)) {
+      const other = byId(finish.brush === 'none' ? 'french_terry' : 'fleece_3_thread');
+      if (other && JSON.stringify(KP.normaliseStructure(other).beds) === JSON.stringify(KP.normaliseStructure(match).beds)) match = other;
+    }
     const anchorDef = S.A.def;
     const isAnchor = match && match.id === anchorDef.id;
     const M0 = S.model;
-    const myM = posNorm * mean(KP.feedConsumption(st, S.pitch, S.lref).map((c, i) => c.share * ((S.feeds[i].tex) / S.ground.tex)));
+    const myM = posNorm * mean(KP.feedConsumption(st, S.pitch, S.lref).map((c, i) => c.share * (((S.feeds[i] || S.feeds[0]).tex) / S.ground.tex)));
     const ratio = myM / S.A.M;
     const partPlated = S.phi > 0 && S.phi < 1;
     const unmeasured = M0.mu > 0 || partPlated || M0.tau / TUCK_ANCHOR > TUCK_CAP || S.fibre.ks === 1 && S.ground.fibre !== 'cotton' || family === 'fleece' || (S.pack.basis && !S.pack.measured);
@@ -963,7 +1103,7 @@ function analyse(input) {
     return {
       success: true,
       structure: {
-        bed: D ? 'double' : 'single', gating, feeds: st.feeds, needles_per_repeat: st.width, beds: st.beds, roles,
+        bed: D ? 'double' : 'single', gating, feeds: st.feeds, needles_per_repeat: st.width, beds: st.beds, roles, roles_drawn: feedRows.map((f) => f.drawn || f.role),
         family: plush ? 'plush' : family, family_label: plush ? 'Sinker-loop plush (terry / velour)' : FAMILY[family].label,
         anchor: plush ? { id: 'terry', name: 'factory loopback terry (loop size)' } : { id: anchorDef.id, name: anchorDef.name },
         match: plush ? { id: plush.variant.id, name: plush.variant.name } : match ? { id: match.id, name: match.name } : null,
@@ -1026,6 +1166,13 @@ function analyse(input) {
         note: 'Course inclination from the number of feeders (geometry). Yarn twist adds to or offsets it — the main calculator models the twist part.',
       } : null,
       solver,
+      finish: finish ? {
+        brushed: finish.brush, passes: finish.passes, sheared: finish.sheared,
+        fabric_loss_pct: r1(finish.loss * 100), loop_yarn_raised_pct: finish.fleece ? r1(finish.loopLost * 100) : null,
+        nap_mm: r2(finish.pile), gsm_before_brushing: Math.round(S.gsm / (1 - finish.loss)), weight_factor: r3(finish.k),
+        basis: 'modelled: ~3.5% of the loop yarn raised per pass (fleece), ~1.2% surface fibre per pass on a side with no floats; nap from staple and passes',
+      } : null,
+      plush_spread: plushSpread ? { pile_feeds: plushSpread.pileFeeds, plain_feeds: plushSpread.plainFeeds, pile_density: r2(plushSpread.want), arrangement: plushSpread.arrangement } : null,
       plush: plush ? {
         variant: plush.variant, declaration: plush.declaration, pile: plush.pile, loop: plush.loop, shearing: plush.shearing,
         mass_balance: plush.mass_balance, gauge_check: plush.gauge_check, plating: plush.plating, absorbency: plush.absorbency,

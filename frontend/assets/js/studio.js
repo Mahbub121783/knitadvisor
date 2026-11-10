@@ -91,6 +91,9 @@
       S.C = fit(S.C); if (S.D) S.D = fit(S.D);
       S.feeds = t.roles.map(function (r) { return { role: r }; });
       $('st-cut').checked = id === 'velour_plush';
+      $('st-brush').value = /fleece/.test(id) ? 'back' : 'none';
+      $('st-brush-box').hidden = $('st-brush').value === 'none';
+      $('st-pile').value = 'sinker';
       if (t.gsm_range && t.gsm_range.min && !$('st-gsm').dataset.touched) {
         $('st-gsm').value = Math.round((t.gsm_range.min + t.gsm_range.max) / 2 / 5) * 5;
       }
@@ -306,6 +309,8 @@
       }),
       yarn: num('st-ne') ? { ne: num('st-ne'), fibre: $('st-fibre').value } : { fibre: $('st-fibre').value },
       plush: { cut: $('st-cut').checked, sinker_mm: num('st-sinker'), arrangement: $('st-parr').value },
+      pile: $('st-pile').value,
+      finish: { brush: $('st-brush').value, passes: num('st-passes'), sheared: $('st-shear').checked },
       elastane: $('st-lycra').checked ? { denier: +$('st-lyd').value, draft: num('st-lydraft') || 2.6, every: $('st-lyevery').value } : null,
       target: { gsm: num('st-gsm'), width_in: num('st-width') },
       calibration: $('st-userolls').checked && completeRolls().length ? { rolls: completeRolls() } : null,
@@ -392,6 +397,11 @@
           return '<tr' + (i === 0 ? ' style="background:var(--accent-tint)"' : '') + '><td>' + esc(o.count) + (i === 0 ? ' ✓' : '') + '</td><td>' + o.gauge + ' GG' + (o.practised ? ' ·&nbsp;factory' : '') + '</td><td>' + o.sl_mm + ' mm</td><td>' + o.tf + '</td><td>' + o.gsm + '</td><td>' + o.width_in + '"</td><td>' + (o.breaks && o.breaks.length ? '<span style="color:#9a5b00">' + esc(o.breaks.join('; ')) + '</span>' : 'all kept') + '</td></tr>';
         }).join('') + '</table></div><p class="st-p">“factory”: the gauge the factory records most often knit this count on for this family. Limits: tightness factor inside the factory\'s 5th–95th percentile, gauge fit, hook load, stitch length 1.8–7 mm.</p>';
     }
+    if (r.finish && r.finish.brushed !== 'none') {
+      var fz = r.finish;
+      html += '<div class="st-sub">Finish: brushing ' + src('e') + '</div><p class="st-p">' + ({ back: 'Raised on the back', face: 'Brushed on the face (peach)', both: 'Brushed on both sides' })[fz.brushed] + ', ' + fz.passes + ' passes' + (fz.sheared ? ', sheared level' : '') + '. ' +
+        (fz.loop_yarn_raised_pct != null ? fz.loop_yarn_raised_pct + '% of the loop yarn is raised into the nap; ' : '') + fz.fabric_loss_pct + '% of the fabric weight is torn out — ' + fz.gsm_before_brushing + ' GSM before brushing, ' + r.fabric.gsm + ' after. Nap about ' + fz.nap_mm + ' mm. ' + esc(fz.basis) + '.</p>';
+    }
     if (r.plush) {
       var P = r.plush, mb = P.mass_balance;
       html += '<div class="st-sub">Plush pile ' + src('e') + '</div><p class="st-p"><b>' + esc(P.variant.name) + '</b> — ' + esc(P.declaration) + '. Sinker ' + P.pile.sinker_height_mm + ' mm (' + P.pile.sinker_for_exact_gsm_mm + ' mm hits the target exactly), ' + esc(P.pile.kind) + ' ' + P.pile.finished_pile_mm + ' mm, ' + P.pile.loops_per_cm2 + ' loops per cm². Ground loop ' + mb.ground_sl_mm + ' mm, pile ' + mb.pile_sl_mm + ' mm of yarn per needle.</p>' +
@@ -403,7 +413,7 @@
     }
     html += '<div class="st-sub">Yarn on every feeder ' + src('c') + '</div><div class="st-scroll"><table class="st-t"><tr><th>Feed</th><th>Role</th><th>Yarn</th><th>SL mm</th><th>TF</th><th>Yarn per needle</th><th>Course length m/rev</th><th>Yarn speed m/min</th><th>Share of fabric</th><th>Input tension cN ' + src('e') + '</th></tr>' +
       y.feeds.map(function (x) {
-        return '<tr><td>F' + x.feed + '</td><td style="color:' + ROLE_COL[x.role] + '">' + x.role + '</td><td>' + esc(x.yarn) + '</td><td>' + x.sl_mm + '</td><td>' + (x.tf == null ? '—' : x.tf) + '</td><td>' + x.share + '</td><td>' + x.course_length_m + '</td><td>' + x.yarn_speed_m_min + '</td><td>' + x.mass_share_pct + '%</td><td>' + x.tension_cN.join('–') + '</td></tr>';
+        return '<tr><td>F' + x.feed + '</td><td style="color:' + (ROLE_COL[x.role] || '') + '">' + esc(x.role) + (x.role_drawn && x.role_drawn !== x.role ? ' <span style="color:var(--t3)" title="Drawn as ' + esc(x.role_drawn) + ', works as ' + esc(x.role) + ' — see the checks">(drawn ' + esc(x.role_drawn) + ')</span>' : '') + '</td><td>' + esc(x.yarn) + '</td><td>' + x.sl_mm + '</td><td>' + (x.tf == null ? '—' : x.tf) + '</td><td>' + x.share + '</td><td>' + x.course_length_m + '</td><td>' + x.yarn_speed_m_min + '</td><td>' + x.mass_share_pct + '%</td><td>' + x.tension_cN.join('–') + '</td></tr>';
       }).join('') + '</table></div>';
     html += '<p class="st-p">Yarn per needle: the yarn a feeder lays at one needle position as a share of a full knitted loop (knit 1, tuck about 0.7, a miss is the float; on a double bed both beds count). Input tension is a starting range at 0.12–0.16 cN per tex for knit feeders and 0.08–0.10 for loop feeders — confirm with a tension meter.</p>';
     html += '<div class="st-sub">Composition by weight ' + src('c') + '</div><div class="st-scroll"><table class="st-t"><tr><th>Part</th><th>Share</th></tr>' +
@@ -751,7 +761,7 @@
   /** The drawn programme as the 3D engine's construction, pattern and needle sampler. */
   function clothOpts() {
     // the notation → 3D mapping lives in studio-cloth-map.js (tested in node)
-    var cs = window.KAStudioCloth.clothSpec({ bed: S.bed, C: S.C, D: S.D, feeds: S.feeds,
+    var cs = window.KAStudioCloth.clothSpec({ bed: S.bed, C: S.C, D: S.D, feeds: S.feeds, brush: $('st-brush').value, pile: $('st-pile').value,
       plush: last && last.plush && S.feeds.some(function (fd) { return fd.role === 'loop'; }) ? { cut: $('st-cut').checked, arrangement: $('st-parr').value } : null });
     var con = cs.construction, pattern = cs.pattern;
     // density from the engine's answer for this design (wales, courses, GSM, stitch length)
@@ -986,6 +996,7 @@
     $('st-bed').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) setBed(b.getAttribute('data-bed')); });
     $('st-template').addEventListener('change', function () { applyTemplate(this.value); });
     $('st-lycra').addEventListener('change', function () { $('st-lycra-box').hidden = !this.checked; schedule(); });
+    $('st-brush').addEventListener('change', function () { $('st-brush-box').hidden = this.value === 'none'; });
     $('st-gsm').addEventListener('input', function () { this.dataset.touched = '1'; });
     $('st-name').addEventListener('input', function () { delete this.dataset.auto; });
     document.querySelectorAll('aside input, aside select').forEach(function (el) {
