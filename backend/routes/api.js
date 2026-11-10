@@ -1357,18 +1357,28 @@ router.get('/cost-sheet/options', requireUser, (req, res) => {
   res.json({ success: true, ...costSheet.options() });
 });
 
-// A warp design saved in the Fabric Studio, as a fabric shell for the sheet (the Studio never prices; the sheet does).
+// A design saved in the Fabric Studio (warp or weft), as a fabric shell for the sheet (the Studio never prices; the sheet does).
 router.post('/cost-sheet/shell-from-studio', requireUser, async (req, res) => {
   try {
     const id = parseInt((req.body || {}).design_id, 10);
     if (!Number.isInteger(id)) return res.status(400).json({ success: false, error: 'Choose a saved Studio design.' });
     const row = (await studioRepo.designs.list(req.user.id)).find((d) => d.id === id);
-    const w = row && row.design && row.design.tech === 'warp' ? row.design.warp : null;
-    if (!w) return res.status(404).json({ success: false, error: 'That warp design was not found in your account.' });
-    const a = warpStudio.analyse({ machine: w.machine, bars: w.bars.map((b) => ({ notation: b.notation, threading: b.threading, yarn: b.yarn })), target: w.target, beams: w.beams });
-    if (!a.success) return res.status(400).json({ success: false, error: a.error });
-    if (!a.ok_to_knit) return res.status(400).json({ success: false, error: 'This design does not knit as drawn — fix it in the Studio first.' });
-    res.json({ success: true, ...costSheet.shellFromWarp(a, row.name) });
+    if (!row || !row.design) return res.status(404).json({ success: false, error: 'That design was not found in your account.' });
+    const d = row.design;
+    let a, built;
+    if (d.tech === 'warp') {
+      const w = d.warp;
+      a = warpStudio.analyse({ machine: w.machine, bars: w.bars.map((b) => ({ notation: b.notation, threading: b.threading, yarn: b.yarn })), target: w.target, beams: w.beams });
+      if (!a.success) return res.status(400).json({ success: false, error: a.error });
+      if (!a.ok_to_knit) return res.status(400).json({ success: false, error: 'This design does not knit as drawn — fix it in the Studio first.' });
+      built = costSheet.shellFromWarp(a, row.name);
+    } else {
+      a = require('../engine/domain/fabric-studio').analyse(require('../engine/domain/studio-weft-input').weftPayload(d));
+      if (!a.success) return res.status(400).json({ success: false, error: a.error || 'The Studio could not read this design.' });
+      if (!a.ok_to_knit) return res.status(400).json({ success: false, error: 'This design does not knit as drawn — fix it in the Studio first.' });
+      built = costSheet.shellFromWeft(a, row.name);
+    }
+    res.json({ success: true, tech: d.tech === 'warp' ? 'warp' : 'weft', ...built });
   } catch (err) {
     console.error('[cost-sheet] studio shell failed:', err);
     res.status(500).json({ success: false, error: 'Could not bring in that design.' });

@@ -159,6 +159,31 @@ function autoYarns(sh, fibers, comp) {
 }
 
 // ── system prices ─────────────────────────────────────────────────────────
+// A filament or elastane yarn is priced per kg on a short list of deniers. A yarn between them is
+// interpolated (straight line in log-denier); one outside the list is carried on from the last
+// step of the list but held within +-15 % of that end's price: a stated estimate, never a quote.
+function priceAtDenier(key, den, live) {
+  const row = costing.SM_PRICE_MATRIX[key];
+  const pts = Object.keys(costing.SM_PRICE_MATRIX)
+    .filter((k) => { const x = costing.SM_PRICE_MATRIX[k]; return x.price !== undefined && x.fiber === row.fiber && x.denier; })
+    .map((k) => ({ d: costing.SM_PRICE_MATRIX[k].denier, p: costing.resolveYarnPrice(k, 0, live, 'BD').price }))
+    .filter((p) => p.p != null).sort((a, b) => a.d - b.d);
+  if (pts.length < 2 || !(den > 0)) return null;
+  const lg = Math.log;
+  const first = pts[0], last = pts[pts.length - 1];
+  const exact = pts.find((p) => Math.abs(den - p.d) / p.d <= 0.05);
+  if (exact) return { price: exact.p, how: 'listed' };
+  if (den >= first.d && den <= last.d) {
+    const hi = pts.findIndex((p) => p.d >= den), lo = Math.max(0, hi - 1), a = pts[lo], b = pts[hi];
+    const t = b.d === a.d ? 0 : (lg(den) - lg(a.d)) / (lg(b.d) - lg(a.d));
+    return { price: a.p + (b.p - a.p) * t, how: 'interpolated' };
+  }
+  const [a, b, end] = den < first.d ? [pts[1], pts[0], first] : [pts[pts.length - 2], last, last];
+  const slope = (b.p - a.p) / (lg(b.d) - lg(a.d));
+  const raw = end.p + slope * (lg(den) - lg(end.d));
+  return { price: Math.min(end.p * 1.15, Math.max(end.p * 0.85, raw)), how: 'extrapolated' };
+}
+
 function yarnLine(y, live, i, shell, auto) {
   const key = String(y.type || '');
   const row = costing.SM_PRICE_MATRIX[key];
@@ -175,9 +200,16 @@ function yarnLine(y, live, i, shell, auto) {
   // the system's price is worked out even when one is typed, so the page can
   // always offer it back
   const own = pos(y.price);
-  const r = costing.resolveYarnPrice(key, count || 0, live, 'BD');
+  let r = costing.resolveYarnPrice(key, count || 0, live, 'BD');
+  // a yarn of a denier the list does not have: its own price, worked out from the list
+  const actual = pos(y.denier_actual);
+  let denAdj = null;
+  if (denier && actual && Math.abs(actual - row.denier) / row.denier > 0.05) {
+    const pd = priceAtDenier(key, actual, live);
+    if (pd) { if (pd.how !== 'listed') denAdj = { how: pd.how, actual }; r = { ...r, price: pd.price }; }
+  }
   const ps = r.price_source;
-  const sysSource = r.price == null ? null : ps.kind.startsWith('market')
+  const sysSource = r.price == null ? null : denAdj ? { kind: 'reference', label: `reference list ${ps.last_updated}, ${denAdj.how} to ${Math.round(denAdj.actual)} D (estimate)`, date: ps.last_updated } : ps.kind.startsWith('market')
     ? { kind: 'market', label: `market quote ${ps.last_updated}${ps.freshness === 'stale' ? ' (stale)' : ''}`, date: ps.last_updated }
     : { kind: 'reference', label: `reference list ${ps.last_updated}`, date: ps.last_updated };
   let price, source;
@@ -186,7 +218,7 @@ function yarnLine(y, live, i, shell, auto) {
     if (r.price == null) throw new SheetError(`${shell}: no price for ${row.label}${count ? ` ${count}s` : ''} — type the price.`);
     price = r.price; source = sysSource;
   }
-  return { role: y.role || null, type: key, label: row.label, count: denier ? null : count, count_source: countSource, denier: denier ? row.denier : null, share_pct: share, price: r4(price), source,
+  return { role: y.role || null, type: key, label: row.label, denier_actual: denAdj ? Math.round(denAdj.actual) : null, denier_adj: denAdj ? denAdj.how : null, count: denier ? null : count, count_source: countSource, denier: denier ? row.denier : null, share_pct: share, price: r4(price), source,
     system_price: r.price == null ? null : r4(r.price), system_source: sysSource, fiber: row.fiber };
 }
 
@@ -232,11 +264,14 @@ function shellPrices(sh, live, idx) {
   // a warp design from the Studio: the charge book is a circular-knit sheet, so it has no knitting rate for warp
   // goods (it would quietly price a locknit as single jersey) — the knitting price is the user's to type
   const isWarp = !!sh.warp;
-  const knitSys = !isWarp && q.ok && q.knit ? sys(q.knit.usd, `charge book · ${q.vendor.name} · ${q.knit.tier}`) : null;
+  let knitSys = !isWarp && q.ok && q.knit ? sys(q.knit.usd, `charge book · ${q.vendor.name} · ${q.knit.tier}`) : null;
   if (isWarp) {
     const at = notes.findIndex((n) => /is not on the charge sheet/.test(n));
     if (at > -1) notes.splice(at, 1);
-    notes.push("Warp knitting has no rate in the charge book: type the knitting price per kg. Dyeing is the charge book's figure for this fibre and shade and finishing the finishing model's — check both against your dyehouse for warp goods.");
+    // knitting = what the machine costs per hour / what the design makes per hour (its own structure, gauge, speed, yarns)
+    const mh = pos(sh.machine_hour), kgh = pos(sh.warp_kg_per_hour);
+    if (mh > 0 && kgh > 0) knitSys = sys(mh / kgh, `machine hour $${r2(mh)} ÷ ${r2(kgh)} kg/h from the design`);
+    notes.push('Warp knitting has no rate in the charge book' + (knitSys ? ": knitting is your machine-hour cost divided by this design's output (kg per hour)." : ": give the machine cost per hour and the design's output prices the knitting, or type the knitting price per kg.") + " Dyeing is the charge book's figure for this fibre and shade and finishing the finishing model's — check both against your dyehouse for warp goods.");
   }
   const dyeSys = q.ok && q.dye ? sys(q.dye.usd, `charge book · ${q.vendor.name} · ${q.dye.tier.replace('_', '/')} ${q.dye.part}-part`) : null;
 
@@ -270,7 +305,7 @@ function shellPrices(sh, live, idx) {
   const L = lossPick.value / 100;
   const sheetKg = base * (1 + L), exactKg = base / (1 - L);
   return {
-    name, application: String(sh.application || '').slice(0, 80), composition: comp ? comp.display : '', fabric: fabricId, warp: isWarp,
+    name, application: String(sh.application || '').slice(0, 80), composition: comp ? comp.display : '', fabric: fabricId, warp: isWarp, machine_hour: isWarp ? pos(sh.machine_hour) : null, warp_kg_per_hour: isWarp ? pos(sh.warp_kg_per_hour) : null,
     gsm: pos(sh.gsm), shade, yarns,
     prices: {
       yarn: { value: r4(yarnPrice), source: { kind: 'blend', label: yarns.map((y) => `${y.share_pct}% ${y.label.replace(/^100% /, '')}${y.count ? ' ' + y.count + 's' : ''} @ $${y.price} (${y.source.label})`).join(' + ') } },
@@ -447,67 +482,143 @@ function options() {
   return { yarns, fabrics, shades: SHADES, limits: LIMITS, bdt_rate: costing.DEFAULT_EXCHANGE_RATES.BDT };
 }
 
-// ── a Fabric Studio warp design as a fabric shell ─────────────────────────
+// ── a Fabric Studio design as a fabric shell ──────────────────────────────
 // The Studio designs the fabric; the sheet prices it. The design's own analysis gives the
-// weight, the composition (each bar's share of the fabric weight) and the yarn of each bar;
-// the price book needs the nearest catalogue fabric and the nearest priced yarn, and says so.
+// weight, the composition (each yarn's share of the fabric weight) and the yarns; the price
+// book needs the nearest catalogue fabric and the priced yarn for each, and the notes say
+// every place where the match is not exact.
 const WARP_FIBRE = { nylon_filament: 'nylon', polyester_filament: 'polyester', polyester_mono: 'polyester', nylon_mono: 'nylon', elastane: 'elastane', polypropylene: 'polypropylene', cotton: 'cotton', polyester_spun: 'polyester', viscose: 'viscose' };
 const nearestKey = (keys, den) => keys.reduce((b, k) => (Math.abs(+k.match(/(\d+)d$/)[1] - den) < Math.abs(+b.match(/(\d+)d$/)[1] - den) ? k : b), keys[0]);
+const priced = (fiber) => Object.keys(costing.SM_PRICE_MATRIX).filter((k) => costing.SM_PRICE_MATRIX[k].price !== undefined && costing.SM_PRICE_MATRIX[k].fiber === fiber);
+const FILAMENTS = () => Object.keys(costing.SM_PRICE_MATRIX).filter((k) => /^filament_\d+d$/.test(k));
+
+// bars / feeds of the same priced yarn become one line (the sheet holds at most six); shares sum to 100
+function mergeLines(lines) {
+  const merged = [];
+  lines.forEach((y) => {
+    const m = merged.find((x) => x.type === y.type && x.count === y.count);
+    if (m) {
+      const tot = m.share_pct + y.share_pct;
+      if (m.denier_actual != null && y.denier_actual != null) m.denier_actual = Math.round((m.denier_actual * m.share_pct + y.denier_actual * y.share_pct) / tot);
+      m.share_pct = tot; if (!m.role.split('+').includes(y.role)) m.role += `+${y.role}`;
+    } else merged.push({ ...y });
+  });
+  const tot = merged.reduce((t, y) => t + y.share_pct, 0) || 1;
+  merged.forEach((y) => { y.share_pct = Math.round((y.share_pct / tot) * 1000) / 10; });
+  const drift = Math.round((100 - merged.reduce((t, y) => t + y.share_pct, 0)) * 10) / 10;
+  if (merged.length) merged[0].share_pct = Math.round((merged[0].share_pct + drift) * 10) / 10;
+  return merged;
+}
+// "75% nylon 25% elastane" from fibre shares
+const compositionOf = (byFibre) => Object.entries(byFibre).filter(([, p]) => p > 0.04).sort((x, y) => y[1] - x[1]).map(([f, p]) => `${Math.round(p * 10) / 10}% ${f}`).join(' ');
+const noteDenier = (notes, who, y) => {
+  const row = costing.SM_PRICE_MATRIX[y.type];
+  if (row && row.denier && y.denier_actual && Math.abs(row.denier - y.denier_actual) / y.denier_actual > 0.05) {
+    const out = y.denier_actual < Math.min(...Object.keys(costing.SM_PRICE_MATRIX).filter((k) => costing.SM_PRICE_MATRIX[k].fiber === row.fiber && costing.SM_PRICE_MATRIX[k].denier).map((k) => costing.SM_PRICE_MATRIX[k].denier))
+      || y.denier_actual > Math.max(...Object.keys(costing.SM_PRICE_MATRIX).filter((k) => costing.SM_PRICE_MATRIX[k].fiber === row.fiber && costing.SM_PRICE_MATRIX[k].denier).map((k) => costing.SM_PRICE_MATRIX[k].denier));
+    notes.push(`${who}: ${y.denier_actual} D is ${out ? 'outside the price list (' + row.label.replace(/\s*\d+D$/, '') + ' is listed 20–150 D)' : 'between listed deniers'}: its price is ${out ? 'carried on from the list, held within ±15 % of its end price' : 'interpolated between the neighbouring deniers'} — an estimate; type your own price if you have a quote.`);
+  }
+};
+
 /**
- * @param a     warp-studio analyse() result of the design
- * @param name  the design's name
- * @returns { shell, notes }  a shell for the sheet's fabric list, and what was matched
+ * A warp design (warp-studio analyse result) as a shell.
+ * @returns { shell, notes }
  */
 function shellFromWarp(a, name) {
   const notes = [];
   const sn = String((a.structure && a.structure.name) || '');
   let fabric = 'tricot_plain', nearest = 'plain tricot';
   if (a.structure && a.structure.beds === 2) { fabric = 'spacer_fabric'; nearest = 'spacer fabric'; }
-  else if (/Powernet|Elastic raschel|Net/i.test(sn)) { fabric = 'powernet'; nearest = 'powernet'; }
+  else if (/Powernet|Elastic raschel|Net/i.test(sn)) { fabric = 'powernet'; nearest = 'powernet'; }
   else if (/Locknit/i.test(sn)) { fabric = 'locknit'; nearest = 'locknit'; }
   else if (/Sharkskin/i.test(sn)) { fabric = 'sharkskin_tricot'; nearest = 'sharkskin'; }
-  else if (!/Full tricot/i.test(sn)) notes.push(`"${sn || 'This structure'}" has no knitting charge of its own in the rate book: priced as plain tricot. Type the knitting price if you know it.`);
-  notes.unshift(`Priced as the catalogue's ${nearest}.`);
-  const rowsOf = costing.SM_PRICE_MATRIX;
-  const keysOf = (fiber) => Object.keys(rowsOf).filter((k) => rowsOf[k].price !== undefined && rowsOf[k].fiber === fiber);
-  const filaments = Object.keys(rowsOf).filter((k) => /^filament_\d+d$/.test(k));
-  const yarns = a.bars.map((b) => {
-    const den = b.tex * 9;
-    const f = Object.keys(WARP_FIBRE).find((k) => b.fibre === (require('./warp-studio').FIBRES[k] || {}).label) || 'nylon_filament';
+  notes.push(`Dyeing and finishing are those of the catalogue's ${nearest}` + (/Full tricot/i.test(sn) || nearest !== 'plain tricot' ? '.' : `, the nearest to "${sn || 'this structure'}". Its knitting is priced from the machine hour and the design's own output, so the structure is not lost.`));
+  const W = require('./warp-studio');
+  const fibreOf = (b) => Object.keys(WARP_FIBRE).find((k) => b.fibre === (W.FIBRES[k] || {}).label) || 'nylon_filament';
+  const lines = a.bars.map((b) => {
+    const den = b.tex * 9, f = fibreOf(b);
     let type, count = '';
-    if (f === 'elastane') type = nearestKey(keysOf('elastane'), den);
-    else if (f === 'nylon_filament' || f === 'nylon_mono') type = nearestKey(keysOf('nylon'), den);
-    else if (f === 'polyester_filament' || f === 'polyester_mono' || f === 'polypropylene') type = nearestKey(filaments, den);
+    if (f === 'elastane') type = nearestKey(priced('elastane'), den);
+    else if (f === 'nylon_filament' || f === 'nylon_mono') type = nearestKey(priced('nylon'), den);
+    else if (f === 'polyester_filament' || f === 'polyester_mono' || f === 'polypropylene') type = nearestKey(FILAMENTS(), den);
     else { type = f === 'cotton' ? 'combed_regular' : f === 'viscose' ? 'viscose_regular' : 'polyester_spun'; count = Math.round(590.5 / b.tex); }
-    const row = rowsOf[type];
-    if (row && row.denier && Math.abs(row.denier - den) / den > 0.25) notes.push(`GB${b.bar}: ${Math.round(den)} D priced as the nearest listed yarn, ${row.label} (${row.denier} D) — type your own price if it differs.`);
-    return { role: `GB${b.bar}`, type, count, share_pct: b.pct, price: '' };
+    return { role: `GB${b.bar}`, type, count, share_pct: b.pct, price: '', denier_actual: costing.SM_PRICE_MATRIX[type].denier ? Math.round(den) : null };
   });
-  // bars of the same priced yarn are one yarn line (the sheet holds at most six)
-  const merged = [];
-  yarns.forEach((y) => {
-    const m = merged.find((x) => x.type === y.type && x.count === y.count);
-    if (m) { m.share_pct += y.share_pct; m.role += `+${y.role}`; } else merged.push({ ...y });
-  });
-  yarns.length = 0; merged.forEach((y) => yarns.push(y));
-  // shares of the fabric weight must add to 100
-  const tot = yarns.reduce((t, y) => t + y.share_pct, 0) || 1;
-  yarns.forEach((y) => { y.share_pct = Math.round((y.share_pct / tot) * 1000) / 10; });
-  const drift = Math.round((100 - yarns.reduce((t, y) => t + y.share_pct, 0)) * 10) / 10;
-  if (yarns.length) yarns[0].share_pct = Math.round((yarns[0].share_pct + drift) * 10) / 10;
+  const yarns = mergeLines(lines);
+  yarns.forEach((y) => noteDenier(notes, y.role, y));
   const byFibre = {};
   const totBars = a.bars.reduce((t, b) => t + b.pct, 0) || 1;
-  a.bars.forEach((b) => {
-    const f = Object.keys(WARP_FIBRE).find((k) => b.fibre === (require('./warp-studio').FIBRES[k] || {}).label) || 'nylon_filament';
-    byFibre[WARP_FIBRE[f]] = (byFibre[WARP_FIBRE[f]] || 0) + (b.pct / totBars) * 100;
-  });
-  const composition = Object.entries(byFibre).sort((x, y) => y[1] - x[1]).map(([f, p]) => `${Math.round(p * 10) / 10}% ${f}`).join(' ');
+  a.bars.forEach((b) => { const f = WARP_FIBRE[fibreOf(b)]; byFibre[f] = (byFibre[f] || 0) + (b.pct / totBars) * 100; });
   return {
-    shell: { name: String(name || 'Warp fabric').slice(0, 60), application: `Studio design · ${sn || 'warp knit'} · E${a.machine.gauge}`, fabric, composition, gsm: Math.max(60, Math.min(800, a.fabric.gsm)),
-      shade: 'light_medium', two_part: false, stripe: '', brushed: false, aop: false, yarn_mode: 'manual', warp: true, yarns,
+    shell: { name: String(name || 'Warp fabric').slice(0, 60), application: `Studio design · ${sn || 'warp knit'} · E${a.machine.gauge}`, fabric, composition: compositionOf(byFibre), gsm: Math.max(60, Math.min(800, a.fabric.gsm)),
+      shade: 'light_medium', two_part: false, stripe: '', brushed: false, aop: false, yarn_mode: 'manual', warp: true, warp_kg_per_hour: a.machine.kg_per_hour, machine_hour: '', yarns,
       yarn_dye_price: '', knit_price: '', dye_price: '', finish_price: '', aop_price: '', loss_pct: '', consumption_unit: 'pc', consumption: [] },
     notes,
   };
 }
 
-module.exports = { analyse, options, LIMITS, SheetError, shellFromWarp };
+// ── a weft design (fabric-studio analyse result) as a shell ───────────────
+const WEFT_FAMILY_FABRIC = { single_jersey: 'single_jersey', pique: 'lacoste_single', fleece: 'fleece_3_thread', rib: 'rib_1x1', interlock: 'interlock' };
+const WEFT_FIBRE_NAME = { Cotton: 'cotton', 'Polyester (spun)': 'polyester', Viscose: 'viscose', Modal: 'modal', 'CVC / PC blend': 'cvc', 'Polyester filament': 'polyester', 'Nylon filament': 'nylon' };
+const spinOf = (s) => String(s || '').toLowerCase();
+
+/**
+ * @param a     fabric-studio analyse() result
+ * @param name  the design's name
+ */
+function shellFromWeft(a, name) {
+  const notes = [];
+  const st = a.structure || {};
+  const ids = chargeBook.GROUP_MAP;
+  let fabric = null, how = '';
+  if (st.match && ids[st.match.id]) { fabric = st.match.id; how = st.match.name; }
+  else if (st.anchor && ids[st.anchor.id]) { fabric = st.anchor.id; how = st.anchor.name; notes.push(`This drawing is not one of the catalogue's fabrics: priced as ${st.anchor.name}, the structure of its ${st.family_label || st.family} the charge book knows.`); }
+  else { fabric = WEFT_FAMILY_FABRIC[st.family] || 'single_jersey'; how = fabric.replace(/_/g, ' '); notes.push(`This drawing is not one of the catalogue's fabrics: priced as ${how}, the nearest in its family.`); }
+  if (st.match && st.match.id === fabric) notes.unshift(`Matched to the catalogue's ${how}${st.yarn_vs_anchor_pct ? ` (the yarn is ${Math.abs(st.yarn_vs_anchor_pct)} % off its reference)` : ''}.`);
+  const y = a.yarn || {};
+  const roleYarn = (role) => (role === 'ground' || role === 'face' ? y.ground : (y.roles || {})[role]) || y.ground || {};
+  const feedOf = (role) => (y.feeds || []).find((f) => f.role === role) || (y.feeds || [])[0] || {};
+  const comp = Array.isArray(y.composition) ? y.composition : [];
+  const lines = comp.map((p) => {
+    const m = String(p.part).match(/^(\w+):/);
+    if (/^elastane/i.test(p.part)) {
+      const d = +(String(p.part).match(/(\d+(?:\.\d+)?)\s*D/i) || [])[1] || 40;
+      return { role: 'elastane', type: nearestKey(priced('elastane'), d), count: '', share_pct: p.pct, price: '', denier_actual: Math.round(d), fibreName: 'elastane' };
+    }
+    const role = m ? m[1] : 'ground', ry = roleYarn(role), fd = feedOf(role);
+    const fibreLabel = fd.fibre || (y.ground || {}).fibre || 'Cotton';
+    const fibre = WEFT_FIBRE_NAME[fibreLabel] || 'cotton';
+    const den = ry.equivalents ? ry.equivalents.denier : null;
+    const ne = ry.equivalents ? Math.round(ry.equivalents.ne) : null;
+    const spin = spinOf(ry.type || fd.yarn_type);
+    let type, count = '', denier_actual = null;
+    if (/Nylon filament/.test(fibreLabel)) { type = nearestKey(priced('nylon'), den || 70); denier_actual = Math.round(den || 70); }
+    else if (/Polyester filament/.test(fibreLabel)) { type = nearestKey(FILAMENTS(), den || 75); denier_actual = Math.round(den || 75); }
+    else if (fibre === 'cotton') { type = /carded|open/.test(spin) ? 'carded_regular' : 'combed_regular'; count = ne || 30; }
+    else if (fibre === 'cvc') { type = 'cvc_60_40'; count = ne || 30; }
+    else if (fibre === 'polyester' ) { type = 'polyester_spun'; count = ne || 30; }
+    else { type = 'viscose_regular'; count = ne || 30; if (fibre === 'modal') notes.push(`${role}: modal is not on the yarn price list — priced as viscose; type your own price.`); }
+    return { role, type, count, share_pct: p.pct, price: '', denier_actual, fibreName: fibre };
+  });
+  if (!lines.length) notes.push('The design gave no yarn breakdown: add the yarns by hand.');
+  const yarns = mergeLines(lines);
+  yarns.forEach((l) => noteDenier(notes, l.role, l));
+  const byFibre = {};
+  lines.forEach((l) => {
+    const share = l.share_pct, f = l.fibreName;
+    if (f === 'cvc') { byFibre.cotton = (byFibre.cotton || 0) + share * 0.6; byFibre.polyester = (byFibre.polyester || 0) + share * 0.4; }
+    else byFibre[f] = (byFibre[f] || 0) + share;
+  });
+  const lineTot = lines.reduce((t, l) => t + l.share_pct, 0) || 1;
+  Object.keys(byFibre).forEach((k) => { byFibre[k] = (byFibre[k] / lineTot) * 100; });
+  yarns.forEach((l) => { delete l.fibreName; });
+  const fin = a.finish || {};
+  return {
+    shell: { name: String(name || 'Studio fabric').slice(0, 60), application: `Studio design · ${st.family_label || st.family || 'weft knit'}`, fabric, composition: compositionOf(byFibre) || '100% cotton', gsm: Math.max(60, Math.min(800, Math.round((a.fabric || {}).gsm || 160))),
+      shade: 'light_medium', two_part: false, stripe: '', brushed: !!(fin.brushed || (fin.brush && fin.brush !== 'none')), aop: false, yarn_mode: 'manual', yarns,
+      yarn_dye_price: '', knit_price: '', dye_price: '', finish_price: '', aop_price: '', loss_pct: '', consumption_unit: 'pc', consumption: [] },
+    notes,
+  };
+}
+
+module.exports = { analyse, options, LIMITS, SheetError, shellFromWarp, shellFromWeft, priceAtDenier };

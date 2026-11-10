@@ -309,9 +309,58 @@ console.log('Studio warp costing tests passed');
   assert.strictEqual(go('spacer').shell.fabric, 'spacer_fabric');
   assert.strictEqual(go('full_tricot').shell.fabric, 'tricot_plain');
   const sat = go('satin');
-  assert(sat.notes.some((n) => /no knitting charge of its own/.test(n)), 'a structure with no rate of its own is flagged');
+  assert(sat.notes.some((n) => /nearest to "Satin/.test(n) && /machine hour/.test(n)), 'a structure with no rate of its own says what it was matched to and how knitting is priced');
   // a yarn between listed deniers is priced as the nearest and flagged
-  assert(go('powernet').notes.some((n) => /nearest listed yarn/.test(n)));
+  assert(go('powernet').notes.some((n) => /outside the price list/.test(n) && /estimate/.test(n)), 'a yarn beyond the list is flagged as an estimate');
   for (const id of ['full_tricot', 'locknit', 'powernet', 'spacer', 'spacer_stretch', 'elastic_raschel', 'atlas']) assert(go(id).sheet.success, id + ': ' + go(id).sheet.error);
+}
+// warp knitting is priced from the machine hour and the design's own output, so each structure has its own rate
+{
+  const CS = require('../engine/domain/cost-sheet');
+  const shellOf = (id, extra) => {
+    const t = W.TEMPLATES.find((x) => x.id === id);
+    const an = W.analyse({ machine: { type: t.machine, gauge: t.gauge, gap_mm: t.gap, notation_step: t.notation_step }, bars: t.bars, target: { gsm: t.gsm } });
+    const sh = CS.shellFromWarp(an, id).shell;
+    return { an, res: CS.analyse({ sizes: ['M'], shells: [{ ...sh, ...extra, consumption: [0.3] }], cm: { cpm: 0.05, smv: [10] } }) };
+  };
+  const a1 = shellOf('satin', { machine_hour: 12 });
+  const k = a1.res.shells[0].prices.knitting;
+  near(k.value, 12 / a1.an.machine.kg_per_hour, 0.001, 'knitting = machine hour / kg per hour');
+  assert(k.source.kind === 'system' && /machine hour/.test(k.source.label));
+  const velour = shellOf('velour', { machine_hour: 12 }).res.shells[0].prices.knitting.value;
+  const tricot = shellOf('full_tricot', { machine_hour: 12 }).res.shells[0].prices.knitting.value;
+  assert(velour !== tricot, 'each structure has its own knitting rate');
+  assert(shellOf('satin', { machine_hour: 12, knit_price: 0.9 }).res.shells[0].prices.knitting.value === 0.9, 'a typed price still wins');
+  assert(shellOf('satin', {}).res.shells[0].prices.knitting.source.kind === 'missing', 'no machine hour: not guessed');
+  // yarn prices follow the yarn's own denier
+  const price = (d) => CS.analyse({ sizes: ['M'], shells: [{ name: 't', fabric: 'tricot_plain', composition: '100% nylon', gsm: 100, yarn_mode: 'manual', warp: true, yarns: [{ type: 'nylon_filament_40d', share_pct: 100, denier_actual: d }], knit_price: 1, dye_price: 1, finish_price: 1, consumption: [0.3] }], cm: { cpm: 0.05, smv: [10] } }).shells[0].yarns[0];
+  assert.strictEqual(price(40).price, 3.7);
+  assert.strictEqual(price(20).price, 4.4, 'a listed denier is the list price');
+  assert(price(50).price < 3.7 && price(50).price > 3.3 && price(50).denier_adj === 'interpolated', 'between 40 and 70 D: between their prices');
+  assert(price(280).denier_adj === 'extrapolated' && price(280).price >= 3.3 * 0.85 - 1e-9 && /estimate/.test(price(280).source.label), 'beyond the list: an estimate, held near the end price');
+  const PT = CS.priceAtDenier('spandex_70d', 280, null);
+  assert(PT.price <= 4.9 * 1.15 + 1e-9 && PT.price >= 4.9 * 0.85 - 1e-9);
+}
+
+// a weft design saved from the Studio becomes a shell on the catalogue fabric the Studio matched
+{
+  const S = require('../engine/domain/fabric-studio'), CS = require('../engine/domain/cost-sheet'), { weftPayload } = require('../engine/domain/studio-weft-input');
+  const rows = (g) => g.map((r) => (Array.isArray(r) ? r : String(r).split('')));
+  const saved = (id, fields, extra) => { const t = S.listTemplates().find((x) => x.id === id), g = t.grid; return { v: 2, name: id, bed: t.gating === 'interlock' ? 'interlock' : g && g.D ? 'rib' : 'single', C: rows(g.C || g), D: g.D ? rows(g.D) : null, feeds: t.roles.map((role) => ({ role })), lycra: false, cut: false, fields, ...extra }; };
+  const shellOf = (id, fields, extra) => { const an = S.analyse(weftPayload(saved(id, fields, extra))); assert(an.success, id + ': ' + an.error); const o = CS.shellFromWeft(an, id); return { ...o, an, res: CS.analyse({ sizes: ['M'], shells: [{ ...o.shell, consumption: [0.3] }], cm: { cpm: 0.05, smv: [10] } }) }; };
+  const cot = { 'st-fibre': 'cotton', 'st-ne': 30, 'st-unit': 'ne' };
+  const jersey = shellOf('single_jersey', { ...cot, 'st-gsm': 160 });
+  assert.strictEqual(jersey.shell.fabric, 'single_jersey'); assert.strictEqual(jersey.shell.composition, '100% cotton');
+  assert.strictEqual(jersey.shell.yarns[0].type, 'combed_regular'); assert(jersey.res.success, jersey.res.error);
+  assert(jersey.res.shells[0].prices.knitting.source.kind === 'system', 'a weft design is priced from the charge book');
+  near(jersey.shell.gsm, 160, 6);
+  assert.strictEqual(shellOf('lacoste_single', { ...cot, 'st-gsm': 200 }).shell.fabric, 'lacoste_single', "the Studio's own match is the catalogue fabric");
+  const rib = shellOf('rib_1x1', { ...cot, 'st-gsm': 220, 'st-lyd': 40, 'st-lydraft': 2.6, 'st-lyevery': 'all' }, { lycra: true });
+  assert(rib.shell.yarns.some((y) => /^spandex/.test(y.type)) && /elastane/.test(rib.shell.composition), 'lycra becomes a spandex yarn line');
+  near(rib.shell.yarns.reduce((t, y) => t + y.share_pct, 0), 100, 0.05);
+  const fl = shellOf('fleece_3_thread', { ...cot, 'yb-count': 75, 'yb-unit': 'denier', 'yb-fibre': 'polyester_filament', 'yl-count': 12, 'yl-unit': 'ne', 'yl-fibre': 'cotton', 'st-gsm': 280 });
+  assert.strictEqual(fl.shell.fabric, 'fleece_3_thread'); assert(fl.shell.yarns.length >= 3 && fl.res.success, fl.res.error);
+  const il = shellOf('interlock', { 'st-fibre': 'polyester_filament', 'st-ne': 100, 'st-unit': 'denier', 'st-gsm': 180 });
+  assert.strictEqual(il.shell.yarns[0].type, 'filament_100d'); assert.strictEqual(il.shell.composition, '100% polyester');
 }
 console.log('Studio design → costing sheet tests passed');

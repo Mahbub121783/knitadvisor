@@ -116,7 +116,8 @@
         (S.shells.length > 1 ? '<button class="cs-btn small danger" type="button" data-rmshell="' + i + '">Remove</button>' : '') + '</div>' +
         '<div class="cs-row">' +
           '<label class="cs-f" style="grid-column:span 2">Application in garment<input data-k="' + p + '.application" value="' + esc(sh.application) + '" placeholder="Body / rib for cuff, collar, hem / neck tape"></label>' +
-          (sh.warp ? '<label class="cs-f">Fabric<input value="Warp knit — from the Fabric Studio (' + esc(sh.fabric.replace(/_/g, ' ')) + ')" disabled></label>'
+          (sh.warp ? '<label class="cs-f">Fabric<input value="Warp knit — from the Fabric Studio (' + esc(sh.fabric.replace(/_/g, ' ')) + ')" disabled></label>' +
+              '<label class="cs-f">Warp machine cost $/hour<input class="num" type="number" min="0" step="0.1" data-k="' + p + '.machine_hour" value="' + esc(sh.machine_hour) + '" placeholder="e.g. 12"><small style="color:var(--t3)">knitting = this ÷ the design\'s ' + esc(sh.warp_kg_per_hour) + ' kg/h</small></label>'
             : '<label class="cs-f">Fabric<select data-k="' + p + '.fabric">' + fabricOptions(sh.fabric) + '</select></label>') +
           '<label class="cs-f">Composition<input data-k="' + p + '.composition" value="' + esc(sh.composition) + '" placeholder="95% cotton 5% elastane"></label>' +
           '<label class="cs-f">GSM<input class="num" type="number" min="60" max="800" data-k="' + p + '.gsm" value="' + esc(sh.gsm) + '"></label>' +
@@ -462,9 +463,9 @@
   var studioDesigns = [];
   function loadStudioDesigns() {
     return apiFetch('/api/studio/designs').then(function (r) {
-      studioDesigns = (r.designs || []).filter(function (d) { return d.design && d.design.tech === 'warp'; });
-      $('cs-studio-pick').innerHTML = '<option value="">' + (studioDesigns.length ? 'A design from the Fabric Studio…' : 'No saved warp designs in the Studio yet') + '</option>' +
-        studioDesigns.map(function (d) { return '<option value="' + d.id + '">' + esc(d.name) + ' (warp)</option>'; }).join('');
+      studioDesigns = (r.designs || []).filter(function (d) { return d.design; });
+      $('cs-studio-pick').innerHTML = '<option value="">' + (studioDesigns.length ? 'A design from the Fabric Studio…' : 'No saved designs in the Studio yet') + '</option>' +
+        studioDesigns.map(function (d) { return '<option value="' + d.id + '">' + esc(d.name) + (d.design.tech === 'warp' ? ' (warp)' : ' (weft)') + '</option>'; }).join('');
     }).catch(function () {});
   }
   function bringIn(id) {
