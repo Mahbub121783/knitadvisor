@@ -37,6 +37,7 @@ const KP = require('./knit-plan');
 const KM = require('./knit-machine');
 const KF = require('./knit-formation');
 const KR = require('./knit-relax');
+const YC = require('./yarn-character');
 const TE = require('./terry-engine');
 const { FABRIC_DERIVATIVES } = require('../catalog/fabric-derivatives');
 const { FACTORY_RECORDS } = require('../catalog/factory-dataset');
@@ -180,16 +181,48 @@ function readBed(rows, name) {
   return g;
 }
 
+// ── yarn: count in any system, ply, type ─────────────────────────────────
+// Every count system comes down to tex (grams per km):
+//   Ne (cotton)  590.5 / Ne     Nm (metric)  1000 / Nm     Nw (worsted)  885.8 / Nw
+//   dtex         dtex / 10      denier       den / 9       tex           tex
+// A ply yarn written 2/40s is two 40s singles: resultant tex = ply × single tex.
+// A filament yarn's filament count (75D/72F) gives the fineness of one
+// filament (dpf) — the softer the finer. The yarn TYPE sets its diameter at a
+// given count: spinning system and yarn form for spun yarns, flat (FDY) or
+// textured (DTY) for filament (bulk factors from the yarn-character tables).
+const UNITS = {
+  ne: { label: 'Ne', toTex: (v) => 590.5 / v }, nm: { label: 'Nm', toTex: (v) => 1000 / v }, nw: { label: 'Nw', toTex: (v) => 885.8 / v },
+  tex: { label: 'tex', toTex: (v) => v }, dtex: { label: 'dtex', toTex: (v) => v / 10 }, denier: { label: 'D', toTex: (v) => v / 9 },
+};
+const FILAMENT_FIBRES = ['polyester_filament', 'nylon_filament'];
+const SPUN_TYPES = Object.keys(YC.SYSTEM_LOOK);
 function readYarn(y, fallback) {
   const o = y || {};
-  let tex = null, label = null;
-  if (+o.ne > 0) { tex = 590.5 / +o.ne; label = `${r1(+o.ne)}s Ne`; }
-  else if (+o.denier > 0) { tex = +o.denier / 9; label = `${r1(+o.denier)} D`; }
-  else if (+o.tex > 0) { tex = +o.tex; label = `${r1(+o.tex)} tex`; }
-  if (!tex) return fallback || null;
-  if (tex < 2 || tex > 120) throw new StudioError(`Yarn ${label}: outside 5s–300s Ne — check the count.`);
+  let unit = UNITS[String(o.unit || '').toLowerCase()] ? String(o.unit).toLowerCase() : null;
+  let v = +o.count > 0 ? +o.count : null;
+  if (!v || !unit) { if (+o.ne > 0) { v = +o.ne; unit = 'ne'; } else if (+o.denier > 0) { v = +o.denier; unit = 'denier'; } else if (+o.tex > 0) { v = +o.tex; unit = 'tex'; } else if (+o.dtex > 0) { v = +o.dtex; unit = 'dtex'; } else if (+o.nm > 0) { v = +o.nm; unit = 'nm'; } }
+  if (!v || !unit) return fallback || null;
+  const ply = [1, 2, 3, 4].includes(+o.ply) ? +o.ply : 1;
+  const single = UNITS[unit].toTex(v);
+  const tex = single * ply;
+  const countLabel = unit === 'ne' ? `${r1(v)}s Ne` : unit === 'denier' ? `${r1(v)} D` : `${r1(v)} ${UNITS[unit].label}`;
+  const label = (ply > 1 ? `${ply}/${countLabel}` : countLabel) + (+o.filaments > 0 ? `/${Math.round(+o.filaments)}F` : '');
+  if (tex < 2 || tex > 120) throw new StudioError(`Yarn ${label}: ${r1(tex)} tex is outside 2–120 tex (5s–300s Ne) — check the count and the unit.`);
   const fibre = FIBRES[o.fibre] ? o.fibre : (fallback && fallback.fibre) || 'cotton';
-  return { tex, ne: 590.5 / tex, label, fibre, fibre_label: FIBRES[fibre].label };
+  const filament = FILAMENT_FIBRES.includes(fibre);
+  // type: a spinning system for spun yarn, flat / textured for filament
+  const type = filament ? (['fdy', 'dty'].includes(o.type) ? o.type : 'dty') : (SPUN_TYPES.includes(o.type) ? o.type : 'combed');
+  const form = filament ? null : (ply > 1 ? 'ply2' : ['slub', 'core_spun'].includes(o.form) ? o.form : 'single');
+  const bulk = filament ? YC.POLY_FORM[type].bulk : YC.SYSTEM_LOOK[type].bulk * YC.FORM_LOOK[form].bulk;
+  const typeLabel = filament ? YC.POLY_FORM[type].label : `${type.replace('_', '-')}${form !== 'single' ? ', ' + YC.FORM_LOOK[form].label : ''}`;
+  const dpf = filament && +o.filaments > 0 ? (tex * 9) / +o.filaments : null;
+  return {
+    tex, ne: 590.5 / tex, label, fibre, fibre_label: FIBRES[fibre].label, ply, type, type_label: typeLabel, bulk,
+    // Peirce's diameter d = √tex / 28 mm, by fibre packing and by the yarn's own bulk
+    d_mm: (Math.sqrt(tex) / 28) * FIBRES[fibre].dFactor * bulk,
+    filaments: +o.filaments > 0 ? Math.round(+o.filaments) : null, dpf: dpf ? r2(dpf) : null,
+    equivalents: { ne: r1(590.5 / tex), nm: r1(1000 / tex), tex: r2(tex), dtex: r1(tex * 10), denier: r1(tex * 9) },
+  };
 }
 
 // ── structure helpers ──────────────────────────────────────────────────────
@@ -247,9 +280,9 @@ function factoryGauge(family, lycra, ne) {
   return { gauge: +g, share_pct: Math.round(n / near.length * 100), n: near.length };
 }
 
-function gaugeFit(family, gauge, tex, fibre) {
+function gaugeFit(family, gauge, tex, fibre, bulk = 1) {
   const pitch = 25.4 / gauge;
-  const yarnD = (Math.sqrt(tex) / 28) * FIBRES[fibre].dFactor;
+  const yarnD = (Math.sqrt(tex) / 28) * FIBRES[fibre].dFactor * bulk;
   const ratio = pitch / yarnD;
   const B = KP.CAL.band[family] && KP.CAL.band[family].n >= 20 ? KP.CAL.band[family] : KP.CAL.band.single_jersey;
   const fit = ratio < B.lo * 0.92 ? 'too fine' : ratio > B.hi * 1.08 ? 'coarse' : 'good';
@@ -604,7 +637,7 @@ function solve(ctx, ground) {
     const loopy = f.role === 'loop' || !knitsHere;
     const elast = ctx.elastane && ctx.elastane.feeds.includes(i) ? ctx.elastane : null;
     return {
-      feed: i + 1, role: f.role, role_drawn: f.drawn || f.role, yarn: yarns[i].label, fibre: yarns[i].fibre_label, tex: r2(yarns[i].tex),
+      feed: i + 1, role: f.role, role_drawn: f.drawn || f.role, yarn: yarns[i].label, yarn_type: yarns[i].type_label || null, d_mm: yarns[i].d_mm ? r3(yarns[i].d_mm) : null, fibre: yarns[i].fibre_label, tex: r2(yarns[i].tex),
       sl_mm: r3(l), sl_source: f.sl_mm ? 'your setting' : f.sl_ratio !== 1 ? `${f.sl_ratio} × ground` : 'ground stitch length',
       tf: knitsHere ? r2(Math.sqrt(yarns[i].tex) / (l / 10)) : null,
       share: r2(s), course_length_m: r3(courseM), yarn_speed_m_min: r1(courseM * rpm),
@@ -643,7 +676,7 @@ function solve(ctx, ground) {
     ground, gauge, recGauge, fg, coverGauge, pitch, lref, slSource, slRange, gsm, gsmRange, target,
     KS, KW, modelKS, modelKW, model, pack, fibre, phi, A: at.A, dia, diaSource, needles, width, widthRange: [widthAt(dia, KW.q3), widthAt(dia, KW.q1)], workFrac,
     feeders, rpm, eff, feeds, composition, kgh, wpc, cpc, tfGround, M, tW,
-    gfit: gaugeFit(family, gauge, ground.tex, ground.fibre),
+    gfit: gaugeFit(family, gauge, ground.tex, ground.fibre, ground.bulk || 1),
   };
 }
 
@@ -688,7 +721,7 @@ function calibrate(ctx, ground, rolls) {
 function hookLoad(st, S, dir = 1) {
   const d0 = S.gfit.yarn_d_mm, t0 = S.ground.tex;
   const own = S.feeds.length === st.feeds;
-  const dOf = (i) => (own && S.feeds[i] ? d0 * Math.sqrt(S.feeds[i].tex / t0) : d0);
+  const dOf = (i) => (own && S.feeds[i] ? (S.feeds[i].d_mm || d0 * Math.sqrt(S.feeds[i].tex / t0)) : d0);
   let worst = { idx: 0, loops: 1, where: '', mm: d0 };
   for (const [b, name] of [['C', 'cylinder'], ['D', 'dial']]) {
     const g = st.beds[b]; if (!g) continue;
@@ -906,13 +939,18 @@ function analyse(input) {
     const gating = D ? (input.gating === 'interlock' ? 'interlock' : 'rib') : 'single';
 
     const ground = readYarn(input.yarn, null);
+    const roleYarn = {};
+    for (const role of ['binder', 'loop']) {
+      const y = input.yarns && input.yarns[role];
+      if (y) roleYarn[role] = readYarn({ fibre: (input.yarn || {}).fibre, ...y }, null);
+    }
     const auto = !ground;
     const feedRows = C.map((_, i) => {
       const f = (input.feeds || [])[i] || {};
       const role = ROLES.includes(f.role) ? f.role : 'ground';
       return {
         role,
-        yarn: readYarn(f.yarn, null),
+        yarn: readYarn(f.yarn ? { ...(input.yarn || {}), ne: null, count: null, unit: null, ...f.yarn } : null, null) || roleYarn[role] || null,
         sl_mm: +f.sl_mm > 0 ? +f.sl_mm : null,
         sl_ratio: +f.sl_ratio > 0 ? Math.min(3, Math.max(0.3, +f.sl_ratio)) : 1,
       };
@@ -1219,7 +1257,17 @@ function analyse(input) {
             : 'Delayed (rib) timing: the dial knocks over a few needles after the cylinder and draws its loop from the cylinder\'s — a tighter, finer rib.') : null,
       },
       yarn: {
-        ground: { count: S.ground.label, tex: r2(S.ground.tex), fibre: S.ground.fibre_label, source: auto || (plush && !ground) ? 'solved' : 'your input' },
+        ground: { count: S.ground.label, tex: r2(S.ground.tex), fibre: S.ground.fibre_label, source: auto || (plush && !ground) ? 'solved' : 'your input',
+          type: S.ground.type_label || null, d_mm: r3(S.gfit.yarn_d_mm), equivalents: S.ground.equivalents || { ne: r1(590.5 / S.ground.tex), nm: r1(1000 / S.ground.tex), tex: r2(S.ground.tex), dtex: r1(S.ground.tex * 10), denier: r1(S.ground.tex * 9) }, dpf: S.ground.dpf || null },
+        roles: (() => {
+          const out = {};
+          feedRows.forEach((f, i) => {
+            const y = S.feeds[i]; if (!y || out[f.role] || f.role === 'ground' || f.role === 'face') return;
+            out[f.role] = { count: y.yarn, tex: y.tex, type: y.yarn_type, d_mm: y.d_mm, source: f.yarn ? 'your input' : f.role === 'loop' ? 'assumed (2.5 × the ground tex)' : 'the ground yarn',
+              equivalents: { ne: r1(590.5 / y.tex), nm: r1(1000 / y.tex), tex: r2(y.tex), dtex: r1(y.tex * 10), denier: r1(y.tex * 9) } };
+          });
+          return out;
+        })(),
         feeds: S.feeds.map(({ mass, elastane_mass, ...f }) => f),
         composition: S.composition,
       },

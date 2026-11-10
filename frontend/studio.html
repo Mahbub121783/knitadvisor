@@ -59,6 +59,11 @@
     .st-btn:hover { border-color: var(--accent); color: var(--accent); }
     .st-btn.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
     .st-btn:disabled { opacity: .45; cursor: default; }
+    .st-yrow { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px 10px 2px; margin-bottom: 8px; }
+    .st-yrow[hidden] { display: none; }
+    .st-yhead { font-size: 12px; margin-bottom: 4px; display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
+    .st-yeq { font: 500 11px var(--mono); color: var(--t3); }
+    .st-yfil[hidden] { display: none; }
     .st-mcard { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px 12px; margin: 8px 0; background: var(--bg); }
     .st-mcard dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 6px 0 0; font-size: 12px; }
     .st-mcard dt { color: var(--t3); }
@@ -217,11 +222,41 @@
 
         <div class="st-card">
           <div class="st-step"><b>2</b> Yarn</div>
-          <div class="st-row">
-            <div class="st-f"><label for="st-ne">Ground count (Ne)</label><input id="st-ne" type="number" min="5" max="150" step="1" placeholder="auto"></div>
-            <div class="st-f"><label for="st-fibre">Fibre</label><select id="st-fibre"></select></div>
-          </div>
-          <p class="st-hint">Leave the count empty and the studio picks it from the target GSM. Other yarns (face, binder, loop) are set per feed in the design.</p>
+          <p class="st-hint" style="margin-top:0">Every yarn the design uses — set by the roles you give the feeders (face / ground, binder, loop or pile). Any count system: Ne, Nm, tex, dtex, denier, worsted; ply (2/40s) and filaments (75D/72F).</p>
+            <div class="st-yrow" data-yrole="ground">
+              <div class="st-yhead"><b>Face / ground yarn</b> <span class="st-yeq" id="st-yeq-ground"></span></div>
+              <div class="st-row">
+                <div class="st-f"><label for="st-ne">Count</label><input id="st-ne" type="number" min="1" max="2000" step="0.1" placeholder="auto"></div>
+                <div class="st-f"><label for="st-unit">Unit</label><select id="st-unit"><option value="ne">Ne</option><option value="nm">Nm</option><option value="tex">tex</option><option value="dtex">dtex</option><option value="denier">denier</option><option value="nw">Nw (worsted)</option></select></div>
+                <div class="st-f"><label for="st-ply">Ply</label><select id="st-ply"><option value="1">single</option><option value="2">2-ply</option><option value="3">3-ply</option></select></div>
+                <div class="st-f"><label for="st-fibre">Fibre</label><select id="st-fibre" class="st-yfibre"></select></div>
+                <div class="st-f"><label for="st-ytype">Yarn type</label><select id="st-ytype" class="st-ytype"></select></div>
+                <div class="st-f st-yfil"><label for="st-fil">Filaments (F)</label><input id="st-fil" type="number" min="1" max="600" step="1" placeholder="e.g. 48"></div>
+              </div>
+            </div>
+            <div class="st-yrow" data-yrole="binder">
+              <div class="st-yhead"><b>Binder yarn</b> <span class="st-yeq" id="st-yeq-binder"></span></div>
+              <div class="st-row">
+                <div class="st-f"><label for="yb-count">Count</label><input id="yb-count" type="number" min="1" max="2000" step="0.1" placeholder="ground yarn"></div>
+                <div class="st-f"><label for="yb-unit">Unit</label><select id="yb-unit"><option value="ne">Ne</option><option value="nm">Nm</option><option value="tex">tex</option><option value="dtex">dtex</option><option value="denier">denier</option><option value="nw">Nw (worsted)</option></select></div>
+                <div class="st-f"><label for="yb-ply">Ply</label><select id="yb-ply"><option value="1">single</option><option value="2">2-ply</option><option value="3">3-ply</option></select></div>
+                <div class="st-f"><label for="yb-fibre">Fibre</label><select id="yb-fibre" class="st-yfibre"></select></div>
+                <div class="st-f"><label for="yb-type">Yarn type</label><select id="yb-type" class="st-ytype"></select></div>
+                <div class="st-f st-yfil"><label for="yb-fil">Filaments (F)</label><input id="yb-fil" type="number" min="1" max="600" step="1" placeholder="e.g. 48"></div>
+              </div>
+            </div>
+            <div class="st-yrow" data-yrole="loop">
+              <div class="st-yhead"><b>Loop / pile yarn</b> <span class="st-yeq" id="st-yeq-loop"></span></div>
+              <div class="st-row">
+                <div class="st-f"><label for="yl-count">Count</label><input id="yl-count" type="number" min="1" max="2000" step="0.1" placeholder="auto"></div>
+                <div class="st-f"><label for="yl-unit">Unit</label><select id="yl-unit"><option value="ne">Ne</option><option value="nm">Nm</option><option value="tex">tex</option><option value="dtex">dtex</option><option value="denier">denier</option><option value="nw">Nw (worsted)</option></select></div>
+                <div class="st-f"><label for="yl-ply">Ply</label><select id="yl-ply"><option value="1">single</option><option value="2">2-ply</option><option value="3">3-ply</option></select></div>
+                <div class="st-f"><label for="yl-fibre">Fibre</label><select id="yl-fibre" class="st-yfibre"></select></div>
+                <div class="st-f"><label for="yl-type">Yarn type</label><select id="yl-type" class="st-ytype"></select></div>
+                <div class="st-f st-yfil"><label for="yl-fil">Filaments (F)</label><input id="yl-fil" type="number" min="1" max="600" step="1" placeholder="e.g. 48"></div>
+              </div>
+            </div>
+          <p class="st-hint">Leave the ground count empty and the studio picks it from the target GSM. A feeder can still take its own count (Ne) in the design; elastane is set below.</p>
           <div id="st-plush-box" hidden>
             <div class="st-f"><label for="st-pile">A loop-yarn feeder that knits</label><select id="st-pile"><option value="sinker">Sinker-loop pile (terry / velour)</option><option value="none">Knits in as a yarn (no pile)</option></select></div>
             <p class="st-hint"><b>Sinker-loop pile:</b> the loop yarn is plated behind the ground yarn and drawn over the high sinker — terry, or velour when sheared. Feeds without the loop yarn knit plain ground courses between the pile courses. <b>Knits in:</b> the loop yarn forms ordinary needle loops — a jersey course of that yarn.</p>
@@ -477,6 +512,6 @@
 <script src="assets/js/api.js"></script>
 <script src="assets/js/studio-cloth-map.js?v=20261110d"></script>
 <script src="assets/js/studio-needle.js?v=20261110d"></script>
-<script src="assets/js/studio.js?v=20261110i"></script>
+<script src="assets/js/studio.js?v=20261110j"></script>
 </body>
 </html>

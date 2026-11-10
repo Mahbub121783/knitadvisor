@@ -55,6 +55,44 @@
   var CAT_LABEL = { single_jersey: 'Single jersey family', rib: 'Rib family (double bed)', interlock: 'Interlock family (double bed)' };
 
   var machines = [];
+  // ── yarns: one row per role the design uses ────────────────────────────
+  var YROWS = [
+    { key: 'ground', c: 'st-ne', u: 'st-unit', f: 'st-fibre', t: 'st-ytype', p: 'st-ply', fil: 'st-fil' },
+    { key: 'binder', c: 'yb-count', u: 'yb-unit', f: 'yb-fibre', t: 'yb-type', p: 'yb-ply', fil: 'yb-fil' },
+    { key: 'loop', c: 'yl-count', u: 'yl-unit', f: 'yl-fibre', t: 'yl-type', p: 'yl-ply', fil: 'yl-fil' },
+  ];
+  var SPUN = [['combed', 'Combed ring'], ['carded', 'Carded ring'], ['compact', 'Compact'], ['siro', 'Siro'], ['siro_compact', 'Siro-compact'], ['open_end', 'Open-end (rotor)'], ['vortex', 'Vortex (air-jet)']];
+  var FILA = [['dty', 'Textured (DTY)'], ['fdy', 'Flat (FDY)']];
+  var isFil = function (f) { return /filament/.test(f || ''); };
+  function yarnTypes(R) {
+    var fib = $(R.f).value, sel = $(R.t), keep = sel.value, list = isFil(fib) ? FILA : SPUN;
+    sel.innerHTML = list.map(function (x) { return '<option value="' + x[0] + '">' + x[1] + '</option>'; }).join('');
+    if (list.some(function (x) { return x[0] === keep; })) sel.value = keep;
+    var fil = $(R.fil).closest('.st-yfil'); if (fil) fil.hidden = !isFil(fib);
+    if (isFil(fib) && $(R.u).value === 'ne' && !$(R.c).value) $(R.u).value = 'denier';
+  }
+  function yarnOf(R) {
+    var y = { fibre: $(R.f).value, type: $(R.t).value, ply: +$(R.p).value || 1 };
+    if (+$(R.c).value > 0) { y.count = +$(R.c).value; y.unit = $(R.u).value; }
+    if (isFil(y.fibre) && +$(R.fil).value > 0) y.filaments = +$(R.fil).value;
+    return y;
+  }
+  var TEX = { ne: function (v) { return 590.5 / v; }, nm: function (v) { return 1000 / v; }, nw: function (v) { return 885.8 / v; }, tex: function (v) { return v; }, dtex: function (v) { return v / 10; }, denier: function (v) { return v / 9; } };
+  // the ground yarn as Ne (for the views), whatever system it was given in
+  function groundNeOf() { var R = YROWS[0], v = +$(R.c).value; if (!(v > 0)) return 0; return 590.5 / (TEX[$(R.u).value](v) * (+$(R.p).value || 1)); }
+  function showYarnRows() {
+    var roles = S.feeds.map(function (f) { return (f && f.role) || 'ground'; });
+    document.querySelector('[data-yrole="binder"]').hidden = roles.indexOf('binder') < 0;
+    document.querySelector('[data-yrole="loop"]').hidden = roles.indexOf('loop') < 0;
+    document.querySelector('[data-yrole="ground"] .st-yhead b').textContent = roles.indexOf('face') > -1 ? 'Face yarn' : 'Ground yarn';
+  }
+  function showYarnEq() {
+    if (!last || !last.yarn) return;
+    var eq = function (e) { return e ? '= ' + e.tex + ' tex · ' + e.ne + 's Ne · ' + e.nm + ' Nm · ' + e.dtex + ' dtex · ' + e.denier + ' D' : ''; };
+    var g = last.yarn.ground;
+    $('st-yeq-ground').textContent = eq(g.equivalents) + (g.d_mm ? ' · Ø ' + g.d_mm + ' mm' : '') + (g.source === 'solved' ? ' (solved: ' + g.count + ')' : '');
+    ['binder', 'loop'].forEach(function (k) { var y = (last.yarn.roles || {})[k]; $('st-yeq-' + k).textContent = y ? eq(y.equivalents) + ' · Ø ' + y.d_mm + ' mm' + (y.source !== 'your input' ? ' — ' + y.source : '') : ''; });
+  }
   var MYM = 'ka-studio-mymachine';
   function myMachine() {
     var cams = function (b) { var a = ['K']; document.querySelectorAll('[data-mmc="' + b + '"]').forEach(function (x) { if (x.checked) a.push(x.value); }); return a; };
@@ -97,7 +135,9 @@
     return apiFetch('/api/studio/templates').then(function (d) {
       templates = d.templates || [];
       var fib = $('st-fibre');
-      fib.innerHTML = Object.keys(d.fibres || {}).map(function (k) { return '<option value="' + k + '">' + esc(d.fibres[k].label) + '</option>'; }).join('');
+      var fopts = Object.keys(d.fibres || {}).map(function (k) { return '<option value="' + k + '">' + esc(d.fibres[k].label) + '</option>'; }).join('');
+      document.querySelectorAll('.st-yfibre').forEach(function (x) { var keep = x.value; x.innerHTML = fopts; if (keep) x.value = keep; });
+      void fib; YROWS.forEach(yarnTypes);
       var sel = $('st-template');
       var groups = {};
       templates.forEach(function (t) { (groups[t.category] = groups[t.category] || []).push(t); });
@@ -310,7 +350,7 @@
   function bindRolls() {
     $('st-addroll').addEventListener('click', function () {
       var last0 = rolls[rolls.length - 1] || {};
-      rolls.push({ sl_mm: '', ne: num('st-ne') || last0.ne || '', gsm: '', width_in: '', dia: num('st-dia') || last0.dia || '', gauge: num('st-gauge') || last0.gauge || '' });
+      rolls.push({ sl_mm: '', ne: (groundNeOf() ? Math.round(groundNeOf() * 10) / 10 : '') || last0.ne || '', gsm: '', width_in: '', dia: num('st-dia') || last0.dia || '', gauge: num('st-gauge') || last0.gauge || '' });
       renderRolls(); writeRolls();
     });
     $('st-rolls').addEventListener('input', function (e) {
@@ -354,7 +394,8 @@
       feeds: S.feeds.map(function (f) {
         return { role: f.role || 'ground', colour: f.colour || null, yarn: +f.ne > 0 ? { ne: +f.ne, fibre: $('st-fibre').value } : null, sl_ratio: +f.sl_ratio > 0 ? +f.sl_ratio : null };
       }),
-      yarn: num('st-ne') ? { ne: num('st-ne'), fibre: $('st-fibre').value } : { fibre: $('st-fibre').value },
+      yarn: yarnOf(YROWS[0]),
+      yarns: { binder: +$('yb-count').value > 0 ? yarnOf(YROWS[1]) : null, loop: +$('yl-count').value > 0 ? yarnOf(YROWS[2]) : null },
       plush: { cut: $('st-cut').checked, sinker_mm: num('st-sinker'), arrangement: $('st-parr').value },
       pile: $('st-pile').value,
       stripes: $('st-stripe').value.trim() ? { sequence: $('st-stripe').value } : null,
@@ -408,7 +449,7 @@
       var bed = td.closest('table').getAttribute('data-bed');
       td.classList.toggle('bad', !!bad[bed + td.getAttribute('data-i') + '_' + td.getAttribute('data-j')]);
     });
-    renderSetup(); renderResults(); renderMachine(); renderNotation();
+    renderSetup(); renderResults(); renderMachine(); renderNotation(); showYarnEq();
     clearTimeout(timer3d); timer3d = setTimeout(render3D, 350);
     race.reset(); cycle.refresh();
   }
@@ -927,7 +968,7 @@
     // density from the engine's answer for this design (wales, courses, GSM, stitch length)
     var fab = (last && last.fabric) || {};
     var wpc = fab.wpc || shape.wpc, cpc = fab.cpc || shape.cpc;
-    var ne = +$('st-ne').value > 0 ? +$('st-ne').value : (last && last.yarn && last.yarn.ground && last.yarn.ground.tex ? 590.5 / last.yarn.ground.tex : 590.5 / shape.tex);
+    var ne = groundNeOf() > 0 ? groundNeOf() : (last && last.yarn && last.yarn.ground && last.yarn.ground.tex ? 590.5 / last.yarn.ground.tex : 590.5 / shape.tex);
     var gsm = fab.gsm || num('st-gsm') || 180;
     var dbl = con.base === 'double';
     var clamp = function (v, lo, hi) { return Math.max(lo, Math.min(hi, v)); };
@@ -968,7 +1009,7 @@
   var shape = { wpc: 14, cpc: 19, tex: 590.5 / 30 };   // a 30s jersey until the engine answers
   function loopSpec() {
     if (last && last.fabric) shape = { wpc: last.fabric.wpc, cpc: last.fabric.cpc, tex: last.yarn.ground.tex };
-    var f = { wpc: shape.wpc, cpc: shape.cpc }, y = { ground: { tex: +$('st-ne').value > 0 ? 590.5 / +$('st-ne').value : shape.tex } };
+    var f = { wpc: shape.wpc, cpc: shape.cpc }, y = { ground: { tex: groundNeOf() > 0 ? 590.5 / groundNeOf() : shape.tex } };
     var real = mode3d === 'cloth';
     var C = S.C, D = S.D, feeds = S.feeds;
     var ly = $('st-lycra').checked ? $('st-lyevery').value : null;
@@ -1103,7 +1144,7 @@
   var STORE = 'ka_studio_designs';
   function readStore() { try { return JSON.parse(localStorage.getItem(STORE) || '[]'); } catch (_) { return []; } }
   function writeStore(a) { try { localStorage.setItem(STORE, JSON.stringify(a)); return true; } catch (_) { return false; } }
-  var FIELDS = ['st-ne', 'st-fibre', 'st-gsm', 'st-width', 'st-gauge', 'st-dia', 'st-feeders', 'st-rpm', 'st-sl', 'st-eff', 'st-tc', 'st-td', 'st-lyd', 'st-lydraft', 'st-lyevery', 'st-v1r', 'st-v1l', 'st-v2r', 'st-v2l', 'st-sinker', 'st-parr', 'st-mprof', 'st-brush', 'st-passes', 'st-pile', 'st-tdir', 'st-shr', 'st-camd', 'st-timing', 'st-dgap', 'st-c1r', 'st-c1l', 'st-c2r', 'st-c2l', 'st-stripe', 'st-sc-A', 'st-sc-B', 'st-sc-C', 'st-sc-D', 'st-sc-E', 'st-sc-F'];
+  var FIELDS = ['st-ne', 'st-unit', 'st-ply', 'st-ytype', 'st-fil', 'yb-count', 'yb-unit', 'yb-fibre', 'yb-type', 'yb-ply', 'yb-fil', 'yl-count', 'yl-unit', 'yl-fibre', 'yl-type', 'yl-ply', 'yl-fil', 'st-fibre', 'st-gsm', 'st-width', 'st-gauge', 'st-dia', 'st-feeders', 'st-rpm', 'st-sl', 'st-eff', 'st-tc', 'st-td', 'st-lyd', 'st-lydraft', 'st-lyevery', 'st-v1r', 'st-v1l', 'st-v2r', 'st-v2l', 'st-sinker', 'st-parr', 'st-mprof', 'st-brush', 'st-passes', 'st-pile', 'st-tdir', 'st-shr', 'st-camd', 'st-timing', 'st-dgap', 'st-c1r', 'st-c1l', 'st-c2r', 'st-c2l', 'st-stripe', 'st-sc-A', 'st-sc-B', 'st-sc-C', 'st-sc-D', 'st-sc-E', 'st-sc-F'];
   function designNow() {
     var o = { v: 2, name: $('st-name').value || 'Untitled design', bed: S.bed, C: S.C, D: S.D, feeds: S.feeds, rolls: rolls, lycra: $('st-lycra').checked, cut: $('st-cut').checked, colour: $('st-col').value, fields: {} };
     FIELDS.forEach(function (id) { o.fields[id] = $(id).value; });
@@ -1146,6 +1187,7 @@
 
   // ── wiring ───────────────────────────────────────────────────────────────
   function renderAll() {
+    showYarnRows();
     rolls = readRolls(); renderRolls();
     renderBed(); renderEditor(); renderNotation(); schedule();
   }
@@ -1189,6 +1231,8 @@
     $('st-play').addEventListener('click', function () { this.textContent = race.toggle() ? 'Pause' : 'Play'; });
     $('st-anibed').addEventListener('change', function () { race.reset(); cycle.refresh(); });
     cycle.bind();
+    YROWS.forEach(function (R) { $(R.f).addEventListener('change', function () { yarnTypes(R); }); });
+    $('st-editor').addEventListener('change', function (e) { if (e.target.getAttribute('data-k') === 'role') showYarnRows(); });
     loadMyMachine();
     $('st-mymach').addEventListener('change', function () { saveMyMachine(); $('st-mprof').dispatchEvent(new Event('change')); });
     $('st-mymach').addEventListener('input', function (e) { if (e.target.type === 'number' || e.target.type === 'text') { saveMyMachine(); schedule(); } });
