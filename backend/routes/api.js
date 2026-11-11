@@ -1517,6 +1517,30 @@ router.post('/studio/graph', requireUser, (req, res) => {
   }
 });
 
+// Parts 1-2 - fibre and yarn as engine parts: every number with its unit and where it came from
+// (measured, law, blend, bound, typical), and the test that replaces each typical one (engine/domain/materials.js).
+const materials = require('../engine/domain/materials');
+router.post('/studio/yarn', requireUser, (req, res) => {
+  try {
+    const b = req.body || {};
+    res.json({ success: true, yarn: materials.yarn(b.yarn || b) });
+  } catch (err) {
+    if (err instanceof materials.MaterialError) return res.status(400).json({ success: false, error: err.message });
+    console.error('[studio] yarn failed:', err);
+    res.status(500).json({ success: false, error: 'Could not work out the yarn.' });
+  }
+});
+router.post('/studio/fibre', requireUser, (req, res) => {
+  try {
+    const b = req.body || {};
+    res.json({ success: true, fibre: materials.fibre(b.fibres || b.composition || 'cotton', b.tests || {}) });
+  } catch (err) {
+    if (err instanceof materials.MaterialError) return res.status(400).json({ success: false, error: err.message });
+    console.error('[studio] fibre failed:', err);
+    res.status(500).json({ success: false, error: 'Could not work out the fibre.' });
+  }
+});
+
 // Calibration measurements (migration 045): relaxed sizes, load-extension, recovery on one cloth, kept with the design and
 // what the Studio predicted for it, and compared with that prediction at once (engine/domain/calibration-intake.js).
 const calibration = require('../engine/domain/calibration-intake');
