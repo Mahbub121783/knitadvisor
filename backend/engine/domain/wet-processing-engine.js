@@ -278,7 +278,7 @@ const MACHINE_STAGES = [
       series: [{ cotton: 'American FGM', ab: 3.07, lustre: 5.7 },
                { cotton: 'Antigua Sea Island', ab: 1.91, lustre: 10.7 },
                { cotton: 'mercerised C', ab: 1.47, lustre: 13.9 }],
-      source: 'Morton & Hearle, Table 24.5, p.706',
+      source: 'published fibre-property tables',
     },
     when: (c) => c.combed && c.cottonRich,
     problems: [

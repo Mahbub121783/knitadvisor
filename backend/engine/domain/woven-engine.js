@@ -226,7 +226,7 @@ function calculateWoven(params = {}) {
     consumption: use,
     pile: fabric.pile || null,
     notes: notes.filter(Boolean),
-    source: 'Gokarneshan, Fabric Structure and Design (2005), with the mass and cover relations labelled separately on each block.',
+    source: 'a published fabric-structure reference, with the mass and cover relations labelled separately on each block.',
   };
 }
 

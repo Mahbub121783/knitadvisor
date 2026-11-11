@@ -223,7 +223,7 @@ function coverFactor({ epi, ppi, warpNe, weftNe, averageFloat = 1 }) {
     practical_ceiling: r2(practicalCeiling),
     jammed: cloth >= practicalCeiling,
     source: 'PEIRCE',
-    basis: 'K = K1 + K2 - K1.K2/28 in the cotton system. The 28 is an empirical plain-weave maximum and does not come from Gokarneshan (2005); the ceiling is widened by the square root of the average float because a longer float intersects less and jams later.',
+    basis: 'K = K1 + K2 - K1.K2/28 in the cotton system. The 28 is an empirical plain-weave maximum; the ceiling is widened by the square root of the average float because a longer float intersects less and jams later.',
   };
 }
 

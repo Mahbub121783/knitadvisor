@@ -351,7 +351,7 @@ const QUIZ_QUESTIONS = [
       "Warp overlap"
     ],
     answer: 1,
-    explanation: "According to page 326 of the textbook, a 'Kink of yarn' is a length of yarn that has been bent into a shape appropriate for its transformation into a weft knitted loop.",
+    explanation: "A 'kink of yarn' is a length of yarn that has been bent into a shape appropriate for its transformation into a weft knitted loop.",
     page: "326"
   },
   {
@@ -364,7 +364,7 @@ const QUIZ_QUESTIONS = [
       "Two legs + Sinker loop"
     ],
     answer: 2,
-    explanation: "Page 326 states: 'Needle loop = Top arc + Two legs. The needle loop is the simplest unit of knitted structure.'",
+    explanation: "'Needle loop = Top arc + Two legs. The needle loop is the simplest unit of knitted structure.'",
     page: "326"
   },
   {
@@ -377,7 +377,7 @@ const QUIZ_QUESTIONS = [
       "Extended sinker loop"
     ],
     answer: 2,
-    explanation: "Page 326 states: 'Sinker loop is the yarn portion that connects two adjacent needle loops belonging in the same knitted course. Bottom arc also called sinker loop.'",
+    explanation: "'Sinker loop is the yarn portion that connects two adjacent needle loops belonging in the same knitted course. Bottom arc also called sinker loop.'",
     page: "326"
   },
   {
@@ -390,7 +390,7 @@ const QUIZ_QUESTIONS = [
       "Stitch Length × Wales per inch (wpi)"
     ],
     answer: 1,
-    explanation: "Page 328 states: 'Stitch density = Wales per inch (wpi) x Courses per inch (cpi). Stitch density tends to be a more accurate measurement.'",
+    explanation: "'Stitch density = Wales per inch (wpi) x Courses per inch (cpi). Stitch density tends to be a more accurate measurement.'",
     page: "328"
   },
   {
@@ -403,7 +403,7 @@ const QUIZ_QUESTIONS = [
       "Matthew Townsend"
     ],
     answer: 3,
-    explanation: "Page 323 states: '1847: Matthew Townsend obtains a patent for his invention of the latch needle. A new epoch in the knitting technique begins.'",
+    explanation: "'1847: Matthew Townsend obtains a patent for his invention of the latch needle. A new epoch in the knitting technique begins.'",
     page: "323"
   },
   {
@@ -416,7 +416,7 @@ const QUIZ_QUESTIONS = [
       "Monsieur Decroix"
     ],
     answer: 2,
-    explanation: "Page 322 states: 'This invention is usually attributed to a certain English clergyman (1589) William Lee.'",
+    explanation: "'This invention is usually attributed to a certain English clergyman (1589) William Lee.'",
     page: "322"
   },
   {
@@ -429,7 +429,7 @@ const QUIZ_QUESTIONS = [
       "Warp, Weft, Guide bar"
     ],
     answer: 1,
-    explanation: "Page 337 states: 'There are three basic elements of knitting, such as needle, cam and sinker.'",
+    explanation: "'There are three basic elements of knitting, such as needle, cam and sinker.'",
     page: "337"
   },
   {
@@ -442,7 +442,7 @@ const QUIZ_QUESTIONS = [
       "Bearded-slider needle"
     ],
     answer: 1,
-    explanation: "Page 338 states: 'The latch needle is the most widely used needle in weft knitting, because it is self-acting or loop controlled.'",
+    explanation: "'The latch needle is the most widely used needle in weft knitting, because it is self-acting or loop controlled.'",
     page: "338"
   },
   {
@@ -455,7 +455,7 @@ const QUIZ_QUESTIONS = [
       "Butt"
     ],
     answer: 3,
-    explanation: "Page 339 states: 'The Butt: Which serving to displace the needle along the needle bed slot... contacted by cam profiles.'",
+    explanation: "'The Butt: Which serving to displace the needle along the needle bed slot... contacted by cam profiles.'",
     page: "339"
   },
   {
@@ -468,7 +468,7 @@ const QUIZ_QUESTIONS = [
       "Slider and Double hook"
     ],
     answer: 1,
-    explanation: "Page 339 states: 'In contrast to standard spring-bearded needles and latch needles the compound needle consists of two separate parts- the stem and the sliding latch.'",
+    explanation: "'In contrast to standard spring-bearded needles and latch needles the compound needle consists of two separate parts- the stem and the sliding latch.'",
     page: "339"
   },
   {
@@ -481,7 +481,7 @@ const QUIZ_QUESTIONS = [
       "Guard cam"
     ],
     answer: 2,
-    explanation: "Page 342 states: 'The Stitch Cam: It controls the depth to which the needle descends thus controlling the amount of yarn drawn into the needle loop.'",
+    explanation: "'The Stitch Cam: It controls the depth to which the needle descends thus controlling the amount of yarn drawn into the needle loop.'",
     page: "342"
   },
   {
@@ -494,7 +494,7 @@ const QUIZ_QUESTIONS = [
       "To push the fabric into the take-down rollers"
     ],
     answer: 2,
-    explanation: "Page 343 states that the holding-down sinker functions to retain the fabric at the knock-over level when the needles rise, preventing fabric from lifting with the needles.",
+    explanation: "that the holding-down sinker functions to retain the fabric at the knock-over level when the needles rise, preventing fabric from lifting with the needles.",
     page: "343-344"
   },
   {
@@ -507,7 +507,7 @@ const QUIZ_QUESTIONS = [
       "Ten"
     ],
     answer: 2,
-    explanation: "Page 348 states: 'The loop forming process is divided into nine operations: 1. Clearing, 2. Yarn laying or feeding, 3. Under lapping/drawing, 4. Pressing, 5. Landing, 6. Joining, 7. Casting-off/knocking-over, 8. Loop forming/sinking, 9. Loop draw-off.'",
+    explanation: "'The loop forming process is divided into nine operations: 1. Clearing, 2. Yarn laying or feeding, 3. Under lapping/drawing, 4. Pressing, 5. Landing, 6. Joining, 7. Casting-off/knocking-over, 8. Loop forming/sinking, 9. Loop draw-off.'",
     page: "348"
   },
   {
@@ -520,7 +520,7 @@ const QUIZ_QUESTIONS = [
       "Casting-off"
     ],
     answer: 2,
-    explanation: "Page 350 states: 'Pressing: The aim of pressing is to close the needle hook... When the needle lowers, its latch contacts the old loop... closes it.'",
+    explanation: "'Pressing: The aim of pressing is to close the needle hook... When the needle lowers, its latch contacts the old loop... closes it.'",
     page: "350"
   },
   {
@@ -533,7 +533,7 @@ const QUIZ_QUESTIONS = [
       "Machine or needle gauge"
     ],
     answer: 3,
-    explanation: "Page 333 states: 'The needle gauge of a knitting machine (also called cut or gauge) is a measure expressing the number of needles per a unit of the needle bed (bar) width. Gauge, N = How many needles are used in one English inch.'",
+    explanation: "'The needle gauge of a knitting machine (also called cut or gauge) is a measure expressing the number of needles per a unit of the needle bed (bar) width. Gauge, N = How many needles are used in one English inch.'",
     page: "333"
   },
   {
@@ -546,7 +546,7 @@ const QUIZ_QUESTIONS = [
       "Double-headed needles, stationary circular cams"
     ],
     answer: 1,
-    explanation: "Page 354 states: 'Vee-bed flat knitting machines employ latch needles and angular cams of a bi-directional cam system attached to the underside of a carriage traversing reciprocatingly.'",
+    explanation: "'Vee-bed flat knitting machines employ latch needles and angular cams of a bi-directional cam system attached to the underside of a carriage traversing reciprocatingly.'",
     page: "354"
   },
   {
@@ -559,7 +559,7 @@ const QUIZ_QUESTIONS = [
       "24 to 60 npi"
     ],
     answer: 1,
-    explanation: "Page 355 states: 'Normally machine gauge is 3 to 18 needles per inch and machine width up to 79 inches.'",
+    explanation: "'Normally machine gauge is 3 to 18 needles per inch and machine width up to 79 inches.'",
     page: "355"
   },
   {
@@ -572,7 +572,7 @@ const QUIZ_QUESTIONS = [
       "Tape positive feed"
     ],
     answer: 2,
-    explanation: "Page 358 states: 'The top and bottom stop motions are spring-loaded yarn supports... when the yarn breaks or tension increases, they release yarn, stop the machine, and illuminate an indicator.'",
+    explanation: "'The top and bottom stop motions are spring-loaded yarn supports... when the yarn breaks or tension increases, they release yarn, stop the machine, and illuminate an indicator.'",
     page: "358"
   },
   {
@@ -585,7 +585,7 @@ const QUIZ_QUESTIONS = [
       "It converts the machine to a flat bed"
     ],
     answer: 1,
-    explanation: "Page 360 states: 'Lint blower is used. This reduces the incidence of knitted-in lint slubs, to improve quality... and reduces cross-contamination by fibres.'",
+    explanation: "'Lint blower is used. This reduces the incidence of knitted-in lint slubs, to improve quality... and reduces cross-contamination by fibres.'",
     page: "360"
   },
   {
@@ -598,7 +598,7 @@ const QUIZ_QUESTIONS = [
       "Ne = G × 18"
     ],
     answer: 0,
-    explanation: "Page 362 states: 'An approximately suitable count may be obtained using the formula Ne = G² / 18, where Ne = cotton count... and G = gauge in npi.'",
+    explanation: "'An approximately suitable count may be obtained using the formula Ne = G² / 18, where Ne = cotton count... and G = gauge in npi.'",
     page: "362"
   },
   {
@@ -611,7 +611,7 @@ const QUIZ_QUESTIONS = [
       "A machine with an open carriage path"
     ],
     answer: 0,
-    explanation: "Page 362 states: 'As the sinker cam-plate is mounted outside the needle circle, the centre of the cylinder is open and the machine is referred to as an open top or sinker top machine.'",
+    explanation: "'As the sinker cam-plate is mounted outside the needle circle, the centre of the cylinder is open and the machine is referred to as an open top or sinker top machine.'",
     page: "362"
   },
   {
@@ -624,7 +624,7 @@ const QUIZ_QUESTIONS = [
       "Directly behind the sinker ring"
     ],
     answer: 1,
-    explanation: "Page 368 states: 'In a rib circular knitting machine, there is one set of needles on the cylinder and a second set arranged perpendicular to the first set and mounted on a horizontal dial.'",
+    explanation: "'In a rib circular knitting machine, there is one set of needles on the cylinder and a second set arranged perpendicular to the first set and mounted on a horizontal dial.'",
     page: "368"
   },
   {
@@ -637,7 +637,7 @@ const QUIZ_QUESTIONS = [
       "There are no dial grooves on a rib machine"
     ],
     answer: 1,
-    explanation: "Page 368 states: 'Rib gating: The grooves of the dial and the grooves of the cylinder are alternately arranged or gated. With this arrangement, the cylinder and dial needles cross one another.'",
+    explanation: "'Rib gating: The grooves of the dial and the grooves of the cylinder are alternately arranged or gated. With this arrangement, the cylinder and dial needles cross one another.'",
     page: "368"
   },
   {
@@ -650,7 +650,7 @@ const QUIZ_QUESTIONS = [
       "The yarn cannot feed to both beds"
     ],
     answer: 1,
-    explanation: "Page 370 states: 'In Interlock gating, cylinder and dial needles are directly opposite... they can never work at the same time, because they would collide while being cleared.'",
+    explanation: "'In Interlock gating, cylinder and dial needles are directly opposite... they can never work at the same time, because they would collide while being cleared.'",
     page: "370"
   },
   {
@@ -663,7 +663,7 @@ const QUIZ_QUESTIONS = [
       "Needles are actuated manually by a hand crank"
     ],
     answer: 1,
-    explanation: "Page 372 states: 'Synchronized timing: The cylinder and the dial needles knock-over their knitted loops at the same time.'",
+    explanation: "'Synchronized timing: The cylinder and the dial needles knock-over their knitted loops at the same time.'",
     page: "372"
   },
   {
@@ -676,7 +676,7 @@ const QUIZ_QUESTIONS = [
       "Twelve to fifteen needle pitches"
     ],
     answer: 2,
-    explanation: "Page 374 states: 'With delayed timing, the dial knock-over occurs after about four cylinder needles have drawn loops... based on synchronous timing, the dial camplate is moved in the direction of rotation over 5 to 6 needle pitches.'",
+    explanation: "'With delayed timing, the dial knock-over occurs after about four cylinder needles have drawn loops... based on synchronous timing, the dial camplate is moved in the direction of rotation over 5 to 6 needle pitches.'",
     page: "374"
   },
   {
@@ -689,7 +689,7 @@ const QUIZ_QUESTIONS = [
       "Requires only single-headed needles"
     ],
     answer: 2,
-    explanation: "Page 374 states: 'The advantages of using delayed timing are: Tight structure, Evenly formed stitches, Good rigidity, Heavier and wider fabric, Less strain on the yarn.'",
+    explanation: "'The advantages of using delayed timing are: Tight structure, Evenly formed stitches, Good rigidity, Heavier and wider fabric, Less strain on the yarn.'",
     page: "374"
   },
   {
@@ -702,7 +702,7 @@ const QUIZ_QUESTIONS = [
       "k = 2.0 to 3.0"
     ],
     answer: 2,
-    explanation: "Page 374 states: 'The knocking-over depth of the cylinder needle must be k times the knocking-over depth of the dial needle, where k = 1.2 ... 1.5.'",
+    explanation: "'The knocking-over depth of the cylinder needle must be k times the knocking-over depth of the dial needle, where k = 1.2 ... 1.5.'",
     page: "374"
   },
   {
@@ -715,7 +715,7 @@ const QUIZ_QUESTIONS = [
       "Sixteen cam systems"
     ],
     answer: 2,
-    explanation: "Page 379 states: 'Interlock requires eight cam systems or locks in order to produce one complete course, two cam systems for each feeder in each needle bed. Often referred to as eight-lock machines.'",
+    explanation: "'Interlock requires eight cam systems or locks in order to produce one complete course, two cam systems for each feeder in each needle bed. Often referred to as eight-lock machines.'",
     page: "379"
   },
   {
@@ -728,7 +728,7 @@ const QUIZ_QUESTIONS = [
       "Reciprocating cylinder cams only"
     ],
     answer: 1,
-    explanation: "Page 380 states: 'The main loop-forming elements are two headed latch needles and needle sliders... Two sliders correspond to each needle (M and N engage left and right head respectively).'",
+    explanation: "'The main loop-forming elements are two headed latch needles and needle sliders... Two sliders correspond to each needle (M and N engage left and right head respectively).'",
     page: "380"
   }
 ];

@@ -236,6 +236,8 @@ app.use(express.urlencoded({ extended: true, limit: '256kb' }));
 
 // Rate limiter on API routes
 app.use('/api', rateLimiter);
+// No outside source (book, author, page, source site) is named in any JSON the API sends (middleware/no-sources.js)
+app.use('/api', require('./middleware/no-sources').middleware);
 // the versioned API: a key for every endpoint, listed endpoints only
 app.use('/api', require('./middleware/api-key-auth').v1Surface);
 

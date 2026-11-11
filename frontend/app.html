@@ -919,7 +919,7 @@
               </div>
               <div class="info-box mt-12" style="font-size:10px; line-height:1.6;">
                 <strong>Finishing route</strong> is the #1 driver of residual shrinkage — compacted ≈ half of greige.
-                Based on Munden relaxation theory · tested per AATCC 135 / AATCC 179.
+                Based on knit relaxation theory · tested per AATCC 135 / AATCC 179.
               </div>
             </div>
 
@@ -1434,7 +1434,7 @@ function onFabricChange() {
     if (fabric.construction) parts.push(fabric.construction);
     if (fabric.nominal_gsm) parts.push(`${fabric.nominal_gsm} GSM`);
     parts.push(fabric.sett_source === 'BOOK_VERIFIED'
-      ? 'construction from Gokarneshan (2005)'
+      ? 'construction from a published structure reference'
       : 'working default sett — replace with your own');
     if (!fabric.has_structure) parts.push('weave grid not stored for this structure');
     info.textContent = parts.join(' · ');

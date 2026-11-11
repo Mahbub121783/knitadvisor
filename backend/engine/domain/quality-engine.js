@@ -637,7 +637,7 @@ function predictQuality(params) {
       calibrated: !!(calib && (calib.shrinkage_length != null || calib.shrinkage_width != null)),
       test_standard: 'AATCC 135 / ISO 6330 (home laundering), AATCC 150 (garment)',
       reference_note: 'Directional finishing-route model: compacting pre-shrinks LENGTH heavily but barely affects WIDTH. Calibrated to a real factory grey→finish report (129 rows, 30s S/J cotton: L≈0.4%, W≈4.4%).',
-      source: 'Factory finishing-report data (30s S/J, 2026) + Munden (1959) reference state; Heap/Starfish relaxation DB',
+      source: 'Factory finishing-report data (30s S/J, 2026) and published relaxation reference states',
     },
 
     spirality: {

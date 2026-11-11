@@ -1,0 +1,60 @@
+// No outside source — no book, author, page reference or source site — reaches a visitor or an API customer.
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+console.log('--- Running No-Sources Tests ---');
+const S = require('../middleware/no-sources');
+const BANNED = /Morton|Hearle|Munden|Postle|Gokarneshan|Spencer \(|Peirce|Knapton|Adderley|Beste and Hoffman|Understanding Textile|Marchandiser|textile ?learner|Heap\/Starfish|[Pp]age \d+ states|page \d+ of the textbook/;
+
+// 1. citations go; things that only look like them stay
+const o = S.scrub({
+  source: 'Morton & Hearle, Table 13.1, p.290', sl_source: 'your setting', sett_source: 'BOOK_VERIFIED', page: 3, pages: 9,
+  yarns: [{ id: 'F1', source: { feed: 1 } }], tensile: { tenacity: 0.32, page: 290, table: 'Table 13.1' },
+  basis: 'Munden constants (dry and wet relaxed plain knit)', name: 'Chowdhury Knit Ltd', colour: 'Starfish',
+  explanation: "Page 354 states: 'Vee-bed flat knitting machines employ latch needles.'", note: 'Cover from Peirce’s cotton-yarn diameter.',
+  multiplier_source: 'Understanding Textile for Marchandiser p.512', link: 'https://textilelearner.net/x', own: 'https://www.onlinetextileschool.com',
+  sources: ['Gokarneshan (2005)', 'Spencer (2001) p.289'], preface: 'Mellor, Greater Manchester\nJohn W. S. Hearle', when: new Date(0),
+});
+assert(!('source' in o) && !('multiplier_source' in o) && !('sources' in o), 'citation keys are dropped');
+assert.strictEqual(o.sl_source, 'your setting'); assert.strictEqual(o.sett_source, 'BOOK_VERIFIED');
+assert.strictEqual(o.page, 3); assert.strictEqual(o.pages, 9, 'pagination is not a citation');
+assert.deepStrictEqual(o.yarns[0].source, { feed: 1 }, 'a structural source object stays');
+assert.deepStrictEqual(o.tensile, { tenacity: 0.32 }, 'a book table and its page go');
+assert.strictEqual(o.name, 'Chowdhury Knit Ltd'); assert.strictEqual(o.colour, 'Starfish');
+assert.strictEqual(o.own, 'https://www.onlinetextileschool.com');
+assert(!BANNED.test(JSON.stringify(o)), JSON.stringify(o));
+assert(o.when instanceof Date);
+
+// 2. the middleware wraps res.json
+let sent = null;
+const res = { json: (b) => { sent = b; return res; } };
+S.middleware({}, res, () => {});
+res.json({ source: 'Spencer (2001) eq. 14.2', ok: true });
+assert.deepStrictEqual(sent, { ok: true });
+
+// 3. no engine or route says it in its own words any more (the middleware is the net, not the fix)
+const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(path.join(dir, e.name)) : e.name.endsWith('.js') ? [path.join(dir, e.name)] : []));
+const B = path.join(__dirname, '..');
+const offenders = [];
+for (const f of [...walk(path.join(B, 'engine')), ...walk(path.join(B, 'routes'))]) {
+  fs.readFileSync(f, 'utf8').split('\n').forEach((line, i) => {
+    const t = line.trim();
+    if (t.startsWith('*') || t.startsWith('//') || t.startsWith('/*')) return;            // comments may say where things came from
+    const code = t.replace(/\/\/.*$/, '');
+    if (/['"`]/.test(code) && BANNED.test(code)) offenders.push(`${path.relative(B, f)}:${i + 1}`);
+  });
+}
+assert.deepStrictEqual(offenders, [], `outside sources in engine strings: ${offenders.join(', ')}`);
+
+// 4. nor does any page: the HTML and the page scripts (comments aside)
+const F = path.join(B, '..', 'frontend');
+const pages = [...fs.readdirSync(F).filter((n) => n.endsWith('.html')).map((n) => path.join(F, n)), ...fs.readdirSync(path.join(F, 'assets/js')).filter((n) => n.endsWith('.js')).map((n) => path.join(F, 'assets/js', n))];
+const pageOffenders = [];
+for (const f of pages) fs.readFileSync(f, 'utf8').split('\n').forEach((line, i) => { const t = line.trim(); if (t.startsWith('//') || t.startsWith('*') || t.startsWith('/*')) return; if (BANNED.test(t.replace(/\/\/ .*$/, ''))) pageOffenders.push(`${path.relative(F, f)}:${i + 1}`); });
+assert.deepStrictEqual(pageOffenders, [], `outside sources on the pages: ${pageOffenders.join(', ')}`);
+
+// 5. the fibre engine's answers are clean before any net
+const Y = require('../engine/domain/yarn-engine');
+const blend = { cotton: 60, polyester: 40 };
+for (const fn of ['blendMechanics', 'blendFriction', 'blendRecovery', 'blendDirectional', 'heatCeiling', 'blendThermal']) assert(!BANNED.test(JSON.stringify(Y[fn](blend))), fn);
+console.log('No-sources tests passed');

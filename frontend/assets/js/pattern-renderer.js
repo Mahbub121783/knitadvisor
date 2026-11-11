@@ -991,7 +991,7 @@ function renderWovenPattern(data) {
   html += '<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:12px;">'
     + '<span class="badge badge-gray">WOVEN</span>'
     + '<span class="text-sm" style="color:var(--t2)">' + wovEsc((data.family || '').replace(/_/g, ' ')) + '</span>'
-    + (data.book_page ? '<span class="text-xs text-dim">Gokarneshan (2005) p.' + data.book_page + '</span>' : '')
+    + ''
     + '</div>';
 
   if (!s.available) {
@@ -1076,8 +1076,8 @@ function renderWovenPattern(data) {
       wovStat('Weft cover', String(cv.weft_cover)),
       wovStat('Cloth cover', String(cv.cloth_cover),
         cv.jammed ? 'at or past the jamming point' : cv.saturation_pct + '% of this weave’s ceiling'),
-    ]) + '<div class="text-xs text-dim mb-16">Peirce’s cover factor. The 28 inside it is an empirical '
-      + 'plain-weave maximum and does not come from Gokarneshan (2005).</div>';
+    ]) + '<div class="text-xs text-dim mb-16">The classic cover factor. The 28 inside it is an empirical '
+      + 'plain-weave maximum.</div>';
   } else if (data.fabric_type === 'woven' && data.weight) {
     html += '<div class="info-box mb-16 text-sm">Cover factor is not reported for this cloth: its picks per inch '
       + 'include pile picks, which do not lie in the single plane the formula describes.</div>';

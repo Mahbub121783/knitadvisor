@@ -816,7 +816,7 @@ function blendDirectional(fibers) {
       from_pct: round3(looped.reduce((a, x) => a + x.pct, 0)),
     },
     unmeasured,
-    source: 'Morton & Hearle, Tables 17.2 (p.421) and 17.3 (p.425).',
+    source: 'published fibre-property tables',
   };
 }
 
@@ -856,7 +856,7 @@ function blendCyclic(fibers) {
     vs_cotton: round3(g10 / FIBER_PROPERTIES.cotton.cyclic.growth_10),
     band: g10 >= 1.5 ? 'high' : g10 >= 0.8 ? 'moderate' : 'low',
     unmeasured,
-    source: 'Morton & Hearle, Table 16.1, p.369.',
+    source: 'published fibre-property tables',
   };
 }
 
@@ -898,7 +898,7 @@ function blendThermal(fibers) {
     // a fabric's warmth is the air it holds, not the fibre it is made of.
     still_air_mw_mk: 25,
     unmeasured,
-    source: 'Morton & Hearle, Tables 6.5 (p.176) and 6.2 (p.173).',
+    source: 'published fibre-property tables',
   };
 }
 
@@ -955,7 +955,7 @@ function dryingLoad(fibers) {
                          .map(x => `${x.name} ${x.sucked}% by suction against ${x.v}% spun`),
     heat_released_kj_kg: mean(heat),
     unmeasured,
-    source: 'Morton & Hearle, Tables 10.1 (p.231) and 8.5 (p.200).',
+    source: 'published fibre-property tables',
   };
 }
 
@@ -999,7 +999,7 @@ function flexFatigue(fibers) {
     from_pct: round3(parts.reduce((a, x) => a + x.pct, 0)),
     all: parts.map(x => ({ fibre: x.name, cycles: x.v })),
     unmeasured,
-    source: 'Morton & Hearle, Table 19.4, p.534.',
+    source: 'published fibre-property tables',
   };
 }
 
@@ -1060,7 +1060,7 @@ function fibreAnisotropy(fibers) {
   if (!parts.length) {
     return noShear.length
       ? { measured: false, no_shear_modulus: noShear, unmeasured,
-          source: 'Morton & Hearle, Table 17.2, p.421.' }
+          source: 'published fibre-property tables' }
       : null;
   }
   const w = parts.reduce((a, x) => a + x.pct, 0);
@@ -1082,7 +1082,7 @@ function fibreAnisotropy(fibers) {
     no_shear_modulus: noShear,
     from_pct: round3(w),
     unmeasured,
-    source: 'Morton & Hearle, Table 17.2, p.421.',
+    source: 'published fibre-property tables',
   };
 }
 
@@ -1133,7 +1133,7 @@ function curveShape(fibers) {
     all: parts.map(x => ({ fibre: x.name, work_factor: x.wf, grade: x.grade })),
     from_pct: round3(w),
     unmeasured,
-    source: 'Morton & Hearle, Table 13.1, p.290.',
+    source: 'published fibre-property tables',
   };
 }
 
@@ -1198,7 +1198,7 @@ function molecularOrientation(fibers) {
                            n_parallel: x.n_par, n_perpendicular: x.n_perp })),
     from_pct: round3(w),
     unmeasured,
-    source: 'Morton & Hearle, Table 24.3, p.702.',
+    source: 'published fibre-property tables',
   };
 }
 
@@ -1253,7 +1253,7 @@ function jointStrength(fibers) {
     all: parts.map(x => ({ fibre: x.name, loop_pct: x.loop, knot_pct: x.knot })),
     from_pct: round3(parts.reduce((a, x) => a + x.pct, 0)),
     unmeasured,
-    source: 'Morton & Hearle, Table 17.3, p.425.',
+    source: 'published fibre-property tables',
   };
 }
 
@@ -1308,7 +1308,7 @@ function stretchResistance(fibers) {
     all: parts.map(x => ({ fibre: x.name, stress_mn_tex: x.stress, growth_pct: x.growth })),
     from_pct: round3(w),
     unmeasured,
-    source: 'Morton & Hearle, Table 16.1, p.369, at 2% imposed extension.',
+    source: 'published fibre-property tables',
   };
 }
 
@@ -1367,7 +1367,7 @@ function humidityLeverage(fibers) {
     all: parts.map(x => ({ fibre: x.name, slope: x.slope })),
     from_pct: round3(w),
     unmeasured,
-    source: 'Morton & Hearle, Table 22.1, p.647.',
+    source: 'published fibre-property tables',
   };
 }
 
@@ -1423,7 +1423,7 @@ function wetJamming(fibers, ctx = {}) {
     all: parts.map(x => ({ fibre: x.name, diameter_gain_pct: x.span })),
     from_pct: round3(w),
     unmeasured,
-    source: 'Morton & Hearle, Table 11.1, p.240, fibres immersed in water.',
+    source: 'published fibre-property tables',
   };
 }
 
@@ -1468,7 +1468,7 @@ function staticRisk(fibers, rh) {
     margin_pct: rh == null ? null : round3(rh - worst.st.rh_threshold),
     all_thresholds: parts.map(x => ({ fibre: x.name, rh: x.st.rh_threshold })),
     unmeasured,
-    source: 'Morton & Hearle, Table 22.1, p.647.',
+    source: 'published fibre-property tables',
   };
 }
 
@@ -1515,7 +1515,7 @@ function heatCeiling(fibers) {
     non_melting: endures.map(x => x.name),
     most_heat_damaged: worst && { fibre: worst.name, retained_130c_80d: worst.retained },
     unmeasured,
-    source: 'Morton & Hearle, Tables 18.1 (p.463) and 18.3 (p.479).',
+    source: 'published fibre-property tables',
   };
 }
 
@@ -1652,7 +1652,7 @@ function mercerisingGain(fibers) {
     raw_ratio: x.ellipticity,
     cotton_pct: pct,
     page: x.page,
-    source: 'Morton & Hearle, Table 24.5, p.706 (Adderley).',
+    source: 'published fibre-property tables',
   };
 }
 
@@ -1699,7 +1699,7 @@ function wetToughness(fibers) {
     all: parts.map(x => ({ fibre: x.name, wet: x.wet, hot_wet: x.hot })),
     from_pct: round3(w),
     unmeasured,
-    source: 'Morton & Hearle, Table 13.7, p.312.',
+    source: 'published fibre-property tables',
   };
 }
 
@@ -1750,7 +1750,7 @@ function moistureEconomics(fibers) {
     covered_pct: round3(parts.reduce((a, x) => a + x.pct, 0)),
     no_allowance_published: noAllowance,
     unmeasured,
-    source: 'Morton & Hearle, Table 7.3, p.188 (allowances per BS 4784:1973).',
+    source: 'published fibre-property tables',
   };
 }
 
@@ -1826,7 +1826,7 @@ function blendRecovery(fibers, rh) {
         + 'figures above describe only the rest of the blend'
       : null,
     unmeasured,
-    source: 'Morton & Hearle, Table 15.2, p.344 (Beste and Hoffman).',
+    source: 'published fibre-property tables',
   };
 }
 
@@ -1937,7 +1937,7 @@ function blendFriction(fibers) {
     felting,
     covered_pct: round3(mass),
     unmeasured,
-    source: 'Morton & Hearle, Tables 25.3 (p.719) and 25.6 (p.723).',
+    source: 'published fibre-property tables',
   };
 }
 
@@ -2008,7 +2008,7 @@ function fibreVariability(fibers) {
       : 'Moderate fibre-to-fibre spread — between a natural vegetable fibre and a synthetic.',
     covered_pct: round3(mass),
     unmeasured,
-    source: 'Morton & Hearle, Table 14.6, p.335',
+    source: 'published fibre-property tables',
   };
 }
 
@@ -2158,7 +2158,7 @@ function blendMechanics(fibers) {
     unmeasured,
     no_wet_data: parts.filter(x => !x.t.wet).map(x => x.name),
     sources: parts.map(x => `${x.name}: ${x.t.grade}, ${x.t.table} p.${x.t.page}`),
-    source: 'Morton & Hearle, Physical Properties of Textile Fibres, 4th edn, Tables 13.1, 13.2 and 13.7.',
+    source: 'published fibre-property tables',
   };
 }
 

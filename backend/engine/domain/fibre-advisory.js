@@ -50,7 +50,7 @@ const {
   jointStrength, stretchResistance, humidityLeverage, wetJamming, wetToughness, mercerisingGain,
 } = require('./yarn-engine');
 
-const SOURCE = 'Morton & Hearle, Physical Properties of Textile Fibres, 4th edn (2008), '
+const SOURCE = 'published fibre-property tables, '
   + 'as extracted into the fibre reference layer. Every finding cites its table and '
   + 'printed page.';
 
@@ -810,7 +810,7 @@ function fibreAdvisory(fibers, ctx = {}) {
       claim: `Mercerising under tension would raise this fabric's lustre by about `
         + `${round1(merc.multiple)} times.`,
       mechanism: `Cotton lustre tracks one thing — how flat the fibre's cross-section is. `
-        + `Adderley measured lustre ${merc.lustre_flat} at an axis ratio of ${merc.from_ratio} `
+        + `A published study measured lustre ${merc.lustre_flat} at an axis ratio of ${merc.from_ratio} `
         + `and ${merc.lustre_round} at ${merc.to_ratio}, which is where the `
         + `${round1(merc.multiple)} comes from, and found no correlation at all with fibre `
         + 'length, linear density or diameter — so the premium paid for staple length buys '

@@ -1158,7 +1158,7 @@ function calculate(params) {
           result: `Wet vs conditioned — tenacity ${Math.round(wm.wet_vs_conditioned.tenacity * 100)}%, ` +
                   `initial modulus ${Math.round(wm.wet_vs_conditioned.modulus * 100)}% · ` +
                   `dimensional risk ${wm.dimensional_risk} (bath ${wm.dimensional_risk_in_bath}) · ` +
-                  `Morton & Hearle Table 13.7 p.312` });
+                  `published fibre-property tables` });
       }
     }
   }
@@ -2441,7 +2441,7 @@ function calculateLoopLength(fabricId, count_ne, gsm, compModifiers = {}) {
       ll_mm: parseFloat(ll_mm.toFixed(3)),
       ll_cm: parseFloat(ll_cm.toFixed(5)),
       multiplier: llData.m,
-      multiplier_source: 'Understanding Textile for Marchandiser p.512',
+      multiplier_source: 'merchandising reference rule',
       trace: {
         formula: slFactor !== 1.0
           ? `LL = ${kVal} / (${count_ne} × ${gsm}) × ${slFactor}`

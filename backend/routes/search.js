@@ -236,7 +236,7 @@ router.get('/woven', searchLimiter, async (req, res) => {
     res.json({
       success: true,
       query: q,
-      source: 'Gokarneshan, Fabric Structure and Design (2005)',
+      source: 'a published fabric-structure reference',
       results: rows.map(r => ({
         kind: r.kind,
         label: r.label,
@@ -361,7 +361,7 @@ router.get('/fibre', searchLimiter, async (req, res) => {
       // What the query was understood to be asking. A user who types "cotton
       // tenacity" and gets densities should be able to see why.
       understood_as: { fibre: fibreTerm, property: propLike || 'any' },
-      source: 'Morton & Hearle, Physical Properties of Textile Fibres, 4th edn (2008)',
+      source: 'published fibre-property tables',
       measurements: measurements.map(r => ({
         fibre: r.name, slug: r.slug, property: r.property,
         value: span(r), unit: r.unit, condition: r.condition,

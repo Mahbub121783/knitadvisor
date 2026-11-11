@@ -2183,7 +2183,7 @@
       $('wGsm').innerHTML = Math.round(gsm) + '<small>g/m&sup2;</small>';
       $('wRep').textContent = n + ' × ' + n + ' repeat';
       var fl = runs(g, n);
-      $('wNote').innerHTML = '<b>' + w.name + '.</b> ' + w.note + ' Longest float: <b>' + fl.warp + '</b> end' + (fl.warp > 1 ? 's' : '') + ' on the warp, <b>' + fl.weft + '</b> pick' + (fl.weft > 1 ? 's' : '') + ' on the weft. Cover from Peirce&rsquo;s cotton-yarn diameter; weight is before crimp, so a lower bound.';
+      $('wNote').innerHTML = '<b>' + w.name + '.</b> ' + w.note + ' Longest float: <b>' + fl.warp + '</b> end' + (fl.warp > 1 ? 's' : '') + ' on the warp, <b>' + fl.weft + '</b> pick' + (fl.weft > 1 ? 's' : '') + ' on the weft. Cover from the classic cotton-yarn diameter; weight is before crimp, so a lower bound.';
       // draft
       var D = wDr.width; dctx.clearRect(0, 0, D, D); dctx.fillStyle = '#fff'; dctx.fillRect(0, 0, D, D);
       var ds = D / n;

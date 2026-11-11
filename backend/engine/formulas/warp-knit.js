@@ -564,7 +564,7 @@ function calculateYarnConsumption(fabricId, fabricArea_m2, denier, filaments = 3
     per_bar,
     guide_bars:           barKeys.length,
     formula: 'Weight (g/m²) = loops/m² × loop_length_m × denier/9000 × crimp_correction',
-    source: 'Spencer (2001) eq. 14.2',
+    source: 'knitting-technology relation',
   };
 }
 
@@ -669,7 +669,7 @@ function recommendGauge(fabricId, denier) {
     recommended_gauge: [gauge],
     denier,
     formula: 'gauge ≈ √(4000 / denier)',
-    source: 'Spencer (2001) p.289',
+    source: 'knitting-technology relation',
   };
 }
 
