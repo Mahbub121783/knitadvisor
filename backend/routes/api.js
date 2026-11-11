@@ -1541,6 +1541,36 @@ router.post('/studio/fibre', requireUser, (req, res) => {
   }
 });
 
+// Parts 3-5 - machine, stitch formation, consumption, read off the stitch graph and the yarn part
+// (engine/domain/knitting-parts.js): knock-over depth, knitting tension, hook fill, course length, runners.
+const knittingParts = require('../engine/domain/knitting-parts');
+const yarnSpecOf = (y) => {
+  const o = y || {}, f = String(o.fibre || 'cotton');
+  const base = f.replace(/_(filament|spun|mono)$/, '');
+  const spinning = o.spinning || (/mono/.test(f) ? 'mono' : /filament/.test(f) ? 'filament' : f === 'elastane' ? 'elastane' : o.type === 'carded' ? 'carded' : o.type === 'compact' ? 'compact' : o.type === 'open_end' ? 'open_end' : 'combed');
+  return { count: o.count, unit: o.unit || 'ne', ply: o.ply, fibres: base, spinning, filaments: o.filaments || (spinning === 'mono' ? 1 : undefined), tests: o.tests };
+};
+router.post('/studio/process', requireUser, (req, res) => {
+  try {
+    const d = (req.body || {}).design || {};
+    const g = stitchGraph.fromDesign(d);
+    const m = d.machine || {};
+    if (Array.isArray(d.bars)) {
+      const yarns = d.bars.map((b) => materials.yarn(yarnSpecOf(b.yarn)));
+      const mach = knittingParts.machine({ ...m, type: m.type }, g);
+      return res.json({ success: true, machine: mach, formation: knittingParts.formation(g, yarns, mach, null), consumption: knittingParts.consumption(g, yarns, mach, null, { cpc: +m.cpc || +((req.body || {}).cpc) }) });
+    }
+    const yarn = materials.yarn(yarnSpecOf(d.yarn));
+    const mach = knittingParts.machine(m, g);
+    const sl = { sl_mm: +m.sl_mm };
+    res.json({ success: true, machine: mach, formation: knittingParts.formation(g, yarn, mach, sl), consumption: knittingParts.consumption(g, yarn, mach, sl, { draft: (d.elastane || {}).draft }) });
+  } catch (err) {
+    if (err instanceof stitchGraph.GraphError || err instanceof materials.MaterialError || err instanceof knittingParts.PartError) return res.status(400).json({ success: false, error: err.message });
+    console.error('[studio] process failed:', err);
+    res.status(500).json({ success: false, error: 'Could not work out the knitting.' });
+  }
+});
+
 // Calibration measurements (migration 045): relaxed sizes, load-extension, recovery on one cloth, kept with the design and
 // what the Studio predicted for it, and compared with that prediction at once (engine/domain/calibration-intake.js).
 const calibration = require('../engine/domain/calibration-intake');
