@@ -1366,6 +1366,7 @@ const floorRepo = require('../db/repositories/floor-repo');
 // The pool (migration 044): mills that opt in share one clamped number per structure, and receive the
 // same from the others - only from cells where 5 other accounts stand behind it (engine/domain/machine-pool.js).
 const poolRepo = require('../db/repositories/pool-repo');
+const secondOpinion = require('../engine/domain/second-opinion');
 const floorFail = (res, err, what) => {
   if (err instanceof floorRepo.FloorError) return res.status(400).json({ success: false, error: err.message });
   console.error(`[studio] ${what} failed:`, err);
@@ -1482,6 +1483,8 @@ async function studioAnswer(userId, input) {
   if (hit) { studioCache.delete(key); studioCache.set(key, hit); }
   else {
     const out = fabricStudio.analyse(body);
+    // a second opinion from the stitches themselves (brick laws, no family table) — never allowed to break the answer
+    if (out.success) { try { out.fabric.second_opinion = secondOpinion.forDesign(body, out); } catch (err) { console.error('[studio] second opinion failed:', err.message); } }
     hit = { status: out.success ? 200 : 400, body: JSON.stringify(out) };
     if (key.length < 32768) {
       studioCache.set(key, hit);

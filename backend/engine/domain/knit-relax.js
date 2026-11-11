@@ -84,7 +84,7 @@ function states(a) {
   };
   return {
     states: out, residual, processing, compaction, fibre_factor: r2(f),
-    basis: 'Munden constants (dry and wet relaxed plain knit), fully relaxed after Postle / cotton tables; each state placed against the factory\'s finished jersey (Kc ' + r2(J.kc) + ', Kw ' + r2(J.kw) + '); other families and fibres carry these ratios — modelled',
+    basis: 'published relaxed-state constants for plain knit (dry and wet relaxed), fully relaxed from cotton laundering tables; each state placed against the factory\'s finished jersey (Kc ' + r2(J.kc) + ', Kw ' + r2(J.kw) + '); other families and fibres carry these ratios — modelled',
   };
 }
 

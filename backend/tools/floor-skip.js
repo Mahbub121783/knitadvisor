@@ -59,8 +59,8 @@ function lawsScenario(taught) {
   const cells = [];
   for (const r of ALL.filter((x) => usable(x) && x.fdia > 0 && x.dia > 0 && x.g > 0 && taught.includes(x.fab))) {
     const c = recordCell(r);
-    const kind = r.fab === 'single_jersey' ? (isL(r) ? 'jersey+L' : 'jersey') : r.fab === 'rib' && c.id === 'rib_1x1' && !isL(r) ? 'rib' : null;
-    if (kind) cells.push({ kind, w_l: c.w / c.sl, H_l: c.Hrep / (c.f.loops_per_wale * c.sl) });
+    const kind = r.fab === 'single_jersey' ? (isL(r) ? 'jersey+L' : 'jersey') : r.fab === 'rib' && c.id === 'rib_1x1' && !isL(r) ? 'rib' : r.fab === 'rib' && c.id === 'rib_2x2' && !isL(r) ? 'rib2x2' : r.fab === 'pique' && !isL(r) ? 'pique' : null;
+    if (kind) cells.push({ kind, w_l: c.w / c.sl, H_l: c.Hrep / (c.f.loops_per_wale * c.sl), tucks_per_knit: c.f.ground_tucks_per_knit });
   }
   const K = GL.calibrate(cells);
   const by = {};
@@ -76,7 +76,7 @@ function lawsScenario(taught) {
 
 function run() {
   const out = {};
-  for (const [name, taught] of [['jersey_only', ['single_jersey']], ['jersey_and_rib', ['single_jersey', 'rib']]]) out[name] = { studio: studioScenario(taught), laws: lawsScenario(taught) };
+  for (const [name, taught] of [['jersey_only', ['single_jersey']], ['jersey_and_rib', ['single_jersey', 'rib']], ['jersey_rib_and_pique', ['single_jersey', 'rib', 'pique']]]) out[name] = { studio: studioScenario(taught), laws: lawsScenario(taught) };
   return out;
 }
 module.exports = { run, studioScenario, lawsScenario };
@@ -86,12 +86,15 @@ if (require.main === module) {
   const p = (v) => (v == null ? '   —  ' : (v * 100).toFixed(1).padStart(5) + '%');
   for (const [name, s] of Object.entries(r)) {
     console.log(`\n${name.replace(/_/g, ' ').toUpperCase()} — the rest never shown (records and book values gone)`);
-    console.log(`  laws learned: jersey cell ${s.laws.constants.w0.toFixed(3)} × ${s.laws.constants.h0.toFixed(3)} ℓ, rib collapse ${s.laws.constants.phi_rib == null ? '—' : s.laws.constants.phi_rib.toFixed(3)}, elastane ${s.laws.constants.elastane ? s.laws.constants.elastane.w.toFixed(3) + ' × ' + s.laws.constants.elastane.h.toFixed(3) : '—'}`);
+    const k = s.laws.constants;
+    console.log(`  laws learned: jersey cell ${k.w0.toFixed(3)} × ${k.h0.toFixed(3)} ℓ, rib collapse ${k.phi_rib == null ? '—' : k.phi_rib.toFixed(3)}, elastane ${k.elastane ? k.elastane.w.toFixed(3) + ' × ' + k.elastane.h.toFixed(3) : '—'}, tuck ${k.tuck ? 'κ ' + k.tuck.kappa.toFixed(2) + ' λ ' + k.tuck.lambda.toFixed(2) : '—'}`);
     console.log('  family             n     STUDIO  GSM   width        LAWS  GSM   width');
     const fams = [...new Set([...Object.keys(s.studio), ...Object.keys(s.laws.families)])].sort();
+    const wavg = (o, key) => { let a = 0, n = 0; for (const v of Object.values(o)) if (v[key] != null) { a += v[key] * v.n; n += v.n; } return n ? a / n : null; };
     for (const k of fams) {
       const a = s.studio[k] || {}, b = s.laws.families[k] || {};
       console.log('  ' + k.padEnd(16), String(a.n || b.n || '').padStart(5), '      ', p(a.gsm_err_med), p(a.width_err_med), '       ', p(b.gsm_err_med), p(b.width_err_med));
     }
+    console.log('  ' + 'record-weighted'.padEnd(22), '      ', p(wavg(s.studio, 'gsm_err_med')), p(wavg(s.studio, 'width_err_med')), '       ', p(wavg(s.laws.families, 'gsm_err_med')), p(wavg(s.laws.families, 'width_err_med')));
   }
 }

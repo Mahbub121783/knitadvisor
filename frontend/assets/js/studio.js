@@ -226,6 +226,7 @@
             ['ground', 'face', 'binder', 'loop'].map(function (r) { return '<option value="' + r + '"' + (f.role === r ? ' selected' : '') + '>' + ROLE_LABEL[r] + '</option>'; }).join('') +
             '</select> <input data-feed="' + i + '" data-k="count" type="number" min="1" max="2000" step="0.1" placeholder="count" value="' + esc(f.count || f.ne || '') + '" title="Count on this feeder, in the unit beside it. Empty = this role\'s yarn."> ' +
             '<select data-feed="' + i + '" data-k="unit" title="Count unit">' + [['ne', 'Ne'], ['nm', 'Nm'], ['tex', 'tex'], ['dtex', 'dtex'], ['denier', 'D']].map(function (u) { return '<option value="' + u[0] + '"' + ((f.unit || 'ne') === u[0] ? ' selected' : '') + '>' + u[1] + '</option>'; }).join('') + '</select> ' +
+            '<select data-feed="' + i + '" data-k="course" title="Does this feeder start a new course, or knit into the course of the feeder before it (plated into the same loops, as the face yarn with its binder in a three-thread fleece)? Auto: a face feeder after a binder joins it; otherwise a new course.">' + [['', 'course: auto'], ['new', 'new course'], ['same', 'same course as F' + (i === 0 ? g.length : i)]].map(function (o) { return '<option value="' + o[0] + '"' + ((f.course || '') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select> ' +
             '<label class="st-plate" title="Plate a second yarn behind this feeder\'s yarn (Plated yarn row under Yarn)"><input type="checkbox" data-feed="' + i + '" data-k="plate"' + (f.plate ? ' checked' : '') + '> plated</label> ' +
             '<select class="st-feedcol" data-feed="' + i + '" data-k="colour" title="Stripe yarn on this feeder (colours under Yarn)"><option value="">—</option>' + ['A', 'B', 'C', 'D', 'E', 'F'].map(function (c) { return '<option' + (f.colour === c ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select> ' +
             '<input data-feed="' + i + '" data-k="sl_ratio" type="number" min="0.3" max="3" step="0.01" placeholder="×SL" value="' + esc(f.sl_ratio || '') + '" title="Stitch length on this feeder as a multiple of the ground stitch length (e.g. 0.92 for a tighter tuck feeder). Empty = 1."></td>';
@@ -579,7 +580,7 @@
       grid: { C: S.C.map(function (r) { return r.join(''); }), D: S.D ? S.D.map(function (r) { return r.join(''); }) : null },
       feeds: S.feeds.map(function (f) {
         var c = +f.count > 0 ? +f.count : +f.ne > 0 ? +f.ne : 0;
-        return { role: f.role || 'ground', colour: f.colour || null, plate: !!f.plate, yarn: c ? { count: c, unit: f.count ? (f.unit || 'ne') : 'ne' } : null, sl_ratio: +f.sl_ratio > 0 ? +f.sl_ratio : null };
+        return { role: f.role || 'ground', course: f.course === 'same' || f.course === 'new' ? f.course : null, colour: f.colour || null, plate: !!f.plate, yarn: c ? { count: c, unit: f.count ? (f.unit || 'ne') : 'ne' } : null, sl_ratio: +f.sl_ratio > 0 ? +f.sl_ratio : null };
       }),
       yarn: yarnOf(YROWS[0]),
       yarns: { binder: +$('yb-count').value > 0 ? yarnOf(YROWS[1]) : null, loop: +$('yl-count').value > 0 ? yarnOf(YROWS[2]) : null, plate: +$('yp-count').value > 0 ? yarnOf(YROWS[3]) : null },
@@ -663,6 +664,15 @@
       A && A.level === 'machine' ? '<div class="st-acc"><b>How right is this?</b> Learned on <b>' + esc(A.machine || 'your machine') + '</b> from ' + A.supported_by_rolls + ' of your roll' + (A.supported_by_rolls === 1 ? '' : 's') + ' of this structure: GSM × ' + A.gsm_factor + ', width × ' + A.width_factor + ' against the factory model. Expected: GSM typically ' + A.gsm.typical_error_pct + '% off (' + A.gsm.within_5_pct + '% within ±5%), width typically ' + A.width.typical_error_pct + '% off (' + A.width.within_5_pct + '% within ±5%). <span title="' + esc(A.method) + '">' + esc(A.basis) + '.</span> Each roll you log moves it; a few rolls move it a little, ten move it most of the way.</div>' :
       A ? '<div class="st-acc"><b>How right is this?</b> When the Studio predicted ' + (A.level === 'estimate' ? 'structures it had no records for' : A.level === 'close' ? 'structures like this one' : 'cloths like this one') + ' without having seen them, the finished GSM was typically ' + A.gsm.typical_error_pct + '% off; ' +
         A.gsm.within_3_pct + '% landed within ±3%, ' + A.gsm.within_5_pct + '% within ±5%, ' + A.gsm.within_8_pct + '% within ±8%' + (A.width ? '. Width: typically ' + A.width.typical_error_pct + '% off, ' + A.width.within_5_pct + '% within ±5%' : '') + '. <span title="' + esc(A.method) + ' (' + esc(A.generated) + ')">' + esc(A.basis) + '.</span> Your own trial rolls narrow this (Trial rolls below).</div>' : '');
+    var SO = f.second_opinion;
+    if (SO) {
+      var sg = function (v) { return (v > 0 ? '+' : '') + v; };
+      html += '<div class="st-acc" style="border-left:3px solid ' + (SO.status === 'agrees' ? '#0f7a4a' : SO.status === 'differs' ? '#9a6a00' : '#c9ccd1') + '"><b>Second opinion — from the stitches themselves.</b> Worked out from the yarn each stitch takes and the cell the brick laws give, with no table of this structure\'s family: about <b>' + SO.gsm + ' GSM</b> and <b>' + SO.width_in + '"</b> open width (' + sg(SO.diff_gsm_pct) + ' % and ' + sg(SO.diff_width_pct) + ' % against the answer above). ' +
+        (SO.status === 'agrees' ? 'The two agree within 10 % — two independent methods, one answer.'
+          : SO.status === 'differs' ? 'They differ by more than 10 % although every stitch here has a law: read the range above as wider until the first trial roll settles it.'
+            : 'Incomplete — no law yet for: ' + esc(SO.missing.join('; ')) + '. A rough cross-check only.') +
+        ' <span style="color:var(--t3)">Laws used: ' + esc(SO.laws.join(', ')) + '.</span></div>';
+    }
     if (f.calibration) {
       var cb = f.calibration;
       html += '<div class="st-sub">Your trial rolls ' + src('m') + '</div><p class="st-p">Ks ' + cb.ks + ' against ' + cb.model_ks + ' from the factory constants (' + (cb.ks_vs_model_pct > 0 ? '+' : '') + cb.ks_vs_model_pct + '%), Kw ' + cb.kw + ' against ' + cb.model_kw + ' (' + (cb.kw_vs_model_pct > 0 ? '+' : '') + cb.kw_vs_model_pct + '%). Scatter between rolls ' + cb.scatter_pct + '%.</p>' +
@@ -686,7 +696,7 @@
     }
     if (f.relaxation) {
       var RX = f.relaxation, rs = RX.residual, cp = RX.compaction;
-      html += '<div class="st-sub">Relaxation states and shrinkage ' + src('e') + '</div><p class="st-p">The loop length stays what the machine knitted; the shape of the loop — and with it wales, courses, weight and width — follows the state of relaxation (Munden: wales/cm = Kw ÷ ℓ, courses/cm = Kc ÷ ℓ).</p>' +
+      html += '<div class="st-sub">Relaxation states and shrinkage ' + src('e') + '</div><p class="st-p">The loop length stays what the machine knitted; the shape of the loop — and with it wales, courses, weight and width — follows the state of relaxation (wales/cm = Kw ÷ ℓ, courses/cm = Kc ÷ ℓ).</p>' +
         '<div class="st-scroll"><table class="st-t"><tr><th>State</th><th>Wales × courses /cm</th><th>GSM</th><th>Open width</th><th>Length vs finished</th><th>Width vs finished</th></tr>' +
         RX.states.map(function (x) { return '<tr' + (x.state === 'finished' ? ' style="background:var(--accent-tint)"' : '') + '><td style="white-space:normal;font-family:inherit;min-width:190px">' + esc(x.label) + '</td><td>' + x.wpc + ' × ' + x.cpc + '</td><td>' + x.gsm + '</td><td>' + x.width_in + '"</td><td>' + (x.length_pct > 0 ? '+' : '') + x.length_pct + '%</td><td>' + (x.width_pct > 0 ? '+' : '') + x.width_pct + '%</td></tr>'; }).join('') + '</table></div>' +
         '<p class="st-p"><b>Residual shrinkage</b> after home laundering (finished → fully relaxed): length <b>' + rs.length_pct[1] + '%</b> (' + rs.length_pct[0] + '–' + rs.length_pct[2] + '), width <b>' + rs.width_pct[1] + '%</b> (' + rs.width_pct[0] + '–' + rs.width_pct[2] + '). Greige to finished: length ' + RX.processing.length_pct + '%, width ' + RX.processing.width_pct + '%.</p>' +
