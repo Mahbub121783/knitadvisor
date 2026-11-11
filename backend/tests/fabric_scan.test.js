@@ -61,6 +61,28 @@ for (const [o, tol] of [
 {
   const g = new Uint8ClampedArray(800 * 600 * 4).fill(180);
   assert(/four black squares/.test(KS.analysePhoto(g, 800, 600).error));
+  // four dark marks on grey cloth are not the card: the paper between them must be white
+  const p = SY.photo({ KAScan: KS, width: 1700, height: 1350, pxPerMm: 15, structure: 'single_jersey', wpc: 14, cpc: 19, seed: 2 }, KS.CARD);
+  const grey = new Uint8ClampedArray(p.rgba);
+  for (let i = 0; i < grey.length; i += 4) for (let c = 0; c < 3; c++) if (grey[i + c] > 140) grey[i + c] = Math.round(grey[i + c] * 0.5);
+  const fake = KS.analysePhoto(grey, p.w, p.h);
+  assert(fake.error && fake.code === 'no_card', 'grey "paper" is not the card: ' + (fake.error || 'card found'));
+}
+
+// no card at all: the fabric fills the frame, turned 30 degrees; counted on its own axes, the scale given
+{
+  const p = SY.photo({ KAScan: KS, structure: 'single_jersey', wpc: 14, cpc: 19, seed: 5, pxPerMm: 9, width: 1300, height: 1300, uncut: true, cardY: -2, angle: 30, blur: 1, noise: 0.03, light: 0.3, wrinkle: 0.2, fuzz: 0.2 }, KS.CARD);
+  assert.strictEqual(KS.analysePhoto(p.rgba, p.w, p.h).code, 'no_card');
+  const r = KS.analyseFree(p.rgba, p.w, p.h, { pxPerMm: 9, source: 'assumed' });
+  assert(!r.error, r.error);
+  near(r.wpc, 14, 0.12, 'no-card wales'); near(r.cpc, 19, 0.2, 'no-card courses');
+  assert.strictEqual(r.kind.kind, 'knit');
+  assert.strictEqual(r.scale.source, 'assumed');
+  assert(r.card === null && r.colour && r.colour.reference === 'camera, no white card');
+  // a plain surface has no repeat: said so, not guessed
+  const flat = new Uint8ClampedArray(900 * 900 * 4).fill(150);
+  const fr = KS.analyseFree(flat, 900, 900, { pxPerMm: 9 });
+  assert(fr.error || fr.kind.kind === 'none', 'a blank surface is not read as a fabric');
 }
 
 // colour against the card's white

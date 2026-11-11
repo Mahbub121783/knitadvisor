@@ -185,7 +185,14 @@
     if (!best) return { error: 'The scan card is not clear enough — make the whole card fill most of the photo, square to the camera.' };
     var corners = best.ord.map(function (s) { return [s.x, s.y]; });
     var pxPerMm = best.sides.reduce(function (t, v) { return t + v; }, 0) / 4 / 60;
-    return { corners: corners, pxPerMm: pxPerMm, tilt: Math.max.apply(null, best.sides) / Math.min.apply(null, best.sides) };
+    // a printed card has white paper between its squares: dark marks on a print or a cloth do not
+    var Hc = homography(CARD.markers, corners), paper = [], ink = [];
+    CARD.white.forEach(function (p) { var q = apply(Hc, p[0], p[1]); var v = bilinear(g, w, h, q[0], q[1]); if (v === v) paper.push(v); });
+    CARD.markers.forEach(function (p) { var q = apply(Hc, p[0], p[1]); var v = bilinear(g, w, h, q[0], q[1]); if (v === v) ink.push(v); });
+    var pm = paper.length ? paper.reduce(function (t, v) { return t + v; }, 0) / paper.length : 0, im = ink.length ? ink.reduce(function (t, v) { return t + v; }, 0) / ink.length : 1;
+    var tiltC = Math.max.apply(null, best.sides) / Math.min.apply(null, best.sides);
+    if (paper.length < 3 || pm < 0.55 || im > 0.4 || pm - im < 0.33 || tiltC > 2) return { error: 'The scan card was not seen: four black squares on white paper. Dark marks on the fabric are not the card.', code: 'no_card' };
+    return { corners: corners, pxPerMm: pxPerMm, tilt: Math.max.apply(null, best.sides) / Math.min.apply(null, best.sides), paper: pm };
   }
   function polyArea(q) { var s = 0; for (var i = 0; i < q.length; i++) { var a = q[i], b = q[(i + 1) % q.length]; s += a[0] * b[1] - b[0] * a[1]; } return s / 2; }
   // TL, TR, BR, BL as the phone holds the picture
@@ -628,6 +635,118 @@
   }
 
   /**
+   * Is this a knitted loop lattice, a woven thread grid, or a print with no textile repeat?
+   * Knit: loops are V-shaped, so edge energy runs diagonally. Woven: threads cross at right angles, edges
+   * are vertical/horizontal. Print/plain: no repeat at all (regularity low).
+   */
+  // edge energy against the lattice: along its two axes (woven threads) or slanted 15-75 degrees (knit V legs)
+  function orientationRel(img, m) {
+    var W = m.lattice.W, th = Math.atan2(W[1], W[0]), slant = 0, axial = 0, tot = 0, sp = 0, sn = 0, w = img.w, g = img.data;
+    for (var y = 1; y < img.h - 1; y += 2) for (var x = 1; x < w - 1; x += 2) {
+      var gx = g[y * w + x + 1] - g[y * w + x - 1], gy = g[(y + 1) * w + x] - g[(y - 1) * w + x];
+      var e = gx * gx + gy * gy; if (e < 1e-4) continue;
+      var a = Math.atan2(gy, gx) - th; a = ((a % Math.PI) + Math.PI) % Math.PI;
+      var d = Math.min(a, Math.PI - a) * 180 / Math.PI;               // 0 = along the course axis, 90 = across it
+      if (d > 15 && d < 75) slant += e; else axial += e;
+      if (d > 30 && d < 60) { if (a < Math.PI / 2) sp += e; else sn += e; }
+      tot += e;
+    }
+    return { slant: tot ? slant / tot : 0, axial: tot ? axial / tot : 0, diag: tot ? (sp + sn) / tot : 0, balance: Math.max(sp, sn) ? Math.min(sp, sn) / Math.max(sp, sn) : 1 };
+  }
+  function fabricKind(img, m) {
+    if (!m || m.error) return { kind: 'unknown', why: 'no repeat found' };
+    var r = m.regularity;
+    if (r < 0.22) return { kind: 'none', why: 'no regular repeat: a print, a plain surface, or out of focus', scores: { r: r } };
+    var o = orientationRel(detail(img), m);
+    if (o.slant < 0.42) return { kind: 'woven', why: 'threads cross at right angles, no V-shaped loops', scores: o };
+    if (o.diag > 0.3 && o.balance < 0.4) return { kind: 'woven', why: 'lines run one way on the diagonal (a twill), not the two-way V of knitted loops', scores: o };
+    return { kind: 'knit', why: 'V-shaped loops in a lattice', scores: o };
+  }
+
+  /**
+   * A photo with NO scan card: the fabric fills the frame. The repeat is found on the clearest patch; the
+   * scale (px per mm) comes from the caller (focus distance, a known object, or a guess), so wales/cm
+   * carries that scale's uncertainty. The lattice itself is measured in pixels and kept.
+   * @param scale {pxPerMm, source: 'card'|'focus'|'reference'|'assumed', note}
+   */
+  function analyseFree(rgba, w, h, scale) {
+    var gray = toGray(rgba, w, h);
+    var P = scale && scale.pxPerMm > 0 ? scale.pxPerMm : 8;
+    // work at <= 12 px/mm: loops are 0.5 to 1.5 mm, more pixels only add noise and time
+    var k = Math.min(1, 12 / P);
+    var small = k < 1 ? downscale(gray, w, h, Math.round(Math.max(w, h) * k)) : { data: gray, w: w, h: h, scale: 1 };
+    var sw = small.w, sh = small.h, Ps = P / small.scale;
+    var side = Math.min(sw, sh), N = Math.round(side * 0.56), best = null;
+    var spots = [[0.5, 0.5], [0.3, 0.3], [0.7, 0.3], [0.3, 0.7], [0.7, 0.7]];
+    for (var i = 0; i < spots.length; i++) {
+      var cx = (sw - N) * spots[i][0] + N / 2, cy = (sh - N) * spots[i][1] + N / 2;
+      var patch = rotPatch(small.data, sw, sh, cx, cy, N, 0, Ps);
+      var m = measure(patch, { maxN: 512 });
+      if (m.error) continue;
+      if (!best || m.regularity > best.m.regularity) best = { m: m, flat: patch, c: [cx, cy] };
+      if (best.m.regularity > 0.6 && best.m.confidence === 'high') break;
+    }
+    if (!best) return { error: 'No regular loop pattern was found. Fill the frame with the fabric, 8 to 12 cm away, in focus.', code: 'no_loops' };
+    // The phone is rarely square to the wales. Turn the patch through a fan of angles and keep the one where the
+    // loop lattice stands straightest (courses across, wales down) and repeats most clearly; then measure there.
+    var alignErr = function (mm) { var W = mm.lattice.W, C = mm.lattice.C; return Math.abs(Math.atan2(W[1], W[0])) * 180 / Math.PI + Math.abs(Math.abs(Math.atan2(C[1], C[0])) * 180 / Math.PI - 90); };
+    var Ns = Math.min(320, Math.floor(Math.min(sw, sh) * 0.5));
+    var tryAt = function (deg) {
+      var rp = rotPatch(small.data, sw, sh, best.c[0], best.c[1], Ns, deg * Math.PI / 180, Ps), mm = measure(rp, { maxN: 256, pass2: true });
+      return mm.error ? null : { deg: deg, score: mm.regularity - 0.012 * alignErr(mm) - 0.0015 * Math.abs(deg) };
+    };
+    var top = null;
+    var scores0 = null;
+    for (var dg = -40; dg <= 40; dg += 8) { var t = tryAt(dg); if (dg === 0) scores0 = t; if (t && (!top || t.score > top.score)) top = t; }
+    if (top) [top.deg - 4, top.deg + 4].forEach(function (d2) { var t2 = tryAt(d2); if (t2 && t2.score > top.score) top = t2; });
+    var zero = scores0;
+    if (top && zero && top.deg !== 0 && zero.score >= top.score - 0.05) top = zero;
+    var turned = null;
+    if (top && Math.abs(top.deg) >= 4) {
+      var th = top.deg * Math.PI / 180, room = Math.min(best.c[0], best.c[1], sw - best.c[0], sh - best.c[1]) * 2;
+      var N2 = Math.floor(Math.min(N * 1.2, room / (Math.abs(Math.cos(th)) + Math.abs(Math.sin(th)))));
+      if (N2 >= 128) {
+        var rp2 = rotPatch(small.data, sw, sh, best.c[0], best.c[1], N2, th, Ps), rm = measure(rp2, { maxN: 512 });
+        if (!rm.error) { best = { m: rm, flat: rp2, c: best.c }; turned = top.deg; }
+      }
+    }
+    // held sideways (wales across the frame): courses always outnumber or equal wales in a knit, so swap back
+    var sideways = best.m.cpc / best.m.wpc < 0.78;
+    if (sideways) { var tw = best.m.wpc; best.m.wpc = best.m.cpc; best.m.cpc = tw; best.m.density = best.m.wpc * best.m.cpc; }
+    var m2 = best.m, f = features(best.flat, m2), kind = fabricKind(best.flat, m2);
+    var cw = Math.min(w, 400), ch = Math.round(cw * h / w);
+    var col = colourPlain(smallRgba(rgba, w, h, cw, ch), cw, ch);
+    return {
+      card: null, scale: { px_per_mm: Math.round(P * 10) / 10, source: scale && scale.source || 'assumed', note: scale && scale.note || null },
+      kind: kind, turned_deg: turned, sideways: sideways,
+      wpc: m2.wpc, cpc: m2.cpc, density: m2.density, skew_deg: m2.skew_deg, confidence: m2.confidence, spread: m2.spread,
+      regularity: m2.regularity, staggered: m2.staggered, lattice: m2.lattice,
+      wale_px: 10 * Ps / m2.wpc * small.scale, course_px: 10 * Ps / m2.cpc * small.scale,
+      features: f, faults: faults(best.flat, m2), colour: col, _flat: best.flat,
+    };
+  }
+  /** A square patch of `side` px around (cx, cy), the sampling grid turned by theta (radians). */
+  function rotPatch(src, sw, sh, cx, cy, side, theta, pxPerMm) {
+    var out = new Float32Array(side * side), c = Math.cos(theta), sn = Math.sin(theta), h = side / 2, bad = 0;
+    for (var y = 0; y < side; y++) for (var x = 0; x < side; x++) {
+      var dx = x - h + 0.5, dy = y - h + 0.5;
+      var v = bilinear(src, sw, sh, cx + c * dx - sn * dy, cy + sn * dx + c * dy);
+      if (v !== v) { v = 0.5; bad++; }
+      out[y * side + x] = v;
+    }
+    return { data: out, w: side, h: side, pxPerMm: pxPerMm, outside: bad / out.length };
+  }
+  /** The fabric's own colour with no white reference: the mean of the middle, as the camera saw it. */
+  function colourPlain(rgba, w, h) {
+    var fab = [0, 0, 0], n = 0;
+    for (var y = Math.round(h * 0.3); y < h * 0.7; y += 2) for (var x = Math.round(w * 0.3); x < w * 0.7; x += 2) { var i = (y * w + x) * 4; fab[0] += rgba[i]; fab[1] += rgba[i + 1]; fab[2] += rgba[i + 2]; n++; }
+    if (!n) return null;
+    fab = fab.map(function (v) { return v / n; });
+    var hex = '#' + fab.map(function (v) { var t = Math.round(v).toString(16); return t.length < 2 ? '0' + t : t; }).join('');
+    return { rgb: fab.map(Math.round), hex: hex, lab: srgbToLab(fab[0], fab[1], fab[2]).map(function (v) { return Math.round(v * 10) / 10; }), white_seen: null, reference: 'camera, no white card' };
+  }
+
+  /**
    * One photo, start to finish.
    * @param rgba  full image pixels (Uint8ClampedArray), w, h
    * @returns {object} measurement, or {error}
@@ -636,7 +755,7 @@
     var gray = toGray(rgba, w, h);
     var small = downscale(gray, w, h, 1200);
     var card = detectCard(small.data, small.w, small.h);
-    if (card.error) return { error: card.error };
+    if (card.error) return { error: card.error, code: 'no_card' };
     var full = card.corners.map(function (c) { return [c[0] * small.scale, c[1] * small.scale]; });
     var srcPx = card.pxPerMm * small.scale;
     if (srcPx < 9) return { error: 'The card is too small in the photo (' + srcPx.toFixed(1) + ' px per mm). Move the phone closer, or use a clip-on macro lens.' };
@@ -650,6 +769,7 @@
     var col = colour(smallRGBA, small.w, small.h, Hsmall, pick.region);
     return {
       card: { px_per_mm: Math.round(srcPx * 10) / 10, tilt: Math.round(card.tilt * 100) / 100, fabric_at: pick.name },
+      scale: { px_per_mm: Math.round(srcPx * 10) / 10, source: 'card', note: null }, kind: fabricKind(flat, m),
       wpc: m.wpc, cpc: m.cpc, density: m.density, skew_deg: m.skew_deg, confidence: m.confidence, spread: m.spread,
       regularity: m.regularity, staggered: m.staggered, lattice: m.lattice, features: f, faults: faults(flat, m), colour: col,
       _flat: flat,
@@ -716,7 +836,7 @@
   }
 
   return {
-    grid: grid, findFabric: findFabric, detail: detail,
+    grid: grid, findFabric: findFabric, detail: detail, analyseFree: analyseFree, fabricKind: fabricKind, colourPlain: colourPlain,
     CARD: CARD, toGray: toGray, downscale: downscale, homography: homography, apply: apply, detectCard: detectCard,
     rectify: rectify, autocorr: autocorr, lattice: lattice, measure: measure, features: features, suggest: suggest,
     faults: faults, colour: colour, srgbToLab: srgbToLab, analysePhoto: analysePhoto, median: median, FAMILY_RATIO: FAMILY_RATIO,

@@ -55,6 +55,25 @@
     }
   }
 
+  // No card in the photo: the loops are still counted, on the fabric's own axes; only the scale is estimated —
+  // from the camera's focus distance when it reports one, else a phone held about 10 cm away (66 degree lens).
+  var FOV = 66 * Math.PI / 180, ASSUME_MM = 100;
+  function freeScale(img) {
+    var f = img.focus_mm, d = f >= 40 && f <= 300 ? f : ASSUME_MM;
+    return { pxPerMm: Math.max(img.w, img.h) / (2 * d * Math.tan(FOV / 2)), source: d === f ? 'focus' : 'assumed', dist_mm: d,
+      note: d === f ? 'from the camera focus (' + Math.round(d / 10) + ' cm)' : 'phone about 10 cm from the fabric' };
+  }
+  function analyseAny(img) {
+    var r = KS.analysePhoto(img.rgba, img.w, img.h);
+    if (!r.error || r.code !== 'no_card') return r;
+    var sc = freeScale(img), f = KS.analyseFree(img.rgba, img.w, img.h, sc);
+    if (f.error) return f;
+    f.scale.dist_mm = sc.dist_mm;
+    if (f.kind && f.kind.kind === 'none') return { error: 'No regular loop pattern in this photo — come closer (8–12 cm), fill the frame with the fabric, and keep it in focus.', code: 'no_loops' };
+    if (f.confidence === 'high') f.confidence = 'medium';                // the count is good; the scale is an estimate
+    return f;
+  }
+
   function addShot(list, box) {
     var el = document.createElement('div'); el.className = 'sc-shot';
     el.innerHTML = '<canvas width="160" height="160"></canvas><div><span class="sc-busy"></span> Measuring…</div>';
@@ -72,7 +91,8 @@
       return;
     }
     drawFlat(item.el.querySelector('canvas'), res, false, null);
-    txt.innerHTML = kind === 'back' ? 'Back read ✓' : '<b>' + res.wpc.toFixed(1) + '</b> w · <b>' + res.cpc.toFixed(1) + '</b> c /cm<br>' + esc(res.confidence) + ' confidence' + (res.faults.length ? ' · ' + res.faults.length + ' fault' + (res.faults.length > 1 ? 's' : '') : '');
+    txt.innerHTML = kind === 'back' ? 'Back read ✓' : '<b>' + res.wpc.toFixed(1) + '</b> w · <b>' + res.cpc.toFixed(1) + '</b> c /cm<br>' + esc(res.confidence) + ' confidence' + (res.faults.length ? ' · ' + res.faults.length + ' fault' + (res.faults.length > 1 ? 's' : '') : '')
+      + (res.card ? '' : '<br><span style="color:#B26A00">no card · scale estimated</span>') + (res.kind && res.kind.kind === 'woven' ? '<br><span style="color:#B26A00">looks woven</span>' : '');
   }
   function run(kind, getImage) {
     var list = kind === 'face' ? S.faces : S.backs;
@@ -84,7 +104,7 @@
       return new Promise(function (ok) {
         setTimeout(function () {
           var r;
-          try { r = KS.analysePhoto(img.rgba, img.w, img.h); } catch (e) { r = { error: 'This photo could not be measured: ' + e.message }; }
+          try { r = analyseAny(img); } catch (e) { r = { error: 'This photo could not be measured: ' + e.message }; }
           ok(r);
         }, 30);
       });
@@ -115,10 +135,11 @@
       steps: steps,
       onCapture: function (kind, img) {
         var r;
-        try { r = KS.analysePhoto(img.rgba, img.w, img.h); } catch (e) { r = { error: e.message }; }
+        try { r = analyseAny(img); } catch (e) { r = { error: e.message }; }
         if (kind === 'back' && r.error && /No regular loop pattern/.test(r.error)) r = { backOnly: true, features: { regularity: 0, orient: { diagonal: 0, across: 0 } } };
         if (r.error) return Promise.resolve({ ok: false, error: r.error.replace(/\. .*/, '.') });
-        if (kind === 'face' && r.confidence === 'low') return Promise.resolve({ ok: false, error: 'the loops are not clear enough' });
+        if (kind === 'face' && r.confidence === 'low' && r.card) return Promise.resolve({ ok: false, error: 'the loops are not clear enough' });
+        if (kind === 'face' && r.confidence === 'low' && r.regularity < 0.3) return Promise.resolve({ ok: false, error: 'the loops are not clear — come a little closer and hold still' });
         // a face photo far from the ones before it is the back, or a different fabric
         var before = goodFaces();
         if (kind === 'face' && before.length) {
@@ -126,7 +147,7 @@
           if (Math.abs(r.wpc / mw - 1) > 0.15 || Math.abs(r.cpc / mc - 1) > 0.15) return Promise.resolve({ ok: false, error: 'different from the earlier photos — is this the face side of the same fabric?' });
         }
         addMeasured(kind, r);
-        return Promise.resolve({ ok: true, note: kind === 'back' ? 'Back captured' : r.wpc.toFixed(1) + ' wales · ' + r.cpc.toFixed(1) + ' courses per cm' });
+        return Promise.resolve({ ok: true, note: kind === 'back' ? 'Back captured' : r.kind && r.kind.kind === 'woven' ? 'Woven fabric seen' : r.wpc.toFixed(1) + ' wales · ' + r.cpc.toFixed(1) + ' courses per cm' + (r.card ? '' : ' (scale estimated)') });
       },
       onSendFrame: function (img, info) {
         var c = document.createElement('canvas'), k = Math.min(1, 2000 / Math.max(img.w, img.h));
@@ -143,7 +164,7 @@
   function drawBlank(c) { var g = c.getContext('2d'); g.fillStyle = '#e9ecef'; g.fillRect(0, 0, c.width, c.height); }
 
   /** The flattened window, optionally a 12 mm crop with the check grid. */
-  function drawFlat(canvas, r, withGrid, adj) {
+  function drawFlat(canvas, r, withGrid, adj, k) {
     var f = r._flat, g = canvas.getContext('2d'), W = canvas.width;
     var cropPx = withGrid ? Math.min(f.w, Math.round(12 * f.pxPerMm)) : f.w;
     var x0 = Math.floor((f.w - cropPx) / 2), y0 = Math.floor((f.h - cropPx) / 2), s = W / cropPx;
@@ -172,7 +193,8 @@
     line(G.wale, '#00B3A4'); line(G.course, '#FF7A00');
     g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(0, W - 22, W, 22);
     g.fillStyle = '#fff'; g.font = '12px system-ui, sans-serif';
-    g.fillText('12 × 12 mm · ' + m.wpc.toFixed(1) + ' wales/cm · ' + m.cpc.toFixed(1) + ' courses/cm', 8, W - 7);
+    k = k || 1;
+    g.fillText((r.card ? '12 × 12 mm · ' : '≈ ' + (12 / k).toFixed(0) + ' mm · ') + (m.wpc * k).toFixed(1) + ' wales/cm · ' + (m.cpc * k).toFixed(1) + ' courses/cm', 8, W - 7);
   }
 
   // ── combining the photos ────────────────────────────────────────────
@@ -184,10 +206,29 @@
     var spread = g.length > 1 ? Math.max.apply(null, g.map(function (r) { return Math.max(Math.abs(r.wpc / wpc - 1), Math.abs(r.cpc / cpc - 1)); })) : g[0].spread;
     var best = g.slice().sort(function (a, b) { return b.regularity - a.regularity; })[0];
     var conf = g.some(function (r) { return r.confidence === 'low'; }) || spread > 0.06 ? 'low' : g.every(function (r) { return r.confidence === 'high'; }) && spread < 0.03 ? 'high' : 'medium';
-    return { wpc: wpc, cpc: cpc, spread: spread, best: best, n: g.length, confidence: conf };
+    var free = g.filter(function (r) { return !r.card; });
+    var woven = g.filter(function (r) { return r.kind && r.kind.kind === 'woven'; }).length > g.length / 2;
+    return { wpc: wpc, cpc: cpc, spread: spread, best: best, n: g.length, confidence: conf, estimated: free.length > 0, dist: free.length ? free[0].scale.dist_mm : null, woven: woven,
+      wovenWhy: woven ? g.filter(function (r) { return r.kind && r.kind.kind === 'woven'; })[0].kind.why : '' };
   }
 
   var CHIP = ['single_jersey', 'pique', 'rib', 'interlock', 'fleece', 'terry'];
+  // without the card: "how far was the phone?" — counts per cm scale with 1 / distance
+  function distK(c) { return c && c.estimated && S.dist && c.dist ? c.dist / S.dist : 1; }
+  function scaleBox(c) {
+    var box = $('sc-scale');
+    if (!box) { box = document.createElement('div'); box.id = 'sc-scale'; box.className = 'sc-why'; $('sc-agree').parentNode.insertBefore(box, $('sc-agree')); }
+    if (!c.estimated) { box.hidden = true; return; }
+    box.hidden = false;
+    var now = S.dist || c.dist;
+    box.innerHTML = '<b>No scan card — the scale is estimated.</b> The loop grid is exact; the per-cm numbers assume the phone was ' + (now / 10).toFixed(0) + ' cm from the fabric. Held closer or farther? Tap it:<div class="sc-row" style="margin-top:6px">'
+      + [60, 80, 100, 120, 150].map(function (d) { return '<button type="button" class="sc-chip' + (Math.abs(d - now) < 5 ? ' on' : '') + '" data-dist="' + d + '">' + d / 10 + ' cm</button>'; }).join('')
+      + '</div><span style="font-size:12px">For an exact count, lay the printed scan card on the fabric.</span>';
+  }
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('[data-dist]'); if (!b) return;
+    S.dist = +b.getAttribute('data-dist'); update();
+  });
   function update() {
     var c = combined();
     var hasFace = !!c;
@@ -195,9 +236,11 @@
     $('sc-count-card').hidden = !hasFace;
     $('sc-struct-card').hidden = !hasFace;
     if (!hasFace) return;
-    $('sc-wpc').textContent = (c.wpc * S.adj.w).toFixed(2);
-    $('sc-cpc').textContent = (c.cpc * S.adj.c).toFixed(2);
-    drawFlat($('sc-check'), c.best, true, S.adj);
+    var k = distK(c);
+    $('sc-wpc').textContent = (c.estimated ? '≈ ' : '') + (c.wpc * S.adj.w * k).toFixed(c.estimated ? 1 : 2);
+    $('sc-cpc').textContent = (c.estimated ? '≈ ' : '') + (c.cpc * S.adj.c * k).toFixed(c.estimated ? 1 : 2);
+    drawFlat($('sc-check'), c.best, true, S.adj, k);
+    scaleBox(c);
     $('sc-agree').textContent = c.n > 1 ? c.n + ' photos agree within ' + (c.spread * 100).toFixed(1) + '%' + (c.spread > 0.04 ? ' — retake the one that differs' : '.') : 'One photo — a second at another place makes it surer.';
     // suggestions
     var back = S.backs[0] && S.backs[0].res && !S.backs[0].res.error ? S.backs[0].res.features : null;
@@ -212,6 +255,7 @@
       return '<button type="button" class="sc-chip' + (k === S.structure ? ' on' : '') + '" data-s="' + k + '">' + esc(V.NAMES[k]) + '<small>' + Math.round((p[k] || 0) * 100) + '%</small></button>';
     }).join('');
     $('sc-why').textContent = why[S.structure] ? 'Why: ' + why[S.structure] + '.' : '';
+    if (c.woven) $('sc-why').innerHTML = '<b style="color:#B26A00">This looks woven, not knitted</b> — ' + esc(c.wovenWhy) + '. The scan works out knitting specs; for woven cloth use the Woven calculator in the <a href="/app.html">Calculator</a>. If it is a knit, pick the structure above.';
     if ((S.structure === 'pique' || S.structure === 'fleece' || S.structure === 'terry') && S.adj.c === 1) $('sc-agree').textContent += ' Tuck and loop fabrics often read one course per cell of two — if a grid cell holds two loops, tap × 2 on courses. Wales, stitch length and count are not affected.';
     S.suggest = order.map(function (k) { return { structure: k, p: p[k] || 0 }; });
   }
@@ -256,12 +300,12 @@
     var c = combined(), btn = this, msg = $('sc-msg');
     if (!c) return;
     if (S.busy) { msg.textContent = 'Still measuring a photo…'; return; }
-    var best = c.best, thumb = null;
+    var best = c.best, thumb = null, k = distK(c);
     try { thumb = $('sc-check').toDataURL('image/jpeg', 0.82); } catch (_) {}
     var body = {
-      pair: pair || undefined, structure: S.structure, wpc: +(c.wpc * S.adj.w).toFixed(3), cpc: +(c.cpc * S.adj.c).toFixed(3),
+      pair: pair || undefined, structure: S.structure, wpc: +(c.wpc * S.adj.w * k).toFixed(3), cpc: +(c.cpc * S.adj.c * k).toFixed(3),
       gsm: $('sc-gsm').value || null, composition: $('sc-comp').value, colour_hex: best.colour ? best.colour.hex : null, confidence: c.confidence,
-      measure: { spread: c.spread, regularity: best.regularity, skew_deg: best.skew_deg, px_per_mm: best.card.px_per_mm, photos: c.n, faults: best.faults, suggest: S.suggest, colour: best.colour },
+      measure: { spread: c.spread, regularity: best.regularity, skew_deg: best.skew_deg, px_per_mm: best.card ? best.card.px_per_mm : best.scale.px_per_mm * k, scale: best.card ? 'card' : best.scale.source, photos: c.n, faults: best.faults, suggest: S.suggest, colour: best.colour },
       thumb: thumb,
     };
     btn.disabled = true; msg.className = 'sc-msg'; msg.innerHTML = '<span class="sc-busy"></span> Working out the spec…';
@@ -270,7 +314,7 @@
       .then(function (d) {
         S.result = d.result;
         msg.textContent = '';
-        $('sc-result').innerHTML = V.render(d.result) + (S.sampleTruth && S.sampleTruth.structure === d.result.structure ? '<p class="sv-note" style="background:#E8F0FD;color:#1857C4">Sample fabric: drawn at ' + S.sampleTruth.wpc + ' wales and ' + S.sampleTruth.cpc + ' courses per cm — compare with what was measured.</p>' : '');
+        $('sc-result').innerHTML = (c.estimated ? '<p class="sv-note" style="background:#FFF4E0;color:#7A4A00">Measured without the scan card: the loop pattern and structure are read from the photo, the per-cm counts assume the phone was ' + ((S.dist || c.dist) / 10).toFixed(0) + ' cm away. Lay the printed card on the fabric for an exact count.</p>' : '') + V.render(d.result) + (S.sampleTruth && S.sampleTruth.structure === d.result.structure ? '<p class="sv-note" style="background:#E8F0FD;color:#1857C4">Sample fabric: drawn at ' + S.sampleTruth.wpc + ' wales and ' + S.sampleTruth.cpc + ' courses per cm — compare with what was measured.</p>' : '');
         $('sc-result-card').hidden = false;
         $('sc-result-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
       })
@@ -285,7 +329,7 @@
   });
   $('sc-again').addEventListener('click', function () {
     S.faces.forEach(function (f) { f.el.remove(); }); S.backs.forEach(function (f) { f.el.remove(); });
-    S.faces = []; S.backs = []; S.adj = { w: 1, c: 1 }; S.structure = null; S.userPicked = false; S.result = null; S.sampleTruth = null;
+    S.faces = []; S.backs = []; S.adj = { w: 1, c: 1 }; S.dist = null; S.structure = null; S.userPicked = false; S.result = null; S.sampleTruth = null;
     $('sc-result-card').hidden = true; $('sc-gsm').value = ''; update();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   });

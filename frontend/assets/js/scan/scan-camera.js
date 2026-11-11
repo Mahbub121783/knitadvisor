@@ -19,8 +19,8 @@
   'use strict';
   var KS = root.KAScan;
   var FOV_DEG = 66;              // typical main phone camera, horizontal — the distance shown is approximate
-  var MIN_PX_PER_MM = 11, GOOD_PX_PER_MM = 14, MAX_SIDE = 2400;
-  var TICK_MS = 120, HOLD_TICKS = 5, LOOP_EVERY = 4, LIVE_MIN_PXMM = 6.5;
+  var MIN_PX_PER_MM = 9.5, GOOD_PX_PER_MM = 13, MAX_SIDE = 2400;
+  var TICK_MS = 120, HOLD_TICKS = 3, LOOP_EVERY = 4, LIVE_MIN_PXMM = 6.5, FREE_AFTER = 10, FREE_HOLD = 9;
 
   var CSS = '.kc{position:fixed;inset:0;z-index:2000;background:#000;color:#fff;font-family:var(--head,system-ui);overflow:hidden;touch-action:none}' +
     '.kc video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}.kc canvas.ov{position:absolute;inset:0;width:100%;height:100%}' +
@@ -61,7 +61,7 @@
     var crop = document.createElement('canvas'); crop.width = crop.height = 192; var cg = crop.getContext('2d', { willReadFrequently: true });
     var live = null, tickN = 0, fullCanvas = document.createElement('canvas'), fg = fullCanvas.getContext('2d', { willReadFrequently: true }), moves = [];
     var stream = null, track = null, imageCapture = null, captureW = 0, timer = null, closed = false;
-    var okTicks = 0, prev = null, sharpBest = 0, armed = true, busy = false, lastPrint = null, lostTicks = 0, capturedAt = 0, movedSince = false;
+    var okTicks = 0, prev = null, sharpBest = 0, armed = true, busy = false, lastPrint = null, lostTicks = 0, capturedAt = 0, movedSince = false, noCard = 0;
 
     function setStepUI() {
       var st = steps[stepIx];
@@ -144,7 +144,7 @@
       var px = sg.getImageData(0, 0, sw, sh).data, g = KS.toGray(px, sw, sh);
       var det = KS.detectCard(g, sw, sh);
       var out = { vw: vw, vh: vh, sw: sw, sh: sh, det: det, checks: [] };
-      if (det.error) { out.found = false; return out; }
+      if (det.error) { out.found = false; out.free = lookFree(g, sw, sh, vw, vh); return out; }
       out.found = true;
       var c = det.corners, minS = Math.min(sw, sh);
       // distance: px per mm in the photo that will be analysed
@@ -158,13 +158,13 @@
       out.distance = { ok: !tooBig && pxmmPhoto >= MIN_PX_PER_MM, cm: distCm, pxmm: pxmmPhoto, hint: tooBig ? 'Move back a little' : pxmmPhoto < MIN_PX_PER_MM ? 'Move closer' : null, good: pxmmPhoto >= GOOD_PX_PER_MM };
       // straight: perspective and turn
       var ang = Math.atan2(c[1][1] - c[0][1], c[1][0] - c[0][0]) * 180 / Math.PI;
-      out.straight = { ok: det.tilt < 1.12 && Math.abs(ang) < 12, hint: det.tilt >= 1.12 ? 'Hold the phone flat above the card' : Math.abs(ang) >= 12 ? 'Turn the phone to line up with the card' : null };
+      out.straight = { ok: det.tilt < 1.22 && Math.abs(ang) < 25, hint: det.tilt >= 1.22 ? 'Hold the phone flat above the card' : Math.abs(ang) >= 25 ? 'Turn the phone to line up with the card' : null };
       var cx = (c[0][0] + c[1][0] + c[2][0] + c[3][0]) / 4, cy = (c[0][1] + c[1][1] + c[2][1] + c[3][1]) / 4;
       out.centred = { ok: Math.abs(cx - sw / 2) < sw * 0.12 && Math.abs(cy - sh / 2) < sh * 0.12, hint: 'Centre the card' };
       var move = prev ? Math.max.apply(null, c.map(function (p, i) { return Math.hypot(p[0] - prev[i][0], p[1] - prev[i][1]); })) / Math.hypot(sw, sh) : 1;
       moves.push(move); if (moves.length > 3) moves.shift();
       var mv = moves.slice().sort(function (a2, b2) { return a2 - b2; })[Math.floor(moves.length / 2)];
-      out.steady = { ok: mv < 0.015, hint: 'Hold still', move: mv };
+      out.steady = { ok: mv < 0.025, hint: 'Hold still', move: mv };
       // light, from the white paper and the window
       var H = KS.homography(KS.CARD.markers, c);
       var at = function (mx, my) { var q = KS.apply(H, mx, my), x = Math.round(q[0]), y = Math.round(q[1]); return x >= 0 && y >= 0 && x < sw && y < sh ? g[y * sw + x] : null; };
@@ -192,7 +192,7 @@
       if (out.steady.ok) sharpBest = Math.max(sharpBest * 0.995, sharp);
       // loops counted on the live video means the picture is sharp enough already
       var loopsSeen = live && !live.error && live.regularity > 0.28 && Date.now() - live.t < 2500;
-      out.sharp = { ok: loopsSeen || (sharp >= sharpBest * 0.75 && sharpBest > 0), hint: 'Focusing…', value: sharp };
+      out.sharp = { ok: loopsSeen || (sharp >= sharpBest * 0.6 && sharpBest > 0), hint: 'Focusing…', value: sharp };
       prev = c;
       // the loops themselves, counted on the video every few looks
       var pxmmVideo = det.pxPerMm * vw / sw;
@@ -214,6 +214,29 @@
           : { ok: false, hint: fresh && live.error ? (live.code === 'no_fabric' ? 'No fabric seen — cut the window, or lay the card beside the fabric' : 'Loops not clear — hold steady, closer, more light') : 'Reading the loops…' };
       }
       return out;
+    }
+
+    // no card: is the fabric filling the frame steady, sharp and lit? (the photo is measured with an estimated scale)
+    var thumbPrev = null, freeBest = 0;
+    function lookFree(g, sw, sh, vw, vh) {
+      var T = 48, th = new Float32Array(T * T), mean = 0;
+      for (var y = 0; y < T; y++) for (var x = 0; x < T; x++) { var v = g[Math.floor((y + 0.5) * sh / T) * sw + Math.floor((x + 0.5) * sw / T)]; th[y * T + x] = v; mean += v; }
+      mean /= T * T;
+      var diff = 0; if (thumbPrev) { for (var i = 0; i < th.length; i++) diff += Math.abs(th[i] - thumbPrev[i]); diff /= th.length; } else diff = 1;
+      thumbPrev = th;
+      var steady = { ok: diff < 0.03, hint: 'Hold still' };
+      var light = { ok: mean > 0.08 && mean < 0.94, hint: mean <= 0.08 ? 'Too dark — more light' : 'Too bright — move the light' };
+      var side = Math.min(vw, vh) * 0.32;
+      cg.drawImage(video, (vw - side) / 2, (vh - side) / 2, side, side, 0, 0, 192, 192);
+      var d2 = cg.getImageData(0, 0, 192, 192).data, gs = KS.toGray(d2, 192, 192), e = 0, m = 0, m2 = 0;
+      for (i = 0; i < gs.length; i++) { m += gs[i]; m2 += gs[i] * gs[i]; }
+      m /= gs.length; var varc = m2 / gs.length - m * m;
+      for (y = 1; y < 191; y++) for (x = 1; x < 191; x++) { var k = y * 192 + x, l = 4 * gs[k] - gs[k - 1] - gs[k + 1] - gs[k - 192] - gs[k + 192]; e += l * l; }
+      var sharpV = varc > 0.0004 ? e / (190 * 190) / varc : 0;
+      if (steady.ok) freeBest = Math.max(freeBest * 0.995, sharpV);
+      var texture = varc > 0.0008;
+      var sharp = { ok: texture && sharpV > 0 && sharpV >= freeBest * 0.65, hint: texture ? 'Focusing… (8–12 cm from the fabric)' : 'Fill the frame with the fabric' };
+      return { steady: steady, light: light, sharp: sharp };
     }
 
     function corr(a, b) {
@@ -317,7 +340,7 @@
         if (!L.found) lostTicks++; else lostTicks = 0;
         if (L.found && L.steady && !L.steady.ok) movedSince = true;
         var c = corr(L.print, lastPrint);
-        if (lostTicks >= 3 || (L.found && c < 0.55) || (movedSince && Date.now() - capturedAt > 4000)) { armed = true; sharpBest = 0; }
+        if ((lostTicks >= 3 && lastPrint) || (L.found && c < 0.55) || (movedSince && Date.now() - capturedAt > 4000) || (!L.found && !lastPrint && Date.now() - capturedAt > (steps[stepIx] && steps[stepIx].kind === 'back' ? 4500 : 2500))) { armed = true; sharpBest = 0; freeBest = 0; }
       }
       checksEl.innerHTML = names.map(function (n) {
         var ok = n[0] === 'found' ? L.found : L[n[0]] && L[n[0]].ok;
@@ -326,10 +349,30 @@
       }).join('');
       if (!armed) {
         okTicks = 0; setRing(0); draw(L, 'idle');
-        say(steps[stepIx].kind === 'back' ? 'Turn the fabric over — back side up' : 'Move the card to another place on the fabric');
+        say(steps[stepIx].kind === 'back' ? 'Turn the fabric over — back side up' : lastPrint ? 'Move the card to another place on the fabric' : 'Move the phone to another place on the fabric');
         return;
       }
-      if (!L.found) { okTicks = 0; setRing(0); draw(L, 'idle'); say('Point at the scan card — all four black squares'); return; }
+      if (!L.found) {
+        noCard++;
+        if (noCard < FREE_AFTER || !L.free) { okTicks = 0; setRing(0); draw(L, 'idle'); say('Looking for the scan card… (or just fill the frame with the fabric)'); return; }
+        // free mode: no card — the fabric fills the frame; capture when steady, sharp and lit
+        var F = L.free, fn = [['steady', 'Steady'], ['sharp', 'Sharp'], ['light', 'Light']];
+        checksEl.innerHTML = '<span>No card · scale estimated</span>' + fn.map(function (n) { var ok = F[n[0]].ok; return '<span class="' + (ok ? 'ok' : 'bad') + '">' + (ok ? '✓ ' : '') + n[1] + '</span>'; }).join('');
+        draw(L, 'idle');
+        var allF = fn.every(function (n) { return F[n[0]].ok; });
+        if (allF) {
+          okTicks++;
+          setRing(okTicks / FREE_HOLD);
+          say(okTicks >= FREE_HOLD ? 'Capturing…' : 'Good — hold still', 'ok');
+          if (okTicks >= FREE_HOLD) { okTicks = 0; capture(false, null); }
+          return;
+        }
+        okTicks = 0; setRing(0);
+        var bad = fn.filter(function (n) { return !F[n[0]].ok; })[0];
+        say(F[bad[0]].hint, 'warn');
+        return;
+      }
+      noCard = 0;
       if (allOk) {
         okTicks++;
         setRing(okTicks / HOLD_TICKS);
@@ -344,11 +387,15 @@
     }
 
     // ── taking the photo ─────────────────────────────────────────────
+    // the lens's focus distance, where the browser reports it (metres): the scale when there is no card
+    function focusMm() {
+      try { var fd = track && track.getSettings ? track.getSettings().focusDistance : null; return fd > 0.02 && fd < 0.5 ? fd * 1000 : null; } catch (_) { return null; }
+    }
     function grabVideo() {
       var vw = video.videoWidth, vh = video.videoHeight, k = Math.min(1, MAX_SIDE / Math.max(vw, vh));
       var c = document.createElement('canvas'); c.width = Math.round(vw * k); c.height = Math.round(vh * k);
       var g = c.getContext('2d'); g.drawImage(video, 0, 0, c.width, c.height);
-      return { rgba: g.getImageData(0, 0, c.width, c.height).data, w: c.width, h: c.height, source: 'video ' + vw + '×' + vh };
+      return { rgba: g.getImageData(0, 0, c.width, c.height).data, w: c.width, h: c.height, source: 'video ' + vw + '×' + vh, focus_mm: focusMm() };
     }
     function grabPhoto() {
       if (!imageCapture || !imageCapture.takePhoto) return Promise.resolve(grabVideo());
@@ -356,7 +403,7 @@
         var k = Math.min(1, MAX_SIDE / Math.max(bm.width, bm.height));
         var c = document.createElement('canvas'); c.width = Math.round(bm.width * k); c.height = Math.round(bm.height * k);
         c.getContext('2d').drawImage(bm, 0, 0, c.width, c.height);
-        var o = { rgba: c.getContext('2d').getImageData(0, 0, c.width, c.height).data, w: c.width, h: c.height, source: 'photo ' + bm.width + '×' + bm.height };
+        var o = { rgba: c.getContext('2d').getImageData(0, 0, c.width, c.height).data, w: c.width, h: c.height, source: 'photo ' + bm.width + '×' + bm.height, focus_mm: focusMm() };
         bm.close && bm.close();
         return o;
       }).catch(function () { return grabVideo(); });

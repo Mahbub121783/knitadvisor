@@ -69,18 +69,18 @@
   <header class="hdr"></header>
   <main class="sc">
     <h1>Fabric scan</h1>
-    <p class="lead">Photograph a knitted swatch under the scan card. The loops are counted on this phone (no AI, nothing uploaded but the numbers); the knitting spec is worked out from the factory's own records.</p>
+    <p class="lead">Point the phone at a knitted fabric — with the scan card for an exact count, or without it for a quick read. The loops are counted on this phone (no AI, nothing uploaded but the numbers); the knitting spec is worked out from the factory's own records.</p>
     <div class="sc-pair off" id="sc-pair">Not connected to a screen — results show here.</div>
 
     <section class="sc-card">
-      <h2><span class="n">1</span>The card</h2>
-      <p class="h">Print the scan card at 100 %. Lay the fabric flat, face up, wales running top to bottom. Then either cut out the card's window and lay it on the fabric, or — no scissors — lay the card right beside the fabric: the scanner finds the fabric on any side.</p>
+      <h2><span class="n">1</span>The card <span style="font-weight:500;color:var(--t3);font-size:12.5px">— optional, for an exact count</span></h2>
+      <p class="h"><b>No card?</b> Just fill the camera with the fabric, about 10 cm away: the loops, the structure and the colour are read, and the per-cm count is estimated. <b>With the card</b> the count is exact: print it at 100 %. Lay the fabric flat, face up, wales running top to bottom. Then either cut out the card's window and lay it on the fabric, or — no scissors — lay the card right beside the fabric: the scanner finds the fabric on any side.</p>
       <div class="sc-row">
         <a class="sc-btn" href="/api/scan/card.pdf" target="_blank" rel="noopener">Print the card (PDF)</a>
         <button class="sc-btn" type="button" id="sc-howbtn">How to take the photo</button>
       </div>
       <ol class="sc-how" id="sc-how" hidden>
-        <li>Phone straight above the card, 8–12 cm away; the four black squares fill most of the picture.</li>
+        <li>Phone straight above the fabric (or the card), 8–12 cm away. With the card, the four black squares fill most of the picture; without it, the fabric fills the whole picture.</li>
         <li>Even light — no shadow of the phone, no flash glare.</li>
         <li>Take 2–3 photos at different places. A clip-on macro lens helps fine jersey (over 20 wales/cm).</li>
         <li>Then one photo of the back: it tells jersey from interlock and shows fleece loops.</li>
@@ -93,7 +93,7 @@
       <input type="file" accept="image/*" capture="environment" id="sc-face-in" hidden>
       <input type="file" accept="image/*" id="sc-face-pick" hidden multiple>
       <button class="sc-btn primary big" type="button" id="sc-cam" style="margin-bottom:8px">📷 Open camera — automatic</button>
-      <p class="h" style="margin:-2px 0 10px">The camera checks the distance, straightness, focus and light by itself and takes each photo when everything is right: 3 of the face, then the back.</p>
+      <p class="h" style="margin:-2px 0 10px">The camera checks focus, steadiness and light by itself and takes each photo when it is right: 3 of the face, then the back. With the card in view it also checks distance and straightness; without it, it switches to an estimated scale after a second. The round button takes a photo at any time.</p>
       <div class="sc-row">
         <button class="sc-btn" type="button" id="sc-face">Take a photo</button>
         <button class="sc-btn" type="button" id="sc-face-file">Choose from gallery</button>
@@ -104,7 +104,7 @@
 
     <section class="sc-card" id="sc-back-card" hidden>
       <h2><span class="n">3</span>Back photo <span style="font-weight:500;color:var(--t3);font-size:12.5px">— optional</span></h2>
-      <p class="h">Turn the fabric over, same card. It helps tell the structure.</p>
+      <p class="h">Turn the fabric over (same card, if you use one). It helps tell the structure.</p>
       <input type="file" accept="image/*" capture="environment" id="sc-back-in" hidden>
       <button class="sc-btn" type="button" id="sc-back">Photograph the back</button>
       <div class="sc-shots" id="sc-back-shots"></div>
@@ -151,10 +151,10 @@
   </main>
   <footer class="footer"></footer>
   <script src="assets/js/storage.js?v=20260606b"></script>
-  <script src="assets/js/scan/fabric-scan-core.js?v=20261109b"></script>
+  <script src="assets/js/scan/fabric-scan-core.js?v=20261112a"></script>
   <script src="assets/js/scan/fabric-scan-synth.js?v=20261109b"></script>
   <script src="assets/js/scan/scan-view.js?v=20261108a"></script>
-  <script src="assets/js/scan/scan-camera.js?v=20261109b"></script>
-  <script src="assets/js/scan/scan-page.js?v=20261109b"></script>
+  <script src="assets/js/scan/scan-camera.js?v=20261112a"></script>
+  <script src="assets/js/scan/scan-page.js?v=20261112a"></script>
 </body>
 </html>
