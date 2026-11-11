@@ -91,6 +91,17 @@ function fromWeft(spec) {
     if (fd.plated || el) { ids.push(`F${f + 1}p`); yarns.push({ id: `F${f + 1}p`, role: el && !fd.plated ? 'elastane' : 'plating', source: { feed: f + 1 }, plated_with: `F${f + 1}` }); }
     yarnsOfFeed.push(ids);
   });
+  // which feeds knit INTO the course of the feed before (plated into the same loops) rather than starting a new one.
+  // The designer says so per feed (course: 'same' | 'new'); left unsaid, a face feeder right after a binder (or a binder
+  // right after a face) joins it — the three-thread fleece face course: the binder knits every needle behind the face.
+  const joins = feeds.map((fd, f) => {
+    if (fd.course === 'same') return f > 0 || R > 1;
+    if (fd.course === 'new') return false;
+    const prev = feeds[mod(f - 1, R)] || {};
+    return R > 1 && ((fd.role === 'face' && prev.role === 'binder') || (fd.role === 'binder' && prev.role === 'face' && prev.course !== 'same'));
+  });
+  const courseOfFeed = []; { let k = -1; for (let f = 0; f < R; f++) { if (!joins[f]) k++; courseOfFeed.push(Math.max(0, k)); } }
+  const fabricCourses = joins.filter((j) => !j).length || 1;
 
   const stack = new Map(needles.map((n) => [n.id, []]));
   const loops = new Map(), passes = [], transfers = [];
@@ -121,13 +132,18 @@ function fromWeft(spec) {
     for (const n of path) {
       const a = act(n);
       let made = null;
-      if (a === 'K') {
+      const top = stack.get(n.id).length === 1 ? loops.get(stack.get(n.id)[0]) : null;
+      if (a === 'K' && joins[f] && top && top.course === c - 1 && top.kind !== 'tuck') {
+        // the same course: this feeder's yarn is plated into the loop the feeder before has just made on this needle
+        top.yarns = [...top.yarns, ...yarnsOfFeed[f]]; top.plated_feeds = (top.plated_feeds || 1) + 1;
+        made = top;
+      } else if (a === 'K') {
         const through = stack.get(n.id);
         through.forEach((t) => { const L = loops.get(t); if (L && L.cast_off == null) L.cast_off = c; });
-        made = { id: lid(n.id, c), needle: n.id, course: c, yarns: yarnsOfFeed[f], kind: through.length ? 'knit' : 'cast-on', through: through.slice(), cast_off: null };
+        made = { id: lid(n.id, c), needle: n.id, course: c, yarns: yarnsOfFeed[f].slice(), kind: through.length ? 'knit' : 'cast-on', through: through.slice(), cast_off: null };
         loops.set(made.id, made); stack.set(n.id, [made.id]);
       } else if (a === 'T') {
-        made = { id: lid(n.id, c), needle: n.id, course: c, yarns: yarnsOfFeed[f], kind: 'tuck', through: [], cast_off: null };
+        made = { id: lid(n.id, c), needle: n.id, course: c, yarns: yarnsOfFeed[f].slice(), kind: 'tuck', through: [], cast_off: null };
         loops.set(made.id, made); stack.get(n.id).push(made.id);
         if (stack.get(n.id).length > STACK_WARN + 1 && c >= 0) check('warn', 'tuck_stack', `${n.id} holds ${stack.get(n.id).length - 1} tucks on its loop at feed ${f + 1}: past about ${STACK_WARN} the hook overloads and the yarn breaks or the tucks fail to clear.`, n.id);
       }
@@ -171,7 +187,8 @@ function fromWeft(spec) {
   const steady = a1 === a0;
   if (!steady) check('error', 'not_periodic', 'The programme does not settle into a repeating cloth (a needle keeps gathering loops): it cannot be knitted continuously.', null);
 
-  return finish({ technique: flat ? 'weft-flat' : 'weft-circular', gating, period: { courses: R, needles: N }, beds: [...new Set(needles.map((n) => n.bed))], needles, yarns, loops: out, passes, transfers, checks, steady });
+  return finish({ technique: flat ? 'weft-flat' : 'weft-circular', gating, period: { courses: R, needles: N, fabric_courses: fabricCourses },
+    feeds: feeds.map((fd, f) => ({ feed: f + 1, role: fd.role || 'ground', fabric_course: courseOfFeed[f] + 1, joins_previous: joins[f], said: fd.course === 'same' || fd.course === 'new' })), beds: [...new Set(needles.map((n) => n.bed))], needles, yarns, loops: out, passes, transfers, checks, steady });
 }
 
 // ── WARP ──────────────────────────────────────────────────────────────────────
