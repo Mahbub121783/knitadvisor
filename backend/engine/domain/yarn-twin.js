@@ -98,7 +98,10 @@ function twin(out, opt = {}) {
   }
   const x = new Float64Array(3 * N); nodes.forEach((p, i) => x.set(p, 3 * i));
   const topo = { yarns: [{ n: N, x }], Lx, Ly, d: 1, l0: (ell * nw) / N };
-  const r = solver.relax(topo, { fixedLx: Lx, fixedLy: Ly, maxIter: opt.maxIter || 120000, timeMs: opt.timeMs || 2500, tol: 5e-4 });
+  // with a stress the cell is free and finds its own size (the yarn model's prediction); without, it is held at the Studio's
+  const r = opt.stress
+    ? solver.relax(topo, { sx: opt.stress.sx, sy: opt.stress.sy, maxIter: opt.maxIter || 600000, timeMs: opt.timeMs || 20000, tol: 3e-4 })
+    : solver.relax(topo, { fixedLx: Lx, fixedLy: Ly, maxIter: opt.maxIter || 120000, timeMs: opt.timeMs || 2500, tol: 5e-4 });
 
   // how well the yarn fitted: the closest two non-neighbouring yarns come (in diameters), over every periodic image
   let gap = 1e9;

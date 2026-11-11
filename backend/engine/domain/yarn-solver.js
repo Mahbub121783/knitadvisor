@@ -29,7 +29,8 @@ const KS = 2500, KC = 400, MEXCL = 3;
 
 /**
  * @param topo  { yarns: [{ n, x: Float64Array(3n) }], Lx, Ly, d, l0 }
- * @param opt   { fixedLx, fixedLy, maxIter, tol, Fy }   fixed* hold a cell length; Fy is a force pulling on Ly
+ * @param opt   { fixedLx, fixedLy, maxIter, tol, Fx, Fy, sx, sy }   fixed* hold a cell length; Fx / Fy pull on the cell, sx / sy are
+ *              stresses (force per unit length of face) — negative presses it together
  * @returns     { x, Lx, Ly, energy, gLx, gLy, iterations, converged, maxForce, yarns }
  */
 function relax(topo, opt = {}) {
@@ -49,7 +50,7 @@ function relax(topo, opt = {}) {
     }
     o += y.n;
   });
-  const tol = opt.tol || 3e-4, maxIter = opt.maxIter || 30000, Fy = opt.Fy || 0, deadline = opt.timeMs ? Date.now() + opt.timeMs : Infinity;
+  const tol = opt.tol || 3e-4, maxIter = opt.maxIter || 30000, Fy = opt.Fy || 0, Fx = opt.Fx || 0, sx = opt.sx || 0, sy = opt.sy || 0, deadline = opt.timeMs ? Date.now() + opt.timeMs : Infinity;
   const freeLx = opt.fixedLx == null, freeLy = opt.fixedLy == null;
 
   // neighbour list: node pairs (i, j, image) within d + skin, rebuilt when anything has moved by skin/2
@@ -128,7 +129,8 @@ function relax(topo, opt = {}) {
       g[3 * i] -= Gx; g[3 * i + 1] -= Gy; g[3 * i + 2] -= Gz;
       if (sx) gLx += sx * Gx; if (sy) gLy += sy * Gy;
     }
-    gLy -= Fy;                                                          // an external force pulling on the cell length
+    gLy -= Fy; gLx -= Fx;                                               // external forces pulling on the cell lengths
+    gLx -= sx * Ly; gLy -= sy * Lx;                                     // a stress: force per unit length of the face it acts on (negative presses)
   }
 
   // FIRE over [nodes, Lx, Ly]

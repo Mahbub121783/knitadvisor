@@ -70,7 +70,7 @@ function accuracyFor({ matchId, family, lycra, level }) {
   const w = level === 'estimate' ? 1 : level === 'close' ? 0.5 : 0;
   const mix = (a, b) => (a && b ? Object.fromEntries(['p10', 'p90', 'mae_med', 'within_3', 'within_5', 'within_8'].map((k) => [k, a[k] * (1 - w) + b[k] * w])) : a || b);
   const nice = (k) => (k === '_all' ? 'all structures' : k.replace('+L', ' with elastane').replace(/_/g, ' '));
-  const basis = w === 1 ? `cross-validated on the factory records: ${unseen.key} (its family left out), ${unseen.v.gsm.n} cloths`
+  const basis = w === 1 ? `cross-validated on the factory records: ${unseen.key}, predicted from its family constant alone (its own records left out), ${unseen.v.gsm.n} cloths`
     : w === 0.5 ? `cross-validated on the factory records: between ${nice(own.key)} (${own.v.gsm.n} cloths) and a structure with no records`
       : `cross-validated on the factory records: ${nice(own.key)}, ${own.v.gsm.n} cloths the engine had not seen when it predicted them`;
   return { gsm: mix(own.v.gsm, unseen.v.gsm), width: mix(own.v.width, unseen.v.width), basis, group: own.key, method: ACCURACY.method, generated: ACCURACY.generated };
