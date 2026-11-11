@@ -1126,12 +1126,16 @@ router.post('/faults/diagnose', (req, res) => {
 // ============================================================
 // GET /api/academy/content
 // ============================================================
+const noPages = (v) => (Array.isArray(v) ? v.map(noPages) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).filter(([k]) => k !== 'page' && k !== 'pages').map(([k, x]) => [k, noPages(x)])) : v);
+// ============================================================
+// ============================================================
 router.get('/academy/content', (req, res) => {
   res.json({
     success: true,
-    glossary: GLOSSARY,
-    basic_elements: BASIC_ELEMENTS,
-    formation_cycles: FORMATION_CYCLES
+    // the book pages the content was checked against stay here (no page reference leaves the API)
+    glossary: noPages(GLOSSARY),
+    basic_elements: noPages(BASIC_ELEMENTS),
+    formation_cycles: noPages(FORMATION_CYCLES)
   });
 });
 
@@ -1143,7 +1147,6 @@ router.get('/academy/quiz', (req, res) => {
     id: q.id,
     question: q.question,
     options: q.options,
-    page: q.page
   }));
   res.json({ success: true, questions: sanitizedQuestions });
 });
@@ -1164,7 +1167,6 @@ router.post('/academy/quiz/verify', (req, res) => {
     correctAnswer: question.options[question.answer],
     correctAnswerIndex: question.answer,
     explanation: question.explanation,
-    page: question.page
   });
 });
 

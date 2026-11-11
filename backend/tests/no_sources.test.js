@@ -57,4 +57,16 @@ assert.deepStrictEqual(pageOffenders, [], `outside sources on the pages: ${pageO
 const Y = require('../engine/domain/yarn-engine');
 const blend = { cotton: 60, polyester: 40 };
 for (const fn of ['blendMechanics', 'blendFriction', 'blendRecovery', 'blendDirectional', 'heatCeiling', 'blendThermal']) assert(!BANNED.test(JSON.stringify(Y[fn](blend))), fn);
+// 6. the academy: no page reference, no pointing at a book, in what it sends
+{
+  const A = require('../engine/domain/academy-engine');
+  const route = fs.readFileSync(path.join(B, 'routes/api.js'), 'utf8');
+  assert(!/page: q(?:uestion)?\.page/.test(route), 'the quiz routes send no page');
+  assert(/noPages\(GLOSSARY\)/.test(route), 'the academy content is sent without its pages');
+  for (const q of A.QUIZ_QUESTIONS) assert(!/textbook|[Pp]age \d/.test(q.question + ' ' + q.explanation + ' ' + q.options.join(' ')), q.id);
+  assert.strictEqual(S.scrub({ page: '326', term: 'x' }).page, undefined, 'a book page given as text');
+  assert.strictEqual(S.scrub({ page: 3, items: [] }).page, 3, 'a pagination page stays');
+  const ac = fs.readFileSync(path.join(B, '..', 'frontend', 'academy.html'), 'utf8');
+  assert(!/Textbook Reference Page|term-page-badge">p\./.test(ac), 'the academy page shows no book page');
+}
 console.log('No-sources tests passed');

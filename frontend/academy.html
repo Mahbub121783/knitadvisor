@@ -1335,7 +1335,6 @@
       html += `
         <div class="term-item" id="term-${key}" onclick="showGlossaryDetail('${key}')">
           <span>${val.term}</span>
-          <span class="term-page-badge">p. ${val.page}</span>
         </div>
       `;
     });
@@ -1384,9 +1383,6 @@
     detailsPane.innerHTML = `
       <div class="term-detail-title">${term.term}</div>
       <div class="term-detail-desc">${term.definition}</div>
-      <div style="font-family:var(--mono); font-size:10px; color:var(--t3);">
-        Textbook Reference Page: ${term.page}
-      </div>
       ${sketchHtml}
     `;
   }

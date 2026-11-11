@@ -51,7 +51,7 @@ function cleanText(s) {
 function dropKey(k, x, parent) {
   if (!KEY.test(k)) return false;
   if (k === 'book_page') return true;
-  if (k === 'page' || k === 'pages') return typeof x === 'number' ? typeof parent.table === 'string' && /^Tables?\s/.test(parent.table) : typeof x === 'string' && CITATION.test(x);
+  if (k === 'page' || k === 'pages') return typeof x === 'number' ? typeof parent.table === 'string' && /^Tables?\s/.test(parent.table) : typeof x === 'string' && (/^\s*\d+(?:\s*[-–,]\s*\d+)*\s*$/.test(x) || CITATION.test(x));
   if (k === 'table' || k === 'tables') return typeof x === 'string' && /^(?:Tables?\s|Fig)/.test(x);
   if (typeof x === 'string') return CITATION.test(x);
   if (Array.isArray(x)) return x.length > 0 && x.every((s) => typeof s === 'string' && CITATION.test(s));

@@ -356,7 +356,7 @@ const QUIZ_QUESTIONS = [
   },
   {
     id: "q2",
-    question: "A needle loop is mathematically represented in the textbook as:",
+    question: "A needle loop is mathematically represented as:",
     options: [
       "Top arc + Sinker loop",
       "Top arc + One leg",
@@ -551,7 +551,7 @@ const QUIZ_QUESTIONS = [
   },
   {
     id: "q17",
-    question: "What is the typical gauge range (needles per inch) for flat-bed knitting machines according to the textbook?",
+    question: "What is the typical gauge range (needles per inch) for flat-bed knitting machines?",
     options: [
       "1 to 5 npi",
       "3 to 18 npi",
@@ -590,7 +590,7 @@ const QUIZ_QUESTIONS = [
   },
   {
     id: "q20",
-    question: "The textbook formula for estimating a suitable Cotton Count (Ne) for a Single-Jersey machine is:",
+    question: "The standard formula for estimating a suitable Cotton Count (Ne) for a Single-Jersey machine is:",
     options: [
       "Ne = G² / 18",
       "Ne = G / 18",
