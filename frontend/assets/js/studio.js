@@ -671,6 +671,7 @@
         (SO.status === 'agrees' ? 'The two agree within 10 % — two independent methods, one answer.'
           : SO.status === 'differs' ? 'They differ by more than 10 % although every stitch here has a law: read the range above as wider until the first trial roll settles it.'
             : 'Incomplete — no law yet for: ' + esc(SO.missing.join('; ')) + '. A rough cross-check only.') +
+        ((SO.unchecked || []).length ? ' Uses laws not yet checked against cloth: ' + esc(SO.unchecked.join('; ')) + '.' : '') +
         ' <span style="color:var(--t3)">Laws used: ' + esc(SO.laws.join(', ')) + '.</span></div>';
     }
     if (f.calibration) {

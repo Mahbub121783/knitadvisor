@@ -5,8 +5,9 @@
  * IS that family; for a new structure the two can part, and when they do the designer is told by how much, which
  * laws were used and what no law covers yet. Neither is passed off as the truth: the first trial roll settles it.
  *
- * The laws' constants are learned once, at load, from the first floors only — plain jersey (with and without
- * elastane), 1×1 and 2×2 rib and single piqué records — the way tools/floor-skip.js judges them.
+ * The laws' constants are learned once, at load, from the first floors — plain jersey (with and without elastane),
+ * 1×1 and 2×2 rib and single piqué — and, for the one law no first floor can teach, waffle (a tuck on two beds).
+ * tools/floor-skip.js judges the laws on families they never saw; laws no such family can check are marked unchecked.
  */
 'use strict';
 
@@ -30,13 +31,14 @@ function floorCells() {
     else if (r.fab === 'rib' && !isL(r) && r.fdia / r.dia >= 1.6) { kind = 'rib'; id = 'rib_1x1'; }
     else if (r.fab === 'rib' && !isL(r)) { kind = 'rib2x2'; id = 'rib_2x2'; }
     else if (r.fab === 'pique' && !isL(r)) { kind = 'pique'; id = 'lacoste_single'; }
+    else if (r.fab === 'waffle' && !isL(r)) { kind = 'waffle'; id = 'waffle_knit'; }
     if (!kind) continue;
     const g = graphOf(id), f = GL.featuresOf(g), p = 25.4 / r.g, tex = 590.5 / r.ne;
     let K = 0, Tk = 0, fl = 0;
     for (const ps of g.passes.filter((x) => !x.yarn.endsWith('p'))) { ps.visits.forEach((v) => { if (v.act === 'K') K++; if (v.act === 'T') Tk++; }); ps.spans.forEach((s) => { if (s.kind === 'float') fl += s.float_needles; }); }
     const Y = K * r.sl + Tk * 0.7 * r.sl + fl * p, w = (r.fdia * 25.4) / (Math.PI * r.dia * r.g);
     const Hrep = (Y * tex) / (g.period.needles * w * r.fgsm);
-    cells.push({ kind, w_l: w / r.sl, H_l: Hrep / (f.loops_per_wale * r.sl), tucks_per_knit: f.ground_tucks_per_knit });
+    cells.push({ kind, w_l: w / r.sl, H_l: Hrep / (f.loops_per_wale * r.sl), tucks_per_knit: f.ground_tucks_per_knit, wales_per_slot: f.wales / f.slots });
   }
   return cells;
 }
@@ -53,8 +55,18 @@ function forDesign(input, out) {
   if (!(f.sl_mm > 0 && f.gsm > 0 && f.width_open_in > 0 && m.needles > 0 && m.gauge > 0)) return null;
   let g;
   try { g = G.fromDesign({ grid: out.structure.beds, gating: out.structure.gating, feeds: (input.feeds || []).map((x) => ({ role: x.role, course: x.course })), elastane: input.elastane || null }); } catch (_) { return null; }
-  const Kc = constants(), c = GL.cell(g, Kc, { elastane: !!input.elastane });
   const p = 25.4 / m.gauge, sl = f.sl_mm;
+  // a loop plated from two feeders: the shorter yarn sets its width. The feeders' own stitch lengths when the designer set
+  // them apart; a binder left at the face's length runs at the typical 0.81 of it (fleece order specs)
+  let plated = null;
+  for (const fd of g.feeds || []) {
+    if (!fd.joins_previous) continue;
+    const a = yf[fd.feed - 2] || {}, b = yf[fd.feed - 1] || {};
+    const la = a.sl_mm || sl, lb = b.sl_mm || sl, roles = [(input.feeds[fd.feed - 2] || {}).role, (input.feeds[fd.feed - 1] || {}).role];
+    const r = Math.abs(la - lb) > 1e-6 ? Math.min(la, lb) / Math.max(la, lb) : roles.includes('binder') ? 0.81 : null;
+    if (r) plated = plated == null ? r : Math.min(plated, r);
+  }
+  const Kc = constants(), c = GL.cell(g, Kc, { elastane: !!input.elastane, pitch_l: p / sl, plated_ratio: plated });
   // the mass of yarn in one repeat: every pass, at its own feeder's stitch length and count
   let mass = 0;
   for (const ps of g.passes) {
@@ -77,8 +89,8 @@ function forDesign(input, out) {
     agrees: Math.abs(dg) <= AGREE && Math.abs(dw) <= AGREE,
     // with a brick no law covers, the laws' number is incomplete — a difference then says little
     status: c.missing.length ? 'incomplete' : Math.abs(dg) <= AGREE && Math.abs(dw) <= AGREE ? 'agrees' : 'differs',
-    laws: c.laws, missing: c.missing,
-    basis: 'worked out from the stitches themselves — the yarn each one takes and the cell the brick laws give — with no table of this structure\'s family; the laws\' constants come from plain jersey, 1×1 and 2×2 rib and single piqué',
+    laws: c.laws, missing: c.missing, unchecked: c.unchecked || [],
+    basis: 'worked out from the stitches themselves — the yarn each one takes and the cell the brick laws give — with no table of this structure\'s family; the laws\' constants come from plain jersey, 1×1 and 2×2 rib, single piqué and waffle',
   };
 }
 

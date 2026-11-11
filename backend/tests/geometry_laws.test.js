@@ -49,9 +49,32 @@ assert.throws(() => GL.calibrate([{ kind: 'rib', w_l: 0.3, H_l: 0.2 }]), /jersey
 // 3. the yardstick: taught jersey + rib only, the laws must keep what they won on the families never shown
 const s = FS.lawsScenario(['single_jersey', 'rib']).families;
 assert(s.interlock.gsm_err_med < 0.12, `interlock GSM ${s.interlock.gsm_err_med} (the Studio without its interlock table: 46 %)`);
-assert(s['fleece+L'].gsm_err_med < 0.12, `fleece with elastane GSM ${s['fleece+L'].gsm_err_med}`);
+assert(s.fleece.gsm_err_med < 0.15 && s.fleece.width_err_med < 0.1, `fleece ${s.fleece.gsm_err_med} / ${s.fleece.width_err_med} (the binder, shorter, holds the width)`);
+assert(s['fleece+L'].gsm_err_med < 0.16 && s['fleece+L'].width_err_med < 0.13, `fleece with elastane ${s['fleece+L'].gsm_err_med} / ${s['fleece+L'].width_err_med}`);
 assert(s.waffle.width_err_med < 0.2, `waffle width ${s.waffle.width_err_med}`);
 assert(s.heavy_jersey.gsm_err_med < 0.08);
+// 5. the newer laws
+{
+  // the tighter of two width holds governs, not both
+  const fl3 = graphOf('fleece_3_thread');
+  const plain = GL.cell(fl3, Kt), held = GL.cell(fl3, Kt, { plated_ratio: 0.81 }), both = GL.cell(fl3, { ...Kt, elastane: { w: 0.864, h: 0.789 } }, { plated_ratio: 0.81, elastane: true });
+  assert(Math.abs(held.w_l / plain.w_l - 0.81) < 1e-9, 'a shorter plated yarn holds the width');
+  assert(Math.abs(both.w_l / plain.w_l - 0.81) < 1e-9, 'with elastane too, only the tighter hold (0.81 < 0.864) counts');
+  // a float is slack in a relaxed cloth: it binds only a wale that would pass the needle pitch
+  const mr = graphOf('mock_rib');
+  assert(GL.cell(mr, Kt, { pitch_l: 1 }).laws.some((x) => /slack/.test(x)) && Math.abs(GL.cell(mr, Kt, { pitch_l: 1 }).w_l - Kt.w0) < 1e-9);
+  assert(Math.abs(GL.cell(mr, Kt, { pitch_l: 0.2 }).w_l - 0.2) < 1e-9, 'a wale wider than the pitch is held to it by the float');
+  // one-bed courses on a double bed: loops take their own course's height, and the law says it is unchecked
+  const mil = GL.cell(graphOf('half_milano'), Kt), fm = mil.features;
+  assert(fm.loops_one_bed_per_wale > 0);
+  assert(Math.abs(mil.H_rep_l - ((fm.loops_per_wale - fm.loops_one_bed_per_wale) * Kt.h_rib + fm.loops_one_bed_per_wale * Kt.h0)) < 1e-9);
+  assert(mil.unchecked.some((u) => /one-bed/.test(u)) && !mil.missing.length);
+  // the tuck on two beds, learned from waffle: waffle is what it was learned from; the law is marked unchecked
+  const Kw = GL.calibrate([{ kind: 'jersey', w_l: 0.263, H_l: 0.193 }, { kind: 'rib', w_l: 0.346, H_l: 0.215 }, { kind: 'waffle', w_l: 0.313, H_l: 0.271, tucks_per_knit: 1 / 3, wales_per_slot: 2 }]);
+  const wf = GL.cell(graphOf('waffle_knit'), Kw);
+  assert(Math.abs(wf.w_l - 0.313) < 1e-6 && Math.abs(wf.H_rep_l / wf.features.loops_per_wale - 0.271) < 1e-6, 'waffle is what it was learned from');
+  assert(wf.unchecked.some((u) => /double bed/.test(u)));
+}
 console.log('Geometry laws tests passed');
 
 // 4. the second opinion on a Studio answer: agrees on what the laws were learned from, says "incomplete" where a brick
@@ -62,7 +85,8 @@ console.log('Geometry laws tests passed');
   assert.strictEqual(run('single_jersey').fabric.second_opinion.status, 'agrees');
   assert.strictEqual(run('rib_1x1').fabric.second_opinion.status, 'agrees');
   const fl = run('fleece_3_thread').fabric.second_opinion;
-  assert.strictEqual(fl.status, 'incomplete'); assert(fl.missing.some((m) => /float/.test(m)));
+  assert(!fl.missing.length && fl.laws.some((x) => /shorter yarn/.test(x)) && fl.laws.some((x) => /float: slack/.test(x)), 'every fleece brick has a law now: the binder holds the width, the loop yarn floats slack');
+  assert.strictEqual(run('pique_single').fabric.second_opinion.status, 'incomplete', 'more tucks than the law was learned on: said');
   const il = run('interlock').fabric.second_opinion;
   assert(il.laws.some((x) => /face to face/.test(x)) && Math.abs(il.diff_gsm_pct) < 15);
   for (const id of ['single_jersey', 'interlock', 'fleece_3_thread', 'pique_single', 'rib_2x2']) {

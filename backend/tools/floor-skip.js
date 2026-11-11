@@ -53,7 +53,7 @@ function recordCell(r) {
   const Y = K * sl + Tk * 0.7 * sl + fl * p;                               // mm of yarn per repeat
   const w = (r.fdia * 25.4) / (Math.PI * r.dia * r.g);                     // mm per needle slot, measured
   const Hrep = (Y * tex) / (g.period.needles * w * r.fgsm);                // mm per repeat, from the measured GSM
-  return { id, g, f, sl, tex, Y, w, Hrep, needles: Math.PI * r.dia * r.g };
+  return { id, g, f, sl, p, tex, Y, w, Hrep, needles: Math.PI * r.dia * r.g };
 }
 function lawsScenario(taught) {
   const cells = [];
@@ -65,7 +65,10 @@ function lawsScenario(taught) {
   const K = GL.calibrate(cells);
   const by = {};
   for (const r of ALL.filter((x) => usable(x) && x.fdia > 0 && x.dia > 0 && x.g > 0 && !taught.includes(x.fab))) {
-    const c = recordCell(r), pr = GL.cell(c.g, K, { elastane: isL(r) });
+    // the records give one stitch length; a binder plated into the face loop runs shorter — 0.81 of it (typical: fleece order specs)
+    const c = recordCell(r);
+    const binder = c.g.loops.some((L) => L.plated_feeds > 1) && c.g.yarns.some((y) => y.role === 'binder');
+    const pr = GL.cell(c.g, K, { elastane: isL(r), pitch_l: c.p / c.sl, plated_ratio: binder ? 0.81 : null });
     const w = pr.w_l * c.sl, Hrep = pr.H_rep_l * c.sl;
     const gsm = (c.Y * c.tex) / (c.g.period.needles * w * Hrep), width = (w * c.needles) / 25.4;
     const k = r.fab + (isL(r) ? '+L' : ''), b = (by[k] = by[k] || { g: [], w: [] });
