@@ -1501,6 +1501,22 @@ router.post('/studio/analyse', requireUser, async (req, res) => {
   }
 });
 
+// Part 0 - the stitch graph: the interlocking of any weft or warp design, as the machine makes it
+// (engine/domain/stitch-graph.js). Pure logic, no data; every later part reads it.
+const stitchGraph = require('../engine/domain/stitch-graph');
+router.post('/studio/graph', requireUser, (req, res) => {
+  try {
+    const b = req.body || {};
+    const g = stitchGraph.fromDesign(b.design || {});
+    const { passes, ...rest } = g;
+    res.json({ success: true, ...rest, wales: stitchGraph.wales(g), ...(b.full ? { passes } : {}) });
+  } catch (err) {
+    if (err instanceof stitchGraph.GraphError) return res.status(400).json({ success: false, error: err.message });
+    console.error('[studio] graph failed:', err);
+    res.status(500).json({ success: false, error: 'Could not build the stitch graph.' });
+  }
+});
+
 // Calibration measurements (migration 045): relaxed sizes, load-extension, recovery on one cloth, kept with the design and
 // what the Studio predicted for it, and compared with that prediction at once (engine/domain/calibration-intake.js).
 const calibration = require('../engine/domain/calibration-intake');
