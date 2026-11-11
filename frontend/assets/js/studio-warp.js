@@ -7,7 +7,7 @@
   var $ = function (id) { return document.getElementById(id); };
   var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
   var BAR_COL = ['#1857C4', '#c2410c', '#0f9d76', '#7a4fc2', '#b8860b', '#0e7490', '#be185d', '#4d7c0f'];
-  var HINT_LOOPS = 'Each tube is one warp end, coloured by its guide bar. Every loop is drawn through the loop below it on the same needle; the underlaps run across the technical back — the front bar’s outermost. Closed laps cross at the loop’s foot. Drag to turn, scroll to zoom.', HINT_CLOTH = 'The real view: the knit3d engine draws every end from the same lapping in real yarn, at the finished wales and courses. Drag to turn, scroll to zoom; Show back shows the underlaps.';
+  var HINT_LOOPS = 'Each tube is one warp end, coloured by its guide bar. Every loop is drawn through the loop below it on the same needle; the underlaps run across the technical back — the front bar’s outermost. Closed laps cross at the loop’s foot. Drag to turn, Ctrl + scroll to zoom.', HINT_CLOTH = 'The real view: the knit3d engine draws every end from the same lapping in real yarn, at the finished wales and courses. Drag to turn, Ctrl + scroll to zoom; Show back shows the underlaps.';
   function barCol(i) { return (W.bars[i] && W.bars[i].colour) || BAR_COL[i % 8]; }
   var W = { bars: [], templates: [], fibres: {}, machines: {}, last: null, seq: 0, timer: null };
 
@@ -183,7 +183,7 @@
     var geo = { courses: g.paths.map(function (p) { return { course: p.guide, feed: p.bar, points: p.points, side: [], stitches: [] }; }), wales: g.needles, rows: g.courses, h: h, bed: L.beds === 2 ? 'double' : 'single', F: 1, W: 1 };
     var spec = { geo: geo, colours: r.bars.map(function (_, i) { return barCol(i); }), colourBy: 'feed', feeds: r.bars, plated: [], real: false,
       radius: r.bars.map(function (b) { return Math.max(0.04, Math.min(0.2, 0.5 * 1.3 * (b.d_mm || Math.sqrt(b.tex) / 28) / (10 / F.wpc))); }) };
-    if (!loopP) loopP = import('/assets/js/studio-loops.js?v=20261110d').then(function (mod) { loopView = new mod.LoopView($('wp-loops'), function () {}); return loopView; });
+    if (!loopP) loopP = import('/assets/js/studio-loops.js?v=20261111b').then(function (mod) { loopView = new mod.LoopView($('wp-loops'), function () {}); return loopView; });
     loopP.then(function (v) { v.draw(spec); v.view(lview); }).catch(function (e) { $('wp-loops').innerHTML = '<p class="st-p" style="padding:12px">3D could not draw: ' + esc(e.message || e) + '</p>'; });
   }
   // one colour, or each bar its own: the knit3d tint multiplies a grey base (in linear light)
@@ -214,7 +214,7 @@
     clothKey = key;
     var my = ++clothSeq, host = $('wp-cloth');
     $('wp-3dnote').textContent = 'Knitting the real view…';
-    import('/assets/js/knit3d/index.js?v=20261111a').then(function (mod) {
+    import('/assets/js/knit3d/index.js?v=20261111b').then(function (mod) {
       if (my !== clothSeq || mode3d !== 'cloth') return;
       if (cloth) { try { cloth.dispose(); } catch (_) {} cloth = null; }
       Array.prototype.forEach.call(host.querySelectorAll('canvas'), function (c) { c.remove(); });

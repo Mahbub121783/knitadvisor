@@ -282,7 +282,7 @@ const MACHINE_STAGES = [
     },
     when: (c) => c.combed && c.cottonRich,
     problems: [
-      { problem: 'No lustre / no benefit', cause: 'Insufficient tension during caustic — the fibre swells and relaxes back to a flat, convoluted section, and lustre tracks that section and nothing else', solution: 'Maintain clip/chain tension through impregnation', remedy: 'Verify lustre on sample', formula: 'Lustre rises as the axis ratio a/b falls: 3.07→5.7, 1.47→13.9 (Table 24.5, p.706)' },
+      { problem: 'No lustre / no benefit', cause: 'Insufficient tension during caustic — the fibre swells and relaxes back to a flat, convoluted section, and lustre tracks that section and nothing else', solution: 'Maintain clip/chain tension through impregnation', remedy: 'Verify lustre on sample', formula: 'Lustre rises as the axis ratio a/b falls: 3.07→5.7, 1.47→13.9' },
       { problem: 'Streaky / uneven dyeing', cause: 'Uneven caustic pickup', solution: 'Uniform pad, controlled caustic conc.', remedy: 'Mercerize evenly or skip for solids' },
       { problem: 'Shade shift, harsh hand', cause: 'Residual alkali not washed', solution: 'Thorough neutralise + hot wash', remedy: 'Check residual alkali (phenolphthalein)' },
     ],
@@ -582,7 +582,7 @@ function wetMechanics(fibers, ctx) {
   if (m.no_swelling_data && m.no_swelling_data.length && m.swelling_area_pct) {
     findings.push({
       severity: 'info',
-      finding: `Table 11.1 does not measure ${m.no_swelling_data.join(', ')}`,
+      finding: `No swelling measurement exists for ${m.no_swelling_data.join(', ')}`,
       means: 'It was compiled before most synthetics, so the swelling figures above '
            + 'describe only the fibres it covers rather than the whole blend.',
       do: `Read the swelling figures as covering ${m.swelling_covered_pct}% of the blend by mass.`,
@@ -648,8 +648,8 @@ function wetMechanics(fibers, ctx) {
   if (m.no_wet_data.length) {
     findings.push({
       severity: 'info',
-      finding: `The book measures no wet behaviour for ${m.no_wet_data.join(', ')}`,
-      means: 'Table 13.7 lists no elastomer, so what water does to elastane is not known '
+      finding: `No wet behaviour is measured for ${m.no_wet_data.join(', ')}`,
+      means: 'The wet measurements include no elastomer, so what water does to elastane is not known '
            + 'from this source. It is left out of the wet averages rather than counted as '
            + '1.00, which would have said water leaves it alone.',
       do: 'Take elastane wet behaviour from the supplier data sheet; the figures above '
@@ -662,7 +662,7 @@ function wetMechanics(fibers, ctx) {
       severity: 'info',
       finding: `No measured mechanics for ${m.unmeasured.join(', ')}`,
       means: 'Those fibres are absent from the averages above rather than assumed neutral, '
-           + 'so the figures describe only the part of the blend the book covers.',
+           + 'so the figures describe only the part of the blend that is measured.',
       do: `Treat the figures as covering ${m.measured_pct}% of the blend by mass.`,
       source: null,
     });

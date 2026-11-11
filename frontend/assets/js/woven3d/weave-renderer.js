@@ -22,6 +22,7 @@ import { createYarnMaterial } from '../knit3d/yarn-material.js?v=20260608g';
 import { buildFabricMesh, yarnDiameterMm } from '../knit3d/fabric-mesh.js?v=20260608g';
 import { addStudioLighting, configureShadowCamera, applyLightPreset, DEFAULT_LIGHT_PRESET } from '../knit3d/lighting.js?v=20260608g';
 import { applyDrape } from '../knit3d/drape.js?v=20260608g';
+import '../view-guard.js?v=20261111b';
 
 const VIEW_HEIGHT = 380;
 
@@ -85,13 +86,31 @@ export class Woven3D {
     this._ro = new ResizeObserver(() => this.resize());
     this._ro.observe(container);
 
+    // Frames on demand, as in knit3d: drawn while the camera moves and for a moment after a change, not at all
+    // off screen. The wheel scrolls the page past the view; Ctrl/⌘ + wheel or a click first zooms it.
+    const guard = window.KAViewGuard;
+    this._onScreen = true;
+    this._wakeUntil = 0;
     const tick = () => {
+      this._raf = null;
       if (this._disposed) return;
-      controls.update();
+      const now = performance.now();
+      if (controls.update()) this._wakeUntil = Math.max(this._wakeUntil, now + 250);
       renderer.render(scene, camera);
-      this._raf = requestAnimationFrame(tick);
+      if (!this._raf && this._onScreen && now < this._wakeUntil) this._raf = requestAnimationFrame(tick);
     };
-    tick();
+    this._tick = tick;
+    controls.addEventListener('change', () => this.wake());
+    this._unguardWheel = guard ? guard.wheel(renderer.domElement, controls) : null;
+    this._unwatchScreen = guard ? guard.onScreen(renderer.domElement, (on) => { this._onScreen = on; if (on) this.wake(300); }) : null;
+    this.wake(600);
+  }
+
+  /** Draw for the next `ms` milliseconds (and longer while the camera still moves). */
+  wake(ms = 600) {
+    if (this._disposed || !this._tick) return;
+    this._wakeUntil = Math.max(this._wakeUntil || 0, performance.now() + ms);
+    if (!this._raf && this._onScreen !== false) this._raf = requestAnimationFrame(this._tick);
   }
 
   _lodScale() {
@@ -312,6 +331,8 @@ export class Woven3D {
     this._disposed = true;
     if (this._raf) cancelAnimationFrame(this._raf);
     if (this._ro) this._ro.disconnect();
+    if (this._unguardWheel) this._unguardWheel();
+    if (this._unwatchScreen) this._unwatchScreen();
     if (this.controls) this.controls.dispose();
     if (this.group) {
       this.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
@@ -325,4 +346,16 @@ export class Woven3D {
       if (el && el.parentNode) el.parentNode.removeChild(el);
     }
   }
+}
+
+// every public call that can change the picture draws the next frames (the loop sleeps between changes)
+for (const name of Object.getOwnPropertyNames(Woven3D.prototype)) {
+  if (name === 'constructor' || name === 'mount' || name === 'dispose' || name === 'wake' || name.startsWith('_')) continue;
+  const d = Object.getOwnPropertyDescriptor(Woven3D.prototype, name);
+  if (!d || typeof d.value !== 'function') continue;
+  const f = d.value;
+  Object.defineProperty(Woven3D.prototype, name, {
+    configurable: true, writable: true, enumerable: false,
+    value: function (...args) { const r = f.apply(this, args); this.wake(); return r; },
+  });
 }

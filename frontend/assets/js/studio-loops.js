@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import './studio-loop-geom.js?v=20261110c';
+import './view-guard.js?v=20261111b';
 
 const FEED_COLOURS = ['#1857C4', '#0f9d76', '#c2410c', '#7a4fc2', '#b8860b', '#0e7490', '#be185d', '#4d7c0f', '#9a3412', '#334155', '#0369a1', '#a16207'];
 const ROLE_COLOURS = { ground: '#1857C4', face: '#1857C4', binder: '#7a4fc2', loop: '#c2410c' };
@@ -31,6 +32,8 @@ export class LoopView {
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     // drawn on demand, not every frame: the page stays light while you edit
     this.controls.addEventListener('change', () => this.redraw());
+    // the wheel scrolls the page past the view; Ctrl/⌘ + wheel, a pinch, or a click first zooms it
+    this._unguard = window.KAViewGuard ? window.KAViewGuard.wheel(this.renderer.domElement, this.controls) : null;
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8f99, 1.6));
     const key = new THREE.DirectionalLight(0xffffff, 1.7); key.position.set(-4, 7, 10); this.scene.add(key);
     const rim = new THREE.DirectionalLight(0xffffff, 0.8); rim.position.set(5, -3, -9); this.scene.add(rim);
@@ -171,6 +174,7 @@ export class LoopView {
 
   dispose() {
     cancelAnimationFrame(this._raf);
+    if (this._unguard) this._unguard();
     this._ro.disconnect();
     this.renderer.domElement.removeEventListener('pointermove', this._move);
     this.renderer.domElement.removeEventListener('pointerleave', this._leave);

@@ -33,6 +33,7 @@ import { buildPile } from './pile.js?v=20260608g';
 import { buildHairiness } from './hairiness.js?v=20260608g';
 import { applyDrape } from './drape.js?v=20260608g';
 import { BACKING, PITCH_Y, RIB_PITCH_SCALE } from './constants.js?v=20260608g';
+import '../view-guard.js?v=20261111b';
 
 const VIEW_HEIGHT = 380;
 // The viewer's height: its container's own when the page gives it one (the
@@ -186,14 +187,66 @@ export class Knit3D {
     this._ro.observe(container);
     if (this._macro) this._initHandling();
 
+    // Frames on demand. A still view is drawn once and then left alone: the loop runs only while something
+    // moves — the camera (input or damping), the cloth simulation, a grab, a stretch test — and for a moment
+    // after any change (wake). Off screen it does not run at all. A swatch used to be redrawn 60 times a
+    // second for as long as the page was open, which on a desktop kept the GPU and the page busy.
+    const guard = window.KAViewGuard;
+    this._onScreen = true;
+    this._wakeUntil = 0;
+    this._ready = false;
+    // a manual stretch held still (clamp at its goal, a few frames to settle) needs no frames: stretchTo wakes it
+    const manMoving = (m) => !!m && (m.phase === 'recover' ||
+      (m.phase === 'pull' && (Math.abs((m.eGoal || 0) - (m.eCur || 0)) > 1e-4 || (m.still || 0) < 30)));
+    const busy = () => !!(this._grab || this._stretch || manMoving(this._man) ||
+      (this._sim && !this._sim.asleep) || this._anchorMoved);
     const tick = () => {
+      this._raf = null;
       if (this._disposed) return;
       this._stepCloth();
-      controls.update();
-      renderer.render(scene, camera);
-      this._raf = requestAnimationFrame(tick);
+      const moved = controls.update();
+      const now = performance.now(), b = busy();
+      if (moved || b) this._wakeUntil = Math.max(this._wakeUntil, now + 250);
+      if (this._ready) renderer.render(scene, camera);
+      // (a camera 'change' during this frame may already have asked for the next one)
+      if (!this._raf && this._onScreen && (b || now < this._wakeUntil)) this._raf = requestAnimationFrame(tick);
     };
-    tick();
+    this._tick = tick;
+    controls.addEventListener('change', () => this.wake());
+    // the wheel scrolls the page past the view; Ctrl/⌘ + wheel, a pinch, or a wheel after a click zooms it
+    this._unguardWheel = guard ? guard.wheel(renderer.domElement, controls) : null;
+    this._unwatchScreen = guard ? guard.onScreen(renderer.domElement, (on) => {
+      this._onScreen = on;
+      if (on) this.wake(300);
+    }) : null;
+    // Compile the shaders off the main thread where the GPU driver can (KHR_parallel_shader_compile), then
+    // draw: the first frame used to block the page for seconds while every shader compiled in line.
+    // Without that extension three.js r163 polls forever, so it is asked for first, and a slow driver gets 5 s.
+    this.ready = new Promise((resolve) => {
+      let done = false;
+      const go = () => {
+        if (done) return;
+        done = true;
+        if (this._disposed) { resolve(false); return; }
+        this._ready = true;
+        this.wake(600);
+        resolve(true);
+      };
+      let parallel = false;
+      try { parallel = typeof renderer.compileAsync === 'function' && renderer.extensions.has('KHR_parallel_shader_compile'); } catch (_) { parallel = false; }
+      if (parallel) {
+        try { renderer.compileAsync(scene, camera).then(go, go); } catch (_) { go(); }
+        setTimeout(go, 5000);
+      } else go();
+    });
+    this.wake(600);
+  }
+
+  /** Draw for the next `ms` milliseconds (and longer while anything still moves). */
+  wake(ms = 600) {
+    if (this._disposed || !this._tick) return;
+    this._wakeUntil = Math.max(this._wakeUntil || 0, performance.now() + ms);
+    if (!this._raf && this._onScreen !== false) this._raf = requestAnimationFrame(this._tick);
   }
 
   // ── Handling the cloth (cloth-physics.js) ───────────────────────────────
@@ -216,10 +269,11 @@ export class Knit3D {
       e.stopImmediatePropagation();
       el.setPointerCapture(e.pointerId);
       this._startGrab(pick, ndcOf(e), e.shiftKey);
+      this.wake();
       el.style.cursor = 'grabbing';
     };
     this._onMove = (e) => {
-      if (this._grab) { this._moveGrab(ndcOf(e)); return; }
+      if (this._grab) { this._moveGrab(ndcOf(e)); this.wake(); return; }
       if (!this._canHandle() || e.buttons) return;
       el.style.cursor = this._pick(ndcOf(e)) >= 0 ? 'grab' : '';
     };
@@ -227,6 +281,7 @@ export class Knit3D {
       if (!this._grab) return;
       try { el.releasePointerCapture(e.pointerId); } catch (_) { /* already released */ }
       this._endGrab();
+      this.wake(800);
       el.style.cursor = this._canHandle() ? 'grab' : '';
     };
     // capture phase: decide before OrbitControls sees the press
@@ -2204,6 +2259,8 @@ export class Knit3D {
     this._disposed = true;
     if (this._raf) cancelAnimationFrame(this._raf);
     if (this._ro) this._ro.disconnect();
+    if (this._unguardWheel) this._unguardWheel();
+    if (this._unwatchScreen) this._unwatchScreen();
     if (this.controls) this.controls.dispose();
     if (this._envTarget) this._envTarget.dispose();
     if (this.group) {
@@ -2241,4 +2298,17 @@ export class Knit3D {
       if (el && el.parentNode) el.parentNode.removeChild(el);
     }
   }
+}
+
+// Every public call that can change what the view shows draws the next frames: the loop sleeps between
+// changes (see mount), so a setter that did not wake it would leave the old picture on screen.
+for (const name of Object.getOwnPropertyNames(Knit3D.prototype)) {
+  if (name === 'constructor' || name === 'mount' || name === 'dispose' || name === 'wake' || name === 'pxPerCm' || name.startsWith('_')) continue;
+  const d = Object.getOwnPropertyDescriptor(Knit3D.prototype, name);
+  if (!d || typeof d.value !== 'function') continue;
+  const f = d.value;
+  Object.defineProperty(Knit3D.prototype, name, {
+    configurable: true, writable: true, enumerable: false,
+    value: function (...args) { const r = f.apply(this, args); this.wake(); return r; },
+  });
 }

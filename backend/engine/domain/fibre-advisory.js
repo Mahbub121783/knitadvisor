@@ -456,7 +456,7 @@ function fibreAdvisory(fibers, ctx = {}) {
         + `${silentOn.length > 1 ? 'any of these' : 'this fibre'}. `
         + `Nothing below was suppressed; nothing was ever available.`],
       headline: `No measured fibre properties for ${silentOn.join(', ')} — this fabric cannot `
-        + `be advised on from the book, and no verdict is implied by the silence.`,
+        + `be advised on from published measurements, and no verdict is implied by the silence.`,
       source: SOURCE,
     };
   }
@@ -730,7 +730,7 @@ function fibreAdvisory(fibers, ctx = {}) {
         + `${f.with_scales_static} to start a slide with the scales and `
         + `${f.against_scales_static} against them, a factor of ${f.directional_ratio}. `
         + `Agitation therefore lets each fibre travel root-first and not tip-first, so the mass `
-        + `ratchets inwards and locks. No other fibre in the book has a directional friction, `
+        + `ratchets inwards and locks. No other fibre measured has a directional friction, `
         + `which is why no other fibre felts — and unlike shrinkage it does not relax back.`,
       action: 'Keep the bath cool and mechanical action low, avoid rope handling, and specify a '
         + 'shrink-resist (chlorine-Hercosett or equivalent) if the garment must be machine '
@@ -849,7 +849,7 @@ function fibreAdvisory(fibers, ctx = {}) {
         + 'loss figure — otherwise it hides real waste of the same size.',
       evidence: [{ table: 'Table 7.3', page: 188 }],
       confidence: moist.no_allowance_published.length
-        ? `the book publishes no allowance for ${moist.no_allowance_published.join(', ')}`
+        ? `no allowance is published for ${moist.no_allowance_published.join(', ')}`
         : 'measured',
     });
   }
@@ -889,7 +889,7 @@ function fibreAdvisory(fibers, ctx = {}) {
         + `point the deformation is taken, whatever the others are still doing. At `
         + `${yld.tex} tex that stress is ${round1(yld.fibre_ceiling_cn)} cN. The figure is the `
         + `FIBRE's: a yarn is twisted, so the fibres sit at an angle to the load and only part `
-        + `of their strength reaches the yarn. The book does not measure that translation, so `
+        + `of their strength reaches the yarn. That translation is not measured, so `
         + `no factor is applied — the number is a ceiling the yarn cannot exceed, not the yarn's `
         + `own limit.`,
       action: `This is the mechanism behind ${mc.symptom}: tension past yield is not stored in `
@@ -1145,7 +1145,7 @@ function fibreAdvisory(fibers, ctx = {}) {
         + 'insulating one does not drain it.',
       action: known && S.at_risk
         ? `Raise the floor humidity toward ${S.threshold_rh_pct}% where the process allows, or `
-          + 'rely on the finish — the book measures stripping the spin finish off acrylic and '
+          + 'rely on the finish — stripping the spin finish off acrylic and '
           + 'polyester moving the threshold from 85% to 95% r.h., so the finish and not the '
           + 'polymer is what carries the charge away. Do not scour an antistatic off and then '
           + 'wonder where the problem came from.'
@@ -1264,7 +1264,7 @@ function fibreAdvisory(fibers, ctx = {}) {
         + `${round1(aniso.worst_ratio)} times harder than it resists a twist, so the twist put `
         + `in at spinning is stored as torque rather than absorbed.`, aniso.from_pct,
         aniso.unmeasured.concat(aniso.no_shear_modulus)),
-      mechanism: 'Table 17.2 measures the same fibre twice: E, the stiffness in tension, and G, '
+      mechanism: 'The fibre-property data measures the same fibre twice: E, the stiffness in tension, and G, '
         + 'the stiffness in shear. In a material with no grain those are locked together at '
         + 'E/G = 2(1+v), about 2.6 — so everything above 2.6 is a direct measure of molecules '
         + `lying along the fibre axis. This blend runs at ${round1(aniso.worst_ratio)}, `
@@ -1305,7 +1305,7 @@ function fibreAdvisory(fibers, ctx = {}) {
         + `about ${round1(aniso.worst_ratio)} times weaker across the axis than along it, with a `
         + 'skin stiffer than the core — so rubbing damage starts as a lengthwise split at the '
         + 'surface rather than as material worn away.',
-      mechanism: 'Two measurements in Table 17.2 line up. E/G says the chains run along the axis '
+      mechanism: 'Two measurements of the same fibre line up. E/G says the chains run along the axis '
         + 'and are held across it only by weak secondary forces. The bending modulus against the '
         + 'tensile modulus says where the stiffness sits: bending is carried by the OUTSIDE of '
         + 'the fibre, so a bending modulus above the tensile one means a skin stiffer than the '
@@ -1337,8 +1337,8 @@ function fibreAdvisory(fibers, ctx = {}) {
         + `${shape.work_factor} against 0.5 for a straight line, so it ${shape.band}.`,
         shape.from_pct, shape.unmeasured),
       mechanism: 'Tenacity says where the curve stops and extension says how far along it got; '
-        + 'neither says what the fabric does in between, and that is what a wearer feels. Table '
-        + '13.1 prints work of rupture divided by (breaking load x breaking extension), which is '
+        + 'neither says what the fabric does in between, and that is what a wearer feels. The '
+        + 'work factor is work of rupture divided by (breaking load x breaking extension), which is '
         + 'exactly 0.5 for a straight line to break. Cotton reads 0.46 and wool 0.64 — and those '
         + 'are the same two fibres whose yield points this engine already knows, cotton at 1% '
         + 'strain and wool at 4%, wool then carrying load for another forty per cent. The work '
@@ -1373,7 +1373,7 @@ function fibreAdvisory(fibers, ctx = {}) {
         : `This blend's molecular orientation is ${hi.band} at ${orient.blend_birefringence} `
           + 'birefringence, which sets how hard a dye has to work to get in.',
         orient.from_pct, orient.unmeasured),
-      mechanism: 'Table 24.3 measures the refractive index twice — light polarised along the '
+      mechanism: 'The refractive index is measured twice — light polarised along the '
         + 'fibre and across it — and the difference is a direct measure of how far the molecules '
         + 'lie along the axis. Orientation is the same thing as a tight ordered structure, and a '
         + 'dye molecule has to push into one. The single column explains the whole dyeing '
@@ -1405,7 +1405,7 @@ function fibreAdvisory(fibers, ctx = {}) {
       topic: 'joins and knots', severity: 'info',
       claim: `${b.fibre} keeps ${b.knot}% of its strength in a knot but only ${b.loop}% in a `
         + 'loop, so what it cannot take is being bent round a small radius, not being gripped.',
-      mechanism: 'Table 17.3 tests the same fibre two ways and the pair says more than either '
+      mechanism: 'The same fibre is tested two ways and the pair says more than either '
         + 'alone. A loop is a sharp bend plus tension; a knot is a bend plus tension plus '
         + `transverse pressure — strictly the harder test. Where the knot nevertheless holds `
         + `better, as it does here by ${b.gap} points, the fibre is failing on bend radius. `
@@ -1414,8 +1414,8 @@ function fibreAdvisory(fibers, ctx = {}) {
         + 'than dropping tension — dropping tension will not help. The same reasoning applies at '
         + 'the needle: a small loop radius is the same test.',
       evidence: [{ table: 'Table 17.3', page: 425 }],
-      confidence: 'measured on single fibres by Berry and by Bohringer and Schieber; the '
-        + 'workers do not always agree, and the book prints both',
+      confidence: 'measured on single fibres in two independent studies; they do not always '
+        + 'agree, and both are given',
     });
   }
 
@@ -1429,7 +1429,7 @@ function fibreAdvisory(fibers, ctx = {}) {
         stretch.from_pct, stretch.unmeasured),
       mechanism: 'The growth figures this report already gives are the permanent set left after '
         + 'cycling, and on their own they are unreadable, because growth is measured at whatever '
-        + 'stress the fibre needed to reach 2% in the first place. Table 16.1 prints that stress '
+        + 'stress the fibre needed to reach 2% in the first place. That stress is published too '
         + 'and it spans a factor of ten: wool 25 mN/tex, viscose and nylon 51, cotton 68, silk '
         + '108, flax 263. The pair that settles it is viscose and nylon — identical at 51 mN/tex, '
         + 'and they grow 1.79% and 0.28%. Equal stiffness, six times the permanent set, so how a '
@@ -1460,8 +1460,8 @@ function fibreAdvisory(fibers, ctx = {}) {
       claim: qualify(`On this blend one percentage point of extra regain takes the resistance `
         + `down about ${humid.fold_per_point}-fold, so ${humid.band}.`,
         humid.from_pct, humid.unmeasured),
-      mechanism: 'Resistance against moisture is a straight line on log-log axes, and Table 22.1 '
-        + 'prints its SLOPE — which is not the same for every fibre, and that is the whole reason '
+      mechanism: 'Resistance against moisture is a straight line on log-log axes, and its '
+        + 'SLOPE is measured — which is not the same for every fibre, and that is the whole reason '
         + 'the column exists. Flax runs 10.6 and silk 17.6, so the same humidifier buys nearly '
         + 'twice as much on a protein fibre as on a bast one. The other column separates two '
         + 'things that are otherwise confounded: at a FIXED 10% moisture, cotton reads 5.3 and '
@@ -1500,7 +1500,7 @@ function fibreAdvisory(fibers, ctx = {}) {
         + '.', jam.from_pct, jam.unmeasured),
       mechanism: 'Area swelling is the right figure for how much water a fibre takes into '
         + 'itself; diameter swelling is the figure for what happens to everything packed around '
-        + 'it, and Table 11.1 prints both. Nylon gains 2% on diameter and viscose up to 52%. In '
+        + 'it, and both are measured. Nylon gains 2% on diameter and viscose up to 52%. In '
         + 'a slack knitted structure that simply pushes the loops apart and the fabric relaxes. '
         + 'In a woven at a high cover factor there is nowhere for it to go — the yarns jam '
         + 'against each other, the cloth cannot take up any more in width, and the strain goes '
@@ -1564,7 +1564,7 @@ function fibreAdvisory(fibers, ctx = {}) {
             ? ` ${tough.reverses.map(r => r.fibre + ' reverses outright — ' + r.at_20c
                 + ' of its dry toughness wet at 20 C, ' + r.at_95c + ' at 95 C').join('; ')}.`
             : ''),
-      mechanism: 'Three columns of Table 13.7 were already driving the wet advice here: what '
+      mechanism: 'Three columns of the wet measurements were already driving the wet advice here: what '
         + 'water does to strength, to extension and to stiffness. The fourth is the one that '
         + 'decides whether a wet fabric survives being handled, because a fabric fails when it '
         + 'runs out of ENERGY to absorb, not when it runs out of any one of those. Cotton is the '
@@ -1587,16 +1587,16 @@ function fibreAdvisory(fibers, ctx = {}) {
   // -- What is NOT known --------------------------------------------------
   const gaps = [];
   if (silentOn.length) {
-    gaps.push(`${silentOn.join(', ')} — the book carries no measurements for `
+    gaps.push(`${silentOn.join(', ')} — no published measurements cover `
       + `${silentOn.length > 1 ? 'these' : 'this'}, so nothing above describes `
       + `${silentOn.length > 1 ? 'them' : 'it'}`);
   }
   if (mech && mech.no_wet_data && mech.no_wet_data.length) {
-    gaps.push(`wet behaviour of ${mech.no_wet_data.join(', ')} — Table 13.7 has no row for `
+    gaps.push(`wet behaviour of ${mech.no_wet_data.join(', ')} — no wet measurement exists for `
       + `${mech.no_wet_data.length > 1 ? 'them' : 'it'}`);
   }
   if (rec && rec.unmeasured && rec.unmeasured.length) {
-    gaps.push(`elastic recovery of ${rec.unmeasured.join(', ')} — Table 15.2 predates `
+    gaps.push(`elastic recovery of ${rec.unmeasured.join(', ')} — the recovery measurements predate `
       + `${rec.unmeasured.length > 1 ? 'them' : 'it'}`);
   }
   if (pill && pill.unmeasured.length) {

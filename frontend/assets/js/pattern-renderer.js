@@ -1000,10 +1000,10 @@ function renderWovenPattern(data) {
     // rather than filled in with something plausible.
     html += '<div class="warning-box" style="margin-bottom:14px;">'
       + '<strong>No weave grid is stored for this structure.</strong>'
-      + '<div class="text-sm mt-8">' + wovEsc(s.note || 'The book draws this weave as a figure rather than stating a rule that generates it.') + '</div>'
+      + '<div class="text-sm mt-8">' + wovEsc(s.note || 'This weave is published only as a drawing, with no rule that generates it.') + '</div>'
       + '</div>';
     if (s.draft_hint) {
-      html += '<div class="info-box mb-12"><strong>What the book does say about the set-up</strong>'
+      html += '<div class="info-box mb-12"><strong>What is known about the set-up</strong>'
         + '<div class="text-sm mt-4">' + wovEsc(s.draft_hint.slug) + ' draft'
         + (s.draft_hint.healds ? ', about ' + s.draft_hint.healds + ' shafts' : '')
         + ' — ' + wovEsc(s.draft_hint.note || '') + '</div></div>';
@@ -1046,8 +1046,8 @@ function renderWovenPattern(data) {
   if (c.ends_per_inch) {
     html += '<div class="label mb-8">Construction <span class="text-dim" style="font-weight:400">— '
       + (c.sett_source === 'BOOK_VERIFIED'
-          ? wovEsc('the book’s own quality, p.' + c.sett_page)
-          : 'a working default, not one of the book’s constructions')
+          ? 'the published standard quality'
+          : 'a working default, not a published standard quality')
       + '</span></div>' + wovStatGrid([
         wovStat('Sett', c.ends_per_inch + ' × ' + c.picks_per_inch, 'ends × picks per inch'),
         wovStat('Warp yarn', String(c.warp_count), c.warp_resultant_ne + ' Ne resultant'),
@@ -1062,8 +1062,8 @@ function renderWovenPattern(data) {
     html += '<div class="label mb-8">Cloth Weight</div>' + wovStatGrid([
       wovStat('Weight', w.gsm + ' g/m²', w.oz_per_sq_yd + ' oz/yd²'),
       wovStat('Warp share', w.warp_share_pct + '%', w.warp_gsm + ' of ' + w.gsm + ' g'),
-      wovStat('Warp crimp', w.warp_crimp_pct + '%', w.warp_crimp_source === 'ASSUMED' ? 'assumed' : 'from the book'),
-      wovStat('Weft crimp', w.weft_crimp_pct + '%', w.weft_crimp_source === 'ASSUMED' ? 'assumed' : 'from the book'),
+      wovStat('Warp crimp', w.warp_crimp_pct + '%', w.warp_crimp_source === 'ASSUMED' ? 'assumed' : 'standard quality'),
+      wovStat('Weft crimp', w.weft_crimp_pct + '%', w.weft_crimp_source === 'ASSUMED' ? 'assumed' : 'standard quality'),
     ]) + '<div class="text-xs text-dim mb-16">' + wovEsc(w.basis)
       + (assumedCrimp ? ' The weight is therefore no firmer than the crimp assumed behind it.' : '')
       + '</div>';
@@ -1102,7 +1102,7 @@ function renderWovenPattern(data) {
   const ta = data.twill_angle;
   if (ta) {
     html += '<div class="info-box mb-16"><strong>Twill angle — ' + wovEsc(ta.band.label) + '</strong>'
-      + '<div class="text-sm mt-4">The book (p.' + ta.band.page + ') names the band from the sett alone. '
+      + '<div class="text-sm mt-4">The band is named from the sett alone. '
       + 'The ' + ta.angle_deg + '° figure beside it is derived, not quoted.</div></div>';
   }
 

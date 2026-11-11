@@ -194,7 +194,7 @@ function classifyDraft(assignment, healds) {
              note: 'Resembles the pointed draft but the pointed effect is broken. Suits herringbone twills.' };
   }
   return { slug: 'irregular', name: 'Irregular draft', page: null,
-           note: 'Does not match any of the eight orders the book names; drawn end by end.' };
+           note: 'Does not match any of the eight standard drafting orders; drawn end by end.' };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -320,7 +320,7 @@ function generatePointedTwill(warpFloat, weftFloat, { direction = 'Z' } = {}) {
     notation: `${warpFloat}/${weftFloat} pointed twill`,
     healds_expected: n,
     source: 'DERIVED',
-    basis: 'the base twill read through the pointed drafting order the book defines on p.11',
+    basis: 'the base twill read through the pointed drafting order',
     page: 11,
   };
 }
@@ -348,7 +348,7 @@ function generateCorkscrew(warpFloat, weftFloat, { move = 2 } = {}) {
   return {
     grid, notation: `${warpFloat}/${weftFloat} corkscrew`, move,
     source: 'DERIVED',
-    basis: 'twill ends rearranged in satin order; p.31 constraints checked by validateCorkscrew(), and the defining property — one unbroken warp float per end — is asserted by scripts/verify-woven-design.js',
+    basis: 'twill ends rearranged in satin order; the corkscrew constraints checked by validateCorkscrew(), and the defining property — one unbroken warp float per end — is asserted by scripts/verify-woven-design.js',
     page: 31,
   };
 }

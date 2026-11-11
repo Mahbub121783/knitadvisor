@@ -1822,7 +1822,7 @@ function blendRecovery(fibers, rh) {
             : growth >= 55 ? 'severe' : growth >= 40 ? 'high'
             : growth >= 25 ? 'moderate' : 'low',
     withheld_because: dominant.length
-      ? `${dominant.join(', ')} governs recovery and Table 15.2 predates it, so the `
+      ? `${dominant.join(', ')} governs recovery and the recovery measurements predate it, so the `
         + 'figures above describe only the rest of the blend'
       : null,
     unmeasured,

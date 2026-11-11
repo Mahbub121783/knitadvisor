@@ -183,7 +183,7 @@ function twillAngle(endsPerInch, picksPerInch) {
     band: { ...band, source: 'BOOK_VERIFIED', page: 24 },
     angle_deg: Math.round(Math.atan(endsPerInch / picksPerInch) * (180 / Math.PI) * 10) / 10,
     angle_source: 'DERIVED',
-    angle_basis: 'atan(epi/ppi) — the continuous function satisfying the three bands the book names on p.24',
+    angle_basis: 'atan(epi/ppi) — the continuous function satisfying the three standard twill-angle bands',
   };
 }
 

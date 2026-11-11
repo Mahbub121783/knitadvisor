@@ -968,7 +968,7 @@
               </div>
               <div class="info-box mt-12" style="font-size:10px; line-height:1.6;">
                 Fill in width and length to get the yarn requirement in kilograms, split warp and weft.
-                Leave the sett and counts as they are to use the quality the book prints.
+                Leave the sett and counts as they are to use the published standard quality.
               </div>
             </div>
 
@@ -1134,10 +1134,10 @@
 <script src="assets/js/storage.js?v=20260606b"></script>
 <!-- Draws the woven loom plans in place. Knit results render on result.html;
      a woven quality answers here, so the renderer has to be on this page too. -->
-<script src="assets/js/pattern-renderer.js?v=20260831a"></script>
+<script src="assets/js/pattern-renderer.js?v=20261111b"></script>
 <!-- Realistic 2D/3D weave preview, mounted by pattern-renderer.js's woven
      branch into the "Realistic Preview" section it now emits. -->
-<script src="assets/js/woven-visualizer.js?v=20260903b"></script>
+<script src="assets/js/woven-visualizer.js?v=20261111b"></script>
 
 <script>
 /* ============================================================
@@ -1485,8 +1485,16 @@ function onFabricChange() {
  * book — but they start from something real rather than empty.
  */
 function prefillWovenConstruction(fabric) {
-  const m = (fabric.construction || '').match(/^(\d+)×(\d+),\s*(.+?)\/(.+)$/);
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+  // the sett as separate fields; the construction text only as a fallback. Read from "84×80, 2/80s/2/80s" the
+  // warp came out as "2" — a 2s yarn instead of a two-ply 80s — and the cloth weight with it.
+  const st = fabric.sett;
+  if (st && st.epi && st.ppi && st.warp_count && st.weft_count) {
+    set('epi-input', st.epi); set('ppi-input', st.ppi);
+    set('warp-count-input', st.warp_count); set('weft-count-input', st.weft_count);
+    return;
+  }
+  const m = (fabric.construction || '').match(/^(\d+)×(\d+),\s*(.+?)\s+×\s+(.+)$/);
   if (m) {
     set('epi-input', m[1]);
     set('ppi-input', m[2]);
@@ -1548,7 +1556,6 @@ async function doWovenCalculate(fabricId, btn) {
       consumption: r.consumption,
       characteristics: r.fabric.characteristics,
       end_uses: r.fabric.end_uses,
-      book_page: r.fabric.book_page,
       notes: r.notes,
     });
     const wrap = document.getElementById('woven-result-wrap');

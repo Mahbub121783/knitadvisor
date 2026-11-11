@@ -76,7 +76,9 @@ class WovenVisualizer {
 
   exportPng() {
     if (this.activeTab === 'threed' && this._fabric3d && this._fabric3d.renderer) {
-      this._download(this._fabric3d.renderer.domElement.toDataURL('image/png'), 'threed');
+      // a frame drawn for the file: the live view draws only when something changes
+      const url = typeof this._fabric3d.captureHiRes === 'function' ? this._fabric3d.captureHiRes(1) : this._fabric3d.renderer.domElement.toDataURL('image/png');
+      if (url) this._download(url, 'threed');
       return;
     }
     const canvas = this.canvases[this.activeTab] || this.canvases.realistic;
@@ -330,7 +332,7 @@ class WovenVisualizer {
         <button class="ka3d-btn" data-act="reset" title="Reset view">⟳</button>
         <button class="ka3d-btn" data-act="wire" title="Show thread paths">Threads</button>
         <button class="ka3d-btn" data-act="light" title="Preview under a different lightbox illuminant">Light: D65</button>
-        <span class="ka3d-hint" style="margin-left:6px">Drag to orbit · scroll to zoom · real 3-D warp/weft</span>
+        <span class="ka3d-hint" style="margin-left:6px">Drag to orbit · Ctrl + scroll (or click, then scroll) to zoom · real 3-D warp/weft</span>
       </div>
       <div class="ka3dgl-mount"></div>
       <div class="ka3dgl-loading" style="font:11px monospace;color:#778;padding:6px 2px;">Loading 3-D engine…</div>`;
@@ -339,7 +341,7 @@ class WovenVisualizer {
     const mount = stage.querySelector('.ka3dgl-mount');
     const loading = stage.querySelector('.ka3dgl-loading');
 
-    import('/assets/js/woven3d/index.js?v=20260903b').then(({ Woven3D, LIGHT_PRESETS, LIGHT_PRESET_ORDER }) => {
+    import('/assets/js/woven3d/index.js?v=20261111b').then(({ Woven3D, LIGHT_PRESETS, LIGHT_PRESET_ORDER }) => {
       if (this._destroyed || this.activeTab !== 'threed') return;
       if (this._fabric3d) { try { this._fabric3d.dispose(); } catch (_) {} }
       this._fabric3d = new Woven3D();

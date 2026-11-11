@@ -1181,13 +1181,13 @@
       if (my !== twinSeq || mode3d !== 'twin') return;
       if (!tw.supported) { note.textContent = 'Not modelled yet: ' + tw.reason; host.hidden = true; twinKey = ''; return; }
       host.hidden = false;
-      if (!twinPromise) twinPromise = import('/assets/js/studio-twin.js?v=20261114a').then(function (mod) { twinView = new mod.TwinView(host); return twinView; });
+      if (!twinPromise) twinPromise = import('/assets/js/studio-twin.js?v=20261111b').then(function (mod) { twinView = new mod.TwinView(host); return twinView; });
       return twinPromise.then(function (v) {
         if (my !== twinSeq) return;
         v.draw(tw, { colour: $('st-twcol').value });
         twinKey = key;
         var f = tw.fit;
-        note.innerHTML = '<b>Interlocked yarn, ' + f.nodes + ' segments per repeat.</b> The cell &mdash; wales and courses per cm and width &mdash; is the Studio&rsquo;s own prediction; the yarn is threaded as a chain of loops and settled inside it as a bending-stiff rod that cannot pass through itself. The dimensions are not re-derived here, only the shape. Cloth thickness about ' + tw.thickness_mm + ' mm. Closest two yarns: ' + f.closest_yarns_d + ' yarn diameters (1.0 = touching, nothing passes through)' + (f.converged ? '.' : '; settled to a residual force of ' + f.residual_force + ' (a viewing-grade solution, not a converged one).') + ' Drag to turn, scroll to zoom.';
+        note.innerHTML = '<b>Interlocked yarn, ' + f.nodes + ' segments per repeat.</b> The cell &mdash; wales and courses per cm and width &mdash; is the Studio&rsquo;s own prediction; the yarn is threaded as a chain of loops and settled inside it as a bending-stiff rod that cannot pass through itself. The dimensions are not re-derived here, only the shape. Cloth thickness about ' + tw.thickness_mm + ' mm. Closest two yarns: ' + f.closest_yarns_d + ' yarn diameters (1.0 = touching, nothing passes through)' + (f.converged ? '.' : '; settled to a residual force of ' + f.residual_force + ' (a viewing-grade solution, not a converged one).') + ' Drag to turn, Ctrl + scroll to zoom.';
       });
     }).catch(function (e) {
       if (my !== twinSeq) return;
@@ -1238,7 +1238,7 @@
     if (cloth && key === clothKey) { cloth.setColor(o.baseHex); return; }
     clothKey = key;
     $('st-cloth-wait').hidden = false;
-    import('/assets/js/knit3d/index.js?v=20261111a').then(function (mod) {
+    import('/assets/js/knit3d/index.js?v=20261111b').then(function (mod) {
       if (my !== clothSeq || mode3d !== 'cloth') return;
       if (cloth) { try { cloth.dispose(); } catch (_) {} cloth = null; }
       Array.prototype.forEach.call(host.querySelectorAll('canvas'), function (c) { c.remove(); });
@@ -1301,7 +1301,7 @@
   function renderLoops() {
     var host = $('st-loops');
     if (!loopPromise) {
-      loopPromise = import('/assets/js/studio-loops.js?v=20261110d').then(function (mod) {
+      loopPromise = import('/assets/js/studio-loops.js?v=20261111b').then(function (mod) {
         loopView = new mod.LoopView(host, showTip);
         loopView.feedColour = mod.feedColour;
         return loopView;

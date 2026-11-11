@@ -52,6 +52,22 @@ const pages = [...fs.readdirSync(F).filter((n) => n.endsWith('.html')).map((n) =
 const pageOffenders = [];
 for (const f of pages) fs.readFileSync(f, 'utf8').split('\n').forEach((line, i) => { const t = line.trim(); if (t.startsWith('//') || t.startsWith('*') || t.startsWith('/*')) return; if (BANNED.test(t.replace(/\/\/ .*$/, ''))) pageOffenders.push(`${path.relative(F, f)}:${i + 1}`); });
 assert.deepStrictEqual(pageOffenders, [], `outside sources on the pages: ${pageOffenders.join(', ')}`);
+// a book's page, or "the book" as the authority, is a citation too (the woven construction label said "the book's own quality, p.130")
+const BOOKISH = /the book[’']s own|quality the book|from the book|the book draws|p\.' *\+ *c\.sett_page|book_page:/;
+const bookOffenders = [];
+for (const f of pages) fs.readFileSync(f, 'utf8').split('\n').forEach((line, i) => { const t = line.trim(); if (t.startsWith('//') || t.startsWith('*') || t.startsWith('/*')) return; if (BOOKISH.test(t)) bookOffenders.push(`${path.relative(F, f)}:${i + 1}`); });
+assert.deepStrictEqual(bookOffenders, [], `book references on the pages: ${bookOffenders.join(', ')}`);
+{
+  const WE = require('../engine/domain/woven-engine');
+  const wl = WE.listWovenFabrics();
+  assert(!/"(book_)?page":|[Tt]he book|p\.\d+/.test(JSON.stringify(wl)), 'the woven list carries no book page');
+  for (const f of wl) {
+    const r = WE.calculateWoven({ fabric_id: f.id });
+    assert(r.success, f.id);
+    // (a fibre advisory's own `sources` list is provenance the net drops; everything else must be clean as it leaves)
+    assert(!/sett_page|"(book_)?page":|"figure":|p\.\d+|[Tt]he book/.test(JSON.stringify(S.scrub(JSON.parse(JSON.stringify(r))))), `${f.id}: the woven answer carries no book page`);
+  }
+}
 
 // 5. the fibre engine's answers are clean before any net
 const Y = require('../engine/domain/yarn-engine');
@@ -69,4 +85,18 @@ for (const fn of ['blendMechanics', 'blendFriction', 'blendRecovery', 'blendDire
   const ac = fs.readFileSync(path.join(B, '..', 'frontend', 'academy.html'), 'utf8');
   assert(!/Textbook Reference Page|term-page-badge">p\./.test(ac), 'the academy page shows no book page');
 }
-console.log('No-sources tests passed');
+// 7. what a visitor reads on a calculation's result — the fibre and wet advice included — after the net: no book,
+//    no table or page number, no researcher's name (the advice said "Table 13.7 lists no elastomer" and
+//    "measured … by Berry and by Bohringer and Schieber")
+(async () => {
+  const E = require('../engine');
+  const SEEN = /[Tt]he book\b|Tables? \d+\.\d+|\bp\.\s?\d+|\bet al\b|Berry|Bohringer|Schieber|\.pdf/;
+  for (const [fabric, composition] of [['single_jersey', '100% Cotton'], ['rib_1x1', '95% Cotton 5% Elastane'], ['interlock', '65% Polyester 35% Cotton'],
+    ['single_jersey', '100% Viscose'], ['single_jersey', '100% Wool'], ['single_jersey', '100% Nylon'], ['single_jersey', '100% Acrylic']]) {
+    const r = await E.calculate({ fabric, gsm: 180, composition });
+    const t = JSON.stringify(S.scrub(JSON.parse(JSON.stringify(r))));
+    const m = t.match(new RegExp('.{0,60}(' + SEEN.source + ').{0,40}'));
+    assert(!m, `${fabric} ${composition}: ${m && m[0]}`);
+  }
+  console.log('No-sources tests passed');
+})().catch((e) => { console.error(e); process.exit(1); });

@@ -88,7 +88,9 @@ class FabricVisualizer {
     // silently fall through to whatever the Realistic 2D canvas last painted,
     // downloading a file NAMED "-threed.png" that was actually the 2D render.
     if (this.activeTab === 'threed' && this._fabric3d && this._fabric3d.renderer) {
-      this._download(this._fabric3d.renderer.domElement.toDataURL('image/png'), 'threed');
+      // a frame drawn for the file: the live view draws only when something changes
+      const url = typeof this._fabric3d.captureHiRes === 'function' ? this._fabric3d.captureHiRes(1) : this._fabric3d.renderer.domElement.toDataURL('image/png');
+      if (url) this._download(url, 'threed');
       return;
     }
     if (this.activeTab === 'realistic' && this._photo3d) {
@@ -151,6 +153,7 @@ class FabricVisualizer {
 
   destroy() {
     this._destroyed = true;
+    if (this._stopNear) { this._stopNear(); this._stopNear = null; }
     if (this.animFrame) { cancelAnimationFrame(this.animFrame); this.animFrame = null; }
     if (this._threeHandlers) {
       window.removeEventListener('mousemove', this._threeHandlers.move);
@@ -1105,7 +1108,7 @@ class FabricVisualizer {
         <button class="ka-loupe-btn" data-act="reset" title="Back to the whole swatch">Fit</button>
         ${opts.shrinkage ? `<button class="ka-loupe-btn" data-act="shrink" title="Greige off the machine, or dyed and finished">${this._shrinkT >= 0.5 ? 'Show: Finished' : 'Show: As-Knit'}</button>` : ''}
         <button class="ka-loupe-btn" data-act="light" title="View under a different lightbox illuminant">Light: D65</button>
-        <span class="ka-loupe-tip">Drag to move · scroll to zoom, down to the loops and fibres</span>
+        <span class="ka-loupe-tip">Drag to move · Ctrl + scroll (or click, then scroll) to zoom down to the loops and fibres</span>
       </div>
       <div class="ka-photo-stage" style="position:relative;width:100%;max-width:560px;margin:0 auto;">
         <div class="ka-photo-mount" style="width:100%;height:380px;border-radius:10px;overflow:hidden;background:#d9dbe0;"></div>
@@ -1139,14 +1142,18 @@ class FabricVisualizer {
       yarnLook: this._yarnLook(),
     };
     const fail = () => { holder.remove(); this._photoFailed = true; this._renderRealisticView(); };
-    import('/assets/js/knit3d/index.js?v=20260608g').then(({ Knit3D, LIGHT_PRESETS, LIGHT_PRESET_ORDER }) => {
-      if (this._destroyed || this.activeTab !== 'realistic') return;
+    // The swatch is built (seconds of work on a big screen) only once it comes near the screen: further down a
+    // long result page, the page opens and scrolls without waiting for it.
+    if (this._stopNear) this._stopNear();
+    const start = () => import('/assets/js/knit3d/index.js?v=20261111b').then(({ Knit3D, LIGHT_PRESETS, LIGHT_PRESET_ORDER }) => {
+      if (this._destroyed || this.activeTab !== 'realistic' || !mount.isConnected) return;
       if (this._photo3d) { try { this._photo3d.dispose(); } catch (_) {} }
       const k = new Knit3D();
       try { k.mount(mount, glOpts); } catch (e) { try { k.dispose(); } catch (_) {} fail(); return; }
       this._photo3d = k;
       if (!k._macro) { k.dispose(); this._photo3d = null; fail(); return; }
-      holder.querySelector('.ka-photo-loading').remove();
+      const loadingEl = holder.querySelector('.ka-photo-loading');
+      Promise.resolve(k.ready).then(() => { if (loadingEl) loadingEl.remove(); });
       k.previewShrink(this._shrinkT);
       // scale bar + zoom label follow the camera
       const NICE = [0.1, 0.2, 0.5, 1, 2, 5, 10];
@@ -1195,6 +1202,7 @@ class FabricVisualizer {
       });
       this._updateInfoLine(opts);
     }).catch(fail);
+    this._stopNear = window.KAViewGuard ? window.KAViewGuard.whenNear(mount, start) : (start(), null);
   }
 
   // What the spinning system does to a yarn's surface, from the engine's
@@ -1257,7 +1265,7 @@ class FabricVisualizer {
         <button class="ka-loupe-btn" data-act="in">+</button>
         <button class="ka-loupe-btn" data-act="reset" title="Fit">Fit</button>
         ${opts.shrinkage ? `<button class="ka-loupe-btn" id="ka-shrink-btn" data-act="shrink" title="Animate to the computed finished-fabric shrinkage">${this._shrinkT >= 0.5 ? 'Show: Finished' : 'Show: As-Knit'}</button>` : ''}
-        <span class="ka-loupe-tip">Click to zoom into a point · scroll to magnify · drag to pan</span>
+        <span class="ka-loupe-tip">Click to zoom into a point · Ctrl + scroll to magnify · drag to pan</span>
       </div>
       <div class="ka-loupe-stage"></div>`;
     wrap.appendChild(holder);
@@ -1343,7 +1351,10 @@ class FabricVisualizer {
       this._loupe.fu = f.fu; this._loupe.fv = f.fv;
       zoomAt(W / 2, H / 2, 2.2);               // focal already centered → just magnify
     });
+    // the wheel scrolls the page past the swatch; Ctrl/⌘ + wheel, a pinch, or a click first magnifies it
+    if (window.KAViewGuard) window.KAViewGuard.watch(canvas);
     canvas.addEventListener('wheel', (e) => {
+      if (window.KAViewGuard && !window.KAViewGuard.allow(canvas, e)) return;
       e.preventDefault();
       const p = rel(e);
       zoomAt(p.x, p.y, e.deltaY < 0 ? 1.18 : 0.85);
@@ -2523,7 +2534,7 @@ class FabricVisualizer {
         ${opts.shrinkage ? `<button class="ka3d-btn" data-act="shrink" title="Animate to the computed finished-fabric shrinkage">${this._shrinkT >= 0.5 ? 'Show: Finished' : 'Show: As-Knit'}</button>` : ''}
         <button class="ka3d-btn" data-act="handle" title="Drag the cloth to lift, pull and fold it — Shift slides it on the table; right-drag still orbits">Handle</button>
         <button class="ka3d-btn" data-act="stretch" title="Pull the cloth across its width at a standard load, then release it (estimated stretch and recovery)">Stretch test</button>
-        <span class="ka3d-hint" style="margin-left:6px">Drag to orbit · scroll in to the loops and fibres</span>
+        <span class="ka3d-hint" style="margin-left:6px">Drag to orbit · Ctrl + scroll (or click, then scroll) in to the loops and fibres</span>
       </div>
       <div class="ka3dgl-mount"></div>
       <div class="ka3dgl-loading" style="font:11px var(--mono,monospace);color:var(--t3,#778);padding:6px 2px;">Loading 3-D engine…</div>`;
@@ -2563,12 +2574,13 @@ class FabricVisualizer {
       fluoro: this._fluoro(),
     };
 
-    import('/assets/js/knit3d/index.js?v=20260608g').then(({ Knit3D, LIGHT_PRESETS, LIGHT_PRESET_ORDER }) => {
+    import('/assets/js/knit3d/index.js?v=20261111b').then(({ Knit3D, LIGHT_PRESETS, LIGHT_PRESET_ORDER }) => {
       if (this._destroyed || this.activeTab !== 'threed') return;
       if (this._fabric3d) { try { this._fabric3d.dispose(); } catch (_) {} }
       this._fabric3d = new Knit3D();
       this._fabric3d.mount(mount, glOpts);
-      loading.remove();
+      loading.textContent = 'Preparing the view…';
+      Promise.resolve(this._fabric3d.ready).then(() => loading.remove());
       // Handling and the stretch test need the macro cloth (structures with
       // a fixed repeat); hide them where it does not exist.
       if (!this._fabric3d.hasCloth) {
@@ -2920,7 +2932,9 @@ class FabricVisualizer {
       const r = faceEl.getBoundingClientRect();
       return { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H };
     };
+    if (window.KAViewGuard) window.KAViewGuard.watch(viewport);
     viewport.addEventListener('wheel', (e) => {
+      if (window.KAViewGuard && !window.KAViewGuard.allow(viewport, e)) return;
       e.preventDefault();
       const showingBack = (() => { const b = ((t.rotY % 360) + 360) % 360; return b > 90 && b < 270; })();
       const faceEl = showingBack ? backC : frontC;

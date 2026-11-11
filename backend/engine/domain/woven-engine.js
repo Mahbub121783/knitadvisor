@@ -167,11 +167,11 @@ function calculateWoven(params = {}) {
   }) : null;
 
   const notes = [];
-  if (fabric.sett.source === 'USER_SUPPLIED') notes.push(fabric.sett.note || 'The sett shown is a working default, not one of the book’s constructions.');
+  if (fabric.sett.source === 'USER_SUPPLIED') notes.push(fabric.sett.note || 'The sett shown is a working default, not a published standard construction.');
   if (fabric.sett.note && fabric.sett.source === 'BOOK_VERIFIED') notes.push(fabric.sett.note);
   if (!structure.available) notes.push(structure.note);
   if (pilePicks) notes.push('Cover factor is not reported: the picks per inch include pile picks, which do not lie in the ground plane the formula describes.');
-  if (warp.ambiguous || weft.ambiguous) notes.push(`The book prints more than one yarn for this cloth (warp "${warpRaw}", weft "${weftRaw}"). The first was taken; confirm which is actually on the beam.`);
+  if (warp.ambiguous || weft.ambiguous) notes.push(`The standard quality lists more than one yarn for this cloth (warp "${warpRaw}", weft "${weftRaw}"). The first was taken; confirm which is actually on the beam.`);
   if (structure.denting && structure.denting.warning) notes.push(structure.denting.warning);
 
   // The fibre reference layer applies to woven cloth exactly as it does to
@@ -217,7 +217,6 @@ function calculateWoven(params = {}) {
       weft_resultant_ne: Math.round(weft.resultant_ne * 100) / 100,
       material: fabric.sett.material || null,
       sett_source: fabric.sett.source,
-      sett_page: fabric.sett.page || null,
     },
     structure,
     weight,
@@ -259,7 +258,10 @@ function listWovenFabrics() {
       name_bn: f.name_bn || null,
       category: 'woven',
       family: f.family,
-      construction: f.sett.epi && f.sett.ppi ? `${f.sett.epi}×${f.sett.ppi}, ${f.sett.warp_count}/${f.sett.weft_count}` : null,
+      // warp × weft, not warp/weft: a ply count is itself written with a slash (2/80s), and "2/80s/2/80s" was read
+      // back by the calculator form as a 2s warp
+      construction: f.sett.epi && f.sett.ppi ? `${f.sett.epi}×${f.sett.ppi}, ${f.sett.warp_count} × ${f.sett.weft_count}` : null,
+      sett: { epi: f.sett.epi || null, ppi: f.sett.ppi || null, warp_count: f.sett.warp_count || null, weft_count: f.sett.weft_count || null },
       nominal_gsm: w ? w.gsm : null,
       sett_source: f.sett.source,
       has_structure: built.grid_status === 'GENERATED',
@@ -269,4 +271,21 @@ function listWovenFabrics() {
   });
 }
 
-module.exports = { calculateWoven, structureDesign, listWovenFabrics };
+// What leaves the engine names no book page or figure number: the catalogue keeps them for the verify scripts,
+// a visitor or an API customer never sees them.
+const PAGE_KEYS = new Set(['page', 'book_page', 'sett_page', 'figure']);
+function noPages(v) {
+  if (Array.isArray(v)) return v.map(noPages);
+  if (v && typeof v === 'object' && Object.getPrototypeOf(v) === Object.prototype) {
+    const o = {};
+    for (const [k, x] of Object.entries(v)) if (!PAGE_KEYS.has(k)) o[k] = noPages(x);
+    return o;
+  }
+  return v;
+}
+
+module.exports = {
+  calculateWoven: (params) => noPages(calculateWoven(params)),
+  structureDesign: (fabric, opts) => noPages(structureDesign(fabric, opts)),
+  listWovenFabrics: () => noPages(listWovenFabrics()),
+};

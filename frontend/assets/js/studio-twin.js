@@ -3,6 +3,7 @@
 // per course, real loop threading, lit with image-based light, twist and a fine fibre halo.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import './view-guard.js?v=20261111b';
 
 /** A soft studio environment built in code: a gradient dome and three softboxes, prefiltered for PBR reflections. */
 function studioEnvironment(renderer) {
@@ -57,6 +58,8 @@ export class TwinView {
     this.camera = new THREE.PerspectiveCamera(30, w / h, 0.1, 800);
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.addEventListener('change', () => this.redraw());
+    // the wheel scrolls the page past the view; Ctrl/⌘ + wheel, a pinch, or a click first zooms it
+    this._unguard = window.KAViewGuard ? window.KAViewGuard.wheel(this.renderer.domElement, this.controls) : null;
     const key = new THREE.DirectionalLight(0xffffff, 1.6); key.position.set(-6, 9, 12); this.scene.add(key);
     this.group = new THREE.Group(); this.scene.add(this.group);
     this.twist = twistTexture();
@@ -137,5 +140,5 @@ export class TwinView {
     this.renderer.setSize(w, h); this.camera.aspect = w / h; this.camera.updateProjectionMatrix(); this.redraw();
   }
 
-  dispose() { this._ro.disconnect(); this._clear(); this.renderer.dispose(); this.host.innerHTML = ''; }
+  dispose() { if (this._unguard) this._unguard(); this._ro.disconnect(); this._clear(); this.renderer.dispose(); this.host.innerHTML = ''; }
 }

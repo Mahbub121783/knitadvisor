@@ -676,10 +676,10 @@ router.get('/fabrics', (req, res) => {
     is_warp: false,
     is_woven: true,
     construction: f.construction,
+    sett: f.sett,
     nominal_gsm: f.nominal_gsm,
     sett_source: f.sett_source,
     has_structure: f.has_structure,
-    book_page: f.book_page,
   }));
   const fabrics = [...knit, ...woven];
   const cat = req.query.category;

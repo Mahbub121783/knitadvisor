@@ -265,8 +265,8 @@
 
 <script src="assets/js/api.js"></script>
 <script src="assets/js/ui.js"></script>
-<script src="assets/js/pattern-renderer.js?v=20260831a"></script>
-<script src="assets/js/woven-visualizer.js?v=20260903b"></script>
+<script src="assets/js/pattern-renderer.js?v=20261111b"></script>
+<script src="assets/js/woven-visualizer.js?v=20261111b"></script>
 
 <script>
 let allFabrics = [];
@@ -329,7 +329,7 @@ function renderGrid(fabrics) {
           ${f.is_woven ? `
           <div class="fc-stat">Construction: <span>${f.construction || '—'}</span></div>
           <div class="fc-stat">Weight: <span>${f.nominal_gsm ? f.nominal_gsm + ' g/m²' : '—'}</span></div>
-          <div class="fc-stat">Sett: <span style="color:${CAT_COLOR.woven}">${f.sett_source === 'BOOK_VERIFIED' ? 'from the book' : 'working default'}</span></div>
+          <div class="fc-stat">Sett: <span style="color:${CAT_COLOR.woven}">${f.sett_source === 'BOOK_VERIFIED' ? 'published standard' : 'working default'}</span></div>
           ` : `
           <div class="fc-stat">GSM: <span>${f.gsm_range ? f.gsm_range[0] + '–' + f.gsm_range[1] : '—'}</span></div>
           <div class="fc-stat">Gauge: <span>${f.gauge_range ? f.gauge_range[0] + '–' + f.gauge_range[1] + ' GG' : '—'}</span></div>
@@ -362,7 +362,7 @@ async function loadMiniPattern(fabricId) {
              ${buildClothPreviewSVG(st, { cell: 5, target: 16 })}
              <div class="text-xs text-dim">${st.repeat_ends}×${st.repeat_picks} · ${st.draft.healds} shafts</div>
            </div>`
-        : '<div class="text-xs text-dim" style="padding:4px 0;">Weave grid not stored — the book draws this one as a figure</div>';
+        : '<div class="text-xs text-dim" style="padding:4px 0;">Weave grid not stored — published only as a drawing</div>';
     } else if (pattern?.fabric_type === 'warp_knit') {
       // Warp knit mini preview: show guide bar count and stitch density
       const d = pattern.stitch_density || {};

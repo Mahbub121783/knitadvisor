@@ -270,8 +270,8 @@ section('6. The engine refuses rather than guesses');
     'honeycomb calculates its cloth numbers but reports no structure');
   check(honeycomb.structure.grid === null,
     'honeycomb returns no grid at all rather than a plausible-looking wrong one');
-  check(honeycomb.notes.some(n => /p\.\d+/.test(n)),
-    'the missing structure names the page the figure is on, so it can be checked by hand');
+  check(honeycomb.notes.some(n => /drawing|no structure/i.test(n)) && !honeycomb.notes.some(n => /p\.\d+/.test(n)),
+    'the missing structure is said in plain words, with no book page (pages stay in the catalogue)');
 
   const corduroy = calculateWoven({ fabric_id: 'woven_corduroy' });
   check(corduroy.cover === null,
