@@ -663,6 +663,595 @@
     return { kind: 'knit', why: 'V-shaped loops in a lattice', scores: o };
   }
 
+  // ══ WOVEN: the spectrum names the threads, the weave and its direction ═════════════════════════
+  //
+  // A woven cloth is two sets of threads at right angles. In its power spectrum the threads are the two
+  // strongest peaks at right angles to each other (ends across, picks down): their distance from the
+  // centre is ends and picks per mm, their direction is the thread axes. Everything the weave adds sits
+  // at FRACTIONS of those two: a plain weave puts power at (½, ½), a 3/1 twill at (¼, ±¼) and its
+  // multiples — the sign is the twill direction — a 5-end satin at (⅕, ⅖)… Each weave is a lattice in
+  // thread units, so each is tested by the power it predicts, and the weave whose points carry the most
+  // power, per point, is the one the cloth is woven in. Nothing is guessed: the spectrum is measured, the
+  // candidate weaves are arithmetic.
+
+  // the candidate weaves: their repeat lattice in thread units (x = ends, y = picks, y downwards)
+  var WEAVE_LIB = (function () {
+    var L = [{ id: 'plain', cls: 'plain', A: [[1, 1], [1, -1]], repeat: 2 }];
+    [3, 4, 5].forEach(function (R) {
+      L.push({ id: 'twill' + R + 'R', cls: 'twill', A: [[1, -1], [R, 0]], repeat: R, hand: 'RH' });
+      L.push({ id: 'twill' + R + 'L', cls: 'twill', A: [[1, 1], [R, 0]], repeat: R, hand: 'LH' });
+    });
+    // a satin moves m picks per end and repeats every R picks: basis (1, m), (0, R)
+    L.push({ id: 'satin5a', cls: 'satin', A: [[1, 2], [0, 5]], repeat: 5 }, { id: 'satin5b', cls: 'satin', A: [[1, 3], [0, 5]], repeat: 5 });
+    L.push({ id: 'satin8a', cls: 'satin', A: [[1, 3], [0, 8]], repeat: 8 }, { id: 'satin8b', cls: 'satin', A: [[1, 5], [0, 8]], repeat: 8 });
+    L.push({ id: 'basket22', cls: 'basket', A: [[2, 2], [2, -2]], repeat: 4 });
+    L.push({ id: 'oxford', cls: 'half_basket_warp', A: [[2, 1], [2, -1]], repeat: 4 });
+    L.push({ id: 'weftrib', cls: 'half_basket_weft', A: [[1, 2], [1, -2]], repeat: 4 });
+    // the reciprocal points of each lattice, first order and a little beyond, fractions only
+    L.forEach(function (w) {
+      var a = w.A, d = a[0][0] * a[1][1] - a[0][1] * a[1][0];
+      var b1 = [a[1][1] / d, -a[1][0] / d], b2 = [-a[0][1] / d, a[0][0] / d];   // rows of inv(A)^T
+      var pts = [];
+      for (var k = -10; k <= 10; k++) for (var l = -10; l <= 10; l++) {
+        var u = k * b1[0] + l * b2[0], v = k * b1[1] + l * b2[1];
+        if (Math.abs(u) > 1.05 || Math.abs(v) > 1.05 || (v < 0) || (v === 0 && u <= 0)) continue;   // one half-plane
+        if (Math.abs(u - Math.round(u)) < 1e-6 && Math.abs(v - Math.round(v)) < 1e-6) continue;   // thread points
+        if (!pts.some(function (p) { return Math.abs(p[0] - u) < 1e-6 && Math.abs(p[1] - v) < 1e-6; })) pts.push([u, v]);
+      }
+      w.pts = pts; w.det = Math.abs(d);
+    });
+    return L;
+  })();
+
+  // least squares: the thread frequencies that put every strong peak exactly on the weave's lattice
+  function refineFrame(c, strong) {
+    var fe = c.fe, fp = c.fp, A = c.H.A, d = fe[0] * fp[1] - fe[1] * fp[0];
+    var S = [0, 0, 0], bx = [0, 0], by = [0, 0];
+    var a00 = A[0][0], a01 = A[0][1], a10 = A[1][0], a11 = A[1][1], dA = a00 * a11 - a01 * a10;
+    strong.forEach(function (p) {
+      var u = (p.x * fp[1] - p.y * fp[0]) / d, v = (fe[0] * p.y - fe[1] * p.x) / d;
+      // snap to the lattice: t = A·(u,v) must be whole
+      var t1 = Math.round(a00 * u + a01 * v), t2 = Math.round(a10 * u + a11 * v);
+      if (Math.abs(a00 * u + a01 * v - t1) > 0.13 || Math.abs(a10 * u + a11 * v - t2) > 0.13) return;
+      var us = (a11 * t1 - a01 * t2) / dA, vs = (-a10 * t1 + a00 * t2) / dA, w = Math.sqrt(p.v);
+      S[0] += w * us * us; S[1] += w * us * vs; S[2] += w * vs * vs;
+      bx[0] += w * us * p.x; bx[1] += w * vs * p.x; by[0] += w * us * p.y; by[1] += w * vs * p.y;
+    });
+    var D = S[0] * S[2] - S[1] * S[1];
+    if (Math.abs(D) < 1e-9) return { fe: fe, fp: fp };
+    var sol = function (b) { return [(S[2] * b[0] - S[1] * b[1]) / D, (S[0] * b[1] - S[1] * b[0]) / D]; };
+    var X = sol(bx), Y = sol(by);                     // f = u·fe + v·fp, solved for fe = (X0, Y0), fp = (X1, Y1)
+    var nfe = [X[0], Y[0]], nfp = [X[1], Y[1]];
+    if (Math.hypot(nfe[0] - fe[0], nfe[1] - fe[1]) > 2 || Math.hypot(nfp[0] - fp[0], nfp[1] - fp[1]) > 2) return { fe: fe, fp: fp };
+    return { fe: nfe, fp: nfp };
+  }
+
+  /** The cloth folded into one repeat of its weave: which set is on top at each crossing (1 = the end). */
+  function foldMatrix(src, sw, x0, y0, N, fe, fp, H, colourOK) {
+    var le = Math.hypot(fe[0], fe[1]), lp = Math.hypot(fp[0], fp[1]);
+    var se = N / le, sp = N / lp, ex = [fe[0] / le, fe[1] / le], ey = [-ex[1], ex[0]];
+    // the rectangular repeat: the smallest Rx x Ry box of whole threads the lattice repeats in
+    var A = H.A, Rx = 1, Ry = 1, dA = A[0][0] * A[1][1] - A[0][1] * A[1][0];
+    var inLat = function (m, n) { var p = (m * A[1][1] - n * A[1][0]) / dA, q = (-m * A[0][1] + n * A[0][0]) / dA; return Math.abs(p - Math.round(p)) < 1e-6 && Math.abs(q - Math.round(q)) < 1e-6; };
+    while (!inLat(Rx, 0) && Rx < 12) Rx++;
+    while (!inLat(0, Ry) && Ry < 12) Ry++;
+    if (Rx * Ry > 64) return null;
+    // fold the middle of the cloth into one repeat, at 8 x 8 sub-positions per crossing
+    var S = 8, GW = Rx * S, GH = Ry * S, T = new Float64Array(GW * GH), Tn = new Float64Array(GW * GH);
+    var cx0 = x0 + N / 2, cy0 = y0 + N / 2, half = Math.min(N / 2, Math.max(40, 8 * Math.max(se, sp)));
+    for (var y = Math.round(cy0 - half); y < cy0 + half; y++) for (var x = Math.round(cx0 - half); x < cx0 + half; x++) {
+      var dx = x - cx0, dy = y - cy0, u = (dx * ex[0] + dy * ex[1]) / se, v = (dx * ey[0] + dy * ey[1]) / sp;
+      var gx = Math.floor(u * S), gy = Math.floor(v * S);
+      var k = (((gy % GH) + GH) % GH) * GW + (((gx % GW) + GW) % GW);
+      T[k] += src[y * sw + x]; Tn[k]++;
+    }
+    for (var q = 0; q < T.length; q++) T[q] = Tn[q] ? T[q] / Tn[q] : 0;
+    // the crossings' boundaries are not known in advance: try every sub-position as the corner and keep the
+    // placement where the crossings read most clearly. A yarn on top runs either down the crossing (the end:
+    // it varies across, not down) or across it (the pick: it varies down, not across).
+    var read = function (a, b) {
+      var sc = [];
+      for (var j = 0; j < Ry; j++) for (var i = 0; i < Rx; i++) {
+        var pu = new Float64Array(S), pv = new Float64Array(S);
+        for (var sv = 0; sv < S; sv++) for (var su = 0; su < S; su++) {
+          var X = (i * S + su + a) % GW, Y = (j * S + sv + b) % GH, val = T[Y * GW + X];
+          pu[su] += val; pv[sv] += val;
+        }
+        var rng = function (p) { var mx = -Infinity, mn = Infinity; for (var t = 1; t < S - 1; t++) { mx = Math.max(mx, p[t]); mn = Math.min(mn, p[t]); } return mx - mn; };
+        var ru = rng(pu), rv = rng(pv);
+        sc.push((ru - rv) / (ru + rv + 1e-9));
+      }
+      return sc;
+    };
+    // the borders sit on the gaps between threads: the darkest sub-position across the ends, and down the picks
+    var colM = new Float64Array(S), rowM = new Float64Array(S);
+    for (var Y = 0; Y < GH; Y++) for (var X = 0; X < GW; X++) { colM[X % S] += T[Y * GW + X]; rowM[Y % S] += T[Y * GW + X]; }
+    var amin = function (arr) { var bi = 0; for (var t = 1; t < S; t++) if (arr[t] < arr[bi]) bi = t; return bi; };
+    var a0 = amin(colM), b0 = amin(rowM), best = null;
+    // within one sub-position of that, the clearest reading
+    for (var da = -1; da <= 1; da++) for (var db = -1; db <= 1; db++) {
+      var a = (a0 + da + S) % S, b = (b0 + db + S) % S;
+      var sc = read(a, b), st = sc.reduce(function (t, z) { return t + Math.abs(z); }, 0) / sc.length;
+      if (!best || st > best.st) best = { sc: sc, st: st, a: a, b: b };
+    }
+    var score = best.sc;
+    var bright = [];
+    for (var j3 = 0; j3 < Ry; j3++) for (var i3 = 0; i3 < Rx; i3++) {
+      var sb = 0, nb = 0;
+      for (var sv3 = 2; sv3 < S - 2; sv3++) for (var su3 = 2; su3 < S - 2; su3++) { sb += T[((j3 * S + sv3 + best.b) % GH) * GW + ((i3 * S + su3 + best.a) % GW)]; nb++; }
+      bright.push(sb / nb);
+    }
+    var colourSplit = (function () {
+      var srt = bright.slice().sort(function (p1, p2) { return p1 - p2; }), n = srt.length, mean = 0, tot = 0, bestS = null;
+      if (n < 3) return null;
+      srt.forEach(function (v) { mean += v; }); mean /= n;
+      srt.forEach(function (v) { tot += (v - mean) * (v - mean); });
+      if (tot <= 0) return null;
+      for (var c = 1; c < n; c++) {
+        var m1 = 0, m2 = 0; for (var q = 0; q < c; q++) m1 += srt[q]; for (q = c; q < n; q++) m2 += srt[q]; m1 /= c; m2 /= (n - c);
+        var between = c * (m1 - mean) * (m1 - mean) + (n - c) * (m2 - mean) * (m2 - mean);
+        if (!bestS || between > bestS.between) bestS = { between: between, cut: (srt[c - 1] + srt[c]) / 2, gap: m2 - m1 };
+      }
+      bestS.eta = bestS.between / tot;
+      return bestS;
+    })();
+    var tmB = 0; for (var qb = 0; qb < T.length; qb++) tmB += T[qb]; tmB /= T.length;
+    var byColour = !!(colourOK && colourSplit && colourSplit.eta >= 0.8 && colourSplit.gap >= 0.12 * Math.max(0.05, tmB));
+    if (byColour) {
+      // the dark group or the light group is the end: whichever carries the more vertical texture
+      var sDark = 0, nDark = 0, sLight = 0, nLight = 0;
+      bright.forEach(function (v, q) { if (v < colourSplit.cut) { sDark += score[q]; nDark++; } else { sLight += score[q]; nLight++; } });
+      var darkIsEnd = (nDark ? sDark / nDark : 0) >= (nLight ? sLight / nLight : 0);
+      score = bright.map(function (v) { return (v < colourSplit.cut) === darkIsEnd ? 0.5 : -0.5; });
+    }
+    // which crossings show the end: by sign when both signs are clearly there, else at the widest gap
+    var hasPos = score.some(function (z) { return z > 0.15; }), hasNeg = score.some(function (z) { return z < -0.15; }), cut = 0;
+    if (!(hasPos && hasNeg)) {
+      var sorted = score.slice().sort(function (p1, p2) { return p1 - p2; }), gap = -1;
+      for (var g2 = 1; g2 < sorted.length; g2++) { var gp = sorted[g2] - sorted[g2 - 1]; if (gp > gap) { gap = gp; cut = (sorted[g2] + sorted[g2 - 1]) / 2; } }
+    }
+    var on = score.map(function (z) { return z > cut ? 1 : 0; }), cells = [];
+    for (var j = 0; j < Ry; j++) cells.push(on.slice(j * Rx, j * Rx + Rx));
+    // Polarity, from the physics of a float: where an end floats over two picks in a row, its bright crown
+    // runs straight across the border between them; where a pick floats over two ends, the same across the
+    // vertical border. Elsewhere a border is a dark gap. The reading, or its complement, must agree.
+    var Tz = function (X, Y) { var s3 = 0; for (var o = -1; o <= 1; o++) s3 += T[(((Y % GH) + GH) % GH) * GW + ((((X + o) % GW) + GW) % GW)]; return (s3 / 3 - tm) / tsd; };
+    var TzV = function (X, Y) { var s3 = 0; for (var o = -1; o <= 1; o++) s3 += T[((((Y + o) % GH) + GH) % GH) * GW + (((X % GW) + GW) % GW)]; return (s3 / 3 - tm) / tsd; };
+    var agreeFor = function (M2) {
+      var t = 0;
+      for (var jj = 0; jj < Ry; jj++) for (var ii = 0; ii < Rx; ii++) {
+        var below = M2[(jj + 1) % Ry][ii], right = M2[jj][(ii + 1) % Rx];
+        var zv = Tz(ii * S + best.a + (S >> 1), (jj + 1) * S + best.b);           // the border below this crossing, mid-end
+        var zh = TzV((ii + 1) * S + best.a, jj * S + best.b + (S >> 1));          // the border to its right, mid-pick
+        t += (M2[jj][ii] && below ? zv : -zv) + (!M2[jj][ii] && !right ? zh : -zh);
+      }
+      return t;
+    };
+    var tm = 0, tq = 0; for (q = 0; q < T.length; q++) { tm += T[q]; tq += T[q] * T[q]; }
+    tm /= T.length; var tsd = Math.sqrt(Math.max(1e-12, tq / T.length - tm * tm));
+    var comp = cells.map(function (r) { return r.map(function (z) { return 1 - z; }); });
+    var flipped = !byColour && agreeFor(comp) > agreeFor(cells) + 0.5;
+    if (flipped) { cells = comp; on = on.map(function (z) { return 1 - z; }); }
+    var share = on.reduce(function (t, z) { return t + z; }, 0) / on.length;
+    var wm = weaveMatch(cells, H); wm.flipped = flipped;
+    return { cells: cells, ideal: wm.ideal, up: wm.up, warp_share: wm.ideal ? wm.share : share, match: wm.match, repeat: [Rx, Ry], strength: byColour ? Math.max(best.st, 0.5) : best.st, read_by: byColour ? 'colour' : 'texture', _scores: score };
+  }
+  // The read crossings against every clean weave this lattice can make — each class marks a few generator
+  // crossings as "end on top", copied along the lattice — at every phase and face. The best agreement is the
+  // match, and the clean pattern it agrees with is the weave diagram shown.
+  function weaveMatch(cells, H) {
+    var Ry = cells.length, Rx = cells[0].length, A = H.A, d = A[0][0] * A[1][1] - A[0][1] * A[1][0];
+    var inLat = function (m, n) { var p = (m * A[1][1] - n * A[1][0]) / d, q = (-m * A[0][1] + n * A[0][0]) / d; return Math.abs(p - Math.round(p)) < 1e-6 && Math.abs(q - Math.round(q)) < 1e-6; };
+    var gens = [];
+    if (H.cls === 'plain' || H.cls === 'satin') gens.push([[0, 0]]);
+    else if (H.cls === 'twill') for (var k = 1; k < H.repeat; k++) { var g = []; for (var t = 0; t < k; t++) g.push([t, 0]); gens.push(g); }
+    else if (H.cls === 'basket') gens.push([[0, 0], [1, 0], [0, 1], [1, 1]]);
+    else if (H.cls === 'half_basket_warp') gens.push([[0, 0], [1, 0]]);
+    else if (H.cls === 'half_basket_weft') gens.push([[0, 0], [0, 1]]);
+    else return { match: 0.5, ideal: null };
+    var best = null;
+    gens.forEach(function (gen) {
+      for (var inv = 0; inv < 2; inv++) for (var sy = 0; sy < Ry; sy++) for (var sx = 0; sx < Rx; sx++) {
+        var agree = 0, ups = 0, ideal = [];
+        for (var j = 0; j < Ry; j++) {
+          var row = [];
+          for (var i = 0; i < Rx; i++) {
+            var up = gen.some(function (c) { return inLat(i - c[0] - sx, j - c[1] - sy); }) ? 1 : 0;
+            if (inv) up = 1 - up;
+            row.push(up); ups += up; if (up === cells[j][i]) agree++;
+          }
+          ideal.push(row);
+        }
+        var m = agree / (Rx * Ry);
+        if (!best || m > best.match) best = { match: m, ideal: ideal, up: ups, share: ups / (Rx * Ry) };
+      }
+    });
+    return best;
+  }
+  function turnMatrix(cells) {                     // the frame was turned a quarter: turn the diagram with it, and swap the sets
+    var Ry = cells.length, Rx = cells[0].length, out = [];
+    for (var i = 0; i < Rx; i++) { var row = []; for (var j = Ry - 1; j >= 0; j--) row.push(1 - cells[j][i]); out.push(row); }
+    return out;
+  }
+
+  function powerSpectrum(src, sw, x0, y0, N) {
+    var H = hannAC(N), re = new Float64Array(N * N), im = new Float64Array(N * N), mean = 0, x, y;
+    for (y = 0; y < N; y++) for (x = 0; x < N; x++) mean += src[(y0 + y) * sw + x0 + x];
+    mean /= N * N;
+    for (y = 0; y < N; y++) for (x = 0; x < N; x++) re[y * N + x] = (src[(y0 + y) * sw + x0 + x] - mean) * H.w1[x] * H.w1[y];
+    fft2(re, im, N, false);
+    var Pw = new Float32Array(N * N);
+    for (var k = 0; k < N * N; k++) Pw[k] = re[k] * re[k] + im[k] * im[k];
+    return Pw;
+  }
+
+  /**
+   * Read a woven cloth. src: grayscale (sw × sh) at P px/mm; (cx, cy) the centre of the area to read.
+   */
+  function analyseWoven(src, sw, sh, P, cx, cy, opts) {
+    opts = opts || {};
+    cx = cx == null ? sw / 2 : cx; cy = cy == null ? sh / 2 : cy;
+    var room = Math.floor(Math.min(cx, cy, sw - cx, sh - cy) * 2), N = 512;
+    while (N > 64 && N > room) N >>= 1;
+    if (N < 128) return { ok: false, why: 'the area is too small to read threads' };
+    var x0 = Math.round(cx - N / 2), y0 = Math.round(cy - N / 2);
+    // everything below looks at this square and a margin for the filters: cut it out first
+    var rHp = Math.round(Math.max(3, 1.2 * P)), M0 = 2 * rHp + 4;
+    var cx0c = Math.max(0, x0 - M0), cy0c = Math.max(0, y0 - M0), cx1c = Math.min(sw, x0 + N + M0), cy1c = Math.min(sh, y0 + N + M0);
+    var cw = cx1c - cx0c, chh = cy1c - cy0c, crop = new Float32Array(cw * chh);
+    for (var yc = 0; yc < chh; yc++) for (var xc = 0; xc < cw; xc++) crop[yc * cw + xc] = src[(cy0c + yc) * sw + cx0c + xc];
+    src = crop; sw = cw; sh = chh; x0 -= cx0c; y0 -= cy0c;
+    var hp = detail({ data: src, w: sw, h: sh, pxPerMm: P }, rHp);
+    var Pw = powerSpectrum(hp.data, sw, x0, y0, N);
+    var pw = function (fx, fy) { fx = Math.round(fx); fy = Math.round(fy); return Pw[(((fy % N) + N) % N) * N + (((fx % N) + N) % N)]; };
+    var pwMax3 = function (fx, fy) { var m = 0; for (var dy = -1; dy <= 1; dy++) for (var dx = -1; dx <= 1; dx++) m = Math.max(m, pw(fx + dx, fy + dy)); return m; };
+    // peaks: local maxima between a 3 mm period and a 0.07 mm period (no thread is finer than that)
+    var rMin = Math.max(3, N / (3 * P)), rMax = Math.min(N / 2 - 2, N / (0.07 * P)), list = [], band = [];
+    for (var fy = 0; fy <= rMax; fy++) for (var fx = -rMax; fx <= rMax; fx++) {
+      if (fy === 0 && fx <= 0) continue;
+      var r = Math.hypot(fx, fy); if (r < rMin || r > rMax) continue;
+      var v = pw(fx, fy); band.push(v);
+      var isMax = true;
+      for (var ky = -1; ky <= 1 && isMax; ky++) for (var kx = -1; kx <= 1; kx++) if ((kx || ky) && pw(fx + kx, fy + ky) > v) { isMax = false; break; }
+      if (isMax) list.push({ x: fx, y: fy, v: v, r: r });
+    }
+    if (list.length < 2) return { ok: false, why: 'no periodic structure in the spectrum' };
+    band.sort(function (a, b) { return a - b; });
+    var noise = band[Math.floor(band.length * 0.5)] || 1e-12;
+    list.sort(function (a, b) { return b.v - a.v; });
+    var vmax = list[0].v;
+    var strong = list.filter(function (p) { return p.v >= 0.02 * vmax && p.v > 8 * noise; }).slice(0, 24);
+    if (strong.length < 2) return { ok: false, why: 'no clear repeat' };
+    var Lp = function (x, y) { return Math.log(1 + pwMax3(x, y) / noise); };
+
+    // candidate thread frequencies: the strong peaks and small sums of the strongest. A thread peak can be
+    // weak (an indigo warp barely shows its own gaps) and still be a point of the weave's lattice.
+    var C = [];
+    var addC = function (x, y) {
+      if (y < 0 || (y === 0 && x < 0)) { x = -x; y = -y; }
+      var rr = Math.hypot(x, y); if (rr < rMin * 1.4 || rr > rMax) return;
+      for (var q = 0; q < C.length; q++) if (Math.hypot(C[q][0] - x, C[q][1] - y) < 1.2) return;
+      C.push([x, y]);
+    };
+    strong.forEach(function (p) { addC(p.x, p.y); });
+    var base = strong.slice(0, 7);
+    for (var i = 0; i < base.length; i++) for (var k0 = 2; k0 <= 5; k0++) addC(k0 * base[i].x, k0 * base[i].y);
+    for (i = 0; i < base.length; i++) for (var j = i + 1; j < base.length; j++) for (var k1 = -3; k1 <= 3; k1++) for (var k2 = -3; k2 <= 3; k2++) {
+      if (!k1 || !k2) continue;
+      addC(k1 * base[i].x + k2 * base[j].x, k1 * base[i].y + k2 * base[j].y);
+    }
+    var tot = strong.reduce(function (t, p) { return t + p.v; }, 0);
+    var THREADS = { id: 'threads', cls: 'threads', A: [[1, 0], [0, 1]], repeat: 1, pts: [], det: 1 };
+    var lib = WEAVE_LIB.concat([THREADS]);
+    var best = null, all = [];
+    for (i = 0; i < C.length; i++) for (j = 0; j < C.length; j++) {
+      if (i === j) continue;
+      var fe = C[i].slice(), fp = C[j].slice();
+      var le = Math.hypot(fe[0], fe[1]), lp = Math.hypot(fp[0], fp[1]);
+      var skewCos = Math.abs(fe[0] * fp[0] + fe[1] * fp[1]) / (le * lp);
+      if (skewCos > 0.16) continue;                                                            // threads cross at right angles (perspective allowed for)
+      if (le / lp < 0.33 || le / lp > 3 || N / le < 2.2 || N / lp < 2.2) continue;
+      if (fe[0] < 0) fe = [-fe[0], -fe[1]];
+      if (fe[0] * fp[1] - fe[1] * fp[0] < 0) fp = [-fp[0], -fp[1]];                       // (ends, picks) a proper frame
+      if (Math.abs(fe[1]) > Math.abs(fe[0])) continue;                                         // ê the more horizontal one
+      var det = fe[0] * fp[1] - fe[1] * fp[0];
+      var coords = strong.map(function (p) { return [(p.x * fp[1] - p.y * fp[0]) / det, (fe[0] * p.y - fe[1] * p.x) / det, p.v]; });
+      var te = Lp(fe[0], fe[1]) + Lp(fp[0], fp[1]);
+      for (var h = 0; h < lib.length; h++) {
+        var H = lib[h], A = H.A, un = 0;
+        coords.forEach(function (c) {
+          var t1 = c[0] * A[0][0] + c[1] * A[0][1], t2 = c[0] * A[1][0] + c[1] * A[1][1];
+          if (Math.abs(t1 - Math.round(t1)) > 0.13 || Math.abs(t2 - Math.round(t2)) > 0.13) un += c[2];
+        });
+        un /= tot;
+        if (un > 0.3) continue;
+        var s = 0, n = 0;
+        H.pts.forEach(function (q) {
+          var bx = q[0] * fe[0] + q[1] * fp[0], by = q[0] * fe[1] + q[1] * fp[1];
+          if (Math.hypot(bx, by) < rMin) return;
+          s += Math.log(1 + pwMax3(bx, by) / noise); n++;
+        });
+        var ptsScore = n ? s / n : Math.log(1 + 3);
+        var total = ptsScore + 0.45 * te - 4 * un - 0.04 * H.det - 25 * Math.max(0, skewCos - 0.035);
+        var cand = { fe: fe, fp: fp, H: H, total: total, pts: ptsScore, un: un, te: te };
+        all.push(cand);
+        if (!best || total > best.total) best = cand;
+      }
+    }
+    if (!best) return { ok: false, why: 'no two thread directions at right angles' };
+    all.sort(function (a2, b2) { return b2.total - a2.total; });
+    var tried = [], pick = null;
+    for (var ci = 0; ci < all.length && tried.length < 6; ci++) {
+      var c0 = all[ci];
+      if (tried.some(function (t) { return t.H === c0.H && Math.hypot(t.fe[0] - c0.fe[0], t.fe[1] - c0.fe[1]) < 1.5 && Math.hypot(t.fp[0] - c0.fp[0], t.fp[1] - c0.fp[1]) < 1.5; })) continue;
+      var fr = refineFrame(c0, strong), mat = null;
+      // a photo is never quite flat: try the frame a little finer, coarser and turned, keep the sharpest fold
+      for (var ks = -1; ks <= 1; ks++) for (var kp = -1; kp <= 1; kp++) for (var kr = -1; kr <= 1; kr++) {
+        var a1 = 1 + 0.012 * ks, a2 = 1 + 0.012 * kp, rr = kr * 0.6 * Math.PI / 180, cr = Math.cos(rr), sr = Math.sin(rr);
+        var fe2 = [a1 * (fr.fe[0] * cr - fr.fe[1] * sr), a1 * (fr.fe[0] * sr + fr.fe[1] * cr)], fp2 = [a2 * (fr.fp[0] * cr - fr.fp[1] * sr), a2 * (fr.fp[0] * sr + fr.fp[1] * cr)];
+        var m2 = foldMatrix(src, sw, x0, y0, N, fe2, fp2, c0.H, !!opts.yarnColours);
+        if (m2 && (!mat || m2.match + 0.5 * m2.strength > mat.match + 0.5 * mat.strength)) { mat = m2; mat._fe = fe2; mat._fp = fp2; }
+      }
+      if (mat && mat.match >= 0.75) fr = { fe: mat._fe, fp: mat._fp };
+      c0.frame = fr; c0.matrix = mat;
+      c0.final = c0.total + (mat ? 0.5 * (mat.match - 0.8) : -0.3);
+      tried.push(c0);
+      if (!pick || c0.final > pick.final) pick = c0;
+    }
+    best = pick || best;
+    // the runner-up weave in the same frame, for the confidence
+    var fe0 = best.fe, fp0 = best.fp, second = null;
+    lib.forEach(function (H) {
+      if (H === best.H) return;
+      var s = 0, n = 0;
+      H.pts.forEach(function (q) { var bx = q[0] * fe0[0] + q[1] * fp0[0], by = q[0] * fe0[1] + q[1] * fp0[1]; if (Math.hypot(bx, by) < rMin) return; s += Math.log(1 + pwMax3(bx, by) / noise); n++; });
+      var sc = n ? s / n : Math.log(4);
+      if (!second || sc > second.score) second = { id: H.id, score: sc };
+    });
+    // sub-bin thread frequencies (only where the thread peak itself is visible)
+    var refine = function (f) {
+      var x = Math.round(f[0]), y = Math.round(f[1]), c = pw(x, y), l = pw(x - 1, y), r2 = pw(x + 1, y), u = pw(x, y - 1), d = pw(x, y + 1);
+      if (c < 6 * noise || c < l || c < r2 || c < u || c < d) return f;
+      var ox = (l - r2) / (2 * (l - 2 * c + r2) || 1), oy = (u - d) / (2 * (u - 2 * c + d) || 1);
+      return [x + Math.max(-0.5, Math.min(0.5, ox)), y + Math.max(-0.5, Math.min(0.5, oy))];
+    };
+    var fe = best.frame ? best.frame.fe : refine(best.fe), fp = best.frame ? best.frame.fp : refine(best.fp);
+    var le = Math.hypot(fe[0], fe[1]), lp = Math.hypot(fp[0], fp[1]);
+    var ex = [fe[0] / le, fe[1] / le], ey = [-ex[1], ex[0]];
+    var se = N / le, sp = N / lp, axesDeg = Math.atan2(ex[1], ex[0]) * 180 / Math.PI;
+    var Hb = best.H, A = Hb.A.map(function (row) { return row.slice(); });
+    // the warp is the denser set: if the picks are denser, turn the frame a quarter (keeps the handedness)
+    var swapped = false;
+    if (sp < se * 0.96) {
+      swapped = true;
+      var t3 = se; se = sp; sp = t3; var t4 = ex; ex = ey; ey = [-t4[0], -t4[1]];
+      A = A.map(function (row) { return [-row[1], row[0]]; });            // the repeat turned with the frame
+    }
+    // which set floats on the face: the shape of the central autocorrelation lobe in thread units —
+    // warp floats are long in the pick direction, weft floats long in the end direction
+    var R = autocorr(hp.data, sw, x0, y0, N), Iu = 0, Iv = 0, seen = {}, stack = [[0, 0]];
+    var lim = 2.6 * Math.max(se, sp);
+    while (stack.length) {
+      var q2 = stack.pop(), key = q2[0] + ',' + q2[1];
+      if (seen[key]) continue; seen[key] = 1;
+      var rv = at(R, N, q2[0], q2[1]);
+      if (rv < 0.45 || Math.abs(q2[0]) > lim || Math.abs(q2[1]) > lim) continue;
+      var uu = (q2[0] * ex[0] + q2[1] * ex[1]) / se, vv = (q2[0] * ey[0] + q2[1] * ey[1]) / sp;
+      Iu += rv * uu * uu; Iv += rv * vv * vv;
+      stack.push([q2[0] + 1, q2[1]], [q2[0] - 1, q2[1]], [q2[0], q2[1] + 1], [q2[0], q2[1] - 1]);
+    }
+    var elong = (Iv + 1e-9) / (Iu + 1e-9);                                    // > 1: floats long down the warp
+    var face = elong > 1.45 ? 'warp' : elong < 0.69 ? 'weft' : 'balanced';
+    // the crossings themselves decide the face where they could be read
+    var M = best.matrix;
+    var faceRead = !!(M && M.match >= 0.9 && M.strength >= 0.3);
+    if (faceRead) {
+      var warpShare = swapped ? 1 - M.warp_share : M.warp_share;
+      face = warpShare > 0.6 ? 'warp' : warpShare < 0.4 ? 'weft' : 'balanced';
+    }
+    // cover: fold the raw picture along each set into one thread period; the share brighter than mid
+    var fold = function (dir, spc) {
+      var bins = 16, s = new Float64Array(bins), c = new Float64Array(bins);
+      for (var y2 = y0; y2 < y0 + N; y2 += 2) for (var x2 = x0; x2 < x0 + N; x2 += 2) {
+        var tt = (x2 * dir[0] + y2 * dir[1]) / spc, kb = Math.floor((tt - Math.floor(tt)) * bins) % bins;
+        s[kb] += src[y2 * sw + x2]; c[kb]++;
+      }
+      var prof = []; for (var q = 0; q < bins; q++) prof.push(c[q] ? s[q] / c[q] : 0);
+      var mx = Math.max.apply(null, prof), mn = Math.min.apply(null, prof);
+      if (mx - mn < 1e-6) return null;
+      var mid = (mx + mn) / 2;
+      return Math.max(0.45, Math.min(1, prof.filter(function (q) { return q >= mid; }).length / bins / 0.87));
+    };
+    var resolved = Hb.cls !== 'threads';
+    var hand = null;
+    if (Hb.cls === 'twill') { var mv = A[0][0] === 1 ? A[0][1] : A[1][0] === 1 ? A[1][1] : null; hand = mv == null ? Hb.hand : mv < 0 ? 'RH' : 'LH'; }
+    var upCount = faceRead ? Math.round((swapped ? 1 - M.warp_share : M.warp_share) * Hb.repeat) : null;
+    var wv = { id: Hb.id, cls: Hb.cls, repeat: Hb.repeat, score: Math.round(best.pts * 100) / 100,
+      runner_up: second ? { id: second.id, score: Math.round(second.score * 100) / 100 } : null, face: face };
+    if (wv.cls === 'plain') wv.name = 'Plain weave 1/1';
+    else if (wv.cls === 'twill') {
+      var Rr = wv.repeat, up = upCount != null && upCount > 0 && upCount < Rr ? upCount : face === 'warp' ? Rr - 1 : face === 'weft' ? 1 : Math.round(Rr / 2);
+      if (upCount == null && Rr === 3 && face === 'balanced') up = 2;
+      wv.notation = up + '/' + (Rr - up); wv.hand = hand;
+      wv.direction = hand === 'RH' ? 'right-hand (Z, rising to the right)' : 'left-hand (S, rising to the left)';
+      wv.angle_deg = Math.round(Math.atan2(sp, se) * 1800 / Math.PI) / 10;
+      wv.name = wv.notation + ' twill, ' + hand;
+    } else if (wv.cls === 'satin') wv.name = face === 'weft' ? wv.repeat + '-end sateen (weft-faced)' : wv.repeat + '-end satin (warp-faced)';
+    else if (wv.cls === 'basket') wv.name = 'Basket / matt 2/2';
+    else if (wv.cls === 'half_basket_warp') wv.name = swapped ? 'Rib weave (picks in pairs)' : 'Oxford / half-basket (ends in pairs)';
+    else if (wv.cls === 'half_basket_weft') wv.name = swapped ? 'Oxford / half-basket (ends in pairs)' : 'Rib weave (picks in pairs)';
+    else wv.name = 'Weave not resolved — threads counted';
+    var margin = second ? best.pts - second.score : best.pts;
+    var conf = !resolved ? 'low' : best.un < 0.1 && margin > 0.3 && (!M || M.match >= 0.85) ? 'high' : best.un < 0.2 && (margin > 0.1 || (M && M.match >= 0.9)) ? 'medium' : 'low';
+    return {
+      ok: true, weave: wv, ends_per_cm: 10 * P / se, picks_per_cm: 10 * P / sp, epi: 25.4 * P / se, ppi: 25.4 * P / sp,
+      end_spacing_mm: se / P, pick_spacing_mm: sp / P, axes_deg: Math.round(axesDeg * 10) / 10, swapped: swapped,
+      repeat_threads: A, unexplained: Math.round(best.un * 1000) / 1000, float_elongation: Math.round(elong * 100) / 100,
+      matrix_strength: M ? Math.round(M.strength * 1000) / 1000 : null, matrix: M && M.ideal ? (swapped ? turnMatrix(M.ideal) : M.ideal) : null, matrix_read: M ? (swapped ? turnMatrix(M.cells) : M.cells) : null, matrix_match: M ? M.match : null,
+      cover: { warp: fold(ex, se), weft: fold(ey, sp) }, thread_evidence: Math.round(best.te * 10) / 10, read_by: M ? M.read_by : null,
+      confidence: conf,
+    };
+  }
+
+  /** Two-tone yarn colours (k-means, 2 groups in Lab) — denim is an indigo warp over a white weft. */
+  function twoTone(rgba, w, h) {
+    var pts = [];
+    for (var y = Math.round(h * 0.2); y < h * 0.8; y += 2) for (var x = Math.round(w * 0.2); x < w * 0.8; x += 2) {
+      var i = (y * w + x) * 4; pts.push(srgbToLab(rgba[i], rgba[i + 1], rgba[i + 2]));
+    }
+    return twoToneLab(pts);
+  }
+  function twoToneRegion(rgba, w, h, Hm, reg) {
+    var pts = [];
+    for (var my = reg[2]; my <= reg[3]; my += (reg[3] - reg[2]) / 40) for (var mx = reg[0]; mx <= reg[1]; mx += (reg[1] - reg[0]) / 40) {
+      var q = apply(Hm, mx, my), x = Math.round(q[0]), y = Math.round(q[1]);
+      if (x < 0 || y < 0 || x >= w || y >= h) continue;
+      var i = (y * w + x) * 4; pts.push(srgbToLab(rgba[i], rgba[i + 1], rgba[i + 2]));
+    }
+    return twoToneLab(pts);
+  }
+  function twoToneLab(pts) {
+    if (pts.length < 50) return null;
+    var Ls = pts.map(function (p) { return p[0]; }).sort(function (a, b) { return a - b; });
+    var c = [pts[Math.floor(pts.length * 0.2)].slice(), pts[Math.floor(pts.length * 0.8)].slice()];
+    c[0][0] = Ls[Math.floor(Ls.length * 0.2)]; c[1][0] = Ls[Math.floor(Ls.length * 0.85)];
+    var lab = null;
+    for (var it = 0; it < 12; it++) {
+      var s = [[0, 0, 0, 0], [0, 0, 0, 0]];
+      pts.forEach(function (p) {
+        var d0 = Math.hypot(p[0] - c[0][0], p[1] - c[0][1], p[2] - c[0][2]), d1 = Math.hypot(p[0] - c[1][0], p[1] - c[1][1], p[2] - c[1][2]);
+        var k = d0 <= d1 ? 0 : 1; s[k][0] += p[0]; s[k][1] += p[1]; s[k][2] += p[2]; s[k][3]++;
+      });
+      for (var k = 0; k < 2; k++) if (s[k][3]) c[k] = [s[k][0] / s[k][3], s[k][1] / s[k][3], s[k][2] / s[k][3]];
+      lab = s;
+    }
+    var n0 = lab[0][3], n1 = lab[1][3], tot = n0 + n1;
+    var dark = c[0][0] <= c[1][0] ? 0 : 1, light = 1 - dark;
+    var dE = Math.hypot(c[0][0] - c[1][0], c[0][1] - c[1][1], c[0][2] - c[1][2]);
+    var chroma = function (q) { return Math.hypot(q[1], q[2]); };
+    var hue = function (q) { var a = Math.atan2(q[2], q[1]) * 180 / Math.PI; return a < 0 ? a + 360 : a; };
+    return {
+      delta_e: Math.round(dE * 10) / 10, two_tone: dE > 14 && Math.min(n0, n1) / tot > 0.1,
+      dark: { lab: c[dark].map(function (v) { return Math.round(v * 10) / 10; }), share: Math.round((dark ? n1 : n0) / tot * 100) / 100, chroma: Math.round(chroma(c[dark])), hue: Math.round(hue(c[dark])) },
+      light: { lab: c[light].map(function (v) { return Math.round(v * 10) / 10; }), share: Math.round((light ? n1 : n0) / tot * 100) / 100, chroma: Math.round(chroma(c[light])), hue: Math.round(hue(c[light])) },
+    };
+  }
+
+  // Knitted loops have legs: in every wale the yarn climbs one way on the left of the loop and the other way on
+  // the right, the same in every course. The legs are the longest edges in the picture, so the strongest
+  // gradient runs across them, along the course; the tilt of the texture against that direction swaps sign
+  // from one leg to the next and holds still down the wale — in the spectrum of the tilt map, power on the one
+  // line through the centre along the course. Woven threads run straight along both axes and their tilt map has
+  // no such line. Run at the photo's own scale and, where the texture is coarse enough not to alias, at half.
+  function legTest(g, w, h, cx, cy, axis, periodPx) {
+    var out = null;
+    [1, 2].forEach(function (k) {
+      if (k > 1 && !(periodPx >= 8 * k / 2)) return;          // halving a fine texture would alias it into false legs
+      var N = 256;
+      while (N > 64 && (N * k > Math.min(w, h) - 4 || cx - N * k / 2 < 1 || cy - N * k / 2 < 1 || cx + N * k / 2 > w - 2 || cy + N * k / 2 > h - 2)) N >>= 1;
+      if (N < 128) return;
+      var x0 = Math.round(cx - N * k / 2), y0 = Math.round(cy - N * k / 2), img = new Float64Array(N * N);
+      for (var y = 0; y < N; y++) for (var x = 0; x < N; x++) {
+        var sm = 0; for (var dy = 0; dy < k; dy++) for (var dx = 0; dx < k; dx++) sm += g[(y0 + y * k + dy) * w + x0 + x * k + dx];
+        img[y * N + x] = sm / (k * k);
+      }
+      var gx = new Float64Array(N * N), gy = new Float64Array(N * N), c2 = 0, s2 = 0;
+      for (y = 1; y < N - 1; y++) for (x = 1; x < N - 1; x++) {
+        var I = function (yy, xx) { return img[yy * N + xx]; };
+        var a1 = (I(y - 1, x + 1) + 2 * I(y, x + 1) + I(y + 1, x + 1) - I(y - 1, x - 1) - 2 * I(y, x - 1) - I(y + 1, x - 1)) / 8;
+        var b1 = (I(y + 1, x - 1) + 2 * I(y + 1, x) + I(y + 1, x + 1) - I(y - 1, x - 1) - 2 * I(y - 1, x) - I(y - 1, x + 1)) / 8;
+        gx[y * N + x] = a1; gy[y * N + x] = b1; c2 += a1 * a1 - b1 * b1; s2 += 2 * a1 * b1;
+      }
+      var al = Math.atan2(s2, c2) / 2, ca = Math.cos(al), sa = Math.sin(al);
+      var re = new Float64Array(N * N), im = new Float64Array(N * N), Et = 0, H = hannAC(N).w1;
+      for (y = 0; y < N; y++) for (x = 0; x < N; x++) {
+        var q = y * N + x, gu = gx[q] * ca + gy[q] * sa, gv = -gx[q] * sa + gy[q] * ca, hw = H[x] * H[y];
+        re[q] = 2 * gu * gv * hw; Et += (gu * gu + gv * gv) * hw;
+      }
+      if (Et <= 0) return;
+      fft2(re, im, N, false);
+      var lines = [0, 0], peaks = [0, 0], all = 0;
+      for (var fy = -N / 2 + 1; fy < N / 2; fy++) for (var fx = -N / 2 + 1; fx < N / 2; fx++) {
+        if (Math.hypot(fx, fy) < 3) continue;
+        var kk = ((fy + N) % N) * N + ((fx + N) % N), v = re[kk] * re[kk] + im[kk] * im[kk];
+        all += v;
+        var along = fx * ca + fy * sa, across = -fx * sa + fy * ca;
+        if (Math.abs(across) <= 1.5 + 0.06 * Math.abs(along)) { lines[0] += v; if (v > peaks[0]) peaks[0] = v; }
+        if (Math.abs(along) <= 1.5 + 0.06 * Math.abs(across)) { lines[1] += v; if (v > peaks[1]) peaks[1] = v; }
+      }
+      for (var d = 0; d < 1; d++) {
+        var line = all > 0 ? lines[d] / all : 0, amp = Math.sqrt(peaks[d]) / Et;
+        var score = amp * Math.min(1, line / 0.05);
+        if (!out || score > out.score) out = { line: Math.round(line * 1000) / 1000, amp: Math.round(amp * 1000) / 1000, score: Math.round(score * 1000) / 1000, scale: k };
+      }
+    });
+    if (!out) return null;
+    out.legs = out.line >= 0.045 && out.amp >= 0.05 && out.score > 0.055;
+    out.none = out.amp < 0.03;
+    return out;
+  }
+  // the two thread sets are different colours (an indigo warp over a white weft, a yarn-dyed chambray) — not
+  // just light and shade on one colour
+  function yarnColours(t) {
+    if (!t || !t.two_tone) return false;
+    var d = t.dark, l = t.light, dh = Math.abs(d.hue - l.hue); if (dh > 180) dh = 360 - dh;
+    // shade on one colour changes its lightness and chroma together, not its hue; a white set beside a dyed one
+    // is near-neutral against clearly coloured
+    return (Math.min(d.chroma, l.chroma) > 10 && dh > 40) || (Math.min(d.chroma, l.chroma) < 8 && Math.max(d.chroma, l.chroma) > 18);
+  }
+  var KNIT_NAMES = { single_jersey: 'Single jersey', rib: 'Rib', interlock: 'Interlock', pique: 'Pique', fleece: 'Fleece', terry: 'Terry', lacoste: 'Lacoste', french_terry: 'French terry', fleece_or_terry: 'Fleece / terry' };
+
+  /**
+   * What the cloth IS, in three levels — family (knit / woven), category (jersey, rib, denim, poplin …)
+   * and structure (single jersey, 3/1 twill RH …) — with a probability for each candidate and the evidence,
+   * item by item, that decided the family. Every item is a measurement with a physical reason behind it.
+   */
+  function identify(r) {
+    var kind = r.kind || {}, wv = r.woven && r.woven.ok ? r.woven : null, col = r.two_tone || null, leg = r.legs || null, kr = r.knit_read || null;
+    var ev = [], z = 0;
+    var add = function (wgt, why) { z += wgt; ev.push({ says: wgt > 0 ? 'woven' : 'knit', weight: Math.round(Math.abs(wgt) * 100) / 100, why: why }); };
+    add(-0.3, 'starting point: knitted, the cloth this scanner is mostly used on');
+    if (leg && leg.legs) add(-2.2 * Math.min(1, (leg.score - 0.05) / 0.05), 'loop legs: the texture leans one way, then the other, across every wale');
+    else if (leg && leg.score < 0.035 && (wv || (kr && kr.ok))) add(0.8 * Math.min(1, (0.035 - leg.score) / 0.025), 'no loop legs: the texture runs straight along two axes');
+    if (!wv) add(-0.8, 'no two thread sets at right angles were found');
+    else add(wv.confidence === 'high' ? 1.0 : wv.confidence === 'medium' ? 0.6 : 0.2, 'two thread sets at right angles, read as ' + wv.weave.name + ' (' + wv.confidence + ' confidence)');
+    if (kind.kind === 'woven') add(0.7, kind.why || 'the texture runs along two axes, not in V-shaped loops');
+    else if (kind.kind === 'knit') add(-0.15, kind.why || 'V-shaped texture, as loops make');
+    if (kr && kr.ok) {
+      if (kr.regularity >= 0.7 && kr.ratio >= 1.1 && kr.ratio <= 1.8) add(kr.regularity >= 0.8 ? -1.4 : -0.5, 'a clean loop lattice with a knitted loop shape (courses / wales = ' + kr.ratio.toFixed(2) + ')');
+      else if (kr.regularity >= 0.8 && kr.ratio >= 0.95 && kr.ratio < 1.1) add(-0.6, 'a very regular loop lattice, loops about as tall as wide (courses / wales = ' + kr.ratio.toFixed(2) + ') — as in interlock');
+      else if (kr.ratio < 0.98) add(0.4, 'read as loops they would be wider than tall (courses / wales = ' + kr.ratio.toFixed(2) + ') — not how a knitted loop sits');
+    } else if (kr && !kr.ok) add(0.5, 'no loop lattice could be read');
+    var blue = col && col.dark && col.dark.hue >= 220 && col.dark.hue <= 300 && col.dark.chroma > 12 && col.dark.lab[0] < 62;
+    var denimLike = !!(blue && col.two_tone && col.light.lab[0] > col.dark.lab[0] + 18 && yarnColours(col));
+    if (wv && denimLike && wv.weave.cls === 'twill') add(2.0, 'an indigo thread set over a light one, in a twill — dyed warp, white weft');
+    else if (wv && yarnColours(col)) add(0.4, 'the two thread sets are different colours');
+    var pW = 1 / (1 + Math.exp(-z));
+    var cands = [];
+    (r.knit_suggest || []).forEach(function (s) { cands.push({ family: 'knit', category: KNIT_NAMES[s.structure] || s.structure, structure: s.structure, p: (1 - pW) * s.p, why: s.why }); });
+    if (!cands.length) cands.push({ family: 'knit', category: 'Single jersey', structure: 'single_jersey', p: 1 - pW, why: 'the most common knitted cloth' });
+    if (wv) {
+      var w = wv.weave, cat = 'Woven';
+      if (w.cls === 'twill') cat = denimLike ? 'Denim' : w.notation === '2/2' ? ((w.angle_deg || 45) > 60 ? 'Gabardine' : 'Serge') : (w.angle_deg || 45) > 62 ? 'Gabardine / steep twill' : 'Drill / twill';
+      else if (w.cls === 'plain' || w.cls === 'threads') cat = denimLike || (yarnColours(col) && blue) ? 'Chambray' : wv.ends_per_cm > 34 ? 'Poplin / shirting' : wv.ends_per_cm < 16 ? 'Canvas / sheeting' : 'Plain sheeting';
+      else if (w.cls === 'satin') cat = w.face === 'weft' ? 'Sateen' : 'Satin';
+      else if (w.cls === 'basket') cat = 'Matt / hopsack';
+      else if (w.cls === 'half_basket_warp') cat = /Oxford/.test(w.name) ? 'Oxford' : 'Rib weave';
+      else if (w.cls === 'half_basket_weft') cat = /Oxford/.test(w.name) ? 'Oxford' : 'Rib weave';
+      if (w.cls === 'threads') cat = 'Woven (weave not resolved)';
+      var share = w.cls === 'threads' ? 0.6 : wv.confidence === 'high' ? 0.85 : wv.confidence === 'medium' ? 0.7 : 0.55;
+      cands.push({ family: 'woven', category: cat, structure: w.name, p: pW * share, why: (denimLike ? 'indigo warp over a light weft; ' : '') + w.name + ', the weave whose lattice carries the most power in the spectrum' });
+      var ru = w.runner_up && WEAVE_LIB.filter(function (h) { return h.id === w.runner_up.id; })[0];
+      var ruName = ru ? (ru.cls === 'twill' ? 'twill (repeat ' + ru.repeat + ')' : ru.cls === 'satin' ? ru.repeat + '-end satin' : ru.cls === 'plain' ? 'plain weave' : ru.cls === 'basket' ? 'basket / matt' : 'rib / oxford') : 'another weave';
+      cands.push({ family: 'woven', category: 'Other weave', structure: ruName, p: pW * (1 - share), why: 'the next best weave for the same threads' });
+    } else cands.push({ family: 'woven', category: 'Woven', structure: 'not read', p: pW, why: 'no thread lattice was read' });
+    cands.forEach(function (c) { c.p = Math.round(c.p * 1000) / 1000; });
+    cands.sort(function (a, b) { return b.p - a.p; });
+    var family = pW >= 0.5 ? 'woven' : 'knit';
+    var best = cands.filter(function (c) { return c.family === family; })[0] || cands[0];
+    return { family: family, p_woven: Math.round(pW * 1000) / 1000, p_knit: Math.round((1 - pW) * 1000) / 1000, best: best, candidates: cands.slice(0, 6), evidence: ev, legs: leg, denim_like: denimLike };
+  }
+
   /**
    * A photo with NO scan card: the fabric fills the frame. The repeat is found on the clearest patch; the
    * scale (px per mm) comes from the caller (focus distance, a known object, or a guess), so wales/cm
@@ -685,6 +1274,38 @@
       if (m.error) continue;
       if (!best || m.regularity > best.m.regularity) best = { m: m, flat: patch, c: [cx, cy] };
       if (best.m.regularity > 0.55 && best.m.confidence === 'high') break;
+    }
+    // the woven reading, the colours and the loop-leg test, at full resolution on the same spot (threads are finer
+    // than loops). A clear woven needs nothing more from the knit reader.
+    var cw = Math.min(w, 400), ch = Math.round(cw * h / w), srgb = smallRgba(rgba, w, h, cw, ch);
+    var tone = null; try { tone = twoTone(srgb, cw, ch); } catch (_) { tone = null; }
+    var spot = best ? [best.c[0] * small.scale, best.c[1] * small.scale] : [w / 2, h / 2];
+    var wov = null; try { wov = analyseWoven(gray, w, h, P, spot[0], spot[1], { yarnColours: yarnColours(tone) }); } catch (_) { wov = null; }
+    var legAxis = wov && wov.ok ? wov.axes_deg * Math.PI / 180 : best ? Math.atan2(best.m.lattice.W[1], best.m.lattice.W[0]) : null;
+    var finest = Math.min(wov && wov.ok ? Math.min(wov.end_spacing_mm, wov.pick_spacing_mm) * P : Infinity, best ? Math.min(10 * Ps / best.m.wpc, 10 * Ps / best.m.cpc) * small.scale : Infinity);
+    var legs = null; try { legs = legTest(gray, w, h, spot[0], spot[1], legAxis, isFinite(finest) ? finest : null); } catch (_) { legs = null; }
+    // held sideways the knit reader swaps wales and courses back; the loop shape is read the same way
+    var knitRead0 = best ? { ok: true, regularity: best.m.regularity, ratio: best.m.cpc / best.m.wpc < 0.78 ? best.m.wpc / best.m.cpc : best.m.cpc / best.m.wpc } : { ok: false };
+    var kind0 = best ? fabricKind(best.flat, best.m) : { kind: 'none', scores: {} };
+    // (the texture-orientation verdict is left out here: on a patch not yet turned square to the cloth it reads a
+    // turned knit's legs as a one-way diagonal)
+    var id0 = identify({ kind: { kind: 'none', scores: {} }, woven: wov, two_tone: tone, legs: legs, knit_read: knitRead0, knit_suggest: [] });
+    if (wov && wov.ok && (!best || id0.p_woven >= 0.85)) {
+      // clearly woven: the knit reader's slow angle search is skipped. Its first look (one patch, not turned)
+      // is kept, so the person can still say "it is knitted" and get a loop count — a rougher one.
+      var b0 = best ? best.m : null, sw0 = b0 && b0.cpc / b0.wpc < 0.78, f0 = null;
+      if (b0) { try { f0 = features(best.flat, b0); } catch (_) { f0 = null; } }
+      var id0s = identify({ kind: kind0, woven: wov, two_tone: tone, legs: legs, knit_read: knitRead0, knit_suggest: f0 ? (function () { try { return suggest(f0); } catch (_) { return []; } })() : [] });
+      return {
+        card: null, scale: { px_per_mm: Math.round(P * 10) / 10, source: scale && scale.source || 'assumed', note: scale && scale.note || null },
+        kind: { kind: 'woven', why: 'read as woven', scores: kind0.scores || {} }, turned_deg: null, sideways: !!sw0,
+        wpc: b0 ? (sw0 ? b0.cpc : b0.wpc) : wov.ends_per_cm, cpc: b0 ? (sw0 ? b0.wpc : b0.cpc) : wov.picks_per_cm, density: b0 ? b0.wpc * b0.cpc : wov.ends_per_cm * wov.picks_per_cm,
+        skew_deg: b0 ? b0.skew_deg : 0, confidence: b0 ? b0.confidence : wov.confidence, spread: b0 ? b0.spread : 0,
+        regularity: b0 ? b0.regularity : 0, staggered: b0 ? b0.staggered : false, lattice: b0 ? b0.lattice : null,
+        wale_px: b0 ? 10 * Ps / b0.wpc * small.scale : null, course_px: b0 ? 10 * Ps / b0.cpc * small.scale : null,
+        features: f0, faults: [], colour: colourPlain(srgb, cw, ch), _flat: best ? best.flat : null,
+        woven: stripFlat(wov), two_tone: tone, legs: legs, family: 'woven', identity: id0s,
+      };
     }
     if (!best) return { error: 'No regular loop pattern was found. Fill the frame with the fabric, 8 to 12 cm away, in focus.', code: 'no_loops' };
     // The phone is rarely square to the wales. Turn the patch through a fan of angles and keep the one where the
@@ -719,8 +1340,10 @@
     var sideways = best.m.cpc / best.m.wpc < 0.78;
     if (sideways) { var tw = best.m.wpc; best.m.wpc = best.m.cpc; best.m.cpc = tw; best.m.density = best.m.wpc * best.m.cpc; }
     var m2 = best.m, f = features(best.flat, m2), kind = fabricKind(best.flat, m2);
-    var cw = Math.min(w, 400), ch = Math.round(cw * h / w);
-    var col = colourPlain(smallRgba(rgba, w, h, cw, ch), cw, ch);
+    var col = colourPlain(srgb, cw, ch);
+    var knitSug = []; try { knitSug = suggest(f); } catch (_) {}
+    var knitRead = { ok: true, regularity: m2.regularity, ratio: m2.cpc / m2.wpc };
+    var idF = identify({ kind: kind, woven: wov, two_tone: tone, legs: legs, knit_read: knitRead, knit_suggest: knitSug });
     return {
       card: null, scale: { px_per_mm: Math.round(P * 10) / 10, source: scale && scale.source || 'assumed', note: scale && scale.note || null },
       kind: kind, turned_deg: turned, sideways: sideways,
@@ -728,8 +1351,10 @@
       regularity: m2.regularity, staggered: m2.staggered, lattice: m2.lattice,
       wale_px: 10 * Ps / m2.wpc * small.scale, course_px: 10 * Ps / m2.cpc * small.scale,
       features: f, faults: faults(best.flat, m2), colour: col, _flat: best.flat,
+      woven: wov && wov.ok ? stripFlat(wov) : wov, two_tone: tone, legs: legs, family: idF.family, identity: idF,
     };
   }
+  function stripFlat(o) { var c = {}; for (var k in o) if (k !== '_flat') c[k] = o[k]; return c; }
   /** A square patch of `side` px around (cx, cy), the sampling grid turned by theta (radians). */
   function rotPatch(src, sw, sh, cx, cy, side, theta, pxPerMm) {
     var out = new Float32Array(side * side), c = Math.cos(theta), sn = Math.sin(theta), h = side / 2, bad = 0;
@@ -765,19 +1390,41 @@
     var srcPx = card.pxPerMm * small.scale;
     if (srcPx < 9) return { error: 'The card is too small in the photo (' + srcPx.toFixed(1) + ' px per mm). Move the phone closer, or use a clip-on macro lens.' };
     var pick = findFabric(gray, w, h, full, srcPx);
-    if (pick.error) return { error: pick.error };
-    var flat = pick.flat, m = pick.m;
-    var f = features(flat, m);
-    // colour from a small RGBA copy
     var Hsmall = homography(CARD.markers, card.corners);
     var smallRGBA = smallRgba(rgba, w, h, small.w, small.h);
+    var wov = null, tone = null;
+    if (pick.error) {
+      // the knit reader found no loops: it may be a woven (threads, not loops) — read the window as one
+      var flatW = rectify(gray, w, h, full, srcPx, { region: CARD.regions.window });
+      try { tone = twoToneRegion(smallRGBA, small.w, small.h, Hsmall, CARD.regions.window); } catch (_) {}
+      try { wov = flatW.outside < 0.02 && !isPaper(flatW.data) ? analyseWoven(flatW.data, flatW.w, flatW.h, flatW.pxPerMm, null, null, { yarnColours: yarnColours(tone) }) : null; } catch (_) { wov = null; }
+      if (!wov || !wov.ok) return { error: pick.error };
+      var legsW = null; try { legsW = legTest(flatW.data, flatW.w, flatW.h, flatW.w / 2, flatW.h / 2, wov.axes_deg * Math.PI / 180, Math.min(wov.end_spacing_mm, wov.pick_spacing_mm) * flatW.pxPerMm); } catch (_) {}
+      var kindW = { kind: 'woven', why: 'threads at right angles, no loops', scores: { slant: 0.3, balance: 0.5 } };
+      return {
+        card: { px_per_mm: Math.round(srcPx * 10) / 10, tilt: Math.round(card.tilt * 100) / 100, fabric_at: 'window' },
+        scale: { px_per_mm: Math.round(srcPx * 10) / 10, source: 'card', note: null }, kind: kindW,
+        wpc: wov.ends_per_cm, cpc: wov.picks_per_cm, density: wov.ends_per_cm * wov.picks_per_cm, skew_deg: 0, confidence: wov.confidence, spread: 0,
+        regularity: 0.5, staggered: false, lattice: null, features: null, faults: [], colour: colour(smallRGBA, small.w, small.h, Hsmall, CARD.regions.window),
+        _flat: wov._flat, woven: stripFlat(wov), two_tone: tone, legs: legsW, family: 'woven',
+        identity: identify({ kind: kindW, woven: wov, two_tone: tone, legs: legsW, knit_read: { ok: false }, knit_suggest: [] }),
+      };
+    }
+    var flat = pick.flat, m = pick.m;
+    var f = features(flat, m);
     var col = colour(smallRGBA, small.w, small.h, Hsmall, pick.region);
+    try { tone = twoToneRegion(smallRGBA, small.w, small.h, Hsmall, pick.region); } catch (_) { tone = null; }
+    try { wov = analyseWoven(flat.data, flat.w, flat.h, flat.pxPerMm, null, null, { yarnColours: yarnColours(tone) }); } catch (_) { wov = null; }
+    var finC = Math.min(10 * flat.pxPerMm / m.wpc, 10 * flat.pxPerMm / m.cpc, wov && wov.ok ? Math.min(wov.end_spacing_mm, wov.pick_spacing_mm) * flat.pxPerMm : Infinity);
+    var legsC = null; try { legsC = legTest(flat.data, flat.w, flat.h, flat.w / 2, flat.h / 2, wov && wov.ok ? wov.axes_deg * Math.PI / 180 : Math.atan2(m.lattice.W[1], m.lattice.W[0]), finC); } catch (_) {}
+    var kindC = fabricKind(flat, m), sugC = []; try { sugC = suggest(f); } catch (_) {}
+    var idC = identify({ kind: kindC, woven: wov, two_tone: tone, legs: legsC, knit_read: { ok: true, regularity: m.regularity, ratio: m.cpc / m.wpc }, knit_suggest: sugC });
     return {
       card: { px_per_mm: Math.round(srcPx * 10) / 10, tilt: Math.round(card.tilt * 100) / 100, fabric_at: pick.name },
-      scale: { px_per_mm: Math.round(srcPx * 10) / 10, source: 'card', note: null }, kind: fabricKind(flat, m),
+      scale: { px_per_mm: Math.round(srcPx * 10) / 10, source: 'card', note: null }, kind: kindC,
       wpc: m.wpc, cpc: m.cpc, density: m.density, skew_deg: m.skew_deg, confidence: m.confidence, spread: m.spread,
       regularity: m.regularity, staggered: m.staggered, lattice: m.lattice, features: f, faults: faults(flat, m), colour: col,
-      _flat: flat,
+      _flat: flat, woven: wov && wov.ok ? stripFlat(wov) : wov, two_tone: tone, legs: legsC, family: idC.family, identity: idC,
     };
   }
   // plain paper: bright and flat. Dark cloth is flat in absolute terms too, so contrast is judged against brightness.
@@ -842,6 +1489,8 @@
 
   return {
     grid: grid, findFabric: findFabric, detail: detail, analyseFree: analyseFree, fabricKind: fabricKind, colourPlain: colourPlain,
+    analyseWoven: analyseWoven, WEAVE_LIB: WEAVE_LIB, twoTone: twoTone, identify: identify, legTest: legTest, yarnColours: yarnColours,
+    _foldMatrix: foldMatrix,
     CARD: CARD, toGray: toGray, downscale: downscale, homography: homography, apply: apply, detectCard: detectCard,
     rectify: rectify, autocorr: autocorr, lattice: lattice, measure: measure, features: features, suggest: suggest,
     faults: faults, colour: colour, srgbToLab: srgbToLab, analysePhoto: analysePhoto, median: median, FAMILY_RATIO: FAMILY_RATIO,

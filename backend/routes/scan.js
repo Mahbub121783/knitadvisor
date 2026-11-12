@@ -19,6 +19,7 @@ const { requireUser, loadUser } = require('../middleware/user-auth');
 const { createRateLimiter } = require('../middleware/rate-limiter');
 const { scans, pairs } = require('../db/repositories/scan-repo');
 const reverse = require('../engine/domain/fabric-reverse');
+const wovenReverse = require('../engine/domain/woven-reverse');
 
 const analyseLimiter = createRateLimiter({ name: 'scan-analyse', max: 60, windowMs: 10 * 60 * 1000, message: 'Too many scans. Wait a few minutes.' });
 const pairLimiter = createRateLimiter({ name: 'scan-pair', max: 20, windowMs: 10 * 60 * 1000, message: 'Too many pairing codes. Wait a few minutes.' });
@@ -111,6 +112,41 @@ router.post('/analyse', analyseLimiter, async (req, res) => {
       }
     }
     if (!userId && !guest) return res.status(401).json({ success: false, code: 'AUTH_REQUIRED', error: 'Sign in, or scan the QR code on a signed-in screen.' });
+
+    // a woven cloth: the weave and the threads the phone read, worked back to a construction
+    if (b.family === 'woven') {
+      const w = b.weave && typeof b.weave === 'object' ? b.weave : {};
+      const cls = ['plain', 'twill', 'satin', 'basket', 'half_basket_warp', 'half_basket_weft', 'threads'].includes(w.cls) ? w.cls : null;
+      if (!cls) return res.status(400).json({ success: false, error: 'No weave was read.' });
+      const matrix = Array.isArray(b.matrix) && b.matrix.length <= 12 && b.matrix.every((r) => Array.isArray(r) && r.length <= 12)
+        ? b.matrix.map((r) => r.map((v) => (v ? 1 : 0))) : null;
+      const count = (v) => (typeof v === 'string' && /^[0-9./\sNesS]{1,12}$/.test(v.trim()) && v.trim() ? v.trim() : null);
+      const winput = {
+        weave: { cls, repeat: num(w.repeat, 1, 12), notation: /^\d\/\d$/.test(w.notation || '') ? w.notation : null, hand: ['RH', 'LH'].includes(w.hand) ? w.hand : null,
+          face: ['warp', 'weft', 'balanced'].includes(w.face) ? w.face : null, name: String(w.name || '').slice(0, 80), angle_deg: num(w.angle_deg, 0, 90) },
+        ends_per_cm: num(b.ends_per_cm, 4, 120), picks_per_cm: num(b.picks_per_cm, 4, 120),
+        gsm: b.gsm === '' || b.gsm == null ? null : num(b.gsm, 20, 1200), composition: String(b.composition || '100% cotton').slice(0, 120),
+        warp_count: count(b.warp_count), weft_count: count(b.weft_count), denim: !!b.denim, matrix,
+        confidence: ['high', 'medium', 'low'].includes(b.confidence) ? b.confidence : null,
+      };
+      let wout;
+      try { wout = wovenReverse.reverse(winput); } catch (e) {
+        if (e instanceof wovenReverse.WovenReverseError) return res.status(400).json({ success: false, error: e.message });
+        throw e;
+      }
+      const m = b.measure && typeof b.measure === 'object' ? b.measure : {};
+      const wmeasure = {
+        confidence: winput.confidence, px_per_mm: num(m.px_per_mm, 0, 500), photos: num(m.photos, 0, 10), scale: ['card', 'focus', 'assumed', 'reference'].includes(m.scale) ? m.scale : null,
+        colour: m.colour && /^#[0-9a-f]{6}$/i.test(m.colour.hex || '') ? { hex: m.colour.hex, lab: Array.isArray(m.colour.lab) ? m.colour.lab.slice(0, 3).map((v) => num(v, -200, 200)) : null } : null,
+        p_woven: num(m.p_woven, 0, 1),
+      };
+      const thumbW = typeof b.thumb === 'string' && /^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(b.thumb) && b.thumb.length < 200000 ? b.thumb : null;
+      const wresult = { ...wout, scan: wmeasure, composition: winput.composition };
+      if (guest) return res.json({ success: true, id: null, guest: true, result: wresult });
+      const wsaved = await scans.save(userId, { structure: wout.structure, result: wresult, thumb: thumbW, viaPair: !!pair });
+      if (pair) await pairs.touch(pair.code, wsaved.id);
+      return res.json({ success: true, id: wsaved.id, result: wresult });
+    }
 
     const input = {
       structure: String(b.structure || ''), wpc: num(b.wpc, 4, 40), cpc: num(b.cpc, 4, 60),

@@ -1166,7 +1166,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   // "Recalculate" from result.html — prefill the whole form from the params that
   // produced the result the user just came from, instead of starting blank.
   if (new URLSearchParams(window.location.search).get('recalc') === '1') {
-    applyPrefill(loadPending());
+    const pend = loadPending();
+    applyPrefill(pend);
+    // a woven scan: choosing the quality fills in the book's sett, so the measured one goes back in after it
+    if (pend && pend.woven) {
+      const set = (id, v) => { const el = document.getElementById(id); if (el && v != null && v !== '') el.value = v; };
+      set('epi-input', pend.epi); set('ppi-input', pend.ppi);
+      set('warp-count-input', pend.warp_count); set('weft-count-input', pend.weft_count);
+    }
   }
 
   loadRecentsUI();

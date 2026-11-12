@@ -10,7 +10,7 @@
  * Message out: { id, r }  — the card measurement, or, with no card in the
  *              photo, the card-free one at the scale the page estimated.
  */
-self.importScripts('fabric-scan-core.js?v=20261112b');
+self.importScripts('fabric-scan-core.js?v=20261113a');
 
 self.onmessage = function (e) {
   var d = e.data || {}, KS = self.KAScan, r;

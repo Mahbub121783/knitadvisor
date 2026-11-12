@@ -15,7 +15,7 @@
 
   var pair = (new URLSearchParams(window.location.search).get('pair') || '').toUpperCase();
   if (!/^[A-Z2-9]{8}$/.test(pair)) pair = '';
-  var S = { faces: [], backs: [], adj: { w: 1, c: 1 }, structure: null, result: null, signedIn: false, busy: 0 };
+  var S = { faces: [], backs: [], adj: { w: 1, c: 1 }, wadj: { e: 1, p: 1 }, family: null, structure: null, result: null, signedIn: false, busy: 0 };
 
   // ── who is this for ─────────────────────────────────────────────────
   if (pair) {
@@ -74,7 +74,7 @@
   function getWorker() {
     if (worker !== null) return worker;
     try {
-      worker = new Worker('assets/js/scan/scan-worker.js?v=20261112a');
+      worker = new Worker('assets/js/scan/scan-worker.js?v=20261113a');
       worker.onmessage = function (e) { var p = wpend[e.data.id]; if (p) { delete wpend[e.data.id]; p(e.data.r); } };
       worker.onerror = function () { worker = false; Object.keys(wpend).forEach(function (k) { var p = wpend[k]; delete wpend[k]; p(null); }); };
     } catch (_) { worker = false; }
@@ -115,9 +115,14 @@
       txt.textContent = res.error;
       return;
     }
-    drawFlat(item.el.querySelector('canvas'), res, false, null);
+    if (res._flat) drawFlat(item.el.querySelector('canvas'), res, false, null); else drawBlank(item.el.querySelector('canvas'));
+    var wv = res.woven && res.woven.ok ? res.woven : null;
+    if (kind !== 'back' && res.family === 'woven' && wv) {
+      txt.innerHTML = '<b>' + wv.ends_per_cm.toFixed(1) + '</b> ends · <b>' + wv.picks_per_cm.toFixed(1) + '</b> picks /cm<br>' + esc(wv.weave.name) + (res.card ? '' : '<br><span style="color:#B26A00">no card · scale estimated</span>');
+      return;
+    }
     txt.innerHTML = kind === 'back' ? 'Back read ✓' : '<b>' + res.wpc.toFixed(1) + '</b> w · <b>' + res.cpc.toFixed(1) + '</b> c /cm<br>' + esc(res.confidence) + ' confidence' + (res.faults.length ? ' · ' + res.faults.length + ' fault' + (res.faults.length > 1 ? 's' : '') : '')
-      + (res.card ? '' : '<br><span style="color:#B26A00">no card · scale estimated</span>') + (res.kind && res.kind.kind === 'woven' ? '<br><span style="color:#B26A00">looks woven</span>' : '');
+      + (res.card ? '' : '<br><span style="color:#B26A00">no card · scale estimated</span>');
   }
   function run(kind, getImage) {
     var list = kind === 'face' ? S.faces : S.backs;
@@ -158,21 +163,22 @@
         update();
         if (goodFaces().length) $('sc-count-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
         // one shot: the spec follows the photo without another tap
-        if (shotNow && goodFaces().length) setTimeout(function () { $('sc-go').click(); }, 350);
+        if (shotNow && goodFaces().length) setTimeout(function () { var c = combined(); $(c && c.family === 'woven' ? 'sc-wgo' : 'sc-go').click(); }, 350);
       },
     });
     function accept(kind, r, img) {
         if (!r) r = { error: 'This photo could not be measured.' };
         // the live view was counting the same cloth a moment ago: a photo that reads double or half of it caught a
         // double image from the moving hand, not a different fabric — take it again (it is quick)
-        if (kind === 'face' && !r.error && r.card && img && img.live) {
+        var isWoven = !r.error && r.family === 'woven';
+        if (kind === 'face' && !r.error && r.card && img && img.live && !isWoven) {
           var q = r.wpc / img.live.wpc;
           if (q > 1.6 || q < 0.62) return Promise.resolve({ ok: false, error: 'blurred by the movement — taking it again' });
         }
         if (kind === 'back' && r.error && /No regular loop pattern/.test(r.error)) r = { backOnly: true, features: { regularity: 0, orient: { diagonal: 0, across: 0 } } };
         if (r.error) return Promise.resolve({ ok: false, error: r.error.replace(/\. .*/, '.') });
-        if (kind === 'face' && r.confidence === 'low' && r.card) return Promise.resolve({ ok: false, error: 'the loops are not clear enough' });
-        if (kind === 'face' && r.confidence === 'low' && r.regularity < 0.3) return Promise.resolve({ ok: false, error: 'the loops are not clear — come a little closer, with the fabric filling the picture' });
+        if (kind === 'face' && !isWoven && r.confidence === 'low' && r.card) return Promise.resolve({ ok: false, error: 'the loops are not clear enough' });
+        if (kind === 'face' && !isWoven && r.confidence === 'low' && r.regularity < 0.3) return Promise.resolve({ ok: false, error: 'the loops are not clear — come a little closer, with the fabric filling the picture' });
         // a face photo far from the ones before it is the back, or a different fabric
         var before = goodFaces();
         if (kind === 'face' && before.length) {
@@ -181,7 +187,7 @@
         }
         addMeasured(kind, r);
         if (kind === 'face') shotNow = true;
-        return Promise.resolve({ ok: true, note: kind === 'back' ? 'Back captured' : r.kind && r.kind.kind === 'woven' ? 'Woven fabric seen' : r.wpc.toFixed(1) + ' wales · ' + r.cpc.toFixed(1) + ' courses per cm' + (r.card ? '' : ' (scale estimated)') });
+        return Promise.resolve({ ok: true, note: kind === 'back' ? 'Back captured' : isWoven && r.woven && r.woven.ok ? 'Woven: ' + r.woven.weave.name + ' · ' + r.woven.ends_per_cm.toFixed(1) + ' × ' + r.woven.picks_per_cm.toFixed(1) + ' threads per cm' : r.wpc.toFixed(1) + ' wales · ' + r.cpc.toFixed(1) + ' courses per cm' + (r.card ? '' : ' (scale estimated)') });
     }
     function sendFrame(img, info) {
         var c = document.createElement('canvas'), k = Math.min(1, 2000 / Math.max(img.w, img.h));
@@ -239,21 +245,31 @@
     var best = g.slice().sort(function (a, b) { return b.regularity - a.regularity; })[0];
     var conf = g.some(function (r) { return r.confidence === 'low'; }) || spread > 0.06 ? 'low' : g.every(function (r) { return r.confidence === 'high'; }) && spread < 0.03 ? 'high' : 'medium';
     var free = g.filter(function (r) { return !r.card; });
-    var woven = g.filter(function (r) { return r.kind && r.kind.kind === 'woven'; }).length > g.length / 2;
-    return { wpc: wpc, cpc: cpc, spread: spread, best: best, n: g.length, confidence: conf, estimated: free.length > 0, dist: free.length ? free[0].scale.dist_mm : null, woven: woven,
-      wovenWhy: woven ? g.filter(function (r) { return r.kind && r.kind.kind === 'woven'; })[0].kind.why : '' };
+    var ids = g.filter(function (r) { return r.identity; });
+    var pW = ids.length ? ids.reduce(function (t, r) { return t + r.identity.p_woven; }, 0) / ids.length : 0;
+    var autoFamily = pW >= 0.5 ? 'woven' : 'knit';
+    // the woven reading: the clearest of the photos, and the thread counts as the median of all of them
+    var rank = { high: 3, medium: 2, low: 1 };
+    var wr = g.filter(function (r) { return r.woven && r.woven.ok; });
+    var wov = wr.slice().sort(function (a, b) { return (rank[b.woven.confidence] || 0) - (rank[a.woven.confidence] || 0) || (b.woven.matrix_match || 0) - (a.woven.matrix_match || 0); })[0];
+    var idBest = ids.slice().sort(function (a, b) { return Math.abs(b.identity.p_woven - 0.5) - Math.abs(a.identity.p_woven - 0.5); })[0];
+    return { wpc: wpc, cpc: cpc, spread: spread, best: best, n: g.length, confidence: conf, estimated: free.length > 0, dist: free.length ? free[0].scale.dist_mm : null,
+      family: S.family || autoFamily, autoFamily: autoFamily, pWoven: pW, identity: idBest ? idBest.identity : null,
+      wov: wov ? wov.woven : null, wovBest: wov || null,
+      epc: wr.length ? KS.median(wr.map(function (r) { return r.woven.ends_per_cm; })) : null, ppc: wr.length ? KS.median(wr.map(function (r) { return r.woven.picks_per_cm; })) : null,
+      wspread: wr.length > 1 ? Math.max.apply(null, wr.map(function (r) { return Math.abs(r.woven.ends_per_cm / KS.median(wr.map(function (x) { return x.woven.ends_per_cm; })) - 1); })) : null };
   }
 
   var CHIP = ['single_jersey', 'pique', 'rib', 'interlock', 'fleece', 'terry'];
   // without the card: "how far was the phone?" — counts per cm scale with 1 / distance
   function distK(c) { return c && c.estimated && S.dist && c.dist ? c.dist / S.dist : 1; }
-  function scaleBox(c) {
-    var box = $('sc-scale');
-    if (!box) { box = document.createElement('div'); box.id = 'sc-scale'; box.className = 'sc-why'; $('sc-agree').parentNode.insertBefore(box, $('sc-agree')); }
+  function scaleBox(c, woven) {
+    var id = woven ? 'sc-wscale' : 'sc-scale', anchor = woven ? 'sc-wagree' : 'sc-agree', box = $(id);
+    if (!box) { box = document.createElement('div'); box.id = id; box.className = 'sc-why'; $(anchor).parentNode.insertBefore(box, $(anchor)); }
     if (!c.estimated) { box.hidden = true; return; }
     box.hidden = false;
     var now = S.dist || c.dist;
-    box.innerHTML = '<b>No scan card — the scale is estimated.</b> The loop grid is exact; the per-cm numbers assume the phone was ' + (now / 10).toFixed(0) + ' cm from the fabric. Held closer or farther? Tap it:<div class="sc-row" style="margin-top:6px">'
+    box.innerHTML = '<b>No scan card — the scale is estimated.</b> The ' + (woven ? 'weave and the thread lattice are' : 'loop grid is') + ' exact; the per-cm numbers assume the phone was ' + (now / 10).toFixed(0) + ' cm from the fabric. Held closer or farther? Tap it:<div class="sc-row" style="margin-top:6px">'
       + [60, 80, 100, 120, 150].map(function (d) { return '<button type="button" class="sc-chip' + (Math.abs(d - now) < 5 ? ' on' : '') + '" data-dist="' + d + '">' + d / 10 + ' cm</button>'; }).join('')
       + '</div><span style="font-size:12px">For an exact count, lay the printed scan card on the fabric.</span>';
   }
@@ -264,10 +280,16 @@
   function update() {
     var c = combined();
     var hasFace = !!c;
-    $('sc-back-card').hidden = !hasFace;
-    $('sc-count-card').hidden = !hasFace;
-    $('sc-struct-card').hidden = !hasFace;
+    $('sc-id-card').hidden = !hasFace;
+    var isW = !!c && c.family === 'woven', knitOK = !!c && !!c.best.lattice;
+    $('sc-woven-card').hidden = !hasFace || !isW;
+    $('sc-back-card').hidden = !hasFace || isW;
+    $('sc-count-card').hidden = !hasFace || isW || !knitOK;
+    $('sc-struct-card').hidden = !hasFace || isW || !knitOK;
     if (!hasFace) return;
+    renderId(c);
+    if (isW) { renderWovenCard(c); return; }
+    if (!knitOK) return;
     var k = distK(c);
     $('sc-wpc').textContent = (c.estimated ? '≈ ' : '') + (c.wpc * S.adj.w * k).toFixed(c.estimated ? 1 : 2);
     $('sc-cpc').textContent = (c.estimated ? '≈ ' : '') + (c.cpc * S.adj.c * k).toFixed(c.estimated ? 1 : 2);
@@ -287,10 +309,99 @@
       return '<button type="button" class="sc-chip' + (k === S.structure ? ' on' : '') + '" data-s="' + k + '">' + esc(V.NAMES[k]) + '<small>' + Math.round((p[k] || 0) * 100) + '%</small></button>';
     }).join('');
     $('sc-why').textContent = why[S.structure] ? 'Why: ' + why[S.structure] + '.' : '';
-    if (c.woven) $('sc-why').innerHTML = '<b style="color:#B26A00">This looks woven, not knitted</b> — ' + esc(c.wovenWhy) + '. The scan works out knitting specs; for woven cloth use the Woven calculator in the <a href="/app.html">Calculator</a>. If it is a knit, pick the structure above.';
     if ((S.structure === 'pique' || S.structure === 'fleece' || S.structure === 'terry') && S.adj.c === 1) $('sc-agree').textContent += ' Tuck and loop fabrics often read one course per cell of two — if a grid cell holds two loops, tap × 2 on courses. Wales, stitch length and count are not affected.';
     S.suggest = order.map(function (k) { return { structure: k, p: p[k] || 0 }; });
   }
+  var FAMN = { knit: 'Knitted', woven: 'Woven' };
+  function pct(v) { return Math.round(v * 100) + '%'; }
+  function renderId(c) {
+    var id = c.identity, pW = c.pWoven, fam = c.family;
+    var kw = Math.max(10, Math.min(90, (1 - pW) * 100));
+    $('sc-fam').innerHTML = '<div class="k" style="width:' + kw + '%">' + (kw < 28 ? '' : 'Knitted ') + pct(1 - pW) + '</div><div class="w" style="width:' + (100 - kw) + '%">' + (100 - kw < 28 ? '' : 'Woven ') + pct(pW) + '</div>';
+    document.querySelectorAll('[data-fam]').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-fam') === fam); });
+    var rows = [];
+    if (S.family && S.family !== c.autoFamily) rows.push('<div class="sc-idrow"><span>Your choice: <b>' + FAMN[fam] + '</b> — the photo read ' + FAMN[c.autoFamily].toLowerCase() + ' (' + pct(c.autoFamily === 'woven' ? pW : 1 - pW) + ').</span></div>');
+    if (id) {
+      var list = id.candidates.filter(function (x) { return x.family === fam; });
+      var tot = list.reduce(function (t, x) { return t + x.p; }, 0) || 1;
+      if (fam === 'knit' && S.suggest && S.suggest.length) list = S.suggest.slice(0, 3).map(function (x) { return { family: 'knit', category: V.NAMES[x.structure] || x.structure, structure: '', p: x.p, why: '' }; }), tot = 1;
+      if (fam === 'woven' && c.wov) list[0] && (list[0].structure = c.wov.weave.name);
+      list.slice(0, 3).forEach(function (x, i) {
+        rows.push('<div class="sc-idrow' + (i ? '' : ' top') + '"><span><b>' + esc(FAMN[fam]) + ' › ' + esc(x.category) + '</b>' + (x.structure && x.structure !== x.category ? ' › ' + esc(x.structure) : '')
+          + (x.why ? '<small>' + esc(x.why) + '</small>' : '') + '</span><span class="p">' + pct(x.p / tot) + '</span></div>');
+      });
+      $('sc-evid').innerHTML = (id.evidence || []).map(function (e) {
+        return '<li><i class="' + (e.says === 'woven' ? 'w' : 'k') + '">' + (e.says === 'woven' ? 'woven +' : 'knitted +') + e.weight.toFixed(1) + '</i><span>' + esc(e.why) + '</span></li>';
+      }).join('') + '<li><i></i><span>Each item is a measurement on the photo; the weights add up as log-odds into the knitted / woven split above.</span></li>';
+    }
+    if (fam === 'knit' && !c.best.lattice) rows.push('<div class="sc-idrow"><span>These photos were read only as woven, so no loop count was kept. Take the photo again; it will be counted as knitted.</span></div>');
+    $('sc-idlist').innerHTML = rows.join('');
+  }
+  var DENIM = ['#243B6B', '#E9E6DC'];
+  function renderWovenCard(c) {
+    var w = c.wov, btn = $('sc-wgo');
+    if (!$('sc-wcomp').options.length) $('sc-wcomp').innerHTML = $('sc-comp').innerHTML;
+    if (!w) {
+      $('sc-wv').innerHTML = '<div class="d">No thread lattice was read in these photos — the threads may be too fine at this distance. Come closer (6–8 cm), keep the cloth flat and filling the frame, and take it again. For knitted cloth, tap Knitted above.</div>';
+      $('sc-epc').textContent = $('sc-ppc').textContent = '—'; $('sc-epi').textContent = $('sc-ppi').textContent = '';
+      btn.disabled = true; return;
+    }
+    btn.disabled = false;
+    var k = distK(c), e = c.epc * S.wadj.e * k, p = c.ppc * S.wadj.p * k, wv = w.weave, id = c.identity || {};
+    var cols = id.denim_like ? DENIM : null;
+    var bits = [];
+    if (wv.cls === 'twill') bits.push(wv.direction + (wv.angle_deg ? ', the twill line at about ' + Math.round(wv.angle_deg) + '° to the weft' : ''));
+    bits.push(wv.face === 'warp' ? 'warp-faced (more end than pick on the face)' : wv.face === 'weft' ? 'weft-faced (more pick than end on the face)' : 'balanced face');
+    bits.push('repeat ' + (w.matrix ? w.matrix[0].length + ' ends × ' + w.matrix.length + ' picks' : wv.repeat + ' threads'));
+    bits.push(w.confidence + ' confidence' + (w.matrix_match != null ? ' · ' + Math.round(w.matrix_match * 100) + '% of the crossings fit the diagram' : '') + (w.read_by === 'colour' ? ' · crossings read by the two yarn colours' : ''));
+    if (wv.runner_up) bits.push('next best: ' + wv.runner_up.id.replace(/^twill(\d)([RL])$/, 'twill, repeat $1').replace(/^satin(\d)\w$/, '$1-end satin').replace('basket22', 'basket').replace('weftrib', 'rib weave'));
+    $('sc-wv').innerHTML = (w.matrix ? V.weaveSvg(w.matrix, 12, cols && cols[0], cols && cols[1]) : '') + '<div><div class="t">' + esc(wv.name) + '</div><div class="d">' + bits.map(esc).join('<br>') + '</div></div>';
+    $('sc-epc').textContent = (c.estimated ? '≈ ' : '') + e.toFixed(1);
+    $('sc-ppc').textContent = (c.estimated ? '≈ ' : '') + p.toFixed(1);
+    $('sc-epi').textContent = Math.round(e * 2.54) + ' EPI';
+    $('sc-ppi').textContent = Math.round(p * 2.54) + ' PPI';
+    scaleBox(c, true);
+    $('sc-wagree').textContent = (c.n > 1 && c.wspread != null ? c.n + ' photos agree within ' + (c.wspread * 100).toFixed(1) + '%.' : 'One photo — a second at another place makes it surer.')
+      + ' If a count reads double or half (two threads seen as one), correct it with ÷ 2 / × 2.';
+  }
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('[data-fam]'); if (!b) return;
+    var f = b.getAttribute('data-fam'), c = combined();
+    S.family = c && f === c.autoFamily ? null : f; update();
+  });
+  document.querySelectorAll('[data-wadj]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var k = b.getAttribute('data-wadj'), f = +b.getAttribute('data-f');
+      S.wadj[k] = Math.max(0.25, Math.min(4, S.wadj[k] * f)); update();
+    });
+  });
+  $('sc-wgo').addEventListener('click', function () {
+    var c = combined(), btn = this, msg = $('sc-wmsg');
+    if (!c || !c.wov) return;
+    if (S.busy) { msg.textContent = 'Still measuring a photo…'; return; }
+    var w = c.wov, wv = w.weave, k = distK(c), best = c.wovBest || c.best, id = c.identity || {};
+    var body = {
+      pair: pair || undefined, family: 'woven',
+      weave: { cls: wv.cls, repeat: wv.repeat, notation: wv.notation || null, hand: wv.hand || null, face: wv.face, name: wv.name, angle_deg: wv.angle_deg || null },
+      matrix: w.matrix || null, ends_per_cm: +(c.epc * S.wadj.e * k).toFixed(2), picks_per_cm: +(c.ppc * S.wadj.p * k).toFixed(2),
+      gsm: $('sc-wgsm').value || null, composition: $('sc-wcomp').value, warp_count: $('sc-wwarp').value.trim() || null, weft_count: $('sc-wweft').value.trim() || null,
+      denim: !!id.denim_like, confidence: w.confidence,
+      measure: { px_per_mm: best.card ? best.card.px_per_mm : best.scale.px_per_mm * k, scale: best.card ? 'card' : best.scale.source, photos: c.n, colour: best.colour, p_woven: c.pWoven },
+    };
+    btn.disabled = true; msg.className = 'sc-msg'; msg.innerHTML = '<span class="sc-busy"></span> Working out the woven spec…';
+    fetch(API + '/api/scan/analyse', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json().then(function (d) { if (!r.ok || !d.success) throw new Error(d.error || 'The woven spec could not be worked out.'); return d; }); })
+      .then(function (d) {
+        S.result = d.result; msg.textContent = '';
+        $('sc-result').innerHTML = V.render(d.result);
+        $('sc-full').textContent = 'Open in the woven calculator';
+        $('sc-result-card').hidden = false;
+        $('sc-result-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      })
+      .catch(function (e) { msg.className = 'sc-msg err'; msg.textContent = e.message; })
+      .then(function () { btn.disabled = false; });
+  });
+
   $('sc-chips').addEventListener('click', function (e) {
     var b = e.target.closest('[data-s]'); if (!b) return;
     S.structure = b.getAttribute('data-s'); S.userPicked = true; update();
@@ -346,6 +457,7 @@
       .then(function (d) {
         S.result = d.result;
         msg.textContent = '';
+        $('sc-full').textContent = 'Full analysis: cost, CO₂, 3D';
         $('sc-result').innerHTML = (c.estimated ? '<p class="sv-note" style="background:#FFF4E0;color:#7A4A00">Measured without the scan card: the loop pattern and structure are read from the photo, the per-cm counts assume the phone was ' + ((S.dist || c.dist) / 10).toFixed(0) + ' cm away. Lay the printed card on the fabric for an exact count.</p>' : '') + V.render(d.result) + (S.sampleTruth && S.sampleTruth.structure === d.result.structure ? '<p class="sv-note" style="background:#E8F0FD;color:#1857C4">Sample fabric: drawn at ' + S.sampleTruth.wpc + ' wales and ' + S.sampleTruth.cpc + ' courses per cm — compare with what was measured.</p>' : '');
         $('sc-result-card').hidden = false;
         $('sc-result-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -356,13 +468,19 @@
   $('sc-full').addEventListener('click', function () {
     if (!S.result) return;
     if (!S.signedIn) { alert(pair ? 'Open the full analysis on the screen — the result is already there.' : 'Sign in to open the full analysis.'); return; }
+    if (S.result.family === 'woven') {
+      var fp = S.result.full_params || {};
+      if (typeof savePending === 'function') savePending({ fabric: fp.fabric_id, woven: true, epi: fp.epi, ppi: fp.ppi, warp_count: fp.warp_count, weft_count: fp.weft_count, composition: fp.composition });
+      window.location.href = '/app.html?recalc=1';
+      return;
+    }
     if (typeof savePending === 'function') savePending(S.result.full_params);
     window.location.href = '/result.html';
   });
   $('sc-again').addEventListener('click', function () {
     S.faces.forEach(function (f) { f.el.remove(); }); S.backs.forEach(function (f) { f.el.remove(); });
-    S.faces = []; S.backs = []; S.adj = { w: 1, c: 1 }; S.dist = null; S.structure = null; S.userPicked = false; S.result = null; S.sampleTruth = null;
-    $('sc-result-card').hidden = true; $('sc-gsm').value = ''; update();
+    S.faces = []; S.backs = []; S.adj = { w: 1, c: 1 }; S.wadj = { e: 1, p: 1 }; S.family = null; S.dist = null; S.structure = null; S.userPicked = false; S.result = null; S.sampleTruth = null;
+    $('sc-result-card').hidden = true; $('sc-gsm').value = ''; $('sc-wgsm').value = ''; $('sc-wwarp').value = ''; $('sc-wweft').value = ''; update();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   });
 })();

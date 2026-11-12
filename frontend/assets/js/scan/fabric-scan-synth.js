@@ -90,6 +90,46 @@
   }
 
   /**
+   * A WOVEN fabric as a function of position in millimetres: ends (warp) run top to bottom, picks
+   * (weft) across. o.weave is the interlacing matrix, rows = picks, columns = ends, 1 = warp on top.
+   * Each yarn is a cylinder seen from above (bright crown, dark edges); a float dips where it goes
+   * under; the gaps between yarns show the other set or nothing. Sets fn.side to 1 where the warp is
+   * seen and 2 where the weft is, so the photo can colour them apart (denim: indigo warp, white weft).
+   */
+  function wovenFabric(o) {
+    var se = 10 / o.epc, sp = 10 / o.ppc, Wv = o.weave, R1 = Wv.length, R2 = Wv[0].length;
+    var ca = Math.cos((o.angle || 0) * Math.PI / 180), sa = Math.sin((o.angle || 0) * Math.PI / 180);
+    var ce = o.coverWarp || 0.86, cp = o.coverWeft || 0.82, jit = o.jitter == null ? 0.03 : o.jitter;
+    var up = function (i, j) { return Wv[((j % R1) + R1) % R1][((i % R2) + R2) % R2]; };
+    var fn = function (x, y) {
+      var xr = x * ca + y * sa, yr = -x * sa + y * ca;
+      var fi = xr / se, fj = yr / sp, i = Math.floor(fi), j = Math.floor(fj);
+      var u = fi - i + (hash(i, 0, 5) - 0.5) * jit, v = fj - j + (hash(0, j, 6) - 0.5) * jit;
+      var du = Math.abs(u - 0.5) * 2 / ce, dv = Math.abs(v - 0.5) * 2 / cp;
+      var hw = du < 1 ? Math.sqrt(1 - du * du) : 0, hp = dv < 1 ? Math.sqrt(1 - dv * dv) : 0;
+      var top = up(i, j), val, side;
+      if (top) {
+        if (hw > 0) {
+          val = 0.3 + 0.62 * hw; side = 1;
+          if (!up(i, j - 1) && v < 0.22) val *= 0.55 + 2 * v;          // dives under the pick above
+          if (!up(i, j + 1) && v > 0.78) val *= 0.55 + 2 * (1 - v);
+          val *= 1 - 0.08 * Math.sin((v * 6 + u * 2 + hash(i, j, 7) * 3) * Math.PI);   // twist
+        } else if (hp > 0) { val = 0.12 + 0.3 * hp; side = 2; } else { val = 0.05; side = 2; }
+      } else {
+        if (hp > 0) {
+          val = 0.3 + 0.62 * hp; side = 2;
+          if (up(i - 1, j) && u < 0.22) val *= 0.55 + 2 * u;
+          if (up(i + 1, j) && u > 0.78) val *= 0.55 + 2 * (1 - u);
+          val *= 1 - 0.08 * Math.sin((u * 6 + v * 2 + hash(i, j, 8) * 3) * Math.PI);
+        } else if (hw > 0) { val = 0.12 + 0.3 * hw; side = 1; } else { val = 0.05; side = 1; }
+      }
+      fn.side = side;
+      return val;
+    };
+    return fn;
+  }
+
+  /**
    * A phone photo of the fabric under the scan card.
    * @param o fabric options + {width, height, pxPerMm, seed, blur, noise, light, tilt, rotate, colour:[r,g,b]}
    * @returns {{rgba: Uint8ClampedArray, w, h, truth}}
@@ -105,17 +145,17 @@
     });
     var KS = o.KAScan;
     var Hinv = KS.homography(dst, CARD.markers);                // photo px → card mm
-    var fab = fabric(o);
-    var col = o.colour || [200, 205, 210];
+    var fab = o.weave ? wovenFabric(o) : fabric(o);
+    var col = o.colour || [200, 205, 210], colWarp = o.warpColour || col, colWeft = o.weftColour || col;
     var g = new Float32Array(W * H), tint = new Uint8Array(W * H);
     for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) {
       var q = KS.apply(Hinv, x + 0.5, y + 0.5), mx = q[0], my = q[1], v, t = 0;
       if (mx >= -6 && my >= -6 && mx <= CARD.size + 6 && my <= CARD.size + 6) {
         var inMarker = mx >= 0 && my >= 0 && mx <= CARD.size && my <= CARD.size && (mx < CARD.marker || mx > CARD.size - CARD.marker) && (my < CARD.marker || my > CARD.size - CARD.marker);
         if (inMarker) v = 0.06;
-        else if (!o.uncut && mx > CARD.window[0] && mx < CARD.window[1] && my > CARD.window[0] && my < CARD.window[1]) { v = fab(mx, my); t = 1; }
+        else if (!o.uncut && mx > CARD.window[0] && mx < CARD.window[1] && my > CARD.window[0] && my < CARD.window[1]) { v = fab(mx, my); t = fab.side || 1; }
         else v = 0.9 + (R() - 0.5) * 0.02;
-      } else if (o.uncut) { v = fab(mx, my); t = 1; }                 // the card lies on the fabric, window not cut
+      } else if (o.uncut) { v = fab(mx, my); t = fab.side || 1; }                 // the card lies on the fabric, window not cut
       else v = 0.42 + 0.05 * Math.sin(x * 0.01) * Math.cos(y * 0.013);
       g[y * W + x] = v; tint[y * W + x] = t;
     }
@@ -128,7 +168,7 @@
       var L = 1 + light * (px2 * lx + py2 * ly) * 2;
       var n = (R() + R() + R() - 1.5) * noise * 1.4;
       var val = Math.max(0, Math.min(1, g[k] * L + n));
-      var c = tint[k] ? col : [255, 255, 255];
+      var c = tint[k] === 2 ? colWeft : tint[k] ? colWarp : [255, 255, 255];
       rgba[k * 4] = val * c[0]; rgba[k * 4 + 1] = val * c[1]; rgba[k * 4 + 2] = val * c[2]; rgba[k * 4 + 3] = 255;
     }
     return { rgba: rgba, w: W, h: H, truth: { wpc: o.wpc, cpc: o.cpc, structure: o.structure, side: o.side || 'face', markers: dst } };
@@ -142,5 +182,20 @@
     return o;
   }
 
-  return { fabric: fabric, photo: photo, rng: rng };
+  // weave matrices, rows = picks, columns = ends, 1 = warp on top
+  var WEAVES = {
+    plain: [[1, 0], [0, 1]],
+    twill21: [[1, 1, 0], [0, 1, 1], [1, 0, 1]],
+    twill31: [[1, 1, 1, 0], [0, 1, 1, 1], [1, 0, 1, 1], [1, 1, 0, 1]],
+    twill22: [[1, 1, 0, 0], [0, 1, 1, 0], [0, 0, 1, 1], [1, 0, 0, 1]],
+    basket22: [[1, 1, 0, 0], [1, 1, 0, 0], [0, 0, 1, 1], [0, 0, 1, 1]],
+    oxford: [[1, 1, 0, 0], [0, 0, 1, 1]],
+    satin5: [[1, 1, 1, 1, 0], [1, 1, 0, 1, 1], [0, 1, 1, 1, 1], [1, 1, 1, 0, 1], [1, 0, 1, 1, 1]],
+    sateen5: [[0, 0, 0, 0, 1], [0, 0, 1, 0, 0], [1, 0, 0, 0, 0], [0, 0, 0, 1, 0], [0, 1, 0, 0, 0]],
+  };
+  // as written above the 3/1 line falls to the right (left-hand); mirrored it rises to the right (denim's usual)
+  WEAVES.twill31L = WEAVES.twill31;
+  WEAVES.twill31 = WEAVES.twill31L.map(function (r) { return r.slice().reverse(); });
+
+  return { fabric: fabric, wovenFabric: wovenFabric, photo: photo, rng: rng, WEAVES: WEAVES };
 });
