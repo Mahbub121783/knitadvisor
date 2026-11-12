@@ -14,13 +14,23 @@
  * When every check holds for about half a second, the box turns green and the
  * photo is taken by itself, measured at once, and kept or retaken. Then it
  * waits for the card to move to a new spot, and finally asks for the back.
+ *
+ * ONE SHOT, AND A SHAKING HAND IS FINE (2026-11-12). Holding a phone still for
+ * seconds was the whole difficulty: every small movement reset the countdown.
+ * Two changes remove it. (1) Steadiness and sharpness are no longer gates —
+ * only "is the fabric (or card) in view, close enough and lit". (2) The photo
+ * is a BURST: six video frames over a third of a second, and the sharpest one
+ * is kept, so a moving hand still yields one frame without motion blur. The
+ * loop count itself does not care where the fabric sits in the frame, only
+ * that it is sharp. Tapping the picture takes the burst at once.
  */
 (function (root) {
   'use strict';
   var KS = root.KAScan;
   var FOV_DEG = 66;              // typical main phone camera, horizontal — the distance shown is approximate
   var MIN_PX_PER_MM = 9.5, GOOD_PX_PER_MM = 13, MAX_SIDE = 2400;
-  var TICK_MS = 120, HOLD_TICKS = 3, LOOP_EVERY = 4, LIVE_MIN_PXMM = 6.5, FREE_AFTER = 10, FREE_HOLD = 9;
+  var TICK_MS = 100, HOLD_TICKS = 2, LOOP_EVERY = 4, LIVE_MIN_PXMM = 6.5, FREE_AFTER = 4, FREE_HOLD = 3;
+  var BURST_N = 6, BURST_GAP_MS = 55;     // six frames over ~0.3 s; the sharpest is analysed
 
   var CSS = '.kc{position:fixed;inset:0;z-index:2000;background:#000;color:#fff;font-family:var(--head,system-ui);overflow:hidden;touch-action:none}' +
     '.kc video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}.kc canvas.ov{position:absolute;inset:0;width:100%;height:100%}' +
@@ -84,6 +94,8 @@
     root.querySelector('.kc-done').addEventListener('click', function () { close(true); });
     root.querySelector('.kc-skip').addEventListener('click', function () { next(); });
     root.querySelector('.kc-shut').addEventListener('click', function () { if (!busy) capture(true); });
+    // tap anywhere on the picture: the burst is taken at once, no waiting for any check
+    root.querySelector('canvas.ov').addEventListener('click', function () { if (!busy && steps[stepIx]) capture(true); });
     root.querySelector('.kc-send').addEventListener('click', function () {
       if (!opts.onSendFrame || busy) return;
       busy = true; say('Sending this frame…', 'ok');
@@ -148,7 +160,7 @@
       out.found = true;
       var c = det.corners, minS = Math.min(sw, sh);
       // distance: px per mm in the photo that will be analysed
-      var fullW = Math.max(vw, captureW || 0), longFull = Math.max(fullW, fullW * Math.max(vw, vh) / vw);
+      var fullW = vw, longFull = Math.max(fullW, fullW * Math.max(vw, vh) / vw);
       var keep = Math.min(1, MAX_SIDE / longFull);
       var pxmmPhoto = det.pxPerMm * (fullW / sw) * keep;
       var span = det.pxPerMm * 60;                                   // marker-to-marker, small px
@@ -198,7 +210,7 @@
       var pxmmVideo = det.pxPerMm * vw / sw;
       if (pxmmVideo < LIVE_MIN_PXMM) out.loops = { ok: true, pending: true, hint: null };
       else {
-        if (tickN % LOOP_EVERY === 0 && out.steady.ok) {
+        if (tickN % LOOP_EVERY === 0) {
           try {
             var k = Math.min(1, 1920 / Math.max(vw, vh)), fw = Math.round(vw * k), fh = Math.round(vh * k);
             if (fullCanvas.width !== fw) { fullCanvas.width = fw; fullCanvas.height = fh; }
@@ -224,7 +236,7 @@
       mean /= T * T;
       var diff = 0; if (thumbPrev) { for (var i = 0; i < th.length; i++) diff += Math.abs(th[i] - thumbPrev[i]); diff /= th.length; } else diff = 1;
       thumbPrev = th;
-      var steady = { ok: diff < 0.03, hint: 'Hold still' };
+      var steady = { ok: diff < 0.12, hint: 'Point at the fabric' };
       var light = { ok: mean > 0.08 && mean < 0.94, hint: mean <= 0.08 ? 'Too dark — more light' : 'Too bright — move the light' };
       var side = Math.min(vw, vh) * 0.32;
       cg.drawImage(video, (vw - side) / 2, (vh - side) / 2, side, side, 0, 0, 192, 192);
@@ -234,8 +246,8 @@
       for (y = 1; y < 191; y++) for (x = 1; x < 191; x++) { var k = y * 192 + x, l = 4 * gs[k] - gs[k - 1] - gs[k + 1] - gs[k - 192] - gs[k + 192]; e += l * l; }
       var sharpV = varc > 0.0004 ? e / (190 * 190) / varc : 0;
       if (steady.ok) freeBest = Math.max(freeBest * 0.995, sharpV);
-      var texture = varc > 0.0008;
-      var sharp = { ok: texture && sharpV > 0 && sharpV >= freeBest * 0.65, hint: texture ? 'Focusing… (8–12 cm from the fabric)' : 'Fill the frame with the fabric' };
+      var texture = varc > 0.00025;                       // dark, low-contrast cloth still has this much
+      var sharp = { ok: texture, hint: 'Fill the frame with the fabric, about 10 cm away' };
       return { steady: steady, light: light, sharp: sharp };
     }
 
@@ -332,8 +344,9 @@
       try { L = look(); } catch (e) { L = null; }
       if (!L) return;
       tickN++;
-      var names = [['found', 'Card'], ['distance', 'Distance'], ['straight', 'Straight'], ['steady', 'Steady'], ['sharp', 'Sharp'], ['light', 'Light'], ['loops', 'Loops']];
-      var allOk = L.found && names.slice(1).every(function (n) { return L[n[0]] && L[n[0]].ok; });
+      var names = [['found', 'Card'], ['distance', 'Distance'], ['straight', 'Straight'], ['light', 'Light'], ['loops', 'Loops']];
+      var NEED = ['distance', 'straight', 'light'];
+      var allOk = L.found && NEED.every(function (n) { return L[n] && L[n].ok; });
       lastState = names.map(function (n) { return n[1] + ':' + (n[0] === 'found' ? L.found : !!(L[n[0]] && L[n[0]].ok)); }).join(' ');
       // waiting for a new spot after a photo
       if (!armed) {
@@ -354,20 +367,21 @@
       }
       if (!L.found) {
         noCard++;
-        if (noCard < FREE_AFTER || !L.free) { okTicks = 0; setRing(0); draw(L, 'idle'); say('Looking for the scan card… (or just fill the frame with the fabric)'); return; }
+        if (noCard < FREE_AFTER || !L.free) { okTicks = 0; setRing(0); draw(L, 'idle'); say('Point at the fabric — or tap to shoot'); return; }
         // free mode: no card — the fabric fills the frame; capture when steady, sharp and lit
-        var F = L.free, fn = [['steady', 'Steady'], ['sharp', 'Sharp'], ['light', 'Light']];
+        var F = L.free, fn = [['sharp', 'Fabric in view'], ['steady', 'Pointed'], ['light', 'Light']];
         checksEl.innerHTML = '<span>No card · scale estimated</span>' + fn.map(function (n) { var ok = F[n[0]].ok; return '<span class="' + (ok ? 'ok' : 'bad') + '">' + (ok ? '✓ ' : '') + n[1] + '</span>'; }).join('');
         draw(L, 'idle');
         var allF = fn.every(function (n) { return F[n[0]].ok; });
         if (allF) {
           okTicks++;
           setRing(okTicks / FREE_HOLD);
-          say(okTicks >= FREE_HOLD ? 'Capturing…' : 'Good — hold still', 'ok');
-          if (okTicks >= FREE_HOLD) { okTicks = 0; capture(false, null); }
+          say(okTicks >= FREE_HOLD ? 'Capturing…' : 'Good', 'ok');
+          if (okTicks >= FREE_HOLD) { okTicks = 0; capture(false, L); }
           return;
         }
-        okTicks = 0; setRing(0);
+        // a shaky hand drops a tick now and then: it takes one half back, it does not start the count again
+        okTicks = Math.max(0, okTicks - 0.5); setRing(okTicks / FREE_HOLD);
         var bad = fn.filter(function (n) { return !F[n[0]].ok; })[0];
         say(F[bad[0]].hint, 'warn');
         return;
@@ -377,19 +391,45 @@
         okTicks++;
         setRing(okTicks / HOLD_TICKS);
         draw(L, 'ok');
-        say(okTicks >= HOLD_TICKS ? 'Capturing…' : 'Perfect — hold still', 'ok');
+        say(okTicks >= HOLD_TICKS ? 'Capturing…' : 'Good', 'ok');
         if (okTicks >= HOLD_TICKS) { okTicks = 0; capture(false, L); }
         return;
       }
-      okTicks = 0; setRing(0); draw(L, 'warn');
-      var first = names.slice(1).filter(function (n) { return !(L[n[0]] && L[n[0]].ok); })[0];
-      say(first ? (L[first[0]].hint || first[1]) : 'Hold still', 'warn');
+      okTicks = Math.max(0, okTicks - 0.5); setRing(okTicks / HOLD_TICKS); draw(L, 'warn');
+      var first = NEED.filter(function (n) { return !(L[n] && L[n].ok); })[0];
+      say(first ? (L[first].hint || first) : 'Hold over the fabric', 'warn');
     }
 
     // ── taking the photo ─────────────────────────────────────────────
     // the lens's focus distance, where the browser reports it (metres): the scale when there is no card
     function focusMm() {
       try { var fd = track && track.getSettings ? track.getSettings().focusDistance : null; return fd > 0.02 && fd < 0.5 ? fd * 1000 : null; } catch (_) { return null; }
+    }
+    // Laplacian energy over variance on a centre crop: high when the weave's edges are crisp
+    function sharpness(d, S) {
+      var n = S * S, g = new Float32Array(n), m = 0, m2 = 0, e = 0, i, x, y;
+      for (i = 0; i < n; i++) { var v = (d[i * 4] * 0.299 + d[i * 4 + 1] * 0.587 + d[i * 4 + 2] * 0.114) / 255; g[i] = v; m += v; m2 += v * v; }
+      m /= n; var varc = Math.max(1e-5, m2 / n - m * m);
+      for (y = 1; y < S - 1; y++) for (x = 1; x < S - 1; x++) { var k = y * S + x, l = 4 * g[k] - g[k - 1] - g[k + 1] - g[k - S] - g[k + S]; e += l * l; }
+      return e / ((S - 2) * (S - 2)) / varc;
+    }
+    function burst(n, gap) {
+      return new Promise(function (resolve) {
+        var vw = video.videoWidth, vh = video.videoHeight, k = Math.min(1, MAX_SIDE / Math.max(vw, vh));
+        var W = Math.round(vw * k), H = Math.round(vh * k), S = Math.min(320, W, H), x0 = (W - S) >> 1, y0 = (H - S) >> 1;
+        var pool = [document.createElement('canvas'), document.createElement('canvas')], best = null, i = 0, scores = [];
+        pool.forEach(function (c) { c.width = W; c.height = H; });
+        (function shot() {
+          var c = best && best.c === pool[0] ? pool[1] : pool[0], g = c.getContext('2d', { willReadFrequently: true });
+          g.drawImage(video, 0, 0, W, H);
+          var sc = sharpness(g.getImageData(x0, y0, S, S).data, S);
+          scores.push(Math.round(sc * 100) / 100);
+          if (!best || sc > best.s) best = { c: c, s: sc };
+          if (++i < n) return setTimeout(shot, gap);
+          resolve({ rgba: best.c.getContext('2d').getImageData(0, 0, W, H).data, w: W, h: H, focus_mm: focusMm(),
+            source: 'video ' + vw + '×' + vh + ', sharpest of ' + n + ' frames', burst: scores });
+        })();
+      });
     }
     function grabVideo() {
       var vw = video.videoWidth, vh = video.videoHeight, k = Math.min(1, MAX_SIDE / Math.max(vw, vh));
@@ -412,11 +452,14 @@
       var st = steps[stepIx];
       if (!st) return;
       busy = true;
-      say('Hold still…', 'ok');
+      say('Got it…', 'ok');
       var fl = root.querySelector('.kc-flash');
       fl.classList.add('go'); setTimeout(function () { fl.classList.remove('go'); }, 60);
       if (navigator.vibrate) navigator.vibrate(40);
-      grabPhoto().then(function (img) {
+      burst(BURST_N, BURST_GAP_MS).then(function (img) {
+        img.card_seen = L ? !!L.found : null;       // no card in the live view: the page skips the card search (a tap: unknown, so it looks)
+        // the count the live view was showing, so the page can catch a photo that read a harmonic (double or half)
+        img.live = live && !live.error && live.wpc && Date.now() - live.t < 3000 ? { wpc: live.wpc, cpc: live.cpc } : null;
         say('Measuring the loops…', 'ok');
         return new Promise(function (ok) { setTimeout(function () { ok(img); }, 20); });
       }).then(function (img) { return opts.onCapture(st.kind, img); }).then(function (res) {
@@ -429,6 +472,7 @@
         }
         if (navigator.vibrate) navigator.vibrate([30, 40, 30]);
         say('✓ ' + (res.note || 'Captured'), 'ok');
+        if (stepIx >= steps.length - 1) { busy = true; setTimeout(function () { close(true); }, 450); return; }   // last photo: straight to the result
         lastPrint = L ? L.print : null; armed = false; movedSince = false; capturedAt = Date.now(); lostTicks = 0;
         setTimeout(next, 900);
       }).catch(function (e) { busy = false; say('Retake: ' + e.message, 'warn'); });

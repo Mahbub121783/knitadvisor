@@ -681,10 +681,10 @@
     for (var i = 0; i < spots.length; i++) {
       var cx = (sw - N) * spots[i][0] + N / 2, cy = (sh - N) * spots[i][1] + N / 2;
       var patch = rotPatch(small.data, sw, sh, cx, cy, N, 0, Ps);
-      var m = measure(patch, { maxN: 512 });
+      var m = measure(patch, { maxN: 256 });
       if (m.error) continue;
       if (!best || m.regularity > best.m.regularity) best = { m: m, flat: patch, c: [cx, cy] };
-      if (best.m.regularity > 0.6 && best.m.confidence === 'high') break;
+      if (best.m.regularity > 0.55 && best.m.confidence === 'high') break;
     }
     if (!best) return { error: 'No regular loop pattern was found. Fill the frame with the fabric, 8 to 12 cm away, in focus.', code: 'no_loops' };
     // The phone is rarely square to the wales. Turn the patch through a fan of angles and keep the one where the
@@ -697,10 +697,14 @@
     };
     var top = null;
     var scores0 = null;
-    for (var dg = -40; dg <= 40; dg += 8) { var t = tryAt(dg); if (dg === 0) scores0 = t; if (t && (!top || t.score > top.score)) top = t; }
-    if (top) [top.deg - 4, top.deg + 4].forEach(function (d2) { var t2 = tryAt(d2); if (t2 && t2.score > top.score) top = t2; });
-    var zero = scores0;
-    if (top && zero && top.deg !== 0 && zero.score >= top.score - 0.05) top = zero;
+    var square = alignErr(best.m) < 7 && best.m.regularity > 0.4;
+    if (!square) {
+      for (var dg = -40; dg <= 40; dg += 10) { var t = tryAt(dg); if (dg === 0) scores0 = t; if (t && (!top || t.score > top.score)) top = t; }
+      if (top) [top.deg - 5, top.deg + 5].forEach(function (d2) { var t2 = tryAt(d2); if (t2 && t2.score > top.score) top = t2; });
+      if (top) [top.deg - 2.5, top.deg + 2.5].forEach(function (d2) { var t2 = tryAt(d2); if (t2 && t2.score > top.score) top = t2; });
+      var zero = scores0;
+      if (top && zero && top.deg !== 0 && zero.score >= top.score - 0.05) top = zero;
+    }
     var turned = null;
     if (top && Math.abs(top.deg) >= 4) {
       var th = top.deg * Math.PI / 180, room = Math.min(best.c[0], best.c[1], sw - best.c[0], sh - best.c[1]) * 2;
@@ -710,6 +714,7 @@
         if (!rm.error) { best = { m: rm, flat: rp2, c: best.c }; turned = top.deg; }
       }
     }
+    if (turned == null) { var fm = measure(best.flat, { maxN: 512 }); if (!fm.error) best = { m: fm, flat: best.flat, c: best.c }; }
     // held sideways (wales across the frame): courses always outnumber or equal wales in a knit, so swap back
     var sideways = best.m.cpc / best.m.wpc < 0.78;
     if (sideways) { var tw = best.m.wpc; best.m.wpc = best.m.cpc; best.m.cpc = tw; best.m.density = best.m.wpc * best.m.cpc; }
