@@ -92,7 +92,7 @@ function hashIp(ip) {
 // A signed-in user's calculations are kept as their history. Fire-and-forget: a
 // failure to record must never fail the calculation it describes.
 function recordHistory(req, body, result) {
-  if (!req.user) return;
+  if (!req.user || req.guest) return;   // an open-access guest has no history to write to
   const entry = buildHistoryEntry(ENGINE_INPUTS, body, result);
   if (!entry) return;
   userRepo.calculations.record(req.user.id, entry)
@@ -102,6 +102,12 @@ function recordHistory(req, body, result) {
 // ============================================================
 // POST /api/calculate
 // ============================================================
+// Is today an open-access day? Public: the landing page and the shell ask it.
+router.get('/open-access', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json(require('../services/open-access').publicStatus());
+});
+
 router.post('/calculate', requireUser, enforceDailyLimit, async (req, res) => {
   const startTime = Date.now();
   const body = req.body || {};

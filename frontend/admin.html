@@ -906,6 +906,39 @@
     .ch-row5 { grid-template-columns: repeat(auto-fit, minmax(min(100%, 96px), 1fr)); }
     .ch-cell { display: flex; flex-direction: column; gap: 3px; font-size: 10.5px; color: var(--t3); min-width: 0; }
     .ch-cell input { width: 100%; }
+    /* ── Open Access tab ── */
+    .oa-hero { border-radius: 14px; padding: 18px 20px; display: flex; flex-wrap: wrap; align-items: center; gap: 14px 20px; border: 1px solid var(--line, #e4e6e9); background: #fff; }
+    .oa-hero.on { background: linear-gradient(90deg, #12408f, #1857C4 50%, #1E7A54); color: #fff; border-color: transparent; }
+    .oa-hero .oa-state { font: 800 22px/1.2 inherit; display: flex; align-items: center; gap: 10px; }
+    .oa-hero .oa-dot { width: 12px; height: 12px; border-radius: 50%; background: #B9BEC6; }
+    .oa-hero.on .oa-dot { background: #4ade80; box-shadow: 0 0 0 6px rgba(74,222,128,.25); }
+    .oa-hero .oa-sub { font-size: 13px; opacity: .9; line-height: 1.5; }
+    .oa-hero .oa-count { font: 800 26px inherit; font-variant-numeric: tabular-nums; }
+    .oa-switch { margin-left: auto; border: 0; border-radius: 999px; padding: 12px 22px; font: 800 14px inherit; cursor: pointer; }
+    .oa-switch.turn-on { background: #1E7A54; color: #fff; }
+    .oa-switch.turn-off { background: #fff; color: #B23B3B; }
+    .oa-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+    @media (min-width: 1100px) { .oa-grid { grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); } }
+    .oa-l { display: block; font-size: 12px; font-weight: 600; color: var(--t2, #565C64); margin: 12px 0 5px; }
+    .oa-in { width: 100%; box-sizing: border-box; padding: 9px 10px; border: 1px solid var(--line2, #D2D5DA); border-radius: 8px; font: 14px inherit; }
+    .oa-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+    .oa-chips button { border: 1px solid var(--line2, #D2D5DA); background: #fff; border-radius: 999px; padding: 5px 11px; font: 600 12px inherit; cursor: pointer; }
+    .oa-chips button.on { background: var(--a1, #1857C4); color: #fff; border-color: var(--a1, #1857C4); }
+    .oa-scopes { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 6px; }
+    .oa-scopes label { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line, #e4e6e9); border-radius: 8px; padding: 8px 10px; font-size: 13px; cursor: pointer; }
+    .oa-tool { display: grid; grid-template-columns: minmax(140px, 40%) minmax(0, 1fr) 50px; gap: 10px; align-items: center; font-size: 12.5px; padding: 4px 0; }
+    .oa-tool .b { height: 8px; background: #EEF0F3; border-radius: 99px; overflow: hidden; }
+    .oa-tool .b i { display: block; height: 100%; background: var(--a1, #1857C4); border-radius: 99px; }
+    .oa-hours { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 2px; align-items: end; height: 70px; }
+    .oa-hours div { background: #C9D7F2; border-radius: 3px 3px 0 0; min-height: 2px; position: relative; }
+    .oa-hours div.now { background: var(--a1, #1857C4); }
+    .oa-qr { position: fixed; inset: 0; z-index: 9999; background: rgba(10, 20, 40, .82); display: flex; align-items: center; justify-content: center; padding: 16px; }
+    .oa-qr[hidden] { display: none; }
+    .oa-qr-box { background: #fff; border-radius: 20px; padding: 28px; text-align: center; max-width: 520px; width: 100%; }
+    .oa-qr-title { font: 800 26px inherit; margin-bottom: 12px; color: #12408f; }
+    #oa-qr-code svg { width: min(380px, 80vw); height: auto; }
+    .oa-qr-sub { font-size: 16px; margin: 10px 0 4px; }
+    .oa-qr-url { font: 13px monospace; color: #6F7680; margin-bottom: 14px; }
 </style>
 </head>
 <body>
@@ -947,6 +980,10 @@
         <button class="tab-btn sb-link active" data-tab="tab-overview">
           <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
           Dashboard
+        </button>
+        <button class="tab-btn sb-link" data-tab="tab-open">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 7.5-2" stroke-linecap="round"/></svg>
+          Open Access<span class="sb-count" id="sb-open-live" hidden style="background:#1E7A54;color:#fff">LIVE</span>
         </button>
       </div>
       <div class="sb-group">
@@ -1352,6 +1389,60 @@
           <tbody id="prices-sync-tbody"></tbody>
         </table>
       </div>
+    </div>
+
+    <!-- ── OPEN ACCESS ── -->
+    <div id="tab-open" class="tab-panel">
+      <div class="row-between mb-20">
+        <div>
+          <div class="section-title">Open Access</div>
+          <div class="section-sub">Let anyone use the tools without an account — for an exhibition or an open day — until a time you set. Nothing a guest does is saved to any account.</div>
+        </div>
+        <div class="row gap-8">
+          <button id="oa-reload" class="btn btn-ghost btn-sm">Reload</button>
+          <button id="oa-qr-btn" class="btn btn-ghost btn-sm">Stand QR code</button>
+        </div>
+      </div>
+      <div id="oa-hero" class="oa-hero mb-20"></div>
+      <div class="oa-grid">
+        <div class="card">
+          <div class="section-title" style="font-size:12px;">Settings</div>
+          <div class="section-sub mb-12">Applied to every server process within a few seconds</div>
+          <label class="oa-l" for="oa-label">Event name (shown in the banner)</label>
+          <input id="oa-label" class="oa-in" maxlength="60" placeholder="Open Innovation">
+          <label class="oa-l" for="oa-message">Banner message</label>
+          <input id="oa-message" class="oa-in" maxlength="200" placeholder="Use KnitAdvisor free today — no account needed.">
+          <label class="oa-l">Open until</label>
+          <div class="oa-chips" id="oa-until-chips">
+            <button type="button" data-h="1">1 hour</button><button type="button" data-h="3">3 hours</button><button type="button" data-h="6">6 hours</button>
+            <button type="button" data-h="eod">End of today (Dhaka)</button><button type="button" data-h="none">Until I turn it off</button>
+          </div>
+          <input id="oa-until" class="oa-in" type="datetime-local">
+          <label class="oa-l">Tools open to guests</label>
+          <div id="oa-scopes" class="oa-scopes"></div>
+          <label class="oa-l" for="oa-per-hour">Calls per visitor per hour</label>
+          <input id="oa-per-hour" class="oa-in" type="number" min="10" max="5000" step="10" value="300" style="max-width:160px">
+          <div class="row gap-8 mt-16">
+            <button id="oa-save" class="btn btn-sm" style="background:var(--a1);color:#fff;font-weight:700;">Save settings</button>
+            <span id="oa-msg" style="font-size:12px;color:var(--t3);align-self:center;"></span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="section-title" style="font-size:12px;">Today, live</div>
+          <div class="section-sub mb-12">Guest use since midnight in Dhaka · refreshes every 15 seconds while this tab is open</div>
+          <div class="stat-grid mb-16" id="oa-kpis"></div>
+          <div id="oa-tools" class="mb-16"></div>
+          <div class="section-title" style="font-size:12px;">By hour</div>
+          <div id="oa-hours" class="oa-hours mb-16"></div>
+          <div class="section-title" style="font-size:12px;">Latest guest calls</div>
+          <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Time</th><th>Tool</th><th>Visitor</th><th>Device</th></tr></thead><tbody id="oa-latest"></tbody></table></div>
+        </div>
+      </div>
+    </div>
+    <div id="oa-qr" class="oa-qr" hidden>
+      <div class="oa-qr-box"><div class="oa-qr-title" id="oa-qr-title">Open Innovation</div><div id="oa-qr-code"></div>
+        <div class="oa-qr-sub">Scan to try KnitAdvisor — <b>no sign-in needed today</b></div><div class="oa-qr-url" id="oa-qr-url"></div>
+        <button type="button" class="btn btn-ghost btn-sm" id="oa-qr-close">Close</button></div>
     </div>
 
     <!-- ── DYEING PRICES ── -->
@@ -2063,6 +2154,8 @@
 </div><!-- /admin-app -->
 
 <script src="assets/js/password-toggle.js?v=20260922a"></script>
-<script src="assets/js/admin.js?v=20261111e"></script>
+<script src="assets/js/vendor/qrcode.min.js?v=1.4.4"></script>
+<script src="assets/js/admin.js?v=20261112a"></script>
+<script src="assets/js/admin-open-access.js?v=20261112a"></script>
 </body>
 </html>

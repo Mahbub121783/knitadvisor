@@ -16,6 +16,8 @@ const { resolvePlanLimits } = require('../engine/domain/student-eligibility');
 async function enforceDailyLimit(req, res, next) {
   // an API key has its own plan (monthly quota and per-minute rate, counted in api-key-auth)
   if (req.apiKey) { req.plan = 'api'; return next(); }
+  // an open-access guest has no account to count against; the hourly per-address ceiling holds them
+  if (req.guest) { req.plan = 'guest'; return next(); }
   const { plan, dailyLimit } = resolvePlanLimits(req.user);
   req.plan = plan;
   if (dailyLimit == null) return next();

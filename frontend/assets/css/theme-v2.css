@@ -521,3 +521,15 @@ table.tbl-wide { min-width: 460px; }
   box-sizing: border-box;
 }
 .container { width: 100%; }
+
+/* ── Open-access day: the guest banner and chip ───────────────────────────── */
+.ka-open-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 9px var(--gutter, 24px); background: linear-gradient(90deg, #12408f, #1857C4 45%, #1E7A54); color: #fff; font-size: 13.5px; line-height: 1.4; }
+.ka-open-bar b { font-weight: 800; letter-spacing: .01em; }
+.ka-open-bar .ka-open-msg { opacity: .95; }
+.ka-open-bar .ka-open-until { background: rgba(255,255,255,.16); border-radius: 99px; padding: 2px 10px; font-weight: 600; font-size: 12.5px; }
+.ka-open-bar a { color: #fff; font-weight: 700; margin-left: auto; text-decoration: underline; text-underline-offset: 3px; }
+.ka-open-dot { width: 9px; height: 9px; border-radius: 50%; background: #4ade80; box-shadow: 0 0 0 0 rgba(74,222,128,.7); animation: ka-open-pulse 1.8s infinite; flex: none; }
+@keyframes ka-open-pulse { 0% { box-shadow: 0 0 0 0 rgba(74,222,128,.7); } 70% { box-shadow: 0 0 0 9px rgba(74,222,128,0); } 100% { box-shadow: 0 0 0 0 rgba(74,222,128,0); } }
+@media (max-width: 640px) { .ka-open-bar a { margin-left: 0; } .ka-open-bar .ka-open-msg { flex-basis: 100%; } }
+.ka-guest { display: inline-flex; align-items: center; gap: 6px; font: 700 12px var(--head); color: #17633f; background: #E7F6EE; border: 1px solid #CFE3D7; border-radius: 99px; padding: 5px 10px; margin-right: 8px; white-space: nowrap; }
+@media (max-width: 960px) { .ka-guest { display: none; } }

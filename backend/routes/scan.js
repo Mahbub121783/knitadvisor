@@ -99,7 +99,18 @@ router.post('/analyse', analyseLimiter, async (req, res) => {
       if (!pair) return res.status(400).json({ success: false, error: 'This pairing code has expired. Scan the QR code on the screen again.' });
       userId = pair.user_id;
     }
-    if (!userId) return res.status(401).json({ success: false, code: 'AUTH_REQUIRED', error: 'Sign in, or scan the QR code on a signed-in screen.' });
+    // an open-access guest: worked out and shown, not saved to anyone's history
+    let guest = false;
+    if (!userId) {
+      const openAccess = require('../services/open-access');
+      const oa = openAccess.read();
+      if (openAccess.active(oa) && openAccess.toolFor('POST', '/api/scan/analyse', oa)) {
+        if (!openAccess.rateOk(req.ip, oa.per_hour)) return res.status(429).json({ success: false, code: 'GUEST_RATE', error: 'Too many scans from one place in an hour. Wait a little.' });
+        openAccess.log(req, 'scan', '/api/scan/analyse');
+        guest = true;
+      }
+    }
+    if (!userId && !guest) return res.status(401).json({ success: false, code: 'AUTH_REQUIRED', error: 'Sign in, or scan the QR code on a signed-in screen.' });
 
     const input = {
       structure: String(b.structure || ''), wpc: num(b.wpc, 4, 40), cpc: num(b.cpc, 4, 60),
@@ -122,6 +133,7 @@ router.post('/analyse', analyseLimiter, async (req, res) => {
     };
     const thumb = typeof b.thumb === 'string' && /^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(b.thumb) && b.thumb.length < 200000 ? b.thumb : null;
     const result = { ...out, scan: measure, composition: input.composition };
+    if (guest) return res.json({ success: true, id: null, guest: true, result });
     const saved = await scans.save(userId, { structure: input.structure, result, thumb, viaPair: !!pair });
     if (pair) await pairs.touch(pair.code, saved.id);
     res.json({ success: true, id: saved.id, result });

@@ -169,7 +169,8 @@
     var right = document.getElementById('ka-right');
     if (!right) return;
     if (!user) {
-      right.innerHTML = '<a class="ka-cta" href="/?login=1&amp;next=' + encodeURIComponent('/dashboard.html') + '">Sign in</a>';
+      right.innerHTML = (window.KA_GUEST ? '<span class="ka-guest" title="No account needed today">Guest · free access</span>' : '') +
+        '<a class="ka-cta" href="/?login=1&amp;next=' + encodeURIComponent('/dashboard.html') + '">Sign in</a>';
       return;
     }
     var home = document.getElementById('ka-home-link');
@@ -352,7 +353,34 @@
         .then(function (r) { return r.ok ? r.json() : null; })
         .then(function (d) { return d && d.user ? d.user : null; })
         .catch(function () { return null; });
-    ready.then(renderRight);
+    ready.then(function (u) {
+      renderRight(u);
+      if (!u) openAccessBanner();
+    });
+  }
+
+  /* ---------- open-access day: a banner, and the account pages send guests to the tools ---------- */
+  function openAccessBanner() {
+    var known = window.KA_GUEST;
+    var got = known ? Promise.resolve(known) : fetch(API + '/api/open-access', { headers: { Accept: 'application/json' }, cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
+    got.then(function (oa) {
+      if (!oa || !oa.active) return;
+      window.KA_GUEST = oa;
+      var p = window.location.pathname;
+      if (p === '/dashboard.html' || p === '/account.html') { window.location.replace('/app.html'); return; }
+      renderRight(null);
+      if (document.getElementById('ka-open-bar')) return;
+      var until = oa.until ? new Date(oa.until) : null;
+      var bar = document.createElement('div');
+      bar.id = 'ka-open-bar';
+      bar.className = 'ka-open-bar';
+      bar.innerHTML = '<span class="ka-open-dot"></span><b>' + esc(oa.label || 'Open access') + '</b><span class="ka-open-msg">' + esc(oa.message || '') + '</span>' +
+        (until ? '<span class="ka-open-until">Open until ' + until.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + (until.toDateString() !== new Date().toDateString() ? ', ' + until.toLocaleDateString([], { day: 'numeric', month: 'short' }) : '') + '</span>' : '') +
+        '<a href="/?login=1&amp;next=%2Fdashboard.html">Create a free account to save your work →</a>';
+      var hdr = document.querySelector('header.hdr');
+      if (hdr && hdr.parentNode) hdr.parentNode.insertBefore(bar, hdr.nextSibling); else document.body.insertBefore(bar, document.body.firstChild);
+    });
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

@@ -280,6 +280,8 @@
 
   fetch(API + '/api/account/dashboard', { headers: { Accept: 'application/json' }, cache: 'no-store', credentials: 'same-origin' })
     .then(function (r) {
+      // an open-access guest has no dashboard: the tools are the point of the day
+      if (r.status === 401 && window.KA_GUEST) { window.location.replace('/app.html'); throw new Error('guest'); }
       if (r.status === 401 && window.kaSignInRedirect) { window.kaSignInRedirect(); throw new Error('signed out'); }
       return r.json();
     })

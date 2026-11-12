@@ -1207,6 +1207,21 @@ router.get('/api/yarn-prices', adminAuth, async (req, res) => {
 // broken. The snapshot the engine reads is reloaded on success — without that
 // the new quotes would sit in the database until the next restart, which is
 // "stored but not shipped" wearing a different hat.
+// ── Open access: let anyone use the tools without an account, until a set time ──
+router.get('/api/open-access', adminAuth, (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({ success: true, ...require('../services/open-access').stats() });
+});
+router.post('/api/open-access', adminAuth, (req, res) => {
+  try {
+    const openAccess = require('../services/open-access');
+    openAccess.set(req.body || {});
+    res.json({ success: true, ...openAccess.stats() });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
 router.post('/api/yarn-prices/refresh', adminAuth, async (req, res) => {
   try {
     const { syncYarnPrices } = require('../jobs/yarn-price-sync');

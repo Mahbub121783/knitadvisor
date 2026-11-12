@@ -77,6 +77,30 @@ async function requireUser(req, res, next) {
     console.error('[UserAuth] Session lookup failed:', err.message);
     return res.status(500).json({ success: false, error: 'Could not verify your session. Please try again.' });
   }
+  // No session. On an open-access day (switched on in the admin panel) the
+  // tools that compute are open to everyone as a guest; anything that saves or
+  // reads an account stays closed, with its own code so the page explains
+  // rather than sending the visitor to a sign-in form. See services/open-access.js.
+  const openAccess = require('../services/open-access');
+  const oa = openAccess.read();
+  if (openAccess.active(oa)) {
+    const route = (req.baseUrl || '') + req.path;
+    const tool = openAccess.toolFor(req.method, route, oa);
+    if (tool) {
+      if (!openAccess.rateOk(req.ip, oa.per_hour)) {
+        return res.status(429).json({ success: false, code: 'GUEST_RATE', error: 'That is a lot of calculations from one place in an hour. Wait a little, or create a free account.' });
+      }
+      req.user = openAccess.guestUser();
+      req.guest = true;
+      openAccess.log(req, tool, route);
+      return next();
+    }
+    return res.status(401).json({
+      success: false,
+      code: 'GUEST_LOCKED',
+      error: `${oa.label || 'Open access'}: the tools are open to everyone today, but saving and your own account need a free sign-in.`,
+    });
+  }
   return res.status(401).json({
     success: false,
     code: 'AUTH_REQUIRED',

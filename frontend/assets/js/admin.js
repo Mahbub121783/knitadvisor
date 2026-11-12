@@ -121,6 +121,7 @@ const TAB_TITLES = {
   'tab-cache': 'Cache', 'tab-prices': 'Yarn Prices', 'tab-charges': 'Knit & Dye Charges', 'tab-dyeing-prices': 'Dyeing Prices',
   'tab-validation': 'Real-Order Validation', 'tab-inquiries': 'Inquiries', 'tab-rfq': 'RFQ / Quotes',
   'tab-users': 'Users', 'tab-students': 'Student Plan', 'tab-settings': 'Settings', 'tab-apikeys': 'API Keys',
+  'tab-open': 'Open Access',
 };
 
 function switchTab(tabId) {
@@ -141,6 +142,7 @@ function switchTab(tabId) {
   }
 
   if (tabId === 'tab-overview') loadDashboard();
+  if (typeof window.kaOpenAccessTab === 'function') window.kaOpenAccessTab(tabId === 'tab-open');
   if (tabId === 'tab-providers' && !tabState.loaded.providers) {
     tabState.loaded.providers = true;
     loadProviders();

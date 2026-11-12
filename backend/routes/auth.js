@@ -351,7 +351,12 @@ router.get('/me', async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
     const user = await loadUser(req);
-    if (!user) return res.status(401).json({ success: false, code: 'AUTH_REQUIRED' });
+    if (!user) {
+      // open-access day: a visitor with no account is a guest, not a redirect
+      const oa = require('../services/open-access').publicStatus();
+      if (oa.active) return res.json({ success: true, user: null, guest: true, open_access: oa });
+      return res.status(401).json({ success: false, code: 'AUTH_REQUIRED' });
+    }
     res.json({ success: true, user: publicUser(user) });
   } catch (err) {
     console.error('[Auth] /me failed:', err.message);

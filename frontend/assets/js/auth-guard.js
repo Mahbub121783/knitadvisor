@@ -69,6 +69,8 @@
     })
     .then(function (data) {
       resolveUser(data && data.user ? data.user : null);
+      // open-access day: no account needed, the visitor is a guest
+      if (data && data.guest) window.KA_GUEST = data.open_access || { active: true };
       if (data && data.user) {
         window.KA_USER = data.user;
         if (document.readyState === 'loading') {
