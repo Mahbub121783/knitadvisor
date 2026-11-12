@@ -74,7 +74,7 @@
   function getWorker() {
     if (worker !== null) return worker;
     try {
-      worker = new Worker('assets/js/scan/scan-worker.js?v=20261113a');
+      worker = new Worker('assets/js/scan/scan-worker.js?v=20261113b');
       worker.onmessage = function (e) { var p = wpend[e.data.id]; if (p) { delete wpend[e.data.id]; p(e.data.r); } };
       worker.onerror = function () { worker = false; Object.keys(wpend).forEach(function (k) { var p = wpend[k]; delete wpend[k]; p(null); }); };
     } catch (_) { worker = false; }
@@ -95,6 +95,7 @@
     if (f.error) return f;
     f.scale.dist_mm = sc.dist_mm;
     if (f.kind && f.kind.kind === 'none') return { error: 'No regular loop pattern in this photo — come closer (8–12 cm), fill the frame with the fabric, and keep it in focus.', code: 'no_loops' };
+    if (f.card && f.card.type === 'id') return f;                          // a bank / NID card in the photo: the scale is exact
     if (f.confidence === 'high') f.confidence = 'medium';                // the count is good; the scale is an estimate
     return f;
   }
@@ -118,11 +119,11 @@
     if (res._flat) drawFlat(item.el.querySelector('canvas'), res, false, null); else drawBlank(item.el.querySelector('canvas'));
     var wv = res.woven && res.woven.ok ? res.woven : null;
     if (kind !== 'back' && res.family === 'woven' && wv) {
-      txt.innerHTML = '<b>' + wv.ends_per_cm.toFixed(1) + '</b> ends · <b>' + wv.picks_per_cm.toFixed(1) + '</b> picks /cm<br>' + esc(wv.weave.name) + (res.card ? '' : '<br><span style="color:#B26A00">no card · scale estimated</span>');
+      txt.innerHTML = '<b>' + wv.ends_per_cm.toFixed(1) + '</b> ends · <b>' + wv.picks_per_cm.toFixed(1) + '</b> picks /cm<br>' + esc(wv.weave.name) + (res.card ? (res.card.type === 'id' ? '<br><span style="color:#1E7A54">ID card · exact scale</span>' : '') : '<br><span style="color:#B26A00">no card · scale estimated</span>');
       return;
     }
     txt.innerHTML = kind === 'back' ? 'Back read ✓' : '<b>' + res.wpc.toFixed(1) + '</b> w · <b>' + res.cpc.toFixed(1) + '</b> c /cm<br>' + esc(res.confidence) + ' confidence' + (res.faults.length ? ' · ' + res.faults.length + ' fault' + (res.faults.length > 1 ? 's' : '') : '')
-      + (res.card ? '' : '<br><span style="color:#B26A00">no card · scale estimated</span>');
+      + (res.card ? (res.card.type === 'id' ? '<br><span style="color:#1E7A54">ID card · exact scale</span>' : '') : '<br><span style="color:#B26A00">no card · scale estimated</span>');
   }
   function run(kind, getImage) {
     var list = kind === 'face' ? S.faces : S.backs;
@@ -152,7 +153,10 @@
   // the live camera: each auto-captured photo is measured at once and kept only if it measures
   $('sc-cam').addEventListener('click', function () {
     var hadFaces = goodFaces().length, shotNow = false;
-    var steps = [{ kind: 'face', label: hadFaces ? 'One more photo of the face' : 'Point at the fabric' }];
+    // both sides: a knitted cloth is told apart by its back (jersey's back is all loop heads, rib and interlock look
+    // the same both sides, fleece and terry show loops or pile), and a twill's back runs the other way
+    var steps = [{ kind: 'face', label: hadFaces ? 'One more photo of the face' : 'Face side — point at the fabric' }];
+    if (!(S.backs[0] && S.backs[0].res)) steps.push({ kind: 'back', label: 'Now the back — turn the cloth over' });
     window.KAScanCamera.open({
       steps: steps,
       onCapture: function (kind, img) {
@@ -247,6 +251,10 @@
     var free = g.filter(function (r) { return !r.card; });
     var ids = g.filter(function (r) { return r.identity; });
     var pW = ids.length ? ids.reduce(function (t, r) { return t + r.identity.p_woven; }, 0) / ids.length : 0;
+    // the back adds its own verdict, at a lower weight than the face (log-odds, so a sure back still counts)
+    var bk = S.backs[0] && S.backs[0].res && !S.backs[0].res.error && S.backs[0].res.identity ? S.backs[0].res : null;
+    var lg = function (q) { q = Math.max(0.02, Math.min(0.98, q)); return Math.log(q / (1 - q)); };
+    if (bk && ids.length) pW = 1 / (1 + Math.exp(-(lg(pW) + 0.6 * lg(bk.identity.p_woven))));
     var autoFamily = pW >= 0.5 ? 'woven' : 'knit';
     // the woven reading: the clearest of the photos, and the thread counts as the median of all of them
     var rank = { high: 3, medium: 2, low: 1 };
@@ -254,7 +262,7 @@
     var wov = wr.slice().sort(function (a, b) { return (rank[b.woven.confidence] || 0) - (rank[a.woven.confidence] || 0) || (b.woven.matrix_match || 0) - (a.woven.matrix_match || 0); })[0];
     var idBest = ids.slice().sort(function (a, b) { return Math.abs(b.identity.p_woven - 0.5) - Math.abs(a.identity.p_woven - 0.5); })[0];
     return { wpc: wpc, cpc: cpc, spread: spread, best: best, n: g.length, confidence: conf, estimated: free.length > 0, dist: free.length ? free[0].scale.dist_mm : null,
-      family: S.family || autoFamily, autoFamily: autoFamily, pWoven: pW, identity: idBest ? idBest.identity : null,
+      family: S.family || autoFamily, autoFamily: autoFamily, pWoven: pW, identity: idBest ? idBest.identity : null, back: bk, sides: twoSides(idBest || null, bk),
       wov: wov ? wov.woven : null, wovBest: wov || null,
       epc: wr.length ? KS.median(wr.map(function (r) { return r.woven.ends_per_cm; })) : null, ppc: wr.length ? KS.median(wr.map(function (r) { return r.woven.picks_per_cm; })) : null,
       wspread: wr.length > 1 ? Math.max.apply(null, wr.map(function (r) { return Math.abs(r.woven.ends_per_cm / KS.median(wr.map(function (x) { return x.woven.ends_per_cm; })) - 1); })) : null };
@@ -299,10 +307,19 @@
     // suggestions
     var back = S.backs[0] && S.backs[0].res && !S.backs[0].res.error ? S.backs[0].res.features : null;
     var sug = KS.suggest(c.best.features, back), p = {}, why = {};
+    // the recogniser's structure answer (when it ran), folded in the same way the identification does
+    if (c.best.model && c.best.model.knit && KS.blendKnit) sug = KS.blendKnit(sug, c.best.model.knit);
     sug.forEach(function (x) {
       if (x.structure === 'fleece_or_terry') { p.fleece = x.p * 0.55; p.terry = x.p * 0.45; why.fleece = why.terry = x.why; }
       else { p[x.structure] = x.p; why[x.structure] = x.why; }
     });
+    if (c.sides && c.sides.double != null) {
+      var dbl = c.sides.double, tot = 0;
+      CHIP.forEach(function (k) { var isDouble = k === 'rib' || k === 'interlock'; p[k] = (p[k] || 0.01) * (isDouble === dbl ? 1.8 : 0.55); tot += p[k]; });
+      CHIP.forEach(function (k) { p[k] /= tot; });
+      var lead = dbl ? 'rib' : 'single_jersey';
+      if (!why[lead]) why[lead] = c.sides.notes[0];
+    }
     var order = CHIP.slice().sort(function (a, b) { return (p[b] || 0) - (p[a] || 0); });
     if (!S.structure || !S.userPicked) S.structure = order[0];
     $('sc-chips').innerHTML = order.map(function (k) {
@@ -311,6 +328,20 @@
     $('sc-why').textContent = why[S.structure] ? 'Why: ' + why[S.structure] + '.' : '';
     if ((S.structure === 'pique' || S.structure === 'fleece' || S.structure === 'terry') && S.adj.c === 1) $('sc-agree').textContent += ' Tuck and loop fabrics often read one course per cell of two — if a grid cell holds two loops, tap × 2 on courses. Wales, stitch length and count are not affected.';
     S.suggest = order.map(function (k) { return { structure: k, p: p[k] || 0 }; });
+  }
+  // The classic hand test, done on the photos: is the cloth the same on both sides?
+  function twoSides(face, back) {
+    if (!face || !back) return null;
+    var fl = face.legs, bl = back.legs, out = { notes: [], double: null };
+    if (fl && bl) {
+      if (fl.legs && bl.legs) { out.double = true; out.notes.push('loop legs on both sides — a double knit (rib or interlock)'); }
+      else if (fl.legs && !bl.legs) { out.double = false; out.notes.push('loop legs on the face only — a single knit (jersey, piqué, fleece or terry)'); }
+    }
+    var fw = face.woven && face.woven.ok ? face.woven.weave : null, bw = back.woven && back.woven.ok ? back.woven.weave : null;
+    if (fw && bw && fw.cls === 'twill' && bw.cls === 'twill' && fw.hand && bw.hand) out.notes.push(fw.hand !== bw.hand ? 'the twill runs the other way on the back, as a twill does' : 'the twill runs the same way on both sides — check which side is the face');
+    if (fw && bw && fw.face && bw.face && fw.face !== bw.face && fw.face !== 'balanced' && bw.face !== 'balanced') out.notes.push(fw.face + '-faced on the face, ' + bw.face + '-faced on the back');
+    if (!back.woven || !back.woven.ok) { if (back.backOnly) out.notes.push('no regular loops on the back — loop yarn or brushed (fleece / terry)'); }
+    return out;
   }
   var FAMN = { knit: 'Knitted', woven: 'Woven' };
   function pct(v) { return Math.round(v * 100) + '%'; }
@@ -332,7 +363,9 @@
       });
       $('sc-evid').innerHTML = (id.evidence || []).map(function (e) {
         return '<li><i class="' + (e.says === 'woven' ? 'w' : 'k') + '">' + (e.says === 'woven' ? 'woven +' : 'knitted +') + e.weight.toFixed(1) + '</i><span>' + esc(e.why) + '</span></li>';
-      }).join('') + '<li><i></i><span>Each item is a measurement on the photo; the weights add up as log-odds into the knitted / woven split above.</span></li>';
+      }).join('') + (c.sides && c.sides.notes.length ? c.sides.notes.map(function (n) { return '<li><i>both sides</i><span>' + esc(n) + '</span></li>'; }).join('') : '')
+        + (c.back ? '' : '<li><i></i><span>Photograph the back too: the two sides together tell rib from jersey, and confirm a twill.</span></li>')
+        + '<li><i></i><span>Each item is a measurement on the photo; the weights add up as log-odds into the knitted / woven split above.</span></li>';
     }
     if (fam === 'knit' && !c.best.lattice) rows.push('<div class="sc-idrow"><span>These photos were read only as woven, so no loop count was kept. Take the photo again; it will be counted as knitted.</span></div>');
     $('sc-idlist').innerHTML = rows.join('');

@@ -65,6 +65,12 @@
     return g[i] * (1 - fx) * (1 - fy) + g[i + 1] * fx * (1 - fy) + g[i + w] * (1 - fx) * fy + g[i + w + 1] * fx * fy;
   }
 
+  function hitsBox(cx, cy, size, box) {
+    if (!box) return false;
+    var hs = size / 2;
+    return !(cx + hs < box[0] || cx - hs > box[2] || cy + hs < box[1] || cy - hs > box[3]);
+  }
+
   // ── homography (4 point pairs) ───────────────────────────────────────
   function solve(A, b) { // Gaussian elimination, n×n
     var n = b.length, M = A.map(function (r, i) { return r.concat([b[i]]); });
@@ -892,7 +898,7 @@
     opts = opts || {};
     cx = cx == null ? sw / 2 : cx; cy = cy == null ? sh / 2 : cy;
     var room = Math.floor(Math.min(cx, cy, sw - cx, sh - cy) * 2), N = 512;
-    while (N > 64 && N > room) N >>= 1;
+    while (N > 64 && (N > room || hitsBox(cx, cy, N, opts.avoid))) N >>= 1;
     if (N < 128) return { ok: false, why: 'the area is too small to read threads' };
     var x0 = Math.round(cx - N / 2), y0 = Math.round(cy - N / 2);
     // everything below looks at this square and a margin for the filters: cut it out first
@@ -1094,10 +1100,15 @@
   }
 
   /** Two-tone yarn colours (k-means, 2 groups in Lab) — denim is an indigo warp over a white weft. */
-  function twoTone(rgba, w, h) {
+  function twoTone(rgba, w, h, avoid) {
     var pts = [];
     for (var y = Math.round(h * 0.2); y < h * 0.8; y += 2) for (var x = Math.round(w * 0.2); x < w * 0.8; x += 2) {
+      if (avoid && x >= avoid[0] && x <= avoid[2] && y >= avoid[1] && y <= avoid[3]) continue;
       var i = (y * w + x) * 4; pts.push(srgbToLab(rgba[i], rgba[i + 1], rgba[i + 2]));
+    }
+    if (avoid && pts.length < 200) for (y = 0; y < h; y += 3) for (x = 0; x < w; x += 3) {
+      if (x >= avoid[0] && x <= avoid[2] && y >= avoid[1] && y <= avoid[3]) continue;
+      var i2 = (y * w + x) * 4; pts.push(srgbToLab(rgba[i2], rgba[i2 + 1], rgba[i2 + 2]));
     }
     return twoToneLab(pts);
   }
@@ -1143,12 +1154,12 @@
   // from one leg to the next and holds still down the wale — in the spectrum of the tilt map, power on the one
   // line through the centre along the course. Woven threads run straight along both axes and their tilt map has
   // no such line. Run at the photo's own scale and, where the texture is coarse enough not to alias, at half.
-  function legTest(g, w, h, cx, cy, axis, periodPx) {
+  function legTest(g, w, h, cx, cy, axis, periodPx, avoid) {
     var out = null;
     [1, 2].forEach(function (k) {
       if (k > 1 && !(periodPx >= 8 * k / 2)) return;          // halving a fine texture would alias it into false legs
       var N = 256;
-      while (N > 64 && (N * k > Math.min(w, h) - 4 || cx - N * k / 2 < 1 || cy - N * k / 2 < 1 || cx + N * k / 2 > w - 2 || cy + N * k / 2 > h - 2)) N >>= 1;
+      while (N > 64 && (N * k > Math.min(w, h) - 4 || cx - N * k / 2 < 1 || cy - N * k / 2 < 1 || cx + N * k / 2 > w - 2 || cy + N * k / 2 > h - 2 || hitsBox(cx, cy, N * k, avoid))) N >>= 1;
       if (N < 128) return;
       var x0 = Math.round(cx - N * k / 2), y0 = Math.round(cy - N * k / 2), img = new Float64Array(N * N);
       for (var y = 0; y < N; y++) for (var x = 0; x < N; x++) {
@@ -1199,6 +1210,30 @@
     // is near-neutral against clearly coloured
     return (Math.min(d.chroma, l.chroma) > 10 && dh > 40) || (Math.min(d.chroma, l.chroma) < 8 && Math.max(d.chroma, l.chroma) > 18);
   }
+  // how much the recogniser's verdict counts (log-odds scale, capped): set from the held-out real photos
+  var MODEL_W = { k: 0.9, cap: 3.2 };
+  // the measured knit hints and the recogniser's structure answer, multiplied (each a likelihood) and renormalised
+  function blendKnit(sug, mk) {
+    var map = { single_jersey: 'single_jersey', pique: 'pique', rib: 'rib', interlock: 'interlock', fleece: 'fleece_or_terry', terry: 'fleece_or_terry', purl: 'purl' };
+    var mp = {}; Object.keys(mk).forEach(function (k) { var t = map[k] || k; mp[t] = (mp[t] || 0) + mk[k]; });
+    var out = {}, why = {};
+    sug.forEach(function (s) { out[s.structure] = s.p; why[s.structure] = s.why; });
+    Object.keys(mp).forEach(function (k) { if (out[k] == null) { out[k] = 0.02; why[k] = 'from the recogniser'; } });
+    var tot = 0;
+    Object.keys(out).forEach(function (k) { out[k] = Math.sqrt(Math.max(out[k], 0.01)) * (0.05 + (mp[k] || 0)); tot += out[k]; });
+    return Object.keys(out).map(function (k) { return { structure: k, p: out[k] / tot, why: (why[k] || '') + (mp[k] >= 0.4 ? (why[k] ? '; ' : '') + 'the recogniser agrees (' + Math.round(mp[k] * 100) + '%)' : '') }; })
+      .sort(function (a, b) { return b.p - a.p; });
+  }
+  /** The identity again, with the recogniser's answer added (the worker runs the network after the measuring). */
+  function reidentify(r, model) {
+    if (!r || r.error || !r._id) return r;
+    var inp = {}; for (var k in r._id) inp[k] = r._id[k];
+    inp.model = model;
+    r.model = model;
+    r.identity = identify(inp);
+    if (!r.card || r.card.type === 'id') r.family = r.identity.family; else r.family = r.identity.family;
+    return r;
+  }
   var KNIT_NAMES = { single_jersey: 'Single jersey', rib: 'Rib', interlock: 'Interlock', pique: 'Pique', fleece: 'Fleece', terry: 'Terry', lacoste: 'Lacoste', french_terry: 'French terry', fleece_or_terry: 'Fleece / terry' };
 
   /**
@@ -1226,9 +1261,17 @@
     var denimLike = !!(blue && col.two_tone && col.light.lab[0] > col.dark.lab[0] + 18 && yarnColours(col));
     if (wv && denimLike && wv.weave.cls === 'twill') add(2.0, 'an indigo thread set over a light one, in a twill — dyed warp, white weft');
     else if (wv && yarnColours(col)) add(0.4, 'the two thread sets are different colours');
+    var md = r.model || null;
+    if (md && md.family) {
+      var pm = Math.max(0.03, Math.min(0.97, md.family.woven));
+      var zm = Math.max(-MODEL_W.cap, Math.min(MODEL_W.cap, MODEL_W.k * Math.log(pm / (1 - pm))));
+      if (Math.abs(zm) >= 0.05) add(zm, 'the recogniser trained on thousands of knitted and woven cloths reads it as ' + (pm >= 0.5 ? 'woven' : 'knitted') + ' (' + Math.round(100 * Math.max(pm, 1 - pm)) + '%)');
+    }
     var pW = 1 / (1 + Math.exp(-z));
     var cands = [];
-    (r.knit_suggest || []).forEach(function (s) { cands.push({ family: 'knit', category: KNIT_NAMES[s.structure] || s.structure, structure: s.structure, p: (1 - pW) * s.p, why: s.why }); });
+    var ksug = r.knit_suggest || [];
+    if (md && md.knit) ksug = blendKnit(ksug, md.knit);
+    ksug.forEach(function (s) { cands.push({ family: 'knit', category: KNIT_NAMES[s.structure] || s.structure, structure: s.structure, p: (1 - pW) * s.p, why: s.why }); });
     if (!cands.length) cands.push({ family: 'knit', category: 'Single jersey', structure: 'single_jersey', p: 1 - pW, why: 'the most common knitted cloth' });
     if (wv) {
       var w = wv.weave, cat = 'Woven';
@@ -1252,6 +1295,197 @@
     return { family: family, p_woven: Math.round(pW * 1000) / 1000, p_knit: Math.round((1 - pW) * 1000) / 1000, best: best, candidates: cands.slice(0, 6), evidence: ev, legs: leg, denim_like: denimLike };
   }
 
+  // ── any ID-1 card as the scale (a bank card, an NID card, a driving licence) ──────────
+  // Every such card is 85.60 × 53.98 mm (ISO/IEC 7810 ID-1). Laid flat on the cloth, it gives the photo an exact
+  // scale with nothing printed: the card is the one large region with almost no fine texture, four straight
+  // sides and that 1.586 aspect; the cloth around it is texture everywhere.
+  var ID1 = { w: 85.6, h: 53.98 };
+  function hull(pts) {
+    pts.sort(function (a, b) { return a[0] - b[0] || a[1] - b[1]; });
+    var cr = function (o, a, b) { return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]); };
+    var lo = [], up = [];
+    for (var i = 0; i < pts.length; i++) { while (lo.length >= 2 && cr(lo[lo.length - 2], lo[lo.length - 1], pts[i]) <= 0) lo.pop(); lo.push(pts[i]); }
+    for (i = pts.length - 1; i >= 0; i--) { while (up.length >= 2 && cr(up[up.length - 2], up[up.length - 1], pts[i]) <= 0) up.pop(); up.push(pts[i]); }
+    up.pop(); lo.pop();
+    return lo.concat(up);
+  }
+  function polyArea(p) { var a = 0; for (var i = 0; i < p.length; i++) { var q = p[(i + 1) % p.length]; a += p[i][0] * q[1] - q[0] * p[i][1]; } return Math.abs(a) / 2; }
+  // the largest quadrilateral on a convex hull's vertices (the card's four corners)
+  function maxQuad(H) {
+    var n = H.length, best = null;
+    if (n < 4) return null;
+    var step = Math.max(1, Math.floor(n / 60));
+    for (var a = 0; a < n; a += step) for (var c = a + 2; c < n; c += step) {
+      var bB = -1, bi = -1, dB = -1, di = -1;
+      var ax = H[a][0], ay = H[a][1], cx = H[c][0], cy = H[c][1];
+      for (var k = a + 1; k < c; k++) { var s = Math.abs((cx - ax) * (H[k][1] - ay) - (cy - ay) * (H[k][0] - ax)); if (s > bB) { bB = s; bi = k; } }
+      for (k = c + 1; k < n + a; k++) { var kk = k % n, s2 = Math.abs((cx - ax) * (H[kk][1] - ay) - (cy - ay) * (H[kk][0] - ax)); if (s2 > dB) { dB = s2; di = kk; } }
+      if (bi < 0 || di < 0) continue;
+      var area = (bB + dB) / 2;
+      if (!best || area > best.area) best = { area: area, q: [H[a], H[bi], H[c], H[di]] };
+    }
+    return best;
+  }
+  function detectIdCard(rgba, w, h, grayFull) {
+    // a small, blurred colour copy: the cloth's own texture averages out, the card's outline stays sharp
+    var sc = Math.max(w, h) / 520, W = Math.max(1, Math.round(w / sc)), Hh = Math.max(1, Math.round(h / sc)), n = W * Hh;
+    var ch = [new Float32Array(n), new Float32Array(n), new Float32Array(n)];
+    for (var y0 = 0; y0 < Hh; y0++) for (var x0 = 0; x0 < W; x0++) {
+      var xa = Math.floor(x0 * sc), xb = Math.min(w, Math.floor((x0 + 1) * sc)), ya = Math.floor(y0 * sc), yb = Math.min(h, Math.floor((y0 + 1) * sc)), sr = 0, sg = 0, sb = 0, cnt = 0;
+      for (var yy = ya; yy < yb; yy += 2) for (var xx = xa; xx < xb; xx += 2) { var o4 = (yy * w + xx) * 4; sr += rgba[o4]; sg += rgba[o4 + 1]; sb += rgba[o4 + 2]; cnt++; }
+      var q0 = y0 * W + x0; ch[0][q0] = sr / cnt; ch[1][q0] = sg / cnt; ch[2][q0] = sb / cnt;
+    }
+    var g = new Float32Array(n);
+    for (var i = 0; i < n; i++) g[i] = (0.299 * ch[0][i] + 0.587 * ch[1][i] + 0.114 * ch[2][i]) / 255;
+    var bl = ch.map(function (c) { return boxMean(boxMean(c, W, Hh, 2), W, Hh, 2); });
+    // the cloth's colour as a smooth plane (it may be lit unevenly), fitted robustly: the card is the outlier
+    var fitPlane = function (c, keep) {
+      var S = [0, 0, 0, 0, 0, 0], bv = [0, 0, 0];
+      for (var q = 0; q < n; q += 3) {
+        if (keep && !keep[q]) continue;
+        var x = (q % W) / W - 0.5, y = ((q / W) | 0) / Hh - 0.5, v = c[q];
+        S[0] += 1; S[1] += x; S[2] += y; S[3] += x * x; S[4] += x * y; S[5] += y * y; bv[0] += v; bv[1] += x * v; bv[2] += y * v;
+      }
+      var A = [[S[0], S[1], S[2]], [S[1], S[3], S[4]], [S[2], S[4], S[5]]], co = solve(A, bv) || [bv[0] / Math.max(1, S[0]), 0, 0];
+      return function (q2) { return co[0] + co[1] * ((q2 % W) / W - 0.5) + co[2] * (((q2 / W) | 0) / Hh - 0.5); };
+    };
+    var resid = new Float32Array(n), keep = null;
+    for (var it = 0; it < 3; it++) {
+      var pl = bl.map(function (c) { return fitPlane(c, keep); });
+      var rs = [];
+      for (i = 0; i < n; i++) { var r2 = 0; for (var k = 0; k < 3; k++) { var dd = bl[k][i] - pl[k](i); r2 += dd * dd; } resid[i] = Math.sqrt(r2); if (i % 3 === 0) rs.push(resid[i]); }
+      rs.sort(function (a, b) { return a - b; });
+      var cut = Math.max(10, rs[Math.floor(rs.length * 0.6)] * 3);
+      keep = new Uint8Array(n); for (i = 0; i < n; i++) keep[i] = resid[i] < cut ? 1 : 0;
+    }
+    var rsort = []; for (i = 0; i < n; i += 3) if (keep[i]) rsort.push(resid[i]); rsort.sort(function (a, b) { return a - b; });
+    var colThr = Math.max(14, (rsort[Math.floor(rsort.length * 0.9)] || 10) * 2.6);
+    // fine texture: the card is smooth where the cloth is not
+    var lo = boxMean(g, W, Hh, 2), hp = new Float32Array(n);
+    for (i = 0; i < n; i++) { var d = g[i] - lo[i]; hp[i] = d * d; }
+    var e = boxMean(hp, W, Hh, 3), srt = Array.prototype.slice.call(e).sort(function (a, b) { return a - b; });
+    var med = srt[Math.floor(n * 0.5)], p90 = srt[Math.floor(n * 0.9)];
+    var thr = Math.min(med * 0.3, p90 * 0.08);
+    var m = new Uint8Array(n);
+    for (i = 0; i < n; i++) m[i] = resid[i] > colThr || (p90 > 0 && e[i] < thr) ? 1 : 0;
+    var close = function (src, r, val) {
+      var tmp = new Float32Array(n); for (var q = 0; q < n; q++) tmp[q] = src[q];
+      var b = boxMean(tmp, W, Hh, r), out = new Uint8Array(n);
+      for (q = 0; q < n; q++) out[q] = val ? (b[q] > 0.001 ? 1 : 0) : (b[q] > 0.999 ? 1 : 0);
+      return out;
+    };
+    var r0 = Math.max(2, Math.round(Math.min(W, Hh) / 90));
+    m = close(close(m, r0, 1), r0, 0);                 // dilate then erode: fills the print
+    m = close(close(m, r0, 0), r0, 1);                 // erode then dilate: drops thin seams in the cloth
+    // fill the holes the print leaves inside the card (anything the outside cannot reach)
+    var outside = new Uint8Array(n), fl = [];
+    for (var bx = 0; bx < W; bx++) { fl.push(bx, (Hh - 1) * W + bx); }
+    for (var by = 0; by < Hh; by++) { fl.push(by * W, by * W + W - 1); }
+    while (fl.length) {
+      var qf = fl.pop(); if (outside[qf] || m[qf]) continue; outside[qf] = 1;
+      var fx = qf % W;
+      if (fx > 0) fl.push(qf - 1); if (fx < W - 1) fl.push(qf + 1); if (qf >= W) fl.push(qf - W); if (qf < n - W) fl.push(qf + W);
+    }
+    for (i = 0; i < n; i++) if (!outside[i]) m[i] = 1;
+    var sm = { scale: sc };
+    var lab = new Int32Array(n), best = null, stack = [];
+    for (var s0 = 0; s0 < n; s0++) {
+      if (!m[s0] || lab[s0]) continue;
+      var id = s0 + 1, pts = [], area = 0, touches = 0;
+      lab[s0] = id; stack.push(s0);
+      while (stack.length) {
+        var q2 = stack.pop(), x = q2 % W, y = (q2 / W) | 0; area++;
+        var edge = false;
+        if (x === 0 || y === 0 || x === W - 1 || y === Hh - 1) touches++;
+        var nb = [q2 - 1, q2 + 1, q2 - W, q2 + W];
+        for (var t = 0; t < 4; t++) {
+          var p2 = nb[t];
+          if ((t === 0 && x === 0) || (t === 1 && x === W - 1) || p2 < 0 || p2 >= n) { edge = true; continue; }
+          if (!m[p2]) { edge = true; continue; }
+          if (!lab[p2]) { lab[p2] = id; stack.push(p2); }
+        }
+        if (edge) pts.push([x, y]);
+      }
+      if (area < n * 0.025 || area > n * 0.75 || touches > 0.02 * pts.length || pts.length < 40) continue;
+      var Hl = hull(pts), mq = maxQuad(Hl);
+      if (!mq) continue;
+      var rect = area / mq.area, fill = mq.area / polyArea(Hl);
+      if (rect < 0.86 || rect > 1.08 || fill < 0.93) continue;
+      // the sides, and the 85.6 : 53.98 aspect (a little perspective allowed)
+      var Q = mq.q, L = [0, 1, 2, 3].map(function (k) { var a2 = Q[k], b2 = Q[(k + 1) % 4]; return Math.hypot(b2[0] - a2[0], b2[1] - a2[1]); });
+      var s1 = (L[0] + L[2]) / 2, s2b = (L[1] + L[3]) / 2, asp = Math.max(s1, s2b) / Math.min(s1, s2b);
+      if (Math.abs(asp / (ID1.w / ID1.h) - 1) > 0.1) continue;
+      if (Math.abs(L[0] / L[2] - 1) > 0.15 || Math.abs(L[1] / L[3] - 1) > 0.15) continue;
+      var score = area * (1 - Math.abs(asp / (ID1.w / ID1.h) - 1)) * Math.min(rect, 1 / rect);
+      if (!best || score > best.score) best = { score: score, Q: Q, pts: pts, asp: asp, rect: rect, area: area };
+    }
+    if (!best) return null;
+    // refine each side: a straight line through its own boundary points (away from the rounded corners), then the
+    // corners where the lines meet
+    var Q0 = best.Q, lines = [];
+    for (var k2 = 0; k2 < 4; k2++) {
+      var A = Q0[k2], Bq = Q0[(k2 + 1) % 4], dx = Bq[0] - A[0], dy = Bq[1] - A[1], len = Math.hypot(dx, dy), ux = dx / len, uy = dy / len;
+      var sel = best.pts.filter(function (p) { var tt = ((p[0] - A[0]) * ux + (p[1] - A[1]) * uy) / len, dd = Math.abs((p[0] - A[0]) * uy - (p[1] - A[1]) * ux); return tt > 0.12 && tt < 0.88 && dd < Math.max(3, len * 0.04); });
+      if (sel.length < 8) { lines.push({ p: [(A[0] + Bq[0]) / 2, (A[1] + Bq[1]) / 2], d: [ux, uy] }); continue; }
+      var mx = 0, my = 0; sel.forEach(function (p) { mx += p[0]; my += p[1]; }); mx /= sel.length; my /= sel.length;
+      var sxx = 0, sxy = 0, syy = 0; sel.forEach(function (p) { sxx += (p[0] - mx) * (p[0] - mx); sxy += (p[0] - mx) * (p[1] - my); syy += (p[1] - my) * (p[1] - my); });
+      var th = 0.5 * Math.atan2(2 * sxy, sxx - syy);
+      lines.push({ p: [mx, my], d: [Math.cos(th), Math.sin(th)] });
+    }
+    var meet = function (l1, l2) {
+      var det = l1.d[0] * (-l2.d[1]) - l1.d[1] * (-l2.d[0]); if (Math.abs(det) < 1e-6) return null;
+      var bx = l2.p[0] - l1.p[0], by = l2.p[1] - l1.p[1], tt = (bx * (-l2.d[1]) - by * (-l2.d[0])) / det;
+      return [l1.p[0] + tt * l1.d[0], l1.p[1] + tt * l1.d[1]];
+    };
+    var C = [];
+    for (k2 = 0; k2 < 4; k2++) { var c2 = meet(lines[(k2 + 3) % 4], lines[k2]); C.push(c2 || Q0[k2]); }
+    // the boundary sits half a pixel inside the region, and the rounded corners cut a little: lines are on the
+    // true edges, so the corners are; scale with the side lengths in full-resolution pixels
+    var S2 = sm.scale, full = C.map(function (p) { return [(p[0] + 0.5) * S2, (p[1] + 0.5) * S2]; });
+    // each side found again at full resolution: along its normal, the step in brightness from card to cloth,
+    // at twenty places; a line through those, and the corners where the lines meet. (The mask's edge sits a few
+    // pixels inside the card: blur and thresholds pull it in.)
+    if (grayFull) {
+      var gcx = (full[0][0] + full[1][0] + full[2][0] + full[3][0]) / 4, gcy = (full[0][1] + full[1][1] + full[2][1] + full[3][1]) / 4, fines = [];
+      for (var k3 = 0; k3 < 4; k3++) {
+        var P0 = full[k3], P1 = full[(k3 + 1) % 4], ddx = P1[0] - P0[0], ddy = P1[1] - P0[1], ll = Math.hypot(ddx, ddy), tx = ddx / ll, ty = ddy / ll;
+        var nx = -ty, ny = tx; if ((P0[0] + P1[0]) / 2 * 0 + ((P0[0] + P1[0]) / 2 - gcx) * nx + ((P0[1] + P1[1]) / 2 - gcy) * ny < 0) { nx = -nx; ny = -ny; }
+        var reach = Math.max(6, 10 * S2), edgePts = [];
+        for (var si = 0; si < 24; si++) {
+          var tt2 = 0.12 + 0.76 * si / 23, bx2 = P0[0] + ddx * tt2, by2 = P0[1] + ddy * tt2, prof = [];
+          for (var o2 = -reach; o2 <= reach; o2 += 0.5) {
+            var vv = 0, cntv = 0;
+            for (var a4 = -2; a4 <= 2; a4++) { var sv2 = bilinear(grayFull, w, h, bx2 + nx * o2 + tx * a4, by2 + ny * o2 + ty * a4); if (sv2 === sv2) { vv += sv2; cntv++; } }
+            prof.push(cntv ? vv / cntv : NaN);
+          }
+          var bestG = 0, bestO = null;
+          for (var pi = 2; pi < prof.length - 2; pi++) { var gd = Math.abs(prof[pi + 2] - prof[pi - 2]); if (gd === gd && gd > bestG) { bestG = gd; bestO = -reach + pi * 0.5; } }
+          if (bestO != null && bestG > 0.04) edgePts.push([bx2 + nx * bestO, by2 + ny * bestO]);
+        }
+        if (edgePts.length < 8) { fines = null; break; }
+        // a robust line: fit, drop the points far off it (texture, print), fit again
+        var fitL = function (pp) { var mx2 = 0, my2 = 0; pp.forEach(function (q) { mx2 += q[0]; my2 += q[1]; }); mx2 /= pp.length; my2 /= pp.length; var a5 = 0, b5 = 0, c5 = 0; pp.forEach(function (q) { a5 += (q[0] - mx2) * (q[0] - mx2); b5 += (q[0] - mx2) * (q[1] - my2); c5 += (q[1] - my2) * (q[1] - my2); }); var th2 = 0.5 * Math.atan2(2 * b5, a5 - c5); return { p: [mx2, my2], d: [Math.cos(th2), Math.sin(th2)] }; };
+        var L1 = fitL(edgePts), dist = function (q) { return Math.abs((q[0] - L1.p[0]) * L1.d[1] - (q[1] - L1.p[1]) * L1.d[0]); };
+        var dsort = edgePts.map(dist).sort(function (a, b) { return a - b; }), lim = Math.max(1.5, dsort[Math.floor(dsort.length * 0.6)] * 2.5);
+        var inl = edgePts.filter(function (q) { return dist(q) <= lim; });
+        fines.push(inl.length >= 6 ? fitL(inl) : L1);
+      }
+      if (fines) {
+        var F = [];
+        for (k3 = 0; k3 < 4; k3++) { var c4 = meet(fines[(k3 + 3) % 4], fines[k3]); if (!c4) { F = null; break; } F.push(c4); }
+        if (F && F.every(function (q, ix) { return Math.hypot(q[0] - full[ix][0], q[1] - full[ix][1]) < 20 * S2; })) full = F;
+      }
+    }
+    var Ls = [0, 1, 2, 3].map(function (k) { var a3 = full[k], b3 = full[(k + 1) % 4]; return Math.hypot(b3[0] - a3[0], b3[1] - a3[1]); });
+    var longFirst = Ls[0] + Ls[2] >= Ls[1] + Ls[3];
+    var pLong = (longFirst ? Ls[0] + Ls[2] : Ls[1] + Ls[3]) / 2 / ID1.w, pShort = (longFirst ? Ls[1] + Ls[3] : Ls[0] + Ls[2]) / 2 / ID1.h;
+    var xs = full.map(function (p) { return p[0]; }), ys = full.map(function (p) { return p[1]; });
+    return {
+      corners: full, pxPerMm: (pLong + pShort) / 2, aspect: Math.round(best.asp * 1000) / 1000, agree: Math.round(Math.abs(pLong / pShort - 1) * 1000) / 1000,
+      box: [Math.min.apply(null, xs), Math.min.apply(null, ys), Math.max.apply(null, xs), Math.max.apply(null, ys)],
+    };
+  }
+
   /**
    * A photo with NO scan card: the fabric fills the frame. The repeat is found on the clearest patch; the
    * scale (px per mm) comes from the caller (focus distance, a known object, or a guess), so wales/cm
@@ -1260,6 +1494,10 @@
    */
   function analyseFree(rgba, w, h, scale) {
     var gray = toGray(rgba, w, h);
+    var idc = null;
+    try { idc = detectIdCard(rgba, w, h, gray); } catch (_) { idc = null; }
+    if (idc && !(idc.agree < 0.06)) idc = null;                   // its two sides must give the same scale
+    if (idc) scale = { pxPerMm: idc.pxPerMm, source: 'id-card', note: 'from the ID-size card in the photo (85.6 × 54 mm)' };
     var P = scale && scale.pxPerMm > 0 ? scale.pxPerMm : 8;
     // work at <= 12 px/mm: loops are 0.5 to 1.5 mm, more pixels only add noise and time
     var k = Math.min(1, 12 / P);
@@ -1267,6 +1505,21 @@
     var sw = small.w, sh = small.h, Ps = P / small.scale;
     var side = Math.min(sw, sh), N = Math.round(side * 0.56), best = null;
     var spots = [[0.5, 0.5], [0.3, 0.3], [0.7, 0.3], [0.3, 0.7], [0.7, 0.7]];
+    // with a card in the photo: the card (and 3 mm round it) is not cloth; read the biggest clear squares
+    var avoid = idc ? [idc.box[0] - 3 * P, idc.box[1] - 3 * P, idc.box[2] + 3 * P, idc.box[3] + 3 * P] : null;
+    var avoidS = avoid ? avoid.map(function (v) { return v / small.scale; }) : null;
+    if (avoidS) {
+      var clear = [];
+      for (var fN = 0.56; fN >= 0.2 && !clear.length; fN -= 0.06) {
+        var Nt = Math.round(side * fN);
+        for (var gy = 0; gy <= 6; gy++) for (var gx = 0; gx <= 6; gx++) {
+          var px0 = (sw - Nt) * gx / 6 + Nt / 2, py0 = (sh - Nt) * gy / 6 + Nt / 2;
+          if (!hitsBox(px0, py0, Nt, avoidS)) clear.push([gx / 6, gy / 6]);
+        }
+        if (clear.length) { N = Nt; spots = clear.sort(function (a, b) { return Math.hypot(a[0] - 0.5, a[1] - 0.5) - Math.hypot(b[0] - 0.5, b[1] - 0.5); }).slice(0, 5); }
+      }
+      if (!clear.length) return { error: 'The card covers most of the photo. Lay it at one edge of the cloth, with the cloth filling the rest.', code: 'card_covers' };
+    }
     for (var i = 0; i < spots.length; i++) {
       var cx = (sw - N) * spots[i][0] + N / 2, cy = (sh - N) * spots[i][1] + N / 2;
       var patch = rotPatch(small.data, sw, sh, cx, cy, N, 0, Ps);
@@ -1278,12 +1531,21 @@
     // the woven reading, the colours and the loop-leg test, at full resolution on the same spot (threads are finer
     // than loops). A clear woven needs nothing more from the knit reader.
     var cw = Math.min(w, 400), ch = Math.round(cw * h / w), srgb = smallRgba(rgba, w, h, cw, ch);
-    var tone = null; try { tone = twoTone(srgb, cw, ch); } catch (_) { tone = null; }
+    var avoidC = avoid ? avoid.map(function (v) { return v * cw / w; }) : null;
+    var tone = null; try { tone = twoTone(srgb, cw, ch, avoidC); } catch (_) { tone = null; }
     var spot = best ? [best.c[0] * small.scale, best.c[1] * small.scale] : [w / 2, h / 2];
-    var wov = null; try { wov = analyseWoven(gray, w, h, P, spot[0], spot[1], { yarnColours: yarnColours(tone) }); } catch (_) { wov = null; }
+    var wov = null; try { wov = analyseWoven(gray, w, h, P, spot[0], spot[1], { yarnColours: yarnColours(tone), avoid: avoid }); } catch (_) { wov = null; }
     var legAxis = wov && wov.ok ? wov.axes_deg * Math.PI / 180 : best ? Math.atan2(best.m.lattice.W[1], best.m.lattice.W[0]) : null;
+    // the square the recogniser looks at: around the reading spot, half the short side, clear of a card
+    var cropFor = function (cx2, cy2) {
+      var sd = Math.round(Math.min(w, h) * 0.5);
+      while (sd > 160 && avoid && hitsBox(cx2, cy2, sd, avoid)) sd = Math.round(sd * 0.85);
+      var x0c = Math.max(0, Math.min(w - sd, Math.round(cx2 - sd / 2))), y0c = Math.max(0, Math.min(h - sd, Math.round(cy2 - sd / 2)));
+      return [x0c, y0c, sd];
+    };
     var finest = Math.min(wov && wov.ok ? Math.min(wov.end_spacing_mm, wov.pick_spacing_mm) * P : Infinity, best ? Math.min(10 * Ps / best.m.wpc, 10 * Ps / best.m.cpc) * small.scale : Infinity);
-    var legs = null; try { legs = legTest(gray, w, h, spot[0], spot[1], legAxis, isFinite(finest) ? finest : null); } catch (_) { legs = null; }
+    var legs = null; try { legs = legTest(gray, w, h, spot[0], spot[1], legAxis, isFinite(finest) ? finest : null, avoid); } catch (_) { legs = null; }
+    var idCard = idc ? { type: 'id', px_per_mm: Math.round(idc.pxPerMm * 10) / 10, corners: idc.corners.map(function (q) { return [Math.round(q[0]), Math.round(q[1])]; }), fabric_at: 'around the card' } : null;
     // held sideways the knit reader swaps wales and courses back; the loop shape is read the same way
     var knitRead0 = best ? { ok: true, regularity: best.m.regularity, ratio: best.m.cpc / best.m.wpc < 0.78 ? best.m.wpc / best.m.cpc : best.m.cpc / best.m.wpc } : { ok: false };
     var kind0 = best ? fabricKind(best.flat, best.m) : { kind: 'none', scores: {} };
@@ -1295,16 +1557,17 @@
       // is kept, so the person can still say "it is knitted" and get a loop count — a rougher one.
       var b0 = best ? best.m : null, sw0 = b0 && b0.cpc / b0.wpc < 0.78, f0 = null;
       if (b0) { try { f0 = features(best.flat, b0); } catch (_) { f0 = null; } }
-      var id0s = identify({ kind: kind0, woven: wov, two_tone: tone, legs: legs, knit_read: knitRead0, knit_suggest: f0 ? (function () { try { return suggest(f0); } catch (_) { return []; } })() : [] });
+      var id0in = { kind: kind0, woven: stripFlat(wov), two_tone: tone, legs: legs, knit_read: knitRead0, knit_suggest: f0 ? (function () { try { return suggest(f0); } catch (_) { return []; } })() : [] };
+      var id0s = identify(id0in);
       return {
-        card: null, scale: { px_per_mm: Math.round(P * 10) / 10, source: scale && scale.source || 'assumed', note: scale && scale.note || null },
+        card: idCard, scale: { px_per_mm: Math.round(P * 10) / 10, source: scale && scale.source || 'assumed', note: scale && scale.note || null },
         kind: { kind: 'woven', why: 'read as woven', scores: kind0.scores || {} }, turned_deg: null, sideways: !!sw0,
         wpc: b0 ? (sw0 ? b0.cpc : b0.wpc) : wov.ends_per_cm, cpc: b0 ? (sw0 ? b0.wpc : b0.cpc) : wov.picks_per_cm, density: b0 ? b0.wpc * b0.cpc : wov.ends_per_cm * wov.picks_per_cm,
         skew_deg: b0 ? b0.skew_deg : 0, confidence: b0 ? b0.confidence : wov.confidence, spread: b0 ? b0.spread : 0,
         regularity: b0 ? b0.regularity : 0, staggered: b0 ? b0.staggered : false, lattice: b0 ? b0.lattice : null,
         wale_px: b0 ? 10 * Ps / b0.wpc * small.scale : null, course_px: b0 ? 10 * Ps / b0.cpc * small.scale : null,
-        features: f0, faults: [], colour: colourPlain(srgb, cw, ch), _flat: best ? best.flat : null,
-        woven: stripFlat(wov), two_tone: tone, legs: legs, family: 'woven', identity: id0s,
+        features: f0, faults: [], colour: colourPlain(srgb, cw, ch, avoidC), _flat: best ? best.flat : null,
+        woven: stripFlat(wov), two_tone: tone, legs: legs, family: 'woven', identity: id0s, _id: id0in, _crop: cropFor(spot[0], spot[1]),
       };
     }
     if (!best) return { error: 'No regular loop pattern was found. Fill the frame with the fabric, 8 to 12 cm away, in focus.', code: 'no_loops' };
@@ -1312,6 +1575,7 @@
     // loop lattice stands straightest (courses across, wales down) and repeats most clearly; then measure there.
     var alignErr = function (mm) { var W = mm.lattice.W, C = mm.lattice.C; return Math.abs(Math.atan2(W[1], W[0])) * 180 / Math.PI + Math.abs(Math.abs(Math.atan2(C[1], C[0])) * 180 / Math.PI - 90); };
     var Ns = Math.min(320, Math.floor(Math.min(sw, sh) * 0.5));
+    if (avoidS) Ns = Math.min(Ns, Math.floor(N / 1.42));           // turned, its corners must stay clear of the card
     var tryAt = function (deg) {
       var rp = rotPatch(small.data, sw, sh, best.c[0], best.c[1], Ns, deg * Math.PI / 180, Ps), mm = measure(rp, { maxN: 256, pass2: true });
       return mm.error ? null : { deg: deg, score: mm.regularity - 0.012 * alignErr(mm) - 0.0015 * Math.abs(deg) };
@@ -1329,7 +1593,8 @@
     var turned = null;
     if (top && Math.abs(top.deg) >= 4) {
       var th = top.deg * Math.PI / 180, room = Math.min(best.c[0], best.c[1], sw - best.c[0], sh - best.c[1]) * 2;
-      var N2 = Math.floor(Math.min(N * 1.2, room / (Math.abs(Math.cos(th)) + Math.abs(Math.sin(th)))));
+      var N2 = Math.floor(Math.min(avoidS ? N : N * 1.2, room / (Math.abs(Math.cos(th)) + Math.abs(Math.sin(th)))));
+      if (avoidS) N2 = Math.min(N2, Math.floor(N / (Math.abs(Math.cos(th)) + Math.abs(Math.sin(th)))));
       if (N2 >= 128) {
         var rp2 = rotPatch(small.data, sw, sh, best.c[0], best.c[1], N2, th, Ps), rm = measure(rp2, { maxN: 512 });
         if (!rm.error) { best = { m: rm, flat: rp2, c: best.c }; turned = top.deg; }
@@ -1340,18 +1605,19 @@
     var sideways = best.m.cpc / best.m.wpc < 0.78;
     if (sideways) { var tw = best.m.wpc; best.m.wpc = best.m.cpc; best.m.cpc = tw; best.m.density = best.m.wpc * best.m.cpc; }
     var m2 = best.m, f = features(best.flat, m2), kind = fabricKind(best.flat, m2);
-    var col = colourPlain(srgb, cw, ch);
+    var col = colourPlain(srgb, cw, ch, avoidC);
     var knitSug = []; try { knitSug = suggest(f); } catch (_) {}
     var knitRead = { ok: true, regularity: m2.regularity, ratio: m2.cpc / m2.wpc };
-    var idF = identify({ kind: kind, woven: wov, two_tone: tone, legs: legs, knit_read: knitRead, knit_suggest: knitSug });
+    var idFin = { kind: kind, woven: wov && wov.ok ? stripFlat(wov) : wov, two_tone: tone, legs: legs, knit_read: knitRead, knit_suggest: knitSug };
+    var idF = identify(idFin);
     return {
-      card: null, scale: { px_per_mm: Math.round(P * 10) / 10, source: scale && scale.source || 'assumed', note: scale && scale.note || null },
+      card: idCard, scale: { px_per_mm: Math.round(P * 10) / 10, source: scale && scale.source || 'assumed', note: scale && scale.note || null },
       kind: kind, turned_deg: turned, sideways: sideways,
       wpc: m2.wpc, cpc: m2.cpc, density: m2.density, skew_deg: m2.skew_deg, confidence: m2.confidence, spread: m2.spread,
       regularity: m2.regularity, staggered: m2.staggered, lattice: m2.lattice,
       wale_px: 10 * Ps / m2.wpc * small.scale, course_px: 10 * Ps / m2.cpc * small.scale,
       features: f, faults: faults(best.flat, m2), colour: col, _flat: best.flat,
-      woven: wov && wov.ok ? stripFlat(wov) : wov, two_tone: tone, legs: legs, family: idF.family, identity: idF,
+      woven: wov && wov.ok ? stripFlat(wov) : wov, two_tone: tone, legs: legs, family: idF.family, identity: idF, _id: idFin, _crop: cropFor(spot[0], spot[1]),
     };
   }
   function stripFlat(o) { var c = {}; for (var k in o) if (k !== '_flat') c[k] = o[k]; return c; }
@@ -1367,9 +1633,10 @@
     return { data: out, w: side, h: side, pxPerMm: pxPerMm, outside: bad / out.length };
   }
   /** The fabric's own colour with no white reference: the mean of the middle, as the camera saw it. */
-  function colourPlain(rgba, w, h) {
-    var fab = [0, 0, 0], n = 0;
-    for (var y = Math.round(h * 0.3); y < h * 0.7; y += 2) for (var x = Math.round(w * 0.3); x < w * 0.7; x += 2) { var i = (y * w + x) * 4; fab[0] += rgba[i]; fab[1] += rgba[i + 1]; fab[2] += rgba[i + 2]; n++; }
+  function colourPlain(rgba, w, h, avoid) {
+    var fab = [0, 0, 0], n = 0, inA = function (x2, y2) { return avoid && x2 >= avoid[0] && x2 <= avoid[2] && y2 >= avoid[1] && y2 <= avoid[3]; };
+    for (var y = Math.round(h * 0.3); y < h * 0.7; y += 2) for (var x = Math.round(w * 0.3); x < w * 0.7; x += 2) { if (inA(x, y)) continue; var i = (y * w + x) * 4; fab[0] += rgba[i]; fab[1] += rgba[i + 1]; fab[2] += rgba[i + 2]; n++; }
+    if (n < 50) for (y = 0; y < h; y += 3) for (x = 0; x < w; x += 3) { if (inA(x, y)) continue; var i3 = (y * w + x) * 4; fab[0] += rgba[i3]; fab[1] += rgba[i3 + 1]; fab[2] += rgba[i3 + 2]; n++; }
     if (!n) return null;
     fab = fab.map(function (v) { return v / n; });
     var hex = '#' + fab.map(function (v) { var t = Math.round(v).toString(16); return t.length < 2 ? '0' + t : t; }).join('');
@@ -1393,6 +1660,14 @@
     var Hsmall = homography(CARD.markers, card.corners);
     var smallRGBA = smallRgba(rgba, w, h, small.w, small.h);
     var wov = null, tone = null;
+    // the square of cloth (in photo pixels) the recogniser looks at: inside the region the cloth was read in
+    var regionCrop = function (reg) {
+      var pts = [[reg[0], reg[2]], [reg[1], reg[2]], [reg[1], reg[3]], [reg[0], reg[3]]].map(function (q) { var a = apply(Hsmall, q[0], q[1]); return [a[0] * small.scale, a[1] * small.scale]; });
+      var xs = pts.map(function (q) { return q[0]; }), ys = pts.map(function (q) { return q[1]; });
+      var x0 = Math.max(0, Math.min.apply(null, xs)), x1 = Math.min(w, Math.max.apply(null, xs)), y0 = Math.max(0, Math.min.apply(null, ys)), y1 = Math.min(h, Math.max.apply(null, ys));
+      var sd = Math.round(Math.max(32, Math.min(x1 - x0, y1 - y0) * 0.9));
+      return [Math.round((x0 + x1) / 2 - sd / 2), Math.round((y0 + y1) / 2 - sd / 2), sd];
+    };
     if (pick.error) {
       // the knit reader found no loops: it may be a woven (threads, not loops) — read the window as one
       var flatW = rectify(gray, w, h, full, srcPx, { region: CARD.regions.window });
@@ -1407,6 +1682,7 @@
         wpc: wov.ends_per_cm, cpc: wov.picks_per_cm, density: wov.ends_per_cm * wov.picks_per_cm, skew_deg: 0, confidence: wov.confidence, spread: 0,
         regularity: 0.5, staggered: false, lattice: null, features: null, faults: [], colour: colour(smallRGBA, small.w, small.h, Hsmall, CARD.regions.window),
         _flat: wov._flat, woven: stripFlat(wov), two_tone: tone, legs: legsW, family: 'woven',
+        _id: { kind: kindW, woven: stripFlat(wov), two_tone: tone, legs: legsW, knit_read: { ok: false }, knit_suggest: [] }, _crop: regionCrop(CARD.regions.window),
         identity: identify({ kind: kindW, woven: wov, two_tone: tone, legs: legsW, knit_read: { ok: false }, knit_suggest: [] }),
       };
     }
@@ -1418,13 +1694,14 @@
     var finC = Math.min(10 * flat.pxPerMm / m.wpc, 10 * flat.pxPerMm / m.cpc, wov && wov.ok ? Math.min(wov.end_spacing_mm, wov.pick_spacing_mm) * flat.pxPerMm : Infinity);
     var legsC = null; try { legsC = legTest(flat.data, flat.w, flat.h, flat.w / 2, flat.h / 2, wov && wov.ok ? wov.axes_deg * Math.PI / 180 : Math.atan2(m.lattice.W[1], m.lattice.W[0]), finC); } catch (_) {}
     var kindC = fabricKind(flat, m), sugC = []; try { sugC = suggest(f); } catch (_) {}
-    var idC = identify({ kind: kindC, woven: wov, two_tone: tone, legs: legsC, knit_read: { ok: true, regularity: m.regularity, ratio: m.cpc / m.wpc }, knit_suggest: sugC });
+    var idCin = { kind: kindC, woven: wov && wov.ok ? stripFlat(wov) : wov, two_tone: tone, legs: legsC, knit_read: { ok: true, regularity: m.regularity, ratio: m.cpc / m.wpc }, knit_suggest: sugC };
+    var idC = identify(idCin);
     return {
       card: { px_per_mm: Math.round(srcPx * 10) / 10, tilt: Math.round(card.tilt * 100) / 100, fabric_at: pick.name },
       scale: { px_per_mm: Math.round(srcPx * 10) / 10, source: 'card', note: null }, kind: kindC,
       wpc: m.wpc, cpc: m.cpc, density: m.density, skew_deg: m.skew_deg, confidence: m.confidence, spread: m.spread,
       regularity: m.regularity, staggered: m.staggered, lattice: m.lattice, features: f, faults: faults(flat, m), colour: col,
-      _flat: flat, woven: wov && wov.ok ? stripFlat(wov) : wov, two_tone: tone, legs: legsC, family: idC.family, identity: idC,
+      _flat: flat, woven: wov && wov.ok ? stripFlat(wov) : wov, two_tone: tone, legs: legsC, family: idC.family, identity: idC, _id: idCin, _crop: regionCrop(pick.region),
     };
   }
   // plain paper: bright and flat. Dark cloth is flat in absolute terms too, so contrast is judged against brightness.
@@ -1489,7 +1766,8 @@
 
   return {
     grid: grid, findFabric: findFabric, detail: detail, analyseFree: analyseFree, fabricKind: fabricKind, colourPlain: colourPlain,
-    analyseWoven: analyseWoven, WEAVE_LIB: WEAVE_LIB, twoTone: twoTone, identify: identify, legTest: legTest, yarnColours: yarnColours,
+    analyseWoven: analyseWoven, WEAVE_LIB: WEAVE_LIB, twoTone: twoTone, identify: identify, legTest: legTest, yarnColours: yarnColours, detectIdCard: detectIdCard,
+    reidentify: reidentify, MODEL_W: MODEL_W, blendKnit: blendKnit,
     _foldMatrix: foldMatrix,
     CARD: CARD, toGray: toGray, downscale: downscale, homography: homography, apply: apply, detectCard: detectCard,
     rectify: rectify, autocorr: autocorr, lattice: lattice, measure: measure, features: features, suggest: suggest,

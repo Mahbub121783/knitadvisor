@@ -11,6 +11,7 @@
 //     which carries the decision on real knitted photos, does not fire on most of them.
 const assert = require('assert');
 const path = require('path');
+const fs = require('fs');
 const FE = path.join(__dirname, '..', '..', 'frontend', 'assets', 'js', 'scan');
 const KS = require(path.join(FE, 'fabric-scan-core.js'));
 const SY = require(path.join(FE, 'fabric-scan-synth.js'));
@@ -143,6 +144,75 @@ const free = (o, P = 15) => {
   assert.throws(() => WR.reverse({ weave: { cls: 'plain' }, ends_per_cm: 2, picks_per_cm: 20 }), WR.WovenReverseError);
   assert.throws(() => WR.reverse({ weave: { cls: 'leno' }, ends_per_cm: 20, picks_per_cm: 20 }), WR.WovenReverseError);
   console.log('✓ woven reverse: quality, counts from cover / GSM / given, sources');
+}
+
+// ── any ID-1 card (bank card, NID) laid on the cloth sets the scale exactly ─────
+{
+  // a card drawn on the photographed cloth: 85.6 x 53.98 mm, rounded corners, some print, turned
+  const paint = (p, P, o) => {
+    const w = 85.6 * P, h = 53.98 * P, rr = 3.18 * P, th = o.rot * Math.PI / 180, c = Math.cos(th), s = Math.sin(th), cx = o.cx * p.w, cy = o.cy * p.h;
+    const inside = (u, v) => { const ax = Math.abs(u) - (w / 2 - rr), ay = Math.abs(v) - (h / 2 - rr); return ax > 0 && ay > 0 ? Math.hypot(ax, ay) <= rr : Math.abs(u) <= w / 2 && Math.abs(v) <= h / 2; };
+    for (let y = 0; y < p.h; y++) for (let x = 0; x < p.w; x++) {
+      let acc = 0, col = [0, 0, 0];
+      for (let q = 0; q < 4; q++) {
+        const dx = x + 0.25 + (q & 1) * 0.5 - cx, dy = y + 0.25 + (q >> 1) * 0.5 - cy, u = dx * c + dy * s, v = -dx * s + dy * c;
+        if (!inside(u, v)) continue;
+        acc++; const fu = u / w + 0.5, fv = v / h + 0.5;
+        let k = o.base; if (fv > 0.6 && fv < 0.66 && fu > 0.08 && fu < 0.7) k = k.map((z) => z * 0.3);           // a line of print
+        if (o.chip && fu > 0.1 && fu < 0.24 && fv > 0.35 && fv < 0.55) k = [200, 170, 90];
+        col = col.map((z, i) => z + k[i]);
+      }
+      if (!acc) continue;
+      const i = (y * p.w + x) * 4, a = acc / 4;
+      for (let ch = 0; ch < 3; ch++) p.rgba[i + ch] = p.rgba[i + ch] * (1 - a) + (col[ch] / acc) * a;
+    }
+  };
+  const P = 14, shot = (fo) => SY.photo({ KAScan: KS, seed: 4, pxPerMm: P, width: 2400, height: 1800, uncut: true, cardY: -3, blur: 1, noise: 0.025, light: 0.25, colour: [205, 200, 195], ...fo }, KS.CARD);
+  for (const [fo, card, pos, truth] of [
+    [{ structure: 'rib', wpc: 11, cpc: 16 }, { base: [25, 45, 110], chip: true }, [0.68, 0.6, -12], [11, 16]],
+    [{ weave: W.twill31, epc: 28, ppc: 17, warpColour: [40, 60, 120], weftColour: [225, 225, 215] }, { base: [235, 238, 230] }, [0.3, 0.5, 6], [28, 17]],
+  ]) {
+    const p = shot(fo); paint(p, P, { cx: pos[0], cy: pos[1], rot: pos[2], ...card });
+    const card0 = KS.detectIdCard(p.rgba, p.w, p.h, KS.toGray(p.rgba, p.w, p.h));
+    assert(card0, 'the card is found'); near(card0.pxPerMm, P, 0.02, 'card scale');
+    // the free analysis, told a WRONG scale (10 px/mm), corrects itself from the card
+    const r = KS.analyseFree(p.rgba, p.w, p.h, { pxPerMm: 10, source: 'assumed' });
+    assert.strictEqual(r.scale.source, 'id-card'); assert(r.card && r.card.type === 'id');
+    const got = r.family === 'woven' ? [r.woven.ends_per_cm, r.woven.picks_per_cm] : [r.wpc, r.cpc];
+    near(got[0], truth[0], 0.07, 'count with the card'); near(got[1], truth[1], 0.1, 'second count with the card');
+  }
+  // no card: none is invented
+  for (const fo of [{ structure: 'single_jersey', wpc: 14, cpc: 19 }, { weave: W.plain, epc: 30, ppc: 28, colour: [235, 235, 230] }]) {
+    const p = shot(fo); assert.strictEqual(KS.detectIdCard(p.rgba, p.w, p.h, KS.toGray(p.rgba, p.w, p.h)), null, 'no card in a plain cloth photo');
+  }
+  console.log('✓ ID-1 card: found, exact scale, counts right at a wrong assumed scale, none invented');
+}
+
+// ── the fabric recogniser: the shipped weights, the plain-JS engine, and its place in the evidence ─────
+{
+  const FN = require(path.join(FE, 'fabric-net.js'));
+  const MD = path.join(__dirname, '..', '..', 'frontend', 'assets', 'models');
+  const meta = JSON.parse(fs.readFileSync(path.join(MD, 'fabric-id-v1.json'), 'utf8'));
+  const buf = fs.readFileSync(path.join(MD, 'fabric-id-v1.bin'));
+  assert.strictEqual(buf.length, meta.floats * 2, 'the half-float weights are all there');
+  const net = FN.fromBuffers(meta, FN.weights(meta, buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.length)));
+  const p = SY.photo({ KAScan: KS, seed: 5, pxPerMm: 15, width: 1100, height: 900, uncut: true, cardY: -3, blur: 1, noise: 0.025, light: 0.25, weave: W.twill31, epc: 28, ppc: 17, angle: 12, warpColour: [40, 60, 120], weftColour: [225, 225, 215] }, KS.CARD);
+  const r = KS.analyseFree(p.rgba, p.w, p.h, { pxPerMm: 15, source: 'test' });
+  assert(r._crop && r._id, 'the result says where the recogniser should look');
+  const m = net.classify(p.rgba, p.w, p.h, [r._crop]);
+  for (const head of ['family', 'knit', 'weave', 'side']) {
+    const sum = Object.values(m[head]).reduce((t, v) => t + v, 0);
+    assert(Math.abs(sum - 1) < 0.01, head + ' is a probability distribution');
+  }
+  assert(m.family.woven > 0.5, 'a photographed denim is woven to the recogniser too: ' + m.family.woven);
+  KS.reidentify(r, m);
+  assert(r.identity.evidence.some((e) => /recogniser/.test(e.why)), 'its verdict is listed with the evidence');
+  assert.strictEqual(r.identity.family, 'woven');
+  // weight: one confident recogniser verdict cannot, alone, outvote three measured items against it
+  const wv = { ok: true, confidence: 'high', ends_per_cm: 30, picks_per_cm: 25, weave: { cls: 'plain', name: 'Plain weave 1/1', score: 9 } };
+  const knitty = KS.identify({ kind: { kind: 'knit' }, woven: wv, legs: { line: 0.15, amp: 0.2, score: 0.2, legs: true }, knit_read: { ok: true, regularity: 0.85, ratio: 1.3 }, knit_suggest: [], model: { family: { knit: 0.05, woven: 0.95 } } });
+  assert.strictEqual(knitty.family, 'knit', 'measured loop legs and a clean loop lattice still decide');
+  console.log('✓ recogniser: shipped weights load, distributions sum to one, its verdict joins the evidence at a bounded weight');
 }
 
 console.log('--- Fabric Identification Tests passed ---');
