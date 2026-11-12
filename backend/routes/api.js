@@ -143,7 +143,7 @@ router.post('/calculate', requireUser, enforceDailyLimit, async (req, res) => {
   // three per cent would leave every cached costing quoting the old figure
   // until the next deploy — which is precisely the failure that had answers
   // from a dead engine being served for a month, arriving by a different door.
-  const priceStamp = yarnPrices.status().last_updated || 'none';
+  const priceStamp = yarnPrices.stamp();
   const cacheKey = crypto.createHash('md5')
     .update(ENGINE_VERSION + '|' + priceStamp + '|' + cacheInput).digest('hex');
 
@@ -196,8 +196,7 @@ router.post('/calculate', requireUser, enforceDailyLimit, async (req, res) => {
   // Cache miss — calculate
   // The lookup is handed in rather than reached for inside the engine, so the
   // engine keeps working with no database behind it.
-  engineParams.live_prices = (key, ne, country) =>
-    yarnPrices.lookup(key, ne, undefined, { country });
+  engineParams.live_prices = yarnPrices.feed();
   const result = calculate(engineParams);
 
   if (result.error) {
@@ -322,8 +321,7 @@ router.post('/cost', requireUser, enforceDailyLimit, (req, res) => {
   try {
     const parsedComp = body.composition ? parseComposition(body.composition) : null;
     const result = calculateCost({ ...body, gsm, parsedComp,
-      live_prices: (key, ne, country) =>
-        yarnPrices.lookup(key, ne, undefined, { country }) });
+      live_prices: yarnPrices.feed() });
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -368,6 +366,21 @@ router.post('/carbon', requireUser, carbonLimiter, (req, res) => {
   } catch (err) {
     console.error('[carbon]', err);
     res.status(500).json({ success: false, error: 'The carbon footprint could not be worked out.' });
+  }
+});
+
+// ============================================================
+// GET /api/yarn-prices/desk — where every yarn price comes from today: the
+// sources and whether they answered, the table as the costing resolves it,
+// the move since each quote, six countries, and the buying basis.
+// ============================================================
+router.get('/yarn-prices/desk', requireUser, (req, res) => {
+  try {
+    res.set('Cache-Control', 'no-store');
+    res.json({ success: true, ...require('../services/yarn-desk').desk() });
+  } catch (err) {
+    console.error('[yarn-desk]', err);
+    res.status(500).json({ success: false, error: 'The yarn price desk could not be read.' });
   }
 });
 
@@ -427,8 +440,7 @@ router.post('/garment-costing', requireUser, enforceDailyLimit, (req, res) => {
     const parsedComp = body.composition ? parseComposition(body.composition) : null;
     const fabricResult = calculateCost({
       ...body, gsm, parsedComp, garment_weight_g: garmentWeightG,
-      live_prices: (key, ne, country) =>
-        yarnPrices.lookup(key, ne, undefined, { country }),
+      live_prices: yarnPrices.feed(),
     });
 
     if (!fabricResult || !fabricResult.garment) {
@@ -544,8 +556,7 @@ router.post('/techpack/generate', requireUser, enforceDailyLimit, (req, res) => 
     engineParams.fabric = fabric;
     engineParams.gsm = gsm;
     engineParams.efficiency = body.efficiency || 85;
-    engineParams.live_prices = (key, ne, country) =>
-      yarnPrices.lookup(key, ne, undefined, { country });
+    engineParams.live_prices = yarnPrices.feed();
 
     const result = calculate(engineParams);
     if (result.error) {
@@ -1807,7 +1818,7 @@ router.post('/cost-sheet/shell-from-studio', requireUser, async (req, res) => {
 
 router.post('/cost-sheet/analyse', requireUser, (req, res) => {
   try {
-    const out = costSheet.analyse(req.body || {}, { live: (key, ne, country) => yarnPrices.lookup(key, ne, undefined, { country }) });
+    const out = costSheet.analyse(req.body || {}, { live: yarnPrices.feed() });
     res.status(out.success ? 200 : 400).json(out);
   } catch (err) {
     console.error('[cost-sheet] analyse failed:', err);
@@ -1819,7 +1830,7 @@ router.post('/cost-sheet/analyse', requireUser, (req, res) => {
 router.post('/cost-sheet/pdf', requireUser, (req, res) => {
   try {
     const input = req.body || {};
-    const out = costSheet.analyse(input, { live: (key, ne, country) => yarnPrices.lookup(key, ne, undefined, { country }) });
+    const out = costSheet.analyse(input, { live: yarnPrices.feed() });
     if (!out.success) return res.status(400).json(out);
     const doc = require('../engine/domain/cost-sheet-pdf').render(out, input);
     const safe = String((out.header || {}).style || 'sheet').replace(/[^A-Za-z0-9_.-]+/g, '_').slice(0, 40) || 'sheet';

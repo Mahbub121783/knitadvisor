@@ -238,10 +238,29 @@ function status(now) {
 
 function isLoaded() { return snapshot.loaded; }
 
+/**
+ * The one price feed every costing uses: the quote lookup, with the fibre
+ * benchmarks attached so the engine can bring an old quote forward by what its
+ * fibre has done since (engine/domain/yarn-nowcast.js). Callers used to build
+ * this lambda themselves in seven places; one function means one behaviour.
+ */
+const benchmarks = require('../../jobs/price-sources/benchmarks');
+function feed() {
+  const f = (key, ne, country) => lookup(key, ne, undefined, { country });
+  f.bench = benchmarks;
+  return f;
+}
+
+/** What a cached costing must be keyed on: the newest quote AND the newest benchmark. */
+function stamp() {
+  const b = benchmarks.status();
+  return [snapshot.newest_quote || 'none', b.daily_cotton.latest_date || '-', b.monthly.latest_month || '-'].join('|');
+}
+
 /** Countries that actually have live quotes right now. */
 function quotedCountries() {
   return snapshot.loaded ? Object.keys(snapshot.by_country) : [];
 }
 
-module.exports = { load, lookup, status, isLoaded, ageDays, COSTING_MARKET, quotedCountries,
+module.exports = { load, lookup, status, isLoaded, ageDays, COSTING_MARKET, quotedCountries, feed, stamp, benchmarks,
                    MAX_INTERPOLATION_SPAN_NE };

@@ -219,7 +219,7 @@ const MARKET_WATCH = [
   ['combed_regular', 30], ['combed_regular', 24], ['carded_regular', 30], ['cvc_60_40', 30],
   ['pc_65_35', 30], ['viscose_regular', 30], ['filament_150d', 0], ['spandex_40d', 0],
 ];
-const livePrice = (key, ne, country) => yarnPriceRepo.lookup(key, ne, undefined, { country });
+const livePrice = yarnPriceRepo.feed();
 const r4 = (v) => (v == null || !isFinite(v) ? null : Math.round(v * 10000) / 10000);
 
 function sheetCard(row) {

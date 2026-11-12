@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <script src="assets/js/auth-guard.js?v=20260922a"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Yarn price desk — KnitAdvisor</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <meta name="description" content="Where every yarn price in KnitAdvisor comes from, how an old quote is brought to today, and what a country and a buying basis add.">
+  <meta name="theme-color" content="#FFFFFF">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css?v=20260603c">
+  <style>
+    [hidden] { display: none !important; }
+    .yd-main { padding: 20px 0 56px; }
+    .yd-head h1 { font-size: 26px; margin: 0 0 6px; letter-spacing: -0.01em; }
+    .yd-head p { margin: 0 0 18px; color: var(--t2); font-size: 14px; line-height: 1.6; max-width: 1000px; }
+    .yd-card { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+    .yd-card h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--t2); margin: 0 0 12px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+    .yd-card h2 small { text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--t3); font-size: 12px; }
+    .yd-small { font-size: 12px; color: var(--t3); line-height: 1.6; }
+    /* the chain */
+    .yd-chain { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; }
+    @media (max-width: 1100px) { .yd-chain { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+    @media (max-width: 600px) { .yd-chain { grid-template-columns: minmax(0, 1fr); } }
+    .yd-step { position: relative; border: 1px solid var(--line); border-radius: 12px; padding: 12px; background: linear-gradient(180deg, #fff, #F7F9FC); }
+    .yd-step .n { width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: #fff; font: 700 12px var(--head); display: inline-flex; align-items: center; justify-content: center; }
+    .yd-step b { display: block; font-size: 14px; margin: 8px 0 4px; color: var(--t1); }
+    .yd-step p { margin: 0; font-size: 12px; color: var(--t2); line-height: 1.5; }
+    .yd-step.end { background: linear-gradient(180deg, #EEF6F1, #E3F1E9); border-color: #CFE3D7; }
+    .yd-step.end .n { background: #1E7A54; }
+    /* sources */
+    .yd-src { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+    .yd-s { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+    .yd-s .top { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
+    .yd-s b { font-size: 14px; color: var(--t1); }
+    .yd-s .kind { font: 600 10px var(--head); text-transform: uppercase; letter-spacing: .06em; color: var(--t3); }
+    .yd-s p { margin: 6px 0 0; font-size: 12.5px; color: var(--t2); line-height: 1.5; }
+    .yd-s .meta { font-size: 11.5px; color: var(--t3); margin-top: 6px; line-height: 1.5; }
+    .st { font: 700 10px var(--head); text-transform: uppercase; letter-spacing: .05em; padding: 3px 8px; border-radius: 99px; white-space: nowrap; }
+    .st.ok { background: #E7F6EE; color: #17633f; } .st.old, .st.kept { background: #FFF4E0; color: #8a5300; } .st.offline, .st.none { background: #FDECEC; color: #9b1c1c; } .st.built { background: #EEF3FC; color: #1857C4; }
+    /* moves */
+    .yd-moves { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+    .yd-moves div { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+    .yd-moves b { display: block; font: 700 22px var(--head); }
+    .yd-moves small { font-size: 12px; color: var(--t3); }
+    .up { color: #B23B3B; } .down { color: #1E7A54; }
+    /* table */
+    .yd-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    table.yd-t { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 760px; }
+    .yd-t th { text-align: right; font: 600 11px var(--head); text-transform: uppercase; letter-spacing: .04em; color: var(--t3); padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+    .yd-t th:first-child, .yd-t td:first-child { text-align: left; }
+    .yd-t td { padding: 7px 8px; border-bottom: 1px solid #F1F2F4; text-align: right; font-family: var(--mono); white-space: nowrap; }
+    .yd-t td:first-child { font-family: var(--head); white-space: normal; min-width: 180px; }
+    .yd-t td small { display: block; font-size: 10px; color: var(--t3); font-family: var(--head); }
+    .k-market { color: #17633f; } .k-market_interpolated { color: #1857C4; } .k-reference_list { color: #8a5300; }
+    .yd-legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--t2); margin-top: 10px; }
+    .yd-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+    /* worked example */
+    .yd-ex { list-style: none; margin: 0; padding: 0; }
+    .yd-ex li { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); align-items: start; }
+    .yd-ex li:last-child { border-bottom: 0; font-weight: 700; }
+    .yd-ex .n { width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #fff; font: 700 11px var(--head); display: flex; align-items: center; justify-content: center; }
+    .yd-ex .t { font-size: 13.5px; font-weight: 600; }
+    .yd-ex code { display: block; font: 12px/1.55 var(--mono); color: var(--t2); margin-top: 3px; white-space: normal; }
+    .yd-ex .v { font: 700 14px var(--mono); white-space: nowrap; }
+    .yd-two { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+    @media (min-width: 1200px) { .yd-two { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .yd-two > .yd-card { margin-bottom: 0; } }
+    .yd-cty { display: grid; grid-template-columns: 110px minmax(0, 1fr) 70px; gap: 10px; align-items: center; font-size: 13px; padding: 5px 0; }
+    .yd-cty .b { height: 10px; background: var(--line); border-radius: 99px; overflow: hidden; }
+    .yd-cty .b i { display: block; height: 100%; background: #60a5fa; border-radius: 99px; }
+    .yd-cty.me { font-weight: 700; } .yd-cty.me .b i { background: var(--accent); }
+    .yd-land { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-bottom: 10px; }
+    .yd-land label { display: block; font-size: 12px; font-weight: 600; color: var(--t2); margin-bottom: 4px; }
+    .yd-land input, .yd-land select { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--line2); border-radius: 8px; font: 14px var(--head); }
+    .yd-lines div { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px solid #F1F2F4; font-size: 13px; }
+    .yd-lines div b { font-family: var(--mono); }
+    .yd-lines div.tot { border-bottom: 0; font-weight: 800; font-size: 15px; }
+    .yd-err { background: rgba(178,59,59,.08); color: var(--danger); padding: 10px 12px; border-radius: 8px; font-size: 13px; }
+  </style>
+  <link rel="stylesheet" href="assets/css/theme-v2.css?v=20261112b">
+  <script src="assets/js/app-shell.js?v=20261112d" defer></script>
+</head>
+<body>
+<div class="page-wrap">
+  <header class="hdr"></header>
+  <main class="container yd-main">
+    <div class="yd-head">
+      <h1>Yarn price desk</h1>
+      <p>Where every yarn price in KnitAdvisor comes from, live from the system: which markets are read and whether they answered, how a quote that is weeks old is brought to today by what its fibre has done since, what changes in another country, and what duty, VAT, freight and LC charges add. The costing sheet and the fabric calculator use exactly these prices.</p>
+    </div>
+
+    <div class="yd-card">
+      <h2>The price chain <small>— every yarn price passes these steps, and the result says which ones it took</small></h2>
+      <div class="yd-chain">
+        <div class="yd-step"><span class="n">1</span><b>Market quote</b><p>The Bangladesh yarn market's list of imported yarn against LC, in USD per kg, by product and count, with the date the market put on it.</p></div>
+        <div class="yd-step"><span class="n">2</span><b>Between counts</b><p>A count the list does not print is read between the two nearest quotes of the same day, at most 8 Ne apart, and badged as read-between, never as a quote.</p></div>
+        <div class="yd-step"><span class="n">3</span><b>Brought to today</b><p>An older quote moves by what its fibre has done since: Δ price = share × kg of fibre in a kg of yarn × Δ fibre price, from the cotton benchmark and, for polyester, crude oil.</p></div>
+        <div class="yd-step"><span class="n">4</span><b>Country</b><p>Another country: the same fibre, spun on that country's published industrial power tariff. Energy is about 30% of the spinning cost.</p></div>
+        <div class="yd-step"><span class="n">5</span><b>Buying basis</b><p>Export mill on a back-to-back LC through a bonded warehouse: no duty, no VAT. Otherwise freight, duty, LC charges and VAT, each its own line.</p></div>
+        <div class="yd-step end"><span class="n">✓</span><b>Price used</b><p>With its badge and date on every costing, so any figure can be traced back to the market and the day it came from.</p></div>
+      </div>
+    </div>
+
+    <div id="yd-out"><div class="yd-card"><div class="yd-small">Reading the prices…</div></div></div>
+  </main>
+  <footer class="footer"></footer>
+</div>
+<script src="assets/js/api.js"></script>
+<script src="assets/js/yarn-desk.js?v=20261112a"></script>
+</body>
+</html>

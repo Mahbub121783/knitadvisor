@@ -478,7 +478,7 @@
     .kp-scroll { overflow-x: auto; }
 </style>
   <link rel="stylesheet" href="assets/css/theme-v2.css?v=20261112b">
-  <script src="assets/js/app-shell.js?v=20261112c" defer></script>
+  <script src="assets/js/app-shell.js?v=20261112d" defer></script>
 </head>
 <body>
 <div class="page-wrap">
@@ -3402,7 +3402,7 @@ function renderCosting(costing) {
   const prov = costing.yarn_price_provenance;
   const ageEl = document.getElementById('cost-price-age');
   if (prov) {
-    const tone = prov.freshness === 'current' ? '#4ade80'
+    const tone = prov.freshness === 'current' || prov.freshness === 'nowcast' ? '#4ade80'
                : prov.freshness === 'recent' ? '#fbbf24'
                : prov.freshness === 'stale' ? '#fb923c' : 'var(--t3)';
     const age = prov.age_days == null ? ''
@@ -3421,6 +3421,17 @@ function renderCosting(costing) {
     } else {
       line = `Yarn price is <strong style="color:#fb923c">an estimate</strong> — ${esc(prov.why || 'nothing prices this yarn')}.`;
     }
+    // An older quote (or the list) brought to today by what its fibre has done since
+    if (prov.nowcast && prov.nowcast.parts && prov.nowcast.parts.length) {
+      const nc = prov.nowcast, from = prov.quoted_price != null ? prov.quoted_price : prov.listed_price;
+      line += ` Brought forward to <strong>${esc(nc.to)}</strong> by what its fibre has done since `
+        + `(${nc.parts.map(p => esc(p.fibre) + ' ' + (p.fibre === 'cotton' ? (p.fibre_change_pct > 0 ? '+' : '') + fmt(p.fibre_change_pct, 1) + '%' : 'via crude oil ' + (p.oil_change_pct > 0 ? '+' : '') + fmt(p.oil_change_pct, 1) + '%')).join(', ')}): `
+        + `$${fmt(from, 2)} ${nc.delta >= 0 ? '+' : '−'} $${fmt(Math.abs(nc.delta), 3)} through the kilograms of fibre in a kilogram of yarn.`;
+    }
+    const ld = costing.yarn_landed;
+    if (ld) line += ld.added_usd_kg ? ` Duty, VAT and buying charges add $${fmt(ld.added_usd_kg, 3)}/kg (${ld.lines.filter(x => x.usd_kg).map(x => esc(x.name) + ' ' + x.pct + '%').join(', ')}).`
+      : ' No duty or VAT added: export-oriented mill buying against a back-to-back LC through a bonded warehouse.';
+    line += ' <a href="/yarn-prices.html" style="color:var(--accent);font-weight:600;">How yarn prices are built →</a>';
     // The gap against the built-in list, where both exist. It is the number
     // that shows the reference list going stale, and it is worth seeing.
     if (prov.reference_gap_pct != null && Math.abs(prov.reference_gap_pct) >= 2) {

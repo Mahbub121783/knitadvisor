@@ -394,8 +394,52 @@ function resolveCountry(code) {
  */
 const LIVE_PRICE_MAX_AGE_DAYS = 60;
 
+// With the fibre benchmarks connected (live.bench), an older quote is not
+// dropped at 60 days: it is BROUGHT FORWARD by what its fibre has done since,
+// through the mass balance (see yarn-nowcast.js), up to 150 days. A quote under
+// three days old is used as printed.
+const { nowcast: yarnNowcast } = require('./yarn-nowcast');
+const NOWCAST_MIN_AGE_DAYS = 3;
+const NOWCAST_MAX_AGE_DAYS = 150;
+
+/**
+ * Duty, VAT and the costs of buying the yarn, on top of the quoted price.
+ *
+ * The quotes are the import-against-LC list: what an export-oriented mill pays
+ * under a back-to-back LC, through a bonded warehouse. On that basis there is
+ * no import duty and no VAT on the yarn, so by default nothing is added — and
+ * the result SAYS that, so "where is the tax" has an answer. A mill buying for
+ * the domestic market, or wanting freight, LC and bank charges inside the
+ * yarn price, passes them in `yarn_landed` and each one is shown as its own line.
+ */
+function landedYarnPrice(price, L) {
+  const pct = (v) => { const x = parseFloat(v); return Number.isFinite(x) ? Math.min(60, Math.max(0, x)) : 0; };
+  const basis = L && L.basis === 'domestic' ? 'domestic' : 'bonded_export';
+  const f = pct(L && L.freight_pct), d = pct(L && L.duty_pct), b = pct(L && L.lc_bank_pct), v = pct(L && L.vat_pct);
+  const recoverable = !(L && L.vat_recoverable === false);
+  const freight = price * f / 100, cif = price + freight, duty = cif * d / 100, bank = price * b / 100;
+  const beforeVat = cif + duty + bank, vat = recoverable ? 0 : beforeVat * v / 100;
+  const lines = [
+    { name: 'Freight and insurance to the mill', pct: f, usd_kg: round4(freight) },
+    { name: 'Import duty', pct: d, usd_kg: round4(duty) },
+    { name: 'LC opening and bank charges', pct: b, usd_kg: round4(bank) },
+    { name: recoverable ? 'VAT (recovered as input credit, not a cost)' : 'VAT (not recoverable)', pct: v, usd_kg: round4(vat) },
+  ];
+  const added = round4(freight + duty + bank + vat);
+  return {
+    basis, price_before: round4(price), added_usd_kg: added, price_after: round4(price + added), lines,
+    note: basis === 'bonded_export' && added === 0
+      ? 'Export-oriented mill buying against a back-to-back LC through a bonded warehouse: no import duty and no VAT on the yarn, so the quoted price is the cost. Enter freight, LC charges, duty or VAT to cost another basis.'
+      : basis === 'domestic'
+        ? 'Domestic-market purchase: duty and VAT as entered; VAT is a cost only where it cannot be claimed back.'
+        : 'Charges as entered, each shown on its own line.',
+  };
+}
+
 function resolveYarnPrice(yarnTypeKey, countNe, live, countryCode) {
   const listed = getPriceFromMatrix(yarnTypeKey, countNe);
+  const bench = live && live.bench && typeof live.bench.levelAt === 'function' ? live.bench : null;
+  const maxAge = bench ? NOWCAST_MAX_AGE_DAYS : LIVE_PRICE_MAX_AGE_DAYS;
 
   let quote = null;
   if (typeof live === 'function') {
@@ -420,9 +464,15 @@ function resolveYarnPrice(yarnTypeKey, countNe, live, countryCode) {
 
   if (quote && typeof quote.price_usd_kg === 'number' &&
       quote.price_usd_kg > 0 && quote.age_days != null &&
-      quote.age_days <= LIVE_PRICE_MAX_AGE_DAYS) {
+      quote.age_days <= maxAge) {
+    // older than a few days and the benchmarks are there: move it by its fibre
+    let nc = null;
+    if (bench && quote.age_days > NOWCAST_MIN_AGE_DAYS) {
+      try { nc = yarnNowcast(SM_PRICE_MATRIX[yarnTypeKey], quote.quoted_on, bench); } catch (_) { nc = null; }
+    }
+    const price = nc ? round4(quote.price_usd_kg + nc.delta) : quote.price_usd_kg;
     return {
-      price: quote.price_usd_kg,
+      price,
       price_source: {
         // A price read BETWEEN two quotes is not a quote and never carries a
         // quote's badge. The arithmetic is ordinary; presenting the result as
@@ -435,8 +485,11 @@ function resolveYarnPrice(yarnTypeKey, countNe, live, countryCode) {
         interpolated_between: quote.interpolated ? quote.interpolated.between : null,
         last_updated: quote.quoted_on,
         age_days: quote.age_days,
-        freshness: quote.age_days <= 7 ? 'current'
+        freshness: nc ? 'nowcast'
+                 : quote.age_days <= 7 ? 'current'
                  : quote.age_days <= 21 ? 'recent' : 'stale',
+        quoted_price: quote.price_usd_kg,
+        nowcast: nc,
         as_published: quote.as_published || null,
         matched: quote.label || null,
         // Kept for traceability rather than display: the user asked for the
@@ -446,18 +499,25 @@ function resolveYarnPrice(yarnTypeKey, countNe, live, countryCode) {
         // is the number that makes the drift visible instead of theoretical.
         reference_price: listed,
         reference_gap_pct: listed
-          ? Math.round(((quote.price_usd_kg - listed) / listed) * 1000) / 10 : null,
+          ? Math.round(((price - listed) / listed) * 1000) / 10 : null,
       },
     };
   }
 
+  // the reference list, brought forward from its own date the same way
+  let ncList = null;
+  if (bench && listed != null) {
+    try { ncList = yarnNowcast(SM_PRICE_MATRIX[yarnTypeKey], PRICE_LIST_DATE, bench); } catch (_) { ncList = null; }
+  }
   return {
-    price: listed,
+    price: ncList ? round4(listed + ncList.delta) : listed,
     price_source: {
       kind: 'reference_list',
       last_updated: PRICE_LIST_DATE,
       age_days: null,
-      freshness: 'reference',
+      freshness: ncList ? 'nowcast' : 'reference',
+      listed_price: listed,
+      nowcast: ncList,
       // Why the live figure was not used, so "no live price" and "never looked"
       // do not read the same — the same distinction the fibre advisory makes.
       why: typeof live !== 'function'
@@ -465,7 +525,7 @@ function resolveYarnPrice(yarnTypeKey, countNe, live, countryCode) {
         : !quote
           ? `the market list carries no quote for ${yarnTypeKey} at ${countNe}Ne`
           : `the newest quote for this item is ${quote.age_days} days old, past the `
-            + `${LIVE_PRICE_MAX_AGE_DAYS}-day limit`,
+            + `${maxAge}-day limit`,
     },
   };
 }
@@ -820,7 +880,8 @@ function calculateCost(params) {
     surchargesApplied.push({ name: String(x.name || 'Surcharge'), amount: amt });
   }
 
-  const finalYarnPrice = round4(basePrice + surchargeTotal);
+  const landed = landedYarnPrice(basePrice + surchargeTotal, params.yarn_landed);
+  const finalYarnPrice = landed.price_after;
 
   // ---- 3b. ELASTANE SEPARATE COST (when composition includes elastane) ----
   // Elastane/spandex is always a separate yarn fed via a dedicated feeder.
@@ -1128,6 +1189,7 @@ function calculateCost(params) {
       surcharges:        surchargesApplied,
       surcharge_total:   round4(surchargeTotal),
       final_price_usd:   finalYarnPrice,
+      landed:            landed,
       // Where this price came from and how old it is. It used to be a fixed
       // string naming the May 2026 list, printed under every price whether
       // that is where the price came from or not.
@@ -1256,8 +1318,10 @@ function calculateCost(params) {
           : priceSource.kind === 'market_interpolated'
             ? `Market[${yarnTypeKey}] read between ${priceSource.interpolated_between[0]}Ne and `
               + `${priceSource.interpolated_between[1]}Ne as at ${priceSource.last_updated}`
-            : `Reference Matrix[${yarnTypeKey}][${Math.round(countNe)}Ne]`} = $${basePrice}` +
-        ` + surcharges($${round4(surchargeTotal)}) = $${finalYarnPrice}` +
+            : `Reference Matrix[${yarnTypeKey}][${Math.round(countNe)}Ne]`}` +
+        (priceSource.nowcast ? ` brought forward from ${priceSource.nowcast.since} to ${priceSource.nowcast.to} by its fibre benchmark (${priceSource.nowcast.delta >= 0 ? '+' : ''}$${priceSource.nowcast.delta})` : '') +
+        ` = $${basePrice}` +
+        ` + surcharges($${round4(surchargeTotal)})` + (landed.added_usd_kg ? ` + duty, VAT and charges($${landed.added_usd_kg})` : '') + ` = $${finalYarnPrice}` +
         (priceSource.reference_gap_pct != null
           ? ` — the reference list would have said $${priceSource.reference_price}, ` +
             `${priceSource.reference_gap_pct > 0 ? '+' : ''}${priceSource.reference_gap_pct}%`
@@ -1292,4 +1356,8 @@ module.exports = {
   getPriceFromMatrix,
   autoDetectYarnType,
   DEFAULT_EXCHANGE_RATES,
+  landedYarnPrice,
+  PRICE_LIST_DATE,
+  LIVE_PRICE_MAX_AGE_DAYS,
+  NOWCAST_MAX_AGE_DAYS,
 };

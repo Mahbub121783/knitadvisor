@@ -1194,6 +1194,12 @@ function calculate(params) {
     // Injected rather than required so this module needs no database.
     live_prices: params.live_prices || null,
     country: params.country || null,
+    yarn_landed: {
+      basis: params.yarn_buy_basis === 'domestic' ? 'domestic' : 'bonded_export',
+      freight_pct: params.yarn_freight_pct, duty_pct: params.yarn_duty_pct,
+      lc_bank_pct: params.yarn_lc_bank_pct, vat_pct: params.yarn_vat_pct,
+      vat_recoverable: params.yarn_buy_basis !== 'domestic',
+    },
     fabric: fabricDef.id,
     gsm,
     count_ne: costCountNe || 30,
@@ -1651,6 +1657,7 @@ function calculate(params) {
       // cannot be judged, which is how the reference list drifted 3-7% without
       // anything noticing.
       yarn_price_provenance:    costResult.yarn.price_source,
+      yarn_landed:              costResult.yarn.landed || null,
       // Which country this was costed for, with the tariff behind it and the
       // anchor's own figures beside it, so the page can show the arithmetic
       // rather than just a total that changed.
@@ -1773,6 +1780,9 @@ const ENGINE_INPUTS = Object.freeze([
   // stays null in the response unless both garment_weight_g and garment_type
   // are present)
   'garment_weight_g', 'garment_type', 'order_quantity',
+  // how the yarn is bought: 'bonded_export' (default: no duty, no VAT) or
+  // 'domestic', and the charges on top of the quote, each in percent
+  'yarn_buy_basis', 'yarn_freight_pct', 'yarn_duty_pct', 'yarn_lc_bank_pct', 'yarn_vat_pct',
   'wage_grade', 'line_efficiency_pct', 'cutting_efficiency_pct', 'cutting_sam_pct',
   'addons', 'overhead_pct', 'profit_pct', 'bdt_per_usd',
   'marker_cutting_loss_pct', 'rejection_damage_pct', 'end_bit_remnant_pct', 'gsm_tolerance_buffer_pct',

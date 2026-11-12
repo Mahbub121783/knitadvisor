@@ -79,9 +79,12 @@ const JOBS = {
   async 'sync-yarn-prices'() {
     const { syncYarnPrices } = require('../jobs/yarn-price-sync');
     const yarnPrices = require('../db/repositories/yarn-price-repo');
+    // the free benchmarks first: they move an old quote forward, and they work
+    // even on a day the dealer list does not answer
+    const benchmarks = await require('../jobs/price-sources/benchmarks').refresh().catch((e) => ({ error: e.message }));
     const result = await syncYarnPrices({ trigger: 'schedule' });
     if (result.ok && !result.skipped) await yarnPrices.load();
-    return result;
+    return { ...result, benchmarks };
   },
 
   /** Delete expired cache rows and dead sessions. */

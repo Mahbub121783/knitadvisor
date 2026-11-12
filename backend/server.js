@@ -71,6 +71,40 @@ yarnPrices.load()
   .then(r => console.log(`[Prices] ${r.quotes} market quotes over ${r.items} items, newest ${r.newest || 'none'}`))
   .catch(err => console.warn('[Prices] no market quotes loaded, the reference list will answer:', err.message));
 
+// Free market benchmarks (the international cotton price, crude oil for
+// polyester) bring an old yarn quote forward by what its fibre has done since —
+// see engine/domain/yarn-nowcast.js. Kept in a small file, rebuilt if lost.
+//
+// And the price feeds now refresh THEMSELVES while the app runs. On 2026-11-08
+// the server's crontab was found to have lost every KnitAdvisor line, so the
+// weekly yarn sync had silently stopped; a feed that depends on a crontab nobody
+// watches is a feed that goes months stale. The cron endpoint still works; this
+// is the floor under it. Benchmarks: every six hours (each source keeps its own
+// minimum interval). Yarn quotes: at most one attempt a day, and the sync job
+// keeps its own seven-day window.
+const priceBenchmarks = require('./jobs/price-sources/benchmarks');
+priceBenchmarks.load();
+if (!process.env.KA_NO_SELF_REFRESH) {
+  const selfRefresh = async () => {
+    try {
+      const r = await priceBenchmarks.refresh();
+      console.log('[Benchmarks]', JSON.stringify(r));
+    } catch (e) { console.warn('[Benchmarks] refresh failed:', e.message); }
+    try {
+      const st = yarnPrices.status();
+      const last = st.last_sync && st.last_sync.at ? Date.parse(st.last_sync.at) : 0;
+      if (Date.now() - last > 20 * 3600 * 1000) {
+        const { syncYarnPrices } = require('./jobs/yarn-price-sync');
+        const r = await syncYarnPrices({ trigger: 'schedule' });
+        await yarnPrices.load().catch(() => {});
+        console.log('[Prices] self-refresh:', r.skipped ? 'not due' : r.ok ? 'ok' : 'failed — ' + (r.error || 'see the sync log'));
+      }
+    } catch (e) { console.warn('[Prices] self-refresh failed:', e.message); }
+  };
+  setTimeout(selfRefresh, 60 * 1000).unref();
+  setInterval(selfRefresh, 6 * 3600 * 1000).unref();
+}
+
 // Dyeing chemical price overrides — same synchronous-snapshot reasoning as
 // above. Empty is a normal, permanent state for any chemical name an admin
 // hasn't priced yet; calculateDyeingCost() falls back to each recipe's own

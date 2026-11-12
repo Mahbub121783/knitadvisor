@@ -1153,6 +1153,8 @@ router.get('/api/yarn-prices', adminAuth, async (req, res) => {
 
     res.json({
       status: yarnPrices.status(),
+      // the free benchmarks that bring an old quote forward, with publisher and licence (admin only)
+      benchmarks: yarnPrices.benchmarks.status(),
       refresh_days: REFRESH_DAYS,
       sources: known.map(k => ({
         ...k,
@@ -1213,7 +1215,8 @@ router.post('/api/yarn-prices/refresh', adminAuth, async (req, res) => {
     if (result.ok) await yarnPrices.load();
     // A failed gate is not a server error — it is the gate doing its job, and
     // the reasons are the useful part of the reply.
-    res.status(result.ok ? 200 : 422).json({ ...result, status: yarnPrices.status() });
+    const benchmarks = await yarnPrices.benchmarks.refresh({ force: true }).catch((e) => ({ error: e.message }));
+    res.status(result.ok ? 200 : 422).json({ ...result, benchmarks, status: yarnPrices.status() });
   } catch (err) {
     console.error('[Yarn Prices Refresh Error]', err);
     res.status(500).json({ error: err.message });

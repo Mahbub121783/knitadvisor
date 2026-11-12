@@ -47,7 +47,7 @@ function priceLineItem(item) {
   }
   engineParams.fabric = item.fabric_id;
   engineParams.gsm = parseFloat(item.gsm);
-  engineParams.live_prices = (key, ne, country) => yarnPrices.lookup(key, ne, undefined, { country });
+  engineParams.live_prices = yarnPrices.feed();
 
   const result = calculate(engineParams);
   if (result.error) return { ok: false, error: result.error };

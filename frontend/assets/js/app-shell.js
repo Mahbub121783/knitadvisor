@@ -54,6 +54,7 @@
       { href: '/app.html',        t: 'Fabric calculator', d: 'Yarn, machine, stitch length, shrinkage and cost from one spec', i: 'calc', pages: ['app.html', 'result.html'], k: 'jersey rib interlock fleece pique terry gsm yarn count stitch length gauge shrinkage' },
       { href: '/costsheet.html',  t: 'Costing sheet',     d: 'Buyer quotation by size: yarn by role, CM, FOB, margin, PDF', i: 'sheet', badge: 'New', k: 'fob quotation cm smv trims embroidery print margin profit fleece rib consumption' },
       { href: '/studio-cost.html', t: 'Cost a Studio design', d: 'Open a design saved from the Fabric Studio and cost its yarn and processing', i: 'sheet', k: 'studio design warp cost price per metre kg yarn dyeing finishing' },
+      { href: '/yarn-prices.html', t: 'Yarn price desk',   d: 'Where every yarn price comes from, how it is brought to today, duty and VAT', i: 'tag', badge: 'New', k: 'yarn price market quote cotton polyester lc duty vat tax benchmark country' },
       { href: '/carbon.html',     t: 'Carbon footprint',  d: 'CO2e per kg and per garment, stage by stage, and the strongest ways to cut it', i: 'leaf', badge: 'New', k: 'co2 co2e carbon footprint emissions sustainability scope climate lca energy water' },
       { href: '/weft-calc.html',  t: 'Weft calculator',   d: 'Loop length, production and yarn per fabric', i: 'weft' },
       { href: '/converter.html',  t: 'Unit converter',    d: 'Count systems, GSM, length and weight', i: 'swap' }
