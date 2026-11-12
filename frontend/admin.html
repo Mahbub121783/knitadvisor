@@ -157,7 +157,7 @@
     .tab-btn.active { color: var(--t1); border-bottom-color: var(--a1); }
 
     /* ── MAIN ── */
-    .main { flex: 1; padding: 28px 28px 60px; max-width: 1280px; margin: 0 auto; width: 100%; }
+    .main { flex: 1; padding: 28px clamp(16px, 2.6vw, 40px) 60px; max-width: 1840px; margin: 0 auto; width: 100%; box-sizing: border-box; }
     .tab-panel { display: none; }
     .tab-panel.active { display: block; animation: fadeIn .18s ease; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
@@ -892,7 +892,6 @@
       .tbl-wrap .tbl td[data-label="Actions"], .tbl-wrap .tbl td:last-child:not([data-label]) { flex-wrap: wrap; justify-content: flex-end; }
       .tbl-wrap .tbl td > div { text-align: right; }
     }
-    @media (min-width: 1500px) { .main { max-width: 1400px; } }
     @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
     @media print { .sidebar, .topbar, #toast-wrap { display: none !important; } .main { padding: 0; } }
   

@@ -178,6 +178,18 @@
        not decoration, which is the only reason to number anything. */
     .stage { margin-bottom: 26px; scroll-margin-top: 56px; }
     .stage.hidden { display: none; }
+    /* a laptop or a desktop: each stage's cards in two columns, so the whole fabric reads in half the
+       scroll; the price, the knitting notation, the 3D and the formula trace keep the full width */
+    @media screen and (min-width: 1280px) {
+      .stage { columns: 2; column-gap: 16px; }
+      .stage > .stage-head, .stage > #sec-costing, .stage > #sec-pattern, .stage > #sec-viz, .stage > #sec-trace { column-span: all; }
+      .stage > .result-section { break-inside: avoid; margin-top: 0; }
+      /* the yarn card is long: full width, its character and expertise blocks side by side */
+      .stage > #sec-yarn { column-span: all; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 16px; align-items: start; }
+      #sec-yarn > * { grid-column: 1 / -1; min-width: 0; }
+      #sec-yarn > #yarn-character-block { grid-column: 1; }
+      #sec-yarn > #yarn-expertise-block { grid-column: 2; }
+    }
 
     .stage-head {
       display: flex;
@@ -465,7 +477,7 @@
     .kp-cam td.K { background: rgba(24,87,196,.14); font-weight: 700; } .kp-cam td.T { background: rgba(245,158,11,.18); font-weight: 700; } .kp-cam td.M { color: var(--t3); }
     .kp-scroll { overflow-x: auto; }
 </style>
-  <link rel="stylesheet" href="assets/css/theme-v2.css?v=20261108b">
+  <link rel="stylesheet" href="assets/css/theme-v2.css?v=20261112b">
   <script src="assets/js/app-shell.js?v=20261111a" defer></script>
 </head>
 <body>

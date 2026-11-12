@@ -217,6 +217,21 @@
     .st-needles figcaption { font-size: 11px; color: var(--t2); line-height: 1.45; }
     .st-phase { font: 600 12px var(--mono); color: var(--accent); min-height: 18px; margin: 6px 0; }
     .wp-jobhead { display: none; }
+    /* a laptop or a desktop: three working columns — the inputs, the design and its checks, and the
+       fabric it makes. The 3D stays in view while the programme is drawn, so an edit and its cloth
+       are side by side. */
+    @media (min-width: 1360px) {
+      .st-layout { grid-template-columns: clamp(300px, 21vw, 380px) minmax(0, 1fr); }
+      #st-weft > section { display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr); column-gap: 16px; align-items: start; }
+      #st-weft .st-view .st-tabs { flex-wrap: wrap; overflow: visible; row-gap: 2px; }
+      #st-weft > section > .st-card { grid-column: 1; min-width: 0; }
+      #st-weft > section > .st-view { grid-column: 2; grid-row: 1 / span 6; position: sticky; top: 72px; }
+      #st-weft .st-view #st-loops, #st-weft .st-view #st-twin { height: clamp(400px, calc(100vh - 330px), 680px); }
+      #st-weft .st-view #st-cloth canvas { height: clamp(400px, calc(100vh - 330px), 680px) !important; }
+      #st-warp > section { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 16px; align-items: start; }
+      #st-warp > section > .st-card { min-width: 0; }
+    }
+    .st-head p { max-width: 980px; }
     @media print {
       .wp-jobhead { display: block; margin-bottom: 8px; font-size: 12px; }
       #st-warp .st-layout, #st-warp.st-layout { display: block; }
@@ -227,7 +242,7 @@
       .st-layout { display: block; }
     }
   </style>
-  <link rel="stylesheet" href="assets/css/theme-v2.css?v=20261108b">
+  <link rel="stylesheet" href="assets/css/theme-v2.css?v=20261112b">
   <script src="assets/js/app-shell.js?v=20261111a" defer></script>
 </head>
 <body>
@@ -544,7 +559,7 @@
           <ul class="st-checks" id="st-checks"></ul>
         </div>
 
-        <div class="st-card">
+        <div class="st-card st-view">
           <div class="st-tabs" role="tablist">
             <button type="button" class="on" data-tab="3d">3D fabric</button>
             <button type="button" data-tab="notation">Notation</button>

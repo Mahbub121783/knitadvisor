@@ -507,3 +507,17 @@ table.tbl-wide { min-width: 460px; }
   .ka3d-controls, .ka-loupe-bar { justify-content: flex-start; }
   .ka3d-btn, .ka-loupe-btn { padding: 7px 10px; }
 }
+
+/* ── Page width (all pages) ───────────────────────────────────────────────
+   Working pages use the screen. Content runs to a slim gutter on a laptop and
+   on a desktop alike; only an ultra-wide monitor gets a centred page. Each
+   page lays its cards out in more columns as the room grows, and long text
+   keeps a readable line inside its card. */
+:root { --page-max: 1840px; --gutter: clamp(16px, 2.6vw, 40px); }
+.container, .ka-bar, .ka-foot, .db, .cs-main, .bd {
+  max-width: var(--page-max);
+  padding-left: var(--gutter);
+  padding-right: var(--gutter);
+  box-sizing: border-box;
+}
+.container { width: 100%; }

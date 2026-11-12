@@ -138,8 +138,15 @@
     .ref-table td:first-child { color: var(--a1); font-weight: 600; }
 
     .main-content { padding: 0 0 40px; }
+  
+    /* a laptop or a desktop: the converters side by side, two to a row */
+    @media (min-width: 1200px) {
+      main.main-content { columns: 2; column-gap: 16px; }
+      main.main-content > .page-header, main.main-content > div:last-child { column-span: all; }
+      main.main-content > .conv-section { break-inside: avoid; margin-top: 0; }
+    }
   </style>
-  <link rel="stylesheet" href="assets/css/theme-v2.css?v=20261108b">
+  <link rel="stylesheet" href="assets/css/theme-v2.css?v=20261112b">
   <script src="assets/js/app-shell.js?v=20261111a" defer></script>
 </head>
 <body>

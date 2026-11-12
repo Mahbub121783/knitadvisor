@@ -31,8 +31,18 @@
     .ad-key { font-size: 11px; color: var(--t3); }
     .ad-note { background: #F6F8FB; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: 13px; color: var(--t2); margin: 10px 0; max-width: 760px; }
     .ad-scroll { overflow-x: auto; }
+    .ad-toc { display: none; }
+    @media (min-width: 1200px) {
+      .ad-main { display: grid; grid-template-columns: 220px minmax(0, 1fr); column-gap: 48px; align-items: start; }
+      .ad-main > * { grid-column: 2; min-width: 0; }
+      .ad-main > .ad-toc { display: block; grid-column: 1; grid-row: 1 / span 400; position: sticky; top: 80px; padding-top: 8px; }
+      .ad-main p, .ad-main li, .ad-note { max-width: 900px; }
+    }
+    .ad-toc b { display: block; font: 700 11px var(--head); text-transform: uppercase; letter-spacing: .06em; color: var(--t3); margin-bottom: 8px; }
+    .ad-toc a { display: block; padding: 6px 10px; border-left: 2px solid var(--line); color: var(--t2); font-size: 13.5px; text-decoration: none; }
+    .ad-toc a:hover, .ad-toc a.on { color: var(--accent); border-left-color: var(--accent); background: var(--accent-tint); }
   </style>
-  <link rel="stylesheet" href="assets/css/theme-v2.css?v=20261108b">
+  <link rel="stylesheet" href="assets/css/theme-v2.css?v=20261112b">
   <script src="assets/js/app-shell.js?v=20261111a" defer></script>
 </head>
 <body>
@@ -95,7 +105,19 @@
       <li>The API returns what your account would see on the website. Your saved designs, costing sheets and calculation history are not reachable with a key.</li>
     </ul>
     <div class="ad-note">Need access, a bigger plan, or an endpoint that is not here yet? Use <a href="/rfq.html">Quotes</a> or write from your account.</div>
+    <nav class="ad-toc" id="ad-toc" aria-label="On this page"><b>On this page</b></nav>
   </main>
+  <script>
+    (function () {
+      var toc = document.getElementById('ad-toc'), hs = document.querySelectorAll('.ad-main > h2');
+      hs.forEach(function (h, i) { if (!h.id) h.id = 'sec-' + (i + 1); var a = document.createElement('a'); a.href = '#' + h.id; a.textContent = h.textContent; toc.appendChild(a); });
+      if (!('IntersectionObserver' in window)) return;
+      var links = toc.querySelectorAll('a'), io = new IntersectionObserver(function (es) {
+        es.forEach(function (e) { if (e.isIntersecting) links.forEach(function (a) { a.classList.toggle('on', a.getAttribute('href') === '#' + e.target.id); }); });
+      }, { rootMargin: '0px 0px -70% 0px' });
+      hs.forEach(function (h) { io.observe(h); });
+    })();
+  </script>
   <footer class="footer"></footer>
 </div>
 <script src="assets/js/api-docs.js?v=20261111d"></script>

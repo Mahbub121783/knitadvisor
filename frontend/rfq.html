@@ -34,13 +34,14 @@
 
     .rfq-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
     @media (max-width: 640px) { .rfq-grid { grid-template-columns: 1fr; } }
+    @media (min-width: 1100px) { .rfq-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); } }
 
     .rfq-confirm { text-align: center; padding: 40px 20px; }
     .rfq-confirm-code { font-family: var(--mono); font-size: 28px; font-weight: 800; color: var(--a1); letter-spacing: 1px; margin: 14px 0; }
 
     .main-content { padding: 0 0 40px; }
   </style>
-  <link rel="stylesheet" href="assets/css/theme-v2.css?v=20261108b">
+  <link rel="stylesheet" href="assets/css/theme-v2.css?v=20261112b">
   <script src="assets/js/app-shell.js?v=20261111a" defer></script>
 </head>
 <body>

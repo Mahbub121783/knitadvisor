@@ -14,7 +14,13 @@
   <link rel="stylesheet" href="assets/css/style.css?v=20260603c">
   <style>
     [hidden] { display: none !important; }
-    .sc-main { padding: 18px 0 48px; max-width: 980px; }
+    .sc-main { padding: 18px 0 48px; min-height: 62vh; }
+    /* the inputs on the left, the cost on the right as soon as there is room */
+    .sc-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 16px; align-items: start; }
+    @media (min-width: 1100px) {
+      .sc-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); }
+      .sc-res { position: sticky; top: 72px; }
+    }
     .sc-head h1 { font-size: 24px; margin: 0 0 4px; }
     .sc-head p { margin: 0 0 16px; color: var(--t2); font-size: 13px; max-width: 760px; }
     .st-card { background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; margin-bottom: 12px; }
@@ -40,7 +46,7 @@
     .sc-meta { font-size: 12px; color: var(--t2); line-height: 1.6; }
     @media (max-width: 700px) { .sc-main { padding-left: 16px; padding-right: 16px; } }
   </style>
-  <link rel="stylesheet" href="assets/css/theme-v2.css?v=20261108b">
+  <link rel="stylesheet" href="assets/css/theme-v2.css?v=20261112b">
   <script src="assets/js/app-shell.js?v=20261111a" defer></script>
 </head>
 <body>
@@ -53,6 +59,7 @@
       <p>The Fabric Studio designs the fabric; the cost is worked out here. Save a design in the Studio, open it below, give the yarn and processing prices, and read the cost per metre, per square metre and per kg of fabric.</p>
     </div>
 
+    <div class="sc-grid"><div class="sc-in">
     <div class="st-card">
       <div class="st-step"><b>1</b> Saved design</div>
       <div class="st-row"><div class="st-f"><label for="sc-design">Design</label><select id="sc-design"></select></div></div>
@@ -75,7 +82,9 @@
       <a class="st-btn" id="sc-sheet" href="#" hidden>Use it in a costing sheet (garment FOB) →</a>
     </div>
 
+    </div><div class="sc-res">
     <div class="st-card" id="sc-out-card" hidden><div class="st-step"><b>3</b> Cost</div><div id="sc-out"></div></div>
+    </div></div>
   </main>
   <footer class="footer"></footer>
 </div>

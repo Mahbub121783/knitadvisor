@@ -17,6 +17,13 @@
     [hidden] { display: none !important; }
     body { background: var(--bg-page, #F6F7F8); }
     .sc { max-width: 620px; margin: 0 auto; padding: 16px 16px 60px; }
+    @media (min-width: 1100px) {
+      .sc { max-width: var(--page-max, 1840px); padding-left: var(--gutter, 32px); padding-right: var(--gutter, 32px); }
+      .sc-colB:not(:has(> section:not([hidden])))::before { content: 'The count, the structure and the knitting spec appear here as soon as the first photo is measured.'; display: flex; align-items: center; justify-content: center; text-align: center; min-height: 260px; padding: 24px; border: 1.5px dashed var(--line2); border-radius: 12px; color: var(--t3); font-size: 14px; line-height: 1.6; }
+      .sc > .lead { max-width: 820px; }
+      .sc-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 16px; align-items: start; }
+      .sc-colB { position: sticky; top: 72px; }
+    }
     .sc h1 { font-size: 24px; margin: 4px 0 4px; letter-spacing: -0.01em; }
     .sc .lead { color: var(--t2); font-size: 13.5px; margin: 0 0 12px; line-height: 1.5; }
     .sc-pair { border-radius: 10px; padding: 10px 12px; font-size: 13px; margin-bottom: 12px; line-height: 1.5; }
@@ -62,7 +69,7 @@
     .sc-how { font-size: 13px; color: var(--t2); line-height: 1.6; padding-left: 18px; margin: 6px 0 0; }
     @media (max-width: 420px) { .sc-f { grid-template-columns: 1fr; } }
   </style>
-  <link rel="stylesheet" href="assets/css/theme-v2.css?v=20261108b">
+  <link rel="stylesheet" href="assets/css/theme-v2.css?v=20261112b">
   <script src="assets/js/app-shell.js?v=20261111a" defer></script>
 </head>
 <body>
@@ -72,6 +79,7 @@
     <p class="lead">Point the phone at a knitted fabric — with the scan card for an exact count, or without it for a quick read. The loops are counted on this phone (no AI, nothing uploaded but the numbers); the knitting spec is worked out from the factory's own records.</p>
     <div class="sc-pair off" id="sc-pair">Not connected to a screen — results show here.</div>
 
+    <div class="sc-cols"><div class="sc-colA">
     <section class="sc-card">
       <h2><span class="n">1</span>The card <span style="font-weight:500;color:var(--t3);font-size:12.5px">— optional, for an exact count</span></h2>
       <p class="h"><b>No card?</b> Just fill the camera with the fabric, about 10 cm away: the loops, the structure and the colour are read, and the per-cm count is estimated. <b>With the card</b> the count is exact: print it at 100 %. Lay the fabric flat, face up, wales running top to bottom. Then either cut out the card's window and lay it on the fabric, or — no scissors — lay the card right beside the fabric: the scanner finds the fabric on any side.</p>
@@ -110,6 +118,7 @@
       <div class="sc-shots" id="sc-back-shots"></div>
     </section>
 
+    </div><div class="sc-colB">
     <section class="sc-card" id="sc-count-card" hidden>
       <h2><span class="n">4</span>Check the count</h2>
       <p class="h">Each cell of the grid should hold exactly one loop. If a cell holds two (or half of one), correct it below.</p>
@@ -148,6 +157,7 @@
         <button class="sc-btn" type="button" id="sc-again">Scan another</button>
       </div>
     </section>
+    </div></div>
   </main>
   <footer class="footer"></footer>
   <script src="assets/js/storage.js?v=20260606b"></script>

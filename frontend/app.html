@@ -228,6 +228,12 @@
     }
 
     /* Features row */
+    /* a laptop or a desktop: the yarn on the left, the fabric and its colour on the right — the two
+       required inputs (GSM, fabric type) side by side at the top; one column on a phone, same order */
+    @media (min-width: 1100px) {
+      .calc-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 44px; align-items: start; }
+      .calc-col { min-width: 0; }
+    }
     .features-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -439,7 +445,7 @@
     .yp-hint .yp-tag.warn { color: #9A5B00; border-color: rgba(154,91,0,.35); background: rgba(154,91,0,.07); }
     @media (max-width: 640px) { .yp-chips .comp-chip { padding: 8px 12px; } }
     </style>
-  <link rel="stylesheet" href="assets/css/theme-v2.css?v=20261108b">
+  <link rel="stylesheet" href="assets/css/theme-v2.css?v=20261112b">
   <script src="assets/js/app-shell.js?v=20261111a" defer></script>
 </head>
 <body>
@@ -485,6 +491,7 @@
     <div id="panel-form">
       <div class="input-card">
 
+        <div class="calc-cols"><div class="calc-col">
         <!-- GSM Input -->
         <div class="form-group mb-16">
           <label class="form-label label green" for="gsm-input">Target GSM <span style="color:var(--a3)">*</span></label>
@@ -583,6 +590,7 @@
           <div class="yp-hint" id="yarn-hint" aria-live="polite"></div>
         </div>
 
+        </div><div class="calc-col">
         <!-- Fabric Type -->
         <div class="form-group mb-16">
           <label class="form-label label green" for="fabric-select">Fabric Type <span style="color:var(--a3)">*</span></label>
@@ -733,6 +741,8 @@
             <div class="shade-hint" id="depth-hint" style="margin-top:6px;"></div>
           </div>
         </div>
+
+        </div></div>
 
         <!-- Optional machine specs (collapsible) -->
         <button class="collapsible-trigger" id="optional-trigger" onclick="toggleOptional()">
