@@ -125,12 +125,16 @@ function normalise(p) {
 // pick(key, tri) returns the value to use for that input.
 function run(inp, pick, opts = {}) {
   const P = inp.primary;
+  const SC = inp.sc || {};                         // a reduction lever's settings; {} for the base case
   const val = (key, t, primaryKey) => (primaryKey && Number.isFinite(parseFloat(P[primaryKey]))) ? parseFloat(P[primaryKey]) : pick(key, t);
   const usedPrimary = new Set();
   const mark = (stage, primaryKey) => { if (primaryKey && Number.isFinite(parseFloat(P[primaryKey]))) usedPrimary.add(stage); };
 
   const gridTri = M.GRID[inp.country];
   const grid = val('grid', gridTri, 'grid_ef_kg_per_kwh');
+  // the mill's own electricity (knitting, dyeing, finishing) can be partly solar; the spinner's cannot
+  const solar = Math.min(0.9, Math.max(0, SC.solar_share || 0));
+  const gridMill = grid * (1 - solar) + M.PV_EF * solar;
   const fuelEf = (Number.isFinite(parseFloat(P.fuel_ef_kg_per_kwh)) ? parseFloat(P.fuel_ef_kg_per_kwh) : M.FUELS[inp.fuel].ef);
 
   // mass flow per 1 kg finished
@@ -174,10 +178,11 @@ function run(inp, pick, opts = {}) {
   // formation
   const formT = inp.family === 'woven' ? M.MILL.weave_kwh_per_kg : M.MILL.knit_kwh_per_kg;
   const formKwh = val('form_kwh', formT, 'formation_kwh_per_kg'); mark('formation', 'formation_kwh_per_kg');
-  const formCo2 = grey * formKwh * grid;
+  const formCo2 = grey * formKwh * gridMill;
 
   // wet processing — bath heat
-  const lr = val('liquor_ratio', M.LIQUOR_RATIO);
+  const lr = SC.lr || val('liquor_ratio', M.LIQUOR_RATIO);
+  const feedC = SC.feed_water_c || M.PHYS.feed_water_c;
   const seq = []; const f = inp.flags;
   seq.push(f.bleach ? 'scour_bleach' : 'scour', 'hot_rinse');
   if (f.bleach) seq.push('neutralise');
@@ -196,12 +201,12 @@ function run(inp, pick, opts = {}) {
   }
   let bathKwhTh = 0; const bathList = [];
   for (const b of seq) {
-    const [name, T] = M.BATHS[b];
-    const q = lr * M.PHYS.cp_water_kj_per_kg_k * (T - M.PHYS.feed_water_c) / 3600;
+    const name = M.BATHS[b][0], T = (SC.temps && SC.temps[b]) || M.BATHS[b][1];
+    const q = lr * M.PHYS.cp_water_kj_per_kg_k * Math.max(0, T - feedC) / 3600;
     bathKwhTh += q; bathList.push({ bath: name, temp_c: T, kwh_th_per_kg: r3(q) });
   }
-  const boilerEff = val('boiler_eff', M.BOILER.efficiency, 'boiler_efficiency');
-  const overhead = val('plant_overhead', M.BOILER.plant_overhead);
+  const boilerEff = SC.boiler_eff ? Math.max(SC.boiler_eff, val('boiler_eff', M.BOILER.efficiency, 'boiler_efficiency')) : val('boiler_eff', M.BOILER.efficiency, 'boiler_efficiency');
+  const overhead = SC.overhead ? Math.min(SC.overhead, val('plant_overhead', M.BOILER.plant_overhead)) : val('plant_overhead', M.BOILER.plant_overhead);
   const primaryThermal = Number.isFinite(parseFloat(P.wet_thermal_fuel_kwh_per_kg));
   if (primaryThermal) usedPrimary.add('wet_processing'), usedPrimary.add('finishing');
   const fuelPerThermal = (1 / boilerEff) * overhead;
@@ -219,8 +224,9 @@ function run(inp, pick, opts = {}) {
 
   // drying and finishing — thermal
   const latentKwh = M.PHYS.latent_heat_kj_per_kg / 3600;
-  const dEff = val('dry_eff', M.DRYING.efficiency);
-  const w1 = val('pickup_hydro', M.DRYING.pickup_hydro), w2 = val('pickup_pad', M.DRYING.pickup_pad);
+  const dEff = SC.dry_eff ? Math.max(SC.dry_eff, val('dry_eff', M.DRYING.efficiency)) : val('dry_eff', M.DRYING.efficiency);
+  const w1 = SC.pickup_hydro ? Math.min(SC.pickup_hydro, val('pickup_hydro', M.DRYING.pickup_hydro)) : val('pickup_hydro', M.DRYING.pickup_hydro);
+  const w2 = SC.pickup_pad ? Math.min(SC.pickup_pad, val('pickup_pad', M.DRYING.pickup_pad)) : val('pickup_pad', M.DRYING.pickup_pad);
   let dryKwhTh = (w1 + w2) * latentKwh / dEff;
   if (f.heat_set) dryKwhTh += val('heat_set', M.DRYING.heat_set_kwh_th_per_kg);
   if (inp.method === 'pigment') dryKwhTh += val('cure', M.DRYING.cure_kwh_th_per_kg);
@@ -232,8 +238,8 @@ function run(inp, pick, opts = {}) {
   const stP = val('stenter_p', M.ELECTRIC.stenter_power_kw), stV = val('stenter_v', M.ELECTRIC.stenter_speed_m_min), stW = M.ELECTRIC.stenter_width_m.central;
   const stenterKwh = stP / (stV * 60 * stW * inp.gsm / 1000);          // kW ÷ kg/h
   const anc = val('anc_elec', M.ELECTRIC.ancillary_kwh_per_kg) + (f.brushed ? val('brush_elec', M.ELECTRIC.brushing_kwh_per_kg) : 0);
-  const wetElecCo2 = grey * dyeElec * grid;
-  const finElecCo2 = (stenterKwh + anc) * grid;
+  const wetElecCo2 = grey * dyeElec * gridMill;
+  const finElecCo2 = (stenterKwh + anc) * gridMill;
 
   // transport
   let transCo2 = 0; const legs = [];
@@ -260,11 +266,12 @@ function run(inp, pick, opts = {}) {
 
   const total = stages.reduce((s, x) => s + x.co2e, 0);
   const scope1 = (bathFuelKwh + dryFuelKwh) * fuelEf;
-  const scope2 = (yarn * spinKwh + grey * formKwh + grey * dyeElec + stenterKwh + anc) * grid;
+  const scope2 = yarn * spinKwh * grid + (grey * formKwh + grey * dyeElec + stenterKwh + anc) * gridMill;
   return {
     total, stages, fibreRows, fibreCo2, fibreEf, unmodeled,
     mass: { finished_kg: 1, grey_kg: grey, yarn_kg: yarn, fibre_kg: fibreKg, wet_loss: wetLoss, formation_loss: formLoss, spin_waste: spinWaste },
     energy: { elec_kwh: elecKwh, fuel_kwh: fuelKwh, thermal_kwh_th: bathKwhTh * grey + dryKwhTh, grid, fuel_ef: fuelEf, boiler_eff: boilerEff, overhead },
+    detail: { spinKwh, formKwh, grid, gridMill, solar, lr, feedC, fuelPerThermal, bathFuelKwh, dryFuelKwh, dryKwhTh, w1, w2, dEff, dyeElec, stenterKwh, anc, chemCo2, bathCo2, dryCo2, fuelEf, n_baths: seq.length },
     wet: { liquor_ratio: lr, baths: bathList, bath_kwh_th_per_kg: bathKwhTh, drying_kwh_th_per_kg: dryKwhTh, drying_efficiency: dEff, water_evaporated_kg: w1 + w2, stenter_kwh_per_kg: stenterKwh, chemicals: chemList },
     transport: legs, biogenic,
     scopes: { scope1, scope2, scope3: total - scope1 - scope2 },
@@ -307,6 +314,115 @@ function estimate(inp) {
   const fuels = {};
   for (const fk of Object.keys(M.FUELS)) fuels[fk] = r2(run({ ...inp, fuel: fk }, (k, t) => t.central).total);
   return { central, low, high, tornado, mc: { p5: pct(0.05), p50: pct(0.5), p95: pct(0.95), n: N }, alt, fuels };
+}
+
+// ── reduction levers: the same model re-run with one change ────────────
+const central = (k, t) => t.central;
+function withLever(inp, L) {
+  const x = { ...inp, sc: { ...(inp.sc || {}) } };
+  const set = L.set || {};
+  for (const k of ['feed_water_c', 'lr', 'boiler_eff', 'overhead', 'pickup_hydro', 'pickup_pad', 'dry_eff', 'solar_share']) if (set[k] != null) x.sc[k] = set[k];
+  if (set.temps) x.sc.temps = { ...(x.sc.temps || {}), ...set.temps };
+  if (set.loss_delta) x.lossPct = Math.max(2, inp.lossPct + set.loss_delta);
+  if (set.fuel) x.fuel = set.fuel;
+  if (L.variant) x.raw = (inp.raw || '') + (L.variant === 'organic' ? ' organic cotton' : ' recycled polyester');
+  return x;
+}
+function leverApplies(inp, id, L) {
+  if (L.only_from && !L.only_from.includes(inp.fuel)) return false;
+  if (L.fibre) {
+    if (!(inp.share[L.fibre] > 0)) return false;
+    const v = detectVariant(L.fibre, inp.raw);
+    if (v && v.key === L.variant) return false;                  // already sourced that way
+  }
+  if (id === 'low_liquor' && M.LIQUOR_RATIO.central <= (L.set.lr + 0.5)) return false;
+  if (id === 'rft' && inp.lossPct <= 5) return false;
+  return true;
+}
+const MILL_PATH = ['heat_recovery', 'low_liquor', 'steam', 'dewater', 'stenter', 'low_temp', 'solar', 'rft', 'fuel_gas'];
+const FIBRE_PATH = ['organic_cotton', 'recycled_poly'];
+function combine(inp, ids) {
+  let x = inp;
+  for (const id of ids) { const L = M.LEVERS[id]; if (L && leverApplies(inp, id, L)) x = withLever(x, L); }
+  return x;
+}
+function levers(inp, base) {
+  const rows = [];
+  for (const [id, L] of Object.entries(M.LEVERS)) {
+    if (!leverApplies(inp, id, L)) continue;
+    const r = run(withLever(inp, L), central);
+    const saving = base.total - r.total;
+    if (saving < 0.005) continue;
+    const water = (base.detail.n_baths * base.detail.lr * base.mass.grey_kg) - (r.detail.n_baths * r.detail.lr * r.mass.grey_kg);
+    rows.push({
+      id, name: L.name, how: L.how, change: L.change, note: L.note || null, capex: L.capex, tier: 'MODELLED',
+      kind: L.fibre ? 'fibre' : /^fuel_/.test(id) ? 'fuel' : 'mill',
+      new_total: r2(r.total), saving_kg_per_kg: r3(saving), saving_pct: r2(saving / base.total * 100),
+      saving_kg_per_tonne: Math.round(saving * 1000), saving_g_per_tshirt: Math.round(saving * M.EQUIVALENTS.tshirt_fabric_kg * 1000),
+      fuel_kwh_saved_per_kg: r3(base.energy.fuel_kwh - r.energy.fuel_kwh), elec_kwh_saved_per_kg: r3(base.energy.elec_kwh - r.energy.elec_kwh),
+      water_l_saved_per_kg: water > 0.05 ? r2(water) : 0,
+    });
+  }
+  rows.sort((a, b) => b.saving_kg_per_kg - a.saving_kg_per_kg);
+  const mill = run(combine(inp, MILL_PATH), central), all = run(combine(combine(inp, MILL_PATH), FIBRE_PATH), central);
+  const used = (ids) => ids.filter(id => rows.some(r => r.id === id));
+  return {
+    levers: rows,
+    pathway: {
+      now: r2(base.total),
+      best_practice_mill: { total: r2(mill.total), cut_pct: r2((base.total - mill.total) / base.total * 100), levers: used(MILL_PATH) },
+      plus_preferred_fibre: { total: r2(all.total), cut_pct: r2((base.total - all.total) / base.total * 100), levers: used(MILL_PATH.concat(FIBRE_PATH)) },
+      note: 'Each step re-runs the whole model with the levers together, so savings that overlap (less water also means less heat) are not counted twice.',
+    },
+  };
+}
+
+// ── benchmark: where this fabric sits among typical fabrics modelled the same way ─
+const COHORT = new Map();
+const COHORT_FIBRES = [{ cotton: 100 }, { cotton: 95, elastane: 5 }, { cotton: 60, polyester: 40 }, { cotton: 35, polyester: 65 }, { polyester: 100 }, { viscose: 95, elastane: 5 }];
+const COHORT_SHADES = ['white', 'light', 'medium', 'dark', 'black'];
+function cohort(country, family, fuel) {
+  const key = country + '|' + family + '|' + fuel;
+  if (COHORT.has(key)) return COHORT.get(key);
+  const xs = [];
+  for (const fibers of COHORT_FIBRES) for (const shade of COHORT_SHADES) for (const gsm of [140, 160, 180, 200, 240, 280]) {
+    const n = normalise({ gsm, fibers, shade, country, boiler_fuel: fuel, fabric_family: family });
+    if (!n.error) xs.push(run(n, central).total);
+  }
+  xs.sort((a, b) => a - b);
+  COHORT.set(key, xs);
+  return xs;
+}
+function grade(inp, total) {
+  const xs = cohort(inp.country, inp.family, inp.fuel);
+  const higher = xs.filter(v => v > total + 1e-9).length;          // fabrics with a higher footprint
+  const pctLower = xs.length ? higher / xs.length * 100 : null;
+  const rank = 100 - pctLower;                                      // 0 = cleanest
+  const letter = rank <= 20 ? 'A' : rank <= 40 ? 'B' : rank <= 60 ? 'C' : rank <= 80 ? 'D' : 'E';
+  return { letter, lower_than_pct: r2(pctLower), cohort_n: xs.length, cohort_median: r2(xs[Math.floor(xs.length / 2)]),
+    cohort: `${xs.length} typical ${inp.family} fabrics (cotton, cotton-elastane, CVC, PC, polyester, viscose; white to black; 140-280 GSM) made in ${inp.country} with the same boiler fuel, run through this same model`,
+    scale: 'A = cleanest fifth · B · C · D · E = heaviest fifth' };
+}
+
+// ── the working, step by step, with the numbers in ─────────────────────
+function calcSteps(inp, c) {
+  const d = c.detail, m = c.mass, f = (v, n = 3) => Number(v).toFixed(n);
+  const fibreTxt = c.fibreRows.filter(x => x.modeled).map(x => `${Math.round(x.share * 100)}% ${x.fiber} × ${f(x.ef, 2)}`).join(' + ');
+  const wetElec = (m.grey_kg * d.dyeElec + d.stenterKwh + d.anc);
+  const extraDry = c.wet.drying_kwh_th_per_kg - (d.w1 + d.w2) * 2257 / 3600 / d.dEff;
+  return [
+    { n: 1, title: 'Mass balance: what 1 kg of finished fabric starts as',
+      formula: `grey = 1 ÷ (1 − ${f(m.wet_loss)}) = ${f(m.grey_kg)} kg · yarn = grey ÷ (1 − ${f(m.formation_loss)}) = ${f(m.yarn_kg)} kg · fibre = yarn ÷ (1 − ${f(m.spin_waste)}) = ${f(m.fibre_kg)} kg`,
+      result: null },
+    { n: 2, title: 'Fibre production', formula: `${f(m.fibre_kg)} kg fibre × (${fibreTxt}) kg CO2e per kg`, result: r3(c.fibreCo2) },
+    { n: 3, title: 'Spinning electricity', formula: `${f(m.yarn_kg)} kg yarn × ${f(d.spinKwh, 2)} kWh/kg × ${f(d.grid)} kg CO2/kWh grid`, result: r3(c.stages[1].co2e) },
+    { n: 4, title: (inp.family === 'woven' ? 'Weaving' : 'Knitting') + ' electricity', formula: `${f(m.grey_kg)} kg grey × ${f(d.formKwh, 2)} kWh/kg × ${f(d.gridMill)} kg CO2/kWh`, result: r3(c.stages[2].co2e) },
+    { n: 5, title: 'Heating the baths (physics)', formula: `Σ over ${d.n_baths} baths: liquor ${f(d.lr, 1)} kg × 4.186 kJ/kg·K × (bath °C − ${d.feedC} °C) ÷ 3600 = ${f(c.wet.bath_kwh_th_per_kg)} kWh heat per kg grey · × ${f(m.grey_kg)} kg ÷ boiler ${f(c.energy.boiler_eff, 2)} × steam losses ${f(c.energy.overhead, 2)} = ${f(d.bathFuelKwh)} kWh fuel × ${f(d.fuelEf)} kg CO2/kWh`, result: r3(d.bathCo2) },
+    { n: 6, title: 'Drying (physics)', formula: `${f(d.w1 + d.w2, 2)} kg water to evaporate × 2257 kJ/kg ÷ 3600 ÷ dryer efficiency ${f(d.dEff, 2)}${extraDry > 1e-6 ? ` + ${f(extraDry)} heat-set or cure` : ''} = ${f(d.dryKwhTh)} kWh heat → ${f(d.dryFuelKwh)} kWh fuel × ${f(d.fuelEf)}`, result: r3(d.dryCo2) },
+    { n: 7, title: 'Dyeing and finishing electricity', formula: `(${f(m.grey_kg)} × ${f(d.dyeElec, 2)} dyeing machine + ${f(d.stenterKwh)} stenter at ${inp.gsm} GSM + ${f(d.anc, 2)} other) kWh × ${f(d.gridMill)}`, result: r3(wetElec * d.gridMill) },
+    { n: 8, title: 'Process chemicals (peroxide, caustic)', formula: 'kg used per kg grey × published factor per kg of chemical', result: r3(d.chemCo2) },
+    { n: 9, title: 'Total', formula: 'the sum of the stages above' + (c.transport.length ? ' plus the transport legs' : ''), result: r3(c.total) },
+  ];
 }
 
 /**
@@ -366,6 +482,29 @@ function calculateCarbonFootprint(params = {}) {
 
   const g = M.GRID[inp.country];
   const processingCo2 = total - c.fibreCo2;
+
+  // what to do about it, where it sits, and what it means
+  const L = levers(inp, c);
+  const gr = grade(inp, total);
+  const EQ = M.EQUIVALENTS, tee = total * EQ.tshirt_fabric_kg;
+  const byCountry = Object.keys(M.GRID).map(k => ({ country: k, total: r2(run({ ...inp, country: k }, central).total), grid: M.GRID[k].central, this: k === inp.country }))
+    .sort((a, b) => a.total - b.total);
+  const waterL = c.detail.n_baths * c.detail.lr * c.mass.grey_kg;
+
+  // what if: the levers the reader switched on, run together
+  let whatIf = null;
+  if (Array.isArray(params.apply_levers) && params.apply_levers.length) {
+    let ids = params.apply_levers.filter(id => M.LEVERS[id] && leverApplies(inp, id, M.LEVERS[id]));
+    if (ids.includes('fuel_biomass')) ids = ids.filter(id => id !== 'fuel_gas');          // one boiler fuel at a time
+    const x = run(combine(inp, ids), central);
+    whatIf = {
+      levers: ids, total: r2(x.total), cut_kg_per_kg: r3(total - x.total), cut_pct: r2((total - x.total) / total * 100),
+      per_tshirt_kg: r3(x.total * EQ.tshirt_fabric_kg), order_10000_tshirts_t: r2(x.total * EQ.tshirt_fabric_kg * 10),
+      grade: grade(inp, x.total).letter,
+      stages: x.stages.map(st => ({ id: st.id, name: st.name, co2e_per_kg_fabric: r3(st.co2e) })),
+      water_l_per_kg: r2(x.detail.n_baths * x.detail.lr * x.mass.grey_kg), energy_mj_per_kg: r2((x.energy.elec_kwh + x.energy.fuel_kwh) * 3.6),
+    };
+  }
   const sens = E.tornado.slice(0, 6).map(t => ({ driver: t.driver, low: r2(t.low), high: r2(t.high), swing: r2(t.swing) }));
   const top = sens[0];
 
@@ -417,6 +556,19 @@ function calculateCarbonFootprint(params = {}) {
     sensitivity: { drivers: sens, most_influential: top ? top.driver : null, boiler_fuel: E.fuels, note: 'Each driver moved alone between its low and high value, everything else at central.' },
     data_quality: { share_of_total_by_tier_pct: tierShare, tiers: { PRIMARY: 'your own meter data', SOURCED: 'a published figure', MODELLED: 'a typical-practice figure with a stated range' } },
     not_modelled: M.NOT_MODELLED,
+    grade: gr,
+    equivalents: {
+      per_kg: { car_km: r2(total / EQ.car_km) },
+      per_tshirt: { fabric_kg: EQ.tshirt_fabric_kg, co2e_kg: r3(tee), car_km: r2(tee / EQ.car_km), tree_days: Math.round(tee / (EQ.tree_year / 365)) },
+      order_10000_tshirts_t: r2(tee * 10000 / 1000),
+      note: 'For scale only: an average petrol car about 0.17 kg CO2e per km; a mature tree takes up about 22 kg CO2 a year; a basic T-shirt about 0.2 kg of fabric with its cutting waste.',
+    },
+    reduction: L,
+    what_if: whatIf,
+    by_country: byCountry,
+    water: { bath_fill_l_per_kg: r2(waterL), baths: c.detail.n_baths, liquor_ratio: r2(c.detail.lr), note: 'Water to fill the baths (liquor ratio × baths × grey fabric per kg finished). Overflow rinsing and washing down add to it.' },
+    energy_intensity: { electricity_kwh_per_kg: r2(c.energy.elec_kwh), fuel_kwh_per_kg: r2(c.energy.fuel_kwh), total_mj_per_kg: r2((c.energy.elec_kwh + c.energy.fuel_kwh) * 3.6) },
+    calc_steps: calcSteps(inp, c),
     inputs_used: { gsm: inp.gsm, family: inp.family, country: inp.country, boiler_fuel: inp.fuel, dyeing_class: inp.method, shade_class: inp.shade, flags: inp.flags, process_loss_pct: inp.lossPct },
   };
 }

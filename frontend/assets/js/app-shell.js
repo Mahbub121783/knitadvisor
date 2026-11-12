@@ -40,7 +40,8 @@
     out: 'M14 5h5v14h-5M10 8l-4 4 4 4M6 12h10',
     search: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4',
     scan: 'M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M7 12h10',
-    plus: 'M12 5v14M5 12h14'
+    plus: 'M12 5v14M5 12h14',
+    leaf: 'M5 19c0-8 6-14 15-14 0 9-6 15-14 15zM5 19l8-8'
   };
   function icon(name, cls) {
     return '<svg class="' + (cls || 'ka-ic') + '" viewBox="0 0 24 24" aria-hidden="true"><path d="' + P[name] +
@@ -53,6 +54,7 @@
       { href: '/app.html',        t: 'Fabric calculator', d: 'Yarn, machine, stitch length, shrinkage and cost from one spec', i: 'calc', pages: ['app.html', 'result.html'], k: 'jersey rib interlock fleece pique terry gsm yarn count stitch length gauge shrinkage' },
       { href: '/costsheet.html',  t: 'Costing sheet',     d: 'Buyer quotation by size: yarn by role, CM, FOB, margin, PDF', i: 'sheet', badge: 'New', k: 'fob quotation cm smv trims embroidery print margin profit fleece rib consumption' },
       { href: '/studio-cost.html', t: 'Cost a Studio design', d: 'Open a design saved from the Fabric Studio and cost its yarn and processing', i: 'sheet', k: 'studio design warp cost price per metre kg yarn dyeing finishing' },
+      { href: '/carbon.html',     t: 'Carbon footprint',  d: 'CO2e per kg and per garment, stage by stage, and the strongest ways to cut it', i: 'leaf', badge: 'New', k: 'co2 co2e carbon footprint emissions sustainability scope climate lca energy water' },
       { href: '/weft-calc.html',  t: 'Weft calculator',   d: 'Loop length, production and yarn per fabric', i: 'weft' },
       { href: '/converter.html',  t: 'Unit converter',    d: 'Count systems, GSM, length and weight', i: 'swap' }
     ] },

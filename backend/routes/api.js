@@ -333,6 +333,44 @@ router.post('/cost', requireUser, enforceDailyLimit, (req, res) => {
 // ============================================================
 // GET /api/garment-types — Available garment types for CMT costing
 // ============================================================
+// ============================================================
+// POST /api/carbon — the carbon footprint on its own: one fabric, the
+// strongest ways to cut it, and a what-if with the levers the reader picks.
+// Cheap (a few thousand passes of a closed-form model), so it is not counted
+// against the daily calculation limit; it is rate-limited instead.
+// ============================================================
+const { calculateCarbonFootprint } = require('../engine/domain/carbon-footprint-engine');
+const { parseComposition: parseCompositionText } = require('../engine/domain/composition-engine');
+const carbonLimiter = createRateLimiter({ name: 'carbon', max: 90, windowMs: 60 * 1000, message: 'Too many carbon requests. Please wait a minute.' });
+router.post('/carbon', requireUser, carbonLimiter, (req, res) => {
+  try {
+    const b = req.body || {};
+    const composition = String(b.composition || '100% cotton').slice(0, 120);
+    const pc = parseCompositionText(composition);
+    const gsm = parseFloat(b.gsm);
+    if (!(gsm >= 40 && gsm <= 800)) return res.status(400).json({ success: false, error: 'GSM must be between 40 and 800.' });
+    const loss = b.process_loss_pct === '' || b.process_loss_pct == null ? null : parseFloat(b.process_loss_pct);
+    const garment = b.garment_weight_g === '' || b.garment_weight_g == null ? null : parseFloat(b.garment_weight_g);
+    const out = calculateCarbonFootprint({
+      fibers: pc && pc.fibers, raw_composition: composition, gsm,
+      fabric_family: b.fabric_family === 'woven' ? 'woven' : 'knit',
+      shade: String(b.shade || 'medium').slice(0, 30), dyeing_method: b.dyeing_method ? String(b.dyeing_method).slice(0, 20) : null,
+      process_loss_pct: Number.isFinite(loss) ? Math.min(40, Math.max(0, loss)) : null,
+      spinning_system: b.spinning_system ? String(b.spinning_system).slice(0, 20) : null,
+      country: String(b.country || 'bangladesh').slice(0, 30), boiler_fuel: b.boiler_fuel ? String(b.boiler_fuel).slice(0, 20) : null,
+      finishing: b.finishing ? String(b.finishing).slice(0, 40) : null,
+      garment_weight_g: Number.isFinite(garment) && garment > 0 && garment < 5000 ? garment : null,
+      transport: Array.isArray(b.transport) ? b.transport.slice(0, 6) : null,
+      apply_levers: Array.isArray(b.apply_levers) ? b.apply_levers.slice(0, 20).map(String) : null,
+    });
+    if (!out.success) return res.status(400).json(out);
+    res.json({ ...out, composition_read: pc ? pc.display : null });
+  } catch (err) {
+    console.error('[carbon]', err);
+    res.status(500).json({ success: false, error: 'The carbon footprint could not be worked out.' });
+  }
+});
+
 router.get('/garment-types', (req, res) => {
   res.json(Object.entries(GARMENT_CATALOG).map(([id, g]) => ({
     id,

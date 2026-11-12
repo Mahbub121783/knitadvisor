@@ -165,4 +165,49 @@ const near = (a, b, tol, msg) => assert(Math.abs(a - b) <= tol, `${msg || 'misma
   console.log('  Variant detection correct, no false positives');
 }
 
+// 13. reduction levers: each is the same model re-run, never a typed-in percentage
+{
+  const base = calc({ gsm: 200, fibers: { cotton: 60, polyester: 40 }, shade: 'black', boiler_fuel: 'coal' });
+  const L = base.reduction.levers;
+  assert(L.length >= 8, 'a coal-fired CVC black has many levers');
+  for (const l of L) {
+    assert(l.saving_kg_per_kg > 0 && l.new_total < base.total_co2e_per_kg_fabric, 'every lever saves: ' + l.id);
+    near(l.new_total + l.saving_kg_per_kg, base.total_co2e_per_kg_fabric, 0.01, 'saving = base - new for ' + l.id);
+  }
+  for (let i = 1; i < L.length; i++) assert(L[i - 1].saving_kg_per_kg >= L[i].saving_kg_per_kg, 'ranked by saving');
+  assert(L.some(l => l.id === 'fuel_gas') && L.some(l => l.id === 'recycled_poly') && L.some(l => l.id === 'organic_cotton'));
+  // the low-liquor lever is the physics: the bath heat scales with the liquor ratio (8 → 5)
+  const ll = L.find(l => l.id === 'low_liquor'), heat = base.wet_processing.bath_heat_kwh_th_per_kg;
+  assert(ll.water_l_saved_per_kg > 30, 'less liquor, less water');
+  assert(ll.fuel_kwh_saved_per_kg > heat * (3 / 8) * 1.14 * 0.9, 'and less bath heat');
+  // together: not the sum of the parts, but below the best single mill lever
+  const p = base.reduction.pathway, bestMill = Math.min(...L.filter(l => l.kind !== 'fibre' && l.id !== 'fuel_biomass').map(l => l.new_total));
+  assert(p.best_practice_mill.total < bestMill && p.plus_preferred_fibre.total < p.best_practice_mill.total, JSON.stringify(p));
+  const sumSingles = L.filter(l => p.best_practice_mill.levers.includes(l.id)).reduce((s, l) => s + l.saving_kg_per_kg, 0);
+  assert(base.total_co2e_per_kg_fabric - p.best_practice_mill.total <= sumSingles + 0.01, 'overlap is not double-counted');
+  // a lever already in place is not offered; a gas boiler is not told to switch to gas
+  const org = calc({ gsm: 180, fibers: { cotton: 100 }, raw_composition: '100% organic cotton' });
+  assert(!org.reduction.levers.some(l => l.id === 'organic_cotton') && !org.reduction.levers.some(l => l.id === 'fuel_gas'));
+  // the base case is untouched by the lever machinery
+  const plain = calc({ gsm: 180, fibers: { cotton: 100 }, shade: 'medium' });
+  near(plain.stages.reduce((s, x) => s + x.co2e_per_kg_fabric, 0), plain.total_co2e_per_kg_fabric, 0.01);
+  console.log(`  Levers re-run the model, rank by saving, and combine without double counting (${base.total_co2e_per_kg_fabric} → ${p.best_practice_mill.total} → ${p.plus_preferred_fibre.total})`);
+}
+
+// 14. grade, equivalents, countries, water and the worked steps
+{
+  const r = calc({ gsm: 180, fibers: { cotton: 100 }, shade: 'medium' });
+  assert(/^[A-E]$/.test(r.grade.letter) && r.grade.cohort_n >= 100 && r.grade.lower_than_pct >= 0 && r.grade.lower_than_pct <= 100);
+  const heavy = calc({ gsm: 180, fibers: { viscose: 95, elastane: 5 }, shade: 'black' });
+  assert(heavy.grade.lower_than_pct < r.grade.lower_than_pct, 'a heavier fabric grades lower');
+  near(r.equivalents.per_tshirt.co2e_kg, r.total_co2e_per_kg_fabric * 0.2, 0.002, 'per T-shirt');
+  assert(r.by_country.length === Object.keys(M.GRID).length && r.by_country.some(x => x.this && x.country === 'bangladesh'));
+  for (let i = 1; i < r.by_country.length; i++) assert(r.by_country[i - 1].total <= r.by_country[i].total);
+  near(r.water.bath_fill_l_per_kg, r.water.baths * r.water.liquor_ratio * r.mass_balance.per_kg_finished.grey_fabric_kg, 0.05, 'water = baths × liquor × grey');
+  const steps = r.calc_steps, sum = steps.filter(s => s.n >= 2 && s.n <= 8).reduce((a, s) => a + s.result, 0);
+  near(sum, r.total_co2e_per_kg_fabric, 0.01, 'the worked steps add up to the total');
+  near(steps[steps.length - 1].result, r.total_co2e_per_kg_fabric, 0.01);
+  console.log(`  Grade ${r.grade.letter}, per T-shirt ${r.equivalents.per_tshirt.co2e_kg} kg, ${r.water.bath_fill_l_per_kg} L/kg, and the worked steps add up`);
+}
+
 console.log('\nAll Carbon Footprint Engine Tests Passed!');

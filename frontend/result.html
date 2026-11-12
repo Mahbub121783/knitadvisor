@@ -478,7 +478,7 @@
     .kp-scroll { overflow-x: auto; }
 </style>
   <link rel="stylesheet" href="assets/css/theme-v2.css?v=20261112b">
-  <script src="assets/js/app-shell.js?v=20261111a" defer></script>
+  <script src="assets/js/app-shell.js?v=20261112c" defer></script>
 </head>
 <body>
 <div class="page-wrap">
@@ -1722,6 +1722,7 @@
         <span class="result-key">Per garment</span>
         <span class="result-val white" id="carbon-per-garment">&#8212;</span>
       </div>
+      <div id="carbon-extra"></div>
 
       <div class="result-section-label" style="margin-top:12px;">Where it comes from</div>
       <div id="carbon-stagebar" style="display:flex;height:10px;border-radius:99px;overflow:hidden;background:var(--line3);margin:4px 0 8px;"></div>
@@ -3870,6 +3871,29 @@ function renderCarbonFootprint(c) {
   $('carbon-fuels').innerHTML = f ? `Boiler fuel changes the total: ${Object.keys(f).map(k => `${k.replace('_', ' ')} ${fmt(f[k], 2)}`).join(' &middot; ')}.` : '';
 
   const q = (c.data_quality && c.data_quality.share_of_total_by_tier_pct) || {};
+  // grade, what it means, and the strongest ways to cut it — all from the same engine
+  const gr = c.grade, eq = c.equivalents, red = c.reduction;
+  if (gr && eq && red) {
+    const gc = { A: '#1E7A54', B: '#4D8F2A', C: '#B08900', D: '#C76A00', E: '#B23B3B' }[gr.letter] || '#666';
+    const top = red.levers.slice(0, 4), max = Math.max.apply(null, top.map(l => l.saving_kg_per_kg).concat([0.01]));
+    const comp = (c.fiber_breakdown || []).map(f => `${f.pct}% ${f.variant ? f.variant + ' ' : ''}${f.fiber}`).join(' ');
+    const u = c.inputs_used || {};
+    const mbs = c.mass_balance || {}, spin = mbs.spinning_system === 'combed' || mbs.spinning_system === 'open_end' ? mbs.spinning_system : '';
+    const link = `/carbon.html?composition=${encodeURIComponent(comp)}&gsm=${encodeURIComponent(u.gsm || '')}&shade=${encodeURIComponent(u.shade_class || '')}&country=${encodeURIComponent(u.country || '')}&fuel=${encodeURIComponent(u.boiler_fuel || '')}&spin=${spin}&dye=${encodeURIComponent(u.dyeing_class || '')}&family=${encodeURIComponent(u.family || '')}&loss=${encodeURIComponent(u.process_loss_pct != null ? u.process_loss_pct : '')}&finish=${encodeURIComponent(((u.flags && u.flags.brushed) ? 'brushed ' : '') + ((u.flags && u.flags.mercerise) ? 'mercerised' : ''))}`;
+    $('carbon-extra').innerHTML =
+      `<div style="display:flex;gap:12px;align-items:center;margin:12px 0 6px;">
+         <div style="width:52px;height:52px;border-radius:12px;background:${gc};color:#fff;display:flex;align-items:center;justify-content:center;font:800 26px var(--head);flex:none;">${esc(gr.letter)}</div>
+         <div style="font-size:11.5px;color:var(--t2);line-height:1.55;">Lower than <b style="color:var(--t1)">${fmt(gr.lower_than_pct, 0)}%</b> of ${gr.cohort_n} typical fabrics made the same way in this country. A basic T-shirt of it: <b style="color:var(--t1)">${fmt(eq.per_tshirt.co2e_kg, 2)} kg CO2e</b> (about ${fmt(eq.per_tshirt.car_km, 0)} km by car); 10,000 of them: <b style="color:var(--t1)">${fmt(eq.order_10000_tshirts_t, 1)} t</b>.</div>
+       </div>
+       <div class="result-section-label" style="margin-top:10px;">Strongest ways to cut it <span style="font-weight:400;color:var(--t3);">&#8212; each one the whole model re-run</span></div>
+       ${top.map(l => `<div style="display:grid;grid-template-columns:minmax(0,1fr) 90px 54px;gap:8px;align-items:center;font-size:11px;padding:4px 0;">
+          <span style="color:var(--t1)">${esc(l.name)}<br><span style="color:var(--t3);font-size:10px;">${esc(l.change)}</span></span>
+          <span style="height:6px;background:var(--line3);border-radius:99px;overflow:hidden;"><i style="display:block;height:100%;width:${(l.saving_kg_per_kg / max * 100).toFixed(0)}%;background:#1E7A54;"></i></span>
+          <span class="mono" style="text-align:right;color:#1E7A54;font-weight:700;">&minus;${fmt(l.saving_pct, 1)}%</span></div>`).join('')}
+       <div style="font-size:11px;color:var(--t2);margin:6px 0 2px;line-height:1.6;">Best-practice mill, all together: <b style="color:var(--t1)">${fmt(red.pathway.now, 2)} &rarr; ${fmt(red.pathway.best_practice_mill.total, 2)}</b> (&minus;${fmt(red.pathway.best_practice_mill.cut_pct, 0)}%); with preferred fibres <b style="color:var(--t1)">${fmt(red.pathway.plus_preferred_fibre.total, 2)}</b> (&minus;${fmt(red.pathway.plus_preferred_fibre.cut_pct, 0)}%).</div>
+       <a href="${link}" style="display:inline-block;margin:6px 0 4px;padding:7px 12px;border-radius:8px;background:#1E7A54;color:#fff;font:600 12px var(--head);text-decoration:none;">Open in Carbon footprint: switch the levers on and watch it fall &rarr;</a>`;
+  }
+
   $('carbon-quality').innerHTML = Object.keys(q).map(k => `${tierTag(k)} ${fmt(q[k], 0)}%`).join(' ') + '<div style="margin-top:4px;">PRIMARY is your own meter data &middot; SOURCED is a published figure &middot; MODELLED is a typical-practice figure with a stated range. The share is of the total emissions.</div>';
   $('carbon-notmodelled').innerHTML = c.not_modelled ? '<b>Not modelled:</b> ' + c.not_modelled.map(esc).join('; ') + '.' : '';
 

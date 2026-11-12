@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <script src="assets/js/auth-guard.js?v=20260922a"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Carbon footprint — KnitAdvisor</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <meta name="description" content="The carbon footprint of a fabric worked out from the process itself, and the strongest ways to cut it, re-run through the same model.">
+  <meta name="theme-color" content="#FFFFFF">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css?v=20260603c">
+  <style>
+    [hidden] { display: none !important; }
+    .cb-main { padding: 20px 0 56px; }
+    .cb-head h1 { font-size: 26px; margin: 0 0 6px; letter-spacing: -0.01em; }
+    .cb-head p { margin: 0 0 18px; color: var(--t2); font-size: 14px; line-height: 1.6; max-width: 980px; }
+    .cb-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+    @media (min-width: 1100px) { .cb-grid { grid-template-columns: 360px minmax(0, 1fr); } .cb-in { position: sticky; top: 72px; } }
+    .cb-card { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+    .cb-card h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--t2); margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
+    .cb-card h2 small { text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--t3); font-size: 12px; }
+    .cb-f { margin-bottom: 12px; }
+    .cb-f > label { display: block; font-size: 12px; font-weight: 600; color: var(--t2); margin-bottom: 5px; }
+    .cb-f input, .cb-f select { width: 100%; box-sizing: border-box; padding: 9px 10px; border: 1px solid var(--line2); border-radius: 8px; font: 14px var(--head); color: var(--t1); background: #fff; }
+    .cb-f input:focus, .cb-f select:focus { outline: 2px solid var(--accent-line); border-color: var(--accent); }
+    .cb-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .cb-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+    .cb-chip { border: 1px solid var(--line2); background: var(--bg); border-radius: 999px; padding: 5px 11px; font: 600 12px var(--head); color: var(--t2); cursor: pointer; }
+    .cb-chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .cb-shade i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; border: 1px solid rgba(0,0,0,.15); }
+    .cb-hint { font-size: 11.5px; color: var(--t3); line-height: 1.5; margin: 4px 0 0; }
+
+    /* headline */
+    .cb-hero { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 18px; align-items: center; }
+    .cb-grade { width: 92px; height: 92px; border-radius: 18px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #fff; font: 800 44px/1 var(--head); }
+    .cb-grade small { font: 600 10px var(--head); letter-spacing: .08em; text-transform: uppercase; opacity: .9; margin-top: 4px; }
+    .g-A { background: #1E7A54; } .g-B { background: #4D8F2A; } .g-C { background: #B08900; } .g-D { background: #C76A00; } .g-E { background: #B23B3B; }
+    .cb-big { font: 800 44px/1.05 var(--head); letter-spacing: -0.02em; color: var(--t1); }
+    .cb-big span { font: 600 15px var(--head); color: var(--t2); letter-spacing: 0; }
+    .cb-sub { font-size: 13px; color: var(--t2); line-height: 1.6; margin-top: 6px; }
+    .cb-eq { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-top: 14px; }
+    .cb-eq div { background: var(--bg2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+    .cb-eq b { display: block; font: 700 19px var(--head); color: var(--t1); }
+    .cb-eq small { font-size: 11.5px; color: var(--t3); line-height: 1.4; display: block; }
+
+    /* stages */
+    .cb-bar { display: flex; height: 14px; border-radius: 99px; overflow: hidden; background: var(--line); margin: 2px 0 12px; }
+    .cb-bar i { display: block; height: 100%; transition: width .5s ease; }
+    .cb-st { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; gap: 8px; align-items: baseline; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+    .cb-st:last-child { border-bottom: 0; }
+    .cb-st .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    .cb-st small { display: block; color: var(--t3); font-size: 11.5px; }
+    .cb-st .v { font: 600 13.5px var(--mono); white-space: nowrap; }
+    .tag { font: 600 9.5px var(--head); letter-spacing: .04em; padding: 1px 6px; border-radius: 99px; border: 1px solid; margin-left: 6px; vertical-align: 1px; white-space: nowrap; }
+    .tag.PRIMARY { color: #1E7A54; } .tag.SOURCED { color: #1857C4; } .tag.MODELLED, .tag.ESTIMATED { color: #9A5B00; } .tag.DERIVED { color: #6B46C1; }
+
+    /* levers */
+    .cb-what { background: linear-gradient(135deg, #EEF6F1, #EEF3FC); border: 1px solid #CFE3D7; border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
+    .cb-what .row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+    .cb-what .from { font: 700 22px var(--head); color: var(--t2); }
+    .cb-what .to { font: 800 30px var(--head); color: #1E7A54; }
+    .cb-what .cut { font: 700 14px var(--head); color: #1E7A54; background: #fff; border: 1px solid #CFE3D7; border-radius: 99px; padding: 2px 10px; }
+    .cb-what .track { position: relative; height: 10px; background: rgba(0,0,0,.07); border-radius: 99px; margin: 10px 0 6px; overflow: hidden; }
+    .cb-what .track i { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, #1E7A54, #4ade80); border-radius: 99px; transition: width .45s ease; }
+    .cb-what .note { font-size: 12px; color: var(--t2); line-height: 1.5; }
+    .cb-btns { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 0; }
+    .cb-btn { border: 1px solid var(--line2); background: var(--bg); border-radius: 8px; padding: 7px 12px; font: 600 12.5px var(--head); color: var(--t1); cursor: pointer; }
+    .cb-btn.primary { background: #1E7A54; border-color: #1E7A54; color: #fff; }
+    .cb-lv { display: grid; grid-template-columns: 44px minmax(0, 1fr) 160px; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+    .cb-lv:last-child { border-bottom: 0; }
+    .cb-sw { position: relative; width: 40px; height: 22px; border-radius: 99px; background: var(--line2); border: 0; cursor: pointer; transition: background .2s; padding: 0; }
+    .cb-sw::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: left .2s; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+    .cb-sw[aria-pressed="true"] { background: #1E7A54; }
+    .cb-sw[aria-pressed="true"]::after { left: 21px; }
+    .cb-lv b { font-size: 14px; color: var(--t1); }
+    .cb-lv .how { font-size: 12px; color: var(--t2); line-height: 1.45; margin-top: 2px; }
+    .cb-lv .meta { font-size: 11px; color: var(--t3); margin-top: 3px; }
+    .cb-lv .sv { text-align: right; }
+    .cb-lv .sv b { font: 700 15px var(--head); color: #1E7A54; display: block; }
+    .cb-lv .sv small { font-size: 11px; color: var(--t3); }
+    .cb-lv .sbar { height: 5px; background: var(--line); border-radius: 99px; margin-top: 5px; overflow: hidden; }
+    .cb-lv .sbar i { display: block; height: 100%; background: #1E7A54; border-radius: 99px; }
+    .capex { font: 600 10px var(--head); padding: 1px 7px; border-radius: 99px; background: var(--bg3); color: var(--t2); margin-left: 6px; text-transform: uppercase; letter-spacing: .04em; }
+    @media (max-width: 560px) { .cb-lv { grid-template-columns: 44px minmax(0, 1fr); } .cb-lv .sv { grid-column: 2; text-align: left; } }
+
+    /* countries, water, steps */
+    .cb-cty { display: grid; grid-template-columns: 110px minmax(0, 1fr) 60px; gap: 10px; align-items: center; font-size: 13px; padding: 4px 0; }
+    .cb-cty .b { height: 10px; background: var(--line); border-radius: 99px; overflow: hidden; }
+    .cb-cty .b i { display: block; height: 100%; background: #60a5fa; border-radius: 99px; }
+    .cb-cty.me { font-weight: 700; } .cb-cty.me .b i { background: var(--accent); }
+    .cb-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+    .cb-tiles div { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+    .cb-tiles b { display: block; font: 700 20px var(--head); }
+    .cb-tiles small { display: block; font-size: 11.5px; line-height: 1.4; color: var(--t3); }
+    .cb-steps { list-style: none; margin: 0; padding: 0; counter-reset: s; }
+    .cb-steps li { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); align-items: start; }
+    .cb-steps li:last-child { border-bottom: 0; font-weight: 700; }
+    .cb-steps .n { width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: #fff; font: 700 11px var(--head); display: flex; align-items: center; justify-content: center; }
+    .cb-steps .t { font-size: 13.5px; font-weight: 600; color: var(--t1); }
+    .cb-steps code { display: block; font: 12px/1.55 var(--mono); color: var(--t2); margin-top: 3px; white-space: normal; word-break: break-word; }
+    .cb-steps .r { font: 700 13.5px var(--mono); white-space: nowrap; }
+    .cb-tor { display: grid; grid-template-columns: minmax(130px, 34%) minmax(0, 1fr) 60px; gap: 10px; align-items: center; font-size: 12.5px; padding: 4px 0; }
+    .cb-tor .b { height: 8px; background: var(--line); border-radius: 99px; overflow: hidden; }
+    .cb-tor .b i { display: block; height: 100%; background: linear-gradient(90deg, #4ade80, #fbbf24); }
+    .cb-two { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+    @media (min-width: 1400px) { .cb-two { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .cb-two > .cb-card { margin-bottom: 0; } }
+    .cb-small { font-size: 12px; color: var(--t3); line-height: 1.6; }
+    .cb-err { background: rgba(178,59,59,.08); color: var(--danger); padding: 10px 12px; border-radius: 8px; font-size: 13px; }
+    .cb-wait { opacity: .55; transition: opacity .2s; }
+  </style>
+  <link rel="stylesheet" href="assets/css/theme-v2.css?v=20261112b">
+  <script src="assets/js/app-shell.js?v=20261112c" defer></script>
+</head>
+<body>
+<div class="page-wrap">
+  <header class="hdr"></header>
+  <main class="container cb-main">
+    <div class="cb-head">
+      <h1>Carbon footprint</h1>
+      <p>The CO2e of one kilogram of finished fabric, cradle to mill gate, worked out from the process itself: the fibre and what is lost making it into yarn and cloth, the electricity of every machine, the heat to warm every dye bath, the water every dryer has to boil off, and the boiler and grid behind them. Every uncertain figure is a range, and the range is shown. Then the strongest ways to cut it, each one re-run through the same model.</p>
+    </div>
+
+    <div class="cb-grid">
+      <aside class="cb-in">
+        <div class="cb-card">
+          <h2>The fabric</h2>
+          <div class="cb-f"><label for="cb-comp">Composition</label><input id="cb-comp" type="text" value="100% Cotton" autocomplete="off" spellcheck="false">
+            <div class="cb-chips" data-for="cb-comp">
+              <button type="button" class="cb-chip" data-v="100% Cotton">100% Cotton</button>
+              <button type="button" class="cb-chip" data-v="95% Cotton 5% Elastane">95/5 Ctn+Lycra</button>
+              <button type="button" class="cb-chip" data-v="60% Cotton 40% Polyester">CVC 60/40</button>
+              <button type="button" class="cb-chip" data-v="35% Cotton 65% Polyester">PC 65/35</button>
+              <button type="button" class="cb-chip" data-v="100% Polyester">100% Polyester</button>
+              <button type="button" class="cb-chip" data-v="100% Organic Cotton">Organic cotton</button>
+              <button type="button" class="cb-chip" data-v="100% Recycled Polyester">Recycled poly</button>
+              <button type="button" class="cb-chip" data-v="95% Viscose 5% Elastane">Viscose+Lycra</button>
+            </div>
+            <p class="cb-hint" id="cb-comp-read"></p>
+          </div>
+          <div class="cb-row2">
+            <div class="cb-f"><label for="cb-gsm">GSM</label><input id="cb-gsm" type="number" min="40" max="800" step="1" value="180"></div>
+            <div class="cb-f"><label for="cb-fam">Fabric</label><select id="cb-fam"><option value="knit">Knit</option><option value="woven">Woven</option></select></div>
+          </div>
+          <div class="cb-f"><label>Shade</label>
+            <div class="cb-chips cb-shade" id="cb-shade">
+              <button type="button" class="cb-chip" data-v="white"><i style="background:#fff"></i>White</button>
+              <button type="button" class="cb-chip" data-v="light"><i style="background:#9ec5f0"></i>Light</button>
+              <button type="button" class="cb-chip on" data-v="medium"><i style="background:#3d7fd1"></i>Medium</button>
+              <button type="button" class="cb-chip" data-v="dark"><i style="background:#1d2c58"></i>Dark</button>
+              <button type="button" class="cb-chip" data-v="black"><i style="background:#111"></i>Black</button>
+            </div>
+          </div>
+          <div class="cb-row2">
+            <div class="cb-f"><label for="cb-dye">Dyeing</label><select id="cb-dye"><option value="">Auto</option><option value="reactive">Reactive</option><option value="disperse">Disperse</option><option value="pigment">Pigment</option></select></div>
+            <div class="cb-f"><label for="cb-spin">Spinning</label><select id="cb-spin"><option value="">Carded (auto)</option><option value="combed">Combed</option><option value="open_end">Open-end</option></select></div>
+          </div>
+          <div class="cb-row2">
+            <div class="cb-f"><label for="cb-loss">Process loss %</label><input id="cb-loss" type="number" min="0" max="40" step="0.5" value="12.5"></div>
+            <div class="cb-f"><label for="cb-garment">Garment, g</label><input id="cb-garment" type="number" min="1" max="5000" step="1" placeholder="optional"></div>
+          </div>
+          <div class="cb-row2">
+            <div class="cb-f"><label for="cb-country">Made in</label><select id="cb-country"><option value="bangladesh">Bangladesh</option><option value="india">India</option><option value="china">China</option><option value="vietnam">Vietnam</option><option value="turkiye">Türkiye</option><option value="pakistan">Pakistan</option></select></div>
+            <div class="cb-f"><label for="cb-fuel">Boiler fuel</label><select id="cb-fuel"><option value="natural_gas">Natural gas</option><option value="coal">Coal</option><option value="fuel_oil">Fuel oil</option><option value="diesel">Diesel</option><option value="biomass">Biomass</option></select></div>
+          </div>
+          <p class="cb-hint">Everything recalculates as you change it. Have a mill's own meter readings? They replace the model stage by stage through the API.</p>
+        </div>
+      </aside>
+
+      <section id="cb-out">
+        <div class="cb-card"><div class="cb-small">Working it out…</div></div>
+      </section>
+    </div>
+  </main>
+  <footer class="footer"></footer>
+</div>
+<script src="assets/js/api.js"></script>
+<script src="assets/js/carbon.js?v=20261112a"></script>
+</body>
+</html>

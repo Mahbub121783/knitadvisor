@@ -174,6 +174,68 @@ const GARMENT = {
   polybag_ef: 2.96,  // kg CO2e per kg LDPE bag
 };
 
+// ── REDUCTION LEVERS ────────────────────────────────────────────────────
+// Each lever is a change to the mill that the stage model can re-run: the
+// saving is never a percentage typed in, it is the same physics run again
+// with the lever's settings. `set` holds the new values; everything a lever
+// does not name stays as the base case. The settings are typical
+// best-practice figures (MODELLED); `capex` is our rough class of spend.
+const PV_EF = 0.045;   // kg CO2e per kWh of rooftop solar, life cycle (MODELLED, 0.03-0.06)
+const LEVERS = {
+  heat_recovery: { name: 'Recover heat from the hot drain water', capex: 'medium',
+    how: 'A heat exchanger on the dye-house drain warms the incoming water before it reaches the machines.',
+    set: { feed_water_c: 45 }, change: 'feed water 28 °C → 45 °C',
+    note: 'Dye-house drain water leaves at 50-70 °C; recovering part of it lifts the feed by 15-20 °C.' },
+  low_liquor: { name: 'Low-liquor dyeing machines', capex: 'high',
+    how: 'Soft-flow machines that run at about 1:5 heat and pump far less water per kilogram.',
+    set: { lr: 5 }, change: 'liquor ratio 1:8 → 1:5',
+    note: 'Every bath is heated water: a third less water is a third less bath heat and water.' },
+  steam: { name: 'Tune the boiler and the steam lines', capex: 'low',
+    how: 'Economiser on the stack, condensate return, insulated pipes and working steam traps.',
+    set: { boiler_eff: 0.90, overhead: 1.10 }, change: 'boiler 85% → 90%, steam losses 25% → 10%',
+    note: 'The cheapest lever in most mills: the heat is already paid for and leaks between boiler and machine.' },
+  dewater: { name: 'Squeeze harder before drying', capex: 'low',
+    how: 'Better hydro-extraction and low-pickup padding, so less water reaches the stenter to be boiled off.',
+    set: { pickup_hydro: 0.45, pickup_pad: 0.60 }, change: 'water into the dryer 1.25 → 1.05 kg per kg',
+    note: 'Removing water mechanically costs a few percent of the heat it takes to evaporate it.' },
+  stenter: { name: 'Stenter exhaust heat recovery and humidity control', capex: 'medium',
+    how: 'Recover heat from the stenter exhaust and run it at the right exhaust humidity instead of over-venting.',
+    set: { dry_eff: 0.55 }, change: 'drying efficiency 45% → 55%',
+    note: 'Most stenters vent their hot air long before it is saturated with water; humidity control stops that waste.' },
+  low_temp: { name: 'Low-temperature scouring and soaping', capex: 'none',
+    how: 'Enzymatic scouring at about 65 °C, low-temperature bleach and soaping agents at about 80 °C.',
+    set: { temps: { scour: 65, scour_bleach: 80, soap: 80 } }, change: 'scour 95 → 65 °C, soap 95 → 80 °C',
+    note: 'A chemistry change, not a machine: the same baths at a lower temperature.' },
+  solar: { name: 'Rooftop solar for a quarter of the mill power', capex: 'medium',
+    how: 'Solar panels on the factory roof supply about 25% of the knitting, dyeing and finishing electricity.',
+    set: { solar_share: 0.25 }, change: '25% of mill power from solar',
+    note: 'Solar power still carries its panel manufacturing footprint (about 0.045 kg per kWh), counted here.' },
+  rft: { name: 'Right first time: fewer re-dyes and trims', capex: 'none',
+    how: 'Lab-to-bulk shade control and process discipline, so less fabric is re-dyed, cut or lost.',
+    set: { loss_delta: -3 }, change: 'process loss −3 points',
+    note: 'Lost fabric still carried its fibre, spinning and knitting emissions; keeping it is a saving on every stage.' },
+  fuel_gas: { name: 'Switch the boiler to natural gas', capex: 'high',
+    how: 'Natural gas emits about 40% less CO2 per kWh of heat than coal and less than oil.',
+    set: { fuel: 'natural_gas' }, change: 'boiler fuel → natural gas', only_from: ['coal', 'fuel_oil', 'diesel'] },
+  fuel_biomass: { name: 'Biomass boiler (certified sustainable fuel)', capex: 'high',
+    how: 'Rice husk or certified wood in place of gas: the fossil CO2 of the heat falls to zero.',
+    set: { fuel: 'biomass' }, change: 'boiler fuel → sustainable biomass', only_from: ['natural_gas', 'coal', 'fuel_oil', 'diesel'],
+    note: 'Counts only if the biomass is sustainably sourced; its biogenic CO2 is still reported separately.' },
+  organic_cotton: { name: 'Organic or programme cotton', capex: 'none', fibre: 'cotton', variant: 'organic',
+    how: 'Buy organic or programme-certified cotton for the cotton share.', change: 'cotton → organic cotton' },
+  recycled_poly: { name: 'Recycled polyester', capex: 'none', fibre: 'polyester', variant: 'recycled',
+    how: 'Mechanically recycled PET staple for the polyester share.', change: 'polyester → recycled polyester' },
+};
+
+// ── FOR SCALE ONLY ──────────────────────────────────────────────────────
+// Rough everyday equivalents so a number in kg CO2e means something to a
+// buyer. Approximate on purpose; the page says so.
+const EQUIVALENTS = {
+  car_km: 0.17,            // kg CO2e per km, average petrol car
+  tree_year: 22,           // kg CO2 a mature tree takes up in a year
+  tshirt_fabric_kg: 0.2,   // a basic 175 g T-shirt plus its cutting waste
+};
+
 // ── what the model leaves out, said once ────────────────────────────────
 const NOT_MODELLED = [
   'Dyes, salt and most auxiliaries (no defensible per-kg factor)',
@@ -186,5 +248,5 @@ const NOT_MODELLED = [
 
 module.exports = {
   FACTOR_SET, FIBRES, VARIANTS, UNMODELED, GRID, COUNTRY_ALIASES, FUELS, PHYS, MILL, BATHS, LIQUOR_RATIO,
-  DRYING, ELECTRIC, BOILER, CHEMICALS, TRANSPORT, GARMENT, NOT_MODELLED,
+  DRYING, ELECTRIC, BOILER, CHEMICALS, TRANSPORT, GARMENT, NOT_MODELLED, LEVERS, PV_EF, EQUIVALENTS,
 };
