@@ -40,11 +40,14 @@
       var g = c.getContext('2d'); g.drawImage(src, 0, 0, W, H);
       return { rgba: g.getImageData(0, 0, W, H).data, w: W, h: H };
     };
+    var ex = /jpe?g$/i.test(file.type || '') && file.arrayBuffer && window.KAScanOptics
+      ? file.slice(0, 256 * 1024).arrayBuffer().then(function (b) { return window.KAScanOptics.exif(b); }).catch(function () { return null; }) : Promise.resolve(null);
+    var withExif = function (p) { return Promise.all([p, ex]).then(function (a) { if (a[0]) a[0].exif = a[1]; return a[0]; }); };
     if (window.createImageBitmap) {
-      return createImageBitmap(file, { imageOrientation: 'from-image' }).then(function (b) { var o = draw(b, b.width, b.height); b.close && b.close(); return o; })
-        .catch(function () { return viaImg(); });
+      return withExif(createImageBitmap(file, { imageOrientation: 'from-image' }).then(function (b) { var o = draw(b, b.width, b.height); b.close && b.close(); return o; })
+        .catch(function () { return viaImg(); }));
     }
-    return viaImg();
+    return withExif(viaImg());
     function viaImg() {
       return new Promise(function (ok, bad) {
         var url = URL.createObjectURL(file), im = new Image();
@@ -55,13 +58,29 @@
     }
   }
 
-  // No card in the photo: the loops are still counted, on the fabric's own axes; only the scale is estimated —
-  // from the camera's focus distance when it reports one, else a phone held about 10 cm away (66 degree lens).
-  var FOV = 66 * Math.PI / 180, ASSUME_MM = 100;
+  // No card in the photo: the loops are still counted, on the fabric's own axes; the scale comes from the lens
+  // (scan-optics.js): its focus distance through the thin-lens law, calibrated on this phone by every earlier photo
+  // that had a card in it; else the photo's own EXIF focal length and focus distance; else a phone ~10 cm away.
+  var ASSUME_MM = 100;
   function freeScale(img) {
-    var f = img.focus_mm, d = f >= 40 && f <= 300 ? f : ASSUME_MM;
-    return { pxPerMm: Math.max(img.w, img.h) / (2 * d * Math.tan(FOV / 2)), source: d === f ? 'focus' : 'assumed', dist_mm: d,
-      note: d === f ? 'from the camera focus (' + Math.round(d / 10) + ' cm)' : 'phone about 10 cm from the fabric' };
+    var OPT = window.KAScanOptics, W = Math.max(img.w, img.h), ex = img.exif || {}, f = img.focus_mm;
+    var fm = f >= 30 && f <= 400 ? f : null;
+    if (fm && OPT) {
+      var cal = OPT.calibrated(img.cam_label, 1000 / fm, W);
+      if (cal) return { pxPerMm: cal.pxPerMm, source: 'lens', dist_mm: fm, note: 'from the lens: focused at ' + (fm / 10).toFixed(1) + ' cm (' + (1000 / fm).toFixed(1) + ' dioptres), calibrated on this phone by ' + cal.n + ' card photo' + (cal.n > 1 ? 's' : '') };
+      return { pxPerMm: OPT.thinLens({ W: W, u_mm: fm, f35: ex.f35, f_mm: ex.focal_mm }), source: 'focus', dist_mm: fm, note: 'from the lens focus (' + (fm / 10).toFixed(1) + ' cm) and the thin-lens law' };
+    }
+    var subj = ex.subject_m >= 0.03 && ex.subject_m <= 0.5 ? ex.subject_m * 1000 : null;
+    if (subj && OPT) return { pxPerMm: OPT.thinLens({ W: W, u_mm: subj, f35: ex.f35, f_mm: ex.focal_mm }), source: 'focus', dist_mm: subj, note: 'from the photo’s own focus distance (' + (subj / 10).toFixed(1) + ' cm)' };
+    var px = OPT ? OPT.thinLens({ W: W, u_mm: ASSUME_MM, f35: ex.f35, f_mm: ex.focal_mm }) : W / (2 * ASSUME_MM * Math.tan(33 * Math.PI / 180));
+    return { pxPerMm: px, source: 'assumed', dist_mm: ASSUME_MM, note: 'phone about 10 cm from the fabric' + (ex.f35 ? ' (' + ex.f35 + ' mm-equivalent lens, from the photo)' : '') };
+  }
+  // every photo with a card in it teaches this phone's lens its true scale at that focus
+  function learnLens(img, r) {
+    try {
+      if (!r || r.error || !r.card || !(r.card.px_per_mm > 0) || !(img.focus_mm > 0) || !window.KAScanOptics) return;
+      window.KAScanOptics.addSample(img.cam_label, 1000 / img.focus_mm, r.card.px_per_mm, Math.max(img.w, img.h));
+    } catch (_) {}
   }
   function analyseAny(img) {
     var r = KS.analysePhoto(img.rgba, img.w, img.h);
@@ -74,7 +93,7 @@
   function getWorker() {
     if (worker !== null) return worker;
     try {
-      worker = new Worker('assets/js/scan/scan-worker.js?v=20261113b');
+      worker = new Worker('assets/js/scan/scan-worker.js?v=20261113d');
       worker.onmessage = function (e) { var p = wpend[e.data.id]; if (p) { delete wpend[e.data.id]; p(e.data.r); } };
       worker.onerror = function () { worker = false; Object.keys(wpend).forEach(function (k) { var p = wpend[k]; delete wpend[k]; p(null); }); };
     } catch (_) { worker = false; }
@@ -87,7 +106,7 @@
     return new Promise(function (ok) {
       var id = ++wseq, copy = new Uint8ClampedArray(img.rgba);          // the worker gets its own copy; this one stays usable
       var t = setTimeout(function () { delete wpend[id]; ok(here()); }, 25000);
-      wpend[id] = function (r) { clearTimeout(t); ok(r == null ? here() : r.card === null ? finishFree(r, sc) : r); };
+      wpend[id] = function (r) { clearTimeout(t); if (r) learnLens(img, r); ok(r == null ? here() : r.card === null ? finishFree(r, sc) : r); };
       w.postMessage({ id: id, buf: copy.buffer, w: img.w, h: img.h, skip_card: img.card_seen === false, free: { pxPerMm: sc.pxPerMm, source: sc.source, note: sc.note } }, [copy.buffer]);
     });
   }
@@ -276,10 +295,13 @@
     if (!box) { box = document.createElement('div'); box.id = id; box.className = 'sc-why'; $(anchor).parentNode.insertBefore(box, $(anchor)); }
     if (!c.estimated) { box.hidden = true; return; }
     box.hidden = false;
-    var now = S.dist || c.dist;
-    box.innerHTML = '<b>No scan card — the scale is estimated.</b> The ' + (woven ? 'weave and the thread lattice are' : 'loop grid is') + ' exact; the per-cm numbers assume the phone was ' + (now / 10).toFixed(0) + ' cm from the fabric. Held closer or farther? Tap it:<div class="sc-row" style="margin-top:6px">'
+    var now = S.dist || c.dist, scs = c.best && c.best.scale || {};
+    var head = scs.source === 'lens' ? '<b>Scale from the lens, calibrated on this phone.</b> ' + esc(scs.note) + '. '
+      : scs.source === 'focus' ? '<b>Scale from the lens focus.</b> ' + esc(scs.note) + ' — one photo with a bank or NID card on the cloth calibrates this phone. '
+      : '<b>No card — the scale is estimated.</b> ';
+    box.innerHTML = head + 'The ' + (woven ? 'weave and the thread lattice are' : 'loop grid is') + ' exact; the per-cm numbers take the phone as ' + (now / 10).toFixed(0) + ' cm from the fabric. Held closer or farther? Tap it:<div class="sc-row" style="margin-top:6px">'
       + [60, 80, 100, 120, 150].map(function (d) { return '<button type="button" class="sc-chip' + (Math.abs(d - now) < 5 ? ' on' : '') + '" data-dist="' + d + '">' + d / 10 + ' cm</button>'; }).join('')
-      + '</div><span style="font-size:12px">For an exact count, lay the printed scan card on the fabric.</span>';
+      + '</div><span style="font-size:12px">For an exact count, lay a bank card, NID card or the printed scan card on the fabric.</span>';
   }
   document.addEventListener('click', function (e) {
     var b = e.target.closest && e.target.closest('[data-dist]'); if (!b) return;
@@ -368,8 +390,51 @@
         + '<li><i></i><span>Each item is a measurement on the photo; the weights add up as log-odds into the knitted / woven split above.</span></li>';
     }
     if (fam === 'knit' && !c.best.lattice) rows.push('<div class="sc-idrow"><span>These photos were read only as woven, so no loop count was kept. Take the photo again; it will be counted as knitted.</span></div>');
+    var sure = !!(id && id.sure) || !!S.family;
+    if (!S.family && id && id.too_far) rows.unshift('<div class="sc-idrow"><span><b style="color:#B26A00">Too far to tell knitted from woven.</b> In this photo a thread or loop is only a few pixels — too small to see loops or crossings. Hold the phone 5–8 cm from the cloth so it fills the frame, and take it again; or tap Knitted or Woven above.</span></div>');
+    else if (!S.family && id && !id.sure) rows.unshift('<div class="sc-idrow"><span><b style="color:#B26A00">Not sure from this photo.</b> The measurements point both ways — tap Knitted or Woven above. A closer, sharper photo, or the back, settles it.</span></div>');
+    rows.push('<div class="sc-idrow"><span>' + (S.taught ? '✓ Thank you — this cloth now helps teach the scanner.' : 'Is this right? <button type="button" class="sc-chip" data-teach="yes" style="padding:5px 10px">Yes</button> <button type="button" class="sc-chip" data-teach="no" style="padding:5px 10px">No — I will fix it</button>') + '</span></div>');
     $('sc-idlist').innerHTML = rows.join('');
   }
+  // ── teaching the scanner: a small crop of the cloth and what it really is ─────────────────────
+  function cropJpeg(res) {
+    var c = res && res._cropRGB; if (!c) return null;
+    try {
+      var cv = document.createElement('canvas'); cv.width = c.w; cv.height = c.h;
+      cv.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(c.data), c.w, c.h), 0, 0);
+      return cv.toDataURL('image/jpeg', 0.86);
+    } catch (_) { return null; }
+  }
+  function structureLabel(c) {
+    if (c.family === 'woven') {
+      var wv = c.wov && c.wov.weave, id = c.identity || {};
+      if (id.denim_like) return 'denim';
+      if (!wv) return null;
+      return { plain: 'plain', twill: 'twill', satin: 'satin', basket: 'basket', half_basket_warp: /Oxford/.test(wv.name) ? 'oxford' : 'rib_weave', half_basket_weft: /Oxford/.test(wv.name) ? 'oxford' : 'rib_weave' }[wv.cls] || null;
+    }
+    return S.userPicked && S.structure ? S.structure : null;
+  }
+  function teach(confirmed) {
+    var c = combined(); if (!c) return;
+    var label = { family: c.family, structure: confirmed || S.userPicked || S.family ? structureLabel(c) : null };
+    var auto = { family: c.autoFamily, p_woven: c.pWoven, structure: c.identity && c.identity.best ? c.identity.best.structure : null };
+    var send = function (res, side) {
+      var img = cropJpeg(res); if (!img) return;
+      fetch(API + '/api/scan/teach', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pair: pair || undefined, image: img, label: { family: label.family, structure: label.structure, side: side }, auto: auto, confirmed: !!confirmed, scale: res.scale ? res.scale.source : res.card ? 'card' : null }) }).catch(function () {});
+    };
+    goodFaces().forEach(function (r) { send(r, 'face'); });
+    if (S.backs[0] && S.backs[0].res && !S.backs[0].res.error && !S.backs[0].res.backOnly) send(S.backs[0].res, 'back');
+    S.taught = true;
+  }
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('[data-teach]'); if (!b) return;
+    if (b.getAttribute('data-teach') === 'yes') { teach(true); update(); return; }
+    // "No": the family buttons and the structure chips are the correction; the next tap on either is taught
+    S.correcting = true; S.taught = false;
+    $('sc-id-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    $('sc-idlist').insertAdjacentHTML('beforeend', '<div class="sc-idrow"><span><b>Tap the right one:</b> Knitted or Woven above, then the structure below.</span></div>');
+  });
   var DENIM = ['#243B6B', '#E9E6DC'];
   function renderWovenCard(c) {
     var w = c.wov, btn = $('sc-wgo');
@@ -400,7 +465,9 @@
   document.addEventListener('click', function (e) {
     var b = e.target.closest && e.target.closest('[data-fam]'); if (!b) return;
     var f = b.getAttribute('data-fam'), c = combined();
-    S.family = c && f === c.autoFamily ? null : f; update();
+    S.family = c && f === c.autoFamily ? null : f;
+    if (S.correcting || (c && f !== c.autoFamily)) { S.taught = false; update(); teach(false); }
+    update();
   });
   document.querySelectorAll('[data-wadj]').forEach(function (b) {
     b.addEventListener('click', function () {
@@ -438,6 +505,7 @@
   $('sc-chips').addEventListener('click', function (e) {
     var b = e.target.closest('[data-s]'); if (!b) return;
     S.structure = b.getAttribute('data-s'); S.userPicked = true; update();
+    if (S.correcting) teach(false);
   });
   document.querySelectorAll('[data-adj]').forEach(function (b) {
     b.addEventListener('click', function () {
@@ -512,7 +580,7 @@
   });
   $('sc-again').addEventListener('click', function () {
     S.faces.forEach(function (f) { f.el.remove(); }); S.backs.forEach(function (f) { f.el.remove(); });
-    S.faces = []; S.backs = []; S.adj = { w: 1, c: 1 }; S.wadj = { e: 1, p: 1 }; S.family = null; S.dist = null; S.structure = null; S.userPicked = false; S.result = null; S.sampleTruth = null;
+    S.faces = []; S.backs = []; S.adj = { w: 1, c: 1 }; S.wadj = { e: 1, p: 1 }; S.family = null; S.dist = null; S.taught = false; S.correcting = false; S.structure = null; S.userPicked = false; S.result = null; S.sampleTruth = null;
     $('sc-result-card').hidden = true; $('sc-gsm').value = ''; $('sc-wgsm').value = ''; $('sc-wwarp').value = ''; $('sc-wweft').value = ''; update();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   });

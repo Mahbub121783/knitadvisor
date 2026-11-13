@@ -118,7 +118,15 @@ const free = (o, P = 15) => {
   const sum = b.candidates.reduce((t, c) => t + c.p, 0);
   assert(Math.abs(sum - 1) < 0.02, 'candidate probabilities add to one: ' + sum);
   assert(Math.abs(b.p_woven + b.p_knit - 1) < 1e-6);
-  console.log('✓ identity: evidence adds as log-odds, best follows the family');
+  // too far to see: threads 3 px apart and loops 5 px — the same reading, but never called sure, and flagged
+  const far = KS.identify({ kind: { kind: 'woven' }, woven: Object.assign({}, wv, { thread_px: 3.1 }), legs: { line: 0.01, amp: 0.01, score: 0.004, legs: false }, knit_read: { ok: true, regularity: 0.5, ratio: 0.9, loop_px: 5 }, knit_suggest: [] });
+  assert.strictEqual(far.p_woven, b.p_woven, 'resolution does not change the evidence');
+  assert.strictEqual(far.too_far, true); assert.strictEqual(far.sure, false, 'a photo too far to show loops or crossings is never sure');
+  assert.strictEqual(b.too_far, false);
+  // the measurements and the recogniser pulling opposite ways is not sure either
+  const torn = KS.identify({ kind: { kind: 'woven' }, woven: wv, legs: { line: 0.01, amp: 0.01, score: 0.004, legs: false }, knit_read: { ok: true, regularity: 0.5, ratio: 0.9 }, knit_suggest: [], model: { family: { knit: 0.97, woven: 0.03 } } });
+  assert.strictEqual(torn.sure, false, 'measurements and recogniser disagree: not sure');
+  console.log('✓ identity: evidence adds as log-odds, best follows the family; too far or torn is never sure');
 }
 
 // ── the woven reverse engine ─────
@@ -213,6 +221,42 @@ const free = (o, P = 15) => {
   const knitty = KS.identify({ kind: { kind: 'knit' }, woven: wv, legs: { line: 0.15, amp: 0.2, score: 0.2, legs: true }, knit_read: { ok: true, regularity: 0.85, ratio: 1.3 }, knit_suggest: [], model: { family: { knit: 0.05, woven: 0.95 } } });
   assert.strictEqual(knitty.family, 'knit', 'measured loop legs and a clean loop lattice still decide');
   console.log('✓ recogniser: shipped weights load, distributions sum to one, its verdict joins the evidence at a bounded weight');
+}
+
+// ── the lens: thin-lens scale, this phone's calibration, and the EXIF a photo carries ─────
+{
+  const store = {};
+  global.localStorage = { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: (k) => { delete store[k]; } };
+  const OPT = require(path.join(FE, 'scan-optics.js'));
+  // a 26 mm-equivalent lens, 4000 px long side, focused at 10 cm: f_px = 4000 x 26 / 36, then f_px / (u - f)
+  near(OPT.thinLens({ W: 4000, u_mm: 100, f35: 26, f_mm: 4.4 }), (4000 * 26 / 36) / (100 - 4.4), 1e-9, 'thin lens');
+  assert(OPT.thinLens({ W: 4000, u_mm: 80 }) > OPT.thinLens({ W: 4000, u_mm: 120 }), 'closer is more pixels per mm');
+  // calibration: the card measures px/mm at a focus reading; the samples fit px/mm = A·D + B
+  const truth = (D) => (0.3 * D + 0.5) * 4;                     // px/mm in a 4000 px photo
+  assert.strictEqual(OPT.calibrated('cam', 10, 4000), null, 'no calibration yet');
+  OPT.addSample('cam', 10, truth(10), 4000);
+  near(OPT.calibrated('cam', 10, 4000).pxPerMm, truth(10), 1e-6, 'one sample: exact at its own focus');
+  [8, 12.5, 9].forEach((D) => OPT.addSample('cam', D, truth(D), 4000));
+  const fit = OPT.fit(OPT.loadCal('cam'));
+  near(fit.A, 0.3, 0.01, 'slope per dioptre'); near(fit.B, 0.5, 0.05, 'offset');
+  near(OPT.calibrated('cam', 11, 3000).pxPerMm, truth(11) * 0.75, 0.01, 'a smaller photo scales with its size');
+  OPT.clearCal('cam'); assert.strictEqual(OPT.loadCal('cam').length, 0);
+  // EXIF: focal length 4.7 mm, 26 mm equivalent, subject at 0.095 m
+  const t = Buffer.alloc(84);
+  t.write('II', 0); t.writeUInt16LE(42, 2); t.writeUInt32LE(8, 4);
+  t.writeUInt16LE(1, 8); t.writeUInt16LE(0x8769, 10); t.writeUInt16LE(4, 12); t.writeUInt32LE(1, 14); t.writeUInt32LE(26, 18); t.writeUInt32LE(0, 22);
+  t.writeUInt16LE(3, 26);
+  t.writeUInt16LE(0x920A, 28); t.writeUInt16LE(5, 30); t.writeUInt32LE(1, 32); t.writeUInt32LE(68, 36);
+  t.writeUInt16LE(0xA405, 40); t.writeUInt16LE(3, 42); t.writeUInt32LE(1, 44); t.writeUInt16LE(26, 48);
+  t.writeUInt16LE(0x9206, 52); t.writeUInt16LE(5, 54); t.writeUInt32LE(1, 56); t.writeUInt32LE(76, 60);
+  t.writeUInt32LE(0, 64); t.writeUInt32LE(47, 68); t.writeUInt32LE(10, 72); t.writeUInt32LE(95, 76); t.writeUInt32LE(1000, 80);
+  const payload = Buffer.concat([Buffer.from('Exif\0\0', 'binary'), t]);
+  const len = Buffer.alloc(2); len.writeUInt16BE(payload.length + 2);
+  const jpg = Buffer.concat([Buffer.from([0xFF, 0xD8, 0xFF, 0xE1]), len, payload, Buffer.from([0xFF, 0xD9])]);
+  const ex = OPT.exif(jpg.buffer.slice(jpg.byteOffset, jpg.byteOffset + jpg.length));
+  near(ex.focal_mm, 4.7, 1e-9, 'EXIF focal length'); assert.strictEqual(ex.f35, 26); near(ex.subject_m, 0.095, 1e-9, 'EXIF subject distance');
+  assert.strictEqual(OPT.exif(new ArrayBuffer(10)), null, 'not a JPEG: no EXIF');
+  console.log('✓ lens: thin-lens scale, per-phone calibration linear in dioptres, EXIF focal length and focus distance');
 }
 
 console.log('--- Fabric Identification Tests passed ---');

@@ -198,6 +198,17 @@
     var pm = paper.length ? paper.reduce(function (t, v) { return t + v; }, 0) / paper.length : 0, im = ink.length ? ink.reduce(function (t, v) { return t + v; }, 0) / ink.length : 1;
     var tiltC = Math.max.apply(null, best.sides) / Math.min.apply(null, best.sides);
     if (paper.length < 3 || pm < 0.55 || im > 0.4 || pm - im < 0.33 || tiltC > 2) return { error: 'The scan card was not seen: four black squares on white paper. Dark marks on the fabric are not the card.', code: 'no_card' };
+    // The card's own design, checked where it is: each square solid black right through (3 x 3 points inside it),
+    // and the paper between the squares along all four edges plain white (a label, a form or a print with a table
+    // and text on it — taken for the card at an exhibition — has ink there).
+    var val = function (mx, my) { var q = apply(Hc, mx, my); return bilinear(g, w, h, q[0], q[1]); };
+    var inkOk = 0, inkN = 0, whiteOk = 0, whiteN = 0, lim = pm - 0.22;
+    CARD.markers.forEach(function (c0) { for (var dy = -3; dy <= 3; dy += 3) for (var dx = -3; dx <= 3; dx += 3) { var v = val(c0[0] + dx, c0[1] + dy); if (v === v) { inkN++; if (v < im + 0.18 && v < lim) inkOk++; } } });
+    for (var t2 = 0; t2 <= 8; t2++) {
+      var u2 = 14 + t2 * 5.25;
+      [[u2, 5], [u2, 65], [5, u2], [65, u2]].forEach(function (q2) { var v2 = val(q2[0], q2[1]); if (v2 === v2) { whiteN++; if (v2 > lim) whiteOk++; } });
+    }
+    if (inkN < 30 || inkOk < inkN * 0.85 || whiteN < 30 || whiteOk < whiteN * 0.9) return { error: 'The scan card was not seen: four black squares on white paper. A label or a printed form is not the card.', code: 'no_card' };
     return { corners: corners, pxPerMm: pxPerMm, tilt: Math.max.apply(null, best.sides) / Math.min.apply(null, best.sides), paper: pm };
   }
   function polyArea(q) { var s = 0; for (var i = 0; i < q.length; i++) { var a = q[i], b = q[(i + 1) % q.length]; s += a[0] * b[1] - b[0] * a[1]; } return s / 2; }
@@ -1091,7 +1102,7 @@
     var conf = !resolved ? 'low' : best.un < 0.1 && margin > 0.3 && (!M || M.match >= 0.85) ? 'high' : best.un < 0.2 && (margin > 0.1 || (M && M.match >= 0.9)) ? 'medium' : 'low';
     return {
       ok: true, weave: wv, ends_per_cm: 10 * P / se, picks_per_cm: 10 * P / sp, epi: 25.4 * P / se, ppi: 25.4 * P / sp,
-      end_spacing_mm: se / P, pick_spacing_mm: sp / P, axes_deg: Math.round(axesDeg * 10) / 10, swapped: swapped,
+      end_spacing_mm: se / P, pick_spacing_mm: sp / P, thread_px: Math.round(Math.min(se, sp) * 10) / 10, axes_deg: Math.round(axesDeg * 10) / 10, swapped: swapped,
       repeat_threads: A, unexplained: Math.round(best.un * 1000) / 1000, float_elongation: Math.round(elong * 100) / 100,
       matrix_strength: M ? Math.round(M.strength * 1000) / 1000 : null, matrix: M && M.ideal ? (swapped ? turnMatrix(M.ideal) : M.ideal) : null, matrix_read: M ? (swapped ? turnMatrix(M.cells) : M.cells) : null, matrix_match: M ? M.match : null,
       cover: { warp: fold(ex, se), weft: fold(ey, sp) }, thread_evidence: Math.round(best.te * 10) / 10, read_by: M ? M.read_by : null,
@@ -1211,7 +1222,7 @@
     return (Math.min(d.chroma, l.chroma) > 10 && dh > 40) || (Math.min(d.chroma, l.chroma) < 8 && Math.max(d.chroma, l.chroma) > 18);
   }
   // how much the recogniser's verdict counts (log-odds scale, capped): set from the held-out real photos
-  var MODEL_W = { k: 0.9, cap: 3.2 };
+  var MODEL_W = { k: 0.6, cap: 1.6 };
   // the measured knit hints and the recogniser's structure answer, multiplied (each a likelihood) and renormalised
   function blendKnit(sug, mk) {
     var map = { single_jersey: 'single_jersey', pique: 'pique', rib: 'rib', interlock: 'interlock', fleece: 'fleece_or_terry', terry: 'fleece_or_terry', purl: 'purl' };
@@ -1246,6 +1257,12 @@
     var ev = [], z = 0;
     var add = function (wgt, why) { z += wgt; ev.push({ says: wgt > 0 ? 'woven' : 'knit', weight: Math.round(Math.abs(wgt) * 100) / 100, why: why }); };
     add(-0.3, 'starting point: knitted, the cloth this scanner is mostly used on');
+    // What the photo can carry. Threads only a few pixels apart AND loops too small to show their legs (the
+    // user's own factory swatches shot from a hand's length: 3-5 px a thread) — knits and wovens then read alike:
+    // a weave is found on both, "no legs" on both. The evidence stays as it is (taking it out cost 11 points on
+    // the held-out photos, where such fine wovens are mostly read right), but the answer is never called sure
+    // and the page asks for a closer photo.
+    var fineThreads = !!(wv && wv.thread_px != null && wv.thread_px < 4.5), smallLoops = !!(kr && kr.loop_px != null && kr.loop_px < 7);
     if (leg && leg.legs) add(-2.2 * Math.min(1, (leg.score - 0.05) / 0.05), 'loop legs: the texture leans one way, then the other, across every wale');
     else if (leg && leg.score < 0.035 && (wv || (kr && kr.ok))) add(0.8 * Math.min(1, (0.035 - leg.score) / 0.025), 'no loop legs: the texture runs straight along two axes');
     if (!wv) add(-0.8, 'no two thread sets at right angles were found');
@@ -1261,10 +1278,11 @@
     var denimLike = !!(blue && col.two_tone && col.light.lab[0] > col.dark.lab[0] + 18 && yarnColours(col));
     if (wv && denimLike && wv.weave.cls === 'twill') add(2.0, 'an indigo thread set over a light one, in a twill — dyed warp, white weft');
     else if (wv && yarnColours(col)) add(0.4, 'the two thread sets are different colours');
-    var md = r.model || null;
+    var md = r.model || null, zPhys = z, zModel = 0;
     if (md && md.family) {
       var pm = Math.max(0.03, Math.min(0.97, md.family.woven));
       var zm = Math.max(-MODEL_W.cap, Math.min(MODEL_W.cap, MODEL_W.k * Math.log(pm / (1 - pm))));
+      zModel = zm;
       if (Math.abs(zm) >= 0.05) add(zm, 'the recogniser trained on thousands of knitted and woven cloths reads it as ' + (pm >= 0.5 ? 'woven' : 'knitted') + ' (' + Math.round(100 * Math.max(pm, 1 - pm)) + '%)');
     }
     var pW = 1 / (1 + Math.exp(-z));
@@ -1292,7 +1310,12 @@
     cands.sort(function (a, b) { return b.p - a.p; });
     var family = pW >= 0.5 ? 'woven' : 'knit';
     var best = cands.filter(function (c) { return c.family === family; })[0] || cands[0];
-    return { family: family, p_woven: Math.round(pW * 1000) / 1000, p_knit: Math.round((1 - pW) * 1000) / 1000, best: best, candidates: cands.slice(0, 6), evidence: ev, legs: leg, denim_like: denimLike };
+    // Sure only when it is decided by a margin AND the measured evidence and the recogniser do not pull opposite
+    // ways AND no strong item says the other family (clear loop legs called woven, a denim called knitted). Unsure,
+    // the page asks instead of declaring: a confident wrong answer is worse than a question.
+    var conflict = (md && zPhys * zModel < 0 && Math.abs(zPhys) < 2.5) || (family === 'woven' && leg && leg.legs && leg.score > 0.08) || (family === 'knit' && denimLike);
+    var sure = Math.abs(pW - 0.5) >= 0.3 && !conflict && !(fineThreads && smallLoops);
+    return { family: family, p_woven: Math.round(pW * 1000) / 1000, p_knit: Math.round((1 - pW) * 1000) / 1000, sure: sure, too_far: fineThreads && smallLoops, best: best, candidates: cands.slice(0, 6), evidence: ev, legs: leg, denim_like: denimLike };
   }
 
   // ── any ID-1 card as the scale (a bank card, an NID card, a driving licence) ──────────
@@ -1520,6 +1543,36 @@
       }
       if (!clear.length) return { error: 'The card covers most of the photo. Lay it at one edge of the cloth, with the cloth filling the rest.', code: 'card_covers' };
     }
+    // Where is the photo sharp? A real cloth photographed on a table is draped and wrinkled: part of it is in
+    // focus, part is not, and a patch read in the blur reads nothing — or worse, something. Each candidate spot is
+    // scored by its fine detail against its contrast (a Laplacian, normalised), and the sharpest are read first.
+    var sharpAt = function (fx, fy) {
+      var cxs = (sw - N) * fx + N / 2, cys = (sh - N) * fy + N / 2, R2 = Math.max(24, Math.round(N * 0.22)), e2 = 0, m1 = 0, m2b = 0, nn = 0;
+      for (var yy2 = Math.round(cys - R2); yy2 < cys + R2; yy2 += 2) for (var xx2 = Math.round(cxs - R2); xx2 < cxs + R2; xx2 += 2) {
+        if (xx2 < 1 || yy2 < 1 || xx2 >= sw - 1 || yy2 >= sh - 1) continue;
+        var q3 = yy2 * sw + xx2, v3 = small.data[q3], l3 = 4 * v3 - small.data[q3 - 1] - small.data[q3 + 1] - small.data[q3 - sw] - small.data[q3 + sw];
+        e2 += l3 * l3; m1 += v3; m2b += v3 * v3; nn++;
+      }
+      if (!nn) return 0;
+      m1 /= nn; var vr = m2b / nn - m1 * m1;
+      return vr > 0.0002 ? e2 / nn / vr : 0;
+    };
+    if (!avoidS) {
+      // interior spots only (a spot at the photo's edge leaves no room to turn the patch or read the threads), and
+      // only when the photo is unevenly sharp: on an evenly focused photo the usual centre-first order reads best
+      // (held-out real photos: the sharpest-first order on every photo cost 10 points, 67.7% -> 57.5%)
+      var grid = [], FR = [0.2, 0.35, 0.5, 0.65, 0.8];
+      for (var gy2 = 0; gy2 < 5; gy2++) for (var gx2 = 0; gx2 < 5; gx2++) grid.push([FR[gx2], FR[gy2]]);
+      grid.forEach(function (q4) { q4.s = sharpAt(q4[0], q4[1]); });
+      var sMax = Math.max.apply(null, grid.map(function (q4) { return q4.s; }));
+      var sMed = grid.map(function (q4) { return q4.s; }).sort(function (a2, b2) { return a2 - b2; })[12];
+      if (sMax > 0 && sMax > 1.6 * sMed) {
+        var sc0 = sharpAt(0.5, 0.5);
+        // the centre first when it is nearly as sharp as the best; then the sharpest others
+        var ranked = grid.filter(function (q4) { return q4.s >= sMax * 0.55; }).sort(function (a2, b2) { return b2.s - a2.s; });
+        spots = (sc0 >= sMax * 0.85 ? [[0.5, 0.5]] : []).concat(ranked.map(function (q4) { return [q4[0], q4[1]]; })).slice(0, 6);
+      }
+    }
     for (var i = 0; i < spots.length; i++) {
       var cx = (sw - N) * spots[i][0] + N / 2, cy = (sh - N) * spots[i][1] + N / 2;
       var patch = rotPatch(small.data, sw, sh, cx, cy, N, 0, Ps);
@@ -1547,7 +1600,7 @@
     var legs = null; try { legs = legTest(gray, w, h, spot[0], spot[1], legAxis, isFinite(finest) ? finest : null, avoid); } catch (_) { legs = null; }
     var idCard = idc ? { type: 'id', px_per_mm: Math.round(idc.pxPerMm * 10) / 10, corners: idc.corners.map(function (q) { return [Math.round(q[0]), Math.round(q[1])]; }), fabric_at: 'around the card' } : null;
     // held sideways the knit reader swaps wales and courses back; the loop shape is read the same way
-    var knitRead0 = best ? { ok: true, regularity: best.m.regularity, ratio: best.m.cpc / best.m.wpc < 0.78 ? best.m.wpc / best.m.cpc : best.m.cpc / best.m.wpc } : { ok: false };
+    var knitRead0 = best ? { ok: true, regularity: best.m.regularity, ratio: best.m.cpc / best.m.wpc < 0.78 ? best.m.wpc / best.m.cpc : best.m.cpc / best.m.wpc, loop_px: Math.min(10 * Ps / best.m.wpc, 10 * Ps / best.m.cpc) * small.scale } : { ok: false };
     var kind0 = best ? fabricKind(best.flat, best.m) : { kind: 'none', scores: {} };
     // (the texture-orientation verdict is left out here: on a patch not yet turned square to the cloth it reads a
     // turned knit's legs as a one-way diagonal)
@@ -1607,7 +1660,7 @@
     var m2 = best.m, f = features(best.flat, m2), kind = fabricKind(best.flat, m2);
     var col = colourPlain(srgb, cw, ch, avoidC);
     var knitSug = []; try { knitSug = suggest(f); } catch (_) {}
-    var knitRead = { ok: true, regularity: m2.regularity, ratio: m2.cpc / m2.wpc };
+    var knitRead = { ok: true, regularity: m2.regularity, ratio: m2.cpc / m2.wpc, loop_px: Math.min(10 * Ps / m2.wpc, 10 * Ps / m2.cpc) * small.scale };
     var idFin = { kind: kind, woven: wov && wov.ok ? stripFlat(wov) : wov, two_tone: tone, legs: legs, knit_read: knitRead, knit_suggest: knitSug };
     var idF = identify(idFin);
     return {

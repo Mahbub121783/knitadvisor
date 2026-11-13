@@ -48,3 +48,6 @@ __pycache__/
 /*.xlsm
 /*.xls
 /*.pdf
+
+# photos people send to teach or debug the scanner: private, server-side only
+backend/uploads/

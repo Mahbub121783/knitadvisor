@@ -201,6 +201,48 @@ router.post('/debug', debugLimiter, async (req, res) => {
   } catch (err) { fail(res, 'debug', err, 'Could not keep the frame.'); }
 });
 
+// Teaching the scanner: a small crop of the cloth (never the whole photo) and what it really is, as the person
+// confirmed or corrected it. Kept privately on the server (never served) as training data for the recogniser —
+// the photos of real cloth, taken in real light by real phones, that no download can supply.
+const teachLimiter = createRateLimiter({ name: 'scan-teach', max: 120, windowMs: 60 * 60 * 1000, message: 'Too many corrections sent. Try again later.' });
+const TEACH = {
+  family: ['knit', 'woven'],
+  structure: ['single_jersey', 'pique', 'rib', 'interlock', 'fleece', 'terry', 'purl', 'plain', 'twill', 'satin', 'basket', 'oxford', 'rib_weave', 'denim', 'other'],
+  side: ['face', 'back'],
+};
+router.post('/teach', teachLimiter, async (req, res) => {
+  try {
+    const b = req.body || {};
+    let userId = null;
+    const user = await loadUser(req).catch(() => null);
+    if (user) userId = user.id;
+    if (!userId && b.pair) { const p = await pairs.live(b.pair); if (p) userId = p.user_id; }
+    if (!userId) return res.status(401).json({ success: false, error: 'Sign in to teach the scanner.' });
+    const m = /^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/.exec(String(b.image || ''));
+    if (!m || m[1].length > 400000) return res.status(400).json({ success: false, error: 'Send one small JPEG crop.' });
+    const buf = Buffer.from(m[1], 'base64');
+    if (!(buf[0] === 0xff && buf[1] === 0xd8)) return res.status(400).json({ success: false, error: 'Not a JPEG.' });
+    const l = b.label && typeof b.label === 'object' ? b.label : {};
+    const label = {
+      family: TEACH.family.includes(l.family) ? l.family : null,
+      structure: TEACH.structure.includes(l.structure) ? l.structure : null,
+      side: TEACH.side.includes(l.side) ? l.side : null,
+    };
+    if (!label.family) return res.status(400).json({ success: false, error: 'Say whether the cloth is knitted or woven.' });
+    const a = b.auto && typeof b.auto === 'object' ? b.auto : {};
+    const auto = { family: TEACH.family.includes(a.family) ? a.family : null, p_woven: num(a.p_woven, 0, 1), structure: String(a.structure || '').slice(0, 40) || null };
+    const fs = require('fs'), path = require('path');
+    const day = new Date().toISOString().slice(0, 10);
+    const dir = path.join(__dirname, '..', 'uploads', 'scan-teach', day);
+    fs.mkdirSync(dir, { recursive: true });
+    const name = `${new Date().toISOString().replace(/[:.]/g, '-')}-u${userId}-${Math.random().toString(36).slice(2, 7)}`;
+    fs.writeFileSync(path.join(dir, name + '.jpg'), buf);
+    fs.writeFileSync(path.join(dir, name + '.json'), JSON.stringify({ user_id: userId, at: new Date().toISOString(), label, auto,
+      confirmed: !!b.confirmed, corrected: !!(auto.family && auto.family !== label.family), scale: ['card', 'id-card', 'lens', 'focus', 'assumed'].includes(b.scale) ? b.scale : null }, null, 1));
+    res.json({ success: true });
+  } catch (err) { fail(res, 'teach', err, 'Could not keep the correction.'); }
+});
+
 router.get('/history', requireUser, async (req, res) => {
   try { res.json({ success: true, scans: await scans.list(req.user.id, 30) }); }
   catch (err) { fail(res, 'history', err, 'Could not load your scans.'); }

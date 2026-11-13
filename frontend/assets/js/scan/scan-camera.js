@@ -23,6 +23,21 @@
  * is kept, so a moving hand still yields one frame without motion blur. The
  * loop count itself does not care where the fabric sits in the frame, only
  * that it is sharp. Tapping the picture takes the burst at once.
+ *
+ * THE BACK, ONLY WHEN IT IS THE BACK (2026-11-13). After the face, turning the
+ * cloth over is itself movement, and the old timer shot whatever was in front
+ * of the lens mid-turn. The back is now taken by watching the turn happen:
+ *   turn     the picture is disturbed (the cloth moves, hands cross it, the
+ *            texture leaves the frame) — nothing is taken while it is;
+ *   settle   then it goes quiet: frame-to-frame change near zero for 0.6 s,
+ *            the phone level and not rotating (its motion sensor), and the lens
+ *            finished focusing (sharpness at its peak, no longer rising);
+ *   check    a picture that is still the face (nothing was turned) is refused;
+ *   shoot    the burst, sharpest frame kept.
+ * The lens also gives the scale (scan-optics.js): its focus readout in
+ * dioptres and the thin-lens law, calibrated on this phone by every photo that
+ * had a card in it. And the phone's tilt is watched: a photo taken at an angle
+ * squeezes the counts one way.
  */
 (function (root) {
   'use strict';
@@ -31,6 +46,8 @@
   var MIN_PX_PER_MM = 9.5, GOOD_PX_PER_MM = 13, MAX_SIDE = 2400;
   var TICK_MS = 100, HOLD_TICKS = 2, LOOP_EVERY = 4, LIVE_MIN_PXMM = 6.5, FREE_AFTER = 4, FREE_HOLD = 3;
   var BURST_N = 6, BURST_GAP_MS = 55;     // six frames over ~0.3 s; the sharpest is analysed
+  var STILL_TICKS = 6, MAX_TILT = 12, FACE_STILL = 0.06;
+  var OPT = root.KAScanOptics || null;
 
   var CSS = '.kc{position:fixed;inset:0;z-index:2000;background:#000;color:#fff;font-family:var(--head,system-ui);overflow:hidden;touch-action:none}' +
     '.kc video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}.kc canvas.ov{position:absolute;inset:0;width:100%;height:100%}' +
@@ -72,6 +89,23 @@
     var live = null, tickN = 0, fullCanvas = document.createElement('canvas'), fg = fullCanvas.getContext('2d', { willReadFrequently: true }), moves = [];
     var stream = null, track = null, imageCapture = null, captureW = 0, timer = null, closed = false;
     var okTicks = 0, prev = null, sharpBest = 0, armed = true, busy = false, lastPrint = null, lostTicks = 0, capturedAt = 0, movedSince = false, noCard = 0;
+    var flip = null, faceThumb = null, faceTaken = false, motion = null;
+    // the phone's own motion sensor: how far from flat it is held, and whether it is turning
+    var onMotion = function (e) {
+      var a = e.accelerationIncludingGravity, r = e.rotationRate;
+      if (!a || a.x == null) return;
+      var gm = Math.hypot(a.x, a.y, a.z) || 9.81;
+      motion = { tilt: Math.acos(Math.min(1, Math.abs(a.z) / gm)) * 180 / Math.PI, ax: a.x / gm, ay: a.y / gm, rot: r && r.alpha != null ? Math.hypot(r.alpha, r.beta || 0, r.gamma || 0) : null, t: Date.now() };
+    };
+    var startMotion = function () { window.addEventListener('devicemotion', onMotion); };
+    try {
+      if (window.DeviceMotionEvent && typeof DeviceMotionEvent.requestPermission === 'function') DeviceMotionEvent.requestPermission().then(function (st) { if (st === 'granted') startMotion(); }).catch(function () {});
+      else if (window.DeviceMotionEvent) startMotion();
+    } catch (_) {}
+    function level() {
+      if (!motion || Date.now() - motion.t > 1500) return null;
+      return { ok: motion.tilt <= MAX_TILT, tilt: motion.tilt, still: motion.rot == null || motion.rot < 25, ax: motion.ax, ay: motion.ay };
+    }
 
     function setStepUI() {
       var st = steps[stepIx];
@@ -85,6 +119,7 @@
       if (closed) return;
       closed = true;
       clearTimeout(timer);
+      window.removeEventListener('devicemotion', onMotion);
       if (stream) stream.getTracks().forEach(function (t) { t.stop(); });
       root.remove();
       document.documentElement.style.overflow = '';
@@ -231,12 +266,12 @@
     // no card: is the fabric filling the frame steady, sharp and lit? (the photo is measured with an estimated scale)
     var thumbPrev = null, freeBest = 0;
     function lookFree(g, sw, sh, vw, vh) {
-      var T = 48, th = new Float32Array(T * T), mean = 0;
-      for (var y = 0; y < T; y++) for (var x = 0; x < T; x++) { var v = g[Math.floor((y + 0.5) * sh / T) * sw + Math.floor((x + 0.5) * sw / T)]; th[y * T + x] = v; mean += v; }
+      var th = thumbOf(g, sw, sh), T = 48, mean = 0, x;
+      for (var y = 0; y < T * T; y++) mean += th[y];
       mean /= T * T;
       var diff = 0; if (thumbPrev) { for (var i = 0; i < th.length; i++) diff += Math.abs(th[i] - thumbPrev[i]); diff /= th.length; } else diff = 1;
       thumbPrev = th;
-      var steady = { ok: diff < 0.12, hint: 'Point at the fabric' };
+      var steady = { ok: diff < FACE_STILL, hint: 'Hold still a moment' };
       var light = { ok: mean > 0.08 && mean < 0.94, hint: mean <= 0.08 ? 'Too dark — more light' : 'Too bright — move the light' };
       var side = Math.min(vw, vh) * 0.32;
       cg.drawImage(video, (vw - side) / 2, (vh - side) / 2, side, side, 0, 0, 192, 192);
@@ -247,10 +282,74 @@
       var sharpV = varc > 0.0004 ? e / (190 * 190) / varc : 0;
       if (steady.ok) freeBest = Math.max(freeBest * 0.995, sharpV);
       var texture = varc > 0.00025;                       // dark, low-contrast cloth still has this much
+      var sig = texSig(gs, 192);
       var sharp = { ok: texture, hint: 'Fill the frame with the fabric, about 10 cm away' };
-      return { steady: steady, light: light, sharp: sharp };
+      return { steady: steady, light: light, sharp: sharp, diff: diff, th: th, sharpV: sharpV, sig: sig };
     }
 
+    // the scene in 48 x 48 block averages: the layout and the light, not the weave's phase
+    function thumbOf(g, sw, sh) {
+      var T = 48, th = new Float32Array(T * T);
+      for (var by = 0; by < T; by++) for (var bx = 0; bx < T; bx++) {
+        var y0 = Math.floor(by * sh / T), y1 = Math.floor((by + 1) * sh / T), x0 = Math.floor(bx * sw / T), x1 = Math.floor((bx + 1) * sw / T), t = 0, n = 0;
+        for (var y = y0; y < y1; y++) for (var x = x0; x < x1; x++) { t += g[y * sw + x]; n++; }
+        th[by * T + bx] = n ? t / n : 0;
+      }
+      return th;
+    }
+    // the cloth's texture in numbers that do not move with the hand: how its edges point (16 directions,
+    // energy-weighted) and how fine they are — a jersey's back, a twill's back read differently from the face
+    function texSig(gs, S) {
+      var B = 16, h = new Float32Array(B + 2), tot = 0, e1 = 0, e4 = 0, x, y;
+      for (y = 1; y < S - 1; y++) for (x = 1; x < S - 1; x++) {
+        var k = y * S + x, gx = gs[k + 1] - gs[k - 1], gy = gs[k + S] - gs[k - S], e = gx * gx + gy * gy, a = Math.atan2(gy, gx);
+        if (a < 0) a += Math.PI;
+        h[Math.min(B - 1, Math.floor(a / Math.PI * B))] += e; tot += e;
+      }
+      for (var b = 0; b < B; b++) h[b] /= tot || 1;
+      for (y = 4; y < S - 4; y += 2) for (x = 4; x < S - 4; x += 2) { var q = y * S + x; e1 += (gs[q + 1] - gs[q]) * (gs[q + 1] - gs[q]); e4 += (gs[q + 4] - gs[q]) * (gs[q + 4] - gs[q]); }
+      h[B] = 0.5 * e1 / (e1 + e4 || 1); h[B + 1] = 0.5 * e4 / (e1 + e4 || 1);
+      return h;
+    }
+    function cosSim(a, b) { if (!a || !b) return 0; var s = 0, na = 0, nb = 0; for (var i = 0; i < a.length; i++) { s += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; } return na && nb ? s / Math.sqrt(na * nb) : 0; }
+    function sigNow() {
+      var vw = video.videoWidth, vh = video.videoHeight; if (!vw) return null;
+      var side = Math.min(vw, vh) * 0.32;
+      cg.drawImage(video, (vw - side) / 2, (vh - side) / 2, side, side, 0, 0, 192, 192);
+      return texSig(KS.toGray(cg.getImageData(0, 0, 192, 192).data, 192, 192), 192);
+    }
+    // the back, watched: disturbed by the turn, then quiet, level and focused — and not the face again
+    function flipTick(F) {
+      var now = Date.now(), lv = level();
+      if (!flip) flip = { phase: 'turn', t0: now, dist: 0, still: 0, peak: 0, hist: [] };
+      var el = now - flip.t0, same = faceThumb ? cosSim(F.sig, faceThumb) : 0;
+      if (flip.phase === 'turn') {
+        if (F.diff > 0.035 || !F.sharp.ok || (lv && !lv.still)) flip.dist++;
+        if (flip.dist >= 2 && el > 700) { flip.phase = 'settle'; flip.still = 0; flip.peak = 0; flip.hist = []; }
+        return { msg: el > 12000 ? 'Turn the cloth over — or tap to shoot, or Skip back' : 'Turn the cloth over — back side up', cls: '', ring: 0 };
+      }
+      var lvOk = !lv || (lv.ok && lv.still);
+      var quiet = F.diff < 0.022 && F.sharp.ok && F.light.ok && lvOk;
+      if (F.diff > 0.05) { flip.still = 0; flip.peak = 0; flip.hist = []; } else if (quiet) flip.still++;
+      flip.hist.push(F.sharpV); if (flip.hist.length > 4) flip.hist.shift();
+      if (quiet) flip.peak = Math.max(flip.peak, F.sharpV);
+      var rising = flip.hist.length >= 3 && flip.hist[flip.hist.length - 1] > flip.hist[0] * 1.08;
+      var focused = F.sharpV >= flip.peak * 0.85 && !rising;
+      if (flip.still >= STILL_TICKS && focused) {
+        // the same texture as the face, edge for edge: nothing was turned (a cloth alike on both sides: tap to shoot)
+        if (faceThumb && same > 0.997) { flip = { phase: 'turn', t0: now, dist: 0, still: 0, peak: 0, hist: [] }; return { msg: 'Same as the face — turn the cloth over (alike both sides? tap)', cls: 'warn', ring: 0 }; }
+        flip.phase = 'ready';
+        return { msg: 'Capturing the back…', cls: 'ok', ring: 1, go: true };
+      }
+      var why = !F.light.ok ? F.light.hint : !F.sharp.ok ? 'Fill the frame with the back of the cloth' : lv && !lv.ok ? 'Hold the phone flat over the cloth (' + Math.round(lv.tilt) + '° off)' : lv && !lv.still ? 'Hold the phone still' : rising ? 'Focusing…' : 'Hold still…';
+      return { msg: why, cls: quiet ? 'ok' : 'warn', ring: Math.min(1, flip.still / STILL_TICKS) };
+    }
+    // what the lens says about distance and scale, for the screen
+    function lensText(W) {
+      var fm = focusMm(); if (!fm || !OPT) return null;
+      var D = 1000 / fm, cal = OPT.calibrated(track && track.label, D, W), px = cal ? cal.pxPerMm : OPT.thinLens({ W: W, u_mm: fm });
+      return { text: 'Lens ' + (fm / 10).toFixed(1) + ' cm · ' + D.toFixed(1) + ' D · ' + px.toFixed(0) + ' px/mm' + (cal ? ' ✓' : ''), px: px, cal: !!cal };
+    }
     function corr(a, b) {
       if (!a || !b || a.length !== b.length || a.length < 10) return 0;
       var ma = 0, mb = 0, n = a.length, i;
@@ -262,7 +361,7 @@
     }
 
     // ── drawing the guide ─────────────────────────────────────────────
-    function draw(L, state) {
+    function draw(L, state, lv) {
       var W = ov.clientWidth, Hh = ov.clientHeight, dpr = window.devicePixelRatio || 1;
       if (ov.width !== Math.round(W * dpr)) { ov.width = Math.round(W * dpr); ov.height = Math.round(Hh * dpr); }
       var g = ov.getContext('2d');
@@ -277,6 +376,15 @@
       [[bx, by, 1, 1], [bx + box, by, -1, 1], [bx + box, by + box, -1, -1], [bx, by + box, 1, -1]].forEach(function (k) {
         g.beginPath(); g.moveTo(k[0] + k[2] * arm, k[1]); g.lineTo(k[0], k[1]); g.lineTo(k[0], k[1] + k[3] * arm); g.stroke();
       });
+      lv = lv || level();
+      if (lv) {
+        // a bubble level: the dot sits in the ring when the phone is flat over the cloth
+        var R = 22, cx0 = W - R - 18, cy0 = ry + R + 70, ok = lv.ok;
+        g.lineWidth = 2; g.strokeStyle = '#ffffffaa'; g.beginPath(); g.arc(cx0, cy0, R, 0, Math.PI * 2); g.stroke();
+        g.beginPath(); g.arc(cx0, cy0, R * MAX_TILT / 45, 0, Math.PI * 2); g.strokeStyle = ok ? '#2BD47D' : '#ffffff66'; g.stroke();
+        var bx2 = cx0 + Math.max(-1, Math.min(1, -lv.ax * 2)) * R, by2 = cy0 + Math.max(-1, Math.min(1, lv.ay * 2)) * R;
+        g.beginPath(); g.arc(bx2, by2, 6, 0, Math.PI * 2); g.fillStyle = ok ? '#2BD47D' : '#FFB020'; g.fill();
+      }
       if (!L || !L.found) return;
       // the card as seen, mapped from the small frame to the screen (object-fit: contain)
       var s = Math.min(W / L.vw, Hh / L.vh), ox = (W - L.vw * s) / 2, oy = (Hh - L.vh * s) / 2, f = L.vw / L.sw;
@@ -348,6 +456,8 @@
       var NEED = ['distance', 'straight', 'light'];
       var allOk = L.found && NEED.every(function (n) { return L[n] && L[n].ok; });
       lastState = names.map(function (n) { return n[1] + ':' + (n[0] === 'found' ? L.found : !!(L[n[0]] && L[n[0]].ok)); }).join(' ');
+      var backFlow = steps[stepIx].kind === 'back' && faceTaken;
+      if (backFlow && !L.found) armed = true;                // the turn itself is watched below
       // waiting for a new spot after a photo
       if (!armed) {
         if (!L.found) lostTicks++; else lostTicks = 0;
@@ -368,10 +478,19 @@
       if (!L.found) {
         noCard++;
         if (noCard < FREE_AFTER || !L.free) { okTicks = 0; setRing(0); draw(L, 'idle'); say('Point at the fabric — or tap to shoot'); return; }
-        // free mode: no card — the fabric fills the frame; capture when steady, sharp and lit
-        var F = L.free, fn = [['sharp', 'Fabric in view'], ['steady', 'Pointed'], ['light', 'Light']];
-        checksEl.innerHTML = '<span>No card · scale estimated</span>' + fn.map(function (n) { var ok = F[n[0]].ok; return '<span class="' + (ok ? 'ok' : 'bad') + '">' + (ok ? '✓ ' : '') + n[1] + '</span>'; }).join('');
-        draw(L, 'idle');
+        // free mode: no card — the fabric fills the frame; capture when steady, sharp, lit and level
+        var F = L.free, lv = level(), fn = [['sharp', 'Fabric in view'], ['steady', 'Still'], ['light', 'Light']];
+        F.level = lv ? { ok: lv.ok, hint: 'Hold the phone flat over the cloth (' + Math.round(lv.tilt) + '° off)' } : { ok: true };
+        if (lv) fn.push(['level', 'Level ' + Math.round(lv.tilt) + '°']);
+        var lt = lensText(Math.min(MAX_SIDE, Math.max(L.vw, L.vh)));
+        checksEl.innerHTML = '<span>' + (lt ? lt.text : 'No card · scale estimated') + '</span>' + fn.map(function (n) { var ok = F[n[0]].ok; return '<span class="' + (ok ? 'ok' : 'bad') + '">' + (ok ? '✓ ' : '') + n[1] + '</span>'; }).join('');
+        draw(L, 'idle', lv);
+        if (backFlow) {
+          var ft = flipTick(F);
+          setRing(ft.ring); say(ft.msg, ft.cls);
+          if (ft.go) capture(false, L);
+          return;
+        }
         var allF = fn.every(function (n) { return F[n[0]].ok; });
         if (allF) {
           okTicks++;
@@ -387,6 +506,8 @@
         return;
       }
       noCard = 0;
+      // the back with the card on it: the card must have stopped moving too
+      if (backFlow && L.steady && !L.steady.ok) allOk = false;
       if (allOk) {
         okTicks++;
         setRing(okTicks / HOLD_TICKS);
@@ -426,7 +547,9 @@
           scores.push(Math.round(sc * 100) / 100);
           if (!best || sc > best.s) best = { c: c, s: sc };
           if (++i < n) return setTimeout(shot, gap);
-          resolve({ rgba: best.c.getContext('2d').getImageData(0, 0, W, H).data, w: W, h: H, focus_mm: focusMm(),
+          var lvl = level();
+          resolve({ rgba: best.c.getContext('2d').getImageData(0, 0, W, H).data, w: W, h: H, focus_mm: focusMm(), cam_label: track && track.label || null,
+            tilt_deg: lvl ? Math.round(lvl.tilt * 10) / 10 : null,
             source: 'video ' + vw + '×' + vh + ', sharpest of ' + n + ' frames', burst: scores });
         })();
       });
@@ -435,7 +558,7 @@
       var vw = video.videoWidth, vh = video.videoHeight, k = Math.min(1, MAX_SIDE / Math.max(vw, vh));
       var c = document.createElement('canvas'); c.width = Math.round(vw * k); c.height = Math.round(vh * k);
       var g = c.getContext('2d'); g.drawImage(video, 0, 0, c.width, c.height);
-      return { rgba: g.getImageData(0, 0, c.width, c.height).data, w: c.width, h: c.height, source: 'video ' + vw + '×' + vh, focus_mm: focusMm() };
+      return { rgba: g.getImageData(0, 0, c.width, c.height).data, w: c.width, h: c.height, source: 'video ' + vw + '×' + vh, focus_mm: focusMm(), cam_label: track && track.label || null };
     }
     function grabPhoto() {
       if (!imageCapture || !imageCapture.takePhoto) return Promise.resolve(grabVideo());
@@ -465,12 +588,14 @@
       }).then(function (img) { return opts.onCapture(st.kind, img); }).then(function (res) {
         busy = false; setRing(0);
         if (!res || !res.ok) {
+          if (flip) flip = { phase: 'settle', t0: Date.now(), dist: 0, still: 0, peak: 0, hist: [] };
           say('Retake: ' + ((res && res.error) || 'not measurable'), 'warn');
           armed = false; movedSince = true; capturedAt = Date.now() - 2600;    // a short pause, then try again where it is
           lastPrint = L ? L.print : null;
           return;
         }
         if (navigator.vibrate) navigator.vibrate([30, 40, 30]);
+        if (st.kind === 'face') { faceThumb = sigNow(); faceTaken = true; flip = null; }
         say('✓ ' + (res.note || 'Captured'), 'ok');
         if (stepIx >= steps.length - 1) { busy = true; setTimeout(function () { close(true); }, 450); return; }   // last photo: straight to the result
         lastPrint = L ? L.print : null; armed = false; movedSince = false; capturedAt = Date.now(); lostTicks = 0;

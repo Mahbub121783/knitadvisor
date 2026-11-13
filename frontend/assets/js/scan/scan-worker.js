@@ -14,7 +14,7 @@
  * Message out: { id, r }  — the card measurement, or, with no card in the
  *              photo, the card-free one at the scale the page estimated.
  */
-self.importScripts('fabric-scan-core.js?v=20261113b', 'fabric-net.js?v=20261113a');
+self.importScripts('fabric-scan-core.js?v=20261113e', 'fabric-net.js?v=20261113a');
 
 var MODEL = '/assets/models/fabric-id-v1';
 var netP = null;
@@ -44,6 +44,17 @@ self.onmessage = function (e) {
       } catch (_) { /* the measured identification stands */ }
     }
     delete r._id;
+    // a small colour crop of the cloth read, kept with the result: if the person confirms or corrects what the
+    // cloth is, this crop (never the whole photo) is what teaches the recogniser
+    try { r._cropRGB = cropRGB(rgba, d.w, d.h, r._crop, 192); } catch (_) {}
     self.postMessage({ id: d.id, r: r });
   });
 };
+function cropRGB(rgba, w, h, c, S) {
+  var out = new Uint8ClampedArray(S * S * 4), f = c[2] / S;
+  for (var y = 0; y < S; y++) for (var x = 0; x < S; x++) {
+    var sx = Math.min(w - 1, Math.max(0, Math.floor(c[0] + (x + 0.5) * f))), sy = Math.min(h - 1, Math.max(0, Math.floor(c[1] + (y + 0.5) * f))), i = (sy * w + sx) * 4, o = (y * S + x) * 4;
+    out[o] = rgba[i]; out[o + 1] = rgba[i + 1]; out[o + 2] = rgba[i + 2]; out[o + 3] = 255;
+  }
+  return { w: S, h: S, data: out };
+}
