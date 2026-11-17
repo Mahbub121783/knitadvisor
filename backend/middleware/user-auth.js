@@ -98,7 +98,7 @@ async function requireUser(req, res, next) {
     return res.status(401).json({
       success: false,
       code: 'GUEST_LOCKED',
-      error: `${oa.label || 'Open access'}: the tools are open to everyone today, but saving and your own account need a free sign-in.`,
+      error: `${oa.label || 'Open access'}: the tools are open to everyone right now, but saving and your own account need a free sign-in.`,
     });
   }
   return res.status(401).json({

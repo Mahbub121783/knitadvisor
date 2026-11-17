@@ -24,7 +24,9 @@
  * A small JSON file in backend/tmp, not the database: every Passenger worker
  * reads the same file (checked every few seconds), it needs no migration, and
  * a deploy does not touch it (the FTP sync only deletes files it uploaded).
- * It switches itself off at the end time even if nobody remembers to.
+ * It can start at a set time (scheduled) or straight away, and it switches
+ * itself off at the end time even if nobody remembers to — or never, if the
+ * admin gives it no end time.
  *
  * Usage is appended to one line-per-call log per day, with the address
  * reduced to a salted hash: enough to count visitors, not to identify them.
@@ -68,9 +70,40 @@ function read() {
   return cache.state;
 }
 
+/**
+ * Where the switch stands right now:
+ *   off       — turned off (or never on)
+ *   scheduled — on, but the start time is still ahead
+ *   open      — guests are in
+ *   ended     — on, but the end time has passed (it closed by itself)
+ */
+function status(state, now) {
+  const s = state || read(), t = now || Date.now();
+  if (!s.enabled) return 'off';
+  if (s.until && Date.parse(s.until) <= t) return 'ended';
+  if (s.from && Date.parse(s.from) > t) return 'scheduled';
+  return 'open';
+}
+
 function active(state) {
-  const s = state || read();
-  return !!s.enabled && (!s.until || Date.now() < Date.parse(s.until));
+  return status(state) === 'open';
+}
+
+/** When the current (or last) period actually opened: the later of "turned on" and the scheduled start. */
+function openedAt(s) {
+  const st = s.started_at ? Date.parse(s.started_at) : null, f = s.from ? Date.parse(s.from) : null;
+  return f && (!st || f > st) ? f : st;
+}
+
+/** The last period that has finished, for "last open: …" in the panel. Null while one is open or ahead. */
+function lastPeriod(s, now) {
+  const st = status(s, now);
+  if (st === 'open' || st === 'scheduled') return null;
+  const start = openedAt(s);
+  const ends = [s.ended_at, s.until].filter(Boolean).map(Date.parse).filter(Number.isFinite);
+  const end = ends.length ? Math.min(...ends) : null;
+  if (!start || !end || end <= start) return null;
+  return { label: s.label, from: new Date(start).toISOString(), to: new Date(end).toISOString() };
 }
 
 /** Which scope (tool) a request belongs to, if open access covers it. */
@@ -110,20 +143,40 @@ function log(req, tool, route) {
   fs.appendFile(logFile(dhakaDay()), line, () => {});
 }
 
-/** The admin's settings, checked and written atomically. */
+function parseTime(v, what) {
+  if (v == null || v === '') return null;
+  const t = Date.parse(v);
+  if (!Number.isFinite(t)) throw new Error(`The ${what} time is not a valid date.`);
+  return t;
+}
+
+/**
+ * The admin's settings, checked and written atomically.
+ *   from  — when it opens (null or a past time = straight away)
+ *   until — when it closes by itself (null = only when turned off)
+ * Any start, any length: an hour this afternoon, next Friday 9 to 6, a trial week, no end.
+ */
 function set(input) {
+  const now = Date.now();
   const cur = read();
   const next = { ...cur };
-  if (typeof input.enabled === 'boolean') {
-    if (input.enabled && !cur.enabled) next.started_at = new Date().toISOString();
-    if (!input.enabled && cur.enabled) next.ended_at = new Date().toISOString();
-    next.enabled = input.enabled;
+  const before = status(cur, now);
+  if ('from' in input) {
+    const f = parseTime(input.from, 'start');
+    next.from = f && f > now ? new Date(f).toISOString() : null;
   }
   if ('until' in input) {
-    const u = input.until ? Date.parse(input.until) : null;
-    if (input.until && !Number.isFinite(u)) throw new Error('The end time is not a valid date.');
-    if (u && u <= Date.now() && next.enabled) throw new Error('The end time is already past.');
+    const u = parseTime(input.until, 'end');
     next.until = u ? new Date(u).toISOString() : null;
+  }
+  if (typeof input.enabled === 'boolean') next.enabled = input.enabled;
+  // The times are only checked when the admin is setting them. Saving the banner text
+  // after a period has closed by itself must not fail on that old, past end time.
+  const timing = typeof input.enabled === 'boolean' || 'from' in input || 'until' in input;
+  if (timing && next.enabled) {
+    const f = next.from ? Date.parse(next.from) : null, u = next.until ? Date.parse(next.until) : null;
+    if (u && u <= now) throw new Error('The end time is already past. Pick a later one.');
+    if (f && u && u <= f) throw new Error('The end time must come after the start time.');
   }
   if (typeof input.label === 'string') next.label = input.label.trim().slice(0, 60) || DEFAULTS.label;
   if (typeof input.message === 'string') next.message = input.message.trim().slice(0, 200) || DEFAULTS.message;
@@ -136,6 +189,14 @@ function set(input) {
     if (!(n >= 10 && n <= 5000)) throw new Error('The hourly limit must be between 10 and 5000 calls per visitor.');
     next.per_hour = n;
   }
+  const after = status(next, now);
+  if ((before === 'off' || before === 'ended') && (after === 'open' || after === 'scheduled')) {
+    next.started_at = new Date(now).toISOString();   // a new period
+    delete next.ended_at;
+  } else if (before === 'scheduled' && after === 'open') {
+    next.started_at = new Date(now).toISOString();   // a scheduled period opened early
+  }
+  if ((before === 'open' || before === 'scheduled') && after === 'off') next.ended_at = new Date(now).toISOString();
   next.updated_at = new Date().toISOString();
   fs.mkdirSync(DIR, { recursive: true });
   const tmp = FILE + '.' + process.pid + '.tmp';
@@ -170,8 +231,9 @@ function stats() {
     day, calls: rows.length, visitors: visitors.size, active_now: recent.size, devices,
     by_tool: Object.keys(SCOPES).map((id) => ({ id, label: SCOPES[id].label, calls: by[id] || 0 })),
     hours, latest: rows.slice(-25).reverse().map((r) => ({ t: new Date(r.t).toISOString(), tool: r.tool, route: r.r, device: r.d, visitor: r.v.slice(0, 6) })),
-    state: { ...s, active: active(s) }, scopes: Object.keys(SCOPES).map((id) => ({ id, label: SCOPES[id].label })),
+    state: { ...s, active: active(s), status: status(s, now), opened_at: openedAt(s) ? new Date(openedAt(s)).toISOString() : null, last_period: lastPeriod(s, now) },
+    scopes: Object.keys(SCOPES).map((id) => ({ id, label: SCOPES[id].label })),
   };
 }
 
-module.exports = { read, active, toolFor, guestUser, rateOk, log, set, publicStatus, stats, SCOPES, FILE };
+module.exports = { read, status, active, toolFor, guestUser, rateOk, log, set, publicStatus, stats, SCOPES, FILE };

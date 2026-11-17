@@ -84,6 +84,32 @@ const server = app.listen(0, '127.0.0.1', async () => {
     assert.throws(() => oa.set({ per_hour: 1 }), /between/);
     quiet('  It closes itself at the end time; a past end time and a silly limit are refused');
 
+    // 6b. any start, any length: scheduled, no end, re-opened after it closed
+    oa.set({ enabled: false });
+    const t0 = Date.now();
+    oa.set({ enabled: true, from: new Date(t0 + 1500).toISOString(), until: new Date(t0 + 3600e3).toISOString() });
+    assert.strictEqual(oa.status(), 'scheduled'); assert.strictEqual(oa.active(), false);
+    assert.strictEqual((await call('POST', '/api/carbon', { gsm: 180 })).body.code, 'AUTH_REQUIRED', 'scheduled is still closed');
+    assert.strictEqual(oa.stats().state.last_period, null, 'nothing has finished while one is ahead');
+    await wait(1700);
+    assert.strictEqual(oa.status(), 'open', 'it opens by itself at the start time');
+    assert.strictEqual((await call('POST', '/api/carbon', { gsm: 180 })).status, 200);
+    oa.set({ until: null });
+    assert.strictEqual(oa.status(), 'open', 'no end time: open until turned off');
+    assert.throws(() => oa.set({ from: new Date(Date.now() + 7200e3).toISOString(), until: new Date(Date.now() + 3600e3).toISOString() }), /after the start/);
+    oa.set({ enabled: false });
+    let lp = oa.stats().state.last_period;
+    assert(lp && Date.parse(lp.from) >= t0 + 1400 && Date.parse(lp.to) > Date.parse(lp.from), 'the last period runs from when it actually opened to when it was turned off');
+    oa.set({ enabled: true, from: null, until: new Date(Date.now() + 800).toISOString() });
+    const firstStart = oa.stats().state.started_at;
+    await wait(1000);
+    assert.strictEqual(oa.status(), 'ended');
+    oa.set({ label: 'Open Innovation' });   // saving the banner after it closed must not trip on the old end time
+    oa.set({ enabled: true, from: null, until: new Date(Date.now() + 3600e3).toISOString() });
+    assert.strictEqual(oa.status(), 'open', 'it opens again any time, straight after the last period ended');
+    assert.notStrictEqual(oa.stats().state.started_at, firstStart, 'a new period, not the old one');
+    quiet('  Any start, any length: scheduled, no end, re-opened after it closed by itself');
+
     // 7. usage is counted, with no address stored
     const st = oa.stats();
     assert(st.calls >= 5 && st.visitors >= 1 && st.by_tool.find((t) => t.id === 'carbon').calls >= 5);
