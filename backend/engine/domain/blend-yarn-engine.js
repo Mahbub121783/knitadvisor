@@ -62,10 +62,14 @@ const FIB = {
   nylon:     { label: 'Nylon (staple)', code: 'PA', dtex: 1.70, staple: 38, hair: 0.5, surface: 1.80, cellulosic: false, synthetic: true },
   acrylic:   { label: 'Acrylic',    code: 'PAN', dtex: 1.70, staple: 38, hair: 0.7,  surface: 1.40, cellulosic: false, synthetic: true },
   wool:      { label: 'Wool',       code: 'WO',  dtex: 4.10, staple: 65, hair: 1.3,  surface: 0.90, cellulosic: false, natural: true },
+  silk:      { label: 'Silk (spun)', code: 'SE', dtex: 1.10, staple: 60, hair: 0.35, surface: 2.20, cellulosic: false, natural: true },
+  linen:     { label: 'Linen',      code: 'LI',  dtex: 5.00, staple: 40, hair: 0.8,  surface: 0.90, cellulosic: true,  natural: true },
 };
 // tensile figures the tables do not carry (typical; marked so)
 const TYPICAL_TENSILE = { tencel: { tenacity: 0.40, extension: 14, modulus: 8.5, wet: { ten: 0.88, ext: 1.1, mod: 0.4 }, hot_wet: { ten: 0.85, ext: 1.1, mod: 0.4 }, note: 'lyocell, typical staple' } };
 const TYPICAL_BEND_GPA = 7;
+// the fibre book never weighed flax: its density is typical (1.50), not measured
+const TYPICAL_DENSITY = { linen: 1.5 };
 const FIBRE_IDS = Object.keys(FIB);
 
 const regainOf = (f) => { const d = FP[f]; if (!d) return 0; const c = d.regain_detail && d.regain_detail.commercial; return c != null ? c : (Array.isArray(d.regain) ? (d.regain[0] + d.regain[1]) / 2 : d.regain); };
@@ -90,7 +94,7 @@ function fibreData(id, spec) {
   const wet = t.wet || { ten: 1, ext: 1, mod: 1 }, hot = t.hot_wet || wet;
   const opt = (p.optical && p.optical.n_parallel) ? (p.optical.n_parallel + 2 * p.optical.n_perpendicular) / 3 : { cotton: 1.55, viscose: 1.53 }[id] || 1.53;
   return {
-    id, label: d.label, code: d.code, density: p.density, regain: regainOf(id), n_opt: opt,
+    id, label: d.label, code: d.code, density: typeof p.density === 'number' ? p.density : TYPICAL_DENSITY[id] || 1.4, density_basis: typeof p.density === 'number' ? 'measured' : 'typical', regain: regainOf(id), n_opt: opt,
     dtex: +spec.dtex > 0 ? +spec.dtex : d.dtex, staple: +spec.staple_mm > 0 ? +spec.staple_mm : d.staple,
     dtex_basis: +spec.dtex > 0 ? 'measured' : 'typical', staple_basis: +spec.staple_mm > 0 ? 'measured' : 'typical',
     tenacity: t.tenacity, ext: t.extension / 100, modulus: t.modulus, wor: t.work_of_rupture || null,
@@ -600,7 +604,7 @@ function composition(k, b, chain) {
   return {
     per_fibre: comps.map((c, i) => ({
       fibre: c.id, label: c.label, code: c.code, label_share_pct: r2(chain.label[i] * 100), dry_share_pct: r2(chain.dry[i] * 100), number_share_pct: r1((k.nPer[i] / k.n) * 100), area_share_pct: r1(k.area[i] * 100),
-      regain_pct: V(r2(chain.R[i]), '%', 'measured'), density: V(c.density, 'g/cm³', 'measured'), fibre_dtex: V(c.dtex, 'dtex', c.dtex_basis), staple_mm: V(c.staple, 'mm', c.staple_basis),
+      regain_pct: V(r2(chain.R[i]), '%', 'measured'), density: V(c.density, 'g/cm³', c.density_basis), fibre_dtex: V(c.dtex, 'dtex', c.dtex_basis), staple_mm: V(c.staple, 'mm', c.staple_basis),
       fibres_in_section: Math.round(k.nPer[i]), realization_pct: r1(chain.real[i] * 100), bale_issue_kg: r1(chain.issueCond[i]), issue_share_pct: r1((chain.issueCond[i] / chain.issueTot) * 100),
       if_weighed_at_label_ratio_pct: r1(chain.driftLabel[i] * 100),
       waste: { ...(c.id === 'cotton' ? (['combed', 'compact', 'siro', 'siro_compact'].includes(k.spinKey) ? WASTE.cotton_combed : WASTE.cotton_carded) : c.id === 'polyester' ? WASTE.polyester : c.id === 'wool' ? WASTE.wool : WASTE.man_made), basis: 'typical' },

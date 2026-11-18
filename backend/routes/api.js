@@ -1294,7 +1294,7 @@ router.get('/color/shade-check', (req, res) => {
 // calculation limit (the /api rate limiter still applies). Signed-in only,
 // like the calculator it sits beside.
 router.get('/studio/templates', requireUser, (req, res) => {
-  res.json({ success: true, templates: fabricStudio.listTemplates(), fibres: fabricStudio.FIBRES, limits: fabricStudio.LIMITS, machines: knitMachine.list(), melange: require('../engine/domain/melange-engine').catalogue(), blend: require('../engine/domain/blend-yarn-engine').catalogue(), chemistry: require('../engine/domain/yarn-chemistry-engine').catalogue(), recovery: require('../engine/domain/yarn-recovery-engine').catalogue(),
+  res.json({ success: true, templates: fabricStudio.listTemplates(), fibres: fabricStudio.FIBRES, limits: fabricStudio.LIMITS, machines: knitMachine.list(), melange: require('../engine/domain/melange-engine').catalogue(), blend: require('../engine/domain/blend-yarn-engine').catalogue(), chemistry: require('../engine/domain/yarn-chemistry-engine').catalogue(), recovery: require('../engine/domain/yarn-recovery-engine').catalogue(), fancy: require('../engine/domain/fancy-yarn-engine').catalogue(),
     warp: { templates: warpStudio.TEMPLATES, machines: Object.fromEntries(Object.entries(warpStudio.MACHINES).map(([k, m]) => [k, { label: m.label, gauges: m.gauges, bars: m.bars, speed: m.speed, use: m.use, beds: m.beds }])), fibres: Object.fromEntries(Object.entries(warpStudio.FIBRES).map(([k, f]) => [k, f.label])) } });
 });
 
@@ -1368,6 +1368,20 @@ router.post('/studio/fabric-look', requireUser, (req, res) => {
     if (err instanceof fabricLookEngine.LookError || (err && err.constructor && err.constructor.name === 'BlendError')) return res.status(400).json({ success: false, error: err.message });
     console.error('[studio] fabric look failed:', err);
     res.status(500).json({ success: false, error: 'The fabric look engine could not work this cloth out.' });
+  }
+});
+
+// Fancy yarns — slub, flame, nep, bouclé, chenille, air-jet textured and filament core-spun: the parts, mass, strength, evenness, diameter and
+// knitting limit the effect gives (engine/domain/fancy-yarn-engine.js). The Studio also runs it inside /studio/analyse (the `fancy` input).
+const fancyYarnEngine = require('../engine/domain/fancy-yarn-engine');
+router.get('/studio/fancy-yarn/catalogue', requireUser, (req, res) => res.json({ success: true, ...fancyYarnEngine.catalogue() }));
+router.post('/studio/fancy-yarn', requireUser, (req, res) => {
+  try {
+    res.json(fancyYarnEngine.analyse(req.body || {}));
+  } catch (err) {
+    if (err instanceof fancyYarnEngine.FancyError || (err && err.constructor && err.constructor.name === 'BlendError')) return res.status(400).json({ success: false, error: err.message });
+    console.error('[studio] fancy yarn failed:', err);
+    res.status(500).json({ success: false, error: 'The fancy yarn engine could not work this yarn out.' });
   }
 });
 

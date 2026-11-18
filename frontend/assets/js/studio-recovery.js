@@ -115,6 +115,22 @@
     var k = r.knitting, c = r.cloth;
     h += '<div class="ml-h">Knitting</div><dl class="ml-kv"><dt>Running tension</dt><dd>' + val(k.running_tension) + '</dd><dt>Yarn strain</dt><dd>' + val(k.yarn_strain) + '</dd><dt>Given back in finishing</dt><dd>' + val(k.returned_in_finishing) + '</dd><dt>Set left</dt><dd>' + val(k.set_left_in_the_yarn) + '</dd></dl><div class="ml-rm">' + esc(k.note) + '</div>';
     h += '<div class="ml-h">What it means for the cloth</div><dl class="ml-kv"><dt>Growth tendency</dt><dd><b>' + esc(c.growth_tendency) + '</b> (' + val(c.yarn_growth_after_1000_cycles) + ' after 1000 cycles)</dd><dt>Recovery</dt><dd>' + esc(c.recovery_class) + '</dd></dl><div class="ml-note">' + esc(c.note) + '</div>' + (c.elastane ? '<div class="ml-note"><b>Elastane ' + c.elastane.share_pct + ' %:</b> ' + esc(c.elastane.note) + '</div>' : '') + c.advice.map(function (a) { return '<div class="ml-note warn">⚠ ' + esc(a) + '</div>'; }).join('');
+    var cs = r.cloth_stretch;
+    if (cs) {
+      var W = cs.directions.width, L = cs.directions.length;
+      var gw = function (d) { return d.growth ? d.growth : { after_60s_pct: '—', after_1h_pct: '—', after_wash_pct: '—', held_at_pct: '—' }; };
+      h += '<div class="ml-h">Cloth stretch, growth and bagging — ' + esc(cs.kind_label) + '</div>' +
+        '<div class="ml-note">The stretch model of the cloth (loops first, then the yarn itself) is run with the recovery of THIS yarn: ' + esc(cs.source) + '. At the yarn strains the cloth puts in, the yarn recovers ' + cs.yarn_recovery_used.e1 + ' % from 1 %, ' + cs.yarn_recovery_used.e5 + ' % from 5 %, ' + cs.yarn_recovery_used.e10 + ' % from 10 %.</div>' +
+        table(['', 'Across (width)', 'Along (length)'], [
+          ['Jams at (stretch %)', W.jam_pct, L.jam_pct], ['Stretch at a loose load / form-fitting load %', W.stretch_loose_pct + ' / ' + W.stretch_form_fitting_pct, L.stretch_loose_pct + ' / ' + L.stretch_form_fitting_pct],
+          ['Held stretched at (%)', gw(W).held_at_pct, gw(L).held_at_pct], ['Growth after 60 s %', gw(W).after_60s_pct, gw(L).after_60s_pct], ['Growth after 1 h %', gw(W).after_1h_pct, gw(L).after_1h_pct], ['Growth after a wash %', gw(W).after_wash_pct, gw(L).after_wash_pct],
+          ['Bagging: a ' + W.bagging.pull_pct + ' % pull (knee, elbow) leaves, at once %', W.bagging.growth_quick_pct, L.bagging.growth_quick_pct], ['…after an hour %', W.bagging.growth_after_1h_pct, L.bagging.growth_after_1h_pct], ['…held an hour %', W.bagging.growth_held_1h_pct, L.bagging.growth_held_1h_pct], ['Bagging level', W.bagging.level, L.bagging.level]]) +
+        lineChart({ xmax: Math.max.apply(null, W.curve.map(function (c) { return c.stretch_pct; })), ymin: 0, ymax: Math.max(1, Math.max.apply(null, W.curve.map(function (c) { return c.growth_held_1h_pct; })) * 1.1), label: 'Growth against stretch, across the cloth', xl: 'stretch across the cloth, %', ticks: W.curve.filter(function (_, i) { return i % 2 === 0; }).map(function (c) { return [c.stretch_pct, c.stretch_pct]; }),
+          series: [{ pts: W.curve.map(function (c) { return [c.stretch_pct, c.growth_quick_pct]; }) }, { pts: W.curve.map(function (c) { return [c.stretch_pct, c.growth_1h_pct]; }), dash: true }, { pts: W.curve.map(function (c) { return [c.stretch_pct, c.growth_held_1h_pct]; }) }, { pts: W.curve.map(function (c) { return [c.stretch_pct, c.growth_wash_pct]; }) }], legend: ['growth at once', 'after an hour', 'held an hour', 'after a wash'] });
+      var cm = cs.comparison;
+      h += '<div class="ml-note"><b>What the yarn model changes.</b> Growth after an hour across the cloth: ' + cm.yarn_engine.width_growth_1h_pct + ' % with the yarn recovery engine against ' + cm.mass_weighted.width_growth_1h_pct + ' % with the mass-weighted fibre table (fibre recovery from 5 %: ' + cm.mass_weighted.fibre_recovery.e5 + ' % against ' + cs.yarn_recovery_used.e5 + ' % for the yarn). ' + esc(cm.note) + '</div>' +
+        cs.risks.map(function (x) { return '<div class="ml-note warn">⚠ ' + esc(x.text) + '</div>'; }).join('');
+    }
     h += '<div class="ml-h">Derivations</div><details><summary class="ml-note" style="cursor:pointer">Show the working (' + r.derivations.length + ')</summary>' + r.derivations.map(function (x) { return '<div class="bl-der"><b>' + esc(x.quantity) + ' = ' + esc(x.result) + (x.unit ? ' ' + esc(x.unit) : '') + tag(x.basis) + '</b><code>' + esc(x.formula) + '\n' + esc(x.working) + '</code></div>'; }).join('') + '</details>';
     pane.innerHTML = h;
   }

@@ -61,6 +61,13 @@
     modal:          { label: 'modal', tex: 0.1, rho: 1.52, shape: 'round', aspect: 1.1, conv: 0, len: 38, curl: 0.8, tone: [0.95, 0.94, 0.92], gloss: 0.32 },
     poly_filament:  { label: 'polyester filament', tex: null, rho: 1.38, shape: 'round', aspect: 1, conv: 0, len: Infinity, curl: 0, tone: [0.96, 0.96, 0.95], gloss: 0.6 },
     nylon_filament: { label: 'nylon filament', tex: null, rho: 1.14, shape: 'round', aspect: 1, conv: 0, len: Infinity, curl: 0, tone: [0.96, 0.96, 0.94], gloss: 0.55 },
+    // their own shapes. wool: a round fibre scaled like a roof, strongly crimped and long; acrylic: the dog-bone section of a wet-spun fibre,
+    // crimped; silk: a rounded triangle, smooth and bright; linen: a polygonal bundle with nodes (dislocations) along it; nylon staple: round
+    wool:    { label: 'wool', tex: 0.41, rho: 1.31, shape: 'round', aspect: 1, conv: 0, len: 65, curl: 2.4, tone: [0.90, 0.86, 0.76], gloss: 0.2, modAmp: 0.07, modPitch: 0.09, crimp: { lam: 2.4, amp: 0.1 } },
+    acrylic: { label: 'acrylic', tex: 0.17, rho: 1.18, shape: 'lobed', lobes: 2, lobeAmp: 0.3, aspect: 1, conv: 0, len: 38, curl: 1.8, tone: [0.96, 0.96, 0.95], gloss: 0.35, crimp: { lam: 1.3, amp: 0.05 } },
+    silk:    { label: 'silk', tex: 0.11, rho: 1.33, shape: 'lobed', lobes: 3, lobeAmp: 0.17, aspect: 1, conv: 0, len: 60, curl: 0.5, tone: [0.94, 0.91, 0.84], gloss: 0.6 },
+    linen:   { label: 'linen', tex: 0.5, rho: 1.5, shape: 'lobed', lobes: 6, lobeAmp: 0.07, aspect: 1, conv: 0, len: 40, curl: 0.9, tone: [0.80, 0.72, 0.58], gloss: 0.3, nodeAmp: 0.4, nodePitch: 0.7 },
+    nylon:   { label: 'nylon staple', tex: 0.17, rho: 1.14, shape: 'round', aspect: 1, conv: 0, len: 38, curl: 1.6, tone: [0.96, 0.96, 0.94], gloss: 0.5, crimp: { lam: 1.4, amp: 0.04 } },
   };
   // the Studio's fibre keys → the fibres in the yarn and their shares
   var BLEND = {
@@ -71,10 +78,11 @@
     cvc: [['cotton', 0.6], ['polyester', 0.4]],
     polyester_filament: [['poly_filament', 1]],
     nylon_filament: [['nylon_filament', 1]],
+    wool: [['wool', 1]], acrylic: [['acrylic', 1]], silk: [['silk', 1]], linen: [['linen', 1]],
   };
 
   // a melange yarn: what each component of the recipe is drawn as (the shapes we have), and a colour in linear light
-  var MOTTLE_FIBRE = { cotton: 'cotton', polyester: 'polyester', viscose: 'viscose', modal: 'modal', tencel: 'viscose', bamboo: 'viscose', acrylic: 'polyester', nylon: 'polyester', wool: 'cotton' };
+  var MOTTLE_FIBRE = { cotton: 'cotton', polyester: 'polyester', viscose: 'viscose', modal: 'modal', tencel: 'viscose', bamboo: 'viscose', acrylic: 'acrylic', nylon: 'nylon', wool: 'wool', silk: 'silk', linen: 'linen' };
   var hexLin = function (h) {
     var m = /^#?([0-9a-f]{6})$/i.exec(h || ''); if (!m) return null;
     return [0, 2, 4].map(function (i) { var v = parseInt(m[1].substr(i, 2), 16) / 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
@@ -107,6 +115,7 @@
     mono: { label: 'Monofilament', dpf: null, phi: 1, nodes: 0, nodeLen: 0, twist: 0 },
     fdy:  { label: 'Multifilament (FDY)', dpf: 1.0, phi: 0.62, nodes: 15, nodeLen: 2.0, twist: 0 },
     dty:  { label: 'Textured (DTY)', dpf: 1.56, phi: 0.62, nodes: 90, nodeLen: 1.2, cc: 35, twist: 0 },
+    aty:  { label: 'Air-jet textured (ATY)', dpf: 2.2, phi: 0.5, nodes: 45, nodeLen: 1.0, twist: 0, loops: true },
   };
   // the polymers: density g/cm³ and mean refractive index
   var POLYMER = {
@@ -191,19 +200,22 @@
   function build(y, opt) {
     opt = opt || {};
     if (y && y.fibre === 'elastane') return buildElastane(y, opt);
+    if (y && y.form && FANCY[y.form] && !opt.noFancy) return FANCY[y.form](y, opt);
     var coreSpec = opt.core || null;                    // a core-spun yarn: an elastane core inside the sheath (buildElastane)
     var P = params(y);
     if (P.filament) return buildFilament(P, y || {}, opt);
     var seed = hash(JSON.stringify([P.fibreKey, P.system, Math.round(P.tex * 100), P.ply, P.n, opt.seed || 0]));
     var r = rng(seed);
     var Rc = coreSpec ? coreSpec.r : 0;                 // core radius, mm
+    var SL = (y.form === 'slub' || y.form === 'flame') ? slubPlan(y, opt, r) : null;   // thick places: the slub or the flame
     if (Rc) P.d = 2 * Math.sqrt(Rc * Rc + (P.d / 2) * (P.d / 2));   // the sheath is the annulus round the core
     var plyD = P.ply > 1 ? P.d * (1 + 0.62 * (P.ply - 1)) : P.d;
     var pitch = P.tpm > 0.05 ? 1 / P.tpm : 1.5;
-    var L = opt.length || clamp(3.2 * pitch, 18 * plyD, 12);
-    if (opt.lengthOnly) return { length: L, diameter: plyD, fibres: [], meta: null };
+    var L = SL ? SL.L : (opt.length || clamp(3.2 * pitch, 18 * plyD, 12));
+    if (opt.lengthOnly) return { length: L, diameter: plyD * (SL ? SL.maxThick : 1), fibres: [], meta: null };
     var step = opt.step || clamp(Math.min(pitch / 32, P.fibreD * 2.2), 0.012, 0.035);
     var maxF = opt.maxFibres || 700;
+    if (SL) { maxF = Math.min(maxF, 240); step = Math.max(step, L / 650); }
     var out = [];
 
     // strands: one for a single yarn; two for siro; ply ends for a plied yarn
@@ -261,14 +273,16 @@
         // so the surface carries helical ridges the light picks out
         var ridgeA = (P.S.ridge || 0) * Math.max(0, (u0 - 0.45) / 0.55);
         var ridgeN = P.S.ridgeN || 6;
-        var pts = [], dep = [];
+        var pts = [], dep = [], thAcc = 0;
+        var crPh2 = fx.crimp ? r() * 6.2832 : 0;           // a crimped fibre (wool, acrylic) waves along the yarn
         for (var yy = 0; yy <= L + 1e-9; yy += step) {
           var u = u0;
           if (migA > 0) u = clamp(u0 + migA * 0.5 * Math.sin((2 * Math.PI * yy) / migL + migPh) * (rotor ? 1 + 0.6 * rad(yy / 0.5) : 1), 0.0, 1);
-          var scale = 1 + cvD * 2 * thick(yy / 1.6);
-          var th = th0 - 2 * Math.PI * tw * yy + jitA * jit(yy / 0.8) * (0.5 + u);
+          var scale = (1 + cvD * 2 * thick(yy / 1.6)) * (SL ? SL.prof(yy) : 1);
+          if (yy > 0) thAcc += 2 * Math.PI * tw * (SL ? SL.twMul(yy) : 1) * step;   // a thick place carries less twist per length
+          var th = th0 - thAcc + jitA * jit(yy / 0.8) * (0.5 + u);
           var ridge = ridgeA ? 1 + ridgeA * Math.cos(ridgeN * (th0 + jitA * jit(yy / 0.8))) : 1;
-          var rr = (Rc ? Math.sqrt(Rc * Rc + u * (g.rs * g.rs - Rc * Rc)) : g.rs * Math.sqrt(u)) * scale * ridge * (rotor ? 1 + 0.06 * rad(yy / 0.5) : 1);
+          var rr = (Rc ? Math.sqrt(Rc * Rc + u * (g.rs * g.rs - Rc * Rc)) : g.rs * Math.sqrt(u)) * scale * ridge * (rotor ? 1 + 0.06 * rad(yy / 0.5) : 1) * (fx.crimp ? 1 + fx.crimp.amp * Math.sin((2 * Math.PI * yy) / fx.crimp.lam + crPh2) : 1);
           var gam = gamma0 - 2 * Math.PI * plyTpm * yy;
           var cx = g.rc * Math.cos(gam), cz = g.rc * Math.sin(gam);
           var x = cx + rr * Math.cos(th + (strands.length > 1 ? gam : 0));
@@ -284,10 +298,27 @@
         }
         out.push({
           p: new Float32Array(pts), depth: new Float32Array(dep), rf: (fx.tex ? Math.sqrt(fx.tex / (fx.rho * 1000) / Math.PI) : P.fibreD / 2) * thin,
-          aspect: fx.aspect, conv: fx.conv, kind: 'body', fibre: fb.key, tone: tone(fx, r, fb.col), u: u0,
+          aspect: fx.aspect, conv: fx.conv, shape: fx.shape, lobes: fx.lobes, lobeAmp: fx.lobeAmp, modAmp: fx.modAmp, modPitch: fx.modPitch, nodeAmp: fx.nodeAmp, nodePitch: fx.nodePitch, kind: 'body', fibre: fb.key, tone: tone(fx, r, fb.col), u: u0,
         });
       }
     });
+
+    // a slub holds more fibres: extra short ones lie in the thick place
+    if (SL) {
+      SL.list.forEach(function (sk, si) {
+        var nx = Math.min(200, Math.round(drawn * (sk.m - 1) * 0.55));
+        for (var q = 0; q < nx; q++) {
+          var ya = Math.max(0, sk.y0 - sk.len * (0.12 + r() * 0.2)), yb = Math.min(L, sk.y0 + sk.len * (1.12 - r() * 0.2));
+          var u1 = 0.1 + 0.9 * r(), thA = r() * 6.2832, pts1 = [], dep1 = [], fe1 = pickFibre(P, q * 7 + si * 31 + 13), fx1 = fe1.f;
+          for (var y1 = ya; y1 <= yb + 1e-9; y1 += step) {
+            thA -= 2 * Math.PI * singleTpm * SL.twMul(y1) * step;
+            var rr1 = (P.d / 2) * Math.sqrt(u1) * SL.prof(y1);
+            pts1.push(rr1 * Math.cos(thA), y1, rr1 * Math.sin(thA)); dep1.push(u1);
+          }
+          if (pts1.length >= 9) out.push({ p: new Float32Array(pts1), depth: new Float32Array(dep1), rf: (fx1.tex ? Math.sqrt(fx1.tex / (fx1.rho * 1000) / Math.PI) : P.fibreD / 2), aspect: fx1.aspect, conv: fx1.conv, shape: fx1.shape, lobes: fx1.lobes, lobeAmp: fx1.lobeAmp, modAmp: fx1.modAmp, modPitch: fx1.modPitch, nodeAmp: fx1.nodeAmp, nodePitch: fx1.nodePitch, kind: 'body', fibre: fe1.key, tone: tone(fx1, r, fe1.col), u: u1 });
+        }
+      });
+    }
 
     // protruding fibres: free ends and loops, spread along the yarn (Poisson)
     var surfaceAt = function (yy, th) {
@@ -313,7 +344,7 @@
       var len = Math.min(expo(r, P.S.hairLen) * Math.sqrt(hairScale), 7);
       if (len < 0.06) continue;
       var pts2 = isLoop ? loopPath(r, sp, y0, len, P, step) : endPath(r, sp, y0, len, P, fb2, step, singleTpm);
-      out.push({ p: new Float32Array(pts2), rf: (fb2.tex ? Math.sqrt(fb2.tex / (fb2.rho * 1000) / Math.PI) : P.fibreD / 2), aspect: fb2.aspect, conv: fb2.conv, kind: isLoop ? 'loop' : 'hair', tone: tone(fb2, r, fe2.col), u: 1 });
+      out.push({ p: new Float32Array(pts2), rf: (fb2.tex ? Math.sqrt(fb2.tex / (fb2.rho * 1000) / Math.PI) : P.fibreD / 2), aspect: fb2.aspect, conv: fb2.conv, shape: fb2.shape, lobes: fb2.lobes, lobeAmp: fb2.lobeAmp, modAmp: fb2.modAmp, modPitch: fb2.modPitch, nodeAmp: fb2.nodeAmp, nodePitch: fb2.nodePitch, kind: isLoop ? 'loop' : 'hair', tone: tone(fb2, r, fe2.col), u: 1 });
     }
 
     // rotor: wrapper fibres caught round the outside (belly bands)
@@ -334,7 +365,7 @@
           var aa = tw0 + dir * 2 * Math.PI * turns * f;
           pts3.push(R * sc * lift * Math.cos(aa), yq, R * sc * lift * Math.sin(aa));
         }
-        if (pts3.length >= 9) out.push({ p: new Float32Array(pts3), rf: Math.sqrt(fb3.tex / (fb3.rho * 1000) / Math.PI), aspect: fb3.aspect, conv: fb3.conv, kind: 'wrap', tone: tone(fb3, r, fe3.col), u: 1 });
+        if (pts3.length >= 9) out.push({ p: new Float32Array(pts3), rf: Math.sqrt(fb3.tex / (fb3.rho * 1000) / Math.PI), aspect: fb3.aspect, conv: fb3.conv, shape: fb3.shape, lobes: fb3.lobes, lobeAmp: fb3.lobeAmp, modAmp: fb3.modAmp, modPitch: fb3.modPitch, nodeAmp: fb3.nodeAmp, nodePitch: fb3.nodePitch, kind: 'wrap', tone: tone(fb3, r, fe3.col), u: 1 });
       }
     }
 
@@ -350,6 +381,8 @@
         ply_tpm: P.ply > 1 ? round(Math.abs(plyTpm) * 1000) : null,
         hairiness_H: round(P.H, 1), hairs_per_mm: round(P.hairsPerMm, 1), mean_hair_mm: P.filament ? 0 : P.S.hairLen,
         packing: round(P.phi, 2),
+        slub: SL ? { form: y.form, thickness_max: round(SL.maxThick * SL.maxThick, 2), count_slubs_drawn: SL.list.length, slub_length_mm: round(SL.list[0].len, 1), slub_length_real_mm: round(SL.lenReal, 0), gap_mm: round(SL.gap, 0), gap_shown_mm: round(SL.gapShown, 0), gap_shortened: !!SL.shortened } : null,
+        fancy: !!SL,
       },
     };
   }
@@ -383,7 +416,7 @@
   function cutAway(fibres, y0, y1) {
     var out = [];
     fibres.forEach(function (f) {
-      if (f.kind === 'core') { out.push(f); return; }
+      if (f.kind === 'core' || f.coreFil) { out.push(f); return; }
       var n = f.p.length / 3, run = [], rd = [], hasD = !!f.depth;
       var flush = function () { if (run.length >= 9) out.push(Object.assign({}, f, { p: new Float32Array(run), depth: hasD ? new Float32Array(rd) : undefined })); run = []; rd = []; };
       var inCut = function (i) { var yy = f.p[i * 3 + 1]; return yy >= y0 && yy <= y1 && f.p[i * 3 + 2] > 0; };
@@ -521,7 +554,7 @@
    */
   function buildFilament(P, y, opt) {
     var poly = POLYMER[P.fibreKey], S = P.S;
-    var mono = P.system === 'mono', dty = P.system === 'dty';
+    var mono = P.system === 'mono', dty = P.system === 'dty', aty = P.system === 'aty';
     var r = rng(hash(JSON.stringify(['fil', P.fibreKey, P.system, Math.round(P.tex * 100), P.n, y.section, y.crimp, y.interlace, y.lustre, opt.seed || 0])));
     var denier = P.tex * 9, dpf = denier / P.n;
     var section = y.section === 'trilobal' ? 'trilobal' : 'round';
@@ -532,7 +565,7 @@
     var ftTpm = dty ? 34600 / Math.sqrt(denier) : 0;
     var pitch = dty ? 1000 / ftTpm : 0;
     var coilR = dty ? (pitch * Math.sqrt(1 / ((1 - cc) * (1 - cc)) - 1)) / (2 * Math.PI) : 0;
-    var Renv = dty ? R0 * 1.1 + coilR : R0 * (mono ? 1 : 1.04);
+    var Renv = dty ? R0 * 1.1 + coilR : aty ? R0 * 1.55 : R0 * (mono ? 1 : 1.04);   // an air-jet yarn's loops stand out of the core
     var nodesPerM = mono ? 0 : (y.interlace != null && y.interlace !== '' && +y.interlace >= 0 ? +y.interlace : S.nodes);
     var D = 2 * Renv;
     var L = opt.length || (mono ? clamp(D * 26, 1.2, 10) : clamp(D * 24, 2, 12));
@@ -568,6 +601,9 @@
         var braid = (r() < 0.5 ? -1 : 1) * (1 + r());   // half-turns a filament takes through a node
         var hand = r() < 0.5 ? 1 : -1, ph = r() * 6.283, lastRev = -1, nextRev = expo(r, 1.6), aI = coilR * (0.6 + 0.8 * r());
         var loopAt = dty && r() < 0.2 ? r() * L : -1;    // now and then a coil pulls out into a loop
+        // air-jet textured: about half the filaments are overfed and stand out of the core in random loops, here and there
+        var atyLoops = [];
+        if (aty && r() < 0.55) { var nl = Math.max(1, Math.round((L / 1.1) * (0.5 + r()))); for (var li = 0; li < nl; li++) atyLoops.push({ y: r() * L, half: 0.18 + 0.5 * r(), h: R0 * (1.0 + 2.6 * r()), a: r() * 6.2832 }); }
         var pts = [], dep = [];
         for (var yy = 0; yy <= L + 1e-9; yy += step) {
           var nd = nodeAt(yy);
@@ -585,6 +621,7 @@
             var ac = aI * near * (1 - 0.7 * nd) * big;
             x += ac * Math.cos(ph); z += ac * Math.sin(ph);
           }
+          for (var al = 0; al < atyLoops.length; al++) { var ql = Math.abs(yy - atyLoops[al].y) / atyLoops[al].half; if (ql < 1) { var bl = atyLoops[al].h * (0.5 + 0.5 * Math.cos(Math.PI * ql)); x += bl * Math.cos(atyLoops[al].a); z += bl * Math.sin(atyLoops[al].a); } }
           pts.push(x, yy, z);
           dep.push(clamp(Math.hypot(x, z) / Renv, 0, 1));
         }
@@ -600,13 +637,213 @@
         fibre_diameter_um: round(P.fibreD * 1000, 1), section: section, lustre: lus, lustre_label: LUSTRE[lus].label, tio2_pct: LUSTRE[lus].tio2,
         refractive_index: poly.ri, packing: mono ? 1 : S.phi,
         diameter_mm: round(D, 3), compact_diameter_mm: round(2 * R0, 3), bulk_ratio: round(Renv / R0, 2),
-        crimp_contraction_pct: dty ? round(cc * 100, 0) : null, coil_radius_um: dty ? round(coilR * 1000, 0) : null,
+        overfeed_pct: aty ? round((S.overfeed || 0.22) * 100, 0) : null, crimp_contraction_pct: dty ? round(cc * 100, 0) : null, coil_radius_um: dty ? round(coilR * 1000, 0) : null,
         coil_pitch_mm: dty ? round(pitch, 3) : null, false_twist_tpm: dty ? round(ftTpm, -1) : null,
         nodes_per_m: nodesPerM, node_spacing_mm: nodesPerM ? round(1000 / nodesPerM, 1) : null,
         alpha_e: 0, tpi: 0, tpm: 0, twist_angle_deg: 0, ply_tpm: null, hairiness_H: 0, hairs_per_mm: 0, mean_hair_mm: 0,
       },
     };
   }
+
+  // ══ fancy yarns ═════════════════════════════════════════════════════════════════════════════════════════════════
+  // A slub and a flame (thick places), a nep yarn (coloured knots), a bouclé (overfed loops round a core), a chenille
+  // (a pile standing out of a twisted core), a core-spun yarn with a filament core. Each is built from the same fibre and
+  // strand machinery as the plain yarn; what is drawn is set by the yarn's count and its fancy parameters (y.fancy).
+  //   law      mass balance (tex of the parts), the overfeed (length of effect yarn per length of yarn) from the geometry itself
+  //   typical  loop height, pile length and density, nep size, twist of the parts
+
+  /** Where the thick places are, and how thick: a profile the staple builder multiplies the yarn's radius by. */
+  function slubPlan(y, opt, r) {
+    var fa = y.fancy || {}, flame = y.form === 'flame';
+    var m0 = clamp(+fa.thickness > 0 ? +fa.thickness : (flame ? 2.6 : 1.8), 1.15, 5);      // the slub's MASS ratio (the engine's thickness): its radius is the square root
+    var len = +fa.length_mm > 0 ? +fa.length_mm : (+fa.length_cm > 0 ? +fa.length_cm * 10 : (flame ? 14 : 24));
+    var gap = +fa.spacing_mm > 0 ? +fa.spacing_mm : (+fa.spacing_cm > 0 ? +fa.spacing_cm * 10 : 120);
+    // a real slub is centimetres long and a yarn is a fifth of a millimetre across: at that scale the thick place cannot be seen. The slub and the gap
+    // are drawn shortened (their real lengths are in the note); the thickness, the extra fibres and the twist are real
+    var lenReal = len, gapReal = gap;
+    len = Math.min(len, 8); var gapShown = Math.min(gap, 4);
+    var list = [], pos = 0.4 * len, n = flame ? 3 : 1;
+    for (var k = 0; k < n; k++) {
+      var lk = flame ? len * (0.55 + r() * 0.9) : len, mk = flame ? 1 + (m0 - 1) * (0.4 + 0.6 * r()) : m0;
+      list.push({ y0: pos, len: lk, t: Math.sqrt(mk), m: mk });
+      pos += lk + gapShown * (flame ? 0.6 + r() * 0.8 : 1);
+    }
+    var Lraw = flame ? pos : list[0].y0 + list[0].len + gapShown + 0.6 * len;
+    var L = opt.length || Lraw;
+    var smooth = function (x) { x = clamp(x, 0, 1); return x * x * (3 - 2 * x); };
+    var prof = function (yy) {
+      var p = 1;
+      for (var i = 0; i < list.length; i++) { var s = list[i], ramp = Math.max(0.3 * s.len, 0.4); p += (s.t - 1) * smooth((yy - s.y0) / ramp) * smooth((s.y0 + s.len - yy) / ramp); }
+      return p;
+    };
+    return { list: list, L: L, prof: prof, twMul: function (yy) { return 1 / Math.pow(prof(yy), 0.7); }, maxThick: Math.max.apply(null, list.map(function (s) { return s.t; })), gap: gapReal, gapShown: gapShown, lenReal: lenReal, shortened: gapShown < gapReal || len < lenReal };
+  }
+
+  /** A bundle of fibres along ANY centreline (flat array x,y,z): each fibre spirals round it, parallel transport keeps the frame. */
+  function strandAlong(c, nFib, R, tpm, r, P, kind, extra) {
+    var n = c.length / 3, out = [];
+    if (n < 3) return out;
+    var Nn = [], Bn = [];
+    for (var i = 0; i < n; i++) {
+      var i0 = Math.max(0, i - 1) * 3, i1 = Math.min(n - 1, i + 1) * 3;
+      var tx = c[i1] - c[i0], ty = c[i1 + 1] - c[i0 + 1], tz = c[i1 + 2] - c[i0 + 2], tl = Math.hypot(tx, ty, tz) || 1;
+      tx /= tl; ty /= tl; tz /= tl;
+      var nx, ny, nz;
+      if (i === 0) { var ax = Math.abs(ty) < 0.9 ? 0 : 1, ay = Math.abs(ty) < 0.9 ? 1 : 0; nx = -tz * ay; ny = tz * ax; nz = tx * ay - ty * ax; }
+      else { var pn = Nn[i - 1], dot = pn[0] * tx + pn[1] * ty + pn[2] * tz; nx = pn[0] - dot * tx; ny = pn[1] - dot * ty; nz = pn[2] - dot * tz; }
+      var nl = Math.hypot(nx, ny, nz) || 1; nx /= nl; ny /= nl; nz /= nl; Nn.push([nx, ny, nz]);
+      Bn.push([ty * nz - tz * ny, tz * nx - tx * nz, tx * ny - ty * nx]);
+    }
+    for (var f = 0; f < nFib; f++) {
+      var u = Math.sqrt((f + 0.5) / nFib), a = f * 2.39996323 + r() * 0.3, fe = pickFibre(P, f * 5 + 2), fx = fe.f;
+      var pts = [], dep = [];
+      for (var k = 0; k < n; k++) {
+        if (k > 0) a -= 2 * Math.PI * tpm * Math.hypot(c[k * 3] - c[k * 3 - 3], c[k * 3 + 1] - c[k * 3 - 2], c[k * 3 + 2] - c[k * 3 - 1]);
+        var ca = Math.cos(a) * R * u, sa = Math.sin(a) * R * u;
+        pts.push(c[k * 3] + ca * Nn[k][0] + sa * Bn[k][0], c[k * 3 + 1] + ca * Nn[k][1] + sa * Bn[k][1], c[k * 3 + 2] + ca * Nn[k][2] + sa * Bn[k][2]);
+        dep.push(u);
+      }
+      out.push(Object.assign({ p: new Float32Array(pts), depth: new Float32Array(dep), rf: fx.tex ? Math.sqrt(fx.tex / (fx.rho * 1000) / Math.PI) : P.fibreD / 2, aspect: fx.aspect, conv: fx.conv, shape: fx.shape, lobes: fx.lobes, lobeAmp: fx.lobeAmp, modAmp: fx.modAmp, modPitch: fx.modPitch, nodeAmp: fx.nodeAmp, nodePitch: fx.nodePitch, kind: kind || 'body', fibre: fe.key, tone: tone(fx, r, fe.col), u: u }, extra || {}));
+    }
+    return out;
+  }
+
+  var subBlend = function (y, tex) { return params({ fibre: y.fibre, type: y.type, tex: tex, ply: 1, blend: y.blend, mottle: y.mottle }); };
+  function fancyMeta(P, label, system, d, tex, extra) {
+    return Object.assign({ system: system, system_label: label, fibre: P.fibreKey, filament: false, tex: round(tex, 2), ne: round(590.5 / tex, 1), ply: 1, diameter_mm: round(d, 3), single_diameter_mm: round(d, 3),
+      fibres_in_section: Math.round(P.n * tex / P.tex), fibres_drawn: 0, capped: true, fibre_diameter_um: round(P.fibreD * 1000, 1), alpha_e: P.alpha, tpi: round(P.tpi, 1), tpm: round(P.tpm * 1000), twist_angle_deg: round(P.angle, 1), ply_tpm: null,
+      hairiness_H: round(P.H, 1), hairs_per_mm: round(P.hairsPerMm, 1), mean_hair_mm: P.S.hairLen, packing: round(P.phi, 2), fancy: true }, extra || {});
+  }
+
+  /** Bouclé: a fine ground yarn straight in the middle, a binder wound round it, and an OVERFED effect yarn standing out in loops. */
+  function buildBoucle(y, opt) {
+    var fa = y.fancy || {}, tex = +y.tex > 0 ? +y.tex : 590.5 / 10;
+    var effShare = clamp(fa.effect_share != null ? +fa.effect_share : 0.6, 0.3, 0.85), q = clamp(+fa.overfeed || 3.2, 1.8, 6);
+    var spacing = clamp(+fa.spacing_mm > 0 ? +fa.spacing_mm : 1.6, 0.8, 10);
+    var gT = tex * (1 - effShare) * 0.8, bT = tex * (1 - effShare) * 0.2, eT = tex * effShare / q;     // the effect yarn's own tex: its mass per length of ITS yarn
+    var Pg = subBlend(y, gT), Pb = subBlend(y, bT), Pe = subBlend(y, eT);
+    var rg = Pg.d / 2, rb = Pb.d / 2, re = Pe.d / 2;
+    var L = opt.length || clamp(spacing * 6, 10, 14);
+    if (opt.lengthOnly) return { length: L, diameter: 2 * (rg + 2 * re + spacing * 0.5), fibres: [], meta: null };
+    var r = rng(hash(JSON.stringify(['bou', y.fibre, Math.round(tex * 100), effShare, q, spacing, opt.seed || 0])));
+    // the arch: the effect yarn leaves the core, rises to a height h and comes back; kappa > 1 pulls it back on itself into a loop. Its length per
+    // length of yarn is the overfeed: the height is solved so that it IS the overfeed asked for
+    var kappa = 1.25, M = 28;
+    var archLen = function (h) {
+      var s = 0, py = 0, pr = 0;
+      for (var i = 1; i <= M; i++) { var t = i / M, yy = spacing * (t - kappa * Math.sin(2 * Math.PI * t) / (2 * Math.PI)), rho = h * Math.pow(Math.sin(Math.PI * t), 0.85); s += Math.hypot(yy - py, rho - pr); py = yy; pr = rho; }
+      return s;
+    };
+    var lo = 0.01, hi = 14;
+    for (var it = 0; it < 40; it++) { var mid = (lo + hi) / 2; if (archLen(mid) < q * spacing) lo = mid; else hi = mid; }
+    var hMean = (lo + hi) / 2;
+    var out = [];
+    // the ground: straight, lightly twisted
+    var cc = []; for (var yy = -0.4; yy <= L + 0.4 + 1e-9; yy += 0.05) cc.push(0, yy, 0);
+    out = out.concat(strandAlong(cc, Math.min(34, Math.max(10, Math.round(Pg.n))), rg, Pg.tpm, r, Pg, 'body'));
+    // the binder: a fine yarn wound round the core
+    var bc = [], pitch = clamp(spacing * 0.55, 0.6, 2), rbc = rg + rb * 0.9;
+    for (var yb = -0.4; yb <= L + 0.4 + 1e-9; yb += 0.03) { var ph = 2 * Math.PI * yb / pitch; bc.push(rbc * Math.cos(ph), yb, rbc * Math.sin(ph)); }
+    out = out.concat(strandAlong(bc, Math.min(10, Math.max(5, Math.round(Pb.n))), rb, Pb.tpm, r, Pb, 'body'));
+    // the effect yarn: arch after arch, each in its own direction round the core
+    var ec = [], k = 0, ykk = -spacing * 0.6;
+    while (ykk < L + spacing) {
+      var psi = k * 2.39996323 + r() * 0.8, hk = hMean * (0.7 + 0.6 * r()), turn = (r() - 0.5) * 1.1;
+      for (var i2 = 0; i2 <= M; i2++) {
+        var t2 = i2 / M, y2 = ykk + spacing * (t2 - kappa * Math.sin(2 * Math.PI * t2) / (2 * Math.PI)), rho2 = rg + re * 0.9 + hk * Math.pow(Math.sin(Math.PI * t2), 0.85), a2 = psi + turn * (t2 - 0.5);
+        if (i2 === 0 && ec.length) continue;
+        ec.push(rho2 * Math.cos(a2), y2, rho2 * Math.sin(a2));
+      }
+      ykk += spacing; k++;
+    }
+    out = out.concat(strandAlong(ec, Math.min(18, Math.max(7, Math.round(Pe.n))), re, Pe.tpm, r, Pe, 'body'));
+    var D = 2 * (rg + re * 0.9 + hMean * 1.3);
+    return { length: L, fibres: out, meta: fancyMeta(Pg, 'Bouclé (loop) yarn', 'boucle', D, tex, { overfeed: round(q, 2), loop_height_mm: round(hMean, 2), loop_spacing_mm: round(spacing, 2), effect_share_pct: round(effShare * 100, 0), ground_tex: round(gT, 2), binder_tex: round(bT, 2), effect_tex: round(eT, 2), fibres_drawn: out.length }) };
+  }
+
+  /** Chenille: two fine strands twisted round each other, and a short pile gripped between them standing out on every side. */
+  function buildChenille(y, opt) {
+    var fa = y.fancy || {}, tex = +y.tex > 0 ? +y.tex : 590.5 / 8;
+    var share = clamp(fa.pile_share != null ? +fa.pile_share : 0.72, 0.4, 0.9), pl = clamp(+fa.pile_mm > 0 ? +fa.pile_mm : 1.6, 0.5, 4), dens = clamp(+fa.pile_density > 0 ? +fa.pile_density : 24, 8, 40);
+    var cT = tex * (1 - share), Pc = subBlend(y, cT / 2);
+    var rs = Pc.d / 2, rcore = rs * 1.8;
+    var L = opt.length || clamp((rcore + pl) * 2 * 6, 8, 12);
+    if (opt.lengthOnly) return { length: L, diameter: 2 * (rcore + pl), fibres: [], meta: null };
+    var r = rng(hash(JSON.stringify(['chen', y.fibre, Math.round(tex * 100), share, pl, dens, opt.seed || 0])));
+    var out = [];
+    // the core: two strands twisted round each other, tightly (a chenille core carries 300+ turns/m)
+    for (var sI = 0; sI < 2; sI++) {
+      var c = [], pitch = 0.55;
+      for (var yy = -0.3; yy <= L + 0.3 + 1e-9; yy += 0.03) { var ph = 2 * Math.PI * yy / pitch + sI * Math.PI; c.push(rs * 0.95 * Math.cos(ph), yy, rs * 0.95 * Math.sin(ph)); }
+      out = out.concat(strandAlong(c, Math.min(22, Math.max(8, Math.round(Pc.n))), rs, Pc.tpm, r, Pc, 'body'));
+    }
+    // the pile: tufts, three fibres each, gripped at the core and standing out all round
+    var massMg = share * tex * 0.001, perTuft = massMg / dens;                    // mg per mm of yarn, per tuft
+    var fx0 = pickFibre(Pc, 0).f, rho = fx0.rho || 1.4;
+    var lenF = pl * 1.5, areaF = (perTuft / 3 / rho) / lenF, rpf = clamp(Math.sqrt(areaF / Math.PI), 0.005, 0.05);
+    var nT = Math.round(dens * (L + 0.4));
+    for (var k = 0; k < nT; k++) {
+      var y0 = -0.2 + (k + r()) / dens, psi = k * 2.39996323 + r() * 0.7, lean = (r() - 0.5) * 0.9, droop = (r() - 0.5) * 0.6 * pl, curl = (r() - 0.5) * 0.5 * pl;
+      for (var f = 0; f < 3; f++) {
+        var jy = (r() - 0.5) * 0.05, jp = (r() - 0.5) * 0.25, len = pl * (0.75 + 0.5 * r()), pts = [];
+        for (var i = 0; i <= 6; i++) {
+          var t = i / 6, rho2 = rcore * 0.7 + (len + rcore * 0.3) * t, a = psi + jp + curl * t * t / (rcore + len);
+          pts.push(rho2 * Math.cos(a), y0 + jy + lean * len * t + droop * t * t, rho2 * Math.sin(a));
+        }
+        var fe = pickFibre(Pc, k * 3 + f);
+        out.push({ p: new Float32Array(pts), rf: rpf, aspect: fe.f.aspect, conv: fe.f.conv, shape: fe.f.shape, lobes: fe.f.lobes, lobeAmp: fe.f.lobeAmp, kind: 'tuft', fibre: fe.key, tone: tone(fe.f, r, fe.col), u: 1 });
+      }
+    }
+    return { length: L, fibres: out, meta: fancyMeta(Pc, 'Chenille', 'chenille', 2 * (rcore + pl), tex, { pile_mm: round(pl, 2), pile_share_pct: round(share * 100, 0), pile_density_per_mm: round(dens, 0), core_tex: round(cT, 2), pile_fibre_um: round(rpf * 2000, 0), tufts_drawn: nT }) };
+  }
+
+  /** A nep yarn: a plain yarn with coloured knots of fibre (balls of tangled fibres) spaced along it. */
+  function buildNep(y, opt) {
+    var fa = y.fancy || {}, perCm = clamp(+fa.per_cm > 0 ? +fa.per_cm : 0.6, 0.2, 12), size = clamp(+fa.size > 0 ? +fa.size : 2.2, 1.3, 4);
+    // a stretch long enough to hold two or three neps
+    var base = build(Object.assign({}, y, { form: 'single' }), Object.assign({}, opt, { noFancy: true, length: opt.length || clamp(25 / perCm, 12, 30) }));
+    if (opt.lengthOnly) return base;
+    var P = params(Object.assign({}, y, { form: 'single' }));
+    var r = rng(hash(JSON.stringify(['nep', y.fibre, Math.round(P.tex * 100), perCm, size, opt.seed || 0])));
+    var col = hexLin(fa.colour) || [0.05, 0.12, 0.45], L = base.length, d = P.d, R = d / 2;
+    var nN = Math.max(1, Math.round(perCm * L / 10)), out = base.fibres.slice();
+    for (var k = 0; k < nN; k++) {
+      var yc = L * (k + 0.3 + 0.4 * r()) / nN, a0 = r() * 6.2832, rn = size * d / 2 * (0.8 + 0.4 * r());
+      var cx = (R * 0.9) * Math.cos(a0), cz = (R * 0.9) * Math.sin(a0);
+      for (var f = 0; f < 9; f++) {
+        var ph0 = r() * 6.2832, ph1 = r() * 6.2832, ph2 = r() * 6.2832, pts = [];
+        for (var i = 0; i <= 44; i++) {
+          var t = i / 44, th = Math.PI * (0.5 + 0.46 * Math.sin(2 * Math.PI * 1.7 * t + ph1)), phi = ph0 + 2 * Math.PI * 3.1 * t, rho = rn * (0.55 + 0.42 * Math.sin(2 * Math.PI * 2.3 * t + ph2));
+          pts.push(cx + rho * Math.sin(th) * Math.cos(phi), yc + rho * 1.1 * Math.cos(th), cz + rho * Math.sin(th) * Math.sin(phi));
+        }
+        var fx = pickFibre(P, k * 9 + f).f;
+        out.push({ p: new Float32Array(pts), rf: Math.sqrt((fx.tex || 0.17) / (fx.rho * 1000) / Math.PI), aspect: fx.aspect, conv: fx.conv, kind: 'nep', fibre: 'nep', tone: [col[0] * 0.9, col[1] * 0.9, col[2] * 0.9], u: 1 });
+      }
+    }
+    base.fibres = out;
+    base.meta = Object.assign({}, base.meta, { fancy: true, system: 'nep', system_label: 'Nep yarn (' + base.meta.system_label + ')', neps_per_cm: round(perCm, 1), nep_size_d: round(size, 1), neps_drawn: nN });
+    return base;
+  }
+
+  /** A core-spun yarn with a filament core: a bundle of polyester filaments in the middle, a staple sheath spun round it. */
+  function buildCoreFil(y, opt) {
+    var fa = y.fancy || {}, tex = +y.tex > 0 ? +y.tex : 590.5 / 30;
+    var den = +fa.core_denier > 0 ? +fa.core_denier : 40, coreTex = Math.min(den / 9, tex * 0.45), dpf = +fa.core_dpf > 0 ? +fa.core_dpf : 1.5;
+    var nF = clamp(Math.round(coreTex * 9 / dpf), 6, 40), RHO = 1.38, Rc = Math.sqrt(coreTex / (RHO * 1000 * 0.62 * Math.PI));
+    var sp = build({ fibre: y.fibre, type: y.type, tex: tex - coreTex, ply: 1, form: 'single', blend: y.blend, mottle: y.mottle }, { core: { r: Rc }, length: opt.length, lengthOnly: opt.lengthOnly, seed: opt.seed, maxFibres: opt.maxFibres, maxHairs: opt.maxHairs, noFancy: true });
+    if (opt.lengthOnly) return sp;
+    var r = rng(hash(JSON.stringify(['cf', y.fibre, Math.round(tex * 100), den, dpf, opt.seed || 0])));
+    var rf = Math.sqrt((coreTex / nF) / (RHO * 1000) / Math.PI), tn = LUSTRE.bright.tone, L = sp.length, out = sp.fibres.slice();
+    for (var i = 0; i < nF; i++) {
+      var u = Math.sqrt((i + 0.5) / nF), a = i * 2.39996323 + r() * 0.3, pts = [], dp = [], w = noise1(r, Math.ceil(L / 1.5) + 2);
+      for (var yy = 0; yy <= L + 1e-9; yy += Math.max(0.03, L / 200)) { var rr = Math.max(0, Rc * u - rf * 0.2); pts.push(rr * Math.cos(a) + rf * 0.4 * w(yy / 1.5), yy, rr * Math.sin(a)); dp.push(1); }
+      out.push({ p: new Float32Array(pts), depth: new Float32Array(dp), rf: rf, aspect: 1, conv: 0, shape: 'round', kind: 'filament', coreFil: true, tone: tn, u: 1 });
+    }
+    if (opt.cutaway) out = cutAway(out, L * 0.3, L * 0.64);
+    return { length: L, fibres: out, meta: Object.assign({}, sp.meta, { fancy: true, system: 'core_fil', system_label: 'Core-spun, filament core', core_denier: round(coreTex * 9, 0), core_filaments: nF, core_filament_um: round(rf * 2000, 1), core_share_pct: round(coreTex / tex * 100, 1), core_diameter_mm: round(Rc * 2, 3), tex: round(tex, 2), ne: round(590.5 / tex, 1) }) };
+  }
+
+  var FANCY = { boucle: buildBoucle, chenille: buildChenille, nep: buildNep, core_fil: buildCoreFil };
 
   function round(v, k) { var m = Math.pow(10, k || 0); return Math.round(v * m) / m; }
   function tone(fx, r, col) {

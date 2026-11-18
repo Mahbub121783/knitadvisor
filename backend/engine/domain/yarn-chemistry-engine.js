@@ -395,7 +395,7 @@ function analyse(input) {
   const byIds = {};
   fibres.forEach((f) => { const k = FIB[f.id].by; if (k) byIds[k] = (byIds[k] || 0) + f.label_share * 100; });
   const cum = Object.fromEntries(fibres.map((f) => [f.id, 1]));
-  const strengthSpec = Object.keys(byIds).length && !filament ? { fibres: byIds, count: { value: tex, unit: 'tex' }, spinning: own(BY.GEO, input.spinning) ? input.spinning : undefined, grade: input.grade } : null;
+  const strengthSpec = Object.keys(byIds).length && !filament ? { fibres: byIds, count: { value: Math.min(tex, 120), unit: 'tex' }, spinning: own(BY.GEO, input.spinning) ? input.spinning : undefined, grade: input.grade } : null;
   let strength = null, trace = [];
   const tenacityWith = (retention) => {
     if (!strengthSpec) return null;

@@ -135,4 +135,32 @@ const dry = { ...R.CONDITIONS.dry, id: 'dry' }, wet = { ...R.CONDITIONS.hot_wet,
   assert(base({ elastane: { denier: 40, draft: 2.6 }, recovery: { enabled: true } }).recovery.ground.cloth.elastane, 'the Lycra card\'s elastane is noted');
   console.log('✓ Studio: recovery only on request, at the solved count, with the chosen condition');
 }
+
+// ── 6. the cloth's stretch model takes the yarn's recovery ───────────────────────────────────
+{
+  const SE = require('../engine/domain/stretch-engine');
+  const base = { fabricId: 'single_jersey', category: '', loopMm: 2.5, countNe: 30, fibers: { cotton: 60, polyester: 40 }, rkm: 20 };
+  const old = SE.analyzeStretch(base);
+  assert.strictEqual(old.fibre_recovery.source, 'fibre table, mass-weighted', 'unchanged without a yarn recovery');
+  const fs = run({ cotton: 60, polyester: 40 }).for_stretch;
+  near(fs.rec.e1, run({ cotton: 60, polyester: 40 }).recovery.curve.find((c) => c.strain_pct === 1).recovery_pct, 0.06, 'the stretch input is the yarn recovery at 1 %');
+  const withY = SE.analyzeStretch({ ...base, yarnRecovery: fs });
+  assert(/yarn recovery engine/.test(withY.fibre_recovery.source) && withY.fibre_recovery.points[2].recovery_pct !== old.fibre_recovery.points[2].recovery_pct, 'the yarn recovery is used');
+  near(withY.fibre_recovery.points[1].recovery_pct, fs.rec.e1, 0.06);
+  // a poorer yarn recovery means more growth; a better one less
+  const poor = SE.analyzeStretch({ ...base, yarnRecovery: { ...fs, rec: { e1: fs.rec.e1 - 20, e5: fs.rec.e5 - 20, e10: fs.rec.e10 - 15 } } });
+  assert(poor.directions.width.standard.growth.after_1h_pct > withY.directions.width.standard.growth.after_1h_pct, 'worse yarn recovery, more cloth growth');
+  // the Studio: growth follows the yarn — cotton > CVC > PC > with elastane; humid > dry; the comparison is there
+  const run2 = (blend, rec, extra) => S.analyse({ bed: 'single', grid: { C: ['K'], D: null }, feeds: [{ role: 'ground' }], yarn: { fibre: 'cotton', type: 'combed', count: 30, unit: 'ne' }, target: { gsm: 160 }, machine: {}, blend: blend ? { ground: blend } : undefined, recovery: { enabled: true, ...(rec || {}) }, ...(extra || {}) });
+  const g = (r) => r.recovery.ground.cloth_stretch.directions.width.growth.after_1h_pct;
+  const cot = run2(null), cvc = run2({ fibres: { cotton: 60, polyester: 40 } }), pc = run2({ fibres: { polyester: 65, cotton: 35 } }), lyc = run2({ fibres: { cotton: 60, polyester: 40 } }, null, { elastane: { denier: 40, draft: 2.6 } });
+  assert(g(cot) > g(cvc) && g(cvc) > g(pc) && g(pc) > g(lyc), `growth: cotton ${g(cot)} > CVC ${g(cvc)} > PC ${g(pc)} > with elastane ${g(lyc)}`);
+  assert(g(run2({ fibres: { cotton: 60, polyester: 40 } }, { condition: 'humid' })) > g(cvc), 'a humid room grows more');
+  const cs = cvc.recovery.ground.cloth_stretch;
+  assert(cs.kind === 'jersey' && cs.directions.width.curve.length > 4 && cs.directions.length.bagging.pull_pct === 30 && ['low', 'medium', 'high'].includes(cs.directions.width.bagging.level));
+  assert(cs.comparison.mass_weighted.width_growth_1h_pct !== cs.comparison.yarn_engine.width_growth_1h_pct && cs.comparison.mass_weighted.fibre_recovery.e5 !== cs.yarn_recovery_used.e5, 'the yarn model gives a different answer from the mass-weighted table');
+  assert(/yarn recovery engine/.test(cs.source) && cs.yarn_recovery_used.e1 > cs.yarn_recovery_used.e5 && cs.po_spec);
+  assert.strictEqual(S.analyse({ bed: 'double', gating: 'rib', grid: { C: ['KK'], D: ['KK'] }, feeds: [{ role: 'ground' }], yarn: { fibre: 'cotton', type: 'combed', count: 30, unit: 'ne' }, target: { gsm: 200 }, machine: {}, recovery: { enabled: true } }).recovery.ground.cloth_stretch.kind, 'rib');
+  console.log('✓ cloth stretch: the stretch model takes the yarn recovery (cotton > CVC > PC > elastane in growth, humid grows more), unchanged without it');
+}
 console.log('Yarn recovery engine tests passed');

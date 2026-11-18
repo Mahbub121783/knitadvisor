@@ -54,6 +54,8 @@ const ENDPOINTS = [
   E('GET',  '/studio/yarn-chemistry/catalogue', G.studio, 'Yarn chemistry fibres, shade depths, agents and processes', true),
   E('POST', '/studio/yarn-recovery',     G.studio, 'Yarn recovery: set at any strain, creep, relaxation, cycles, conditioning, wet and hot-wet, and what it means for the cloth', true),
   E('GET',  '/studio/yarn-recovery/catalogue', G.studio, 'Yarn recovery fibres, conditions and time points', true),
+  E('POST', '/studio/fancy-yarn',        G.studio, 'Fancy yarn (slub, flame, nep, bouclé, chenille, ATY, filament core-spun): parts, mass, strength, evenness, diameter and the knitting limit', true),
+  E('GET',  '/studio/fancy-yarn/catalogue', G.studio, 'Fancy yarn forms, their defaults, fibres and spinning systems', true),
   E('POST', '/studio/fabric-look',       G.studio, 'Fabric look: the lustre and texture of a cloth through knitting, dyeing and finishing, and the material the 3D view is given', true),
   E('GET',  '/studio/fabric-look/catalogue', G.studio, 'Fabric look shades, finishes and dye methods', true),
   E('POST', '/studio/warp/analyse',      G.studio, 'Warp design: lapping, runner, GSM, width, beams, production, checks', true),

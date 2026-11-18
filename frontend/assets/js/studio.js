@@ -163,6 +163,7 @@
       if (window.KAStudioMelange) window.KAStudioMelange.setCatalogue(d.melange);
       if (window.KAStudioBlend) window.KAStudioBlend.setCatalogue(d.blend);
       if (window.KAStudioChem) window.KAStudioChem.setCatalogue(d.chemistry);
+      if (window.KAStudioFancy) window.KAStudioFancy.setCatalogue(d.fancy);
       if (window.KAStudioRecovery) window.KAStudioRecovery.setCatalogue(d.recovery);
       var fib = $('st-fibre');
       var fopts = Object.keys(d.fibres || {}).map(function (k) { return '<option value="' + k + '">' + esc(d.fibres[k].label) + '</option>'; }).join('');
@@ -610,6 +611,7 @@
       melange: window.KAStudioMelange ? window.KAStudioMelange.payload() : null,
       blend: window.KAStudioBlend ? window.KAStudioBlend.payload() : null,
       chemistry: window.KAStudioChem ? window.KAStudioChem.payload() : null,
+      fancy: window.KAStudioFancy ? window.KAStudioFancy.payload() : null,
       recovery: window.KAStudioRecovery ? window.KAStudioRecovery.payload() : null,
       look: window.KAStudioLook ? window.KAStudioLook.payload() : null,
       plush: { cut: $('st-cut').checked, sinker_mm: num('st-sinker'), arrangement: $('st-parr').value },
@@ -639,6 +641,7 @@
       if (window.KAStudioMelange) window.KAStudioMelange.studioResult(r);
       if (window.KAStudioBlend) window.KAStudioBlend.studioResult(r);
       if (window.KAStudioChem) window.KAStudioChem.studioResult(r);
+      if (window.KAStudioFancy) window.KAStudioFancy.studioResult(r);
       if (window.KAStudioRecovery) window.KAStudioRecovery.studioResult(r);
       if (window.KAStudioLook) window.KAStudioLook.studioResult(r);
     }).catch(function (e) {
@@ -1223,6 +1226,7 @@
     var mel = window.KAStudioMelange && KAStudioMelange.forYarnView ? KAStudioMelange.forYarnView(role) : null;
     if (mel) return { yarn: { fibre: mel.yarn.fibre, type: mel.yarn.type, tex: mel.yarn.tex, ply: mel.yarn.ply, mottle: mel.mottle }, from: 'the melange card (' + (mel.label || 'melange') + ')', melange: true };
     var blendMix = window.KAStudioBlend && KAStudioBlend.forYarnView ? KAStudioBlend.forYarnView(role) : null;
+    var fancy = window.KAStudioFancy && KAStudioFancy.forYarnView ? KAStudioFancy.forYarnView(role) : null;
     var y = yarnOf(R), ply = y.ply || 1, tex = null, from = 'your count';
     if (y.count) tex = TEX[y.unit || 'ne'](y.count);
     if (!tex && last && last.yarn) {
@@ -1232,7 +1236,8 @@
       if (t) tex = t / ply;
     }
     if (!tex) { tex = 590.5 / 30; from = 'a 30s default (no count yet)'; }
-    return { yarn: { fibre: y.fibre, type: y.type, tex: tex, ply: ply, filaments: y.filaments, lustre: y.lustre, section: y.section, interlace: y.interlace, crimp: y.crimp, blend: blendMix ? blendMix.mix : undefined }, from: from, blendLabel: blendMix ? blendMix.label : null };
+    var atyView = fancy && fancy.form === 'aty';
+    return { yarn: { fibre: atyView ? 'polyester_filament' : y.fibre, type: atyView ? 'aty' : y.type, tex: tex, ply: ply, filaments: y.filaments, lustre: y.lustre, section: y.section, interlace: y.interlace, crimp: y.crimp, blend: blendMix ? blendMix.mix : undefined, form: fancy ? fancy.form : undefined, fancy: fancy ? fancy.fancy : undefined }, from: from, blendLabel: blendMix ? blendMix.label : null, fancyLabel: fancy ? fancy.label : null };
   }
   function filamentNote(m, from) {
     var s = '<b>' + esc(m.system_label) + ' · ' + m.denier + ' D (' + m.dtex + ' dtex)' + (m.system === 'mono' ? '' : ' / ' + m.filaments + ' F') + ', ' + esc(m.polymer) + '</b> — ';
@@ -1272,6 +1277,17 @@
     s += ' Law: diameter from denier and density, volume kept under draft, core mass = tex ÷ draft, relaxed turns = covered turns × draft, wrap angle from tan α = 2πρ/p. Typical: coalesced filament count (about one per 10 D), cover yarn and covering turns. Drag to turn, Ctrl + scroll to zoom.';
     return s;
   }
+  /** The note under a fancy yarn: what is drawn, from which numbers. */
+  function fancyNote(m, from) {
+    var s = '<b>' + esc(m.system_label) + ' · ' + (m.ne != null ? m.ne + 's Ne (' + m.tex + ' tex)' : '') + '</b> — ';
+    if (m.slub) s += 'the thick place is up to ' + m.slub.thickness_max + '× the base mass (the diameter ×' + Math.sqrt(m.slub.thickness_max).toFixed(2) + ') with less twist per length than the thin yarn, and carries extra short fibres. ' + (m.slub.gap_shortened ? 'A real slub is ' + m.slub.slub_length_real_mm + ' mm long with ' + m.slub.gap_mm + ' mm between slubs: here the slub is drawn ' + m.slub.slub_length_mm + ' mm long and the gap ' + m.slub.gap_shown_mm + ' mm, so the thickness can be seen; the thickness and the twist are real.' : 'Slub ' + m.slub.slub_length_mm + ' mm, gap ' + m.slub.gap_mm + ' mm.');
+    else if (m.neps_per_cm != null) s += m.neps_drawn + ' neps in view (' + m.neps_per_cm + ' per cm), each a ball of tangled fibres about ' + m.nep_size_d + '× the yarn diameter.';
+    else if (m.overfeed != null && m.loop_height_mm != null) s += 'a ground yarn (' + m.ground_tex + ' tex), a binder (' + m.binder_tex + ' tex) wound round it and an effect yarn (' + m.effect_tex + ' tex) overfed ' + m.overfeed + '×: the loops stand ' + m.loop_height_mm + ' mm out at ' + m.loop_spacing_mm + ' mm spacing (solved from the overfeed). Ø ' + m.diameter_mm + ' mm.';
+    else if (m.pile_mm != null) s += 'a core of two twisted strands (' + m.core_tex + ' tex) and a ' + m.pile_mm + ' mm pile (' + m.pile_share_pct + ' % of the mass, ' + m.pile_density_per_mm + ' tufts per mm, fibres ' + m.pile_fibre_um + ' µm). Ø ' + m.diameter_mm + ' mm.';
+    else if (m.core_denier != null) s += 'a core of ' + m.core_filaments + ' polyester filaments (' + m.core_denier + ' D, ' + m.core_filament_um + ' µm each, ' + m.core_share_pct + ' % of the yarn) inside a spun sheath. The core is hidden: tick Cutaway on a core-spun elastane to see how.';
+    else if (m.overfeed_pct != null) s += 'a multifilament core with the overfed filaments standing out in random loops (' + m.overfeed_pct + ' % overfeed); ' + m.filaments + ' filaments of ' + m.fibre_diameter_um + ' µm.';
+    return s + ' Count from ' + esc(from) + '. Typical: loop height, pile and nep sizes; law: the mass balance and the overfeed. Drag to turn, Ctrl + scroll to zoom.';
+  }
   function yarnNote(metas, cmp, from) {
     var f1 = function (v) { return v == null ? '—' : v; };
     if (cmp) {
@@ -1279,6 +1295,7 @@
         '. Same fibre and count for every yarn (' + esc(from) + '). Drag to turn, Ctrl + scroll to zoom; the closer you go the more you see, down to single fibres.';
     }
     var m = metas[0];
+    if (m.fancy) return fancyNote(m, from);
     if (m.filament) return filamentNote(m, from);
     var body = m.filament
       ? m.fibres_in_section + ' filaments of ' + m.fibre_diameter_um + ' µm, ' + (m.system === 'dty' ? 'crimped and bulked by texturing' : 'straight and parallel with almost no twist') + '; no hairs.'
@@ -1304,7 +1321,7 @@
       var elKey = JSON.stringify([elList, $('st-ycol').value, $('st-elcut').checked && !cmp]);
       if (elKey === yarnKey && yarnView) return;
       yarnKey = elKey;
-      if (!yarnPromise) yarnPromise = import('/assets/js/yarn-real.js?v=20261118d').then(function (mod) { yarnView = new mod.YarnView(host); return yarnView; });
+      if (!yarnPromise) yarnPromise = import('/assets/js/yarn-real.js?v=20261119c').then(function (mod) { yarnView = new mod.YarnView(host); return yarnView; });
       yarnPromise.then(function (v) {
         var metas = v.draw(elList, { colour: $('st-ycol').value, cutaway: $('st-elcut').checked && con === 'core' && !cmp });
         $('st-yarnnote').innerHTML = elastaneNote(metas, cmp);
@@ -1319,7 +1336,7 @@
     var key = JSON.stringify([list, $('st-ycol').value, window.KAStudioLook ? window.KAStudioLook.yarnRoughnessScale(sel.value) : 1]);
     if (key === yarnKey && yarnView) return;
     yarnKey = key;
-    if (!yarnPromise) yarnPromise = import('/assets/js/yarn-real.js?v=20261118d').then(function (mod) { yarnView = new mod.YarnView(host); return yarnView; });
+    if (!yarnPromise) yarnPromise = import('/assets/js/yarn-real.js?v=20261119c').then(function (mod) { yarnView = new mod.YarnView(host); return yarnView; });
     yarnPromise.then(function (v) {
       var metas = v.draw(list, { colour: $('st-ycol').value, roughScale: window.KAStudioLook ? window.KAStudioLook.yarnRoughnessScale(sel.value) : 1 });
       $('st-yarnnote').innerHTML = yarnNote(metas, cmp, one.from) + (one.blendLabel ? ' <b>' + esc(one.blendLabel) + ':</b> the fibres are drawn in the blend ratio by number of fibres (a finer fibre means more of them), not as plain cotton or a fixed 60/40.' : '') + (one.melange ? ' <b>Melange:</b> each fibre is drawn in its own colour (a fibre blend by its share of the fibres in the section, a marl by whole strand), so the speckle or the twist of colours comes from the recipe itself.' : '');
@@ -1358,7 +1375,7 @@
 
   // ── 3D: the real fabric — the calculator's knit3d engine ──────────────
   var cloth = null, clothSeq = 0, clothKey = '', zoom = 'loops';   // the real view opens on the loops: a drawn programme must be readable stitch by stitch
-  var FIBRE_3D = { cotton: 'cotton', cvc: 'cotton', polyester_spun: 'polyester', polyester_filament: 'polyester', nylon_filament: 'nylon', viscose: 'viscose', modal: 'modal' };
+  var FIBRE_3D = { cotton: 'cotton', cvc: 'cotton', polyester_spun: 'polyester', polyester_filament: 'polyester', nylon_filament: 'nylon', viscose: 'viscose', wool: 'wool', acrylic: 'acrylic', silk: 'silk', linen: 'linen', modal: 'modal' };
   var cellOf = function (x) { return x === 'K' ? 'K' : x === 'T' ? 'T' : 'M'; };   // transfer and empty needle read as a float
   /** The drawn programme as the 3D engine's construction, pattern and needle sampler. */
   function stripeOf() {
@@ -1548,7 +1565,9 @@
     $('st-yarnbar').addEventListener('change', function () { if (mode3d === 'yarn') renderYarn(); });
     document.addEventListener('ka-melange', function () { if (mode3d === 'yarn') renderYarn(); });
     document.addEventListener('ka-blend-result', function () { if (mode3d === 'yarn') renderYarn(); });
+    document.addEventListener('ka-fancy-result', function () { if (mode3d === 'yarn') renderYarn(); });
     document.addEventListener('ka-look', function () { if (mode3d === 'cloth') renderCloth(); });
+    document.addEventListener('ka-look-input', function () { schedule(); });
     $('st-yarnbar').addEventListener('click', function (e) {
       var b = e.target.closest('[data-yview]'); if (b && yarnView) yarnView.view(b.getAttribute('data-yview'));
     });
@@ -1579,7 +1598,9 @@
     if (window.KAStudioMelange) { o.melange = window.KAStudioMelange.state(); o.melange_payload = window.KAStudioMelange.payload(); }
     if (window.KAStudioBlend) { o.blend = window.KAStudioBlend.state(); o.blend_payload = window.KAStudioBlend.payload(); }
     if (window.KAStudioChem) o.chemistry = window.KAStudioChem.state();
+    if (window.KAStudioFancy) o.fancy = window.KAStudioFancy.state();
     if (window.KAStudioRecovery) o.recovery = window.KAStudioRecovery.state();
+    if (window.KAStudioLook) o.look = window.KAStudioLook.state();
     return o;
   }
   // ── design from a goal: the Studio searches needle programmes itself (POST /api/studio/invent) ─────────
@@ -1666,7 +1687,9 @@
     if (window.KAStudioMelange) window.KAStudioMelange.setState(o.melange || null);
     if (window.KAStudioBlend) window.KAStudioBlend.setState(o.blend || null);
     if (window.KAStudioChem) window.KAStudioChem.setState(o.chemistry || null);
+    if (window.KAStudioFancy) window.KAStudioFancy.setState(o.fancy || null);
     if (window.KAStudioRecovery) window.KAStudioRecovery.setState(o.recovery || null);
+    if (window.KAStudioLook) window.KAStudioLook.setState(o.look || null);
     markCustom();
     rolls = Array.isArray(o.rolls) ? o.rolls : [];
     writeRolls();
@@ -1750,6 +1773,13 @@
     if (chc) {
       chc.addEventListener('change', schedule);
       chc.addEventListener('input', function (e) { if (e.target.type === 'number') schedule(); });
+    }
+    // the fancy yarn card likewise
+    var fyc = $('fy-card');
+    if (fyc) {
+      fyc.addEventListener('change', schedule);
+      fyc.addEventListener('input', function (e) { if (e.target.type === 'number' || e.target.type === 'color') schedule(); });
+      fyc.addEventListener('click', function (e) { if (e.target.closest('[data-fy-role]')) schedule(); });
     }
     // the yarn recovery card likewise
     var rcc = $('rc-card');

@@ -559,7 +559,7 @@ function shellFromWarp(a, name) {
 
 // ── a weft design (fabric-studio analyse result) as a shell ───────────────
 const WEFT_FAMILY_FABRIC = { single_jersey: 'single_jersey', pique: 'lacoste_single', fleece: 'fleece_3_thread', rib: 'rib_1x1', interlock: 'interlock' };
-const WEFT_FIBRE_NAME = { Cotton: 'cotton', 'Polyester (spun)': 'polyester', Viscose: 'viscose', Modal: 'modal', 'CVC / PC blend': 'cvc', 'Polyester filament': 'polyester', 'Nylon filament': 'nylon' };
+const WEFT_FIBRE_NAME = { Cotton: 'cotton', 'Polyester (spun)': 'polyester', Viscose: 'viscose', Modal: 'modal', 'CVC / PC blend': 'cvc', 'Polyester filament': 'polyester', 'Nylon filament': 'nylon', Wool: 'wool', Acrylic: 'acrylic', 'Silk (spun)': 'silk', Linen: 'linen' };
 const spinOf = (s) => String(s || '').toLowerCase();
 
 /**
@@ -597,7 +597,7 @@ function shellFromWeft(a, name) {
     else if (fibre === 'cotton') { type = /carded|open/.test(spin) ? 'carded_regular' : 'combed_regular'; count = ne || 30; }
     else if (fibre === 'cvc') { type = 'cvc_60_40'; count = ne || 30; }
     else if (fibre === 'polyester' ) { type = 'polyester_spun'; count = ne || 30; }
-    else { type = 'viscose_regular'; count = ne || 30; if (fibre === 'modal') notes.push(`${role}: modal is not on the yarn price list — priced as viscose; type your own price.`); }
+    else { type = 'viscose_regular'; count = ne || 30; if (fibre === 'modal') notes.push(`${role}: modal is not on the yarn price list — priced as viscose; type your own price.`); else if (['wool', 'acrylic', 'silk', 'linen'].includes(fibre)) notes.push(`${role}: ${fibre} is not on the yarn price list — priced as viscose; type your own price.`); }
     return { role, type, count, share_pct: p.pct, price: '', denier_actual, fibreName: fibre };
   });
   if (!lines.length) notes.push('The design gave no yarn breakdown: add the yarns by hand.');

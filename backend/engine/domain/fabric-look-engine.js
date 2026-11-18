@@ -31,6 +31,7 @@
 const BY = require('./blend-yarn-engine');
 const U = require('./uster-engine');
 const YC = require('./yarn-character');
+const FY = require('./fancy-yarn-engine');
 const Y = require('./yarn-engine');
 
 class LookError extends Error {}
@@ -46,15 +47,35 @@ const SHADES = Object.keys(BODY);
 // a cotton-raw yarn's specular reflectance (Fresnel at n ≈ 1.55): the sheen index 100
 const R_COTTON = Math.pow((1.55 - 1) / (1.55 + 1), 2);
 // the renderer's fibre keys
-const FIBRE_3D = { cotton: 'cotton', polyester: 'polyester', viscose: 'viscose', modal: 'modal', tencel: 'viscose', bamboo: 'viscose', nylon: 'nylon', acrylic: 'acrylic', wool: 'wool', elastane: 'spandex' };
+const FIBRE_3D = { cotton: 'cotton', polyester: 'polyester', viscose: 'viscose', modal: 'modal', tencel: 'viscose', bamboo: 'viscose', nylon: 'nylon', acrylic: 'acrylic', wool: 'wool', silk: 'silk', linen: 'linen', elastane: 'spandex' };
 
 // the lustre scale of the yarn-character engine (0–1) and the sheen index, both ways
 const lustreOf = (index) => clamp(1 - Math.exp(-(index - 60) / 220), 0, 0.99);
 const indexOf = (lustre) => 60 - 220 * Math.log(1 - clamp(lustre, 0, 0.99));
 const lustreClass = (l) => (l < 0.18 ? 'matt' : l < 0.35 ? 'soft sheen' : l < 0.6 ? 'lustrous' : l < 0.85 ? 'bright' : 'glassy');
 
+// ── the glossmeter: ASTM D523 geometry (20°, 60°, 85°), a gloss unit (GU) = 1000 × the specular reflectance ──────────────────────────────
+// 100 GU is the reflectance of polished black glass (n = 1.567): 10 % at 60°. A textile reflects a small, scattered share of that: the
+// specular fraction of its surface (the share of the face lying at the mirror angle) falls as the surface gets rougher.
+function fresnel(n, deg) {
+  const ci = Math.cos(deg * Math.PI / 180), st = Math.sin(deg * Math.PI / 180) / n, ct = Math.sqrt(1 - st * st);
+  const rs = Math.pow((ci - n * ct) / (ci + n * ct), 2), rp = Math.pow((n * ci - ct) / (n * ci + ct), 2);
+  return (rs + rp) / 2;
+}
+const ANGLES = [20, 60, 85];
+const specFraction = (rough) => 0.12 * Math.pow(1 - clamp(rough / 100, 0, 1), 2);
+const guOf = (sheen, rough, angle) => 1000 * fresnel(1.55, angle) * (sheen / 100) * specFraction(rough);
+const STAGE_IDS = ['knitted', 'scoured', 'dyed', 'finished'];
+
 /** The yarn's own look: from the blend yarn engine for a staple yarn, from the yarn character for a filament. */
 function yarnLook(y, mercerised) {
+  const L = yarnLook0(y, mercerised);
+  // a fancy yarn's effect changes how much sheen reaches the eye, how hairy it reads and how it feels
+  const fm = y.form && FY.LOOK[y.form];
+  if (fm && L) { L.sheen *= fm.sheen; L.hair_rel *= fm.hair; L.softness += fm.soft; L.form = y.form; }
+  return L;
+}
+function yarnLook0(y, mercerised) {
   if (y.filament) {
     const fam = y.mix && y.mix.nylon > 50 ? 'nylon' : 'polyester';
     const ch = YC.yarnCharacter({ spinKey: 'combed', spin: Y.SPINNING_SYSTEMS.combed, form: 'single', fibers: { [fam]: 100 }, countNe: 590.5 / y.tex, poly_form: y.type, poly_lustre: y.lustre || 'semi_dull' });
@@ -65,7 +86,7 @@ function yarnLook(y, mercerised) {
   const fibres = {};
   for (const [f, v] of Object.entries(y.mix || { cotton: 100 })) if (f !== 'elastane' && +v > 0 && own(BY.FIB, f)) fibres[f] = +v;
   if (!Object.keys(fibres).length) fibres.cotton = 100;
-  const r = BY.analyse({ fibres, count: { value: y.tex, unit: 'tex' }, spinning: y.spinning && own(BY.GEO, y.spinning) ? y.spinning : undefined, mercerised: !!mercerised });
+  const r = BY.analyse({ fibres, count: { value: Math.min(y.tex, 120), unit: 'tex' }, spinning: y.spinning && own(BY.GEO, y.spinning) ? y.spinning : undefined, mercerised: !!mercerised });
   const comp = r.composition.per_fibre;
   const hairParts = comp.map((c) => ({ id: c.fibre, h: (c.dry_share_pct / 100) * BY.FIB[c.fibre].hair, cell: !!BY.FIB[c.fibre].cellulosic }));
   const hT = hairParts.reduce((t, x) => t + x.h, 0) || 1;
@@ -102,11 +123,12 @@ function stage(id, label, o) {
     id, label, sheen_index: V(r1(sheen), 'raw cotton yarn = 100', o.basis || 'estimate'), lustre: r2(lustreOf(sheen)), lustre_class: lustreClass(lustreOf(sheen)),
     perceived_gloss: V(r1(contrast * 100), '% of the light that is specular', 'law'), hairiness: V(r2(hair), '× combed cotton', 'estimate'),
     stitch_definition: V(r1(definition * 100), '0–100', 'estimate'), roughness: V(r1(rough * 100), '0–100', 'estimate'), softness: V(r1(o.softness), 'cotton yarn = 100', 'estimate'), cover: V(r2(o.cover), '', 'law'),
+    gloss_units: V(r1(guOf(sheen, rough * 100, 60)), 'GU at 60°', o.cal ? 'calibrated' : 'estimate'),
     note: o.note || null,
   };
 }
 
-function face(yarn, merc, st, fin, which) {
+function face(yarn, merc, st, fin, which, cal) {
   const body = BODY[fin.shade];
   const cover = coverOf(st);
   const geoK = geometry(st, cover * 0.92);                                // greige: loops not yet relaxed, a little less cover
@@ -115,12 +137,13 @@ function face(yarn, merc, st, fin, which) {
   const stages = [];
   const y0 = yarn.sheen;
   stages.push(stage('yarn', 'Yarn as spun', { sheen: y0, hair: yarn.hair_rel, relief: 0, cover: 0, body: 0.85, softness: yarn.softness, note: yarn.filament ? 'a filament yarn: no hairs, the polymer\'s own sheen' : 'a spun yarn: the fibres\' sheen under a halo of hairs' }));
-  const sK = y0 * geoK.G * 1.0;
-  stages.push(stage('knitted', 'Knitted (greige)', { sheen: sK, hair: yarn.hair_rel, relief, cover: cover * 0.92, body: 0.85, softness: yarn.softness * 0.97, note: 'the loops give the yarn\'s gloss a geometry: the cover, the alignment of the face yarns, what tucks and floats do' }));
+  const SC = cal ? cal.scale : 1;                                          // a measured gloss fits the model's fabric-level specular strength
+  const sK = y0 * geoK.G * SC;
+  stages.push(stage('knitted', 'Knitted (greige)', { cal: !!cal, sheen: sK, hair: yarn.hair_rel, relief, cover: cover * 0.92, body: 0.85, softness: yarn.softness * 0.97, note: 'the loops give the yarn\'s gloss a geometry: the cover, the alignment of the face yarns, what tucks and floats do' }));
   const clean = 1 + 0.04 * (yarn.cotton_share + (1 - yarn.synthetic) * 0.5);
-  stages.push(stage('scoured', 'Scoured and bleached', { sheen: sK * clean, hair: yarn.hair_rel, relief, cover: cover * 0.94, body: 0.85, softness: yarn.softness * 1.02, note: 'wax, oil and size off: cleaner and a little brighter' }));
-  const sD = y0 * geoF.G * clean;
-  stages.push(stage('dyed', 'Dyed and relaxed', { sheen: sD, hair: yarn.hair_rel, relief, cover, body, softness: yarn.softness * 1.02, note: 'relaxed to the finished density, and the colour sets how visible the gloss is: the same sheen shows far more on a dark shade' }));
+  stages.push(stage('scoured', 'Scoured and bleached', { cal: !!cal, sheen: sK * clean, hair: yarn.hair_rel, relief, cover: cover * 0.94, body: 0.85, softness: yarn.softness * 1.02, note: 'wax, oil and size off: cleaner and a little brighter' }));
+  const sD = y0 * geoF.G * clean * SC;
+  stages.push(stage('dyed', 'Dyed and relaxed', { cal: !!cal, sheen: sD, hair: yarn.hair_rel, relief, cover, body, softness: yarn.softness * 1.02, note: 'relaxed to the finished density, and the colour sets how visible the gloss is: the same sheen shows far more on a dark shade' }));
   // finishing
   let sheen = sD, hair = yarn.hair_rel, soft = yarn.softness * 1.02, defMul = 1, smooth = 0;
   const notes = [];
@@ -137,7 +160,8 @@ function face(yarn, merc, st, fin, which) {
   if (fin.heatset && yarn.poly_share > 0) { sheen *= 1 + 0.03 * yarn.poly_share; soft -= 5 * yarn.poly_share; notes.push('heat-set: the polyester surface smoothed, a little stiffer'); }
   if (fin.softener) { smooth += 0.08; soft += 10; notes.push('softened: less friction, a softer hand'); }
   if (brushed) { hair *= 5; sheen *= 0.4; defMul = 0.5; soft += 18; notes.push('raised: the fibre ends stand up as a nap, the gloss goes (× 0.4) and the stitch is hidden'); }
-  stages.push(stage('finished', 'Finished', { sheen, hair, relief, cover, body, softness: soft, defMul, smoothMul: smooth, note: notes.length ? notes.join('; ') + '.' : 'no finish beyond the wet processing.' }));
+  if (cal && cal.finish_scale && cal.finish_scale !== 1) { sheen *= cal.finish_scale; notes.push(`the finishing's effect on the gloss fitted to your readings (× ${r2(cal.finish_scale)})`); }
+  stages.push(stage('finished', 'Finished', { cal: !!cal, sheen, hair, relief, cover, body, softness: soft, defMul, smoothMul: smooth, note: notes.length ? notes.join('; ') + '.' : 'no finish beyond the wet processing.' }));
   return { stages, yarn, geometry: { cover: r2(cover), alignment: r2(geoF.alignment), factor_knitted: r3(geoK.G), factor_finished: r3(geoF.G) }, mercerise_multiple: mercMul, brushed };
 }
 
@@ -189,7 +213,29 @@ function analyse(input) {
   const mk = (y) => { const yl = yarnLook(y, false); yl._src = y; return yl; };
   const faceYarn = by.ground || by.face || yarns[0];
   const backYarn = by.loop || faceYarn;
-  const F = face(mk(faceYarn), fin.mercerise, st, fin, 'face');
+  let F = face(mk(faceYarn), fin.mercerise, st, fin, 'face');
+  // glossmeter readings of the cloth fit the model: the ratio of what was measured to what the model predicted, per stage
+  let calibration = null;
+  const readings = readGloss(input.gloss);
+  if (readings.length) {
+    const rows = readings.map((r) => {
+      const stg = F.stages.find((x) => x.id === r.stage);
+      const pred = guOf(stg.sheen_index.value, stg.roughness.value, r.angle);
+      return { stage: r.stage, angle: r.angle, measured_gu: r.gu, predicted_gu: r1(pred), ratio: pred > 1e-9 ? r.gu / pred : null };
+    });
+    const early = rows.filter((x) => x.stage !== 'finished' && x.ratio != null), fin1 = rows.find((x) => x.stage === 'finished' && x.ratio != null);
+    const k = early.length ? early.reduce((t, x) => t * x.ratio, 1) ** (1 / early.length) : fin1 ? fin1.ratio : null;
+    if (k != null) {
+      const scale = clamp(k, 0.05, 20);
+      const finishScale = early.length && fin1 ? clamp(fin1.ratio / scale, 0.2, 5) : 1;
+      F = face(mk(faceYarn), fin.mercerise, st, fin, 'face', { scale, finish_scale: finishScale });
+      calibration = {
+        applied: true, basis: 'calibrated', readings: rows.map((x) => ({ ...x, ratio: x.ratio == null ? null : r2(x.ratio), predicted_gu_after: r1(guOf(F.stages.find((y) => y.id === x.stage).sheen_index.value, F.stages.find((y) => y.id === x.stage).roughness.value, x.angle)) })),
+        fitted: { specular_scale: r2(scale), finish_scale: r2(finishScale) },
+        note: 'The model predicted a gloss for each stage you measured; the ratio of your reading to it fits the fabric-level specular strength (every stage from the knitted cloth on) and, if you measured the finished cloth as well as an earlier stage, the own effect of the finishing. Every sheen, perceived gloss and the material the 3D view is given follow from the fitted values. The back of the cloth is not fitted.',
+      };
+    }
+  }
   const hasBack = !!by.loop || fin.brushed === 'back' || fin.brushed === 'both';
   const B = hasBack ? face(mk(backYarn), fin.mercerise, st, fin, 'back') : null;
   const roles = Object.fromEntries(yarns.map((y) => { const l = y === faceYarn ? F.yarn : (y === backYarn && B ? B.yarn : yarnLook(y, false)); return [y.role || 'ground', { label: l.label, sheen_index: V(r1(l.sheen), 'raw cotton yarn = 100', l.source === 'blend' ? 'blend' : 'estimate'), lustre_class: lustreClass(lustreOf(l.sheen)), hairiness: V(r2(l.hair_rel), '× combed cotton', 'blend'), softness: V(r1(l.softness), 'cotton = 100', 'estimate'), source: l.source }]; }));
@@ -209,6 +255,7 @@ function analyse(input) {
     cloth: { shade, shade_body: BODY[shade], dye_method: fin.dye_method, finish: { mercerise: fin.mercerise, biopolish: fin.biopolish, heatset: fin.heatset, softener: fin.softener, brushed: fin.brushed } },
     yarns: roles,
     face: { yarn: F.yarn.label, stages: F.stages, geometry: F.geometry, final: last },
+    calibration,
     back: B ? { yarn: B.yarn.label, stages: B.stages, geometry: B.geometry, final: B.stages[B.stages.length - 1] } : null,
     change: { sheen_yarn_to_finished: r2(last.sheen_index.value / F.stages[0].sheen_index.value), hair_knitted_to_finished: r2(last.hairiness.value / first.hairiness.value), gloss_contrast_knitted_to_finished: r2(last.perceived_gloss.value / first.perceived_gloss.value) },
     render: renderOf(F, fin, st, 'face'), render_back: B ? renderOf(B, fin, st, 'back') : null,
@@ -216,6 +263,21 @@ function analyse(input) {
   };
 }
 
-function catalogue() { return { shades: SHADES.map((id) => ({ id, label: id, body: BODY[id] })), finishes: ['none', 'face', 'back', 'both'], dye_methods: ['reactive', 'disperse', 'pigment', 'discharge', 'garment_wash'] }; }
+/** Glossmeter readings: [{ stage, gu, angle }] — the stage of the cloth measured (knitted, scoured, dyed, finished), the gloss units, the geometry. */
+function readGloss(g) {
+  if (g == null) return [];
+  const list = Array.isArray(g) ? g : Array.isArray(g.readings) ? g.readings : [];
+  return list.filter((r) => r && r.gu !== '' && r.gu != null).map((r, i) => {
+    const gu = +r.gu;
+    if (!(gu > 0 && gu <= 1000)) throw new LookError(`Glossmeter reading ${i + 1}: give the gloss units above 0 (and not above 1000).`);
+    const stage = r.stage == null ? 'finished' : String(r.stage);
+    if (!STAGE_IDS.includes(stage)) throw new LookError(`Glossmeter reading ${i + 1}: the stage is one of ${STAGE_IDS.join(', ')}.`);
+    const angle = r.angle == null || r.angle === '' ? 60 : +r.angle;
+    if (!ANGLES.includes(angle)) throw new LookError(`Glossmeter reading ${i + 1}: the geometry is 20, 60 or 85 degrees.`);
+    return { stage, gu, angle };
+  });
+}
 
-module.exports = { analyse, catalogue, LookError, lustreOf, indexOf, BODY };
+function catalogue() { return { glossmeter: { stages: STAGE_IDS, angles: ANGLES, unit: 'GU (ASTM D523)' }, shades: SHADES.map((id) => ({ id, label: id, body: BODY[id] })), finishes: ['none', 'face', 'back', 'both'], dye_methods: ['reactive', 'disperse', 'pigment', 'discharge', 'garment_wash'] }; }
+
+module.exports = { analyse, catalogue, LookError, lustreOf, indexOf, BODY, guOf, fresnel };

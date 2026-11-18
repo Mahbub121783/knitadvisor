@@ -59,6 +59,8 @@ const REC = {
   nylon:     { proxy: null,        c: 0.15, p: 0.60, q: 0.50, cond: 0.29, g10: 0.28, g1000: 1.03, break_cycles: 5000 },
   acrylic:   { proxy: null,        c: 0.12, p: 0.50, q: 0.40, cond: 0.19, g10: null, g1000: null, break_cycles: null },
   wool:      { proxy: null,        c: 0.10, p: 0.60, q: 0.55, cond: 0.29, g10: 0.48, g1000: 1.44, break_cycles: 2000 },
+  silk:      { proxy: null,        c: 0.06, p: 0.50, q: 0.40, cond: 0.11, g10: 0.36, g1000: 1.92, break_cycles: 5000 },
+  linen:     { proxy: 'cotton',     c: 0.03, p: 0.60, q: 0.25, cond: 0.45, g10: 0.66, g1000: null, break_cycles: 75 },
 };
 const FIBRE_IDS = Object.keys(REC);
 // growth after 10 cycles where the tables have none (typical, between nylon and viscose), and the ratio of the 1000-cycle to the 10-cycle growth
@@ -106,7 +108,10 @@ function build(input) {
   if (src && typeof src === 'object') for (const [f, v] of Object.entries(src)) { if (+v > 0 && f !== 'elastane') { if (!own(REC, f)) throw new RecoveryError(`"${f}" is not a fibre this engine holds recovery data for (${FIBRE_IDS.join(', ')}).`); fibres[f] = +v; } }
   if (!Object.keys(fibres).length) throw new RecoveryError('Give the yarn\'s fibres and their shares, for example cotton 60 and polyester 40.');
   const elastane = src && +src.elastane > 0 ? +src.elastane : 0;
-  const P = BY.prep({ fibres, count: input.count, tex: input.tex, count_ne: input.count_ne, spinning: input.spinning, grade: input.grade, ply: input.ply });
+  const t0 = (() => { const c = input.count; if (!c || !(+c.value > 0)) return null; const u = String(c.unit || 'ne').toLowerCase(); return { ne: (v) => 590.5 / v, nm: (v) => 1000 / v, tex: (v) => v, dtex: (v) => v / 10, denier: (v) => v / 9 }[u] ? { ne: (v) => 590.5 / v, nm: (v) => 1000 / v, tex: (v) => v, dtex: (v) => v / 10, denier: (v) => v / 9 }[u](+c.value) : null; })();
+  // a coarse yarn (bouclé, chenille) is taken at the blend engine's 120 tex: strains and recoveries do not depend on the mass
+  const clampCount = t0 && t0 > 120 ? { value: 120, unit: 'tex' } : input.count;
+  const P = BY.prep({ fibres, count: clampCount, tex: input.tex, count_ne: input.count_ne, spinning: input.spinning, grade: input.grade, ply: input.ply });
   const bl = BY.build(P.comps, P.spinKey);
   const k = BY.core(bl, P.tex, { spinKey: P.spinKey, grade: P.grade, ply: P.ply, form: P.ply > 1 ? 'ply2' : 'single' });
   return { P, k, elastane };
@@ -258,8 +263,19 @@ function analyse(input) {
   };
   if (elastane > 0) cloth.elastane = { share_pct: r1(elastane), note: 'Elastane brings most of its strain back (typically 95–98 % from 100 % extension, a set of 2–4 %) and pulls the loops back past the crossing friction; the figures above are for the staple yarn it rides with.', basis: 'typical' };
 
+  // what the cloth's stretch model takes from the yarn: its recovery at the yarn strains of 1, 5 and 10 % (the standard test), the share of the set
+  // that comes back over an hour, and how much a two-hour hold adds to the set
+  const at = (e, h, r) => yarnSet(e, h, r, false).set_pct;
+  const s60 = at(5, 30, 60), s3600 = at(5, 30, 3600);
+  const forStretch = {
+    rec: { e1: yarnSet(1, 30, 60, false).recovery_pct, e5: yarnSet(5, 30, 60, false).recovery_pct, e10: yarnSet(10, 30, 60, false).recovery_pct },
+    delayed: s60 > 1e-9 ? clamp(1 - s3600 / s60, 0.05, 0.75) : 0.4,
+    creep: s60 > 1e-9 ? clamp(at(5, 7200, 60) / s60, 1, 3) : 1.3,
+    condition: cond.label, basis: 'blend',
+  };
   return {
     success: true,
+    for_stretch: forStretch,
     identity: { label: BY.labelOfMix(Object.fromEntries(P.comps.map((c) => [c.id, c.share]))), count: { tex: r2(k.tex), ne: r1(590.5 / k.tex) }, spinning: P.spinKey, condition: { id: cond.id, label: cond.label, rh: cond.rh }, mean_fibre_angle: r1(k.thetaM * 180 / Math.PI), structure_factor: struct },
     recovery, creep, relaxation, cyclic, conditioning, conditions: conds, knitting, cloth, warnings, derivations: derive,
   };

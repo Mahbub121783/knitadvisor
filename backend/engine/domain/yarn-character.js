@@ -49,6 +49,12 @@ const FORM_LOOK = {
   ply2:      { bulk: 1.06, ply: 2, label: '2-ply' },
   slub:      { bulk: 1.00, ply: 1, label: 'slub' },
   core_spun: { bulk: 0.98, ply: 1, label: 'core-spun' },
+  // fancy yarns (fancy-yarn-engine.js): bulk = diameter against a plain yarn of the same count, from the loop height or the pile
+  flame:     { bulk: 1.02, ply: 1, label: 'flame (irregular slub)' },
+  nep:       { bulk: 1.0,  ply: 1, label: 'nep' },
+  boucle:    { bulk: 3.0,  ply: 1, label: 'bouclé (loop yarn)' },
+  chenille:  { bulk: 2.3,  ply: 1, label: 'chenille' },
+  core_fil:  { bulk: 0.98, ply: 1, label: 'core-spun, filament core' },
 };
 
 // Polyester. Lustre is set by the delustrant (titanium dioxide) in the
@@ -65,6 +71,7 @@ const POLY_FORM = {
   staple: { f: 0.60, rough: 0.18, hair: SPUN_HAIR.polyester, bulk: 1.0, label: 'spun staple', filament: false },
   dty:    { f: 0.72, rough: 0.08, hair: 0.10, bulk: 1.18, label: 'textured filament (DTY)', filament: true },
   fdy:    { f: 1.00, rough: 0.00, hair: FILAMENT_HAIR, bulk: 0.94, label: 'flat filament (FDY)', filament: true },
+  aty:    { f: 0.45, rough: 0.30, hair: 0.18, bulk: 1.35, label: 'air-jet textured (ATY)', filament: true },
   // one solid filament: its diameter is the polymer's own, 2·√(tex / ρπ), about 0.86 of the √tex/28 rule
   mono:   { f: 1.00, rough: 0.00, hair: 0, bulk: 0.86, label: 'monofilament', filament: true },
 };

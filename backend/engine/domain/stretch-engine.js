@@ -188,6 +188,10 @@ function analyzeStretch(p = {}) {
   const tex = Number(p.tex) > 0 ? Number(p.tex) : 590.5 / ne;
   const d = Number(p.yarnDiaMm) > 0 ? Number(p.yarnDiaMm) : 25.4 / (28 * Math.sqrt(ne));
   const fm = fibreModel(p.fibers);
+  // the yarn's own recovery (yarn-recovery-engine.js), when it is given: the fibres in parallel, stiffness-weighted, at the yarn
+  // strains the cloth puts in, in the room asked for — in place of the mass-weighted mean of the fibre table
+  const yr = p.yarnRecovery && p.yarnRecovery.rec && Number.isFinite(p.yarnRecovery.rec.e1) ? p.yarnRecovery : null;
+  if (yr) fm.rec = { e1: yr.rec.e1, e5: yr.rec.e5, e10: yr.rec.e10 };
   const hairF = Number.isFinite(p.hairFactor) ? clamp(p.hairFactor, 0.02, 2.5) : 1;
   const el = Number.isFinite(p.elastanePct) && p.elastanePct > 0 ? p.elastanePct : fm.elastane;
 
@@ -246,7 +250,9 @@ function analyzeStretch(p = {}) {
   const delayed = clamp(0.35 * fm.cellulose + 0.5 * fm.synthetic + 0.55 * fm.wool + 0.35 * (1 - fm.cellulose - fm.synthetic - fm.wool), 0.25, 0.6);
   // yarn set that a wash relaxes out (water lets cellulose fibres recover)
   const washKeep = clamp(0.4 * fm.cellulose + 0.85 * fm.synthetic + 0.2 * fm.wool + 0.6 * (1 - fm.cellulose - fm.synthetic - fm.wool), 0.15, 0.9);
-  const creep = 1 + 0.35 * fm.cellulose + 0.2 * (1 - fm.cellulose);
+  // the yarn's own set: how much of it is still there after an hour's rest (the yarn engine's, else 0.8), and what a 2 h hold adds
+  const yarnKeep1h = yr && Number.isFinite(yr.delayed) ? 1 - clamp(yr.delayed, 0.05, 0.75) : 0.8;
+  const creep = yr && Number.isFinite(yr.creep) ? clamp(yr.creep, 1, 3) : 1 + 0.35 * fm.cellulose + 0.2 * (1 - fm.cellulose);
 
   const dirs = {};
   for (const dir of ['w', 'l']) {
@@ -300,8 +306,8 @@ function analyzeStretch(p = {}) {
       return {
         quick,
         held60: held,
-        held1h: fric * 1.35 * (1 - delayed) + yarnSet * creep * 0.8,
-        quick1h: fric * (1 - delayed) + yarnSet * 0.8,
+        held1h: fric * 1.35 * (1 - delayed) + yarnSet * creep * yarnKeep1h,
+        quick1h: fric * (1 - delayed) + yarnSet * yarnKeep1h,
         washed: fric * 0.08 + yarnSet * creep * washKeep,
       };
     };
@@ -408,6 +414,7 @@ function analyzeStretch(p = {}) {
     fibre_recovery: {
       points: [{ strain_pct: 0, recovery_pct: 100 }, { strain_pct: 1, recovery_pct: r1(fm.rec.e1) }, { strain_pct: 5, recovery_pct: r1(fm.rec.e5) }, { strain_pct: 10, recovery_pct: r1(fm.rec.e10) }],
       proxies: fm.proxies,
+      source: yr ? 'yarn recovery engine (fibres in parallel, stiffness-weighted' + (yr.condition ? ', ' + yr.condition : '') + ')' : 'fibre table, mass-weighted',
     },
     elastane: elastane ? { pct: el, denier: elastane.denier, feed: elastane.feed, pre_strain_pct: r1(elastane.pre_strain * 100) } : null,
     rest,

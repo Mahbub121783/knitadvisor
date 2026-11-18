@@ -10,7 +10,7 @@
 // to see it.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import './yarn-real-geom.js?v=20261118b';
+import './yarn-real-geom.js?v=20261119b';
 import './view-guard.js?v=20261111b';
 
 const G = globalThis.KAYarnGeom;
@@ -48,8 +48,8 @@ function surfaceMap() {
 
 // ── tubes: every fibre with its own section, merged into one geometry ────
 function fibresGeometry(fibres, xOffset) {
-  const RAD = { body: 7, hair: 5, loop: 5, wrap: 5, mono: 48, filament: 8, core: 40, cover: 8 };
-  const radialOf = (f) => (f.shape === 'lobed' ? Math.max(RAD[f.kind] || 40, 14 * f.lobes) : f.kind === 'filament' && f.shape === 'trilobal' ? 12 : f.kind === 'mono' && f.shape === 'trilobal' ? 60 : RAD[f.kind] || 6);
+  const RAD = { body: 7, hair: 5, loop: 5, wrap: 5, nep: 5, tuft: 5, mono: 48, filament: 8, core: 40, cover: 8 };
+  const radialOf = (f) => (f.shape === 'lobed' ? (f.kind === 'core' ? Math.max(RAD.core, 14 * f.lobes) : Math.max(8, 4 * f.lobes)) : f.kind === 'filament' && f.shape === 'trilobal' ? 12 : f.kind === 'mono' && f.shape === 'trilobal' ? 60 : RAD[f.kind] || 6);
   let nv = 0, ni = 0;
   for (const f of fibres) { const n = f.p.length / 3; if (n < 2) continue; const r = radialOf(f); nv += n * (r + 1); ni += (n - 1) * r * 6; }
   const pos = new Float32Array(nv * 3), nor = new Float32Array(nv * 3), uv = new Float32Array(nv * 2), col = new Float32Array(nv * 3);
@@ -86,7 +86,10 @@ function fibresGeometry(fibres, xOffset) {
         s += ds;
         if (f.conv) { psi += sgn * Math.PI * f.conv * ds; if (s > nextRev) { sgn = -sgn; nextRev = s + 0.4 + ((fi * 0.61 + s) % 1) * 0.9; } }
       }
-      const tf = taper ? Math.min(1, 0.25 + 0.75 * (n - 1 - i) / Math.max(1, n * 0.3)) : 1;
+      let tf = taper ? Math.min(1, 0.25 + 0.75 * (n - 1 - i) / Math.max(1, n * 0.3)) : 1;
+      // wool's scale edges and flax's nodes: the fibre's own size varies along it
+      if (f.modAmp) tf *= 1 + f.modAmp * (((s / f.modPitch) % 1) - 0.5) * 2;
+      if (f.nodeAmp) tf *= 1 + f.nodeAmp * Math.exp(-Math.pow((((s / f.nodePitch) % 1) - 0.5) / 0.08, 2));
       const ao = aoAt(i);
       const a = a0 * tf, b = b0 * tf, cp = Math.cos(psi), sp = Math.sin(psi);
       Pp.set(p[i * 3], p[i * 3 + 1], p[i * 3 + 2]);
@@ -252,7 +255,10 @@ export class YarnView {
     // yarns side by side share one length, so none ends short of the others
     const aspect = this.camera.aspect || 1.5;
     const D0 = Math.max(...list.map((it) => G.build(it.yarn, { lengthOnly: true }).diameter));
-    const need = Math.max(D0 * 22, list.length > 1 ? (list.length * D0 * 5) / aspect : 0);   // the side view's height
+    // a slub or a flame is judged along its length: the view is as tall as the yarn shown, not 22 diameters
+    const lens = list.map((it) => G.build(it.yarn, { lengthOnly: true }).length);
+    const longView = list.some((it) => it.yarn.form === 'slub' || it.yarn.form === 'flame') ? Math.max(...lens) * 0.92 : 0;
+    const need = Math.max(D0 * 22, list.length > 1 ? (list.length * D0 * 5) / aspect : 0, longView);   // the side view's height
     const L0 = Math.max(need / 0.88, ...list.map((it) => G.build(it.yarn, { lengthOnly: true }).length));
     const built = list.map((it) => ({ it, b: G.build(it.yarn, Object.assign(list.length > 1 ? { length: L0 } : {}, opt.cutaway ? { cutaway: true } : {})) }));
     const L = Math.max(...built.map((x) => x.b.length));
@@ -295,8 +301,8 @@ export class YarnView {
         this.over.appendChild(el); this.labels.push({ el, x: xo });
       }
     });
-    const resized = this._lastD && Math.abs(D / this._lastD - 1) > 0.1;
-    this._lastD = D;
+    const resized = (this._lastD && Math.abs(D / this._lastD - 1) > 0.1) || (this._lastL && Math.abs(L / this._lastL - 1) > 0.15);   // a different size or length of yarn is framed afresh
+    this._lastD = D; this._lastL = L;
     if (!this._viewed || this._lastN !== list.length || resized) { this.view('side'); this._viewed = true; } else this.redraw();
     this._lastN = list.length;
     this._resize();                                      // the host may have changed height since the renderer was made

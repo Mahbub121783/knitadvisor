@@ -43,6 +43,8 @@ const BY = require('./blend-yarn-engine');
 const CHEMY = require('./yarn-chemistry-engine');
 const RECY = require('./yarn-recovery-engine');
 const LOOK = require('./fabric-look-engine');
+const SE = require('./stretch-engine');
+const FY = require('./fancy-yarn-engine');
 const STRAITS = require('./structure-traits');
 const { SPINNING_SYSTEMS } = require('./yarn-engine');
 const TE = require('./terry-engine');
@@ -125,6 +127,11 @@ const FIBRES = {
   cvc:               { label: 'CVC / PC blend',       dFactor: 1.03 },
   polyester_filament:{ label: 'Polyester filament',   dFactor: 0.90 },
   nylon_filament:    { label: 'Nylon filament',       dFactor: 0.99 },
+  // fibres with their own 3D shapes and engine data but no factory records: the cotton constants stand in, and the answer says so
+  wool:              { label: 'Wool',                 dFactor: 1.08 },
+  acrylic:           { label: 'Acrylic',              dFactor: 1.14 },
+  silk:              { label: 'Silk (spun)',          dFactor: 1.07 },
+  linen:             { label: 'Linen',                dFactor: 1.00 },
 };
 
 const FAMILY = {
@@ -275,12 +282,13 @@ function readYarn(y, fallback) {
   const tex = single * ply;
   const countLabel = unit === 'ne' ? `${r1(v)}s Ne` : unit === 'denier' ? `${r1(v)} D` : `${r1(v)} ${UNITS[unit].label}`;
   const label = (ply > 1 ? `${ply}/${countLabel}` : countLabel) + (+o.filaments > 0 ? `/${Math.round(+o.filaments)}F` : '');
-  if (tex < 2 || tex > 120) throw new StudioError(`Yarn ${label}: ${r1(tex)} tex is outside 2–120 tex (5s–300s Ne) — check the count and the unit.`);
+  const maxTex = ['boucle', 'chenille'].includes(o.form) ? 400 : 120;           // a bouclé or a chenille is a coarse yarn
+  if (tex < 2 || tex > maxTex) throw new StudioError(`Yarn ${label}: ${r1(tex)} tex is outside 2–${maxTex} tex (${r1(590.5 / maxTex)}s–300s Ne) — check the count and the unit.`);
   const fibre = FIBRES[o.fibre] ? o.fibre : (fallback && fallback.fibre) || 'cotton';
   const filament = FILAMENT_FIBRES.includes(fibre);
   const blendMix = !filament && o.blend && o.mix && typeof o.mix === 'object' ? o.mix : null;   // a blend of any ratio: its own density sets the diameter
   // type: a spinning system for spun yarn, flat / textured for filament
-  const type = filament ? (['fdy', 'dty', 'mono'].includes(o.type) ? o.type : 'dty') : (SPUN_TYPES.includes(o.type) ? o.type : 'combed');
+  const type = filament ? (['fdy', 'dty', 'mono', 'aty'].includes(o.type) ? o.type : 'dty') : (SPUN_TYPES.includes(o.type) ? o.type : 'combed');
   // filament details: delustrant, cross-section, intermingling nodes, crimp contraction (DTY)
   const fil = filament ? {
     lustre: ['bright', 'semi_dull', 'full_dull'].includes(o.lustre) ? o.lustre : 'semi_dull',
@@ -288,7 +296,7 @@ function readYarn(y, fallback) {
     interlace: o.interlace != null && o.interlace !== '' && +o.interlace >= 0 ? Math.min(200, Math.round(+o.interlace)) : null,
     crimp: type === 'dty' && +o.crimp > 0 ? Math.min(60, +o.crimp) : null,
   } : null;
-  const form = filament ? null : (ply > 1 || o.form === 'ply2' ? 'ply2' : ['slub', 'core_spun'].includes(o.form) ? o.form : 'single');
+  const form = filament ? null : (ply > 1 || o.form === 'ply2' ? 'ply2' : ['slub', 'flame', 'nep', 'boucle', 'chenille', 'core_fil', 'core_spun'].includes(o.form) ? o.form : 'single');
   const bulk = filament ? YC.POLY_FORM[type].bulk : YC.SYSTEM_LOOK[type].bulk * YC.FORM_LOOK[form].bulk;
   const typeLabel = filament ? YC.POLY_FORM[type].label : `${type.replace('_', '-')}${form !== 'single' ? ', ' + YC.FORM_LOOK[form].label : ''}`;
   const dpf = filament && +o.filaments > 0 ? (tex * 9) / +o.filaments : null;
@@ -297,6 +305,7 @@ function readYarn(y, fallback) {
     // a melange yarn carries its true fibre mix (the Studio's fibre key is only the nearest family)
     ...(o.melange && o.mix && typeof o.mix === 'object' ? { mix: o.mix, melange: true } : {}),
     ...(blendMix ? { mix: blendMix, blend: true, blend_density: +o.blend_density > 0 ? +o.blend_density : null } : {}),
+    ...(o.fancy && typeof o.fancy === 'object' && form && form !== 'single' && form !== 'ply2' ? { fancy: o.fancy } : {}),
     // Peirce's diameter d = √tex / 28 mm, by fibre packing and by the yarn's own bulk
     d_mm: (Math.sqrt(tex) / 28) * (blendMix && +o.blend_density > 0 ? Math.sqrt(1.52 / +o.blend_density) : FIBRES[fibre].dFactor) * bulk,
     filaments: +o.filaments > 0 ? Math.round(+o.filaments) : null, dpf: dpf ? r2(dpf) : null, ...(fil || {}),
@@ -311,6 +320,7 @@ function readYarn(y, fallback) {
 const FIBRE_MIX = {
   cotton: { cotton: 100 }, cvc: { cotton: 60, polyester: 40 }, polyester_spun: { polyester: 100 },
   viscose: { viscose: 100 }, modal: { modal: 100 }, polyester_filament: { polyester: 100 }, nylon_filament: { nylon: 100 },
+  wool: { wool: 100 }, acrylic: { acrylic: 100 }, silk: { silk: 100 }, linen: { linen: 100 },
 };
 function characterOf(y) {
   if (!y) return null;
@@ -1161,7 +1171,8 @@ function analyse(input) {
   try {
     // melange / marl / heather yarns: each role's melange is worked out first (melange-engine.js) and its resultant
     // count, nearest fibre family and spinning system become that role's yarn; the full analysis rides along
-    // blend yarns (CVC, PC, …): applied first, so a melange on the same role still wins
+    // fancy yarns (slub, bouclé, chenille …) give a role its form; blend yarns (CVC, PC, …) its fibres; a melange on the same role still wins
+    if (input && input.fancy) input = FY.applyToInput(input);
     if (input && input.blend) input = BY.applyToInput(input);
     let melange = null;
     if (input && input.melange) { const m = MEL.applyToInput(input); input = m.input; melange = m.results; }
@@ -1558,6 +1569,11 @@ function analyse(input) {
     const chemOut = input.chemistry && input.chemistry.enabled ? chemistrySummary(input.chemistry, S, roleYarn, feedRows) : null;
     // …and its recovery, creep and cycles (yarn-recovery-engine.js)
     const recOut = input.recovery && input.recovery.enabled ? recoverySummary(input.recovery, S, roleYarn, feedRows) : null;
+    // …the effect each fancy yarn is built from: its parts, strength, evenness, diameter and what the 3D view draws (fancy-yarn-engine.js)
+    const fancyOut = input.fancy ? fancySummary(input.fancy, S, roleYarn, feedRows) : null;
+    if (fancyOut) fancyOut.checks.forEach((c) => checks.push(c));
+    // …and what that yarn recovery means for THIS cloth: stretch, growth and bagging (stretch-engine.js, given the yarn's own recovery)
+    if (recOut && recOut.ground) recOut.ground.cloth_stretch = stretchSummary(input, S, family, match, recOut.ground, !!plush);
     // …and the real lustre and texture of the cloth, from the yarn to the dyed and finished fabric (fabric-look-engine.js)
     const lookOut = input.look && typeof input.look === 'object' ? lookSummary(input.look, S, roleYarn, feedRows, st, gating, chemOut) : null;
     return {
@@ -1607,10 +1623,11 @@ function analyse(input) {
         effects: yarnFx,
       },
       melange: melangeOut,
-      blend: blendOut ? blendOut.roles : null,
+      blend: blendOut && Object.keys(blendOut.roles).length ? blendOut.roles : null,
       chemistry: chemOut,
       recovery: recOut,
       look: lookOut,
+      fancy: fancyOut ? fancyOut.roles : null,
       fabric: {
         accuracy: acc && ctx.floor && !ctx.calib ? {
           interval_pct: 80, level: ctx.floor.n > 0 ? 'machine' : 'pooled', own_rolls: false, method: acc.method, generated: acc.generated,
@@ -1724,6 +1741,21 @@ function yarnsInUse(S, roleYarn, feedRows) {
   feedRows.forEach((f, i) => { if (f.role !== 'ground' && f.role !== 'face' && S.feeds[i]) take(f.role, f.yarn || roleYarn[f.role] || S.ground, S.feeds[i].tex, (roleYarn[f.role] && roleYarn[f.role].ply) || 1); });
   return out;
 }
+function fancySummary(spec, S, roleYarn, feedRows) {
+  const roles = {}, checks = [];
+  yarnsInUse(S, roleYarn, feedRows).forEach((u) => {
+    const sp = spec && Object.prototype.hasOwnProperty.call(spec, u.role) ? spec[u.role] : null;
+    const asAty = sp && sp.form === 'aty' && u.y.type === 'aty';        // an air-jet textured yarn is a filament type, not a form
+    if (!sp || sp.enabled === false || (!asAty && (!u.y.form || u.y.form === 'single' || u.y.form === 'ply2'))) return;
+    const fibres = Object.fromEntries(Object.entries(u.mix).filter(([k]) => k !== 'elastane'));
+    try {
+      const r = FY.analyse({ form: sp.form, fibres, count: { value: u.tex * u.ply, unit: 'tex' }, params: sp.params, spinning: u.spinning });
+      roles[u.role] = r;
+      r.warnings.filter((w) => w.level === 'warn').forEach((w) => checks.push({ level: 'warn', text: `${u.role} yarn (${r.identity.label}): ${w.text}` }));
+    } catch (e) { if (!(e instanceof FY.FancyError || e instanceof BY.BlendError)) throw e; checks.push({ level: 'warn', text: `${u.role} yarn: ${e.message}` }); }
+  });
+  return Object.keys(roles).length || checks.length ? { roles: Object.keys(roles).length ? roles : null, checks } : null;
+}
 function lookSummary(opt, S, roleYarn, feedRows, st, gating, chemOut) {
   const units = yarnsInUse(S, roleYarn, feedRows);
   if (!units.length) return null;
@@ -1735,12 +1767,13 @@ function lookSummary(opt, S, roleYarn, feedRows, st, gating, chemOut) {
   const cls = chemOut && chemOut.ground ? chemOut.ground.dyeing.classes.map((c) => c.id) : [];
   try {
     return LOOK.analyse({
-      yarns: units.map((u) => ({ role: u.role, mix: u.mix, tex: u.tex * u.ply, spinning: u.spinning, filament: u.filament, type: u.y.type, lustre: u.y.lustre })),
+      yarns: units.map((u) => ({ role: u.role, mix: u.mix, tex: u.tex * u.ply, spinning: u.spinning, filament: u.filament, type: u.y.type, lustre: u.y.lustre, form: u.y.form })),
       structure: { tuck_share: sh.tau, miss_share: sh.mu, face_knit_share: knitFace, relief, wpc: S.wpc, cpc: S.cpc, loop_mm: S.lref, yarn_d_mm: S.gfit.yarn_d_mm },
       finish: { shade: opt.shade, colour: opt.colour, mercerise: opt.mercerise, biopolish: opt.biopolish, heatset: opt.heatset, softener: opt.softener, brushed: opt.brushed,
         dye_method: opt.dye_method || (cls.length && !cls.includes('reactive') && cls.includes('disperse') ? 'disperse' : 'reactive') },
+      gloss: opt.gloss,
     });
-  } catch (e) { if (e instanceof LOOK.LookError || e instanceof BY.BlendError) return null; throw e; }
+  } catch (e) { if (e instanceof LOOK.LookError) return { success: false, error: e.message }; if (e instanceof BY.BlendError) return null; throw e; }
 }
 function chemistrySummary(opt, S, roleYarn, feedRows) {
   const roles = {};
@@ -1748,6 +1781,47 @@ function chemistrySummary(opt, S, roleYarn, feedRows) {
     try { const p = CHEMY.profileOf(u.mix, u.tex, { filament: u.filament, shade: opt.shade, liquor_ratio: opt.liquor_ratio, mercerise: !!opt.mercerise, biopolish: opt.biopolish === false ? false : undefined, heatset: opt.heatset, spinning: u.spinning, cdp_disperse: !!opt.cdp_disperse }); if (p) roles[u.role] = p; } catch (e) { if (!(e instanceof CHEMY.ChemError)) throw e; }
   });
   return Object.keys(roles).length ? roles : null;
+}
+function stretchSummary(input, S, family, match, rec, isPlush) {
+  try {
+    const u = { mix: null };
+    const y = S.ground;
+    const mix = Object.assign({}, y.mix || FIBRE_MIX[y.fibre] || { cotton: 100 });
+    const elastEntry = (S.composition || []).filter((c) => /elastane|lycra|spandex/i.test(c.part)).reduce((t, c) => t + (+c.pct || 0), 0);
+    const fibres = Object.assign({}, mix);
+    if (elastEntry > 0) { const t = Object.values(fibres).reduce((a, b) => a + b, 0) || 100; Object.keys(fibres).forEach((k) => { fibres[k] = (fibres[k] / t) * (100 - elastEntry); }); fibres.elastane = elastEntry; }
+    const BYlocal = BY.analyse({ fibres: Object.fromEntries(Object.entries(mix).filter(([k]) => BY.FIB[k])), count: { value: y.tex / (y.ply || 1), unit: 'tex' }, spinning: y.type && BY.GEO[y.type] ? y.type : undefined });
+    const el = input.elastane || {};
+    const base = {
+      fabricId: isPlush ? 'velour_plush' : (match && match.id) || FAMILY[family].anchor, category: family === 'rib' ? 'rib' : family === 'interlock' ? 'interlock' : '',
+      gsm: S.gsm, loopMm: S.lref, countNe: 590.5 / y.tex, tex: y.tex, yarnDiaMm: S.gfit.yarn_d_mm, fibers: fibres, elastanePct: elastEntry,
+      lycraDenier: +el.denier > 0 ? +el.denier : null, feedType: el.every === 'alternate' ? 'half' : null, rkm: BYlocal.tensile.tenacity.value,
+    };
+    const withYarn = SE.analyzeStretch({ ...base, yarnRecovery: rec.for_stretch }), table = SE.analyzeStretch(base);
+    const dirOf = (R, k) => R.directions[k];
+    const pull = 30;
+    const at = (d) => d.curve.find((c) => c.e >= pull) || d.curve[d.curve.length - 1];
+    const lvl = (g) => (g >= 7 ? 'high' : g >= 4 ? 'medium' : 'low');
+    const brief = (R) => Object.fromEntries(['width', 'length'].map((k) => { const d = dirOf(R, k), a = at(d), st = d.standard; return [k, {
+      jam_pct: d.jam_pct, break_pct: d.break_pct, stretch_form_fitting_pct: st.form.stretch_pct, stretch_loose_pct: st.loose.stretch_pct,
+      growth: st.growth ? { held_at_pct: st.growth.held_at_pct, after_60s_pct: st.growth.after_60s_pct, after_1h_pct: st.growth.after_1h_pct, after_wash_pct: st.growth.after_wash_pct } : null,
+      bagging: { pull_pct: pull, growth_quick_pct: a.g, growth_after_1h_pct: a.g1hq, growth_held_1h_pct: a.g1h, growth_after_wash_pct: a.gw, level: lvl(a.g) },
+      curve: d.curve.filter((c, i) => i % 3 === 0 && c.e <= 80).map((c) => ({ stretch_pct: c.e, growth_quick_pct: c.g, growth_1h_pct: c.g1hq, growth_held_1h_pct: c.g1h, growth_wash_pct: c.gw, recovery_pct: c.rec, stage: c.stage })),
+    }]; }));
+    const W = brief(withYarn), W0 = brief(table);
+    const g1 = (B, k) => (B[k].growth ? B[k].growth.after_1h_pct : null);
+    return {
+      kind: withYarn.kind, kind_label: withYarn.kind_label, source: withYarn.fibre_recovery.source,
+      geometry: withYarn.geometry, yarn: withYarn.yarn, elastane: withYarn.elastane, directions: W, risks: withYarn.risks, po_spec: withYarn.po_spec,
+      yarn_recovery_used: { e1: r1(rec.for_stretch.rec.e1), e5: r1(rec.for_stretch.rec.e5), e10: r1(rec.for_stretch.rec.e10), hour_recovery_share_pct: r1(rec.for_stretch.delayed * 100), hold_factor: r2(rec.for_stretch.creep), condition: rec.for_stretch.condition },
+      comparison: {
+        mass_weighted: { width_growth_1h_pct: g1(W0, 'width'), length_growth_1h_pct: g1(W0, 'length'), width_bagging_pct: W0.width.bagging.growth_after_1h_pct, fibre_recovery: { e1: r1(table.fibre_recovery.points[1].recovery_pct), e5: r1(table.fibre_recovery.points[2].recovery_pct), e10: r1(table.fibre_recovery.points[3].recovery_pct) } },
+        yarn_engine: { width_growth_1h_pct: g1(W, 'width'), length_growth_1h_pct: g1(W, 'length'), width_bagging_pct: W.width.bagging.growth_after_1h_pct },
+        note: "The cloth's stretch model used to take the mass-weighted mean of the fibres' recovery. With the yarn recovery engine it takes the yarn's own: the fibres in parallel, stiffness-weighted, at the strains the cloth puts into the yarn, in the room chosen. The difference is what the better yarn model adds.",
+      },
+      basis: { measured: withYarn.basis.measured, modelled: withYarn.basis.modelled },
+    };
+  } catch (e) { return null; }
 }
 function recoverySummary(opt, S, roleYarn, feedRows) {
   const roles = {};
@@ -1770,11 +1844,12 @@ function blendSummary(spec, S, roleYarn, feedRows) {
       if (!tex && roleYarn[role]) tex = roleYarn[role].tex;
     }
     if (!(tex > 0)) continue;
-    const prof = BY.analyse({ ...sp, count: { value: tex / ply, unit: 'tex' }, ply: ply > 1 ? ply : undefined, fabric: role === 'ground' ? { wales_per_cm: S.wpc, courses_per_cm: S.cpc, ...(sp.fabric || {}) } : undefined });
+    let prof;
+    try { prof = BY.analyse({ ...sp, count: { value: tex / ply, unit: 'tex' }, ply: ply > 1 ? ply : undefined, fabric: role === 'ground' ? { wales_per_cm: S.wpc, courses_per_cm: S.cpc, ...(sp.fabric || {}) } : undefined }); } catch (e) { if (e instanceof BY.BlendError) { checks.push({ level: 'warn', text: `${role} yarn: the blend analysis is for yarns up to 120 tex (5s Ne); ${e.message}` }); continue; } throw e; }
     roles[role] = prof;
     prof.warnings.filter((w) => w.level === 'warn').forEach((w) => checks.push({ level: 'warn', text: `${role} yarn (${prof.identity.label}): ${w.text}` }));
   }
-  return Object.keys(roles).length ? { roles, checks } : null;
+  return Object.keys(roles).length || checks.length ? { roles, checks } : null;
 }
 function melangeSummary(results, feedRows, S, ctx) {
   const roleOf = (r) => (r === 'face' ? 'ground' : r);

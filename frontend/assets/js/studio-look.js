@@ -15,7 +15,8 @@
  */
 (function () {
   'use strict';
-  var last = null, side = 'face';
+  var last = null, lastErr = null, side = 'face';
+  var gloss = { knitted: '', dyed: '', finished: '', angle: '60' };
 
   function $(id) { return document.getElementById(id); }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]; }); }
@@ -31,6 +32,9 @@
     var ch = window.KAStudioChem ? window.KAStudioChem.payload() : null;
     var o = { colour: $('st-col') ? $('st-col').value : undefined, brushed: $('st-brush') ? $('st-brush').value : 'none',
       mercerise: ch ? !!ch.mercerise : false, biopolish: ch && ch.biopolish === false ? false : true, heatset: ch && ch.heatset === 'none' ? false : true };
+    var rs = [];
+    ['knitted', 'dyed', 'finished'].forEach(function (st) { var v = parseFloat(gloss[st]); if (v > 0) rs.push({ stage: st, gu: v, angle: +gloss.angle || 60 }); });
+    if (rs.length) o.gloss = { readings: rs };
     if (extra) for (var k in extra) o[k] = extra[k];
     return o;
   }
@@ -43,10 +47,23 @@
     }).join('');
   }
 
+  // the glossmeter form: the readings are the person's, the fit is the engine's
+  function glossForm(r) {
+    var cal = r && r.calibration;
+    var f = '<div class="ml-h">Glossmeter readings (optional)</div><div class="ml-note">Measure the cloth with a glossmeter (ASTM D523) and enter the gloss units: the model is fitted to them, and every sheen, perceived gloss and the material the 3D view is given follow. One reading fits the strength of the cloth; two (the greige and the finished cloth) also fit what the finishing does.</div>' +
+      '<div class="st-row"><div class="st-f"><label for="lk-g-knitted">Knitted cloth (GU)</label><input id="lk-g-knitted" data-lk-gu="knitted" type="number" min="0.1" max="1000" step="0.1" value="' + esc(gloss.knitted) + '"></div>' +
+      '<div class="st-f"><label for="lk-g-dyed">Dyed cloth (GU)</label><input id="lk-g-dyed" data-lk-gu="dyed" type="number" min="0.1" max="1000" step="0.1" value="' + esc(gloss.dyed) + '"></div></div>' +
+      '<div class="st-row"><div class="st-f"><label for="lk-g-finished">Finished cloth (GU)</label><input id="lk-g-finished" data-lk-gu="finished" type="number" min="0.1" max="1000" step="0.1" value="' + esc(gloss.finished) + '"></div>' +
+      '<div class="st-f"><label for="lk-angle">Geometry</label><select id="lk-angle"><option value="20"' + (gloss.angle === '20' ? ' selected' : '') + '>20°</option><option value="60"' + (gloss.angle === '60' ? ' selected' : '') + '>60°</option><option value="85"' + (gloss.angle === '85' ? ' selected' : '') + '>85°</option></select></div></div>';
+    if (lastErr) f += '<div class="ml-note warn">⚠ ' + esc(lastErr) + '</div>';
+    if (cal) f += '<div class="ml-note"><b>Fitted</b>' + tag('calibrated') + ' specular strength × ' + cal.fitted.specular_scale + (cal.fitted.finish_scale !== 1 ? ', the finishing × ' + cal.fitted.finish_scale : '') + '.</div>' +
+      '<div class="bl-scroll"><table class="ml-tbl"><tr><th>Stage</th><th>Geometry</th><th>Measured GU</th><th>Model before</th><th>Ratio</th><th>Model after</th></tr>' + cal.readings.map(function (x) { return '<tr><td>' + esc(x.stage) + '</td><td>' + x.angle + '°</td><td>' + x.measured_gu + '</td><td>' + x.predicted_gu + '</td><td>' + x.ratio + '</td><td>' + x.predicted_gu_after + '</td></tr>'; }).join('') + '</table></div><div class="ml-rm">' + esc(cal.note) + '</div>';
+    return f;
+  }
   function render(r) {
     var pane = $('pane-look'); if (!pane) return;
     ensureCss();
-    if (!r) { pane.innerHTML = '<p class="st-p">The look of the cloth appears here once the Studio has an answer: its lustre and texture at every stage of its life.</p>'; return; }
+    if (!r) { pane.innerHTML = '<p class="st-p">The look of the cloth appears here once the Studio has an answer: its lustre and texture at every stage of its life.</p>' + glossForm(null); return; }
     var F = side === 'back' && r.back ? r.back : r.face;
     var h = '';
     if (r.back) h += '<div class="ml-seg" role="group"><button type="button" data-lk-side="face" class="' + (side === 'face' ? 'on' : '') + '">Face</button><button type="button" data-lk-side="back" class="' + (side === 'back' ? 'on' : '') + '">Back</button></div>';
@@ -65,6 +82,7 @@
     h += bars(F.stages, 'softness', 'Softness', 160);
     var rd = side === 'back' && r.render_back ? r.render_back : r.render;
     h += '<div class="ml-h">What the 3D view is given</div><dl class="ml-kv"><dt>Fibre</dt><dd>' + esc(rd.fibre_type) + '</dd><dt>Material</dt><dd>roughness ' + rd.physics.roughness + ' · specular sheen ' + rd.physics.specular_sheen + ' · shadow depth ' + rd.physics.shadow_depth + '</dd><dt>Finish</dt><dd>' + esc(rd.physics.finish_id) + ' · ' + esc(rd.dye_method) + ' dye</dd><dt>Yarn</dt><dd>hairiness ' + rd.yarn_look.hairAbs + ' · gloss ' + rd.yarn_look.gloss + ' · bulk ' + rd.yarn_look.bulk + ' · ' + esc(rd.yarn_look.lustre_class) + (rd.yarn_look.filament ? ' · filament' : '') + '</dd></dl><div class="ml-rm">The Realistic cloth view draws the yarn from these: the lustre and the hairs are the engines\', carried through knitting, dyeing and finishing, not a preset.</div>';
+    h += glossForm(r);
     h += '<div class="ml-h">Derivations</div><details><summary class="ml-note" style="cursor:pointer">Show the working (' + r.derivations.length + ')</summary>' + r.derivations.map(function (d) { return '<div class="bl-der"><b>' + esc(d.quantity) + ' = ' + esc(d.result) + (d.unit ? ' ' + esc(d.unit) : '') + tag(d.basis) + '</b><code>' + esc(d.formula) + '\n' + esc(d.working) + '</code></div>'; }).join('') + '</details>';
     h += '<div class="ml-rm">Sheen, geometry and finishing multipliers are estimates: a glossmeter reading on the finished cloth fits them. The yarn stage is the blend yarn engine\'s own measured-and-blended sheen and hairiness.</div>';
     pane.innerHTML = h;
@@ -93,15 +111,26 @@
   function key() { return last && last.render ? JSON.stringify([last.render.physics, last.render.yarn_look, last.render.dye_method, last.render.fibre_type]) : ''; }
 
   function bind() {
-    var pane = $('pane-look'); if (pane) pane.addEventListener('click', function (e) { var b = e.target.closest('[data-lk-side]'); if (b) { side = b.getAttribute('data-lk-side'); render(last); } });
+    var pane = $('pane-look');
+    if (pane) {
+      pane.addEventListener('click', function (e) { var b = e.target.closest('[data-lk-side]'); if (b) { side = b.getAttribute('data-lk-side'); render(last); } });
+      pane.addEventListener('change', function (e) {
+        var t = e.target;
+        if (t.getAttribute && t.getAttribute('data-lk-gu')) { gloss[t.getAttribute('data-lk-gu')] = t.value; document.dispatchEvent(new Event('ka-look-input')); }
+        else if (t.id === 'lk-angle') { gloss.angle = t.value; document.dispatchEvent(new Event('ka-look-input')); }
+      });
+    }
   }
   function studioResult(r) {
     var was = key();
-    last = r && r.look ? r.look : null;
+    lastErr = r && r.look && r.look.success === false ? r.look.error : null;
+    last = r && r.look && r.look.success !== false ? r.look : null;
     render(last);
     if (key() !== was) document.dispatchEvent(new Event('ka-look'));
   }
 
-  window.KAStudioLook = { payload: payload, studioResult: studioResult, apply: apply, key: key, yarnRoughnessScale: yarnRoughnessScale };
+  function state() { return JSON.parse(JSON.stringify(gloss)); }
+  function setState(o) { gloss = Object.assign({ knitted: '', dyed: '', finished: '', angle: '60' }, o || {}); render(last); }
+  window.KAStudioLook = { state: state, setState: setState, payload: payload, studioResult: studioResult, apply: apply, key: key, yarnRoughnessScale: yarnRoughnessScale };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { bind(); render(null); }); else { bind(); render(null); }
 })();

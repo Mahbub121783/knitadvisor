@@ -135,4 +135,48 @@ const fin = (r) => r.face.final, st = (r, id) => r.face.stages.find((s) => s.id 
   assert(base({ melange: { ground: JSON.parse(JSON.stringify(require('../engine/domain/melange-engine').PRESETS.find((p) => p.id === 'grey_85_15').spec)) }, look: { shade: 'light' } }).look);
   console.log('✓ Studio: the look from the real yarn, the real loop length and density, the chemistry card\'s dye class');
 }
+
+// ── 7. the glossmeter: a measured gloss fits the model ───────────────────────────────────────
+{
+  const mk = (gloss, shade) => L.analyse({ yarns: [{ role: 'ground', mix: { cotton: 60, polyester: 40 }, tex: 19.7, spinning: 'combed' }], structure: STRUCT, finish: { shade: shade || 'dark' }, gloss });
+  const none = mk(undefined);
+  assert.strictEqual(none.calibration, null);
+  // predicted gloss units are in a textile's range and follow the sheen, the roughness and the geometry
+  assert(none.face.stages.every((s) => s.gloss_units.value > 0.5 && s.gloss_units.value < 60 && s.gloss_units.basis === 'estimate'), 'a textile reads a few GU');
+  assert(L.guOf(300, 20, 60) > L.guOf(100, 20, 60) && L.guOf(100, 60, 60) < L.guOf(100, 20, 60), 'more sheen more gloss; rougher, less');
+  near(L.fresnel(1.55, 0.001), Math.pow(0.55 / 2.55, 2), 1e-4, 'normal incidence'); assert(L.fresnel(1.55, 85) > L.fresnel(1.55, 60) && L.fresnel(1.55, 60) > L.fresnel(1.55, 20));
+  near(L.fresnel(1.567, 60), 0.1, 0.006, 'polished black glass reflects 10 % at 60°: 100 GU');
+  // one reading of the knitted cloth: the model reproduces it, and every later stage scales with it
+  const pk = none.face.stages.find((s) => s.id === 'knitted').gloss_units.value;
+  const a = mk({ readings: [{ stage: 'knitted', gu: pk * 2 }] });
+  assert(a.calibration.applied && a.calibration.basis === 'calibrated' && a.calibration.fitted.finish_scale === 1);
+  near(a.face.stages.find((s) => s.id === 'knitted').gloss_units.value, pk * 2, 0.06, 'the knitted stage now reads what was measured');
+  near(a.face.final.sheen_index.value / none.face.final.sheen_index.value, 2, 0.05, 'and the finished cloth scales with it');
+  assert(a.face.stages.find((s) => s.id === 'knitted').gloss_units.basis === 'calibrated' && a.face.stages[0].gloss_units.basis === 'estimate', 'the yarn stage is the blend engine own figure, not fitted');
+  // two readings, knitted and finished: the finishing effect is fitted on its own
+  const pf = none.face.stages.find((s) => s.id === 'finished').gloss_units.value;
+  const b = mk({ readings: [{ stage: 'knitted', gu: pk }, { stage: 'finished', gu: pf * 1.5 }] });
+  near(b.calibration.fitted.specular_scale, 1, 0.02); near(b.calibration.fitted.finish_scale, 1.5, 0.05, 'the finishing lifts the gloss by what was measured');
+  near(b.face.stages.find((s) => s.id === 'finished').gloss_units.value, pf * 1.5, 0.1);
+  near(b.face.stages.find((s) => s.id === 'knitted').gloss_units.value, pk, 0.06);
+  // only the finished cloth measured: the whole fabric-level strength is fitted to it
+  const c = mk([{ stage: 'finished', gu: pf * 0.5 }]); near(c.face.stages.find((s) => s.id === 'finished').gloss_units.value, pf * 0.5, 0.06); assert.strictEqual(c.calibration.fitted.finish_scale, 1);
+  // a brighter measured cloth gives the 3D view a smoother, glossier material
+  const dull = mk({ readings: [{ stage: 'finished', gu: pf * 0.3 }] }), shiny = mk({ readings: [{ stage: 'finished', gu: pf * 3 }] });
+  assert(shiny.render.physics.roughness < dull.render.physics.roughness && shiny.render.physics.specular_sheen >= dull.render.physics.specular_sheen && shiny.face.final.perceived_gloss.value > dull.face.final.perceived_gloss.value);
+  // the geometry: a 20° reading of the same cloth gives a different ratio, but the fit still reproduces it
+  const d = mk({ readings: [{ stage: 'finished', gu: 1.2, angle: 20 }] });
+  near(L.guOf(d.face.final.sheen_index.value, d.face.final.roughness.value, 20), 1.2, 0.08, 'a 20° reading is reproduced at 20°');
+  // bad readings in words
+  assert.throws(() => mk({ readings: [{ stage: 'finished', gu: -4 }] }), /gloss units/); assert.throws(() => mk({ readings: [{ stage: 'finished', gu: 5000 }] }), /gloss units/);
+  assert.throws(() => mk({ readings: [{ stage: 'wet', gu: 5 }] }), /stage is one of/); assert.throws(() => mk({ readings: [{ stage: 'finished', gu: 5, angle: 45 }] }), /20, 60 or 85/);
+  assert.strictEqual(mk({ readings: [{ stage: 'finished', gu: '' }] }).calibration, null, 'an empty reading is no reading');
+  // through the Studio
+  const base = (extra) => S.analyse({ bed: 'single', grid: { C: ['K'], D: null }, feeds: [{ role: 'ground' }], yarn: { fibre: 'cotton', type: 'combed', count: 30, unit: 'ne' }, target: { gsm: 160 }, machine: {}, ...extra });
+  const s1 = base({ look: { shade: 'dark', gloss: { readings: [{ stage: 'finished', gu: 9 }] } } });
+  assert(s1.look.calibration && near(L.guOf(s1.look.face.final.sheen_index.value, s1.look.face.final.roughness.value, 60), 9, 0.15) === undefined);
+  const bad = base({ look: { shade: 'dark', gloss: { readings: [{ stage: 'finished', gu: -1 }] } } });
+  assert.strictEqual(bad.success, true); assert.strictEqual(bad.look.success, false); assert(/gloss units/.test(bad.look.error), 'a bad reading comes back in words, the analysis still works');
+  console.log('✓ glossmeter: predicted GU in the range of a textile, Fresnel at 20/60/85°, one or two readings fit the model exactly, the 3D material follows');
+}
 console.log('Fabric look engine tests passed');
