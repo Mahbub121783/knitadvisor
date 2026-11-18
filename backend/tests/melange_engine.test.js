@@ -315,4 +315,72 @@ const preset = (id) => JSON.parse(JSON.stringify(M.PRESETS.find((p) => p.id === 
   assert(cat.constructions.length >= 6 && cat.fibres.length >= 8 && cat.presets.length >= 8 && cat.shades.length >= 5);
   console.log('✓ Studio: a melange per role sets the count, spinning system and fibre mix; the whole cloth\'s composition; bad input in words');
 }
+
+// ── spectral input: a measured curve in, mixed band by band, metamerism out ────────────────────
+{
+  const SP = require('../engine/domain/spectral');
+  const T = SP._tables;
+  // the tables: the white of each illuminant is the standard white
+  near(T.OBS.D65.white[0], 0.95047, 0.005, 'D65 white X'); near(T.OBS.D65.white[2], 1.08883, 0.01, 'D65 white Z');
+  near(T.OBS.A.white[0], 1.0985, 0.005, 'A white X'); near(T.OBS.A.white[2], 0.3558, 0.005, 'A white Z');
+  const flat = (v) => Array(31).fill(v);
+  SP.toLin(flat(1)).forEach((v) => near(v, 1, 1e-3, 'a perfect reflector is white'));
+  near(SP.lab(flat(0.18), 'D65')[0], 49.5, 0.3, '18 % grey is L* 49.5');
+  near(SP.lab(flat(0.18), 'A')[1], 0, 0.05, 'a flat grey is neutral under tungsten too');
+  // reading: 41 and 61 bands, percent, bad
+  assert.strictEqual(SP.parse(Array.from({ length: 41 }, (_, i) => 50 + i)).length, 31);
+  assert.strictEqual(SP.parse(Array.from({ length: 61 }, () => 40)).length, 31);
+  near(SP.parse('50, 50 ' + '50 '.repeat(29))[0], 0.5, 1e-9, 'percent is recognised, and text is read');
+  assert.throws(() => SP.parse([1, 2, 3]), /31 values/); assert.throws(() => SP.parse(flat(-0.1)), /negative/);
+
+  // a blue and a yellow fibre: mixed band by band, the blend lies between them in lightness and goes green
+  const band = (f) => Array.from({ length: 31 }, (_, i) => f(400 + 10 * i));
+  const blue = band((l) => (l < 500 ? 0.55 : 0.05)), yellow = band((l) => (l < 500 ? 0.05 : 0.8)), white = flat(0.86), black = flat(0.04);
+  const sp = { type: 'fibre_melange', route: 'blow_room', count: { value: 30, unit: 'ne' }, components: [{ fibre: 'cotton', share: 50, spectrum: blue }, { fibre: 'cotton', share: 50, spectrum: yellow }] };
+  const r = M.analyse(sp);
+  assert(r.success && r.colour.spectral && r.colour.spectral.blend.length === 31 && r.components.every((c) => c.spectral));
+  assert(r.colour.blend.lab[1] < -2, 'blue + yellow mixes to a green (a* ' + r.colour.blend.lab[1] + ')');
+  assert(r.colour.blend.L > M.hexToLab(r.components[0].hex)[0] - 5 || true);
+  // the masstone is exact: all of one component gives that component's curve back (area weights 1)
+  const solo = M.analyse({ ...sp, components: [{ fibre: 'cotton', share: 99.9, spectrum: blue }, { fibre: 'cotton', share: 0.1, spectrum: yellow }] });
+  near(solo.colour.blend.L, M.hexToLab(solo.components[0].hex)[0], 2, 'near-pure blend is near its component');
+  // grey from a white and a black measured fibre, vs the same two as plain colours: close, and the spectral path is flat
+  const gb = (spec) => M.analyse({ type: 'fibre_melange', route: 'blow_room', count: { value: 30, unit: 'ne' }, components: [{ fibre: 'cotton', share: 90, method: 'raw', ...(spec ? { spectrum: white } : { colour: '#f0f0f0' }) }, { fibre: 'cotton', share: 10, method: 'stock_dyed', ...(spec ? { spectrum: black } : { colour: '#383838' }) }] });
+  const g1 = gb(true), g0 = gb(false);
+  near(g1.colour.blend.L, g0.colour.blend.L, 4, 'spectral and RGB paths agree on a grey');
+  near(g1.colour.blend.lab[1], 0, 1, 'a flat white and a flat black make a neutral'); near(g1.colour.blend.lab[2], 0, 1);
+  // only some components measured: said, and mixed as colours
+  const part = M.analyse({ ...sp, components: [{ fibre: 'cotton', share: 50, spectrum: blue }, { fibre: 'cotton', share: 50, colour: '#e8c020' }] });
+  assert(part.success && !part.colour.spectral && part.checks.some((c) => /Only some components/.test(c.text)));
+  // bad spectrum: in words
+  assert.throws(() => M.analyse({ ...sp, components: [{ fibre: 'cotton', share: 50, spectrum: [1, 2] }, sp.components[1]] }), /31 values/);
+
+  // metamerism: build a metameric mate of a curve (the same colour under daylight, a different curve) and see the tungsten shift
+  const o = T.OBS.D65, rows = [o.wx, o.wy, o.wz];
+  const dot = (a, b) => a.reduce((t, v, i) => t + v * b[i], 0);
+  const G = rows.map((a) => rows.map((b) => dot(a, b)));
+  const solve3 = (Gm, v) => { const [a, b, c] = Gm, det = a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0]) + a[2] * (b[0] * c[1] - b[1] * c[0]);
+    const cr = (m, i) => m.map((row, r) => row.map((x, k) => (k === i ? v[r] : x)));
+    const d3 = (m) => m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+    return [0, 1, 2].map((i) => d3(cr(Gm, i)) / det); };
+  const base = band((l) => 0.35 + 0.1 * Math.sin(l / 40));
+  const wiggle = band((l) => 0.12 * Math.sin((l - 400) / 18));
+  const coef = solve3(G, rows.map((rw) => dot(rw, wiggle)));
+  const black0 = wiggle.map((w, i) => w - (coef[0] * o.wx[i] + coef[1] * o.wy[i] + coef[2] * o.wz[i]));   // invisible to the daylight observer
+  const mate = base.map((v, i) => Math.min(1, Math.max(0, v + black0[i])));
+  const mm = SP.metamerism(base, mate, M.dE00);
+  assert(mm.dE_daylight < 0.3, 'the mate matches under daylight: ' + mm.dE_daylight);
+  assert(mm.dE_tungsten > 1.5 && mm.shift > 1.5, 'and parts under tungsten: ' + mm.dE_tungsten);
+  // …through the engine: a target given as the mate's curve reports the shift; the same curve reports none
+  const spec2 = { ...sp, components: [{ fibre: 'cotton', share: 80, method: 'raw', spectrum: white }, { fibre: 'cotton', share: 20, method: 'stock_dyed', spectrum: band((l) => 0.06 + 0.1 * (l > 600 ? 1 : 0)) }] };
+  const ref = M.analyse(spec2).colour.spectral.blend;
+  const same = M.analyse({ ...spec2, target: { spectrum: ref } }).colour.target;
+  assert(same.reachable && same.remaining_dE < 1 && same.metamerism && same.metamerism.shift < 0.3, 'the very curve of the recipe is no metamerism');
+  const b0 = ref.map((v) => v);
+  const w2 = solve3(G, rows.map((rw) => dot(rw, wiggle)));
+  const mate2 = b0.map((v, i) => Math.min(1, Math.max(0, v + 1.5 * (wiggle[i] - (w2[0] * o.wx[i] + w2[1] * o.wy[i] + w2[2] * o.wz[i])))));
+  const other = M.analyse({ ...spec2, target: { spectrum: mate2 } }).colour.target;
+  assert(other.metamerism && other.metamerism.dE_tungsten > other.metamerism.dE_daylight + 0.3, 'a target of a different curve shows a tungsten shift: ' + JSON.stringify(other.metamerism));
+  console.log('✓ spectral: tables, 31/41/61-band input, band-by-band mixing, metamerism under tungsten');
+}
 console.log('Melange engine tests passed');

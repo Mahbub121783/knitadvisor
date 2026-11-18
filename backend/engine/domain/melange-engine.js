@@ -37,6 +37,7 @@ const Y = require('./yarn-engine');
 const M = require('./materials');
 const U = require('./uster-engine');
 const SS = require('./shade-spec');
+const SP = require('./spectral');
 
 class MelangeError extends Error {}
 const FP = Y.FIBER_PROPERTIES;
@@ -218,13 +219,18 @@ function readComponents(input, cons) {
     const natural = NATURAL_HEX[fibre];
     let method = own(METHODS, c.method) ? c.method : null;
     let hex = hexOk(c.colour) ? c.colour.toLowerCase() : null;
-    const isNatural = !hex || hex === natural.toLowerCase();
+    let spec = null;
+    if (c.spectrum != null) {
+      try { spec = SP.parse(c.spectrum); } catch (e) { throw new MelangeError(`Component ${i + 1} (${FIBRES[fibre]}): ${e.message}`); }
+      hex = linToHex(SP.toLin(spec));                               // the measured curve decides the colour
+    }
+    const isNatural = !hex || (!spec && hex === natural.toLowerCase());
     if (!method) {
       if (isNatural) method = 'raw';
       else if (cons.group === 'cross') method = 'cross_dye';
       else method = fibre === 'cotton' || fibre === 'wool' ? 'stock_dyed' : 'dope_dyed';   // natural fibres are stock-dyed; regenerated and synthetic are spun-dyed
     }
-    if (method === 'raw') hex = natural.toLowerCase();                                       // undyed: the fibre's own colour
+    if (method === 'raw' && !spec) hex = natural.toLowerCase();                              // undyed: the fibre's own colour
     else if (!hex) hex = (method === 'dope_dyed' ? DOPE_BLACK : '#2b2b30').toLowerCase();
     const coloured = method !== 'raw';
     const variant = c.variant === 'cdp' && fibre === 'polyester' ? 'cdp' : null;
@@ -237,7 +243,7 @@ function readComponents(input, cons) {
     const wu = c.waste || {};
     const w = { blow: wu.blow != null ? +wu.blow : w0.blow, card: wu.card != null ? +wu.card : w0.card, comb: combed ? (wu.comb != null ? +wu.comb : (w0.comb || 14)) : 0, spin: wu.spin != null ? +wu.spin : w0.spin };
     const userWaste = !!c.waste;
-    return { i, fibre, label: FIBRES[fibre], variant, share, share_basis: c.share_basis === 'dry' ? 'dry' : 'conditioned', method, hex, coloured, dtex, staple, combed, waste: w, waste_basis: userWaste ? 'measured' : 'typical', waste_kind: kind, strand_tex: +c.tex > 0 ? +c.tex : null };
+    return { i, fibre, label: FIBRES[fibre], variant, share, share_basis: c.share_basis === 'dry' ? 'dry' : 'conditioned', method, hex, spec, coloured, dtex, staple, combed, waste: w, waste_basis: userWaste ? 'measured' : 'typical', waste_kind: kind, strand_tex: +c.tex > 0 ? +c.tex : null };
   });
   return { comps, spin };
 }
@@ -283,6 +289,10 @@ function analyse(input) {
   if (!input || typeof input !== 'object') throw new MelangeError('Give the melange: its construction and components.');
   const type = own(CONSTRUCTIONS, input.type) ? input.type : 'fibre_melange';
   const cons = CONSTRUCTIONS[type];
+  // a target or a trial blend may be given as a measured curve: its colour is read from it
+  const specIn = (o, what) => { if (!o || o.spectrum == null) return null; try { return SP.parse(o.spectrum); } catch (e) { throw new MelangeError(`The ${what} spectrum: ${e.message}`); } };
+  const tspec = specIn(input.target, 'target'), rspec = specIn(input.trial, 'trial');
+  if (tspec || rspec) input = { ...input, _tspec: tspec, ...(tspec ? { target: { ...input.target, colour: linToHex(SP.toLin(tspec)) } } : {}), ...(rspec ? { trial: { ...input.trial, colour: linToHex(SP.toLin(rspec)) } } : {}) };
   const { comps, spin: spinning } = readComponents(input, cons);
   const route = cons.routes.includes(input.route) ? input.route : cons.routes[0];
   const checks = [];
@@ -305,7 +315,7 @@ function analyse(input) {
 
   // ── component optics and counts ─────────────────────────────────────────────────────────
   const compOut = comps.map((c, i) => {
-    const lin = hexToRgb(c.hex).map(toLin);
+    const lin = c.spec ? SP.toLin(c.spec) : hexToRgb(c.hex).map(toLin);
     return { ...c, lin, lab: linToLab(lin), dry: chain.dry[i], label_share: chain.label[i] };
   });
   // surface-area weights: fibres of one mass cover an area ∝ 1/(ρ·d) ∝ 1/√(ρ·dtex)
@@ -365,7 +375,7 @@ function analyse(input) {
     construction: { id: type, label: cons.label, group: cons.group, effect: cons.effect, what: cons.what, stage: cons.stage, route: { id: route, ...ROUTES[route] }, spinning: SYS ? { id: spinKey, label: SYS.label } : { id: spinKey } },
     identity: identity(compOut, cons, colour, chain, count, spinKey),
     components: compOut.map((c) => ({
-      fibre: c.fibre, label: c.label, variant: c.variant, method: c.method, method_label: METHODS[c.method], hex: c.hex, lab: c.lab.map(r1),
+      spectral: !!c.spec, fibre: c.fibre, label: c.label, variant: c.variant, method: c.method, method_label: METHODS[c.method], hex: c.hex, lab: c.lab.map(r1),
       label_share_pct: r1(c.label_share * 100), dry_share_pct: r1(c.dry * 100), area_share_pct: r1(c.area * 100), number_share_pct: r1(c.number_share * 100),
       fibre_dtex: V(c.dtex, 'dtex', input.components[c.i].dtex > 0 ? 'measured' : 'typical'), staple_mm: V(c.staple, 'mm', input.components[c.i].staple_mm > 0 ? 'measured' : 'typical'),
       fibres_in_section: Math.round(c.fibres_in_section), density: V(c.density, 'g/cm³', 'measured'), regain: V(regainOf(c.fibre), '%', 'measured'),
@@ -416,7 +426,12 @@ function readCount(input, cons, comps, say) {
 
 // ── colour block ────────────────────────────────────────────────────────────────────────────
 function blendAt(compOut, cons, mixP, areaOverride) {
-  const parts = compOut.map((c, i) => ({ lin: c.lin, w: areaOverride ? areaOverride[i] : c.area }));
+  const parts = compOut.map((c, i) => ({ lin: c.lin, spec: c.spec, w: areaOverride ? areaOverride[i] : c.area }));
+  if (compOut.every((c) => c.spec)) {                                  // every component measured: mix band by band
+    const spec = cons.group === 'ply' ? SP.mixLinear(parts) : SP.mixKM(parts, mixP);
+    const lin = SP.toLin(spec);
+    return { lin, spec, hex: linToHex(lin), lab: linToLab(lin) };
+  }
   const lin = cons.group === 'ply' ? mixDomains(parts) : mixFibres(parts, mixP);
   return { lin, hex: linToHex(lin), lab: linToLab(lin) };
 }
@@ -435,16 +450,17 @@ function withEffectShare(compOut, effIdx, dryShare) {
  * what remains in chroma (a grey blend cannot be turned blue by changing the share), the share as the label would
  * carry it, and the nearest whole-sliver creel.
  */
-function solveTarget(compOut, cons, mixP, effIdx, targetHex, chain, maxD) {
+function solveTarget(compOut, cons, mixP, effIdx, targetHex, chain, maxD, tspec) {
   const tLab = hexToLab(targetHex);
-  const at = (p) => blendAt(compOut, cons, mixP, withEffectShare(compOut, effIdx, p)).lab;
+  const atB = (p) => blendAt(compOut, cons, mixP, withEffectShare(compOut, effIdx, p));
+  const at = (p) => atB(p).lab;
   const lo = 0.0005, hi = 0.9995;
   const Lmin = Math.min(at(lo)[0], at(hi)[0]), Lmax = Math.max(at(lo)[0], at(hi)[0]);
   if (tLab[0] < Lmin - 0.05 || tLab[0] > Lmax + 0.05) return { reachable: false, target_hex: targetHex, target_L: r1(tLab[0]), reachable_L: [r1(Lmin), r1(Lmax)], note: `lightness ${r1(tLab[0])} is outside what these components can make (${r1(Lmin)}–${r1(Lmax)}): change a component colour` };
   let a = lo, b = hi;
   const decreasing = at(lo)[0] > at(hi)[0];
   for (let k = 0; k < 50; k++) { const m = (a + b) / 2; if ((at(m)[0] > tLab[0]) === decreasing) a = m; else b = m; }
-  const p = (a + b) / 2, lab = at(p);
+  const p = (a + b) / 2, solved = atB(p), lab = solved.lab;
   // the dry shares at that point → label shares (conditioned)
   const dryNow = compOut.map((c, i) => (i === effIdx ? p : (c.dry / (1 - compOut[effIdx].dry)) * (1 - p)));
   const R = compOut.map((c) => regainOf(c.fibre));
@@ -452,11 +468,17 @@ function solveTarget(compOut, cons, mixP, effIdx, targetHex, chain, maxD) {
   const labelPct = (condRaw[effIdx] / cT) * 100;
   const dE = dE00(lab, tLab);
   return {
-    reachable: true, target_hex: targetHex, target_L: r1(tLab[0]), hex_at: linToHex(blendAt(compOut, cons, mixP, withEffectShare(compOut, effIdx, p)).lin), L_at: r1(lab[0]),
+    reachable: true, target_hex: targetHex, target_L: r1(tLab[0]), hex_at: solved.hex, L_at: r1(lab[0]),
     effect_component: compOut[effIdx].fibre, effect_index: effIdx, label_share_pct: r2(labelPct), dry_share_pct: r2(p * 100), remaining_dE: r2(dE),
     remaining_note: dE < 1 ? 'a match within one ΔE' : dE < 3 ? 'a close match; the rest is hue / chroma the components cannot make' : 'lightness matches but the hue or chroma does not: the component colours cannot make this shade',
+    ...(tspec && solved.spec ? { metamerism: metamerOut(solved.spec, tspec) } : {}),
     creel: creelOptions(labelPct / 100, maxD || 8), basis: mixP.omega === MIX_DEFAULT.omega ? 'estimate' : 'calibrated',
   };
+}
+function metamerOut(spec, tspec) {
+  const m = SP.metamerism(spec, tspec, dE00);
+  const note = { none: 'the colour difference between the two does not change between daylight and a tungsten shop light', slight: 'the difference shifts slightly between daylight and tungsten: usually passes', noticeable: 'the difference shifts noticeably between daylight and tungsten: agree the viewing light with the buyer', strong: 'a metameric pair: the difference in daylight is not the difference under tungsten. Change a dye or fibre (a different absorption curve); moving the share will not cure it' }[m.grade];
+  return { dE_daylight: r2(m.dE_daylight), dE_tungsten: r2(m.dE_tungsten), shift: r2(m.shift), grade: m.grade, note, basis: 'law' };
 }
 function fitOmega(compOut, cons, trial, mixP) {
   // one measured trial blend (its colour) fixes the screening constant ω by bisection on lightness
@@ -501,7 +523,8 @@ function colourBlock(compOut, cons, mixP, calibrated, chain, input) {
     const t = chroma > 12 ? 'color' : darkLabel <= 4 ? 'ecru' : darkLabel <= 20 ? 'grey' : darkLabel <= 45 ? 'anthra' : darkLabel <= 70 ? 'charcoal' : 'black';
     trade = { id: t, label: SHADES[t].label, dark_share_pct: r1(darkLabel), usual_range: [SHADES[t].min, SHADES[t].max], note: SHADES[t].note };
   }
-  const target = input.target && hexOk(input.target.colour) ? solveTarget(compOut, cons, mixP, effIdx, input.target.colour.toLowerCase(), chain, +input.max_doublings === 6 ? 6 : 8) : null;
+  const target = input.target && hexOk(input.target.colour) ? solveTarget(compOut, cons, mixP, effIdx, input.target.colour.toLowerCase(), chain, +input.max_doublings === 6 ? 6 : 8, input._tspec) : null;
+  if (compOut.some((c) => c.spec) && !compOut.every((c) => c.spec)) checks.push({ level: 'note', text: 'Only some components have a measured spectrum, so the blend is mixed from their colours (RGB). Give a spectrum for every component to mix band by band and to check metamerism.' });
   if (!calibrated) checks.push({ level: 'note', text: 'The blend colour is an ESTIMATE from the component colours (screening constant ω = ' + r2(mixP.omega) + '). Spin one trial blend, measure it, and enter its colour: the model is fitted on it and every shade figure here is then calibrated.' });
   if (cons.group === 'ply') checks.push({ level: 'note', text: 'A marl is two (or more) colours the eye mixes at a distance; up close the plies are seen one by one. The colour shown is the distance colour.' });
   return {
@@ -509,6 +532,12 @@ function colourBlock(compOut, cons, mixP, calibrated, chain, input) {
       : { id: 'fibre_km', label: 'Fibre blend: Kubelka–Munk absorption on surface-area weights with a screening constant', basis: calibrated ? 'calibrated' : 'estimate', omega: r3(mixP.omega), floor: mixP.floor },
     calibration: calibrated ? { fitted_omega: r3(calibrated.omega), trial_L: calibrated.trial_L, predicted_before_L: calibrated.predicted_before_L } : null,
     blend: { hex: blend.hex, lab: blend.lab.map(r1), L: r1(L) },
+    spectral: blend.spec ? {
+      wavelengths_nm: SP.WL, blend: blend.spec.map(r3), target: input._tspec ? input._tspec.map(r3) : null,
+      components: compOut.map((c) => ({ fibre: c.fibre, spectrum: c.spec.map(r3) })),
+      metamerism: input._tspec ? metamerOut(blend.spec, input._tspec) : null,
+      note: 'Mixed band by band (31 bands, 400–700 nm) from the measured curves: a blue and a yellow fibre make the green their absorption curves make, not the green of an RGB average.',
+    } : null,
     components: compOut.map((c) => ({ fibre: c.fibre, hex: c.hex, L: r1(c.lab[0]) })),
     contrast_dE: r1(contrast),
     contrast_note: contrast < 8 ? 'low contrast — a quiet, tone-on-tone heather' : contrast < 25 ? 'medium contrast — a visible heather' : 'high contrast — a crisp two-tone / speckled look',

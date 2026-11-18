@@ -73,6 +73,13 @@
     nylon_filament: [['nylon_filament', 1]],
   };
 
+  // a melange yarn: what each component of the recipe is drawn as (the shapes we have), and a colour in linear light
+  var MOTTLE_FIBRE = { cotton: 'cotton', polyester: 'polyester', viscose: 'viscose', modal: 'modal', tencel: 'viscose', bamboo: 'viscose', acrylic: 'polyester', nylon: 'polyester', wool: 'cotton' };
+  var hexLin = function (h) {
+    var m = /^#?([0-9a-f]{6})$/i.exec(h || ''); if (!m) return null;
+    return [0, 2, 4].map(function (i) { var v = parseInt(m[1].substr(i, 2), 16) / 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+  };
+
   // ── spinning systems ─────────────────────────────────────────────────────
   // hair / u_pct: the yarn engine's hairiness and evenness indices (kept equal
   // by a test). Everything else is typical for knitting yarns:
@@ -127,6 +134,18 @@
     var S = filament ? FILA[sysKey] : SYSTEM[sysKey];
     // the fibre mix as one mean fibre (for the section and the diameter)
     var fibres = blend.map(function (b) { return { key: b[0], share: b[1], f: FIBRE[b[0]] }; });
+    // a melange yarn: every fibre of the recipe has its own colour. Fibre blends colour the fibres by number share; a marl
+    // (plies, Siro strands) colours whole strands
+    var strandParts = null;
+    var mt = y.mottle && !filament && Array.isArray(y.mottle.parts) && y.mottle.parts.length ? y.mottle : null;
+    if (mt) {
+      var parts = mt.parts.map(function (q) { var key = MOTTLE_FIBRE[q.fibre] || 'cotton'; return { key: key, share: +q.share > 0 ? +q.share : 0, f: FIBRE[key], col: hexLin(q.colour) }; }).filter(function (q) { return q.col; });
+      var tot = parts.reduce(function (t, q) { return t + q.share; }, 0);
+      if (parts.length && tot > 0) {
+        if (mt.mode === 'strands') strandParts = parts;
+        else fibres = parts.map(function (q) { return { key: q.key, share: q.share / tot, f: q.f, col: q.col }; });
+      }
+    }
     var nFil = !filament ? null : sysKey === 'mono' ? 1 : clamp(Math.round(+y.filaments > 0 ? +y.filaments : (tex * 9) / S.dpf), 2, 600);
     var fibreTex = filament ? tex / nFil : fibres.reduce(function (t, b) { return t + b.share * b.f.tex; }, 0);
     var rho = filament ? POLYMER[fibreKey].rho : fibres.reduce(function (t, b) { return t + b.share * b.f.rho; }, 0);
@@ -143,7 +162,7 @@
     return {
       fibreKey: fibreKey, filament: filament, system: sysKey, systemLabel: S.label, tex: tex, ply: ply, ne: ne,
       fibres: fibres, fibreTex: fibreTex, rho: rho, n: n, phi: phi, d: d, alpha: alpha, tpm: tpm, tpi: tpm * 25.4,
-      angle: angle, H: H, hairsPerMm: hairsPerMm, S: S,
+      angle: angle, H: H, hairsPerMm: hairsPerMm, S: S, strandParts: strandParts, mottled: !!(strandParts || fibres.some(function (b) { return b.col; })),
       fibreD: 2 * Math.sqrt(fibreTex / (rho * 1000) / Math.PI),
     };
   }
@@ -219,7 +238,7 @@
       var g = strandR(st);
       var gamma0 = (2 * Math.PI * si) / strands.length;
       for (var i = 0; i < drawn; i++) {
-        var fb = pickFibre(P, i + si * 7);
+        var fb = P.strandParts ? P.strandParts[si % P.strandParts.length] : pickFibre(P, i + si * 7);
         var fx = fb.f;
         var u0 = (i + 0.5) / drawn;                       // area fraction: even packing from core to surface
         var th0 = i * 2.39996323 + r() * 0.3;             // golden angle
@@ -259,7 +278,7 @@
         }
         out.push({
           p: new Float32Array(pts), depth: new Float32Array(dep), rf: (fx.tex ? Math.sqrt(fx.tex / (fx.rho * 1000) / Math.PI) : P.fibreD / 2) * thin,
-          aspect: fx.aspect, conv: fx.conv, kind: 'body', fibre: fb.key, tone: tone(fx, r), u: u0,
+          aspect: fx.aspect, conv: fx.conv, kind: 'body', fibre: fb.key, tone: tone(fx, r, fb.col), u: u0,
         });
       }
     });
@@ -281,21 +300,21 @@
     var hairScale = nHair > maxH ? nHair / maxH : 1;     // when capped, the drawn hairs carry the same total length
     nHair = Math.min(nHair, maxH);
     for (var h = 0; h < nHair; h++) {
-      var fb2 = pickFibre(P, h * 3 + 1).f;
+      var fe2 = P.strandParts ? P.strandParts[Math.floor(r() * P.strandParts.length)] : pickFibre(P, h * 3 + 1), fb2 = fe2.f;
       var y0 = r() * L, th = r() * Math.PI * 2;
       var sp = surfaceAt(y0, th);
       var isLoop = r() < P.S.loops;
       var len = Math.min(expo(r, P.S.hairLen) * Math.sqrt(hairScale), 7);
       if (len < 0.06) continue;
       var pts2 = isLoop ? loopPath(r, sp, y0, len, P, step) : endPath(r, sp, y0, len, P, fb2, step, singleTpm);
-      out.push({ p: new Float32Array(pts2), rf: (fb2.tex ? Math.sqrt(fb2.tex / (fb2.rho * 1000) / Math.PI) : P.fibreD / 2), aspect: fb2.aspect, conv: fb2.conv, kind: isLoop ? 'loop' : 'hair', tone: tone(fb2, r), u: 1 });
+      out.push({ p: new Float32Array(pts2), rf: (fb2.tex ? Math.sqrt(fb2.tex / (fb2.rho * 1000) / Math.PI) : P.fibreD / 2), aspect: fb2.aspect, conv: fb2.conv, kind: isLoop ? 'loop' : 'hair', tone: tone(fb2, r, fe2.col), u: 1 });
     }
 
     // rotor: wrapper fibres caught round the outside (belly bands)
     if (rotor) {
       var nW = Math.round(P.S.wrappers * L);
       for (var w = 0; w < nW; w++) {
-        var fb3 = pickFibre(P, w * 5 + 2).f;
+        var fe3 = P.strandParts ? P.strandParts[Math.floor(r() * P.strandParts.length)] : pickFibre(P, w * 5 + 2), fb3 = fe3.f;
         var yw = r() * L, tw0 = r() * Math.PI * 2, turns = 0.6 + r() * 1.8;
         var wp = (0.15 + r() * 0.35) * P.d * 3;           // mm of yarn per wrap turn
         var dir = r() < 0.75 ? -1 : 1;                    // mostly with the twist
@@ -309,14 +328,14 @@
           var aa = tw0 + dir * 2 * Math.PI * turns * f;
           pts3.push(R * sc * lift * Math.cos(aa), yq, R * sc * lift * Math.sin(aa));
         }
-        if (pts3.length >= 9) out.push({ p: new Float32Array(pts3), rf: Math.sqrt(fb3.tex / (fb3.rho * 1000) / Math.PI), aspect: fb3.aspect, conv: fb3.conv, kind: 'wrap', tone: tone(fb3, r), u: 1 });
+        if (pts3.length >= 9) out.push({ p: new Float32Array(pts3), rf: Math.sqrt(fb3.tex / (fb3.rho * 1000) / Math.PI), aspect: fb3.aspect, conv: fb3.conv, kind: 'wrap', tone: tone(fb3, r, fe3.col), u: 1 });
       }
     }
 
     return {
       fibres: out, length: L,
       meta: {
-        system: P.system, system_label: P.systemLabel, fibre: P.fibreKey, filament: P.filament,
+        mottled: P.mottled, system: P.system, system_label: P.systemLabel, fibre: P.fibreKey, filament: P.filament,
         tex: round(P.tex, 2), ne: round(P.ne, 1), ply: P.ply,
         diameter_mm: round(plyD, 3), single_diameter_mm: round(P.d, 3),
         fibres_in_section: P.n * P.ply, capped: drawn < nPer, fibres_drawn: drawn * strands.length,
@@ -584,7 +603,12 @@
   }
 
   function round(v, k) { var m = Math.pow(10, k || 0); return Math.round(v * m) / m; }
-  function tone(fx, r) { var k = 0.9 + r() * 0.14; return [fx.tone[0] * k, fx.tone[1] * k, fx.tone[2] * k]; }
+  function tone(fx, r, col) {
+    var k = 0.9 + r() * 0.14;
+    // a coloured fibre: its own colour (linear light), a touch of fibre-to-fibre variation, the same exposure as an undyed one
+    if (col) { var q = 0.9 * k; return [col[0] * q, col[1] * q, col[2] * q]; }
+    return [fx.tone[0] * k, fx.tone[1] * k, fx.tone[2] * k];
+  }
 
   // a free fibre end: leaves the surface along its own helix, bends away, curls
   function endPath(r, sp, y0, len, P, fx, step, tw) {

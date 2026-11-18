@@ -1208,6 +1208,9 @@
   /** One yarn row as the yarn view reads it: fibre, spinning system, one end's tex, ply. */
   function yarnForView(role) {
     var R = YROWS.filter(function (x) { return x.key === role; })[0] || YROWS[0];
+    // a melange yarn: the count, system and ply the melange engine made, and a colour for every fibre
+    var mel = window.KAStudioMelange && KAStudioMelange.forYarnView ? KAStudioMelange.forYarnView(role) : null;
+    if (mel) return { yarn: { fibre: mel.yarn.fibre, type: mel.yarn.type, tex: mel.yarn.tex, ply: mel.yarn.ply, mottle: mel.mottle }, from: 'the melange card (' + (mel.label || 'melange') + ')', melange: true };
     var y = yarnOf(R), ply = y.ply || 1, tex = null, from = 'your count';
     if (y.count) tex = TEX[y.unit || 'ne'](y.count);
     if (!tex && last && last.yarn) {
@@ -1289,7 +1292,7 @@
       var elKey = JSON.stringify([elList, $('st-ycol').value, $('st-elcut').checked && !cmp]);
       if (elKey === yarnKey && yarnView) return;
       yarnKey = elKey;
-      if (!yarnPromise) yarnPromise = import('/assets/js/yarn-real.js?v=20261117e').then(function (mod) { yarnView = new mod.YarnView(host); return yarnView; });
+      if (!yarnPromise) yarnPromise = import('/assets/js/yarn-real.js?v=20261118b').then(function (mod) { yarnView = new mod.YarnView(host); return yarnView; });
       yarnPromise.then(function (v) {
         var metas = v.draw(elList, { colour: $('st-ycol').value, cutaway: $('st-elcut').checked && con === 'core' && !cmp });
         $('st-yarnnote').innerHTML = elastaneNote(metas, cmp);
@@ -1304,10 +1307,10 @@
     var key = JSON.stringify([list, $('st-ycol').value]);
     if (key === yarnKey && yarnView) return;
     yarnKey = key;
-    if (!yarnPromise) yarnPromise = import('/assets/js/yarn-real.js?v=20261117e').then(function (mod) { yarnView = new mod.YarnView(host); return yarnView; });
+    if (!yarnPromise) yarnPromise = import('/assets/js/yarn-real.js?v=20261118b').then(function (mod) { yarnView = new mod.YarnView(host); return yarnView; });
     yarnPromise.then(function (v) {
       var metas = v.draw(list, { colour: $('st-ycol').value });
-      $('st-yarnnote').innerHTML = yarnNote(metas, cmp, one.from);
+      $('st-yarnnote').innerHTML = yarnNote(metas, cmp, one.from) + (one.melange ? ' <b>Melange:</b> each fibre is drawn in its own colour (a fibre blend by its share of the fibres in the section, a marl by whole strand), so the speckle or the twist of colours comes from the recipe itself.' : '');
     }).catch(function (e) {
       if (window.console) console.error(e);
       $('st-yarnnote').textContent = 'The yarn view needs WebGL, which this browser does not have.';
@@ -1529,6 +1532,7 @@
     });
     $('st-twcol').addEventListener('input', function () { if (mode3d === 'twin') { twinKey = ''; renderTwin(); } });
     $('st-yarnbar').addEventListener('change', function () { if (mode3d === 'yarn') renderYarn(); });
+    document.addEventListener('ka-melange', function () { if (mode3d === 'yarn') renderYarn(); });
     $('st-yarnbar').addEventListener('click', function (e) {
       var b = e.target.closest('[data-yview]'); if (b && yarnView) yarnView.view(b.getAttribute('data-yview'));
     });

@@ -29,7 +29,7 @@
   function blank() {
     return { enabled: false, type: 'fibre_melange', route: 'draw_frame', spinning: 'compact', count: 30, unit: 'ne',
       comps: [{ fibre: 'cotton', share: 90, method: '', colour: '#ede9df', ne: 30 }, { fibre: 'viscose', share: 10, method: 'dope_dyed', colour: '#1d1d20', ne: 30 }],
-      adv: { target: '#9b9b9b', targetOn: false, trial: '', trialOn: false, sliver_cv: '', passages: '2', tolerance: '', max_doublings: '8', feeder_cv: '', ply_twist: '', slub_thick: '1.8', slub_len: '4', slub_gap: '20' } };
+      adv: { target: '#9b9b9b', targetOn: false, target_spec: '', trial: '', trialOn: false, trial_spec: '', sliver_cv: '', passages: '2', tolerance: '', max_doublings: '8', feeder_cv: '', ply_twist: '', slub_thick: '1.8', slub_len: '4', slub_gap: '20' } };
   }
   function cur() { return S.specs[S.role] || (S.specs[S.role] = blank()); }
 
@@ -93,7 +93,7 @@
         '<div class="st-f"><label for="ml-unit">Unit</label><select id="ml-unit">' + opts([['ne', 'Ne'], ['nm', 'Nm'], ['tex', 'tex']], c.unit, 0, 1) + '</select></div></div>') +
       '<div class="st-sub" style="margin:8px 0 4px">Components' + (fold ? ' — one single yarn each (fibre · Ne)' : ' (fibre · share % · colouring)') + '</div>' + rows +
       '<button type="button" class="st-btn" id="ml-add" style="margin:2px 0 6px"' + (c.comps.length >= 4 ? ' disabled' : '') + '>+ Add a fibre</button>' +
-      '<details class="ml-adv"' + (adv.trialOn || adv.targetOn || adv.sliver_cv || adv.tolerance ? ' open' : '') + '><summary>Calibration &amp; mill figures</summary>' +
+      '<details class="ml-adv"' + (adv.trialOn || adv.targetOn || adv.sliver_cv || adv.tolerance || c.comps.some(function (k) { return k.spectrum; }) ? ' open' : '') + '><summary>Calibration &amp; mill figures</summary>' +
       '<label class="st-check" style="margin-top:4px"><input type="checkbox" id="ml-target-on"' + (adv.targetOn ? ' checked' : '') + '> I have a target shade to match</label>' +
       '<div class="st-row one"><div class="st-f"><label for="ml-target">Target colour — solve the share</label><input id="ml-target" type="color" value="' + esc(adv.target || '#9b9b9b') + '"' + (adv.targetOn ? '' : ' disabled') + ' style="height:32px;padding:2px"></div></div>' +
       '<label class="st-check" style="margin-top:4px"><input type="checkbox" id="ml-trial-on"' + (adv.trialOn ? ' checked' : '') + '> I have measured a trial blend</label>' +
@@ -105,6 +105,11 @@
       '<div class="st-f"><label for="ml-fcv">Weigh-feeder CV (%)</label><input id="ml-fcv" type="number" min="0.2" max="8" step="0.1" placeholder="typical 2.0" value="' + esc(adv.feeder_cv) + '"></div></div>' +
       (c.type === 'folded_marl' ? '<div class="st-row one"><div class="st-f"><label for="ml-ptw">Ply twist (turns/m)</label><input id="ml-ptw" type="number" min="50" max="1500" step="10" placeholder="typical" value="' + esc(adv.ply_twist) + '"></div></div>' : '') +
       (c.type === 'slub_melange' ? '<div class="st-row"><div class="st-f"><label for="ml-sth">Slub thickness ×</label><input id="ml-sth" type="number" min="1.2" max="5" step="0.1" value="' + esc(adv.slub_thick) + '"></div><div class="st-f"><label for="ml-sln">Slub length (cm)</label><input id="ml-sln" type="number" min="1" max="30" step="0.5" value="' + esc(adv.slub_len) + '"></div></div><div class="st-row one"><div class="st-f"><label for="ml-sgp">Gap between slubs (cm)</label><input id="ml-sgp" type="number" min="2" max="100" step="1" value="' + esc(adv.slub_gap) + '"></div></div>' : '') +
+      '<div class="st-sub" style="margin:10px 0 2px">Measured spectra (optional)</div>' +
+      '<p class="st-hint" style="margin-top:0">Paste what the spectrophotometer prints: 31 reflectance values, 400–700 nm every 10 nm (41 values from 380–780 nm, or 61 at 5 nm, also work; % or 0–1). With a curve for every fibre the blend is mixed band by band and checked for metamerism against the target curve.</p>' +
+      c.comps.map(function (k, i) { return '<div class="st-f" style="margin-bottom:4px"><label for="ml-sp' + i + '">' + esc(((CAT.fibres.filter(function (f) { return f.id === k.fibre; })[0] || {}).label) || k.fibre) + ' — spectrum</label><textarea id="ml-sp' + i + '" data-spec="' + i + '" rows="2" spellcheck="false" placeholder="e.g. 8.1, 8.4, 9.0, …" style="width:100%;font:12px/1.3 ui-monospace,Consolas,monospace">' + esc(k.spectrum || '') + '</textarea></div>'; }).join('') +
+      '<div class="st-f" style="margin-bottom:4px"><label for="ml-tspec">Target — spectrum (used with “a target shade to match”)</label><textarea id="ml-tspec" rows="2" spellcheck="false" style="width:100%;font:12px/1.3 ui-monospace,Consolas,monospace">' + esc(adv.target_spec || '') + '</textarea></div>' +
+      '<div class="st-f" style="margin-bottom:4px"><label for="ml-rspec">Trial blend — spectrum (used with “a trial blend”)</label><textarea id="ml-rspec" rows="2" spellcheck="false" style="width:100%;font:12px/1.3 ui-monospace,Consolas,monospace">' + esc(adv.trial_spec || '') + '</textarea></div>' +
       '<p class="st-hint">Leave blank to use the typical figure; enter your own and it is used and labelled measured. A trial blend (spun, knitted, measured) fits the colour model.</p></details>' +
       '<div class="ml-sum" id="ml-sum"></div>' +
       '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><button type="button" class="st-btn" id="ml-use-col" disabled>Use this colour in the 3D view</button><button type="button" class="st-btn" id="ml-open">Open the full chain</button></div>' +
@@ -127,7 +132,9 @@
     c.type = $('ml-type').value; c.route = $('ml-route').value; c.spinning = $('ml-spin').value;
     if ($('ml-count')) { c.count = parseFloat($('ml-count').value) || c.count; c.unit = $('ml-unit').value; }
     Array.prototype.forEach.call(document.querySelectorAll('#ml-card .ml-crow'), function (row) { var k = c.comps[+row.getAttribute('data-i')]; if (k) readRow(row, k); });
+    Array.prototype.forEach.call(document.querySelectorAll('#ml-card [data-spec]'), function (t) { var k = c.comps[+t.getAttribute('data-spec')]; if (k) k.spectrum = t.value.trim(); });
     var a = c.adv, v = function (id) { var e = $(id); return e ? e.value : ''; };
+    if ($('ml-tspec')) a.target_spec = v('ml-tspec').trim(); if ($('ml-rspec')) a.trial_spec = v('ml-rspec').trim();
     a.targetOn = $('ml-target-on').checked; a.target = v('ml-target') || a.target;
     a.trialOn = $('ml-trial-on').checked; a.trial = v('ml-trial'); a.tolerance = v('ml-tol'); a.passages = v('ml-pass'); a.sliver_cv = v('ml-scv'); a.max_doublings = v('ml-dbl'); a.feeder_cv = v('ml-fcv');
     if ($('ml-ptw')) a.ply_twist = v('ml-ptw');
@@ -139,12 +146,13 @@
       components: c.comps.map(function (k) {
         var o = { fibre: k.fibre, share: k.share };
         if (k.method) { o.method = k.method; o.colour = k.colour; }
+        if (k.spectrum) { o.spectrum = k.spectrum; if (!k.method) o.method = 'raw'; delete o.colour; }
         if (fold) o.tex = 590.5 / (k.ne || 30);
         return o;
       }),
       passages: n(a.passages), sliver_cv_pct: n(a.sliver_cv), feeder_cv_pct: n(a.feeder_cv), tolerance_dE: n(a.tolerance), max_doublings: n(a.max_doublings), ply_twist_tpm: n(a.ply_twist) };
-    if (a.trialOn && a.trial) spec.trial = { colour: a.trial };
-    if (a.targetOn && a.target) spec.target = { colour: a.target };
+    if (a.trialOn && (a.trial || a.trial_spec)) { spec.trial = { colour: a.trial }; if (a.trial_spec) spec.trial.spectrum = a.trial_spec; }
+    if (a.targetOn && (a.target || a.target_spec)) { spec.target = { colour: a.target }; if (a.target_spec) spec.target.spectrum = a.target_spec; }
     if (c.type === 'slub_melange') spec.slub = { thickness: n(a.slub_thick), length_cm: n(a.slub_len), spacing_cm: n(a.slub_gap) };
     if (lastStudioSl > 0) spec.stitch_length_mm = lastStudioSl;
     return spec;
@@ -168,6 +176,21 @@
     return '<svg class="ml-cv" viewBox="0 0 ' + W + ' 14" preserveAspectRatio="none"><defs><linearGradient id="ml-g" x1="0" x2="1">' + stops + '</linearGradient></defs><rect x="0" y="0" width="100" height="9" rx="1.5" fill="url(#ml-g)" stroke="rgba(0,0,0,.2)" stroke-width=".25"/>' +
       (p0 != null ? '<path d="M' + p0 + ' 9 l-1.6 3.8 h3.2z" fill="#1d1d20"/>' : '') + '</svg>';
   }
+  function specBlock(sp) {
+    var W = 320, H = 120, x0 = 28, x1 = W - 8, y0 = 8, y1 = H - 18;
+    var X = function (i) { return x0 + (x1 - x0) * i / 30; }, Yy = function (v) { return y1 - (y1 - y0) * Math.min(1, Math.max(0, v)); };
+    var path = function (a) { return a.map(function (v, i) { return (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Yy(v).toFixed(1); }).join(''); };
+    var cols = ['#2f6fb0', '#c98a12', '#2e8b57', '#9a4bb0'];
+    var g = '';
+    [0, 0.25, 0.5, 0.75, 1].forEach(function (v) { g += '<line x1="' + x0 + '" x2="' + x1 + '" y1="' + Yy(v) + '" y2="' + Yy(v) + '" stroke="currentColor" opacity=".12"/><text x="' + (x0 - 4) + '" y="' + (Yy(v) + 3) + '" text-anchor="end" font-size="8" fill="currentColor" opacity=".6">' + v + '</text>'; });
+    [0, 10, 20, 30].forEach(function (i) { g += '<text x="' + X(i) + '" y="' + (H - 5) + '" text-anchor="middle" font-size="8" fill="currentColor" opacity=".6">' + (400 + 10 * i) + '</text>'; });
+    var lines = sp.components.map(function (c, i) { return '<path d="' + path(c.spectrum) + '" fill="none" stroke="' + cols[i % 4] + '" stroke-width="1" opacity=".75"/>'; }).join('');
+    var tgt = sp.target ? '<path d="' + path(sp.target) + '" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="4 3"/>' : '';
+    var out = '<div class="ml-h">Spectrum — mixed band by band</div><svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;max-width:460px;height:auto;display:block" role="img" aria-label="Reflectance of the components and the blend, 400 to 700 nanometres">' + g + lines + '<path d="' + path(sp.blend) + '" fill="none" stroke="currentColor" stroke-width="2.2"/>' + tgt + '</svg>' +
+      '<div class="ml-rm">Reflectance against wavelength (nm). Thin coloured lines: the components; bold: the blend' + (sp.target ? '; dashed: the target curve' : '') + '. ' + esc(sp.note) + '</div>';
+    if (sp.metamerism) out += '<dl class="ml-kv"><dt>Metamerism (blend vs target)</dt><dd>ΔE ' + sp.metamerism.dE_daylight + ' in daylight → ' + sp.metamerism.dE_tungsten + ' under tungsten — <b>' + esc(sp.metamerism.grade) + '</b>. ' + esc(sp.metamerism.note) + '</dd></dl>';
+    return out;
+  }
   function render(r) {
     var pane = $('pane-melange'); if (!pane) return;
     if (!r) { pane.innerHTML = '<p class="st-p">Switch the melange on for a yarn role (the Melange card, under Yarn) to see its whole chain here.</p>'; return; }
@@ -185,10 +208,11 @@
       '<dt>Steepness</dt><dd>' + esc(cl.sensitivity.note) + tag(cl.sensitivity.basis) + '</dd></dl>' +
       curveSvg({ colour: Object.assign({}, cl, { _eff_share: effShare(r) }), components: comp }) +
       '<div class="ml-rm">The strip is the blend colour as the share of ' + esc((comp.filter(function (c) { return c.fibre === r.effect_component; })[0] || comp[0]).label.toLowerCase()) + ' goes from 0 to 100 %; ▲ is this recipe. A light shade sits on the steep part: a point of share moves it most.</div>';
+    if (cl.spectral) h += specBlock(cl.spectral);
     var tg = cl.target;
     if (tg) {
       h += '<div class="ml-h">To match ' + esc(tg.target_hex) + '</div>' + (tg.reachable
-        ? '<dl class="ml-kv"><dt>Needed</dt><dd><span class="ml-sw" style="background:' + esc(tg.hex_at) + '"></span><b>' + tg.label_share_pct + ' % ' + esc(tg.effect_component) + '</b> on the label (' + tg.dry_share_pct + ' % dry)' + tag(tg.basis) + '</dd><dt>What is left</dt><dd>ΔE ' + tg.remaining_dE + ' — ' + esc(tg.remaining_note) + '</dd></dl>' +
+        ? '<dl class="ml-kv"><dt>Needed</dt><dd><span class="ml-sw" style="background:' + esc(tg.hex_at) + '"></span><b>' + tg.label_share_pct + ' % ' + esc(tg.effect_component) + '</b> on the label (' + tg.dry_share_pct + ' % dry)' + tag(tg.basis) + '</dd><dt>What is left</dt><dd>ΔE ' + tg.remaining_dE + ' — ' + esc(tg.remaining_note) + '</dd>' + (tg.metamerism ? '<dt>Under tungsten</dt><dd>ΔE ' + tg.metamerism.dE_tungsten + ' (daylight ' + tg.metamerism.dE_daylight + ') — ' + esc(tg.metamerism.note) + '</dd>' : '') + '</dl>' +
           '<table class="ml-tbl"><tr><th>Doublings</th><th>Coloured : base</th><th>Share with equal slivers %</th><th>Off target (points)</th><th>Coloured sliver weight to hit it (% of base)</th></tr>' + tg.creel.slice(0, 3).map(function (o) { return '<tr><td>' + o.doublings + '</td><td>' + o.effect_slivers + ' : ' + o.base_slivers + '</td><td>' + o.share_equal_weights_pct + '</td><td>' + o.error_points + '</td><td>' + o.effect_sliver_weight_needed_pct_of_base + '</td></tr>'; }).join('') + '</table>' +
           '<button type="button" class="st-btn" data-ml-apply-share="' + tg.effect_index + '|' + tg.label_share_pct + '">Set the recipe to ' + tg.label_share_pct + ' %</button>'
         : '<div class="ml-note warn">' + esc(tg.note) + '</div>');
@@ -246,10 +270,10 @@
   function run() {
     clearTimeout(timer);
     timer = setTimeout(function () {
-      var c = cur(); if (!c.enabled) { summary(null); lastResult[S.role] = null; render(firstResult()); return; }
+      var c = cur(); if (!c.enabled) { summary(null); lastResult[S.role] = null; render(firstResult()); document.dispatchEvent(new Event('ka-melange')); return; }
       var my = ++seq;
       var apiFetch = window.apiFetch; if (!apiFetch) return;
-      apiFetch('/api/studio/melange', { method: 'POST', body: specOf(c) }).then(function (r) { if (my !== seq) return; lastResult[S.role] = r; summary(r); render(r); })
+      apiFetch('/api/studio/melange', { method: 'POST', body: specOf(c) }).then(function (r) { if (my !== seq) return; lastResult[S.role] = r; summary(r); render(r); document.dispatchEvent(new Event('ka-melange')); })
         .catch(function (e) { if (my !== seq) return; var r = { error: (e.data && e.data.error) || e.message || 'Could not work this yarn out.' }; lastResult[S.role] = r; summary(r); render(r); });
     }, 260);
   }
@@ -327,8 +351,20 @@
     if (!(sl > 0)) return;
     if (!lastStudioSl || Math.abs(sl - lastStudioSl) / lastStudioSl > 0.02) { lastStudioSl = sl; if (S.specs[S.role] && S.specs[S.role].enabled && /marl/.test(cur().type + '')) run(); else if (anyOn()) run(); }
   }
+  /** What the 3D yarn view draws for a role: the Studio yarn this melange makes (count, spinning, ply) and a colour for every
+   *  fibre — a fibre blend by number share, a marl by whole strand. null when the role has no melange on. */
+  function forYarnView(role) {
+    var c = S.specs[role], r = lastResult[role];
+    if (!c || !c.enabled || !r || r.error || !r.studio_yarn || !r.components) return null;
+    var sy = r.studio_yarn, marl = r.construction && r.construction.group === 'ply';
+    return {
+      yarn: { fibre: sy.fibre, type: sy.type, tex: +sy.count, ply: sy.ply || 1 },
+      mottle: { mode: marl ? 'strands' : 'fibres', parts: r.components.map(function (k) { return { fibre: k.fibre, share: marl ? k.dry_share_pct : k.number_share_pct, colour: k.hex }; }) },
+      label: r.identity && r.identity.title,
+    };
+  }
   function anyOn() { return ROLES.some(function (r) { return S.specs[r[0]] && S.specs[r[0]].enabled; }); }
 
-  window.KAStudioMelange = { payload: payload, state: state, setState: setState, setCatalogue: setCatalogue, studioResult: studioResult, hasAny: anyOn };
+  window.KAStudioMelange = { forYarnView: forYarnView, payload: payload, state: state, setState: setState, setCatalogue: setCatalogue, studioResult: studioResult, hasAny: anyOn };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { buildCard(); bind(); render(null); }); else { buildCard(); bind(); render(null); }
 })();

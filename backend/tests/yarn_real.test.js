@@ -134,4 +134,31 @@ assert.ok(dc.meta.diameter_mm > cov.diameter_mm, 'double covered is thicker');
 for (const t of ['bare', 'covered', 'dcovered']) assert.ok(el(t).fibres.every((f) => f.p.every(Number.isFinite)), `${t}: every point finite`);
 assert.ok(core.fibres.every((f) => f.p.every(Number.isFinite)), 'core-spun: every point finite');
 
+
+// 9. a melange yarn: every fibre has the colour of its component. A fibre blend is coloured by number share; a marl by whole strand
+{
+  const lum = (t) => 0.2126 * t[0] + 0.7152 * t[1] + 0.0722 * t[2];
+  const body = (b) => b.fibres.filter((f) => f.kind === 'body');
+  const parts = [{ fibre: 'cotton', share: 85, colour: '#ede9df' }, { fibre: 'viscose', share: 15, colour: '#1d1d20' }];
+  const mb = G.build({ fibre: 'cotton', type: 'combed', tex: NE30, mottle: { mode: 'fibres', parts } });
+  assert.strictEqual(mb.meta.mottled, true, 'a melange is flagged');
+  const dark = body(mb).filter((f) => lum(f.tone) < 0.1).length, all = body(mb).length;
+  assert.ok(Math.abs(dark / all - 0.15) < 0.04, `dark fibres ${dark}/${all} follow the 15 % number share`);
+  assert.ok(body(mb).filter((f) => lum(f.tone) >= 0.1).every((f) => f.fibre === 'cotton'), 'light fibres are cotton, dark ones viscose');
+  assert.ok(body(mb).filter((f) => lum(f.tone) < 0.1).every((f) => f.fibre === 'viscose'));
+  assert.strictEqual(G.build({ fibre: 'cotton', type: 'combed', tex: NE30 }).meta.mottled, false, 'a plain yarn is not');
+  // the same melange twice is the same yarn (deterministic), and the colours do not change the geometry
+  const mb2 = G.build({ fibre: 'cotton', type: 'combed', tex: NE30, mottle: { mode: 'fibres', parts } });
+  assert.deepStrictEqual(body(mb).map((f) => f.tone), body(mb2).map((f) => f.tone));
+  // a folded marl: ply 0 one colour, ply 1 the other
+  const ml = G.build({ fibre: 'cotton', type: 'combed', tex: NE30 / 2, ply: 2, mottle: { mode: 'strands', parts: [{ fibre: 'cotton', share: 50, colour: '#1f2f5a' }, { fibre: 'cotton', share: 50, colour: '#ede9df' }] } });
+  const bs = body(ml), half = bs.length / 2;
+  const L = (a) => a.reduce((t, f) => t + lum(f.tone), 0) / a.length;
+  assert.ok(L(bs.slice(0, half)) < 0.1 && L(bs.slice(half)) > 0.5, 'each ply is one colour');
+  // garbage is ignored, not a crash
+  assert.strictEqual(G.build({ fibre: 'cotton', type: 'combed', tex: NE30, mottle: { mode: 'fibres', parts: [{ fibre: 'cotton', share: 1, colour: 'red' }] } }).meta.mottled, false);
+  assert.ok(G.build({ fibre: 'poly_filament', type: 'fdy', tex: 8, mottle: { mode: 'fibres', parts } }).fibres.length > 0, 'filaments ignore it');
+  console.log('✓ melange yarn view: each fibre in its own colour, by share or by ply');
+}
+
 console.log('✓ Yarn real view tests passed');
