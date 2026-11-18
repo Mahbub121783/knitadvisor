@@ -38,6 +38,7 @@ const KM = require('./knit-machine');
 const KF = require('./knit-formation');
 const KR = require('./knit-relax');
 const YC = require('./yarn-character');
+const MEL = require('./melange-engine');
 const { SPINNING_SYSTEMS } = require('./yarn-engine');
 const TE = require('./terry-engine');
 const { FABRIC_DERIVATIVES } = require('../catalog/fabric-derivatives');
@@ -258,7 +259,8 @@ const UNITS = {
 const FILAMENT_FIBRES = ['polyester_filament', 'nylon_filament'];
 const SPUN_TYPES = Object.keys(YC.SYSTEM_LOOK);
 function readYarn(y, fallback) {
-  const o = y || {};
+  const o = { ...(y || {}) };
+  if (o.type === 'mono' && FILAMENT_FIBRES.includes(o.fibre)) o.filaments = 1;   // a monofilament is one filament
   let unit = UNITS[String(o.unit || '').toLowerCase()] ? String(o.unit).toLowerCase() : null;
   let v = +o.count > 0 ? +o.count : null;
   if (!v || !unit) { if (+o.ne > 0) { v = +o.ne; unit = 'ne'; } else if (+o.denier > 0) { v = +o.denier; unit = 'denier'; } else if (+o.tex > 0) { v = +o.tex; unit = 'tex'; } else if (+o.dtex > 0) { v = +o.dtex; unit = 'dtex'; } else if (+o.nm > 0) { v = +o.nm; unit = 'nm'; } }
@@ -272,16 +274,25 @@ function readYarn(y, fallback) {
   const fibre = FIBRES[o.fibre] ? o.fibre : (fallback && fallback.fibre) || 'cotton';
   const filament = FILAMENT_FIBRES.includes(fibre);
   // type: a spinning system for spun yarn, flat / textured for filament
-  const type = filament ? (['fdy', 'dty'].includes(o.type) ? o.type : 'dty') : (SPUN_TYPES.includes(o.type) ? o.type : 'combed');
-  const form = filament ? null : (ply > 1 ? 'ply2' : ['slub', 'core_spun'].includes(o.form) ? o.form : 'single');
+  const type = filament ? (['fdy', 'dty', 'mono'].includes(o.type) ? o.type : 'dty') : (SPUN_TYPES.includes(o.type) ? o.type : 'combed');
+  // filament details: delustrant, cross-section, intermingling nodes, crimp contraction (DTY)
+  const fil = filament ? {
+    lustre: ['bright', 'semi_dull', 'full_dull'].includes(o.lustre) ? o.lustre : 'semi_dull',
+    section: ['round', 'trilobal'].includes(o.section) ? o.section : 'round',
+    interlace: o.interlace != null && o.interlace !== '' && +o.interlace >= 0 ? Math.min(200, Math.round(+o.interlace)) : null,
+    crimp: type === 'dty' && +o.crimp > 0 ? Math.min(60, +o.crimp) : null,
+  } : null;
+  const form = filament ? null : (ply > 1 || o.form === 'ply2' ? 'ply2' : ['slub', 'core_spun'].includes(o.form) ? o.form : 'single');
   const bulk = filament ? YC.POLY_FORM[type].bulk : YC.SYSTEM_LOOK[type].bulk * YC.FORM_LOOK[form].bulk;
   const typeLabel = filament ? YC.POLY_FORM[type].label : `${type.replace('_', '-')}${form !== 'single' ? ', ' + YC.FORM_LOOK[form].label : ''}`;
   const dpf = filament && +o.filaments > 0 ? (tex * 9) / +o.filaments : null;
   return {
-    tex, ne: 590.5 / tex, single_ne: 590.5 / single, label, fibre, fibre_label: FIBRES[fibre].label, ply, type, form, type_label: typeLabel, bulk,
+    tex, ne: 590.5 / tex, single_ne: +o.spin_ne > 0 ? +o.spin_ne : 590.5 / single, label, fibre, fibre_label: FIBRES[fibre].label, ply, type, form, type_label: typeLabel, bulk,
+    // a melange yarn carries its true fibre mix (the Studio's fibre key is only the nearest family)
+    ...(o.melange && o.mix && typeof o.mix === 'object' ? { mix: o.mix, melange: true } : {}),
     // Peirce's diameter d = √tex / 28 mm, by fibre packing and by the yarn's own bulk
     d_mm: (Math.sqrt(tex) / 28) * FIBRES[fibre].dFactor * bulk,
-    filaments: +o.filaments > 0 ? Math.round(+o.filaments) : null, dpf: dpf ? r2(dpf) : null,
+    filaments: +o.filaments > 0 ? Math.round(+o.filaments) : null, dpf: dpf ? r2(dpf) : null, ...(fil || {}),
     equivalents: { ne: r1(590.5 / tex), nm: r1(1000 / tex), tex: r2(tex), dtex: r1(tex * 10), denier: r1(tex * 9) },
   };
 }
@@ -299,8 +310,8 @@ function characterOf(y) {
   const filament = FILAMENT_FIBRES.includes(y.fibre);
   const spinKey = filament ? 'combed' : y.type;
   const c = YC.yarnCharacter({
-    spinKey, spin: SPINNING_SYSTEMS[spinKey], form: y.form || 'single', fibers: FIBRE_MIX[y.fibre] || { cotton: 100 }, countNe: y.single_ne || y.ne,
-    poly_form: filament ? y.type : /polyester|cvc/.test(y.fibre) ? 'staple' : undefined, poly_lustre: 'semi_dull',
+    spinKey, spin: SPINNING_SYSTEMS[spinKey], form: y.form || 'single', fibers: y.mix || FIBRE_MIX[y.fibre] || { cotton: 100 }, countNe: y.single_ne || y.ne,
+    poly_form: filament ? y.type : /polyester|cvc/.test(y.fibre) ? 'staple' : undefined, poly_lustre: y.lustre || 'semi_dull',
   });
   const spin = SPINNING_SYSTEMS[spinKey];
   const ne1 = y.single_ne || y.ne;
@@ -332,6 +343,59 @@ function classify(st, roles, gating) {
   if (roles.includes('loop')) return 'fleece';
   if (st.beds.C.some((row) => row.includes('T'))) return 'pique';
   return 'single_jersey';
+}
+
+// What the drawing IS, read from the drawn programme alone — never from a family.
+// The title and the counts describe this construction; the family (classify) is
+// only the set of measured constants the weight is currently borrowed from.
+function describeStructure(st, roles, gating, plush) {
+  const beds = [['cylinder', st.beds.C], ['dial', st.beds.D]].filter((b) => b[1]);
+  const double = beds.length === 2;
+  const n = { K: 0, T: 0, M: 0, E: 0, R: 0, out: 0 };
+  beds.forEach(([, g]) => g.forEach((row) => row.forEach((x) => { if (x === '-') n.out++; else if (n[x] != null) n[x]++; })));
+  const cells = n.K + n.T + n.M + n.E + n.R;
+  const pct = (v) => (cells ? Math.round((v / cells) * 100) : 0);
+  // the longest float: consecutive misses along a feed, round the repeat, on one bed
+  let float = 0;
+  beds.forEach(([, g]) => g.forEach((row) => {
+    if (row.every((x) => x === 'M')) { float = Math.max(float, row.length); return; }
+    let run = 0;
+    for (const x of [...row, ...row]) { run = x === 'M' ? run + 1 : 0; float = Math.max(float, Math.min(run, row.length)); }
+  }));
+  // tuck stacking: tucks held on one needle with no knit between them, down the repeat
+  let stack = 0;
+  beds.forEach(([, g]) => {
+    for (let j = 0; j < g[0].length; j++) {
+      const col = g.map((row) => row[j]);
+      if (!col.includes('K')) continue;
+      let t = 0;
+      for (const x of [...col, ...col]) { t = x === 'T' ? t + 1 : x === 'K' ? 0 : t; stack = Math.max(stack, t); }
+    }
+  });
+  const loopFeeds = roles.filter((r) => r === 'loop').length;
+  const parts = [];
+  if (n.T) parts.push('tuck'); if (n.M) parts.push('miss'); if (n.E) parts.push('transfer'); if (n.R) parts.push('bed-to-bed transfer'); if (n.out) parts.push('needle-out');
+  let title;
+  if (plush) title = 'Single bed · terry / velour (loop yarn knits as a sinker-loop pile)';
+  else if (!double) {
+    title = loopFeeds ? 'Single bed · loop-yarn (fleece / terry) construction'
+      : n.E ? 'Single bed · knit with transfer stitches (pointelle / mesh)'
+        : n.T && n.M ? 'Single bed · knit, tuck and miss'
+          : n.T ? 'Single bed · knit and tuck'
+            : n.M ? 'Single bed · knit and miss (float)'
+              : 'Single bed · plain knit';
+  } else {
+    title = `Double bed · ${gating === 'interlock' ? 'interlock' : 'rib'} gating · ${parts.length ? 'knit + ' + parts.join(' + ') : 'plain knit on both beds'}`;
+  }
+  const detail = [
+    `${st.feeds} feed${st.feeds > 1 ? 's' : ''} × ${st.width} needle${st.width > 1 ? 's' : ''} per repeat`,
+    `knit ${pct(n.K)}%${n.T ? `, tuck ${pct(n.T)}%` : ''}${n.M ? `, miss ${pct(n.M)}%` : ''}${n.E ? `, transfer ${pct(n.E)}%` : ''}`,
+    n.M && float ? `longest float ${float} needle${float > 1 ? 's' : ''}` : null,
+    n.T && stack > 1 ? `tucks stack ${stack} high` : null,
+    loopFeeds ? `${loopFeeds} loop-yarn feed${loopFeeds > 1 ? 's' : ''}` : null,
+    n.out ? `${n.out} needle position${n.out > 1 ? 's' : ''} out of action` : null,
+  ].filter(Boolean).join(' · ');
+  return { title, detail, bed: double ? 'double' : 'single', counts: { ...n, cells }, longest_float: float, tuck_stack: stack, loop_feeds: loopFeeds };
 }
 
 // the anchor's yarn per needle position, in ground-tex units
@@ -759,7 +823,7 @@ function solve(ctx, ground) {
     const loopy = f.role === 'loop' || !knitsHere;
     const elast = ctx.elastane && ctx.elastane.feeds.includes(i) ? ctx.elastane : null;
     return {
-      feed: i + 1, role: f.role, role_drawn: f.drawn || f.role, yarn: yarns[i].label, yarn_type: yarns[i].type_label || null, d_mm: yarns[i].d_mm ? r3(yarns[i].d_mm) : null, fibre: yarns[i].fibre_label, tex: r2(yarns[i].tex),
+      feed: i + 1, role: f.role, role_drawn: f.drawn || f.role, yarn: yarns[i].label, yarn_type: yarns[i].type_label || null, d_mm: yarns[i].d_mm ? r3(yarns[i].d_mm) : null, fibre: yarns[i].fibre_label, fibre_mix: yarns[i].mix || FIBRE_MIX[yarns[i].fibre] || null, tex: r2(yarns[i].tex),
       sl_mm: r3(l), sl_source: f.sl_mm ? 'your setting' : f.sl_ratio !== 1 ? `${f.sl_ratio} × ground` : 'ground stitch length',
       tf: knitsHere ? r2(Math.sqrt(yarns[i].tex) / (l / 10)) : null, plated: yarns[i].plated ? { back: yarns[i].plated.back.label, back_pct: r1(yarns[i].plated.share * 100) } : null,
       share: r2(s), course_length_m: r3(courseM), yarn_speed_m_min: r1(courseM * rpm),
@@ -1061,6 +1125,10 @@ function reduceRepeat(C, D, feedRows, altPlating) {
 // ── public ──────────────────────────────────────────────────────────────────
 function analyse(input) {
   try {
+    // melange / marl / heather yarns: each role's melange is worked out first (melange-engine.js) and its resultant
+    // count, nearest fibre family and spinning system become that role's yarn; the full analysis rides along
+    let melange = null;
+    if (input && input.melange) { const m = MEL.applyToInput(input); input = m.input; melange = m.results; }
     const g = input && input.grid ? input.grid : {};
     const C = readBed(g.C, 'Cylinder');
     const D = input.bed === 'double' ? readBed(g.D, 'Dial') : null;
@@ -1081,7 +1149,7 @@ function analyse(input) {
       const role = ROLES.includes(f.role) ? f.role : 'ground';
       return {
         role,
-        yarn: readYarn(f.yarn ? { ...(input.yarn || {}), ne: null, count: null, unit: null, ...f.yarn } : null, null) || roleYarn[role] || null,
+        yarn: readYarn(f.yarn ? { ...(input.yarn || {}), ne: null, count: null, unit: null, mix: null, melange: null, ...f.yarn } : null, null) || roleYarn[role] || null,
         sl_mm: +f.sl_mm > 0 ? +f.sl_mm : null,
         sl_ratio: +f.sl_ratio > 0 ? Math.min(3, Math.max(0.3, +f.sl_ratio)) : 1,
         // plating: a second yarn fed through the same guide into every loop of this feed, held to the back
@@ -1104,8 +1172,16 @@ function analyse(input) {
     }
     // a loop yarn that knits is a sinker-loop pile only when a pile is chosen
     // (older clients send no choice: there it always was a pile)
-    const pileWanted = input.pile == null ? true : input.pile === 'sinker';
+    // 'sinker' / 'none' are the person's choice. Otherwise ('auto', or nothing sent) the drawing decides: where the same
+    // loop yarn is also TIED IN and floated on another feeder (it never knits there), the design is a fleece, whose
+    // sinker is a different part from the terry sinker — so a feeder of that yarn that knits is a knitting course of
+    // it. With no such feeder, a loop yarn that knits is a sinker-loop pile (terry / velour).
+    const pileHeld = !D && feedRows.some((f, i) => f.role === 'loop' && !C[i].includes('K'));
+    const pileKnits = !D && feedRows.some((f, i) => f.role === 'loop' && C[i].includes('K'));
+    const pileChoice = input.pile === 'sinker' || input.pile === 'none' ? input.pile : 'auto';
+    const pileWanted = pileChoice === 'sinker' ? true : pileChoice === 'none' ? false : !pileHeld;
     const roleNotes = resolveRoles(C, D, feedRows, pileWanted);
+    if (pileChoice === 'auto' && pileHeld && pileKnits) roleNotes.unshift({ level: 'note', text: 'The loop yarn is tied in and floated on one feeder and knits on another, so this is read as a fleece, not a terry: the knitting feeder is a course of that yarn. Under “A loop-yarn feeder that knits” choose “Sinker-loop pile” if you mean a pile over a terry sinker.' });
     const fabricDef = {
       id: 'studio_custom', category: D ? (gating === 'interlock' ? 'interlock' : 'rib') : 'single_jersey',
       structure: { pattern: { C, D }, cam: feedRows.map((f, i) => ({ feed: i + 1, yarn: f.role === 'ground' ? null : f.role })) },
@@ -1363,6 +1439,7 @@ function analyse(input) {
     {
       const extra = [...roleNotes];
       if (plush && plushSpread) extra.push({ level: 'warn', text: `Pile on ${plushSpread.pileFeeds} of ${plushSpread.pileFeeds + plushSpread.plainFeeds} knitting feeds: the plain feeds knit ground-only jersey courses between the pile courses. Weighed as ${Math.round(plushSpread.want * 100)}% pile loops per cm² — the plush model's "${plushSpread.arrangement}" arrangement (${Math.round(plushSpread.density * 100)}%); the pile stands in bands, one pile course in ${r1(1 / plushSpread.share)}.` });
+      if (plush) extra.push({ level: 'note', text: 'Read as terry / velour: the loop yarn knits, so it is drawn over the high sinker as a pile on the back, and the front stays plain jersey — the face of this cloth looks like jersey by design. A raised fleece is drawn the other way: the loop yarn tucks on 1 needle in 3–6 and misses the rest, tied in by a binder (open "3-Thread Fleece" in Start from to compare).' });
       if (finish || plush) extra.push(...finishChecks(finish || { brush: ((input.finish || {}).brush) || 'none', legacy: !(input.finish || {}).brush }, family, plush));
       if (extra.length) {
         checks = checks.concat(extra);
@@ -1435,10 +1512,14 @@ function analyse(input) {
       : tfWindow(family, lycra, ctx.rate);
     // how right this answer is likely to be: measured by cross-validation (plush has its own model and no records)
     const acc = accuracyFor({ matchId: match && match.id, family, lycra, level: plush ? 'estimate' : confidence.level });
+    // what the melange yarns mean for THIS structure (composition of the cloth, grin-through, the wet route of the whole fabric)
+    const melangeOut = melange ? melangeSummary(melange, feedRows, S, { st, D: !!st.beds.D }) : null;
+    if (melangeOut) melangeOut.fabric_checks.forEach((c) => checks.push(c));
     return {
       success: true,
       structure: {
         bed: D ? 'double' : 'single', gating, feeds: st.feeds, needles_per_repeat: st.width, beds: st.beds, roles, roles_drawn: feedRows.map((f) => f.drawn || f.role),
+        identity: describeStructure(st, roles, gating, !!plush),
         family: plush ? 'plush' : family, family_label: plush ? 'Sinker-loop plush (terry / velour)' : FAMILY[family].label,
         anchor: plush ? { id: 'terry', name: 'factory loopback terry (loop size)' } : { id: anchorDef.id, name: anchorDef.name },
         match: plush ? { id: plush.variant.id, name: plush.variant.name } : match ? { id: match.id, name: match.name } : null,
@@ -1462,13 +1543,13 @@ function analyse(input) {
             : 'Delayed (rib) timing: the dial knocks over a few needles after the cylinder and draws its loop from the cylinder\'s — a tighter, finer rib.') : null,
       },
       yarn: {
-        ground: { count: S.ground.label, tex: r2(S.ground.tex), fibre: S.ground.fibre_label, source: auto || (plush && !ground) ? 'solved' : 'your input',
+        ground: { count: S.ground.label, tex: r2(S.ground.tex), fibre: S.ground.fibre_label, source: auto || (plush && !ground) ? 'solved' : (melange && melange.ground) ? 'melange' : 'your input',
           type: S.ground.type_label || null, d_mm: r3(S.gfit.yarn_d_mm), equivalents: S.ground.equivalents || { ne: r1(590.5 / S.ground.tex), nm: r1(1000 / S.ground.tex), tex: r2(S.ground.tex), dtex: r1(S.ground.tex * 10), denier: r1(S.ground.tex * 9) }, dpf: S.ground.dpf || null },
         roles: (() => {
           const out = {};
           feedRows.forEach((f, i) => {
             const y = S.feeds[i]; if (!y || out[f.role] || f.role === 'ground' || f.role === 'face') return;
-            out[f.role] = { count: y.yarn, tex: y.tex, type: y.yarn_type, d_mm: y.d_mm, source: f.yarn ? 'your input' : f.role === 'loop' ? 'assumed (2.5 × the ground tex)' : 'the ground yarn',
+            out[f.role] = { count: y.yarn, tex: y.tex, type: y.yarn_type, d_mm: y.d_mm, source: melange && melange[f.role] ? 'melange' : f.yarn ? 'your input' : f.role === 'loop' ? 'assumed (2.5 × the ground tex)' : 'the ground yarn',
               equivalents: { ne: r1(590.5 / y.tex), nm: r1(1000 / y.tex), tex: r2(y.tex), dtex: r1(y.tex * 10), denier: r1(y.tex * 9) } };
           });
           return out;
@@ -1480,6 +1561,7 @@ function analyse(input) {
           effects: y.ch.effects, process: y.ch.process, warnings: y.ch.warnings, look: y.ch.look })),
         effects: yarnFx,
       },
+      melange: melangeOut,
       fabric: {
         accuracy: acc && ctx.floor && !ctx.calib ? {
           interval_pct: 80, level: ctx.floor.n > 0 ? 'machine' : 'pooled', own_rolls: false, method: acc.method, generated: acc.generated,
@@ -1536,7 +1618,7 @@ function analyse(input) {
       machine_setup: {
         profile: KM.describe(profile),
         requirements: req,
-        alternatives: KM.ORDER.filter((id) => !KM.fit(KM.PROFILES[id], req).some((c) => c.level === 'error' || c.level === 'warn')).map((id) => ({ id, label: KM.PROFILES[id].label })),
+        alternatives: KM.alternatives(req).map((id) => ({ id, label: KM.PROFILES[id].label })),
         beds: mPlan,
         transfer_dir: req.transfer ? ctx.transferDir : null,
         speed: { rpm: S.rpm, surface_m_s: r2((Math.PI * S.dia * 0.0254 * S.rpm) / 60), max_m_s: KM.speedLimit(profile).max_m_s, speed_factor: profile.sf, basis: 'RPM × diameter of this class of machine (typical build, modelled)' },
@@ -1571,9 +1653,54 @@ function analyse(input) {
       },
     };
   } catch (e) {
-    if (e instanceof StudioError) return { success: false, error: e.message };
+    if (e instanceof StudioError || e instanceof MEL.MelangeError) return { success: false, error: e.message };
     throw e;
   }
+}
+
+// What the melange yarns do to THIS fabric: each role's analysis, and the fibre composition of the whole cloth
+// (the fibre mix of every yarn weighted by its mass in the fabric — the figure the garment label needs).
+function melangeSummary(results, feedRows, S, ctx) {
+  const roleOf = (r) => (r === 'face' ? 'ground' : r);
+  const mass = {}, tot = S.feeds.reduce((t, f) => t + f.mass, 0) + S.feeds.reduce((t, f) => t + (f.elastane_mass || 0), 0);
+  feedRows.forEach((f, i) => { const k = roleOf(f.role); mass[k] = (mass[k] || 0) + S.feeds[i].mass; });
+  const fabric = {};
+  let covered = 0;
+  Object.keys(mass).forEach((role) => {
+    const m = mass[role] / tot;
+    // the role's own melange; else the yarn it really carries (its fibre mix is on the feed)
+    const idx = feedRows.findIndex((f) => roleOf(f.role) === role);
+    const mix = results[role] ? results[role].composition.dry_pct : (idx > -1 && S.feeds[idx].fibre_mix) || { cotton: 100 };
+    const sum = Object.values(mix).reduce((t, v) => t + v, 0) || 100;
+    Object.entries(mix).forEach(([k, v]) => { fabric[k] = (fabric[k] || 0) + (m * v * 100) / sum; });
+    covered += m;
+  });
+  const elast = 1 - covered;
+  const out = Object.fromEntries(Object.entries(fabric).map(([k, v]) => [k, r1(v)]));
+  // ── what the melange means for this structure ────────────────────────────────────────────
+  const fabric_checks = [];
+  const say = (level, text) => fabric_checks.push({ level, text });
+  const st = ctx && ctx.st;
+  const hasBinder = feedRows.some((f) => f.role === 'binder');
+  const loopHeld = !!st && !ctx.D && feedRows.some((f, i) => f.role === 'loop' && !st.beds.C[i].includes('K'));
+  const face = results.ground, loop = results.loop;
+  if (face && loop && loopHeld) {
+    // a loop yarn tucked onto the face needle is seen THROUGH the face yarn when the cloth stretches: how far apart are the two colours?
+    const dE = MEL.dE00(MEL.hexToLab(face.colour.blend.hex), MEL.hexToLab(loop.colour.blend.hex));
+    if (hasBinder) say(dE > 15 ? 'note' : 'ok', `The loop yarn (${loop.colour.blend.hex}) differs from the face melange (${face.colour.blend.hex}) by ΔE ${r1(dE)}. With a binder the tucked head of the loop yarn is tied in behind it and the face stays clean; keep the binder tension above the face yarn's.`);
+    else if (dE > 8) say('warn', `Two-thread fleece with a loop yarn ΔE ${r1(dE)} from the face melange: the tucked head of the loop yarn sits on the face needle and GRINS THROUGH the face when the cloth stretches. Add a binder feeder (three-thread fleece), or bring the loop yarn's colour within ΔE 8 of the face.`);
+    else say('ok', `Loop yarn ΔE ${r1(dE)} from the face melange: close enough that any show-through is hardly seen.`);
+  }
+  // the whole fabric's wet route: pre-coloured melange meets whatever else is in the cloth
+  const fabricMix = Object.keys(fabric);
+  const stock = Object.values(results).some((r) => r.components.some((c) => c.method === 'stock_dyed' && /cotton|viscose|modal|tencel|bamboo/.test(c.fibre)));
+  const cross = Object.values(results).some((r) => r.wet.route === 'B');
+  if (fabricMix.includes('polyester') && !cross) {
+    const polyPct = fabric.polyester || 0;
+    say('note', `${r1(polyPct)} % polyester in the cloth (${feedRows.filter((f, i) => (S.feeds[i].fibre_mix || {}).polyester).map((f) => f.role).filter((v, i, a) => a.indexOf(v) === i).join(', ')}): the melange yarn is pre-coloured and is not dyed, so a polyester that must be a colour needs a disperse bath at 130 °C — use a dope-dyed or pre-dyed polyester, or leave it undyed where it is hidden (a binder behind the face).${stock ? ' A 130 °C acid bath on stock-dyed cotton can shift the shade and flatten the contrast.' : ''}`);
+  }
+  if (cross && Object.values(results).some((r) => r.wet.route === 'A')) say('warn', 'Pre-coloured melange yarns and cross-dyed yarns in ONE fabric: the dye bath the cross-dyed yarn needs also treats the pre-coloured one. Check its dye fastness to the cross-dye bath before combining.');
+  return { roles: results, fabric_checks, fabric_composition: { dry_pct: out, elastane_pct: elast > 0.001 ? r1(elast * 100) : null, basis: 'law', rule: "each yarn's fibre mix × its mass share in the fabric" } };
 }
 
 module.exports = {

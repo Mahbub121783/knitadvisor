@@ -36,6 +36,7 @@ function weftPayload(d) {
     yarn: yarnOf('st-ne', 'st-unit', 'st-fibre', 'st-ytype', 'st-ply', 'st-fil'),
     yarns: { binder: n('yb-count') ? yarnOf('yb-count', 'yb-unit', 'yb-fibre', 'yb-type', 'yb-ply', 'yb-fil') : null, loop: n('yl-count') ? yarnOf('yl-count', 'yl-unit', 'yl-fibre', 'yl-type', 'yl-ply', 'yl-fil') : null, plate: n('yp-count') ? yarnOf('yp-count', 'yp-unit', 'yp-fibre', 'yp-type', 'yp-ply', 'yp-fil') : null },
     plush: { cut: !!d.cut, sinker_mm: n('st-sinker'), arrangement: f['st-parr'] },
+    melange: d.melange_payload && typeof d.melange_payload === 'object' ? d.melange_payload : null,
     pile: f['st-pile'],
     stripes: String(f['st-stripe'] || '').trim() ? { sequence: f['st-stripe'] } : null,
     finish: { brush: f['st-brush'], passes: n('st-passes'), sheared: false },

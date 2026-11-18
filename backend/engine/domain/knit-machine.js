@@ -201,10 +201,29 @@ function fit(P, req) {
   return out;
 }
 
-function autoProfile(req) {
-  for (const id of ORDER) if (!fit(PROFILES[id], req).some((c) => c.level !== 'note' && c.level !== 'ok')) return id;
-  for (const id of ORDER) if (!fit(PROFILES[id], req).some((c) => c.level === 'error')) return id;
-  return req.kind === 'double' ? 'dj_jacquard' : 'pointelle';
+// A sinker set is a fitted part, not a limit of the machine class: a knitter puts terry sinkers into a 4-track
+// jersey machine to knit a pile, or fleece sinkers to knit a tied-in loop yarn. So when the machine is chosen FOR
+// the design, the sinker the design needs is fitted. (A machine the person picks by hand stays as it is, and says
+// what it lacks.)
+function neededSinker(req) { return req.kind === 'double' ? null : req.pile ? 'terry' : req.fleece ? 'fleece' : null; }
+function withSinker(P, req) {
+  const need = neededSinker(req);
+  if (!need || P.sinker === need || P.kind === 'double') return P;
+  return { ...P, sinker: need, pile: need === 'terry' ? true : P.pile, fitted_sinker: true };
+}
+function autoPick(req) {
+  const clean = (P) => !fit(P, req).some((c) => c.level !== 'note' && c.level !== 'ok');
+  for (const id of ORDER) if (clean(PROFILES[id])) return { id, sinker: null };
+  // nothing is clean as it stands: the simplest class that knits it once the right sinkers are in
+  for (const id of ORDER) { const P = withSinker(PROFILES[id], req); if (P !== PROFILES[id] && clean(P)) return { id, sinker: P.sinker }; }
+  for (const id of ORDER) if (!fit(PROFILES[id], req).some((c) => c.level === 'error')) return { id, sinker: null };
+  for (const id of ORDER) { const P = withSinker(PROFILES[id], req); if (P !== PROFILES[id] && !fit(P, req).some((c) => c.level === 'error')) return { id, sinker: P.sinker }; }
+  return { id: req.kind === 'double' ? 'dj_jacquard' : 'pointelle', sinker: null };
+}
+function autoProfile(req) { return autoPick(req).id; }
+/** Every class that knits the design cleanly, with the sinkers it needs fitted. */
+function alternatives(req) {
+  return ORDER.filter((id) => !fit(withSinker(PROFILES[id], req), req).some((c) => c.level === 'error' || c.level === 'warn'));
 }
 
 // The user's own machine, from its maker's specification: no class figures.
@@ -244,9 +263,11 @@ function resolve(machine, req) {
     return P;
   }
   const asked = PROFILES[m.profile] ? m.profile : null;
-  const id = asked || autoProfile(req);
-  const base = PROFILES[id];
+  const pick = asked ? { id: asked, sinker: null } : autoPick(req);
+  const id = pick.id;
+  const base = pick.sinker ? withSinker(PROFILES[id], req) : PROFILES[id];
   const P = { ...base, id, tracks: { ...base.tracks }, auto: !asked };
+  if (pick.sinker) P.label = `${base.label} · ${pick.sinker} sinkers fitted`;
   if (base.selection === 'tracks') {
     if (+m.tracks_cyl > 0) P.tracks.C = +m.tracks_cyl;
     if (+m.tracks_dial > 0 && P.tracks.D) P.tracks.D = +m.tracks_dial;
@@ -434,7 +455,7 @@ function describe(P) {
   return {
     id: P.id, label: P.label, auto: !!P.auto, kind: P.kind, gatings: P.gatings, selection: P.selection,
     tracks: { C: Number.isFinite(P.tracks.C) ? P.tracks.C : 'needle selection', D: P.tracks.D == null ? null : Number.isFinite(P.tracks.D) ? P.tracks.D : 'needle selection' },
-    cams: P.cams, needle: P.needle, sinker: { type: P.sinker, text: SINKER[P.sinker] }, transfer: P.transfer, timing: P.timing || null,
+    cams: P.cams, needle: P.needle, sinker: { type: P.sinker, text: SINKER[P.sinker], fitted: !!P.fitted_sinker }, transfer: P.transfer, timing: P.timing || null,
     build: { feeders_per_inch: P.fpi, speed_factor: P.sf, surface_speed_m_s: speedLimit(P).surface_m_s, gauges: P.gauges, dia: P.dia, basis: P.custom ? 'your machine\'s own specification' : 'typical build for this class of machine (modelled)' }, use: P.use,
     striper: P.striper || null, bed_transfer: !!P.bedTransfer, max_width: P.maxWidth || null, custom: !!P.custom,
     technique: P.technique || null, transfer_dirs: P.transferDirs || null, butts: P.butts || null,
@@ -443,4 +464,4 @@ function describe(P) {
 
 function list() { return ORDER.map((id) => describe({ ...PROFILES[id], id })); }
 
-module.exports = { PROFILES, ORDER, requirements, fit, autoProfile, resolve, plan, compile, describe, list, trackSeqs, feedPlan, SINKER, speedLimit, parseStripe, stripeRequirement, stripePlan, customProfile, needsStriper };
+module.exports = { PROFILES, ORDER, requirements, fit, autoProfile, alternatives, withSinker, resolve, plan, compile, describe, list, trackSeqs, feedPlan, SINKER, speedLimit, parseStripe, stripeRequirement, stripePlan, customProfile, needsStriper };

@@ -64,25 +64,37 @@
   }
   // ── yarns: one row per role the design uses ────────────────────────────
   var YROWS = [
-    { key: 'ground', c: 'st-ne', u: 'st-unit', f: 'st-fibre', t: 'st-ytype', p: 'st-ply', fil: 'st-fil' },
-    { key: 'binder', c: 'yb-count', u: 'yb-unit', f: 'yb-fibre', t: 'yb-type', p: 'yb-ply', fil: 'yb-fil' },
-    { key: 'loop', c: 'yl-count', u: 'yl-unit', f: 'yl-fibre', t: 'yl-type', p: 'yl-ply', fil: 'yl-fil' },
-    { key: 'plate', c: 'yp-count', u: 'yp-unit', f: 'yp-fibre', t: 'yp-type', p: 'yp-ply', fil: 'yp-fil' },
+    { key: 'ground', c: 'st-ne', u: 'st-unit', f: 'st-fibre', t: 'st-ytype', p: 'st-ply', fil: 'st-fil', lus: 'st-lus', sec: 'st-sec', nip: 'st-nip', cc: 'st-cc' },
+    { key: 'binder', c: 'yb-count', u: 'yb-unit', f: 'yb-fibre', t: 'yb-type', p: 'yb-ply', fil: 'yb-fil', lus: 'yb-lus', sec: 'yb-sec', nip: 'yb-nip', cc: 'yb-cc' },
+    { key: 'loop', c: 'yl-count', u: 'yl-unit', f: 'yl-fibre', t: 'yl-type', p: 'yl-ply', fil: 'yl-fil', lus: 'yl-lus', sec: 'yl-sec', nip: 'yl-nip', cc: 'yl-cc' },
+    { key: 'plate', c: 'yp-count', u: 'yp-unit', f: 'yp-fibre', t: 'yp-type', p: 'yp-ply', fil: 'yp-fil', lus: 'yp-lus', sec: 'yp-sec', nip: 'yp-nip', cc: 'yp-cc' },
   ];
   var SPUN = [['combed', 'Combed ring'], ['carded', 'Carded ring'], ['compact', 'Compact'], ['siro', 'Siro'], ['siro_compact', 'Siro-compact'], ['open_end', 'Open-end (rotor)'], ['vortex', 'Vortex (air-jet)']];
-  var FILA = [['dty', 'Textured (DTY)'], ['fdy', 'Flat (FDY)']];
+  var FILA = [['dty', 'Textured (DTY)'], ['fdy', 'Flat multifilament (FDY)'], ['mono', 'Monofilament']];
   var isFil = function (f) { return /filament/.test(f || ''); };
   function yarnTypes(R) {
     var fib = $(R.f).value, sel = $(R.t), keep = sel.value, list = isFil(fib) ? FILA : SPUN;
     sel.innerHTML = list.map(function (x) { return '<option value="' + x[0] + '">' + x[1] + '</option>'; }).join('');
     if (list.some(function (x) { return x[0] === keep; })) sel.value = keep;
-    var fil = $(R.fil).closest('.st-yfil'); if (fil) fil.hidden = !isFil(fib);
+    filamentFields(R);
     if (isFil(fib) && $(R.u).value === 'ne' && !$(R.c).value) $(R.u).value = 'denier';
+  }
+  // the filament details show only for a filament fibre; crimp only for DTY; no filament count for a monofilament
+  function filamentFields(R) {
+    var row = $(R.fil).closest('.st-yrow'), fil = isFil($(R.f).value), t = $(R.t).value;
+    row.querySelectorAll('.st-yfil').forEach(function (el) { el.hidden = !fil; });
+    $(R.cc).closest('.st-yfil').hidden = !fil || t !== 'dty';
+    $(R.fil).closest('.st-yfil').hidden = !fil || t === 'mono';
   }
   function yarnOf(R) {
     var y = { fibre: $(R.f).value, type: $(R.t).value, ply: +$(R.p).value || 1 };
     if (+$(R.c).value > 0) { y.count = +$(R.c).value; y.unit = $(R.u).value; }
-    if (isFil(y.fibre) && +$(R.fil).value > 0) y.filaments = +$(R.fil).value;
+    if (isFil(y.fibre)) {
+      if (+$(R.fil).value > 0 && y.type !== 'mono') y.filaments = +$(R.fil).value;
+      y.lustre = $(R.lus).value; y.section = $(R.sec).value;
+      if ($(R.nip).value !== '') y.interlace = +$(R.nip).value;
+      if (y.type === 'dty' && +$(R.cc).value > 0) y.crimp = +$(R.cc).value;
+    }
     return y;
   }
   var TEX = { ne: function (v) { return 590.5 / v; }, nm: function (v) { return 1000 / v; }, nw: function (v) { return 885.8 / v; }, tex: function (v) { return v; }, dtex: function (v) { return v / 10; }, denier: function (v) { return v / 9; } };
@@ -99,7 +111,7 @@
     if (!last || !last.yarn) return;
     var eq = function (e) { return e ? '= ' + e.tex + ' tex · ' + e.ne + 's Ne · ' + e.nm + ' Nm · ' + e.dtex + ' dtex · ' + e.denier + ' D' : ''; };
     var g = last.yarn.ground;
-    $('st-yeq-ground').textContent = eq(g.equivalents) + (g.d_mm ? ' · Ø ' + g.d_mm + ' mm' : '') + (g.source === 'solved' ? ' (solved: ' + g.count + ')' : '');
+    $('st-yeq-ground').textContent = eq(g.equivalents) + (g.d_mm ? ' · Ø ' + g.d_mm + ' mm' : '') + (g.source === 'solved' ? ' (solved: ' + g.count + ')' : g.source === 'melange' ? ' — from the melange card (count, spinning and fibre mix)' : '');
     ['binder', 'loop', 'plate'].forEach(function (k) { if (k === 'plate') { var pf = (last.yarn.feeds || []).filter(function (x) { return x.plated; })[0]; $('st-yeq-plate').textContent = pf ? 'back yarn ' + pf.plated.back + ' — ' + pf.plated.back_pct + '% of the plated feed' : ''; return; } var y = (last.yarn.roles || {})[k]; $('st-yeq-' + k).textContent = y ? eq(y.equivalents) + ' · Ø ' + y.d_mm + ' mm' + (y.source !== 'your input' ? ' — ' + y.source : '') : ''; });
     (last.yarn.character || []).forEach(function (c) {
       var k = c.role === 'face' || c.role === 'ground' ? 'ground' : c.role === 'plated' ? 'plate' : c.role, el = $('st-yeq-' + k); if (!el) return;
@@ -148,6 +160,7 @@
   function loadTemplates() {
     return apiFetch('/api/studio/templates').then(function (d) {
       templates = d.templates || [];
+      if (window.KAStudioMelange) window.KAStudioMelange.setCatalogue(d.melange);
       var fib = $('st-fibre');
       var fopts = Object.keys(d.fibres || {}).map(function (k) { return '<option value="' + k + '">' + esc(d.fibres[k].label) + '</option>'; }).join('');
       document.querySelectorAll('.st-yfibre').forEach(function (x) { var keep = x.value; x.innerHTML = fopts; if (keep) x.value = keep; });
@@ -155,7 +168,7 @@
       var sel = $('st-template');
       var groups = {};
       templates.forEach(function (t) { (groups[t.category] = groups[t.category] || []).push(t); });
-      sel.innerHTML = '<option value="">Blank — draw from scratch</option>' + Object.keys(groups).map(function (g) {
+      sel.innerHTML = '<option value="__custom" hidden>Custom — your own drawing</option><option value="">Blank — draw from scratch</option>' + Object.keys(groups).map(function (g) {
         return '<optgroup label="' + esc(CAT_LABEL[g] || g) + '">' + groups[g].map(function (t) {
           return '<option value="' + esc(t.id) + '">' + esc(t.name) + '</option>';
         }).join('') + '</optgroup>';
@@ -168,6 +181,12 @@
       mp.value = keep;
       paletteFor();
     });
+  }
+
+  // "Start from" is only where the drawing began: once it is edited it is the user's own design
+  function markCustom() {
+    S.templateId = '';
+    var sel = $('st-template'); if (sel) sel.value = '__custom';
   }
 
   function applyTemplate(id) {
@@ -192,7 +211,7 @@
       $('st-cut').checked = id === 'velour_plush';
       $('st-brush').value = /fleece/.test(id) ? 'back' : 'none';
       $('st-brush-box').hidden = $('st-brush').value === 'none';
-      $('st-pile').value = 'sinker';
+      $('st-pile').value = 'auto';
       $('st-ply').value = String(t.ends || 1);
       if (t.gsm_range && t.gsm_range.min && !$('st-gsm').dataset.touched) {
         $('st-gsm').value = Math.round((t.gsm_range.min + t.gsm_range.max) / 2 / 5) * 5;
@@ -257,6 +276,7 @@
     var g = bed === 'C' ? S.C : S.D;
     if (g[i][j] === S.brush) return;
     g[i][j] = S.brush;
+    if (S.templateId) markCustom();
     td.className = 'c ' + cellCls(S.brush);
     td.textContent = S.brush === '-' ? '' : S.brush;
     schedule();
@@ -316,7 +336,7 @@
     } else if (name === 'mirror') {
       all.forEach(function (g) { g.forEach(function (r) { r.reverse(); }); });
     } else { undo.pop(); return; }
-    S.templateId = ''; $('st-template').value = '';
+    markCustom();
     renderAll();
   }
 
@@ -330,7 +350,7 @@
       for (var i = 0; i < F; i++) { var r = []; for (var j = 0; j < W; j++) r.push(bed === 'interlock' ? (S.C[i][j] === 'K' ? 'M' : 'K') : 'K'); S.D.push(r); }
     }
     S.bed = bed;
-    S.templateId = ''; $('st-template').value = '';
+    markCustom();
     renderAll();
   }
 
@@ -563,7 +583,7 @@
     clearTimeout(timer);
     timer = setTimeout(analyse, 280);
     // the real view is a heavy rebuild: wait for a pause in the editing
-    clearTimeout(timer3d); timer3d = setTimeout(render3D, mode3d === 'cloth' || mode3d === 'twin' ? 700 : 120);
+    clearTimeout(timer3d); timer3d = setTimeout(render3D, mode3d === 'cloth' || mode3d === 'twin' ? 700 : mode3d === 'yarn' ? 350 : 120);
   }
 
   function num(id) { var v = parseFloat($(id).value); return isFinite(v) && v > 0 ? v : null; }
@@ -584,6 +604,7 @@
       }),
       yarn: yarnOf(YROWS[0]),
       yarns: { binder: +$('yb-count').value > 0 ? yarnOf(YROWS[1]) : null, loop: +$('yl-count').value > 0 ? yarnOf(YROWS[2]) : null, plate: +$('yp-count').value > 0 ? yarnOf(YROWS[3]) : null },
+      melange: window.KAStudioMelange ? window.KAStudioMelange.payload() : null,
       plush: { cut: $('st-cut').checked, sinker_mm: num('st-sinker'), arrangement: $('st-parr').value },
       pile: $('st-pile').value,
       stripes: $('st-stripe').value.trim() ? { sequence: $('st-stripe').value } : null,
@@ -608,6 +629,7 @@
       if (my !== reqSeq) return;
       last = r;
       renderResult();
+      if (window.KAStudioMelange) window.KAStudioMelange.studioResult(r);
     }).catch(function (e) {
       if (my !== reqSeq) return;
       last = null;
@@ -627,8 +649,10 @@
       '<span class="st-badge ' + (r.ok_to_knit ? 'ok' : 'bad') + '">' + (r.ok_to_knit ? 'Knittable' : errs + ' error' + (errs > 1 ? 's' : '') + ' — will not knit as drawn') + '</span>' +
       (warns ? '<span class="st-badge estimate">' + warns + ' warning' + (warns > 1 ? 's' : '') + '</span>' : '') +
       '<span class="st-badge ' + conf.level + '">' + ({ verified: 'Verified on your trial rolls', calibrated: 'Calibrated on factory records', close: 'Close to a measured family', estimate: 'New structure — estimate' })[conf.level] + '</span>' +
-      '<span style="font-size:12px;color:var(--t2)">' + esc(r.structure.family_label) +
-      (r.structure.match ? ' · same as <b>' + esc(r.structure.match.name) + '</b>' : '') + '</span>' +
+      '<span style="font-size:13px;color:var(--t1);font-weight:600">' + esc((r.structure.identity || {}).title || r.structure.family_label) + '</span>' +
+      (r.structure.match ? '<span style="font-size:12px;color:var(--t2)">same as <b>' + esc(r.structure.match.name) + '</b></span>' : '') +
+      (r.structure.identity ? '<div style="flex-basis:100%;font-size:12px;color:var(--t2)">' + esc(r.structure.identity.detail) + '</div>' : '') +
+      '<div style="flex-basis:100%;font-size:12px;color:var(--t2)">Weight is currently borrowed from the measured constants of: ' + esc(r.structure.family_label) + '.</div>' +
       '<div style="flex-basis:100%;font-size:12px;color:var(--t2)">' + esc(conf.why) + '</div>' +
       (r.structure.reduced ? '<div style="flex-basis:100%;font-size:12px;color:var(--t2)">Your repeat of ' + esc(r.structure.reduced.from) + ' is the same fabric as its smallest repeat, ' + esc(r.structure.reduced.to) + ' — the set-out below uses that.</div>' : '');
     $('st-checks').innerHTML = r.checks.map(function (c) { return '<li class="' + c.level + '">' + esc(c.text) + '</li>'; }).join('');
@@ -832,7 +856,7 @@
       if (g.D) S.D = g.D.map(function (r) { return r.split(''); });
       else if (S.D && B.D && B.D.selection === 'needle') { /* unchanged */ }
       if (S.D && S.D[0].length !== S.C[0].length) S.D = S.D.map(function (r) { var o2 = []; for (var j = 0; j < S.C[0].length; j++) o2.push(r[j % r.length]); return o2; });
-      S.templateId = ''; $('st-template').value = '';
+      markCustom();
       renderAll();
       if (o.errors && o.errors.length) setTimeout(function () { var n = $('st-camnote'); if (n) n.textContent = o.errors.join(' '); }, 600);
     }).catch(function (e) {
@@ -1166,7 +1190,128 @@
   // jersey's) is used and the 3D still shows exactly what is drawn.
   function render3D() {
     if (!$('pane-3d').classList.contains('on')) return;
-    if (mode3d === 'cloth') renderCloth(); else if (mode3d === 'twin') renderTwin(); else renderLoops();
+    if (mode3d === 'cloth') renderCloth(); else if (mode3d === 'twin') renderTwin(); else if (mode3d === 'yarn') renderYarn(); else renderLoops();
+  }
+
+  // ── the yarn, real view: every fibre of the chosen yarn (yarn-real.js) ──
+  var yarnView = null, yarnPromise = null, yarnKey = '';
+  var YROLE_LABEL = { ground: 'Ground / face yarn', binder: 'Binder yarn', loop: 'Loop / pile yarn', plate: 'Plated yarn', elastane: 'Elastane' };
+  var CMP_SPUN = [['carded', 'Carded'], ['combed', 'Combed'], ['compact', 'Compact'], ['open_end', 'Rotor']];
+  var CMP_FILA = [['mono', 'Monofilament'], ['fdy', 'Multifilament'], ['dty', 'Textured']];
+  function yarnRolesInUse() {
+    var roles = ['ground'];
+    S.feeds.forEach(function (f) { var r = f && f.role; if ((r === 'binder' || r === 'loop') && roles.indexOf(r) < 0) roles.push(r); });
+    if (S.feeds.some(function (f) { return f && f.plate; })) roles.push('plate');
+    if ($('st-lycra').checked) roles.push('elastane');
+    return roles;
+  }
+  /** One yarn row as the yarn view reads it: fibre, spinning system, one end's tex, ply. */
+  function yarnForView(role) {
+    var R = YROWS.filter(function (x) { return x.key === role; })[0] || YROWS[0];
+    var y = yarnOf(R), ply = y.ply || 1, tex = null, from = 'your count';
+    if (y.count) tex = TEX[y.unit || 'ne'](y.count);
+    if (!tex && last && last.yarn) {
+      var src = role === 'ground' ? last.yarn.ground : (last.yarn.roles || {})[role];
+      if (!src && role !== 'ground') { src = last.yarn.ground; from = 'the ground yarn'; } else from = 'the count the Studio solved';
+      var t = src && (src.tex || (src.equivalents && src.equivalents.tex));
+      if (t) tex = t / ply;
+    }
+    if (!tex) { tex = 590.5 / 30; from = 'a 30s default (no count yet)'; }
+    return { yarn: { fibre: y.fibre, type: y.type, tex: tex, ply: ply, filaments: y.filaments, lustre: y.lustre, section: y.section, interlace: y.interlace, crimp: y.crimp }, from: from };
+  }
+  function filamentNote(m, from) {
+    var s = '<b>' + esc(m.system_label) + ' · ' + m.denier + ' D (' + m.dtex + ' dtex)' + (m.system === 'mono' ? '' : ' / ' + m.filaments + ' F') + ', ' + esc(m.polymer) + '</b> — ';
+    s += m.system === 'mono'
+      ? 'one solid filament, Ø ' + m.fibre_diameter_um + ' µm'
+      : m.dpf + ' denier per filament, each Ø ' + m.fibre_diameter_um + ' µm; bundle Ø ' + m.compact_diameter_mm + ' mm packed' + (m.system === 'dty' ? ', ' + m.diameter_mm + ' mm bulked (' + m.bulk_ratio + '×)' : '');
+    s += ' · ' + m.section + ' section · ' + m.lustre_label + ' (' + m.tio2_pct + '% TiO₂), refractive index ' + m.refractive_index;
+    if (m.system === 'dty') s += ' · crimp contraction ' + m.crimp_contraction_pct + '%: coils of ' + m.coil_radius_um + ' µm radius every ' + m.coil_pitch_mm + ' mm (false twist about ' + m.false_twist_tpm + ' turns/m), reversing S/Z at torque-reversal points';
+    if (m.nodes_per_m) s += ' · ' + m.nodes_per_m + ' intermingling nodes per metre (one every ' + m.node_spacing_mm + ' mm' + (m.node_spacing_mm > 20 ? '; one is shown' : '') + ')';
+    s += '. Count from ' + esc(from) + '. Law: filament and bundle size from the denier and the polymer density; coil radius from the crimp contraction. Typical: false-twist level, reversal spacing, node length, packing. Drag to turn, Ctrl + scroll to zoom.';
+    return s;
+  }
+  var EL_ALL = ['bare', 'core', 'covered', 'dcovered'];
+  /** Elastane in the yarn view: the Lycra card gives the denier and draft; the controls give the construction. */
+  function elastaneYarn(con) {
+    var g = yarnForView('ground').yarn;
+    var cv = { fibre: $('st-elcfib').value, denier: +$('st-elcd').value || 20, filaments: +$('st-elcf').value || 12 };
+    if (+$('st-elct').value > 0) cv.tpm = +$('st-elct').value;
+    return { fibre: 'elastane', type: con, denier: +$('st-lyd').value || 40, draft: num('st-lydraft') || 2.6, state: $('st-elstate').value,
+      sheath: { fibre: g.fibre, type: g.type, tex: g.tex * (g.ply || 1) }, cover: cv };
+  }
+  function elastaneNote(metas, cmp) {
+    var d1 = function (v) { return v == null ? '—' : v; };
+    if (cmp) {
+      return metas.map(function (m) {
+        return '<b>' + esc(m.system_label) + '</b>: Ø ' + m.diameter_mm + ' mm' +
+          (m.elastane === 'core' ? ', ' + m.core_share_pct + '% elastane by weight' : m.elastane === 'covered' || m.elastane === 'dcovered' ? ', cover pitch ' + m.wrap_pitch_mm + ' mm, ' + m.coverage_pct + '% of the core covered' : ', ' + m.state);
+      }).join(' · ') + '. Same elastane (' + metas[0].denier + ' D, draft ' + metas[0].draft + ') in every yarn; ' + metas[0].state + '. Drag to turn, Ctrl + scroll to zoom.';
+    }
+    var m = metas[0];
+    var s = '<b>' + esc(m.system_label) + ' · ' + m.denier + ' D elastane</b> — core Ø ' + (m.state === 'relaxed' ? m.core_diameter_relaxed_um : m.core_diameter_drafted_um) + ' µm ' + (m.elastane === 'core' ? 'as spun (drafted ×' + m.draft + ')' : m.state) + ' (' + m.core_diameter_relaxed_um + ' µm relaxed, ' + m.core_diameter_drafted_um + ' µm at draft ' + m.draft + ': volume kept, d falls as 1/√draft), ' + m.coalesced_filaments + ' coalesced filaments, density ' + m.density + ' g/cm³';
+    if (m.elastane === 'core') {
+      s += ' · sheath ' + esc(m.sheath_label) + (m.sheath_fell_back ? ' (the ground yarn is a filament; a 30s combed cotton sheath is shown)' : '') + ' · yarn ' + m.ne + 's Ne (' + m.tex + ' tex): the core is ' + m.core_mass_tex + ' tex, ' + m.core_share_pct + '% of the weight; Ø ' + m.diameter_mm + ' mm; ' + m.tpi + ' TPI, hairiness H ' + m.hairiness_H + '. The core is hidden inside the sheath' + ($('st-elcut').checked ? ' except in the cutaway.' : ': tick Cutaway to see it.');
+    } else if (m.elastane === 'covered' || m.elastane === 'dcovered') {
+      s += ' · cover ' + m.cover_denier + ' D / ' + m.cover_filaments + ' F ' + esc(m.cover_polymer) + ' (filaments ' + m.cover_filament_um + ' µm) wound at ' + m.cover_turns_per_m + ' turns/m' + (m.cover_turns2_per_m ? ' (inner Z) and ' + m.cover_turns2_per_m + ' (outer S)' : ' (Z)') + ' on the drafted core, so ' + m.relaxed_turns_per_m + ' turns/m once relaxed · shown ' + m.state + ': pitch ' + m.wrap_pitch_mm + ' mm, wrap angle ' + m.wrap_angle_deg + '° to the axis, a band ' + m.band_width_um + ' µm wide covering ' + m.coverage_pct + '% of the core; yarn Ø ' + m.diameter_mm + ' mm.';
+    } else s += '. Bare elastane is knitted plated behind the ground yarn; this is the yarn on its own.';
+    s += ' Law: diameter from denier and density, volume kept under draft, core mass = tex ÷ draft, relaxed turns = covered turns × draft, wrap angle from tan α = 2πρ/p. Typical: coalesced filament count (about one per 10 D), cover yarn and covering turns. Drag to turn, Ctrl + scroll to zoom.';
+    return s;
+  }
+  function yarnNote(metas, cmp, from) {
+    var f1 = function (v) { return v == null ? '—' : v; };
+    if (cmp) {
+      return metas.map(function (m) { return '<b>' + esc(m.system_label) + '</b>: Ø ' + m.diameter_mm + ' mm, ' + (m.filament ? (m.system === 'mono' ? 'one filament' : m.filaments + ' filaments') + (m.system === 'dty' ? ', crimp ' + m.crimp_contraction_pct + '%, bulk ' + m.bulk_ratio + '×' : '') : m.tpi + ' TPI (αe ' + m.alpha_e + '), hairiness H ' + m.hairiness_H + ', ' + m.hairs_per_mm + ' protruding fibres per mm (mean ' + m.mean_hair_mm + ' mm)'); }).join(' · ') +
+        '. Same fibre and count for every yarn (' + esc(from) + '). Drag to turn, Ctrl + scroll to zoom; the closer you go the more you see, down to single fibres.';
+    }
+    var m = metas[0];
+    if (m.filament) return filamentNote(m, from);
+    var body = m.filament
+      ? m.fibres_in_section + ' filaments of ' + m.fibre_diameter_um + ' µm, ' + (m.system === 'dty' ? 'crimped and bulked by texturing' : 'straight and parallel with almost no twist') + '; no hairs.'
+      : m.fibres_in_section + ' fibres in the section (fibre Ø ' + m.fibre_diameter_um + ' µm)' + (m.capped ? ', ' + m.fibres_drawn + ' drawn' : '') + ' · ' +
+        (m.system === 'vortex' ? 'core fibres run straight, a sheath of wrapper fibres holds them' : m.tpi + ' TPI, ' + m.tpm + ' turns/m (αe ' + m.alpha_e + '), surface twist ' + m.twist_angle_deg + '°') +
+        (m.ply_tpm ? ' · ply twist ' + m.ply_tpm + ' turns/m, S over Z' : '') +
+        ' · hairiness H ' + m.hairiness_H + ': about ' + m.hairs_per_mm + ' protruding fibres per mm, mean ' + m.mean_hair_mm + ' mm' + (m.system === 'open_end' ? ', plus wrapper fibres round the outside' : '') + '.';
+    var cnt = m.filament ? Math.round(m.tex * 9) + ' denier (' + m.tex + ' tex)' : f1(m.ne) + 's Ne (' + m.tex + ' tex)';
+    return '<b>' + esc(m.system_label) + ' · ' + cnt + (m.ply > 1 ? ' × ' + m.ply + ' ply' : '') + '</b> — Ø ' + m.diameter_mm + ' mm · ' + body +
+      ' Count from ' + esc(from) + '. Diameter and fibre count follow from the count (law); ' + (m.filament ? 'filament fineness from the filament count' + (m.system === 'dty' ? ', crimp typical for texturing.' : '.') : 'twist multiplier, packing and hairiness are typical for the spinning system.') + ' Drag to turn, Ctrl + scroll to zoom: the closer you go the more you see, down to each fibre\'s own section.';
+  }
+  function renderYarn() {
+    var host = $('st-yarn'), sel = $('st-yrole');
+    var roles = yarnRolesInUse(), keep = sel.value;
+    sel.innerHTML = roles.map(function (r) { return '<option value="' + r + '">' + YROLE_LABEL[r] + '</option>'; }).join('');
+    sel.value = roles.indexOf(keep) > -1 ? keep : 'ground';
+    var isEl = sel.value === 'elastane', cmp = $('st-ycmp').checked;
+    $('st-elbar').hidden = !isEl;
+    if (isEl) {
+      var con = $('st-elcon').value, covered = con === 'covered' || con === 'dcovered';
+      $('st-elcov').hidden = !covered; $('st-elcutl').hidden = con !== 'core'; $('st-elstate').disabled = con === 'core' && !cmp;
+      var elList = cmp ? EL_ALL.map(function (c) { return { yarn: elastaneYarn(c), label: { bare: 'Bare', core: 'Core spun', covered: 'Covered', dcovered: 'Double' }[c] }; }) : [{ yarn: elastaneYarn(con), label: '' }];
+      var elKey = JSON.stringify([elList, $('st-ycol').value, $('st-elcut').checked && !cmp]);
+      if (elKey === yarnKey && yarnView) return;
+      yarnKey = elKey;
+      if (!yarnPromise) yarnPromise = import('/assets/js/yarn-real.js?v=20261117e').then(function (mod) { yarnView = new mod.YarnView(host); return yarnView; });
+      yarnPromise.then(function (v) {
+        var metas = v.draw(elList, { colour: $('st-ycol').value, cutaway: $('st-elcut').checked && con === 'core' && !cmp });
+        $('st-yarnnote').innerHTML = elastaneNote(metas, cmp);
+      }).catch(function (e) { if (window.console) console.error(e); $('st-yarnnote').textContent = 'The yarn view needs WebGL, which this browser does not have.'; });
+      return;
+    }
+    $('st-elbar').hidden = true;
+    var one = yarnForView(sel.value);
+    var list = cmp
+      ? (isFil(one.yarn.fibre) ? CMP_FILA : CMP_SPUN).map(function (s) { var y = {}; for (var k in one.yarn) y[k] = one.yarn[k]; y.type = s[0]; return { yarn: y, label: s[1] }; })
+      : [{ yarn: one.yarn, label: '' }];
+    var key = JSON.stringify([list, $('st-ycol').value]);
+    if (key === yarnKey && yarnView) return;
+    yarnKey = key;
+    if (!yarnPromise) yarnPromise = import('/assets/js/yarn-real.js?v=20261117e').then(function (mod) { yarnView = new mod.YarnView(host); return yarnView; });
+    yarnPromise.then(function (v) {
+      var metas = v.draw(list, { colour: $('st-ycol').value });
+      $('st-yarnnote').innerHTML = yarnNote(metas, cmp, one.from);
+    }).catch(function (e) {
+      if (window.console) console.error(e);
+      $('st-yarnnote').textContent = 'The yarn view needs WebGL, which this browser does not have.';
+    });
   }
 
   // ── the yarn view: the knit as interlocked yarn, its shape solved by the yarn model (POST /api/studio/twin) ──
@@ -1292,6 +1437,7 @@
       spec.pileArrangement = P.variant.arrangement;
       spec.radius = feeds.map(function () { return clamp(0.5 * (0.907 / Math.sqrt(590.5 / gF.tex)) * f.wpc / 10, 0.06, 0.22); });
       spec.pileRadius = clamp(0.5 * (0.907 / Math.sqrt(590.5 / pF.tex)) * f.wpc / 10, 0.06, 0.24);
+      spec.drawnRoles = feeds.map(function (fd) { return fd.role || 'ground'; });   // the key names the role as drawn
       spec.feeds = feeds.map(function (fd) { return fd.role === 'loop' ? { role: 'ground' } : fd; });
       spec.pileColour = '#c2410c';
     }
@@ -1317,7 +1463,7 @@
       var F = geo.F, hl = v._hl;
       $('st-feedkey').innerHTML = '<span>Feeders:</span>' + Array.from({ length: F }, function (_, i) {
         var fd = spec.feeds[i] || {};
-        return '<button type="button" class="fk' + (hl === i ? ' on' : '') + '" data-fk="' + i + '"><i style="background:' + v.feedColour(spec, i) + '"></i>F' + (i + 1) + ' ' + esc(fd.role || 'ground') + (spec.plated[i] ? ' + elastane' : '') + '</button>';
+        return '<button type="button" class="fk' + (hl === i ? ' on' : '') + '" data-fk="' + i + '"><i style="background:' + v.feedColour(spec, i) + '"></i>F' + (i + 1) + ' ' + esc((spec.drawnRoles && spec.drawnRoles[i]) || fd.role || 'ground') + (spec.plated[i] ? ' + elastane' : '') + '</button>';
       }).join('') + (spec.plated.some(Boolean) ? '<span><i style="background:#f5f5f4;border:1px solid #bbb"></i>elastane, plated behind</span>' : '');
     }).catch(function (e) {
       if (window.console) console.error(e);
@@ -1364,7 +1510,8 @@
       var b = e.target.closest('button'); if (!b) return;
       mode3d = b.getAttribute('data-mode');
       Array.prototype.forEach.call(this.children, function (x) { x.classList.toggle('on', x === b); });
-      var lp = mode3d === 'loops', tw = mode3d === 'twin', cl = mode3d === 'cloth';
+      var lp = mode3d === 'loops', tw = mode3d === 'twin', cl = mode3d === 'cloth', yr = mode3d === 'yarn';
+      $('st-yarnbar').hidden = !yr; $('st-yarn').hidden = !yr; $('st-yarnnote').hidden = !yr;
       $('st-loopbar').hidden = !lp; $('st-build').hidden = !lp; $('st-feedkey').hidden = !lp; $('st-loophint').hidden = !lp;
       $('st-clothbar').hidden = !cl; $('st-clothhint').hidden = !cl;
       $('st-loops').hidden = !lp; $('st-cloth').hidden = !cl;
@@ -1381,6 +1528,10 @@
       var b = e.target.closest('[data-tview]'); if (b && twinView) twinView.view(b.getAttribute('data-tview'));
     });
     $('st-twcol').addEventListener('input', function () { if (mode3d === 'twin') { twinKey = ''; renderTwin(); } });
+    $('st-yarnbar').addEventListener('change', function () { if (mode3d === 'yarn') renderYarn(); });
+    $('st-yarnbar').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-yview]'); if (b && yarnView) yarnView.view(b.getAttribute('data-yview'));
+    });
     $('st-colby').addEventListener('change', render3D);
     $('st-feedkey').addEventListener('click', function (e) {
       var b = e.target.closest('[data-fk]'); if (!b || !loopView) return;
@@ -1401,10 +1552,11 @@
   var STORE = 'ka_studio_designs';
   function readStore() { try { return JSON.parse(localStorage.getItem(STORE) || '[]'); } catch (_) { return []; } }
   function writeStore(a) { try { localStorage.setItem(STORE, JSON.stringify(a)); return true; } catch (_) { return false; } }
-  var FIELDS = ['st-ne', 'st-unit', 'st-ply', 'st-ytype', 'st-fil', 'yb-count', 'yb-unit', 'yb-fibre', 'yb-type', 'yb-ply', 'yb-fil', 'yl-count', 'yl-unit', 'yl-fibre', 'yl-type', 'yl-ply', 'yl-fil', 'st-fibre', 'st-gsm', 'st-width', 'st-gauge', 'st-dia', 'st-feeders', 'st-rpm', 'st-sl', 'st-eff', 'st-tc', 'st-td', 'st-lyd', 'st-lydraft', 'st-lyevery', 'st-v1r', 'st-v1l', 'st-v2r', 'st-v2l', 'st-sinker', 'st-parr', 'st-mprof', 'st-brush', 'st-passes', 'st-pile', 'st-tdir', 'st-shr', 'st-camd', 'st-timing', 'st-dgap', 'st-c1r', 'st-c1l', 'st-c2r', 'st-c2l', 'st-stripe', 'st-setw', 'st-sc-A', 'st-sc-B', 'st-sc-C', 'st-sc-D', 'st-sc-E', 'st-sc-F'];
+  var FIELDS = ['st-elcon', 'st-elstate', 'st-elcfib', 'st-elcd', 'st-elcf', 'st-elct', 'st-lus', 'st-sec', 'st-nip', 'st-cc', 'yb-lus', 'yb-sec', 'yb-nip', 'yb-cc', 'yl-lus', 'yl-sec', 'yl-nip', 'yl-cc', 'yp-lus', 'yp-sec', 'yp-nip', 'yp-cc', 'st-ne', 'st-unit', 'st-ply', 'st-ytype', 'st-fil', 'yb-count', 'yb-unit', 'yb-fibre', 'yb-type', 'yb-ply', 'yb-fil', 'yl-count', 'yl-unit', 'yl-fibre', 'yl-type', 'yl-ply', 'yl-fil', 'st-fibre', 'st-gsm', 'st-width', 'st-gauge', 'st-dia', 'st-feeders', 'st-rpm', 'st-sl', 'st-eff', 'st-tc', 'st-td', 'st-lyd', 'st-lydraft', 'st-lyevery', 'st-v1r', 'st-v1l', 'st-v2r', 'st-v2l', 'st-sinker', 'st-parr', 'st-mprof', 'st-brush', 'st-passes', 'st-pile', 'st-tdir', 'st-shr', 'st-camd', 'st-timing', 'st-dgap', 'st-c1r', 'st-c1l', 'st-c2r', 'st-c2l', 'st-stripe', 'st-setw', 'st-sc-A', 'st-sc-B', 'st-sc-C', 'st-sc-D', 'st-sc-E', 'st-sc-F'];
   function designNow() {
     var o = { v: 2, name: $('st-name').value || 'Untitled design', bed: S.bed, C: S.C, D: S.D, feeds: S.feeds, rolls: rolls, lycra: $('st-lycra').checked, cut: $('st-cut').checked, colour: $('st-col').value, fields: {} };
     FIELDS.forEach(function (id) { o.fields[id] = $(id).value; });
+    if (window.KAStudioMelange) { o.melange = window.KAStudioMelange.state(); o.melange_payload = window.KAStudioMelange.payload(); }
     return o;
   }
   // ── design from a goal: the Studio searches needle programmes itself (POST /api/studio/invent) ─────────
@@ -1488,7 +1640,8 @@
     $('st-lycra').checked = !!o.lycra; $('st-lycra-box').hidden = !o.lycra; $('st-cut').checked = !!o.cut;
     if (o.colour) $('st-col').value = o.colour;
     Object.keys(o.fields || {}).forEach(function (id) { if ($(id)) $(id).value = o.fields[id]; });
-    S.templateId = ''; $('st-template').value = '';
+    if (window.KAStudioMelange) window.KAStudioMelange.setState(o.melange || null);
+    markCustom();
     rolls = Array.isArray(o.rolls) ? o.rolls : [];
     writeRolls();
     renderAll();
@@ -1559,6 +1712,13 @@
       el.addEventListener('change', schedule);
       if (el.type === 'number') el.addEventListener('input', schedule);
     });
+    // the melange card rebuilds its own rows, so it is listened to as a whole (its handlers run first and keep its state)
+    var mlc = $('ml-card');
+    if (mlc) {
+      mlc.addEventListener('change', schedule);
+      mlc.addEventListener('input', function (e) { if (e.target.type === 'number' || e.target.type === 'color') schedule(); });
+      mlc.addEventListener('click', function (e) { if (e.target.closest('[data-ml-role],[data-ml-del],#ml-add')) schedule(); });
+    }
     $('st-col').addEventListener('change', render3D);
     $('st-zoom').addEventListener('click', function (e) {
       var b = e.target.closest('[data-z]'); if (!b) return;
@@ -1583,6 +1743,7 @@
     $('st-anibed').addEventListener('change', function () { race.reset(); cycle.refresh(); });
     cycle.bind();
     YROWS.forEach(function (R) { $(R.f).addEventListener('change', function () { yarnTypes(R); }); });
+    YROWS.forEach(function (R) { $(R.t).addEventListener('change', function () { filamentFields(R); }); });
     $('st-editor').addEventListener('change', function (e) { if (e.target.getAttribute('data-k') === 'role') showYarnRows(); });
     loadMyMachine();
     $('st-mymach').addEventListener('change', function () { saveMyMachine(); $('st-mprof').dispatchEvent(new Event('change')); });

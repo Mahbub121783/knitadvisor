@@ -161,7 +161,9 @@
     .st-pane { display: none; } .st-pane.on { display: block; }
     #st-3d { width: 100%; min-height: 380px; border-radius: 12px; background: #e9ebef; position: relative; }
     #st-loops { width: 100%; height: 460px; border-radius: 12px; background: radial-gradient(circle at 50% 40%, #f4f5f7, #dfe2e7); position: relative; overflow: hidden; touch-action: none; }
-    #st-loops[hidden], #st-3d[hidden], .st-build[hidden], #st-twin[hidden] { display: none; }
+    #st-loops[hidden], #st-3d[hidden], .st-build[hidden], #st-twin[hidden], #st-yarn[hidden] { display: none; }
+    #st-yarn { width: 100%; height: 460px; border-radius: 12px; background: #272c34; position: relative; overflow: hidden; touch-action: none; }
+    @media (max-width: 640px) { #st-yarn { height: 380px; } }
     #st-twin { width: 100%; height: 460px; border-radius: 12px; background: radial-gradient(circle at 50% 40%, #f6f7f9, #d9dde3); position: relative; overflow: hidden; touch-action: none; }
     @media (max-width: 640px) { #st-twin { height: 360px; } }
     @media (max-width: 640px) { #st-loops { height: 360px; } }
@@ -226,7 +228,7 @@
       #st-weft .st-view .st-tabs { flex-wrap: wrap; overflow: visible; row-gap: 2px; }
       #st-weft > section > .st-card { grid-column: 1; min-width: 0; }
       #st-weft > section > .st-view { grid-column: 2; grid-row: 1 / span 6; position: sticky; top: 72px; }
-      #st-weft .st-view #st-loops, #st-weft .st-view #st-twin { height: clamp(400px, calc(100vh - 330px), 680px); }
+      #st-weft .st-view #st-loops, #st-weft .st-view #st-twin, #st-weft .st-view #st-yarn { height: clamp(400px, calc(100vh - 330px), 680px); }
       #st-weft .st-view #st-cloth canvas { height: clamp(400px, calc(100vh - 330px), 680px) !important; }
       #st-warp > section { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 16px; align-items: start; }
       #st-warp > section > .st-card { min-width: 0; }
@@ -273,7 +275,7 @@
             <select id="st-template"></select>
           </div></div>
           <div class="st-seg" id="st-bed" role="group" aria-label="Machine type">
-            <button type="button" data-bed="single">Single jersey</button>
+            <button type="button" data-bed="single">Single bed</button>
             <button type="button" data-bed="rib">Rib gating</button>
             <button type="button" data-bed="interlock">Interlock gating</button>
           </div>
@@ -292,6 +294,10 @@
                 <div class="st-f"><label for="st-fibre">Fibre</label><select id="st-fibre" class="st-yfibre"></select></div>
                 <div class="st-f"><label for="st-ytype">Yarn type</label><select id="st-ytype" class="st-ytype"></select></div>
                 <div class="st-f st-yfil"><label for="st-fil">Filaments (F)</label><input id="st-fil" type="number" min="1" max="600" step="1" placeholder="e.g. 48"></div>
+                <div class="st-f st-yfil"><label for="st-lus">Lustre</label><select id="st-lus"><option value="semi_dull">Semi-dull (0.3% TiO₂)</option><option value="bright">Bright (no TiO₂)</option><option value="full_dull">Full-dull (2% TiO₂)</option></select></div>
+                <div class="st-f st-yfil"><label for="st-sec">Cross-section</label><select id="st-sec"><option value="round">Round</option><option value="trilobal">Trilobal</option></select></div>
+                <div class="st-f st-yfil"><label for="st-nip">Intermingling (nodes/m)</label><input id="st-nip" type="number" min="0" max="200" step="1" placeholder="typical"></div>
+                <div class="st-f st-yfil st-ycc"><label for="st-cc">Crimp contraction (%)</label><input id="st-cc" type="number" min="3" max="60" step="1" placeholder="35"></div>
               </div>
             </div>
             <div class="st-yrow" data-yrole="binder">
@@ -303,6 +309,10 @@
                 <div class="st-f"><label for="yb-fibre">Fibre</label><select id="yb-fibre" class="st-yfibre"></select></div>
                 <div class="st-f"><label for="yb-type">Yarn type</label><select id="yb-type" class="st-ytype"></select></div>
                 <div class="st-f st-yfil"><label for="yb-fil">Filaments (F)</label><input id="yb-fil" type="number" min="1" max="600" step="1" placeholder="e.g. 48"></div>
+                <div class="st-f st-yfil"><label for="yb-lus">Lustre</label><select id="yb-lus"><option value="semi_dull">Semi-dull (0.3% TiO₂)</option><option value="bright">Bright (no TiO₂)</option><option value="full_dull">Full-dull (2% TiO₂)</option></select></div>
+                <div class="st-f st-yfil"><label for="yb-sec">Cross-section</label><select id="yb-sec"><option value="round">Round</option><option value="trilobal">Trilobal</option></select></div>
+                <div class="st-f st-yfil"><label for="yb-nip">Intermingling (nodes/m)</label><input id="yb-nip" type="number" min="0" max="200" step="1" placeholder="typical"></div>
+                <div class="st-f st-yfil st-ycc"><label for="yb-cc">Crimp contraction (%)</label><input id="yb-cc" type="number" min="3" max="60" step="1" placeholder="35"></div>
               </div>
             </div>
             <div class="st-yrow" data-yrole="loop">
@@ -314,6 +324,10 @@
                 <div class="st-f"><label for="yl-fibre">Fibre</label><select id="yl-fibre" class="st-yfibre"></select></div>
                 <div class="st-f"><label for="yl-type">Yarn type</label><select id="yl-type" class="st-ytype"></select></div>
                 <div class="st-f st-yfil"><label for="yl-fil">Filaments (F)</label><input id="yl-fil" type="number" min="1" max="600" step="1" placeholder="e.g. 48"></div>
+                <div class="st-f st-yfil"><label for="yl-lus">Lustre</label><select id="yl-lus"><option value="semi_dull">Semi-dull (0.3% TiO₂)</option><option value="bright">Bright (no TiO₂)</option><option value="full_dull">Full-dull (2% TiO₂)</option></select></div>
+                <div class="st-f st-yfil"><label for="yl-sec">Cross-section</label><select id="yl-sec"><option value="round">Round</option><option value="trilobal">Trilobal</option></select></div>
+                <div class="st-f st-yfil"><label for="yl-nip">Intermingling (nodes/m)</label><input id="yl-nip" type="number" min="0" max="200" step="1" placeholder="typical"></div>
+                <div class="st-f st-yfil st-ycc"><label for="yl-cc">Crimp contraction (%)</label><input id="yl-cc" type="number" min="3" max="60" step="1" placeholder="35"></div>
               </div>
             </div>
             <div class="st-yrow" data-yrole="plate">
@@ -325,12 +339,16 @@
                 <div class="st-f"><label for="yp-fibre">Fibre</label><select id="yp-fibre" class="st-yfibre"></select></div>
                 <div class="st-f"><label for="yp-type">Yarn type</label><select id="yp-type" class="st-ytype"></select></div>
                 <div class="st-f st-yfil"><label for="yp-fil">Filaments (F)</label><input id="yp-fil" type="number" min="1" max="600" step="1" placeholder="e.g. 48"></div>
+                <div class="st-f st-yfil"><label for="yp-lus">Lustre</label><select id="yp-lus"><option value="semi_dull">Semi-dull (0.3% TiO₂)</option><option value="bright">Bright (no TiO₂)</option><option value="full_dull">Full-dull (2% TiO₂)</option></select></div>
+                <div class="st-f st-yfil"><label for="yp-sec">Cross-section</label><select id="yp-sec"><option value="round">Round</option><option value="trilobal">Trilobal</option></select></div>
+                <div class="st-f st-yfil"><label for="yp-nip">Intermingling (nodes/m)</label><input id="yp-nip" type="number" min="0" max="200" step="1" placeholder="typical"></div>
+                <div class="st-f st-yfil st-ycc"><label for="yp-cc">Crimp contraction (%)</label><input id="yp-cc" type="number" min="3" max="60" step="1" placeholder="35"></div>
               </div>
             </div>
           <p class="st-hint">Leave the ground count empty and the studio picks it from the target GSM. A feeder can still take its own count (Ne) in the design; elastane is set below.</p>
           <div id="st-plush-box" hidden>
-            <div class="st-f"><label for="st-pile">A loop-yarn feeder that knits</label><select id="st-pile"><option value="sinker">Sinker-loop pile (terry / velour)</option><option value="none">Knits in as a yarn (no pile)</option></select></div>
-            <p class="st-hint"><b>Sinker-loop pile:</b> the loop yarn is plated behind the ground yarn and drawn over the high sinker — terry, or velour when sheared. Feeds without the loop yarn knit plain ground courses between the pile courses. <b>Knits in:</b> the loop yarn forms ordinary needle loops — a jersey course of that yarn.</p>
+            <div class="st-f"><label for="st-pile">A loop-yarn feeder that knits</label><select id="st-pile"><option value="auto">Decide from my drawing</option><option value="sinker">Sinker-loop pile (terry / velour)</option><option value="none">Knits in as a yarn (no pile)</option></select></div>
+            <p class="st-hint"><b>Sinker-loop pile:</b> the loop yarn is plated behind the ground yarn and drawn over the high sinker — terry, or velour when sheared. Feeds without the loop yarn knit plain ground courses between the pile courses. <b>Knits in:</b> the loop yarn forms ordinary needle loops — a jersey course of that yarn. <b>Decide from my drawing:</b> if the same loop yarn is also tied in and floated on another feeder it is a fleece (a different sinker from terry), so the knitting feeder is a course of that yarn; otherwise it is a pile.</p>
             <label class="st-check"><input type="checkbox" id="st-cut"> Shear the loops open (velour)</label>
             <div class="st-row">
               <div class="st-f"><label for="st-sinker">Sinker height (mm)</label><input id="st-sinker" type="number" min="0.8" max="4" step="0.1" placeholder="auto"></div>
@@ -354,6 +372,8 @@
             <div class="st-f"><label for="st-lyevery">Feeders</label><select id="st-lyevery"><option value="all">Every feeder (full)</option><option value="alternate">Alternate (half)</option></select></div>
           </div>
         </div>
+
+        <div class="st-card" id="ml-card"></div>
 
         <div class="st-card">
           <div class="st-step"><b>3</b> Target</div>
@@ -567,13 +587,35 @@
             <button type="button" data-tab="needle">Needle action</button>
             <button type="button" data-tab="results">Fabric &amp; yarn</button>
             <button type="button" data-tab="machine">Machine &amp; VDQ</button>
+            <button type="button" data-tab="melange">Melange</button>
           </div>
 
           <div class="st-pane on" id="pane-3d">
             <div class="st-seg st-3dmode" id="st-3dmode">
+              <button type="button" data-mode="yarn">Yarn (real view)</button>
               <button type="button" class="on" data-mode="loops">Loop structure</button>
               <button type="button" data-mode="cloth">Fabric (real view)</button>
               <button type="button" data-mode="twin">Yarn physics</button>
+            </div>
+            <div class="st-3dbar" id="st-yarnbar" hidden>
+              <label>Yarn <select id="st-yrole" class="st-btn"></select></label>
+              <label><input type="checkbox" id="st-ycmp"> Compare spinning systems</label>
+              <span>View</span>
+              <button type="button" class="st-btn" data-yview="side" title="The whole length of yarn">Whole</button>
+              <button type="button" class="st-btn" data-yview="close" title="A few turns of twist">Twist</button>
+              <button type="button" class="st-btn" data-yview="fibre" title="The surface fibres, one by one">Fibres</button>
+              <label>Colour <input type="color" id="st-ycol" value="#f1ead9"></label>
+              <span id="st-elbar" hidden>
+                <label>Construction <select id="st-elcon" class="st-btn"><option value="bare">Bare elastane</option><option value="core">Core-spun (in the ground yarn)</option><option value="covered">Covered, single</option><option value="dcovered">Covered, double</option></select></label>
+                <label>State <select id="st-elstate" class="st-btn"><option value="relaxed">Relaxed</option><option value="drafted">At knitting draft</option></select></label>
+                <span id="st-elcov">
+                  <label>Cover <select id="st-elcfib" class="st-btn"><option value="nylon_filament">Nylon</option><option value="polyester_filament">Polyester</option></select></label>
+                  <label>Denier <input type="number" id="st-elcd" class="st-btn" min="10" max="150" step="5" value="20" style="width:62px"></label>
+                  <label>Filaments <input type="number" id="st-elcf" class="st-btn" min="1" max="96" step="1" value="12" style="width:62px"></label>
+                  <label>Turns/m <input type="number" id="st-elct" class="st-btn" min="200" max="2000" step="50" placeholder="900" style="width:70px" title="Covering turns per metre, as covered (on the drafted core)"></label>
+                </span>
+                <label id="st-elcutl"><input type="checkbox" id="st-elcut"> Cutaway</label>
+              </span>
             </div>
             <div class="st-3dbar" id="st-twinbar" hidden>
               <span>View</span>
@@ -599,6 +641,8 @@
             </div>
             <div id="st-loops"><div class="st-tip" id="st-tip" hidden></div></div>
             <div id="st-cloth" hidden><div class="st-cloth-wait" id="st-cloth-wait">Knitting the swatch…</div></div>
+            <div id="st-yarn" hidden></div>
+            <p class="st-hint" id="st-yarnnote" hidden></p>
             <div id="st-twin" hidden></div>
             <div id="st-twinnote" class="st-hint" hidden></div>
             <div class="st-build" id="st-build">
@@ -650,6 +694,7 @@
 
           <div class="st-pane" id="pane-results"></div>
           <div class="st-pane" id="pane-machine"></div>
+          <div class="st-pane" id="pane-melange"></div>
         </div>
       </section>
     </div>
@@ -738,6 +783,7 @@
 <script src="assets/js/studio-warp-geom.js?v=20261111a"></script>
 <script src="assets/js/studio-warp.js?v=20261111i"></script>
 <script src="assets/js/studio-needle.js?v=20261110d"></script>
-<script src="assets/js/studio.js?v=20261115c"></script>
+<script src="assets/js/studio-melange.js?v=20261118a"></script>
+<script src="assets/js/studio.js?v=20261118a"></script>
 </body>
 </html>

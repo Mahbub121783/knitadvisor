@@ -46,6 +46,8 @@ const ENDPOINTS = [
   E('POST', '/studio/analyse',           G.studio, 'Weft design: checks, cam set-out, yarn per feeder, GSM, width, stitch length', true),
   E('POST', '/studio/invent',           G.studio, 'Design from a goal: knittable structures that meet a weight and the qualities asked for, ranked, with settings and accuracy', true),
   E('POST', '/studio/compile',           G.studio, 'A machine set-out and cam chart compiled into needle notation', true),
+  E('POST', '/studio/melange',           G.studio, 'Melange, marl and heather yarn: mass chain, blend colour, mixing statistics, yarn, wet route, defects', true),
+  E('GET',  '/studio/melange/catalogue', G.studio, 'Melange constructions, fibres, routes and ready recipes', true),
   E('POST', '/studio/warp/analyse',      G.studio, 'Warp design: lapping, runner, GSM, width, beams, production, checks', true),
 
   E('POST', '/cost',                     G.cost,   'Fabric cost', true),

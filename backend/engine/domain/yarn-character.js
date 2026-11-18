@@ -65,6 +65,8 @@ const POLY_FORM = {
   staple: { f: 0.60, rough: 0.18, hair: SPUN_HAIR.polyester, bulk: 1.0, label: 'spun staple', filament: false },
   dty:    { f: 0.72, rough: 0.08, hair: 0.10, bulk: 1.18, label: 'textured filament (DTY)', filament: true },
   fdy:    { f: 1.00, rough: 0.00, hair: FILAMENT_HAIR, bulk: 0.94, label: 'flat filament (FDY)', filament: true },
+  // one solid filament: its diameter is the polymer's own, 2·√(tex / ρπ), about 0.86 of the √tex/28 rule
+  mono:   { f: 1.00, rough: 0.00, hair: 0, bulk: 0.86, label: 'monofilament', filament: true },
 };
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));

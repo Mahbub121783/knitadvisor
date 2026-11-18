@@ -169,4 +169,47 @@ console.log('Studio machine tests passed');
   const r = S.analyse({ bed: 'single', grid: { C: ['K', 'K'] }, feeds: [{ role: 'loop' }, { role: 'ground' }], pile: 'sinker', yarn: { count: 10, unit: 'ne' }, target: { gsm: 60 }, machine: {} });
   assert(typeof r.success === 'boolean');
 }
+// A new structure is never refused for lack of a machine class: the machine is chosen FOR the design, and a sinker
+// set is a fitted part (terry or fleece sinkers go into a jersey machine), not a limit of the class.
+{
+  // a designer's fleece: face + binder knit, two loop feeds, one of which also knits (a 4-sequence repeat)
+  const fl = (pile) => S.analyse({ bed: 'single', gating: 'rib', grid: { C: ['KKKKKKKK', 'KKTKKTTK', 'KKTKKTTK', 'TTMMTMTT'], D: null },
+    feeds: [{ role: 'face' }, { role: 'binder' }, { role: 'loop' }, { role: 'loop' }], yarn: { fibre: 'cotton' }, target: { gsm: 280 }, machine: {}, pile });
+  for (const pile of [undefined, 'auto', 'none']) {
+    const r = fl(pile);
+    assert(r.success && r.ok_to_knit && !errs(r).length, `fleece design, pile ${pile}: ${errs(r)}`);
+    assert.strictEqual(r.machine_setup.profile.id, 'fleece_3t', 'the drawing says fleece: fleece sinkers, 4 tracks');
+  }
+  // read as a terry on purpose: the machine gets terry sinkers instead of an error, and says the fleece yarn clashes
+  const t = fl('sinker');
+  assert(t.success && t.ok_to_knit && !errs(t).length, `terry reading: ${errs(t)}`);
+  assert.strictEqual(t.machine_setup.profile.sinker.type, 'terry'); assert(t.machine_setup.profile.sinker.fitted && t.machine_setup.profile.auto);
+  assert(/terry sinkers fitted/.test(t.machine_setup.profile.label));
+  assert(t.checks.some((c) => c.level === 'warn' && /fleece sinkers/.test(c.text)), 'the fleece yarn on terry sinkers is still said');
+  // a terry that needs 4 needle sequences: no 2-track terry class has them, so the sinkers go into a 4-track machine
+  const t4 = S.analyse({ bed: 'single', gating: 'rib', grid: { C: ['KKKK', 'KKKK'], D: null }, feeds: [{ role: 'ground' }, { role: 'loop' }], yarn: { fibre: 'cotton' }, target: { gsm: 300 }, machine: {}, pile: 'sinker' });
+  const t5 = S.analyse({ bed: 'single', gating: 'rib', grid: { C: ['KKTKTK', 'KKKKKK', 'KTKKKT', 'KKKTKK'], D: null }, feeds: [{ role: 'ground' }, { role: 'loop' }, { role: 'ground' }, { role: 'loop' }], yarn: { fibre: 'cotton' }, target: { gsm: 300 }, machine: {}, pile: 'sinker' });
+  assert(t4.success && !errs(t4).some((x) => /sinker|machine/.test(x)));
+  assert(t5.success && !errs(t5).some((x) => /sinker|machine|track/.test(x)), `multi-track terry: ${errs(t5)}`);
+  // a machine the person picked by hand is not changed under them: it still says what it lacks
+  assert(errs(fl('sinker')).length === 0 && errs(run('terry_fabric', { profile: 'sj_4track' })).some((x) => /terry sinkers/.test(x)));
+  // the templates keep their machine
+  assert.strictEqual(run('terry_fabric').machine_setup.profile.id, 'terry'); assert(!run('terry_fabric').machine_setup.profile.sinker.fitted);
+}
+// 1500 random single-bed designs: the machine is never the reason a design is refused (only the drawing can be)
+{
+  let seed = 4242; const rnd = () => (seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296;
+  const pk = (a) => a[Math.floor(rnd() * a.length)];
+  let n = 0;
+  for (let i = 0; i < 1500; i++) {
+    const F = 2 + Math.floor(rnd() * 5), W = 3 + Math.floor(rnd() * 8);
+    const C = Array.from({ length: F }, () => Array.from({ length: W }, () => pk(['K', 'K', 'K', 'T', 'T', 'M'])).join(''));
+    const r = S.analyse({ bed: 'single', gating: 'rib', grid: { C, D: null }, feeds: C.map(() => ({ role: pk(['ground', 'face', 'binder', 'loop', 'ground']) })), yarn: { fibre: 'cotton' }, target: { gsm: 260 }, machine: {}, pile: pk([undefined, 'auto', 'sinker', 'none']) });
+    if (!r.success) continue;
+    n++;
+    const bad = errs(r).filter((x) => /cam tracks|different needle sequences|sinkers with a high nib|transfer needles|no .* cam/.test(x));
+    assert(!bad.length, `random design ${C.join('/')}: ${bad}`);
+  }
+  assert(n > 1200, 'the sweep ran: ' + n);
+}
 console.log('Studio machine extra tests passed');

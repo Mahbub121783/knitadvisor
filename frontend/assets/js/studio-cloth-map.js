@@ -31,7 +31,9 @@
     // the engine's reading of the roles (fabric-studio.js resolveRoles): a loop
     // yarn that knits is a pile only when a pile is chosen; otherwise it knits
     // in like any yarn. On a double bed it always knits in.
-    var pileOn = d.pile == null ? true : d.pile === 'sinker';
+    // 'auto' (or nothing): the drawing decides — the same loop yarn tied in and floated on another feeder makes it a fleece
+    var heldLoop = !D && roles.some(function (r, i) { return r === 'loop' && C[i] && C[i].indexOf('K') < 0; });
+    var pileOn = d.pile === 'sinker' ? true : d.pile === 'none' ? false : !heldLoop;
     var brush = d.brush || 'none', brushed = brush !== 'none';
     roles = roles.map(function (r, i) { return r === 'loop' && C[i] && C[i].indexOf('K') > -1 && (D || !pileOn) ? 'ground' : r; });
     var at = function (g, w, c) { return g[mod(c, g.length)][mod(w, g[0].length)]; };

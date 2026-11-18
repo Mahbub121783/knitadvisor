@@ -160,7 +160,7 @@ function sheet(out, o = {}) {
   doc.font('Helvetica-Bold').fontSize(17).fillColor(ACCENT).text('MACHINE SET-UP SHEET', M, M);
   doc.font('Helvetica').fontSize(8.5).fillColor(MUTED).text(`KnitAdvisor  -  printed ${new Date().toISOString().slice(0, 10)}${o.floor ? `  -  floor machine ${latin(o.floor)}` : ''}`, M, M + 21);
   doc.font('Helvetica-Bold').fontSize(13).fillColor(INK).text(latin(o.name || (st.match && st.match.name) || 'Untitled design'), M, M + 36, { width: W });
-  doc.font('Helvetica').fontSize(9).fillColor(MUTED).text(latin(`${st.family_label}${st.match ? ' - same as ' + st.match.name : ''}  |  ${out.ok_to_knit ? 'knits as drawn' : 'WILL NOT KNIT AS DRAWN - see the checks below'}`), M, M + 53, { width: W });
+  doc.font('Helvetica').fontSize(9).fillColor(MUTED).text(latin(`${(st.identity && st.identity.title) || st.family_label}${st.match ? ' - same as ' + st.match.name : ''}  |  ${out.ok_to_knit ? 'knits as drawn' : 'WILL NOT KNIT AS DRAWN - see the checks below'}`), M, M + 53, { width: W });
   doc.y = M + 72;
 
   title('Machine');
@@ -279,7 +279,7 @@ function calibrationSheet(out, o = {}) {
   doc.font('Helvetica-Bold').fontSize(17).fillColor(ACCENT).text('CALIBRATION SHEET', M, M);
   doc.font('Helvetica').fontSize(8.5).fillColor(MUTED).text(`KnitAdvisor  -  printed ${new Date().toISOString().slice(0, 10)}  -  measure ONE cloth properly; enter it in the Studio (Calibration measurements)`, M, M + 21, { width: W });
   doc.font('Helvetica-Bold').fontSize(13).fillColor(INK).text(latin(o.name || (st.match && st.match.name) || 'Untitled design'), M, M + 38, { width: W });
-  doc.font('Helvetica').fontSize(9).fillColor(MUTED).text(latin(`${st.family_label}${st.match ? ' - same as ' + st.match.name : ''}`), M, M + 55, { width: W });
+  doc.font('Helvetica').fontSize(9).fillColor(MUTED).text(latin(`${(st.identity && st.identity.title) || st.family_label}${st.match ? ' - same as ' + st.match.name : ''}`), M, M + 55, { width: W });
   doc.y = M + 74;
 
   title('The cloth to knit');

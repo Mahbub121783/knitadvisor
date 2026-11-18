@@ -1294,8 +1294,22 @@ router.get('/color/shade-check', (req, res) => {
 // calculation limit (the /api rate limiter still applies). Signed-in only,
 // like the calculator it sits beside.
 router.get('/studio/templates', requireUser, (req, res) => {
-  res.json({ success: true, templates: fabricStudio.listTemplates(), fibres: fabricStudio.FIBRES, limits: fabricStudio.LIMITS, machines: knitMachine.list(),
+  res.json({ success: true, templates: fabricStudio.listTemplates(), fibres: fabricStudio.FIBRES, limits: fabricStudio.LIMITS, machines: knitMachine.list(), melange: require('../engine/domain/melange-engine').catalogue(),
     warp: { templates: warpStudio.TEMPLATES, machines: Object.fromEntries(Object.entries(warpStudio.MACHINES).map(([k, m]) => [k, { label: m.label, gauges: m.gauges, bars: m.bars, speed: m.speed, use: m.use, beds: m.beds }])), fibres: Object.fromEntries(Object.entries(warpStudio.FIBRES).map(([k, f]) => [k, f.label])) } });
+});
+
+// Melange / marl / heather yarns: the whole chain from the bale to the yarn (engine/domain/melange-engine.js).
+// Pure arithmetic, no data store. The Studio also runs it inside /studio/analyse (the `melange` input).
+const melangeEngine = require('../engine/domain/melange-engine');
+router.get('/studio/melange/catalogue', requireUser, (req, res) => res.json({ success: true, ...melangeEngine.catalogue() }));
+router.post('/studio/melange', requireUser, (req, res) => {
+  try {
+    res.json(melangeEngine.analyse(req.body || {}));
+  } catch (err) {
+    if (err instanceof melangeEngine.MelangeError) return res.status(400).json({ success: false, error: err.message });
+    console.error('[studio] melange failed:', err);
+    res.status(500).json({ success: false, error: 'The melange engine could not work this yarn out.' });
+  }
 });
 
 // ── The API as sold ──────────────────────────────────────────────────────
@@ -1541,7 +1555,7 @@ async function studioAnswer(userId, input) {
   else {
     const out = fabricStudio.analyse(body);
     // a second opinion from the stitches themselves (brick laws, no family table) — never allowed to break the answer
-    if (out.success) { try { out.fabric.second_opinion = secondOpinion.forDesign(body, out); } catch (err) { console.error('[studio] second opinion failed:', err.message); } }
+    if (out.success) { try { out.fabric.second_opinion = secondOpinion.forDesign(body.melange ? require('../engine/domain/melange-engine').applyToInput(body).input : body, out); } catch (err) { console.error('[studio] second opinion failed:', err.message); } }
     hit = { status: out.success ? 200 : 400, body: JSON.stringify(out) };
     if (key.length < 32768) {
       studioCache.set(key, hit);

@@ -583,7 +583,7 @@ function autoDetectYarnType(parsedComp, countNe, options = {}) {
   const nylon = fibers.nylon || 0, acr = fibers.acrylic || 0, lyo = (fibers.tencel || 0) + (fibers.lyocell || 0);
   if (poly / hard >= 0.85) {
     const form = String(options.poly_form || '');
-    if (form === 'dty' || form === 'fdy') { const k = polyFilamentKey(countNe); return { key: k, label: SM_PRICE_MATRIX[k].label }; }
+    if (form === 'dty' || form === 'fdy' || form === 'mono') { const k = polyFilamentKey(countNe); return { key: k, label: SM_PRICE_MATRIX[k].label }; }
     return { key: 'polyester_spun', label: SM_PRICE_MATRIX.polyester_spun.label };
   }
   if (nylon / hard >= 0.85) { const k = nylonFilamentKey(countNe); return { key: k, label: SM_PRICE_MATRIX[k].label }; }

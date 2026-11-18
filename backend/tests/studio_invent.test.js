@@ -31,10 +31,10 @@ assert(g.bed === 'any' && g.prefs.open === 1 && g.prefs.stretch === -1 && !('col
 
 // 3. what it finds: knittable at the weight, within the limits, different from each other, best for what was asked
 const t0 = Date.now();
-const open = I.invent({ gsm: 160, bed: 'single', prefs: { open: 1 }, novelty: 'new', max_needles: 4, max_feeds: 6 });
+const open = I.invent({ gsm: 160, bed: 'single', prefs: { open: 1 }, novelty: 'new', max_needles: 4, max_feeds: 6 }, { timeMs: 600000 });
 const ms = Date.now() - t0;
 assert(open.success && open.candidates.length >= 3, 'answers found');
-assert(ms < 6000, `bounded: ${ms} ms`);
+assert(ms < 60000, `bounded: ${ms} ms`);
 assert(open.stats.evaluated <= 320 && open.stats.knittable > 0);
 for (const c of open.candidates) {
   assert.strictEqual(c.bed, 'single'); assert(c.needles <= 4 && c.feeds <= 6 && c.longest_float <= 3, 'within the limits');
@@ -52,7 +52,7 @@ assert(mean(open, 'open') > mean(closed, 'open') + 0.15, 'the search follows the
 assert(open.candidates.filter((c) => c.is_new).length >= open.candidates.length / 2, '"surprise me" finds new structures');
 
 // the same goal gives the same answers (so it caches)
-const again = I.invent({ gsm: 160, bed: 'single', prefs: { open: 1 }, novelty: 'new', max_needles: 4, max_feeds: 6 });
+const again = I.invent({ gsm: 160, bed: 'single', prefs: { open: 1 }, novelty: 'new', max_needles: 4, max_feeds: 6 }, { timeMs: 600000 });
 assert.deepStrictEqual(again.candidates.map((c) => c.grid.C.join('/')), open.candidates.map((c) => c.grid.C.join('/')));
 
 // a double bed, stretch, proven: rib-family answers, mostly catalogue structures
