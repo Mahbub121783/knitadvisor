@@ -1294,7 +1294,7 @@ router.get('/color/shade-check', (req, res) => {
 // calculation limit (the /api rate limiter still applies). Signed-in only,
 // like the calculator it sits beside.
 router.get('/studio/templates', requireUser, (req, res) => {
-  res.json({ success: true, templates: fabricStudio.listTemplates(), fibres: fabricStudio.FIBRES, limits: fabricStudio.LIMITS, machines: knitMachine.list(), melange: require('../engine/domain/melange-engine').catalogue(),
+  res.json({ success: true, templates: fabricStudio.listTemplates(), fibres: fabricStudio.FIBRES, limits: fabricStudio.LIMITS, machines: knitMachine.list(), melange: require('../engine/domain/melange-engine').catalogue(), blend: require('../engine/domain/blend-yarn-engine').catalogue(), chemistry: require('../engine/domain/yarn-chemistry-engine').catalogue(), recovery: require('../engine/domain/yarn-recovery-engine').catalogue(),
     warp: { templates: warpStudio.TEMPLATES, machines: Object.fromEntries(Object.entries(warpStudio.MACHINES).map(([k, m]) => [k, { label: m.label, gauges: m.gauges, bars: m.bars, speed: m.speed, use: m.use, beds: m.beds }])), fibres: Object.fromEntries(Object.entries(warpStudio.FIBRES).map(([k, f]) => [k, f.label])) } });
 });
 
@@ -1309,6 +1309,65 @@ router.post('/studio/melange', requireUser, (req, res) => {
     if (err instanceof melangeEngine.MelangeError) return res.status(400).json({ success: false, error: err.message });
     console.error('[studio] melange failed:', err);
     res.status(500).json({ success: false, error: 'The melange engine could not work this yarn out.' });
+  }
+});
+
+// Blend yarns — CVC, PC, cotton/viscose, T/R … at any count: composition, geometry, load–elongation to break, evenness, lustre,
+// texture, properties, process, the count and ratio sweeps and the derivations (engine/domain/blend-yarn-engine.js).
+// The Studio also runs it inside /studio/analyse (the `blend` input) at the count it settles on.
+const blendYarnEngine = require('../engine/domain/blend-yarn-engine');
+router.get('/studio/blend-yarn/catalogue', requireUser, (req, res) => res.json({ success: true, ...blendYarnEngine.catalogue() }));
+router.post('/studio/blend-yarn', requireUser, (req, res) => {
+  try {
+    res.json(blendYarnEngine.analyse(req.body || {}));
+  } catch (err) {
+    if (err instanceof blendYarnEngine.BlendError) return res.status(400).json({ success: false, error: err.message });
+    console.error('[studio] blend yarn failed:', err);
+    res.status(500).json({ success: false, error: 'The blend yarn engine could not work this yarn out.' });
+  }
+});
+
+// Yarn chemistry — the dye classes a yarn's fibres take, the wet route in the order the chemistry allows, the recipe (amounts, no
+// money), resistance to the agents of the dyehouse, the strength left after the route, fastness (engine/domain/yarn-chemistry-engine.js).
+// The Studio also runs it inside /studio/analyse (the `chemistry` input) for each yarn, at the count it settles on.
+const yarnChemistryEngine = require('../engine/domain/yarn-chemistry-engine');
+router.get('/studio/yarn-chemistry/catalogue', requireUser, (req, res) => res.json({ success: true, ...yarnChemistryEngine.catalogue() }));
+router.post('/studio/yarn-chemistry', requireUser, (req, res) => {
+  try {
+    res.json(yarnChemistryEngine.analyse(req.body || {}));
+  } catch (err) {
+    if (err instanceof yarnChemistryEngine.ChemError) return res.status(400).json({ success: false, error: err.message });
+    console.error('[studio] yarn chemistry failed:', err);
+    res.status(500).json({ success: false, error: 'The yarn chemistry engine could not work this yarn out.' });
+  }
+});
+
+// Yarn recovery — what a yarn gives back and keeps: elastic recovery and set at any strain, creep, stress relaxation, growth over cycles,
+// mechanical conditioning, dry / humid / wet / hot-wet, and what it means for the cloth (engine/domain/yarn-recovery-engine.js).
+// The Studio also runs it inside /studio/analyse (the `recovery` input) for each staple yarn, at the count it settles on.
+const yarnRecoveryEngine = require('../engine/domain/yarn-recovery-engine');
+router.get('/studio/yarn-recovery/catalogue', requireUser, (req, res) => res.json({ success: true, ...yarnRecoveryEngine.catalogue() }));
+router.post('/studio/yarn-recovery', requireUser, (req, res) => {
+  try {
+    res.json(yarnRecoveryEngine.analyse(req.body || {}));
+  } catch (err) {
+    if (err instanceof yarnRecoveryEngine.RecoveryError || (err && err.constructor && err.constructor.name === 'BlendError')) return res.status(400).json({ success: false, error: err.message });
+    console.error('[studio] yarn recovery failed:', err);
+    res.status(500).json({ success: false, error: 'The yarn recovery engine could not work this yarn out.' });
+  }
+});
+
+// Fabric look — the real lustre and texture of a cloth through knitting, dyeing and finishing (engine/domain/fabric-look-engine.js).
+// The Studio also runs it inside /studio/analyse (the `look` input) and gives the Realistic cloth view the result.
+const fabricLookEngine = require('../engine/domain/fabric-look-engine');
+router.get('/studio/fabric-look/catalogue', requireUser, (req, res) => res.json({ success: true, ...fabricLookEngine.catalogue() }));
+router.post('/studio/fabric-look', requireUser, (req, res) => {
+  try {
+    res.json(fabricLookEngine.analyse(req.body || {}));
+  } catch (err) {
+    if (err instanceof fabricLookEngine.LookError || (err && err.constructor && err.constructor.name === 'BlendError')) return res.status(400).json({ success: false, error: err.message });
+    console.error('[studio] fabric look failed:', err);
+    res.status(500).json({ success: false, error: 'The fabric look engine could not work this cloth out.' });
   }
 });
 

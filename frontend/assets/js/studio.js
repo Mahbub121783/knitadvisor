@@ -161,6 +161,9 @@
     return apiFetch('/api/studio/templates').then(function (d) {
       templates = d.templates || [];
       if (window.KAStudioMelange) window.KAStudioMelange.setCatalogue(d.melange);
+      if (window.KAStudioBlend) window.KAStudioBlend.setCatalogue(d.blend);
+      if (window.KAStudioChem) window.KAStudioChem.setCatalogue(d.chemistry);
+      if (window.KAStudioRecovery) window.KAStudioRecovery.setCatalogue(d.recovery);
       var fib = $('st-fibre');
       var fopts = Object.keys(d.fibres || {}).map(function (k) { return '<option value="' + k + '">' + esc(d.fibres[k].label) + '</option>'; }).join('');
       document.querySelectorAll('.st-yfibre').forEach(function (x) { var keep = x.value; x.innerHTML = fopts; if (keep) x.value = keep; });
@@ -605,6 +608,10 @@
       yarn: yarnOf(YROWS[0]),
       yarns: { binder: +$('yb-count').value > 0 ? yarnOf(YROWS[1]) : null, loop: +$('yl-count').value > 0 ? yarnOf(YROWS[2]) : null, plate: +$('yp-count').value > 0 ? yarnOf(YROWS[3]) : null },
       melange: window.KAStudioMelange ? window.KAStudioMelange.payload() : null,
+      blend: window.KAStudioBlend ? window.KAStudioBlend.payload() : null,
+      chemistry: window.KAStudioChem ? window.KAStudioChem.payload() : null,
+      recovery: window.KAStudioRecovery ? window.KAStudioRecovery.payload() : null,
+      look: window.KAStudioLook ? window.KAStudioLook.payload() : null,
       plush: { cut: $('st-cut').checked, sinker_mm: num('st-sinker'), arrangement: $('st-parr').value },
       pile: $('st-pile').value,
       stripes: $('st-stripe').value.trim() ? { sequence: $('st-stripe').value } : null,
@@ -630,6 +637,10 @@
       last = r;
       renderResult();
       if (window.KAStudioMelange) window.KAStudioMelange.studioResult(r);
+      if (window.KAStudioBlend) window.KAStudioBlend.studioResult(r);
+      if (window.KAStudioChem) window.KAStudioChem.studioResult(r);
+      if (window.KAStudioRecovery) window.KAStudioRecovery.studioResult(r);
+      if (window.KAStudioLook) window.KAStudioLook.studioResult(r);
     }).catch(function (e) {
       if (my !== reqSeq) return;
       last = null;
@@ -1211,6 +1222,7 @@
     // a melange yarn: the count, system and ply the melange engine made, and a colour for every fibre
     var mel = window.KAStudioMelange && KAStudioMelange.forYarnView ? KAStudioMelange.forYarnView(role) : null;
     if (mel) return { yarn: { fibre: mel.yarn.fibre, type: mel.yarn.type, tex: mel.yarn.tex, ply: mel.yarn.ply, mottle: mel.mottle }, from: 'the melange card (' + (mel.label || 'melange') + ')', melange: true };
+    var blendMix = window.KAStudioBlend && KAStudioBlend.forYarnView ? KAStudioBlend.forYarnView(role) : null;
     var y = yarnOf(R), ply = y.ply || 1, tex = null, from = 'your count';
     if (y.count) tex = TEX[y.unit || 'ne'](y.count);
     if (!tex && last && last.yarn) {
@@ -1220,7 +1232,7 @@
       if (t) tex = t / ply;
     }
     if (!tex) { tex = 590.5 / 30; from = 'a 30s default (no count yet)'; }
-    return { yarn: { fibre: y.fibre, type: y.type, tex: tex, ply: ply, filaments: y.filaments, lustre: y.lustre, section: y.section, interlace: y.interlace, crimp: y.crimp }, from: from };
+    return { yarn: { fibre: y.fibre, type: y.type, tex: tex, ply: ply, filaments: y.filaments, lustre: y.lustre, section: y.section, interlace: y.interlace, crimp: y.crimp, blend: blendMix ? blendMix.mix : undefined }, from: from, blendLabel: blendMix ? blendMix.label : null };
   }
   function filamentNote(m, from) {
     var s = '<b>' + esc(m.system_label) + ' · ' + m.denier + ' D (' + m.dtex + ' dtex)' + (m.system === 'mono' ? '' : ' / ' + m.filaments + ' F') + ', ' + esc(m.polymer) + '</b> — ';
@@ -1292,7 +1304,7 @@
       var elKey = JSON.stringify([elList, $('st-ycol').value, $('st-elcut').checked && !cmp]);
       if (elKey === yarnKey && yarnView) return;
       yarnKey = elKey;
-      if (!yarnPromise) yarnPromise = import('/assets/js/yarn-real.js?v=20261118b').then(function (mod) { yarnView = new mod.YarnView(host); return yarnView; });
+      if (!yarnPromise) yarnPromise = import('/assets/js/yarn-real.js?v=20261118d').then(function (mod) { yarnView = new mod.YarnView(host); return yarnView; });
       yarnPromise.then(function (v) {
         var metas = v.draw(elList, { colour: $('st-ycol').value, cutaway: $('st-elcut').checked && con === 'core' && !cmp });
         $('st-yarnnote').innerHTML = elastaneNote(metas, cmp);
@@ -1304,13 +1316,13 @@
     var list = cmp
       ? (isFil(one.yarn.fibre) ? CMP_FILA : CMP_SPUN).map(function (s) { var y = {}; for (var k in one.yarn) y[k] = one.yarn[k]; y.type = s[0]; return { yarn: y, label: s[1] }; })
       : [{ yarn: one.yarn, label: '' }];
-    var key = JSON.stringify([list, $('st-ycol').value]);
+    var key = JSON.stringify([list, $('st-ycol').value, window.KAStudioLook ? window.KAStudioLook.yarnRoughnessScale(sel.value) : 1]);
     if (key === yarnKey && yarnView) return;
     yarnKey = key;
-    if (!yarnPromise) yarnPromise = import('/assets/js/yarn-real.js?v=20261118b').then(function (mod) { yarnView = new mod.YarnView(host); return yarnView; });
+    if (!yarnPromise) yarnPromise = import('/assets/js/yarn-real.js?v=20261118d').then(function (mod) { yarnView = new mod.YarnView(host); return yarnView; });
     yarnPromise.then(function (v) {
-      var metas = v.draw(list, { colour: $('st-ycol').value });
-      $('st-yarnnote').innerHTML = yarnNote(metas, cmp, one.from) + (one.melange ? ' <b>Melange:</b> each fibre is drawn in its own colour (a fibre blend by its share of the fibres in the section, a marl by whole strand), so the speckle or the twist of colours comes from the recipe itself.' : '');
+      var metas = v.draw(list, { colour: $('st-ycol').value, roughScale: window.KAStudioLook ? window.KAStudioLook.yarnRoughnessScale(sel.value) : 1 });
+      $('st-yarnnote').innerHTML = yarnNote(metas, cmp, one.from) + (one.blendLabel ? ' <b>' + esc(one.blendLabel) + ':</b> the fibres are drawn in the blend ratio by number of fibres (a finer fibre means more of them), not as plain cotton or a fixed 60/40.' : '') + (one.melange ? ' <b>Melange:</b> each fibre is drawn in its own colour (a fibre blend by its share of the fibres in the section, a marl by whole strand), so the speckle or the twist of colours comes from the recipe itself.' : '');
     }).catch(function (e) {
       if (window.console) console.error(e);
       $('st-yarnnote').textContent = 'The yarn view needs WebGL, which this browser does not have.';
@@ -1357,7 +1369,9 @@
     var colours = {}; ['A', 'B', 'C', 'D', 'E', 'F'].forEach(function (c) { colours[c] = $('st-sc-' + c).value; });
     return { seq: seq.slice(0, 2000), colours: colours };
   }
-  function clothOpts() {
+  // the cloth view's options: the notation and the numbers, then the look engine's real lustre, hairs and finish put in
+  function clothOpts() { var o = clothOptsBase(); return window.KAStudioLook ? window.KAStudioLook.apply(o) : o; }
+  function clothOptsBase() {
     // the notation → 3D mapping lives in studio-cloth-map.js (tested in node)
     var stripe = stripeOf();
     var cs = window.KAStudioCloth.clothSpec({ bed: S.bed, C: S.C, D: S.D, feeds: S.feeds, brush: $('st-brush').value, pile: $('st-pile').value, stripe: stripe,
@@ -1382,7 +1396,7 @@
   function renderCloth() {
     var host = $('st-cloth'), o = clothOpts(), my = ++clothSeq;
     // rebuild only when the structure or its numbers changed; a colour change repaints
-    var key = JSON.stringify([o.yarnLook || null, stripeOf(), o.construction, o.pattern.grid, o.pattern.dial, o.pattern.feedYarns, Math.round(o.density.wpc * 10), Math.round(o.density.cpc * 10), Math.round(o.countNe), o.gsm, o.fiberType, o.elastanePct]);
+    var key = JSON.stringify([o.yarnLook || null, o.physics || null, o.dyeMethod || null, o.fiberType, stripeOf(), o.construction, o.pattern.grid, o.pattern.dial, o.pattern.feedYarns, Math.round(o.density.wpc * 10), Math.round(o.density.cpc * 10), Math.round(o.countNe), o.gsm, o.fiberType, o.elastanePct]);
     if (cloth && key === clothKey) { cloth.setColor(o.baseHex); return; }
     clothKey = key;
     $('st-cloth-wait').hidden = false;
@@ -1533,6 +1547,8 @@
     $('st-twcol').addEventListener('input', function () { if (mode3d === 'twin') { twinKey = ''; renderTwin(); } });
     $('st-yarnbar').addEventListener('change', function () { if (mode3d === 'yarn') renderYarn(); });
     document.addEventListener('ka-melange', function () { if (mode3d === 'yarn') renderYarn(); });
+    document.addEventListener('ka-blend-result', function () { if (mode3d === 'yarn') renderYarn(); });
+    document.addEventListener('ka-look', function () { if (mode3d === 'cloth') renderCloth(); });
     $('st-yarnbar').addEventListener('click', function (e) {
       var b = e.target.closest('[data-yview]'); if (b && yarnView) yarnView.view(b.getAttribute('data-yview'));
     });
@@ -1561,6 +1577,9 @@
     var o = { v: 2, name: $('st-name').value || 'Untitled design', bed: S.bed, C: S.C, D: S.D, feeds: S.feeds, rolls: rolls, lycra: $('st-lycra').checked, cut: $('st-cut').checked, colour: $('st-col').value, fields: {} };
     FIELDS.forEach(function (id) { o.fields[id] = $(id).value; });
     if (window.KAStudioMelange) { o.melange = window.KAStudioMelange.state(); o.melange_payload = window.KAStudioMelange.payload(); }
+    if (window.KAStudioBlend) { o.blend = window.KAStudioBlend.state(); o.blend_payload = window.KAStudioBlend.payload(); }
+    if (window.KAStudioChem) o.chemistry = window.KAStudioChem.state();
+    if (window.KAStudioRecovery) o.recovery = window.KAStudioRecovery.state();
     return o;
   }
   // ── design from a goal: the Studio searches needle programmes itself (POST /api/studio/invent) ─────────
@@ -1645,6 +1664,9 @@
     if (o.colour) $('st-col').value = o.colour;
     Object.keys(o.fields || {}).forEach(function (id) { if ($(id)) $(id).value = o.fields[id]; });
     if (window.KAStudioMelange) window.KAStudioMelange.setState(o.melange || null);
+    if (window.KAStudioBlend) window.KAStudioBlend.setState(o.blend || null);
+    if (window.KAStudioChem) window.KAStudioChem.setState(o.chemistry || null);
+    if (window.KAStudioRecovery) window.KAStudioRecovery.setState(o.recovery || null);
     markCustom();
     rolls = Array.isArray(o.rolls) ? o.rolls : [];
     writeRolls();
@@ -1723,7 +1745,27 @@
       mlc.addEventListener('input', function (e) { if (e.target.type === 'number' || e.target.type === 'color') schedule(); });
       mlc.addEventListener('click', function (e) { if (e.target.closest('[data-ml-role],[data-ml-del],#ml-add')) schedule(); });
     }
+    // the yarn chemistry card likewise
+    var chc = $('ch-card');
+    if (chc) {
+      chc.addEventListener('change', schedule);
+      chc.addEventListener('input', function (e) { if (e.target.type === 'number') schedule(); });
+    }
+    // the yarn recovery card likewise
+    var rcc = $('rc-card');
+    if (rcc) {
+      rcc.addEventListener('change', schedule);
+      rcc.addEventListener('input', function (e) { if (e.target.type === 'number') schedule(); });
+    }
+    // the blend yarn card likewise
+    var blc = $('bl-card');
+    if (blc) {
+      blc.addEventListener('change', schedule);
+      blc.addEventListener('input', function (e) { if (e.target.type === 'number') schedule(); });
+      blc.addEventListener('click', function (e) { if (e.target.closest('[data-bl-role],[data-bl-del],#bl-add')) schedule(); });
+    }
     $('st-col').addEventListener('change', render3D);
+    $('st-col').addEventListener('change', schedule);   // the look engine reads the colour
     $('st-zoom').addEventListener('click', function (e) {
       var b = e.target.closest('[data-z]'); if (!b) return;
       zoom = b.getAttribute('data-z');

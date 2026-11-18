@@ -10,7 +10,7 @@
 // to see it.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import './yarn-real-geom.js?v=20261118a';
+import './yarn-real-geom.js?v=20261118b';
 import './view-guard.js?v=20261111b';
 
 const G = globalThis.KAYarnGeom;
@@ -164,13 +164,13 @@ function elastaneMaterial(meta) {
 }
 // the cover yarn is a bright continuous filament (nylon or polyester)
 const coverMeta = (meta) => ({ system: 'fdy', filament: true, lustre: 'bright', section: 'round', refractive_index: meta.cover_refractive_index || 1.565, diameter_mm: meta.diameter_mm });
-function materialFor(meta, colour) {
+function materialFor(meta, colour, roughScale) {
   if (meta.elastane === 'covered' || meta.elastane === 'dcovered') return filamentMaterial(coverMeta(meta), colour);
   const filament = meta.filament;
   if (filament) return filamentMaterial(meta, colour);
   const m = new THREE.MeshPhysicalMaterial({ envMapIntensity: 0.35,
     color: new THREE.Color(colour || '#f1ead9'), vertexColors: true,
-    roughness: filament ? (meta.system === 'fdy' ? 0.26 : 0.4) : meta.fibre === 'polyester_spun' ? 0.5 : 0.66,
+    roughness: Math.max(0.12, Math.min(0.95, (filament ? (meta.system === 'fdy' ? 0.26 : 0.4) : meta.fibre === 'polyester_spun' ? 0.5 : 0.66) * (roughScale || 1))),   // the look engine's sheen, relative to a cotton yarn
     metalness: 0,
     sheen: filament ? 0.25 : 1, sheenRoughness: 0.45, sheenColor: new THREE.Color(0xfff0dc).multiplyScalar(meta.mottled ? 0.12 : 0.4),   // a dyed fibre keeps its hue: less white haze
     clearcoat: filament ? 0.35 : 0, clearcoatRoughness: 0.3,
@@ -282,8 +282,8 @@ export class YarnView {
       } else {
         const geo = fibresGeometry(x.b.fibres, xo);
         // a lone clear rod: its reflections are added at full strength over the see-through body
-        if (m.filament && m.system === 'mono' && m.lustre !== 'full_dull') parts.push(clearRod(geo, materialFor(m, m.mottled ? '#ffffff' : opt.colour), m.lustre === 'bright' ? 0.05 : 0.2, m.lustre === 'bright' ? 2.4 : 1.2));
-        else parts.push(new THREE.Mesh(geo, materialFor(m, m.mottled ? '#ffffff' : opt.colour)));
+        if (m.filament && m.system === 'mono' && m.lustre !== 'full_dull') parts.push(clearRod(geo, materialFor(m, m.mottled ? '#ffffff' : opt.colour, opt.roughScale), m.lustre === 'bright' ? 0.05 : 0.2, m.lustre === 'bright' ? 2.4 : 1.2));
+        else parts.push(new THREE.Mesh(geo, materialFor(m, m.mottled ? '#ffffff' : opt.colour, opt.roughScale)));
       }
       // centre the yarn's length on y = 0
       parts.forEach((p) => { p.position.y = -x.b.length / 2; this.group.add(p); });

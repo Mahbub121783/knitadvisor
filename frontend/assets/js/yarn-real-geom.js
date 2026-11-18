@@ -137,6 +137,12 @@
     // a melange yarn: every fibre of the recipe has its own colour. Fibre blends colour the fibres by number share; a marl
     // (plies, Siro strands) colours whole strands
     var strandParts = null;
+    // a blend of any ratio (CVC 52/48, cotton/viscose …): its fibres by NUMBER share — a finer fibre is more of them for the same mass
+    if (y.blend && typeof y.blend === 'object' && !filament) {
+      var bp = Object.keys(y.blend).map(function (k) { var key = MOTTLE_FIBRE[k] || 'cotton'; return { key: key, mass: +y.blend[k] > 0 ? +y.blend[k] : 0, f: FIBRE[key] }; }).filter(function (q) { return q.mass > 0; });
+      var nt = bp.reduce(function (t, q) { return t + q.mass / q.f.tex; }, 0);
+      if (bp.length && nt > 0) fibres = bp.map(function (q) { return { key: q.key, share: (q.mass / q.f.tex) / nt, f: q.f }; });
+    }
     var mt = y.mottle && !filament && Array.isArray(y.mottle.parts) && y.mottle.parts.length ? y.mottle : null;
     if (mt) {
       var parts = mt.parts.map(function (q) { var key = MOTTLE_FIBRE[q.fibre] || 'cotton'; return { key: key, share: +q.share > 0 ? +q.share : 0, f: FIBRE[key], col: hexLin(q.colour) }; }).filter(function (q) { return q.col; });

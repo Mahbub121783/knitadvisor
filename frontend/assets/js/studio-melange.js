@@ -365,6 +365,6 @@
   }
   function anyOn() { return ROLES.some(function (r) { return S.specs[r[0]] && S.specs[r[0]].enabled; }); }
 
-  window.KAStudioMelange = { forYarnView: forYarnView, payload: payload, state: state, setState: setState, setCatalogue: setCatalogue, studioResult: studioResult, hasAny: anyOn };
+  window.KAStudioMelange = { css: CSS, forYarnView: forYarnView, payload: payload, state: state, setState: setState, setCatalogue: setCatalogue, studioResult: studioResult, hasAny: anyOn };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { buildCard(); bind(); render(null); }); else { buildCard(); bind(); render(null); }
 })();

@@ -161,4 +161,17 @@ assert.ok(core.fibres.every((f) => f.p.every(Number.isFinite)), 'core-spun: ever
   console.log('✓ melange yarn view: each fibre in its own colour, by share or by ply');
 }
 
+// 10. a blend of any ratio is drawn by NUMBER share: the finer fibre is more of them for the same mass
+{
+  const cnt = (b) => { const k = {}; b.fibres.filter((f) => f.kind === 'body').forEach((f) => { k[f.fibre] = (k[f.fibre] || 0) + 1; }); return k; };
+  const b6040 = cnt(G.build({ fibre: 'cotton', type: 'combed', tex: NE30, blend: { cotton: 60, polyester: 40 } })), b8020 = cnt(G.build({ fibre: 'cotton', type: 'combed', tex: NE30, blend: { cotton: 80, polyester: 20 } }));
+  const share = (k) => k.polyester / (k.polyester + k.cotton);
+  assert.ok(share(b6040) > 0.4, 'polyester is finer than cotton, so 40 % of the mass is more than 40 % of the fibres: ' + share(b6040));
+  assert.ok(share(b8020) < share(b6040) - 0.1, 'the ratio changes what is drawn');
+  const cv = cnt(G.build({ fibre: 'cotton', type: 'combed', tex: NE30, blend: { cotton: 70, viscose: 30 } }));
+  assert.ok(cv.viscose > 0 && cv.cotton > cv.viscose, 'cotton/viscose is drawn too');
+  assert.ok(G.build({ fibre: 'poly_filament', type: 'fdy', tex: 8, blend: { cotton: 50, polyester: 50 } }).fibres.length > 0, 'a filament ignores a blend');
+  console.log('✓ blend yarn view: the ratio sets the fibres drawn, by number');
+}
+
 console.log('✓ Yarn real view tests passed');
