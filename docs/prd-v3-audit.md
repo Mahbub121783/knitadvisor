@@ -89,6 +89,18 @@ On scientific grounding, KnitAdvisor is ahead of the PRD. Every number carries a
 - **Score changes:** Module 5 72 → 88 %. **Overall ≈ 84 → 87 %.**
 - **Still open:** no self-collision, so folds may pass through each other (a very limp cloth reads a little low); no garment body, seams or pattern pieces; one skirt only; the stretch stiffness is capped at 30 N/m for speed (a drape load is tiny); a Cusick reading of the mill's own cloth is what turns the number from estimate into measured.
 
+### Update, 2026-11-19: Phase G done (the last phase)
+
+- **Material package** (`Make the ZIP` under the real view; `material-package.js`, `pbr-package.js`, `studio-pbr.js`, `POST /studio/material`): one ZIP of open formats.
+  - **Maps.** One tile of the real knitted structure (a whole number of repeats, so it tiles without a seam), read back from the real view's own bake: albedo with the opacity in its alpha, a tangent-space normal (OpenGL, +Y up), roughness, ambient occlusion, displacement (levels-stretched), opacity, and ORM packed for glTF. The jersey's V-shaped wales show in the height, normal and occlusion maps. Resolution is the tile's own (up to 2048 px a side).
+  - **glTF 2.0 binary** (`swatch.glb`): a 30 cm swatch whose UVs repeat the tile, or the draped Cusick sample if the drape has been run. Maps embedded, a REPEAT sampler, `KHR_materials_sheen` for the yarn fuzz, an alpha mask when the cloth has holes.
+  - **physics.json**: weight, thickness, bending, shear, stretch under load, friction, on knit axes (course = weft, wale = warp), in SI and in the tester's units. Drape, comfort and water numbers are added when they have been worked out.
+  - **README**: the conventions, what each file is, and what it rests on.
+- **U3MA, ZFAB and SBSAR are not written, and the package says so.** They are closed formats with no public specification, and CLO's fabric properties are in its own units from its fabric-kit calibration, which a conversion would only guess. The PNG maps and the physics numbers are what those tools' material editors take. This is the one PRD deliverable that stays open.
+- **Structurally checked, not opened in CLO or Browzwear**: the glb's magic, lengths, 4-byte alignment, accessor bounds, UV tiling and embedded images are tested; the ZIP is read back by a real unzip; the PNG by zlib. A viewer has not loaded the file.
+- **Score changes:** Module 6 80 → 90 % (the U3MA/ZFAB item stays at zero). **Overall ≈ 87 → 90 %.**
+- **What is still open across the whole PRD:** woven in the Studio (deferred by choice); the closed CAD formats; Lurex as a 3D ribbon; a real viewer's check of the glTF; the garment as pattern pieces on a body; and above all the mill's own readings (Cusick, KES/FAST, opacity, air permeability, spectrophotometer, a 100-roll weight log, ISO 9237/11092), which turn the estimate tags into measured ones.
+
 ---
 
 ## 2. Module-by-module

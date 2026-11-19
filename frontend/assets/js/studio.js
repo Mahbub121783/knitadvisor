@@ -58,6 +58,8 @@
   var machines = [], warpData = null;
   // the technology comes first: weft (circular) or warp (tricot / raschel)
   var techNow = 'weft';
+  // what the material package (studio-pbr.js) needs of the page
+  window.KAStudioHost = { cloth: function () { return cloth; }, design: function () { return payload(); }, fetch: function (u, o) { return apiFetch(u, o); }, colour: function () { var c = $('st-col'); return (c && /^#[0-9a-f]{6}$/i.test(c.value)) ? c.value : '#808080'; }, name: function () { return ($('st-name') && $('st-name').value) || 'fabric'; } };
   function setTech(t) {
     Array.prototype.forEach.call($('st-tech').children, function (b) { b.classList.toggle('on', b.getAttribute('data-tech') === t); });
     $('st-weft').hidden = t !== 'weft' && t !== 'vbed'; $('st-warp').hidden = t !== 'warp';
@@ -1504,7 +1506,7 @@
     if (cloth && key === clothKey) { cloth.setColor(o.baseHex); return; }
     clothKey = key;
     $('st-cloth-wait').hidden = false;
-    import('/assets/js/knit3d/index.js?v=20261121a').then(function (mod) {
+    import('/assets/js/knit3d/index.js?v=20261121b').then(function (mod) {
       if (my !== clothSeq || mode3d !== 'cloth') return;
       if (cloth) { try { cloth.dispose(); } catch (_) {} cloth = null; }
       Array.prototype.forEach.call(host.querySelectorAll('canvas'), function (c) { c.remove(); });

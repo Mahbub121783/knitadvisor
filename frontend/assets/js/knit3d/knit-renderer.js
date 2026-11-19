@@ -13,7 +13,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 import { buildYarnPaths, floatAnchorsFromPaths, structureRepeat } from './topology-builder.js?v=20261111a';
-import { bakeStructure, ClothSurface, fibreSurfaceTexture, wavePhase, melangeMaterial, fuzzTexture } from './macro.js?v=20260608g';
+import { bakeStructure, ClothSurface, fibreSurfaceTexture, wavePhase, melangeMaterial, fuzzTexture } from './macro.js?v=20261121a';
 import { ClothSim } from './cloth-physics.js?v=20260608g';
 import { fabricBody, fabricMechanics } from './fabric-body.js?v=20260608g';
 import { hash2 } from './noise.js?v=20260608g';
@@ -1504,6 +1504,9 @@ export class Knit3D {
       melMat, melF: -1, rebake: bake.rebake || null,
       disposeTile: melMat ? () => { bake.release(); disposeTile(); } : null,
       targets: bake.targets, size: box.getSize(new THREE.Vector3()),
+      // the maps of one tile, readable back (exportMaps), and the tile's real size
+      bakeTargets: bake.byName, bakeSize: { w: tileWales * tw, h: tileCourses * th }, bakeDepth: bake.depth,
+      tileCm: { w: (tileWales * rep.xPitch) / cm, h: (tileCourses * pitchY) / cm, wales: tileWales, courses: tileCourses },
       // the face's baked height: where gaps open under stretch (_setHoles)
       heightFront: bake.front.height,
       viewW: 14 * cm,                            // default view: ~14 cm across
@@ -1513,6 +1516,30 @@ export class Knit3D {
       fullW: 0.62 * S * cm * 2,                  // fully zoomed out: the whole piece
     };
     this._syncMacroBack();
+  }
+
+  /**
+   * The maps of the cloth's surface for a material export: one tile of the real structure (a whole number of repeats, so it tiles without a seam), read
+   * back from the same bake the real view is textured with. Rows run top-down. Returns null when the view has no fixed repeat.
+   *   normal    tangent-space, +X right, +Y up (the orthographic view down onto the cloth)
+   *   ao        ambient occlusion of the yarns
+   *   height    0 at the lowest yarn, 255 at the highest
+   *   cover     255 where there is yarn, 0 where there is a hole
+   */
+  exportMaps() {
+    const m = this._macro;
+    if (!m || !m.bakeTargets) return null;
+    const { w, h } = m.bakeSize, r = this.renderer, out = { size: { w, h }, tile_cm: m.tileCm, depth_units: m.bakeDepth, maps: {}, roughness: this._material ? this._material.roughness : 0.85 };
+    for (const name of ['normal', 'ao', 'height', 'cover']) {
+      const t = m.bakeTargets[name] && m.bakeTargets[name].front;
+      if (!t) return null;
+      const bottomUp = new Uint8Array(w * h * 4);
+      r.readRenderTargetPixels(t, 0, 0, w, h, bottomUp);
+      const flipped = new Uint8ClampedArray(w * h * 4), row = w * 4;
+      for (let y = 0; y < h; y++) flipped.set(bottomUp.subarray((h - 1 - y) * row, (h - y) * row), y * row);
+      out.maps[name] = flipped;
+    }
+    return out;
   }
 
   // ── Photo mode helpers ──────────────────────────────────────────────────

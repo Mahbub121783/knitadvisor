@@ -71,6 +71,7 @@ const ENDPOINTS = [
   E('POST', '/studio/stripes',           G.studio, 'Barre simulator: feeder-to-feeder loop-length and count spread to a lightness step, visibility and the tolerance that keeps it invisible', true),
   E('POST', '/studio/grinning',          G.studio, 'Grinning check: a back yarn against the face by colour difference and the share of the face it shows in at rest and stretched', true),
   E('POST', '/studio/drape',             G.studio, 'Drape: a weft design hung under gravity from its own hand numbers: the Cusick drape coefficient and fold count, or a circular skirt', true),
+  E('POST', '/studio/material',          G.studio, 'Material package: the physics, glTF material values and README of a weft design as a 3D material (the maps are baked in the browser)', true),
   E('POST', '/studio/fabric-light',      G.studio, 'Fabric light: open area, opacity, contrast ratio and show-through of a knit, flat and stretched', true),
   E('POST', '/studio/fabric-hand',       G.studio, 'Fabric hand: tensile, shear, bending, compression and surface numbers of a knit, five hand scores in words, set against a reference jersey', true),
   E('GET',  '/studio/fabric-hand/catalogue', G.studio, 'Fabric hand structures, finishes, loads and end uses', true),

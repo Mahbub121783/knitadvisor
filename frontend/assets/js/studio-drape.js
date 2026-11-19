@@ -186,6 +186,6 @@
   function studioResult(r) { last = r && r.repel ? r.repel : null; summary(); var b = $('dp-dropbox'); if (b && last) { render(); } else render(); }
   function setHost(h) { host = h; }
 
-  window.KAStudioDrape = { payload: payload, state: state, setState: setState, setCatalogue: setCatalogue, studioResult: studioResult, setHost: setHost };
+  window.KAStudioDrape = { lastRun: function () { return run; }, payload: payload, state: state, setState: setState, setCatalogue: setCatalogue, studioResult: studioResult, setHost: setHost };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { buildCard(); bind(); render(); }); else { buildCard(); bind(); render(); }
 })();

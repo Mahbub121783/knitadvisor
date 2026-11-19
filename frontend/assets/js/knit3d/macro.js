@@ -99,6 +99,7 @@ export function bakeStructure(renderer, object, win, pxPerUnit, opts = {}) {
   const gv = opts.gap != null ? opts.gap : 0.3;
   const gap = new THREE.Color(gv, gv, gv);
   const black = new THREE.Color(0, 0, 0);
+  const coverMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });      // where there is yarn: the opacity map of a material export
   const aniso = renderer.capabilities.getMaxAnisotropy();
 
   const targets = [];
@@ -133,13 +134,16 @@ export function bakeStructure(renderer, object, win, pxPerUnit, opts = {}) {
     out[side].ao = pass('ao', b, aoMat, gap);
     out[side].exp = pass('exp', b, expMat, black);
     out[side].height = pass('height', b, b ? hBack : hFront, black);
+    out[side].cover = pass('cover', b, coverMat, black);
     if (opts.melMaterial) out[side].mel = pass('mel', b, opts.melMaterial, black);
   }
   // depth of the tile's surface, scene units — scales the cavity shading
   out.depth = zBox.max.z - zBox.min.z;
+  out.byName = byName;                  // the render targets by pass name (front / back), for reading the maps back
   normalMat.dispose();
   aoMat.dispose();
   expMat.dispose();
+  coverMat.dispose();
   hFront.dispose();
   hBack.dispose();
 

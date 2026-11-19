@@ -1732,6 +1732,26 @@ router.post('/studio/drape', requireUser, drapeLimiter, async (req, res) => {
   }
 });
 
+// Material package: the physics, the glTF material values and the README of a cloth as a 3D material (engine/domain/material-package.js). The maps are baked
+// in the browser from the real view; this route gives the numbers and the words that go with them.
+const materialPackage = require('../engine/domain/material-package');
+router.post('/studio/material', requireUser, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const design = b.design && typeof b.design === 'object' ? { ...b.design, hand: { ...(b.design.hand || {}), enabled: true }, look: { ...(b.design.look || {}) } } : null;
+    if (!design) return res.status(400).json({ success: false, error: 'Give the design.' });
+    const hit = await studioAnswer(req.user.id, design);
+    if (hit.status !== 200) return res.status(hit.status).type('application/json').send(hit.body);
+    const a = JSON.parse(hit.body);
+    const extra = { name: String(b.name || '').slice(0, 60) || null, roughness: +b.roughness > 0 ? +b.roughness : undefined, tile_cm: b.tile_cm, files: Array.isArray(b.files) ? b.files.slice(0, 40).map(String) : [], drape: b.drape && b.drape.success !== false ? b.drape : null };
+    res.json({ success: true, physics: materialPackage.physics(a, extra), material: materialPackage.material(a, extra), readme: materialPackage.readme(a, extra), formats: materialPackage.formats() });
+  } catch (err) {
+    if (err instanceof materialPackage.MaterialError) return res.status(400).json({ success: false, error: err.message });
+    console.error('[studio] material failed:', err);
+    res.status(500).json({ success: false, error: 'The material package could not be made.' });
+  }
+});
+
 // The inspection room: the lightbox (colour under D65, TL84, CWF, A and a black light, brightener, metamerism), the burnout lab (which reagent
 // dissolves which fibre), barré and grinning (engine/domain/lightbox-engine.js, burnout-engine.js, defects-engine.js). The Studio also runs
 // them inside /studio/analyse (the `inspect` input).
