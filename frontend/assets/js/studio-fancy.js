@@ -34,6 +34,7 @@
     chenille: [['pile_share', 'Pile (% of the mass)', 40, 90, 1, 100], ['pile_mm', 'Pile length (mm)', 0.5, 4, 0.1, 1], ['pile_density', 'Tufts per mm', 8, 40, 1, 1]],
     core_fil: [['core_denier', 'Core filament (denier)', 10, 200, 5, 1], ['core_dpf', 'Core denier per filament', 0.5, 4, 0.1, 1]],
     aty: [['overfeed_pct', 'Overfeed (%)', 5, 50, 1, 1]],
+    lurex: [['width_mm', 'Film width (mm)', 0.15, 1.5, 0.01, 1], ['thickness_um', 'Film thickness (µm)', 8, 30, 1, 1]],
   };
   function defOf(form, key) { var f = CAT && CAT.forms.filter(function (x) { return x.id === form; })[0]; return f && f.defaults ? f.defaults[key] : undefined; }
   function shown(form, key, scale) { var v = cur().params[key]; if (v == null) v = defOf(form, key); return v == null ? '' : (scale === 100 ? Math.round(v * 100) : v); }

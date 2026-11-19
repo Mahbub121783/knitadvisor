@@ -51,6 +51,7 @@ const LAB = require('./virtual-lab-engine');
 const LB = require('./lightbox-engine');
 const BO = require('./burnout-engine');
 const DEF = require('./defects-engine');
+const VB = require('./vbed-compiler');
 const LOOK = require('./fabric-look-engine');
 const SE = require('./stretch-engine');
 const FY = require('./fancy-yarn-engine');
@@ -317,6 +318,7 @@ function readYarn(y, fallback) {
     ...(o.melange && o.mix && typeof o.mix === 'object' ? { mix: o.mix, melange: true } : {}),
     ...(blendMix ? { mix: blendMix, blend: true, blend_density: +o.blend_density > 0 ? +o.blend_density : null } : {}),
     ...(o.fancy && typeof o.fancy === 'object' && form && form !== 'single' && form !== 'ply2' ? { fancy: o.fancy } : {}),
+    ...(o.metallic && filament ? { metallic: true, fancy: o.fancy } : {}),
     // Peirce's diameter d = √tex / 28 mm, by fibre packing and by the yarn's own bulk
     d_mm: (Math.sqrt(tex) / 28) * (blendMix && +o.blend_density > 0 ? Math.sqrt(1.52 / +o.blend_density) : FIBRES[fibre].dFactor) * bulk,
     filaments: +o.filaments > 0 ? Math.round(+o.filaments) : null, dpf: dpf ? r2(dpf) : null, ...(fil || {}),
@@ -1184,6 +1186,8 @@ function analyse(input) {
     // count, nearest fibre family and spinning system become that role's yarn; the full analysis rides along
     // fancy yarns (slub, bouclé, chenille …) give a role its form; blend yarns (CVC, PC, …) its fibres; a melange on the same role still wins
     // a colour target (a Pantone code, Lab, RGB or hex) sets the shade of the look and chemistry cards and the target of a melange (colour-target-engine.js)
+    // a flat V-bed: its gauge is the machine's gauge (the loops are knitted at it)
+    if (input && input.vbed && input.vbed.enabled && +input.vbed.gauge > 0) input = { ...input, machine: { ...(input.machine || {}), gauge: +input.vbed.gauge } };
     let colourOut = null;
     if (input && input.colour) { const c = CT.applyToInput(input); input = c.input; colourOut = c.result; }
     if (input && input.fancy) input = FY.applyToInput(input);
@@ -1772,7 +1776,21 @@ function analyse(input) {
     // the three gates: does it hold together, does the yarn fit, can a machine knit it and every fibre survive the route (feasibility-engine.js)
     // the inspection room (lightbox, burnout, barré, grinning) on request: the gates read it for U-15 and U-20
     out.inspect = input.inspect && input.inspect.enabled ? inspectSummary(input, out, clothState, S) : null;
-    out.feasibility = FEAS.assess(out, input, { thickness_mm: thickMm, thickness_basis: 'estimate (hand model T0)' });
+    // the flat V-bed compiler: what a flat machine makes of this programme (vbed-compiler.js)
+    out.vbed = null;
+    if (input.vbed && input.vbed.enabled) {
+      try { out.vbed = VB.compile(out, input, { plate_tex: roleYarn.plate ? roleYarn.plate.tex * (roleYarn.plate.ply || 1) : 0, fibres: FEAS.clothFibres(out), spinning: S.ground.type }); } catch (e) { if (!(e instanceof VB.VbedError)) throw e; out.vbed = { success: false, error: e.message }; }
+    }
+    // the ground yarn's breaking force: the CSP the speed rule needs when the yarn's own is not given
+    let yarnForce = 0;
+    if (!FILAMENT_FIBRES.includes(S.ground.fibre)) {
+      try {
+        const gm = Object.fromEntries(Object.entries(S.ground.mix || FIBRE_MIX[S.ground.fibre] || { cotton: 100 }).filter(([k]) => BY.FIB[k]));
+        const yb = BY.analyse({ fibres: gm, count: { value: Math.min(S.ground.tex, 120), unit: 'tex' }, spinning: S.ground.type && BY.GEO[S.ground.type] ? S.ground.type : undefined });
+        yarnForce = yb.tensile.breaking_force.value * (S.ground.tex > 120 ? S.ground.tex / 120 : 1);
+      } catch (_) { yarnForce = 0; }
+    }
+    out.feasibility = FEAS.assess(out, input, { thickness_mm: thickMm, thickness_basis: 'estimate (hand model T0)', yarn_force_cn: yarnForce });
     // the virtual lab (air permeability, thermal resistance, a hundred rolls) and the matching collar and cuff, on request
     out.lab = input.lab && input.lab.enabled ? labSummary(input, out, clothState, thickMm, S, plush) : null;
     out.trim = input.trim && input.trim.enabled ? trimSummary(input, out) : null;
@@ -1798,13 +1816,16 @@ function yarnsInUse(S, roleYarn, feedRows) {
   };
   take('ground', S.ground, S.ground.tex, S.ground.ply || 1);
   feedRows.forEach((f, i) => { if (f.role !== 'ground' && f.role !== 'face' && S.feeds[i]) take(f.role, f.yarn || roleYarn[f.role] || S.ground, S.feeds[i].tex, (roleYarn[f.role] && roleYarn[f.role].ply) || 1); });
+  // the plating (back) yarn: its own role, so its fibres, chemistry and form (a metallised film, say) are worked out too
+  const pl = roleYarn.plate;
+  if (pl && feedRows.some((f) => f.plate) && pl.tex > 0) take('plate', pl, pl.tex, pl.ply || 1);
   return out;
 }
 function fancySummary(spec, S, roleYarn, feedRows) {
   const roles = {}, checks = [];
   yarnsInUse(S, roleYarn, feedRows).forEach((u) => {
     const sp = spec && Object.prototype.hasOwnProperty.call(spec, u.role) ? spec[u.role] : null;
-    const asAty = sp && sp.form === 'aty' && u.y.type === 'aty';        // an air-jet textured yarn is a filament type, not a form
+    const asAty = sp && ((sp.form === 'aty' && u.y.type === 'aty') || (sp.form === 'lurex' && u.y.metallic));        // an air-jet textured yarn and a metallised film are filament types, not forms
     if (!sp || sp.enabled === false || (!asAty && (!u.y.form || u.y.form === 'single' || u.y.form === 'ply2'))) return;
     const fibres = Object.fromEntries(Object.entries(u.mix).filter(([k]) => k !== 'elastane'));
     try {

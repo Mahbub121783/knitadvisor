@@ -41,6 +41,7 @@ const FORMS = {
   boucle:   { label: 'Bouclé', staple: true, what: 'A fine ground yarn, a binder wound round it, and an effect yarn fed in far faster, so it stands out in loops.' },
   chenille: { label: 'Chenille', staple: true, what: 'A short pile gripped between two fine twisted strands, standing out on every side: a caterpillar.' },
   core_fil: { label: 'Core-spun, filament core', staple: true, what: 'A bundle of polyester filaments in the middle, a staple sheath spun round it: the strength of a filament with the surface of the staple.' },
+  lurex:    { label: 'Metallic (Lurex film yarn)', staple: false, what: 'A thin slit film of metallised polyester, flat as a ribbon: it sparkles but is stiff and has no hairs. It is knitted plated with a carrier yarn, never alone.' },
   aty:      { label: 'Air-jet textured (ATY)', staple: false, what: 'A multifilament yarn overfed through an air jet: loops and entanglements stand out of its core, a spun-yarn look from a filament.' },
 };
 const FORM_IDS = Object.keys(FORMS);
@@ -52,11 +53,12 @@ const DEFAULTS = {
   chenille: { pile_share: 0.72, pile_mm: 1.6, pile_density: 24 },
   core_fil: { core_denier: 40, core_dpf: 1.5 },
   aty: { overfeed_pct: 22 },
+  lurex: { width_mm: 0.37, thickness_um: 12 },
 };
 // the look each form hands to the look engine: sheen and hairiness against a plain yarn, and a hand shift (typical)
 const LOOK = {
   slub: { sheen: 1.0, hair: 1.05, soft: 0 }, flame: { sheen: 1.0, hair: 1.1, soft: 0 }, nep: { sheen: 1.0, hair: 1.05, soft: -2 },
-  boucle: { sheen: 0.8, hair: 1.9, soft: 8 }, chenille: { sheen: 0.7, hair: 3.0, soft: 18 }, core_fil: { sheen: 1.0, hair: 0.8, soft: 0 }, aty: { sheen: 0.45, hair: 0.18, soft: 4 },
+  boucle: { sheen: 0.8, hair: 1.9, soft: 8 }, chenille: { sheen: 0.7, hair: 3.0, soft: 18 }, core_fil: { sheen: 1.0, hair: 0.8, soft: 0 }, aty: { sheen: 0.45, hair: 0.18, soft: 4 }, lurex: { sheen: 6.0, hair: 0, soft: -6 },
 };
 
 function readSpec(input) {
@@ -66,8 +68,14 @@ function readSpec(input) {
   const fibres = {};
   const src = input.fibres || input.fibers;
   if (src && typeof src === 'object') for (const [f, v] of Object.entries(src)) if (+v > 0 && own(BY.FIB, f)) fibres[f] = +v;
-  const filamentFibre = form === 'aty';
+  const filamentFibre = form === 'aty' || form === 'lurex';
   if (!filamentFibre && !Object.keys(fibres).length) throw new FancyError('Give the yarn\'s fibres and their shares, for example cotton 100.');
+  const pIn = { ...DEFAULTS[form], ...(input.params && typeof input.params === 'object' ? input.params : {}) };
+  if (form === 'lurex') {
+    // a film yarn's count is its film: width × thickness × density (mm × µm × g/cm³ = tex)
+    const w = clamp(+pIn.width_mm || 0.37, 0.1, 2), t = clamp(+pIn.thickness_um || 12, 6, 40);
+    return { form, fibres: {}, tex: w * t * 1.4, p: { width_mm: w, thickness_um: t }, spinning: input.spinning };
+  }
   const ct = input.count && typeof input.count === 'object' ? input.count : null;
   const conv = { ne: (v) => 590.5 / v, nm: (v) => 1000 / v, tex: (v) => v, dtex: (v) => v / 10, denier: (v) => v / 9 };
   let tex = null;
@@ -107,7 +115,7 @@ function analyse0(input) {
   const warnings = [], say = (level, text) => warnings.push({ level, text });
   const derive = [], D = (id, quantity, formula, working, result, unit, basis) => derive.push({ id, quantity, formula, working, result, unit, basis });
   const tex = S.tex;
-  const rho = S.form === 'aty' ? 1.38 : (() => { try { return staple(S, 19.7).composition.blend_density.value; } catch (e) { return 1.52; } })();
+  const rho = S.form === 'aty' ? 1.38 : S.form === 'lurex' ? 1.4 : (() => { try { return staple(S, 19.7).composition.blend_density.value; } catch (e) { return 1.52; } })();
   let count = {}, mass = [], tens = null, even = null, geo = {}, hand = {}, knit = {};
   let d3 = {};                                                              // what the 3D yarn view draws it from
 
@@ -212,6 +220,22 @@ function analyse0(input) {
     hand = { hairiness_rel: comp.texture.hairiness_vs_combed_cotton.value * 0.8, bulk: 0.98, note: 'The surface of the staple with the strength and recovery of a filament: sewing threads, denim, stretch-free strong knits.' };
     knit = { d_eff: geo.diameter_mm, notes: ['Knit like the plain yarn of the same count: the core makes it stronger, not thicker.', merged ? 'The sheath already contains polyester: the core is counted into it and cannot be told from the sheath polyester in the strength model.' : 'Dye as the blend: the polyester core needs disperse dye at 130 °C, the sheath its own class.'] };
     D('corefil_mass', 'Core and sheath', 'core tex = denier ÷ 9 (not above 45 % of the yarn);  sheath = yarn − core', `${den} D → ${r2(coreTex)} tex of ${r2(tex)}`, `${r1(coreShare)} % core`, '%', 'law');
+  } else if (S.form === 'lurex') {
+    const w = p.width_mm, tu = p.thickness_um, tmm = tu / 1000;
+    const E = 4000;                                                         // N/mm², metallised PET film (typical)
+    const F0 = 28 * tex;                                                    // cN: film tenacity about 28 cN/tex (typical)
+    const B = E * w * Math.pow(tmm, 3) / 12;                                // N·mm² : a ribbon bends easily about its thin axis
+    const bLim = 15 * tmm;                                                  // the film creases tighter than about this bend radius... (typical, mm)
+    count = { resultant_tex: tex, film_width_mm: w, film_thickness_um: tu, film_denier: tex * 9 };
+    mass = [{ part: 'metallised polyester film', share_pct: 100 }];
+    tens = { source: null, force: F0, factor: 1, where: 'the film', note: 'A slit film: strong along its length (about 28 cN/tex) but it splits and creases across. It breaks at about 20-25 % elongation.' };
+    even = { cvm_pct: 2.0, basis: 'typical', note: 'A film of even width and thickness: very even by mass; the sparkle varies with how the ribbon twists.' };
+    geo = { film_width_mm: w, film_thickness_um: tu, bending_rigidity_n_mm2: B, min_bend_radius_mm: bLim, diameter_mm: Math.sqrt(w * w + tmm * tmm) };
+    d3 = { form: 'lurex', fancy: { width_mm: w, thickness_um: tu } };
+    hand = { hairiness_rel: 0, bulk: 0.5, note: 'Smooth, cool and glittering; a little crisp. It adds sparkle, not body: use 5-25 % of the cloth.' };
+    knit = { d_eff: w * 1.1, notes: ['Never knit alone: plate it with a carrier yarn (polyester or nylon filament, or a fine spun yarn) on a plating feeder, held to the face so the film shows.', 'Keep the feeder tension low (about 0.5-1.5 cN) and the path free of twist: a twisted ribbon loses its sparkle and catches in the hook.', 'No tucks or floats on the ribbon: it crimps and cuts. Knit it on single jersey or plated rib.', 'Aluminium is attacked by alkali, chlorine and strong acid, and the film distorts above about 130 °C: no caustic scour, no hypochlorite, heat-set cool. Not dyed: the colour is the film\'s.'] };
+    D('lurex_tex', 'Count of the film', 'tex = width (mm) × thickness (µm) × density (1.4 g/cm³)', `${w} × ${tu} × 1.4`, `${r1(tex)} tex (${r1(tex * 9)} denier)`, 'tex', 'law');
+    D('lurex_b', 'Bending rigidity', 'B = E · w · t³ ÷ 12', `${E} N/mm² × ${w} mm × (${tmm} mm)³ ÷ 12`, `${(B * 1e3).toFixed(3)} mN·mm²`, 'N·mm²', 'estimate');
   } else {                                                                   // aty
     const ov = clamp((+p.overfeed_pct > 0 ? +p.overfeed_pct : 22) / 100, 0.05, 0.6);
     const den = tex * 9, nF = clamp(Math.round(den / 2.2), 10, 300);
@@ -238,7 +262,8 @@ function analyse0(input) {
   const gaugeMax = Math.floor(25.4 / (2.1 * Math.max(knit.d_eff, 0.05)));
   knit = { effective_diameter_mm: V(r3(knit.d_eff), 'mm', 'estimate'), finest_gauge: V(gaugeMax, 'GG', 'typical', { note: 'the finest gauge whose needle pitch is 2.1 × the yarn\'s knitting diameter' }), notes: knit.notes };
   D('gauge', 'Finest gauge', 'GG ≤ 25.4 ÷ (2.1 × knitting diameter)', `25.4 ÷ (2.1 × ${r3(knit.effective_diameter_mm.value)})`, `${gaugeMax} GG`, 'GG', 'typical');
-  if (S.form !== 'aty' && !Object.keys(S.fibres).length) say('warn', 'No fibres given.');
+  if (S.form !== 'aty' && S.form !== 'lurex' && !Object.keys(S.fibres).length) say('warn', 'No fibres given.');
+  if (S.form === 'lurex') say('note', `A ${r1(tex * 9)} denier film: knit it plated with a carrier yarn, never alone, and keep it out of caustic, chlorine and any bath hotter than about 130 °C.`);
   if (['boucle', 'chenille'].includes(S.form) && gaugeMax >= 20) say('note', `A ${S.form} at this count is fine enough for ${gaugeMax} GG, but its loops or pile catch in a fine hook: keep it in a coarse gauge.`);
   return {
     success: true,
@@ -266,6 +291,10 @@ function applyToInput(input) {
     const base = role === 'ground' ? out.yarn : { ...(out.yarns[role] || {}) };
     const merged = { ...base, form: sp.form, fancy: { ...DEFAULTS[sp.form], ...(sp.params || {}) } };
     if (sp.form === 'aty') { merged.fibre = 'polyester_filament'; merged.type = 'aty'; }
+    if (sp.form === 'lurex') {
+      const w = clamp(+((sp.params || {}).width_mm) || DEFAULTS.lurex.width_mm, 0.1, 2), t = clamp(+((sp.params || {}).thickness_um) || DEFAULTS.lurex.thickness_um, 6, 40);
+      merged.fibre = 'polyester_filament'; merged.type = 'fdy'; merged.lustre = 'bright'; merged.count = r1(w * t * 1.4 * 9); merged.unit = 'denier'; merged.ply = 1; merged.metallic = true;
+    }
     if (role === 'ground') out.yarn = merged; else out.yarns[role] = merged;
   }
   return out;

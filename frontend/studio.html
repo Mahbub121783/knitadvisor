@@ -283,7 +283,7 @@
       <div class="st-seg st-techseg" id="st-tech" role="group" aria-label="Knitting technology">
         <button type="button" data-tech="weft" class="on"><b>Weft knit</b><small>circular: jersey, rib, interlock, fleece, terry, jacquard…</small></button>
         <button type="button" data-tech="warp"><b>Warp knit</b><small>tricot, raschel: locknit, satin, powernet, nets…</small></button>
-        <button type="button" data-tech="vbed" disabled title="Coming next"><b>Flat V-bed</b><small>cables, racking, shaping — coming next</small></button>
+        <button type="button" data-tech="vbed"><b>Flat V-bed</b><small>flat machine: transfers, racking, cables, panels</small></button>
       </div>
     </div>
 
@@ -354,6 +354,7 @@
             <div class="st-yrow" data-yrole="plate">
               <div class="st-yhead"><b>Plated (back) yarn</b> <span class="st-yeq" id="st-yeq-plate"></span></div>
               <div class="st-row">
+                <div class="st-f"><label for="st-platr" title="How much tighter the back yarn is fed than the face yarn: 1.15-1.65 keeps it behind the face">Back / face tension</label><input id="st-platr" type="number" min="0.5" max="3" step="0.05" placeholder="e.g. 1.4"></div>
                 <div class="st-f"><label for="yp-count">Count</label><input id="yp-count" type="number" min="1" max="2000" step="0.1" placeholder="ground yarn"></div>
                 <div class="st-f"><label for="yp-unit">Unit</label><select id="yp-unit"><option value="ne">Ne</option><option value="nm">Nm</option><option value="tex">tex</option><option value="dtex">dtex</option><option value="denier">denier</option><option value="nw">Nw (worsted)</option></select></div>
                 <div class="st-f"><label for="yp-ply">Ply</label><select id="yp-ply"><option value="1">single</option><option value="2">2-ply</option><option value="3">3-ply</option></select></div>
@@ -413,6 +414,7 @@
           </div>
         </div>
 
+        <div class="st-card" id="vb-card" hidden></div>
         <div class="st-card">
           <div class="st-step"><b>4</b> Machine <span style="text-transform:none;font-weight:400;letter-spacing:0">(empty = recommended)</span></div>
           <div class="st-f st-row one"><div>
@@ -637,6 +639,7 @@
             <button type="button" data-tab="colour">Colour</button>
             <button type="button" data-tab="lab">Lab</button>
             <button type="button" data-tab="inspect">Inspect</button>
+            <button type="button" data-tab="vbed" hidden>V-bed</button>
             <button type="button" data-tab="melange">Melange</button>
           </div>
 
@@ -762,6 +765,7 @@
           <div class="st-pane" id="pane-colour"></div>
           <div class="st-pane" id="pane-lab"></div>
           <div class="st-pane" id="pane-inspect"></div>
+          <div class="st-pane" id="pane-vbed"></div>
           <div class="st-pane" id="pane-melange"></div>
         </div>
       </section>
@@ -861,8 +865,9 @@
 <script src="assets/js/studio-colour.js?v=20261120b"></script>
 <script src="assets/js/studio-lab.js?v=20261121a"></script>
 <script src="assets/js/studio-inspect.js?v=20261121a"></script>
+<script src="assets/js/studio-vbed.js?v=20261121a"></script>
 <script src="assets/js/studio-capture.js?v=20261120b"></script>
 <script src="assets/js/studio-gates.js?v=20261121b"></script>
-<script src="assets/js/studio.js?v=20261121e"></script>
+<script src="assets/js/studio.js?v=20261121f"></script>
 </body>
 </html>

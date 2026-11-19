@@ -67,6 +67,17 @@ On scientific grounding, KnitAdvisor is ahead of the PRD. Every number carries a
 - **Score changes:** Module 5 55 → 72 %, guardrails 92 → 97 % (U-15 and U-20 now real), Module 2 grinning done. **Overall ≈ 75 → 79 %.**
 - **Still open:** the burnout view is a table, not a 3D dissolve; the DWR droplet is not built; the lamp spectra and brightener strength need a spectrophotometer; the barré and grinning thresholds need a mill's rating.
 
+### Update, 2026-11-19: Phase E done
+
+- **U-14, speed against the yarn.** The CSP is worked out from the yarn's breaking force (lea ≈ 160 strands × 0.7 efficiency; a 30s combed cotton reads ≈ 2600) when the mill has not given one. The cap is min(35, CSP ÷ 85 × 30 ÷ dia). An estimated CSP gets a 10 % margin before a warning; a given CSP none.
+- **Elastane draft window** 2.0–4.2× (U-19): slack and over-drawn are named separately, with a repair into the window.
+- **Plating tension** (U-16): a Back/face tension input in the plated-yarn card; 1.15–1.65 passes. The plating yarn is now a role of its own, so its fibres, chemistry and form are worked out too.
+- **Metallic (Lurex) film yarn**: a fancy form whose count is film width × thickness × 1.4. It has sparkle, no hair, and is stiff. Never knitted alone: U-07 warns if it is the ground yarn. Caustic and heat above about 130 °C attack the aluminium: U-09 warns. Its 3D is a bright filament, not a ribbon.
+- **Flat V-bed compiler** (`vbed-compiler.js`, the "Flat V-bed" choice in "What are you making?"): gauge 5–18, the envelope 24000 ÷ GG², transfers, racking ±6 against the yarn's elongation, panel width, courses an hour and kg/h from the carriage, and the carriage programme pass by pass. The circular-only rules (U-05, U-14) become n/a, and U-04 uses the flat envelope with a repair that sets the gauge.
+- **Warp shogging** was already in `warp-studio.js` (a limit per machine class): earlier audit row corrected.
+- **Score changes:** Module 3 61 → 80 %, Module 2 68 → 74 %, guardrails 97 → 98 %. **Overall ≈ 79 → 84 %.**
+- **Still open:** the flat-bed fabric uses the circular factory records (so panel weight is an estimate until a trial panel is weighed); no fully-fashioned shaping, intarsia or cable-by-cable stitch-cam programme; no machine-maker file export; the V-bed production and efficiency are typical, not a data sheet.
+
 ---
 
 ## 2. Module-by-module

@@ -15,7 +15,7 @@
   var $ = function (id) { return document.getElementById(id); };
   var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
   var WORD = { pass: 'PASS', warn: 'WARN', fatal: 'FATAL', na: '—', not_checked: 'not checked' };
-  var APPLIES = /^(grid\.[CD]\[\d+\]\[\d+\]|sl_mm|machine\.gauge|machine\.rpm|chemistry\.process\.[a-z_]+)$/;
+  var APPLIES = /^(grid\.[CD]\[\d+\]\[\d+\]|sl_mm|machine\.gauge|machine\.rpm|chemistry\.process\.[a-z_]+|vbed\.gauge|elastane\.draft)$/;
   var open = false;
 
   function chip(label, g) {
@@ -48,7 +48,8 @@
     var act = F.rules.filter(function (x) { return x.status === 'fatal' || x.status === 'warn'; });
     var ok = F.rules.filter(function (x) { return x.status === 'pass'; });
     var idle = F.rules.filter(function (x) { return x.status === 'na' || x.status === 'not_checked'; });
-    var others = [].concat(F.gates.gate1.other || [], F.gates.gate2.other || [], F.gates.gate3.other || []);
+    var others = [];
+    ['gate1', 'gate2', 'gate3'].forEach(function (g) { (F.gates[g].other || []).forEach(function (t, i) { others.push({ text: t, status: (F.gates[g].other_status || [])[i] || 'fatal' }); }); });
     var order = { fatal: 0, warn: 1 };
     act.sort(function (a, b) { return order[a.status] - order[b.status]; });
     var all = F.rules;
@@ -57,7 +58,7 @@
       (P ? '<span class="gt-phi" title="' + esc(P.formula + ' = ' + P.working + ' (' + P.basis + ')') + '">Φ ' + P.phi + ' · porosity ' + P.porosity_pct + ' %</span>' : '') + '</div>' +
       (F.export_locked ? '<div class="gt-lock">A gate is FATAL: the machine files are locked until it is fixed.</div>' : '') +
       '<details class="gt-det"' + (open || act.length ? ' open' : '') + '><summary>Feasibility: ' + F.counts.fatal + ' fatal, ' + F.counts.warn + ' warning' + (F.counts.warn === 1 ? '' : 's') + ', ' + F.counts.pass + ' passed' + (idle.length ? ', ' + idle.length + ' not applicable or not checked' : '') + '</summary>' +
-      (others.length ? '<ul class="gt-list">' + others.map(function (t) { return '<li class="gt-rule fatal"><b>Studio check</b> <span class="gt-st">FATAL</span><div class="gt-text">' + esc(t) + '</div></li>'; }).join('') + '</ul>' : '') +
+      (others.length ? '<ul class="gt-list">' + others.map(function (t) { return '<li class="gt-rule ' + t.status + '"><b>Studio check</b> <span class="gt-st">' + (t.status === 'fatal' ? 'FATAL' : 'WARN') + '</span><div class="gt-text">' + esc(t.text) + '</div></li>'; }).join('') + '</ul>' : '') +
       '<ul class="gt-list">' + act.map(function (x) { return ruleRow(x, all.indexOf(x)); }).join('') + ok.map(function (x) { return ruleRow(x, all.indexOf(x)); }).join('') + '</ul>' +
       (idle.length ? '<details class="gt-idle"><summary>' + idle.length + ' rules not applicable or not checked</summary><ul class="gt-list">' + idle.map(function (x) { return ruleRow(x, all.indexOf(x)); }).join('') + '</ul></details>' : '') +
       (r.process_effects ? effectsBlock(r.process_effects) : '') +

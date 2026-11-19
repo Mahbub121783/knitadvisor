@@ -220,10 +220,21 @@ function assess(out, input, extra) {
     if (over && tooFine) rule('U-04', 'fatal', `The knitting yarn of feed ${maxKnit.i + 1} (${r1(maxKnit.tex)} tex) is too thick for a ${GG} GG hook: past the ${r1(env)} tex envelope and outside the pitch-to-yarn band the factory knits.`, { basis: 'measured', value: { tex: r1(maxKnit.tex), envelope_tex: r1(env) }, repair });
     else if (over || tooFine || hook.length) rule('U-04', 'warn', [over ? `the knitting yarn (${r1(maxKnit.tex)} tex) is past the general ${r1(env)} tex envelope for ${GG} GG (estimate)` : null, tooFine ? `the needle pitch is tight for this yarn (gauge fit: too fine, measured)` : null, hook.length ? hook[0].text : null].filter(Boolean).join('; ') + '.', { basis: tooFine ? 'measured' : 'estimate', value: env ? { tex: r1(maxKnit.tex), envelope_tex: r1(env) } : null, repair });
     else rule('U-04', 'pass', env ? `Knitting yarn ${r1(maxKnit.tex)} tex against a ${r1(env)} tex envelope at ${GG} GG; the needle pitch suits the yarn.` : 'The needle pitch suits the yarn.', { basis: 'measured' });
+    // a flat V-bed has its own envelope (24000 ÷ GG²) and its own gauges: the compiler's verdict replaces the circular one
+    const vb = out.vbed && out.vbed.success !== false ? out.vbed : null;
+    if (vb) {
+      const i = rules.findIndex((x) => x.id === 'U-04');
+      const e = vb.checks.filter((c) => c.rule === 'U-04' || (c.level === 'error' && !c.rule));
+      const bad = e.find((c) => c.level === 'error'), warn = e.find((c) => c.level === 'warn');
+      const need = vb.envelope.gauge_needed;
+      rules[i] = { ...rules[i], status: bad ? 'fatal' : warn ? 'warn' : 'pass', basis: 'typical', text: '[flat V-bed] ' + (bad || warn || e[0] || { text: 'The yarn fits the needle.' }).text,
+        ...(bad || warn ? { repair: { text: need ? `Knit it on ${need} GG or coarser, or use a finer yarn.` : 'Use a finer yarn.', changes: need ? [{ field: 'vbed.gauge', from: vb.machine.gauge, to: need, why: 'the finest gauge this yarn fits' }] : [] } } : { repair: undefined }) };
+    }
   }
   {
-    const crash = findCheck(/cannot rise at the same feed/i, ['error']);
-    if (crash.length) rule('U-05', 'fatal', crash[0].text + (crash.length > 1 ? ` (${crash.length} places)` : ''), { basis: 'machine logic', repair: { text: 'On interlock gating a cylinder needle and the dial needle facing it cannot both knit or tuck at one feed: move one to the next feed, or use rib gating.', changes: [] } });
+    const crash = out.vbed && out.vbed.success !== false ? [] : findCheck(/cannot rise at the same feed/i, ['error']);
+    if (out.vbed && out.vbed.success !== false) rule('U-05', 'na', 'A flat V-bed: the two beds are offset, so no needle meets another head-on.', { basis: 'machine logic' });
+    else if (crash.length) rule('U-05', 'fatal', crash[0].text + (crash.length > 1 ? ` (${crash.length} places)` : ''), { basis: 'machine logic', repair: { text: 'On interlock gating a cylinder needle and the dial needle facing it cannot both knit or tuck at one feed: move one to the next feed, or use rib gating.', changes: [] } });
     else rule('U-05', D && st.gating === 'interlock' ? 'pass' : 'na', D && st.gating === 'interlock' ? 'No cylinder and dial needle rise together on interlock gating.' : 'Not interlock gating.', { basis: 'machine logic' });
   }
   {
@@ -256,12 +267,16 @@ function assess(out, input, extra) {
   rule('U-08', 'na', 'Woven: not a knitted design.', { basis: 'law' });
   {
     const sp = (out.machine_setup && out.machine_setup.speed) || null;
-    const csp = +((inp.yarn || {}).csp) || null;
+    const flat = out.vbed && out.vbed.success !== false;
+    // the yarn's CSP (lea strength × count): the one given, else worked out from the yarn's breaking force (lea ≈ 160 strands × 0.7 efficiency)
+    let csp = +((inp.yarn || {}).csp) || null, cspFrom = csp ? 'given' : null;
+    if (!csp && ex.yarn_force_cn > 0 && (yarn.ground || {}).tex > 0) { csp = Math.round(ex.yarn_force_cn * 0.2518 * (590.5 / yarn.ground.tex)); cspFrom = 'estimated from the yarn\'s breaking force'; }
     const dia = +mach.dia || 0, rpm = +mach.rpm || 0;
     const cap = csp && dia ? Math.min(35, (csp / 85) * (30 / dia)) : null;
     const tooFast = sp && sp.max_m_s && sp.surface_m_s > sp.max_m_s;
-    if ((cap && rpm > cap) || tooFast) rule('U-14', 'warn', [cap && rpm > cap ? `${rpm} RPM is above the ${r1(cap)} RPM a ${csp} CSP yarn stands on a ${dia}" machine (general rule, estimate)` : null, tooFast ? `the surface speed ${sp.surface_m_s} m/s is past the ${sp.max_m_s} m/s of this class of machine` : null].filter(Boolean).join('; ') + ': expect yarn breaks and stop marks.', { basis: 'estimate', repair: { text: `Run at ${cap ? Math.floor(cap) : Math.floor(rpm * sp.max_m_s / sp.surface_m_s)} RPM or below.`, changes: [{ field: 'machine.rpm', from: rpm, to: cap ? Math.floor(cap) : Math.floor(rpm * sp.max_m_s / sp.surface_m_s), why: 'speed the yarn stands' }] } });
-    else rule('U-14', csp || sp ? 'pass' : 'not_checked', csp ? `${rpm} RPM is within what a ${csp} CSP yarn stands on a ${dia}" machine.` : sp ? `Surface speed ${sp.surface_m_s} m/s is within this class of machine. Give the yarn's CSP (lea strength) to check it against the yarn too.` : 'Give the RPM and the yarn\'s CSP.', { basis: 'estimate' });
+    if (flat) rule('U-14', 'na', 'A flat V-bed runs a carriage, not a cylinder: the carriage speed is checked in the V-bed card.', { basis: 'estimate' });
+    else if ((cap && rpm > cap * (cspFrom === 'given' ? 1 : 1.1)) || tooFast) rule('U-14', 'warn', [cap && rpm > cap ? `${rpm} RPM is above the ${r1(cap)} RPM a ${csp} CSP yarn (${cspFrom}) stands on a ${dia}" machine (general rule, estimate)` : null, tooFast ? `the surface speed ${sp.surface_m_s} m/s is past the ${sp.max_m_s} m/s of this class of machine` : null].filter(Boolean).join('; ') + ': expect yarn breaks and stop marks.', { basis: 'estimate', repair: { text: `Run at ${cap ? Math.floor(cap) : Math.floor(rpm * sp.max_m_s / sp.surface_m_s)} RPM or below.`, changes: [{ field: 'machine.rpm', from: rpm, to: cap ? Math.floor(cap) : Math.floor(rpm * sp.max_m_s / sp.surface_m_s), why: 'speed the yarn stands' }] } });
+    else rule('U-14', csp || sp ? 'pass' : 'not_checked', csp ? `${rpm} RPM is within the ${r1(cap)} RPM a ${csp} CSP yarn (${cspFrom}) stands on a ${dia}" machine.` : sp ? `Surface speed ${sp.surface_m_s} m/s is within this class of machine.` : 'Give the RPM and the yarn\'s CSP.', { basis: 'estimate', ...(csp ? { value: { csp, cap_rpm: cap ? r1(cap) : null } } : {}) });
   }
   {
     const plated = feeds.filter((f) => f.plated);
@@ -348,6 +363,34 @@ function assess(out, input, extra) {
     });
   }
 
+  // the elastane draft ratio: the yarn is run drawn to 2.0-4.2 times its length; under it the elastane is slack (bagging, curl), over it breaks and retracts too hard
+  {
+    const dr = +((inp.elastane || {}).draft);
+    const u19 = rules.find((x) => x.id === 'U-19');
+    if (has('elastane') && dr > 0 && (dr < 2.0 || dr > 4.2) && u19) {
+      const txt = `Elastane draft ${r1(dr)}×: outside 2.0-4.2× (${dr < 2 ? 'slack: the cloth bags and curls, the recovery is wasted' : 'over-drawn: it breaks on the machine and the cloth retracts too hard'}).`;
+      const ch = { field: 'elastane.draft', from: dr, to: dr < 2 ? 2.6 : 3.4, why: 'the middle of the safe window' };
+      if (u19.status === 'pass' || u19.status === 'na') { u19.status = 'warn'; u19.text = txt; u19.repair = { text: 'Set the draft between 2.0 and 4.2 (2.6-3.4 is usual).', changes: [ch] }; }
+      else { u19.text += ' ' + txt; u19.repair = { text: (u19.repair ? u19.repair.text + ' ' : '') + 'Set the draft between 2.0 and 4.2.', changes: [...((u19.repair && u19.repair.changes) || []), ch] }; }
+      u19.basis = 'estimate';
+    }
+  }
+  // a metallised (Lurex) film: the aluminium layer is attacked by alkali, chlorine and heat above about 130 °C, and the film is never knitted alone
+  {
+    const fy = out.fancy || {};
+    const metal = Object.entries(fy).filter(([, r]) => r && r.identity && r.identity.form === 'lurex');
+    if (metal.length) {
+      const bad = steps.filter((x) => (x.chemicals || []).some((c) => /caustic/i.test(c.name)) || +x.t_c > 135);
+      const u09 = rules.find((x) => x.id === 'U-09'), u07 = rules.find((x) => x.id === 'U-07');
+      if (bad.length && u09) {
+        const txt = `A metallised film yarn is in the cloth and the route has ${bad.map((x) => x.label + (+x.t_c > 135 ? ' ' + x.t_c + ' °C' : ' (caustic)')).join(', ')}: alkali and heat above about 130 °C attack the aluminium layer and distort the film.`;
+        if (u09.status === 'na' || u09.status === 'pass') { u09.status = 'warn'; u09.text = txt; u09.basis = 'chemistry'; u09.repair = { text: 'Scour mild and short at low temperature, no caustic, heat-set cool (under 130 °C), or add the film after the wet processing.', changes: [] }; }
+        else u09.text += ' ' + txt;
+      }
+      if (metal.some(([role]) => role === 'ground') && u07) { u07.status = 'warn'; u07.text = 'A metallised film as the ground yarn: it is stiff and has no body, and cannot hold a cloth. Plate it with a carrier yarn and keep it to 5-25 % of the cloth.'; u07.basis = 'estimate'; u07.repair = { text: 'Make the film the plated (back/face) yarn over a carrier.', changes: [] }; }
+    }
+  }
+
   // ── QUALITY: grinning, metamerism ────────────────────────────────────────────────────────────────
   {
     const grin = findCheck(/grin/i, ['warn', 'note', 'error']);
@@ -373,10 +416,12 @@ function assess(out, input, extra) {
   // the Studio's own errors that no rule above covers still stop the design: they go to the gate they belong to
   const covered = /cannot rise at the same feed|knits on no needle|never knits/i;
   const others = checks.filter((c) => c.level === 'error' && !covered.test(c.text)).map((c) => ({ gate: /repeat|settle|cast off|transferred loop|R hands|after a transfer/i.test(c.text) ? 1 : 3, status: 'fatal', text: c.text }));
+  // a flat V-bed's own checks: transfers, racking, carriage speed
+  if (out.vbed && out.vbed.success !== false) out.vbed.checks.filter((c) => ['transfer', 'rack', 'speed'].includes(c.rule) && (c.level === 'error' || c.level === 'warn')).forEach((c) => others.push({ gate: 3, status: c.level === 'error' ? 'fatal' : 'warn', text: '[flat V-bed] ' + c.text }));
   const gateOf = (g) => {
     const rs = rules.filter((r) => r.gate === g), os = others.filter((o) => o.gate === g);
     const worst = [...rs.map((r) => r.status), ...os.map((o) => o.status)].reduce((w, s) => (RANK[s] > RANK[w] ? s : w), 'pass');
-    return { status: worst === 'na' || worst === 'not_checked' ? 'pass' : worst, rules: rs.map((r) => r.id), other: os.map((o) => o.text) };
+    return { status: worst === 'na' || worst === 'not_checked' ? 'pass' : worst, rules: rs.map((r) => r.id), other: os.map((o) => o.text), other_status: os.map((o) => o.status) };
   };
   const gates = {
     gate1: { name: 'Cohesion', ...gateOf(1) },
@@ -398,7 +443,7 @@ function assess(out, input, extra) {
     safe_route: safeRoute ? safeRoute.map((s) => ({ id: s.id, label: s.label, t_c: s.t_c })) : null,
     route_error: routeErr,
     repair,
-    counts: { fatal: rules.filter((r) => r.status === 'fatal').length + others.length, warn: rules.filter((r) => r.status === 'warn').length, pass: rules.filter((r) => r.status === 'pass').length, not_applicable: rules.filter((r) => r.status === 'na').length, not_checked: rules.filter((r) => r.status === 'not_checked').length },
+    counts: { fatal: rules.filter((r) => r.status === 'fatal').length + others.filter((o) => o.status === 'fatal').length, warn: rules.filter((r) => r.status === 'warn').length + others.filter((o) => o.status === 'warn').length, pass: rules.filter((r) => r.status === 'pass').length, not_applicable: rules.filter((r) => r.status === 'na').length, not_checked: rules.filter((r) => r.status === 'not_checked').length },
     note: 'Three gates: the cloth holds together, the yarn fits, a machine knits it and every fibre survives the wet route of the whole cloth. A FATAL locks the factory files until it is fixed. Laws and the machine\'s logic are FATAL; limits from general practice stay warnings until a mill confirms them.',
   };
 }

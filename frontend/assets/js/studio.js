@@ -57,9 +57,13 @@
 
   var machines = [], warpData = null;
   // the technology comes first: weft (circular) or warp (tricot / raschel)
+  var techNow = 'weft';
   function setTech(t) {
     Array.prototype.forEach.call($('st-tech').children, function (b) { b.classList.toggle('on', b.getAttribute('data-tech') === t); });
-    $('st-weft').hidden = t !== 'weft'; $('st-warp').hidden = t !== 'warp';
+    $('st-weft').hidden = t !== 'weft' && t !== 'vbed'; $('st-warp').hidden = t !== 'warp';
+    techNow = t;
+    if (window.KAStudioVbed) window.KAStudioVbed.setActive(t === 'vbed');
+    if (t !== 'warp' && last) schedule();
     try { localStorage.setItem('ka-studio-tech', t); } catch (_) {}
     if (t === 'warp' && warpData && window.KAStudioWarp) window.KAStudioWarp.start(warpData);
   }
@@ -170,6 +174,7 @@
       if (window.KAStudioColour) window.KAStudioColour.setCatalogue(d.colour);
       if (window.KAStudioLab) window.KAStudioLab.setCatalogue(d.lab);
       if (window.KAStudioInspect) window.KAStudioInspect.setCatalogue(d.inspect);
+      if (window.KAStudioVbed) window.KAStudioVbed.setCatalogue(d.vbed);
       var fib = $('st-fibre');
       var fopts = Object.keys(d.fibres || {}).map(function (k) { return '<option value="' + k + '">' + esc(d.fibres[k].label) + '</option>'; }).join('');
       document.querySelectorAll('.st-yfibre').forEach(function (x) { var keep = x.value; x.innerHTML = fopts; if (keep) x.value = keep; });
@@ -502,7 +507,9 @@
         for (var a = 0; a < g.length; a++) for (var b = 0; b < g[a].length; b++) if (a % fR === i && b % wR === j) g[a][b] = c.to;
         return;
       }
-      if (/^chemistry\.process\./.test(c.field)) { if (window.KAStudioChem) window.KAStudioChem.clearProcess(c.field.slice(18)); }
+      if (c.field === 'vbed.gauge') { if (window.KAStudioVbed) window.KAStudioVbed.setGauge(c.to); }
+      else if (c.field === 'elastane.draft') $('st-lydraft').value = c.to;
+      else if (/^chemistry\.process\./.test(c.field)) { if (window.KAStudioChem) window.KAStudioChem.clearProcess(c.field.slice(18)); }
       else if (c.field === 'sl_mm') $('st-sl').value = c.to;
       else if (c.field === 'machine.gauge') $('st-gauge').value = c.to;
       else if (c.field === 'machine.rpm') $('st-rpm').value = c.to;
@@ -649,6 +656,8 @@
       lab: window.KAStudioLab ? window.KAStudioLab.payload() : null,
       trim: window.KAStudioLab ? window.KAStudioLab.trimPayload() : null,
       inspect: window.KAStudioInspect ? window.KAStudioInspect.payload() : null,
+      vbed: window.KAStudioVbed ? window.KAStudioVbed.payload() : null,
+      plating: num('st-platr') ? { tension_ratio: num('st-platr') } : null,
       state: clothState,
       look: window.KAStudioLook ? window.KAStudioLook.payload() : null,
       plush: { cut: $('st-cut').checked, sinker_mm: num('st-sinker'), arrangement: $('st-parr').value },
@@ -699,6 +708,7 @@
       if (window.KAStudioColour) window.KAStudioColour.studioResult(r);
       if (window.KAStudioLab) window.KAStudioLab.studioResult(r);
       if (window.KAStudioInspect) window.KAStudioInspect.studioResult(r);
+      if (window.KAStudioVbed) window.KAStudioVbed.studioResult(r);
       showClothState(r);
       pushTrans();
       if (window.KAStudioLook) window.KAStudioLook.studioResult(r);
@@ -1680,6 +1690,8 @@
     if (window.KAStudioColour) o.colour = window.KAStudioColour.state();
     if (window.KAStudioLab) o.lab = window.KAStudioLab.state();
     if (window.KAStudioInspect) o.inspect = window.KAStudioInspect.state();
+    if (window.KAStudioVbed) o.vbed = window.KAStudioVbed.state();
+    o.tech = techNow === 'vbed' ? 'vbed' : 'weft';
     o.cloth_state = clothState;
     if (window.KAStudioLook) o.look = window.KAStudioLook.state();
     return o;
@@ -1774,6 +1786,9 @@
     if (window.KAStudioColour) window.KAStudioColour.setState(o.colour || null);
     if (window.KAStudioLab) window.KAStudioLab.setState(o.lab || null);
     if (window.KAStudioInspect) window.KAStudioInspect.setState(o.inspect || null);
+    if (window.KAStudioVbed) window.KAStudioVbed.setState(o.vbed || null);
+    if (o.tech === 'vbed' && techNow !== 'vbed') setTech('vbed');
+    else if (o.tech !== 'vbed' && techNow === 'vbed') setTech('weft');
     setClothState(o.cloth_state || 'finished');
     if (window.KAStudioLook) window.KAStudioLook.setState(o.look || null);
     markCustom();
@@ -2039,7 +2054,7 @@
       rd.readAsText(file); this.value = '';
     });
     refreshSaved(); loadAccount();
-    loadTemplates().then(function () { applyTemplate(S.templateId); undo = []; var t0 = null; try { t0 = localStorage.getItem('ka-studio-tech'); } catch (_) {} if (t0 === 'warp') setTech('warp'); })
+    loadTemplates().then(function () { applyTemplate(S.templateId); undo = []; var t0 = null; try { t0 = localStorage.getItem('ka-studio-tech'); } catch (_) {} if (t0 === 'warp') setTech('warp'); else if (t0 === 'vbed') setTech('vbed'); })
       .catch(function (e) { $('st-status').innerHTML = '<div class="st-err">' + esc(e.message || 'Could not load the fabric catalogue.') + '</div>'; renderAll(); });
   }
 
