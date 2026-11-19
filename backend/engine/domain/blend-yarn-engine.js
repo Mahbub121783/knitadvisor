@@ -353,6 +353,7 @@ function textureBlock(k) {
   const handle = cottonShare >= 0.75 ? 'soft, warm and cotton-like' : cottonShare >= 0.5 ? 'cottony with a little crispness and spring' : cottonShare > 0.3 ? 'a crisp, smooth hand between cotton and synthetic' : 'smooth, light and slightly cool: a synthetic hand';
   const bulk = k.geo.bulk * (1 + 0.5 * (1.52 - k.rho) / 1.52);
   return {
+    bending_rigidity_abs: V(+(B * 1.0197e6).toPrecision(4), 'gf·cm² per yarn (fibres sliding freely)', 'blend'),
     bending_rigidity_vs_cotton: V(r2(rel), '× the same cotton yarn', 'blend'), softness: V(r1(soft), 'cotton = 100', 'estimate'), crispness: V(r1(crisp), '0–100', 'estimate'),
     bulk: V(r2(bulk), 'diameter factor', 'estimate'), hairiness_vs_combed_cotton: V(r2(hairRel), '×', 'blend'), handle,
     fibres: items.map((x) => ({ fibre: x.fibre, diameter_um: r1(x.d_um) })),

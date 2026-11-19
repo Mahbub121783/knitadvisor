@@ -43,7 +43,7 @@ const ENDPOINTS = [
   E('GET',  '/pattern/:slug',            G.ref,    'A knit, tuck and miss pattern, feeder by feeder', false),
 
   E('GET',  '/studio/templates',         G.studio, 'Starting structures, machines and warp templates', true),
-  E('POST', '/studio/analyse',           G.studio, 'Weft design: checks, cam set-out, yarn per feeder, GSM, width, stitch length', true),
+  E('POST', '/studio/analyse',           G.studio, 'Weft design: checks, cam set-out, yarn per feeder, GSM, width, stitch length, and the three-gate feasibility verdict', true),
   E('POST', '/studio/invent',           G.studio, 'Design from a goal: knittable structures that meet a weight and the qualities asked for, ranked, with settings and accuracy', true),
   E('POST', '/studio/compile',           G.studio, 'A machine set-out and cam chart compiled into needle notation', true),
   E('POST', '/studio/melange',           G.studio, 'Melange, marl and heather yarn: mass chain, blend colour, mixing statistics, yarn, wet route, defects', true),
@@ -58,6 +58,14 @@ const ENDPOINTS = [
   E('GET',  '/studio/fancy-yarn/catalogue', G.studio, 'Fancy yarn forms, their defaults, fibres and spinning systems', true),
   E('POST', '/studio/fabric-look',       G.studio, 'Fabric look: the lustre and texture of a cloth through knitting, dyeing and finishing, and the material the 3D view is given', true),
   E('GET',  '/studio/fabric-look/catalogue', G.studio, 'Fabric look shades, finishes and dye methods', true),
+  E('POST', '/studio/colour-target',     G.studio, 'Colour target: a Pantone TCX code, Lab, RGB or hex turned into the screen colour, shade depth, dye amount and a lab-dip check', true),
+  E('GET',  '/studio/colour-target/catalogue', G.studio, 'Colour target formats, illuminants and shade depths', true),
+  E('GET',  '/studio/feasibility/catalogue', G.studio, 'The three feasibility gates and the 20 guardrail rules (U-01 … U-20) every weft analysis is checked against', true),
+  E('POST', '/studio/dna/export',        G.studio, 'Fabric DNA: a weft design written as an open schema-3.0 JSON document (yarn channels, unit cell, machine, wet route, feasibility)', true),
+  E('POST', '/studio/dna/import',        G.studio, 'Fabric DNA: a schema-3.0 JSON document read back into a Studio design', true),
+  E('POST', '/studio/fabric-light',      G.studio, 'Fabric light: open area, opacity, contrast ratio and show-through of a knit, flat and stretched', true),
+  E('POST', '/studio/fabric-hand',       G.studio, 'Fabric hand: tensile, shear, bending, compression and surface numbers of a knit, five hand scores in words, set against a reference jersey', true),
+  E('GET',  '/studio/fabric-hand/catalogue', G.studio, 'Fabric hand structures, finishes, loads and end uses', true),
   E('POST', '/studio/warp/analyse',      G.studio, 'Warp design: lapping, runner, GSM, width, beams, production, checks', true),
 
   E('POST', '/cost',                     G.cost,   'Fabric cost', true),

@@ -139,6 +139,27 @@
 
     /* status + checks */
     .st-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 8px; }
+    /* feasibility gates (studio-gates.js) */
+    .gt-strip { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0 6px; }
+    .gt-chip { padding: 3px 9px; border-radius: 99px; font: 600 11px var(--head); border: 1px solid transparent; }
+    .gt-chip b { font-weight: 800; margin-left: 2px; }
+    .gt-chip.pass { background: rgba(30,122,84,.08); color: var(--good); border-color: rgba(30,122,84,.25); }
+    .gt-chip.warn { background: rgba(154,91,0,.08); color: var(--warn); border-color: rgba(154,91,0,.3); }
+    .gt-chip.fatal { background: rgba(178,59,59,.1); color: var(--danger); border-color: rgba(178,59,59,.35); }
+    .gt-phi { font-size: 12px; color: var(--t2); }
+    .gt-lock { font-size: 12px; font-weight: 600; color: var(--danger); margin-bottom: 6px; }
+    .gt-det > summary, .gt-idle > summary { cursor: pointer; font-size: 12px; font-weight: 600; color: var(--t1); }
+    .gt-list { list-style: none; margin: 6px 0; padding: 0; font-size: 12px; }
+    .gt-rule { padding: 6px 8px; border-radius: 6px; margin-bottom: 4px; line-height: 1.45; background: var(--bg2); color: var(--t2); }
+    .gt-rule.fatal { background: rgba(178,59,59,.07); color: #7d2222; }
+    .gt-rule.warn { background: rgba(154,91,0,.07); color: #6b3f00; }
+    .gt-rule.pass { background: rgba(30,122,84,.05); color: #175c40; }
+    .gt-id { font: 700 11px var(--head); opacity: .8; }
+    .gt-st { font: 800 10px var(--head); margin-left: 4px; }
+    .gt-basis { font-size: 10px; opacity: .7; border: 1px solid currentColor; border-radius: 99px; padding: 0 6px; }
+    .gt-fix { margin-top: 3px; font-weight: 600; }
+    .gt-fix .st-btn { padding: 2px 8px; font-size: 11px; margin-left: 6px; }
+    .gt-route { font-size: 12px; color: var(--t2); margin-top: 4px; }
     .st-badge { padding: 3px 9px; border-radius: 99px; font: 700 11px var(--head); }
     .st-badge.ok { background: rgba(30,122,84,.1); color: var(--good); }
     .st-badge.bad { background: rgba(178,59,59,.1); color: var(--danger); }
@@ -377,6 +398,8 @@
         <div class="st-card" id="fy-card"></div>
         <div class="st-card" id="ch-card"></div>
         <div class="st-card" id="rc-card"></div>
+        <div class="st-card" id="hd-card"></div>
+        <div class="st-card" id="cl-card"></div>
         <div class="st-card" id="ml-card"></div>
 
         <div class="st-card">
@@ -519,6 +542,10 @@
             <button type="button" class="st-btn" data-xf="csv" disabled>Cam chart (CSV)</button>
             <button type="button" class="st-btn" data-xf="calib" disabled title="The protocol for measuring this cloth, with what the Studio expects filled in">Calibration sheet (PDF)</button>
           </div>
+          <div class="st-tools" style="margin:8px 0 0">
+            <button type="button" class="st-btn" id="st-dnaout" disabled title="The design as an open Fabric DNA document (schema 3.0): yarn channels, unit cell, machine, wet route and the feasibility verdict">Fabric DNA (JSON)</button>
+            <label class="st-btn" style="display:inline-block" title="Open a Fabric DNA document (schema 3.0) as a Studio design">Import DNA<input type="file" id="st-dnain" accept="application/json,.json" hidden></label>
+          </div>
           <div id="st-xstat" class="st-hint"></div>
         </div>
 
@@ -580,10 +607,18 @@
 
         <div class="st-card">
           <div class="st-status" id="st-status">Draw a structure to begin.</div>
+          <div id="st-gates" hidden></div>
           <ul class="st-checks" id="st-checks"></ul>
         </div>
 
         <div class="st-card st-view">
+          <div class="st-seg" id="st-state" role="group" aria-label="State of the cloth" style="margin-bottom:6px">
+            <button type="button" data-state="dry" title="Off the machine, conditioned flat (greige)">As knitted</button>
+            <button type="button" data-state="wet" title="Soaked and dried flat">Wet relaxed</button>
+            <button type="button" data-state="finished" class="on" title="Dyed, dried and compacted: the factory records">Finished</button>
+            <button type="button" data-state="full" title="Washed and tumble dried: the garment at home">After washing</button>
+          </div>
+          <div class="st-hint" id="st-statenote" style="margin:0 0 8px"></div>
           <div class="st-tabs" role="tablist">
             <button type="button" class="on" data-tab="3d">3D fabric</button>
             <button type="button" data-tab="notation">Notation</button>
@@ -596,10 +631,19 @@
             <button type="button" data-tab="chem">Yarn chemistry</button>
             <button type="button" data-tab="recovery">Yarn recovery</button>
             <button type="button" data-tab="look">Look</button>
+            <button type="button" data-tab="hand">Fabric hand</button>
+            <button type="button" data-tab="colour">Colour</button>
             <button type="button" data-tab="melange">Melange</button>
           </div>
 
           <div class="st-pane on" id="pane-3d">
+            <div class="st-3dbar" id="st-savebar" style="margin-bottom:6px">
+              <label>Save the view as a picture <select id="st-savesize"><option value="1920">HD · 1920 px</option><option value="3840" selected>4K · 3840 px</option><option value="7680">8K · 7680 px</option></select></label>
+              <label>Shape <select id="st-saveshape"><option value="0">As on screen</option><option value="1.7778" selected>16:9 landscape</option><option value="1.5">3:2 landscape</option><option value="1">Square</option><option value="0.7071">A4 portrait</option></select></label>
+              <label>File <select id="st-savefmt"><option value="png">PNG (lossless)</option><option value="jpeg">JPEG (much smaller)</option></select></label>
+              <button type="button" class="st-btn" id="st-savepic">Save picture</button>
+              <span id="st-savenote" class="st-hint" style="margin:0"></span>
+            </div>
             <div class="st-seg st-3dmode" id="st-3dmode">
               <button type="button" data-mode="yarn">Yarn (real view)</button>
               <button type="button" class="on" data-mode="loops">Loop structure</button>
@@ -646,6 +690,7 @@
               <label>Colour <input type="color" id="st-col" value="#3d5a80"></label>
               <button type="button" class="st-btn" id="st-side">Show back</button>
               <span class="st-zoom" id="st-zoom"><button type="button" class="st-btn on" data-z="loops" title="Every loop of your programme, in real yarn">Loops</button><button type="button" class="st-btn" data-z="swatch" title="A 4 cm swatch">4 cm</button><button type="button" class="st-btn" data-z="cloth" title="The whole piece of cloth">Cloth</button></span>
+              <label title="What is behind the cloth: a light (the cloth glows where it is thin), or skin, a dark or a white backing (what shows through)">Behind <select id="st-behind"><option value="off">Nothing</option><option value="back">A light</option><option value="skin">Skin</option><option value="white">White</option><option value="dark">Dark</option></select></label>
               <span id="st-3dnote"></span>
             </div>
             <div id="st-loops"><div class="st-tip" id="st-tip" hidden></div></div>
@@ -708,6 +753,8 @@
           <div class="st-pane" id="pane-chem"></div>
           <div class="st-pane" id="pane-recovery"></div>
           <div class="st-pane" id="pane-look"></div>
+          <div class="st-pane" id="pane-hand"></div>
+          <div class="st-pane" id="pane-colour"></div>
           <div class="st-pane" id="pane-melange"></div>
         </div>
       </section>
@@ -803,6 +850,10 @@
 <script src="assets/js/studio-chem.js?v=20261118b"></script>
 <script src="assets/js/studio-recovery.js?v=20261119a"></script>
 <script src="assets/js/studio-look.js?v=20261119a"></script>
-<script src="assets/js/studio.js?v=20261118a"></script>
+<script src="assets/js/studio-hand.js?v=20261120a"></script>
+<script src="assets/js/studio-colour.js?v=20261120b"></script>
+<script src="assets/js/studio-capture.js?v=20261120b"></script>
+<script src="assets/js/studio-gates.js?v=20261121a"></script>
+<script src="assets/js/studio.js?v=20261121a"></script>
 </body>
 </html>

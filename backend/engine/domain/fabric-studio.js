@@ -42,6 +42,10 @@ const MEL = require('./melange-engine');
 const BY = require('./blend-yarn-engine');
 const CHEMY = require('./yarn-chemistry-engine');
 const RECY = require('./yarn-recovery-engine');
+const HAND = require('./fabric-hand-engine');
+const CT = require('./colour-target-engine');
+const LIGHT = require('./fabric-light-engine');
+const FEAS = require('./feasibility-engine');
 const LOOK = require('./fabric-look-engine');
 const SE = require('./stretch-engine');
 const FY = require('./fancy-yarn-engine');
@@ -1172,6 +1176,9 @@ function analyse(input) {
     // melange / marl / heather yarns: each role's melange is worked out first (melange-engine.js) and its resultant
     // count, nearest fibre family and spinning system become that role's yarn; the full analysis rides along
     // fancy yarns (slub, bouclé, chenille …) give a role its form; blend yarns (CVC, PC, …) its fibres; a melange on the same role still wins
+    // a colour target (a Pantone code, Lab, RGB or hex) sets the shade of the look and chemistry cards and the target of a melange (colour-target-engine.js)
+    let colourOut = null;
+    if (input && input.colour) { const c = CT.applyToInput(input); input = c.input; colourOut = c.result; }
     if (input && input.fancy) input = FY.applyToInput(input);
     if (input && input.blend) input = BY.applyToInput(input);
     let melange = null;
@@ -1575,8 +1582,32 @@ function analyse(input) {
     // …and what that yarn recovery means for THIS cloth: stretch, growth and bagging (stretch-engine.js, given the yarn's own recovery)
     if (recOut && recOut.ground) recOut.ground.cloth_stretch = stretchSummary(input, S, family, match, recOut.ground, !!plush);
     // …and the real lustre and texture of the cloth, from the yarn to the dyed and finished fabric (fabric-look-engine.js)
-    const lookOut = input.look && typeof input.look === 'object' ? lookSummary(input.look, S, roleYarn, feedRows, st, gating, chemOut) : null;
-    return {
+    // …and the physics numbers of the cloth and what they say about its hand: tensile, shear, bending, compression, surface (fabric-hand-engine.js)
+    // the state the cloth is shown and worked in: off the machine (dry relaxed), wet relaxed, finished (the default, the factory records) or fully
+    // relaxed (home laundering). The loop length stays; the density, weight and width follow the state (knit-relax.js)
+    const stateId = ['dry', 'wet', 'finished', 'full'].includes(input.state) ? input.state : 'finished';
+    const stateRow = relax ? relax.states.find((x) => x.state === stateId) : null;
+    const clothState = {
+      selected: stateRow ? stateId : 'finished', available: !!relax,
+      label: stateRow ? stateRow.label : 'Finished — dyed, dried, compacted (the factory records)',
+      wpc: stateRow ? stateRow.wpc : r2(S.wpc), cpc: stateRow ? stateRow.cpc : r2(S.cpc), gsm: stateRow ? stateRow.gsm : Math.round(S.gsm), width_in: stateRow ? stateRow.width_in : r1(S.width),
+      vs_finished: stateRow ? { length_pct: stateRow.length_pct, width_pct: stateRow.width_pct } : { length_pct: 0, width_pct: 0 },
+      note: stateRow ? (stateId === 'finished' ? 'The finished state is the one the factory records measure; every other state is placed against it.' : 'The loop length is what the machine knitted; the loops take the shape of this state, so the wales, courses, weight and width follow it. The numbers of the Hand and Look cards and the 3D cloth are worked in it.') : 'This structure has no relaxation model: the finished state is shown.',
+    };
+    const handOut = input.hand && input.hand.enabled ? handSummary(input.hand, input, S, family, match, recOut, !!plush, clothState) : null;
+    // …and how much light the cloth lets through (opacity, show-through, stretched) and the glow a back-lit cloth shows (fabric-light-engine.js)
+    let lightOut = null;
+    if (input.look && typeof input.look === 'object') {
+      try {
+        lightOut = LIGHT.analyse({ wpc: clothState.wpc, cpc: clothState.cpc, loop_mm: S.lref, yarn_d_mm: S.gfit.yarn_d_mm, gsm: clothState.gsm, layers: st.beds.D ? 2 : 1, colour: input.look.colour, shade: input.look.shade, brushed: input.finish && input.finish.brush !== 'none' ? input.finish.brush : input.look.brushed });
+      } catch (e) { if (!(e instanceof LIGHT.LightError)) throw e; }
+    }
+    const lookOut = input.look && typeof input.look === 'object' ? lookSummary(input.look, S, roleYarn, feedRows, st, gating, chemOut, clothState) : null;
+    // the cloth's thickness for the packing gate: the hand model's T0 (finished state), worked quietly when the Hand card is off
+    const handT = (h) => (h && h.compression && h.compression.T0 && h.compression.T0.value > 0 ? h.compression.T0.value : null);
+    let thickMm = handOut && handOut.success !== false && clothState.selected === 'finished' ? handT(handOut) : null;
+    if (thickMm == null) { try { thickMm = handT(handSummary({}, input, S, family, match, recOut, !!plush, null)); } catch (_) { thickMm = null; } }
+    const out = {
       success: true,
       structure: {
         bed: D ? 'double' : 'single', gating, feeds: st.feeds, needles_per_repeat: st.width, beds: st.beds, roles, roles_drawn: feedRows.map((f) => f.drawn || f.role),
@@ -1627,6 +1658,10 @@ function analyse(input) {
       chemistry: chemOut,
       recovery: recOut,
       look: lookOut,
+      hand: handOut,
+      light: lightOut,
+      state: clothState,
+      colour: colourOut,
       fancy: fancyOut ? fancyOut.roles : null,
       fabric: {
         accuracy: acc && ctx.floor && !ctx.calib ? {
@@ -1718,6 +1753,9 @@ function analyse(input) {
         estimated: 'family constant carried to a new structure, or a rule of thumb',
       },
     };
+    // the three gates: does it hold together, does the yarn fit, can a machine knit it and every fibre survive the route (feasibility-engine.js)
+    out.feasibility = FEAS.assess(out, input, { thickness_mm: thickMm, thickness_basis: 'estimate (hand model T0)' });
+    return out;
   } catch (e) {
     if (e instanceof StudioError || e instanceof MEL.MelangeError || e instanceof BY.BlendError) return { success: false, error: e.message };
     throw e;
@@ -1756,7 +1794,7 @@ function fancySummary(spec, S, roleYarn, feedRows) {
   });
   return Object.keys(roles).length || checks.length ? { roles: Object.keys(roles).length ? roles : null, checks } : null;
 }
-function lookSummary(opt, S, roleYarn, feedRows, st, gating, chemOut) {
+function lookSummary(opt, S, roleYarn, feedRows, st, gating, chemOut, cs) {
   const units = yarnsInUse(S, roleYarn, feedRows);
   if (!units.length) return null;
   const sh = shares(st, feedRows);
@@ -1768,7 +1806,7 @@ function lookSummary(opt, S, roleYarn, feedRows, st, gating, chemOut) {
   try {
     return LOOK.analyse({
       yarns: units.map((u) => ({ role: u.role, mix: u.mix, tex: u.tex * u.ply, spinning: u.spinning, filament: u.filament, type: u.y.type, lustre: u.y.lustre, form: u.y.form })),
-      structure: { tuck_share: sh.tau, miss_share: sh.mu, face_knit_share: knitFace, relief, wpc: S.wpc, cpc: S.cpc, loop_mm: S.lref, yarn_d_mm: S.gfit.yarn_d_mm },
+      structure: { tuck_share: sh.tau, miss_share: sh.mu, face_knit_share: knitFace, relief, wpc: cs ? cs.wpc : S.wpc, cpc: cs ? cs.cpc : S.cpc, loop_mm: S.lref, yarn_d_mm: S.gfit.yarn_d_mm },
       finish: { shade: opt.shade, colour: opt.colour, mercerise: opt.mercerise, biopolish: opt.biopolish, heatset: opt.heatset, softener: opt.softener, brushed: opt.brushed,
         dye_method: opt.dye_method || (cls.length && !cls.includes('reactive') && cls.includes('disperse') ? 'disperse' : 'reactive') },
       gloss: opt.gloss,
@@ -1822,6 +1860,24 @@ function stretchSummary(input, S, family, match, rec, isPlush) {
       basis: { measured: withYarn.basis.measured, modelled: withYarn.basis.modelled },
     };
   } catch (e) { return null; }
+}
+function handSummary(opt, input, S, family, match, recOut, isPlush, cs) {
+  try {
+    const y = S.ground;
+    const mix = Object.assign({}, y.mix || FIBRE_MIX[y.fibre] || { cotton: 100 });
+    const elast = (S.composition || []).filter((c) => /elastane|lycra|spandex/i.test(c.part)).reduce((t, c) => t + (+c.pct || 0), 0);
+    const el = input.elastane || {};
+    const brush = input.finish && ['face', 'back'].includes(input.finish.brush) ? input.finish.brush : input.finish && input.finish.brush && input.finish.brush !== 'none' ? 'back' : (input.look && ['face', 'back'].includes(input.look.brushed) ? input.look.brushed : 'none');
+    const soft = input.look && input.look.softener;
+    const chemical = ['none', 'softener', 'silicone', 'resin'].includes(opt.finish) ? opt.finish : soft ? 'softener' : 'none';
+    const rec = recOut && recOut.ground && recOut.ground.for_stretch ? recOut.ground.for_stretch : undefined;
+    return HAND.analyse({
+      fabricId: isPlush ? 'velour_plush' : (match && match.id) || FAMILY[family].anchor, category: family === 'rib' ? 'rib' : family === 'interlock' ? 'interlock' : '',
+      fibres: Object.fromEntries(Object.entries(mix).filter(([k]) => BY.FIB[k])), count: { value: y.tex, unit: 'tex' }, spinning: y.type && BY.GEO[y.type] ? y.type : undefined, filament: FILAMENT_FIBRES.includes(y.fibre),
+      loop_mm: S.lref, gsm: cs ? cs.gsm : S.gsm, wpc: cs ? cs.wpc : S.wpc, cpc: cs ? cs.cpc : S.cpc, yarn_d_mm: S.gfit.yarn_d_mm, elastane_pct: elast, elastane_denier: +el.denier > 0 ? +el.denier : undefined,
+      finish: { chemical, brushed: brush }, load_gf_cm: +opt.load_gf_cm > 0 ? +opt.load_gf_cm : undefined, yarnRecovery: rec,
+    });
+  } catch (e) { if (e instanceof HAND.HandError) return { success: false, error: e.message }; if (e instanceof BY.BlendError) return null; return null; }
 }
 function recoverySummary(opt, S, roleYarn, feedRows) {
   const roles = {};

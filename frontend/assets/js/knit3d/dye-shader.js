@@ -64,6 +64,12 @@ export function patchDye(material, o = {}) {
     // map aliases, so far away the same fraction is cut as a fine dither.
     uHole: { value: new THREE.Vector4(0, 0, 0, 0) },
     uHoleMap: { value: null },
+    // Light through the cloth (fabric-light-engine.js): x = the open area, y = the share of light that goes through the yarn itself,
+    // z = a light behind the cloth (the glow it shows), w = a backdrop behind it (what shows through). uSeeTint is the dye's own colour
+    // as light that has passed through the fibre; uBack the backdrop's colour.
+    uSee: { value: new THREE.Vector4(0, 0, 0, 0) },
+    uSeeTint: { value: new THREE.Color(1, 1, 1) },
+    uBack: { value: new THREE.Color(0, 0, 0) },
   };
   const cloth = !!o.cloth;
   // Not in userData: Material.clone() JSON-copies userData.
@@ -77,7 +83,7 @@ export function patchDye(material, o = {}) {
     }
     const decl = [
       'uniform float uFade;', 'uniform vec3 uFadeColor;', 'uniform float uChalk;',
-      'uniform vec4 uCloth;', 'uniform float uClothBias;', 'uniform vec4 uHole;', 'uniform sampler2D uHoleMap;', 'uniform sampler2D uHeightMap;', 'uniform vec2 uCavity;', 'uniform vec4 uRelief;',
+      'uniform vec4 uCloth;', 'uniform float uClothBias;', 'uniform vec4 uHole;', 'uniform sampler2D uHoleMap;', 'uniform sampler2D uHeightMap;', 'uniform vec2 uCavity;', 'uniform vec4 uSee;', 'uniform vec3 uSeeTint;', 'uniform vec3 uBack;', 'float gSeeOpen = 0.0;', 'uniform vec4 uRelief;',
       'uniform float uMel;', 'uniform float uMelF;', 'uniform vec3 uMelLight;', 'uniform sampler2D uMelMap;',
       exposure === 'attr' ? 'varying float vExposure;' : 'uniform sampler2D uExpMap;',
     ].join('\n');
@@ -141,6 +147,22 @@ export function patchDye(material, o = {}) {
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.7), holeTint);
       }`);
     if (cloth) {
+      // Light through the cloth. Thin places (the valleys of the baked height) pass more: the open area lets white light by, the yarn lets
+      // by the dye's own colour. A back light makes it glow; a backdrop shows through the open part.
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        {
+          float thin = 1.0;
+          #ifdef USE_MAP
+          if (uCavity.y > 0.0) { float hh = texture2D(uHeightMap, vMapUv).r; thin = clamp(1.45 - 1.1 * hh, 0.35, 1.6); }
+          #endif
+          float openF = clamp(uSee.x * thin, 0.0, 1.0);
+          float fibreF = (1.0 - openF) * uSee.y * clamp(thin, 0.5, 1.3);
+          gSeeOpen = clamp(openF + fibreF * 0.6, 0.0, 1.0);
+          totalEmissiveRadiance += (vec3(1.0) * openF + uSeeTint * fibreF) * uSee.z;
+        }`)
+        .replace('#include <dithering_fragment>', `#include <dithering_fragment>
+        gl_FragColor.rgb = mix(gl_FragColor.rgb, uBack, clamp(uSee.w * gSeeOpen, 0.0, 1.0));`);
       // Normal-variance roughness (Toksvig): far away, a mipmap averages the
       // tilted normals of many yarns into a short vector. That lost relief is
       // not smoothness: it is many tiny facets, so it becomes roughness —

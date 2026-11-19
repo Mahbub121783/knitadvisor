@@ -71,6 +71,7 @@ const { analyzePique, isPique, solvePiqueRecipe, piqueGsmFor } = require('./doma
 const { analyzeFleece, isFleeceFamily } = require('./domain/fleece-engine');
 const { analyzePlushTerry, isPlushTerry } = require('./domain/terry-engine');
 const { analyzeStretch } = require('./domain/stretch-engine');
+const RECY = require('./domain/yarn-recovery-engine');
 const { yarnCharacter } = require('./domain/yarn-character');
 const { analyzeShadeSpec } = require('./domain/shade-spec');
 const { loopbackPattern } = require('./domain/terry-loops');
@@ -943,7 +944,15 @@ function calculate(params) {
   let yarnCoverRef = null;
   try {
     const fibersForStretch = parsedComp ? parsedComp.fibers : { cotton: 100 };
-    stretchResult = analyzeStretch({
+    // the yarn's OWN recovery (yarn-recovery-engine.js: the fibres in parallel, stiffness-weighted, at the strains the cloth puts in) replaces the
+    // mass-weighted mean of the fibre table; a filament-only yarn, or one the engine cannot take, keeps the table
+    let yarnRec = null;
+    try {
+      const texY = tfResult ? tfResult.tex : countResult.count_ne ? 590.5 / countResult.count_ne : 0;
+      const spinKey = yarn_type || (yarnExpertise ? yarnExpertise.quality_engine_yarn_type : null);
+      if (texY > 0 && !(yarnChar && yarnChar.filament_only)) { const pr = RECY.profileOf(fibersForStretch, texY, spinKey, {}); if (pr && pr.for_stretch) yarnRec = pr.for_stretch; }
+    } catch (e) { yarnRec = null; }
+    const stretchIn = {
       fabricId: fabricDef.id,
       category: fabricDef.category,
       gsm,
@@ -958,7 +967,19 @@ function calculate(params) {
       rkm: yarnExpertise && yarnExpertise.properties ? yarnExpertise.properties.tenacity_rkm : null,
       spiralityPct: qualityResult.spirality ? qualityResult.spirality.predicted_pct : 0,
       hairFactor: yarnChar ? yarnChar.hair_factor : 1,
-    });
+    };
+    stretchResult = analyzeStretch(yarnRec ? { ...stretchIn, yarnRecovery: yarnRec } : stretchIn);
+    if (yarnRec) {
+      // what the yarn model changes against the mass-weighted fibre table, said plainly
+      const tab = analyzeStretch(stretchIn), g1 = (R, k) => (R.directions[k].standard.growth ? R.directions[k].standard.growth.after_1h_pct : null);
+      stretchResult.yarn_recovery = {
+        source: stretchResult.fibre_recovery.source,
+        yarn_recovers_pct: { from_1pct: Math.round(yarnRec.rec.e1 * 10) / 10, from_5pct: Math.round(yarnRec.rec.e5 * 10) / 10, from_10pct: Math.round(yarnRec.rec.e10 * 10) / 10 },
+        growth_after_1h_pct: { width: g1(stretchResult, 'width'), length: g1(stretchResult, 'length') },
+        fibre_table_growth_after_1h_pct: { width: g1(tab, 'width'), length: g1(tab, 'length') },
+        note: 'The stretch model took the mass-weighted mean of the fibre recovery; it now takes the yarn own recovery, the same figure the Fabric Studio uses, so the two tools agree.',
+      };
+    }
     // The same cloth spun as a combed ring yarn — the reference the yarn type
     // is judged against (cover, tightness, open area)
     if (yarnChar && !yarnChar.filament_only && yarnExpertise && yarnExpertise.diameter_mm) {

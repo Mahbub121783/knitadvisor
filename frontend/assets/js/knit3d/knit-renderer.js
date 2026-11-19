@@ -1947,6 +1947,7 @@ export class Knit3D {
     this._paint(hex, mel);
     applyYarnLook(this._material, look);
 
+    this._applyTrans();
     // Worn high points fade toward the undyed fibre showing through.
     const fadeCol = target.clone().lerp(new THREE.Color(this._rawHex), 0.55);
     for (const u of this._dyeUniforms) {
@@ -2143,6 +2144,27 @@ export class Knit3D {
     if (dir.lengthSq() < 1e-9) dir.set(0, 0, 1);
     this.camera.position.copy(c.target).add(dir.setLength(Math.max(c.minDistance, Math.min(c.maxDistance, d))));
     c.update();
+  }
+
+  // Light through the cloth: t = { open, fibre, tint:[r,g,b], mode: 'off' | 'back' | 'skin' | 'dark' | 'white', gain }
+  //   back  a light behind the cloth, the front lights turned down: the cloth glows where it is thin
+  //   skin / dark / white  a backdrop behind the cloth: it shows through the gaps and the thin yarn
+  setTranslucency(t) { this._trans = t || null; this._applyTrans(); }
+  _applyTrans() {
+    const t = this._trans, mode = t && t.mode ? t.mode : 'off';
+    const BACK = { skin: [0.78, 0.55, 0.43], dark: [0.04, 0.04, 0.05], white: [0.97, 0.97, 0.96] };
+    for (const u of this._dyeUniforms || []) {
+      if (!u.uSee) continue;
+      if (!t || mode === 'off') { u.uSee.value.set(0, 0, 0, 0); continue; }
+      const glow = mode === 'back' ? (t.gain || 1) * 3.4 : 0;
+      const bd = BACK[mode];
+      u.uSee.value.set(t.open || 0, t.fibre || 0, glow, bd ? 1 : 0);
+      if (t.tint) u.uSeeTint.value.setRGB(t.tint[0], t.tint[1], t.tint[2]);
+      if (bd) u.uBack.value.setRGB(bd[0], bd[1], bd[2]);
+    }
+    // with a light behind the cloth the front rig is turned down, so the glow is what is seen
+    const rig = [this._key, this._fill, this._rim, this._hemi].filter(Boolean);
+    rig.forEach((l) => { if (l.userData.kaBase == null) l.userData.kaBase = l.intensity; l.intensity = l.userData.kaBase * (mode === 'back' ? 0.18 : 1); });
   }
 
   setView(which) {

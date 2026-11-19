@@ -177,6 +177,7 @@ const PROC = {
   soap:      { label: 'Soaping and rinsing', t: 95, ph: 7, time: 15, chem: [['Soaping agent', 1]], why: 'washes off hydrolysed and unfixed dye: the reactive dyeing\'s rubbing fastness', ret: { cotton: 1, linen: 1, viscose: 0.99, modal: 1, tencel: 1, bamboo: 0.99, polyester: 1, cdp: 1, nylon: 1, acrylic: 1, wool: 0.98, silk: 0.98, elastane: 1 } },
   biopolish: { label: 'Bio-polishing', t: 55, ph: 5, time: 40, chem: [['Cellulase (acid)', 1], ['Acetic acid', 0.5]], why: 'cuts the surface hairs of the cellulosic fibres: a smooth face, less pilling', ret: { cotton: 0.96, linen: 0.95, viscose: 0.9, modal: 0.92, tencel: 0.88, bamboo: 0.9, polyester: 1, cdp: 1, nylon: 1, acrylic: 1, wool: 1, silk: 1, elastane: 1 } },
   heatset:   { label: 'Heat-setting', t: 190, ph: null, time: 0.6, chem: [], why: 'fixes the width and shape of the polyester and elastane; done before dyeing, it stops creasing and unlevel dyeing', ret: { cotton: 0.92, linen: 0.9, viscose: 0.9, modal: 0.9, tencel: 0.9, bamboo: 0.9, polyester: 1, cdp: 1, nylon: 0.95, acrylic: 0.85, wool: 0.6, silk: 0.7, elastane: 0.9 } },
+  killer:    { label: 'Peroxide killer', t: 40, ph: 6.5, time: 15, chem: [['Catalase (peroxide killer)', 0.2], ['Acetic acid', 0.5]], why: 'breaks down the peroxide left after bleaching: it would oxidise the reactive dye and kill the cellulase of the bio-polish', ret: {} },
   oba:       { label: 'Optical brightening', t: 60, ph: 8.5, time: 20, chem: [['Optical brightener', 0.8]], why: 'a fluorescent whitener: the cellulosic and the polyester each need their own type, matched in tone', ret: {} },
   soften:    { label: 'Softening', t: 40, ph: 5.5, time: 20, chem: [['Cationic or silicone softener', 2.5]], why: 'handle and lubricity; a finish for the knitting and for the wearer', ret: {} },
 };
@@ -257,14 +258,16 @@ function routeFor(spec, fibres, classes, comp, depthIdx, opt) {
   const elast = has('elastane'), nylon = has('nylon'), wool = has('wool') || has('silk');
   const add = (proc, extra) => steps.push({ proc, ...PROC[proc], ...(extra || {}) });
   // pre-treatment
-  if (poly || elast) if (opt.heatset_first !== false && (elast || spec.heatset === 'before')) add('heatset', { label: 'Heat-setting (before dyeing)', temp_note: 'stabilises the width and the shape; 180–190 °C for polyester, 170–190 °C with elastane (not above what the elastane stands)' });
-  add('scour', cellulosic ? {} : { ph: 9.5, chem: [['Detergent / wetting agent', 1], ['Soda ash', 1]], why: 'removes spinning oil and dirt; a gentler alkali for a synthetic' });
+  if (poly || elast) if (opt.heatset_first !== false && (elast || spec.heatset === 'before')) add('heatset', { ...(wool ? { t: 170 } : {}), label: 'Heat-setting (before dyeing)', temp_note: 'stabilises the width and the shape; 180–190 °C for polyester, 170–190 °C with elastane (not above what the elastane stands)' });
+  if (wool) add('scour', { label: 'Scouring (mild, no caustic)', t: 60, ph: 9, chem: [['Non-ionic detergent', 1], ['Soda ash (mild)', 0.5], ['Sequestering agent', 1]], why: 'a mild non-ionic scour: caustic soda dissolves wool and silk, so it is left out' });
+  else add('scour', cellulosic ? {} : { ph: 9.5, chem: [['Detergent / wetting agent', 1], ['Soda ash', 1]], why: 'removes spinning oil and dirt; a gentler alkali for a synthetic' });
   if (depthIdx === 0 || depthIdx === 1 || cellulosic && depthIdx <= 2 || spec.bleach === true) {
     if (cellulosic || wool) {
       if (wool || nylon || elast) steps.push({ proc: 'bleach', ...PROC.bleach, label: 'Peroxide bleaching (mild)', t: 80, ph: 9.5, chem: [['Hydrogen peroxide (50 %)', 2], ['Stabiliser', 1]], why: 'a mild peroxide bleach: never hypochlorite on a blend with nylon, wool or elastane', mild: true });
       else add('bleach');
     }
   }
+  if (steps.some((x) => x.proc === 'bleach')) add('killer');
   if (depthIdx === 0) add('oba');
   if (spec.mercerise && cotton && !ids.some((i) => ['viscose', 'bamboo', 'wool', 'silk'].includes(i))) add('mercerise');
   // dyeing, in the order the chemistry allows
@@ -273,25 +276,27 @@ function routeFor(spec, fibres, classes, comp, depthIdx, opt) {
     dyed.forEach((c, k) => {
       if (c === 'one_bath') {
         const lowT = elast || nylon || wool;
-        steps.push({ proc: 'dye_disperse', ...PROC.dye_disperse, t: lowT ? 120 : 130, label: classes.includes('reactive') ? 'Disperse + reactive, one bath, two steps' : 'Disperse + acid, one bath', one_bath: true, classes,
-          temp_note: lowT ? 'held at 120 °C because the nylon, wool or elastane would be damaged at 130 °C; the polyester takes a little less dye' : null });
+        steps.push({ proc: 'dye_disperse', ...PROC.dye_disperse, t: wool ? 105 : lowT ? 120 : 130, label: classes.includes('reactive') ? 'Disperse + reactive, one bath, two steps' : 'Disperse + acid, one bath', one_bath: true, classes,
+          temp_note: wool ? 'held at 105 °C with a wool protector: wool and silk felt, yellow and lose strength above about 105–110 °C; the polyester takes less dye, so a dark shade needs a carrier or a low-temperature disperse range' : lowT ? 'held at 120 °C because the nylon, wool or elastane would be damaged at 130 °C; the polyester takes a little less dye' : null });
         return;
       }
       const p = CLASS_PROC[c];
       let extra = {};
-      if (c === 'disperse' && (elast || nylon || cellulosic && wool)) extra = { t: 120, label: 'Disperse dyeing (lowered to 120 °C)', temp_note: 'held at 120 °C because the elastane, nylon or wool would be damaged at 130 °C; the polyester takes a little less dye' };
+      if (c === 'disperse' && wool) extra = { t: 105, label: 'Disperse dyeing (lowered to 105 °C, wool protector)', temp_note: 'wool and silk felt, yellow and lose strength above about 105–110 °C: held at 105 °C with a wool protector (or a carrier); the polyester takes less dye, so a dark shade needs a carrier or a low-temperature disperse range' };
+      else if (c === 'disperse' && (elast || nylon)) extra = { t: 120, label: 'Disperse dyeing (lowered to 120 °C)', temp_note: 'held at 120 °C because the elastane, nylon or wool would be damaged at 130 °C; the polyester takes a little less dye' };
       if (c === 'cationic' && has('cdp') && !has('acrylic')) extra = { t: 120, label: 'Cationic dyeing of cationic-dyeable polyester (120 °C)' };
       if (c === 'reactive' && cellulosic && ids.some((i) => ['viscose', 'modal', 'tencel', 'bamboo'].includes(i)) && cotton) extra = { label: 'Reactive dyeing (viscose compensated)', temp_note: 'viscose takes the dye faster and deeper: a levelling agent, a slower alkali dosing and a little less dye for the regenerated part' };
       add(p, extra);
-      if (c === 'disperse' && cellulosic && depthIdx >= 2) add('reduction_clear');
-      if (c === 'disperse' && !cellulosic && depthIdx >= 3) add('reduction_clear', { label: 'Reduction clearing (poly-only)' });
+      const woolClear = { label: 'Clearing (wool-safe, no caustic)', t: 70, ph: 5, chem: [['Acid reducing agent (thiourea dioxide)', 1], ['Non-ionic detergent', 1]], why: 'strips the surface disperse dye in an acid bath: the usual caustic and hydrosulphite clearing would damage the wool or silk' };
+      if (c === 'disperse' && cellulosic && depthIdx >= 2) add('reduction_clear', wool ? woolClear : undefined);
+      if (c === 'disperse' && !cellulosic && depthIdx >= 3) add('reduction_clear', wool ? woolClear : { label: 'Reduction clearing (poly-only)' });
       if (c === 'reactive') add('soap');
     });
-    if (comp.one_bath && classes.length > 1) { add('reduction_clear', { label: 'Reduction clearing (light)', time: 10, chem: [['Sodium hydrosulphite', 1], ['Soda ash', 1]] }); add('soap'); }
+    if (comp.one_bath && classes.length > 1) { add('reduction_clear', wool ? { label: 'Clearing (wool-safe, light)', t: 70, ph: 5, time: 10, chem: [['Acid reducing agent (thiourea dioxide)', 0.5], ['Non-ionic detergent', 1]] } : { label: 'Reduction clearing (light)', time: 10, chem: [['Sodium hydrosulphite', 1], ['Soda ash', 1]] }); add('soap'); }
   }
   if (cellulosic && spec.biopolish !== false && !wool) add('biopolish');
-  if ((poly || elast) && spec.heatset !== 'none' && spec.heatset !== 'before' && !elast) add('heatset', { label: 'Heat-setting (after dyeing)', temp_note: 'sets the polyester; done after dyeing it risks thermomigration of disperse dye to the surface and yellowing of the white' });
-  add('soften');
+  if ((poly || elast) && spec.heatset !== 'none' && spec.heatset !== 'before' && !elast) add('heatset', wool ? { t: 170, label: 'Heat-setting (after dyeing, wool-safe 170 °C)', temp_note: 'a wool or silk blend is set at about 170 °C with a short dwell: at the 190 °C of a polyester alone the wool yellows and scorches' } : { label: 'Heat-setting (after dyeing)', temp_note: 'sets the polyester; done after dyeing it risks thermomigration of disperse dye to the surface and yellowing of the white' });
+  add('soften', depthIdx === 0 ? { chem: [['Silicone or non-ionic softener (no cationic on an optical white: it yellows it)', 2.5]] } : undefined);
   return steps;
 }
 
@@ -505,4 +510,4 @@ function profileOf(mix, tex, opts) {
   return analyse({ fibres, count: { value: tex, unit: 'tex' }, filament: o.filament, shade: o.shade, liquor_ratio: o.liquor_ratio, mercerise: o.mercerise, biopolish: o.biopolish, heatset: o.heatset, spinning: o.spinning, grade: o.grade, cdp_disperse: o.cdp_disperse, yarn_kg: o.yarn_kg });
 }
 
-module.exports = { analyse, profileOf, catalogue, ChemError, FIB, DEPTHS, AGENTS, PROC, RES, OWF, BATH, CHEM, FAST };
+module.exports = { analyse, profileOf, catalogue, ChemError, FIB, DEPTHS, DEPTH_LABEL, AGENTS, PROC, RES, OWF, BATH, CHEM, FAST };

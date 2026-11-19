@@ -96,6 +96,18 @@ const at = (curve, e) => curve.find((c) => c.e >= e) || curve[curve.length - 1];
   assert(fl.rest.open_pct < S({ cotton: 100 }).rest.open_pct, 'a fleece back closes the cloth');
 }
 
+// 6b. the calculator takes the yarn's own recovery, the same figure the Studio uses
+{
+  const cot = calculate({ fabric: 'single_jersey', gsm: 160, composition: '100% Cotton', efficiency: 85 }).stretch;
+  assert(/yarn recovery engine/.test(cot.fibre_recovery.source) && cot.yarn_recovery && cot.yarn_recovery.yarn_recovers_pct.from_5pct > 0, 'a staple yarn is worked by the yarn engine');
+  const pc = calculate({ fabric: 'single_jersey', gsm: 160, composition: '65% Polyester 35% Cotton', efficiency: 85 }).stretch;
+  assert(pc.yarn_recovery.yarn_recovers_pct.from_5pct > cot.yarn_recovery.yarn_recovers_pct.from_5pct, 'polyester raises the yarn recovery');
+  assert(pc.directions.width.standard.growth.after_1h_pct < cot.directions.width.standard.growth.after_1h_pct, 'and lowers the growth');
+  const sa = require('../engine/domain/fabric-studio').analyse({ bed: 'single', grid: { C: ['K'], D: null }, feeds: [{ role: 'ground' }], yarn: { fibre: 'cotton', type: 'combed', count: 30, unit: 'ne' }, target: { gsm: 160 }, machine: {}, recovery: { enabled: true } });
+  assert(/yarn recovery engine/.test(sa.recovery.ground.cloth_stretch.source), 'the Studio uses the same source');
+  console.log('✓ the calculator stretch uses the yarn recovery engine, like the Studio');
+}
+
 // 7. through calculate(): every fabric family returns a stretch block, no source names
 {
   for (const [fabric, comp, gsm] of [['single_jersey', '100% Cotton', 160], ['single_jersey', '92% Cotton 8% Elastane', 200], ['rib_1x1', '100% Cotton', 220], ['interlock', '100% Cotton', 220], ['fleece_3_thread', '80% Cotton 20% Polyester', 300], ['french_terry', '100% Cotton', 280], ['terry_fabric', '100% Cotton', 400], ['lacoste_single', '100% Cotton', 220], ['tricot_plain', '100% Polyester', 140]]) {

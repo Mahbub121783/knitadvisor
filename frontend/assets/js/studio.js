@@ -37,6 +37,7 @@
   var rolls = [];            // trial rolls for the drawn design
   var templates = [];
   var last = null;            // last engine answer
+  var clothState = 'finished'; // the state the cloth is shown and worked in: dry (as knitted), wet, finished, full (after washing)
   var reqSeq = 0;
 
   function snapshot() {
@@ -165,6 +166,8 @@
       if (window.KAStudioChem) window.KAStudioChem.setCatalogue(d.chemistry);
       if (window.KAStudioFancy) window.KAStudioFancy.setCatalogue(d.fancy);
       if (window.KAStudioRecovery) window.KAStudioRecovery.setCatalogue(d.recovery);
+      if (window.KAStudioHand) window.KAStudioHand.setCatalogue(d.hand);
+      if (window.KAStudioColour) window.KAStudioColour.setCatalogue(d.colour);
       var fib = $('st-fibre');
       var fopts = Object.keys(d.fibres || {}).map(function (k) { return '<option value="' + k + '">' + esc(d.fibres[k].label) + '</option>'; }).join('');
       document.querySelectorAll('.st-yfibre').forEach(function (x) { var keep = x.value; x.innerHTML = fopts; if (keep) x.value = keep; });
@@ -477,7 +480,32 @@
     var dial = !!last.structure.beds.D, sel = $('st-xbed');
     sel.querySelector('option[value="D"]').disabled = !dial;
     if (!dial) sel.value = 'C';
-    if (!last.ok_to_knit) xStat('This design will not knit as drawn yet — the sheet says so, and lists what to fix.', true); else if ($('st-xstat').textContent.indexOf('will not knit') > -1) xStat('');
+    var locked = !!(last.feasibility && last.feasibility.export_locked);
+    document.querySelectorAll('#st-xcard [data-xf]').forEach(function (b) { b.disabled = locked; });
+    $('st-dnaout').disabled = false;
+    if (locked) xStat('A feasibility gate is FATAL: the machine files are locked until it is fixed (see the gates above the checks).', true);
+    else if (!last.ok_to_knit) xStat('This design will not knit as drawn yet — the sheet says so, and lists what to fix.', true); else if (/will not knit|locked until/.test($('st-xstat').textContent)) xStat('');
+  }
+  // a repair from the feasibility gates: a needle, the stitch length, the gauge or the speed. A needle of the analysed (smallest) repeat
+  // is every needle of the drawn repeat that repeats it.
+  function applyRepair(changes) {
+    if (!changes || !changes.length || !last) return;
+    snapshot();
+    var rb = last.structure.beds, fR = rb.C.length, wR = rb.C[0].length;
+    changes.forEach(function (c) {
+      var m = /^grid\.([CD])\[(\d+)\]\[(\d+)\]$/.exec(c.field);
+      if (m) {
+        var g = m[1] === 'C' ? S.C : S.D; if (!g) return;
+        var i = +m[2], j = +m[3];
+        for (var a = 0; a < g.length; a++) for (var b = 0; b < g[a].length; b++) if (a % fR === i && b % wR === j) g[a][b] = c.to;
+        return;
+      }
+      if (c.field === 'sl_mm') $('st-sl').value = c.to;
+      else if (c.field === 'machine.gauge') $('st-gauge').value = c.to;
+      else if (c.field === 'machine.rpm') $('st-rpm').value = c.to;
+    });
+    markCustom();
+    renderEditor(); renderNotation(); schedule();
   }
   function bindExport() {
     $('st-xcard').addEventListener('click', function (e) {
@@ -613,6 +641,9 @@
       chemistry: window.KAStudioChem ? window.KAStudioChem.payload() : null,
       fancy: window.KAStudioFancy ? window.KAStudioFancy.payload() : null,
       recovery: window.KAStudioRecovery ? window.KAStudioRecovery.payload() : null,
+      hand: window.KAStudioHand ? window.KAStudioHand.payload() : null,
+      colour: window.KAStudioColour ? window.KAStudioColour.payload() : null,
+      state: clothState,
       look: window.KAStudioLook ? window.KAStudioLook.payload() : null,
       plush: { cut: $('st-cut').checked, sinker_mm: num('st-sinker'), arrangement: $('st-parr').value },
       pile: $('st-pile').value,
@@ -631,6 +662,21 @@
     };
   }
 
+  // ── the state of the cloth: as knitted / wet relaxed / finished / after washing ──
+  function setClothState(id) {
+    clothState = ['dry', 'wet', 'finished', 'full'].indexOf(id) > -1 ? id : 'finished';
+    var seg = $('st-state'); if (seg) Array.prototype.forEach.call(seg.children, function (b) { b.classList.toggle('on', b.getAttribute('data-state') === clothState); });
+  }
+  function showClothState(r) {
+    var n = $('st-statenote'), cs = r && r.state; if (!n) return;
+    if (!cs) { n.textContent = ''; return; }
+    n.innerHTML = '<b>' + esc(cs.label) + '</b> — ' + cs.wpc + ' wales × ' + cs.cpc + ' courses /cm · ' + cs.gsm + ' GSM · ' + cs.width_in + ' in wide' + (cs.vs_finished && (cs.vs_finished.length_pct || cs.vs_finished.width_pct) ? ' · against finished: length ' + (cs.vs_finished.length_pct > 0 ? '+' : '') + cs.vs_finished.length_pct + ' %, width ' + (cs.vs_finished.width_pct > 0 ? '+' : '') + cs.vs_finished.width_pct + ' %' : '') + (cs.available ? '' : ' · ' + esc(cs.note)) + (r.light ? '<br>Light through the cloth: <b>' + r.light.opacity.value + ' % opaque</b> (' + esc(r.light.opacity.word) + '), ' + r.light.open_area.value + ' % open, contrast ratio ' + r.light.contrast_ratio.value + ' · stretched 20 %: ' + r.light.stretched[0].opacity.value + ' % — the Behind control shows it.' : '');
+  }
+  function bindClothState() {
+    var seg = $('st-state'); if (!seg) return;
+    seg.addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; setClothState(b.getAttribute('data-state')); schedule(); });
+  }
+
   function analyse() {
     var my = ++reqSeq;
     $('st-status').innerHTML = '<span style="color:var(--t3)">Checking…</span>';
@@ -643,6 +689,10 @@
       if (window.KAStudioChem) window.KAStudioChem.studioResult(r);
       if (window.KAStudioFancy) window.KAStudioFancy.studioResult(r);
       if (window.KAStudioRecovery) window.KAStudioRecovery.studioResult(r);
+      if (window.KAStudioHand) window.KAStudioHand.studioResult(r);
+      if (window.KAStudioColour) window.KAStudioColour.studioResult(r);
+      showClothState(r);
+      pushTrans();
       if (window.KAStudioLook) window.KAStudioLook.studioResult(r);
     }).catch(function (e) {
       if (my !== reqSeq) return;
@@ -650,6 +700,7 @@
       var msg = (e.data && e.data.error) || e.message || 'Could not analyse.';
       $('st-status').innerHTML = '<div class="st-err">' + esc(msg) + '</div>';
       $('st-checks').innerHTML = '';
+      if (window.KAStudioGates) window.KAStudioGates.render(null);
     });
   }
 
@@ -670,6 +721,7 @@
       '<div style="flex-basis:100%;font-size:12px;color:var(--t2)">' + esc(conf.why) + '</div>' +
       (r.structure.reduced ? '<div style="flex-basis:100%;font-size:12px;color:var(--t2)">Your repeat of ' + esc(r.structure.reduced.from) + ' is the same fabric as its smallest repeat, ' + esc(r.structure.reduced.to) + ' — the set-out below uses that.</div>' : '');
     $('st-checks').innerHTML = r.checks.map(function (c) { return '<li class="' + c.level + '">' + esc(c.text) + '</li>'; }).join('');
+    if (window.KAStudioGates) window.KAStudioGates.render(r, { onApply: applyRepair });
     // repaint flagged cells without losing focus in feed inputs
     var bad = badCells();
     document.querySelectorAll('#st-editor td.c').forEach(function (td) {
@@ -1193,6 +1245,7 @@
 
   // ── 3D ───────────────────────────────────────────────────────────────────
   var showBack = false;
+  var behind = 'off';          // what is behind the cloth in the real view: off, back (a light), skin, white, dark
   function hexRgb(h) { var n = parseInt(h.slice(1), 16); return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 }; }
 
   // ── 3D: the loop structure ─────────────────────────────────────────────
@@ -1396,9 +1449,10 @@
     var con = cs.construction, pattern = cs.pattern;
     // density from the engine's answer for this design (wales, courses, GSM, stitch length)
     var fab = (last && last.fabric) || {};
-    var wpc = fab.wpc || shape.wpc, cpc = fab.cpc || shape.cpc;
+    var cst = last && last.state && last.state.available ? last.state : null;
+    var wpc = (cst && cst.wpc) || fab.wpc || shape.wpc, cpc = (cst && cst.cpc) || fab.cpc || shape.cpc;
     var ne = groundNeOf() > 0 ? groundNeOf() : (last && last.yarn && last.yarn.ground && last.yarn.ground.tex ? 590.5 / last.yarn.ground.tex : 590.5 / shape.tex);
-    var gsm = fab.gsm || num('st-gsm') || 180;
+    var gsm = (cst && cst.gsm) || fab.gsm || num('st-gsm') || 180;
     var dbl = con.base === 'double';
     var clamp = function (v, lo, hi) { return Math.max(lo, Math.min(hi, v)); };
     var scalar = clamp(Math.sqrt(clamp(cpc / (dbl ? 9.5 : 8), 0.5, 2.6)) * clamp(gsm / (dbl ? 260 : 190), 0.85, 1.18), 0.7, 1.7);
@@ -1410,6 +1464,12 @@
       yarnLook: (function () { var ch = last && last.yarn && last.yarn.character && last.yarn.character[0]; if (!ch || !ch.look) return undefined; var l = ch.look; return { hair: 1, hairAbs: l.hairAbs, hairLen: l.hairLen, gloss: l.gloss, bulk: l.bulk, ply: l.ply, slub: !!l.slub, filament: !!l.filament, dty: !!l.dty, lustre: l.lustre }; })(),
     };
   }
+  // the engine's light-through figures for the cloth in view, handed to the real view
+  function pushTrans() {
+    if (!cloth || !cloth.setTranslucency) return;
+    var L = last && last.light;
+    cloth.setTranslucency(L && L.render ? { open: L.render.open, fibre: L.render.fibre, tint: L.render.tint, gain: L.render.gain, mode: behind } : null);
+  }
   function renderCloth() {
     var host = $('st-cloth'), o = clothOpts(), my = ++clothSeq;
     // rebuild only when the structure or its numbers changed; a colour change repaints
@@ -1417,13 +1477,14 @@
     if (cloth && key === clothKey) { cloth.setColor(o.baseHex); return; }
     clothKey = key;
     $('st-cloth-wait').hidden = false;
-    import('/assets/js/knit3d/index.js?v=20261111b').then(function (mod) {
+    import('/assets/js/knit3d/index.js?v=20261120b').then(function (mod) {
       if (my !== clothSeq || mode3d !== 'cloth') return;
       if (cloth) { try { cloth.dispose(); } catch (_) {} cloth = null; }
       Array.prototype.forEach.call(host.querySelectorAll('canvas'), function (c) { c.remove(); });
       var k = new mod.Knit3D();
       try { k.mount(host, o); } catch (e) { try { k.dispose(); } catch (_) {} throw e; }
       cloth = k;
+      pushTrans();
       if (showBack) k.setView('back');
       if (zoom !== 'loops') k.frame(zoom);
       $('st-cloth-wait').hidden = true;
@@ -1600,6 +1661,9 @@
     if (window.KAStudioChem) o.chemistry = window.KAStudioChem.state();
     if (window.KAStudioFancy) o.fancy = window.KAStudioFancy.state();
     if (window.KAStudioRecovery) o.recovery = window.KAStudioRecovery.state();
+    if (window.KAStudioHand) o.hand = window.KAStudioHand.state();
+    if (window.KAStudioColour) o.colour = window.KAStudioColour.state();
+    o.cloth_state = clothState;
     if (window.KAStudioLook) o.look = window.KAStudioLook.state();
     return o;
   }
@@ -1689,6 +1753,9 @@
     if (window.KAStudioChem) window.KAStudioChem.setState(o.chemistry || null);
     if (window.KAStudioFancy) window.KAStudioFancy.setState(o.fancy || null);
     if (window.KAStudioRecovery) window.KAStudioRecovery.setState(o.recovery || null);
+    if (window.KAStudioHand) window.KAStudioHand.setState(o.hand || null);
+    if (window.KAStudioColour) window.KAStudioColour.setState(o.colour || null);
+    setClothState(o.cloth_state || 'finished');
     if (window.KAStudioLook) window.KAStudioLook.setState(o.look || null);
     markCustom();
     rolls = Array.isArray(o.rolls) ? o.rolls : [];
@@ -1787,6 +1854,11 @@
       rcc.addEventListener('change', schedule);
       rcc.addEventListener('input', function (e) { if (e.target.type === 'number') schedule(); });
     }
+    // the fabric hand card likewise
+    var hdc = $('hd-card');
+    if (hdc) hdc.addEventListener('change', schedule);
+    var clc = $('cl-card');
+    if (clc) { clc.addEventListener('change', schedule); clc.addEventListener('input', function (e) { if (e.target.type === 'text' || e.target.type === 'number') schedule(); }); }
     // the blend yarn card likewise
     var blc = $('bl-card');
     if (blc) {
@@ -1802,6 +1874,18 @@
       Array.prototype.forEach.call(this.children, function (x) { x.classList.toggle('on', x === b); });
       if (cloth) cloth.frame(zoom);
     });
+    $('st-savepic').addEventListener('click', function () {
+      var btn = this, note = $('st-savenote'), view = mode3d === 'cloth' ? cloth : mode3d === 'yarn' ? yarnView : mode3d === 'loops' ? loopView : null;
+      if (!view || !view.renderer) { note.textContent = 'Open the Yarn, Loop structure or Fabric (real view) picture first: those are the ones that can be saved.'; return; }
+      var w = parseInt($('st-savesize').value, 10) || 3840, nm = ($('st-name').value || 'studio-design').trim().replace(/[^A-Za-z0-9_-]+/g, '-').slice(0, 40) + '-' + mode3d;
+      btn.disabled = true; note.textContent = 'Drawing at ' + w + ' px…';
+      setTimeout(function () {
+        window.KAStudioCapture.save(view, w, nm, { aspect: parseFloat($('st-saveshape').value) || 0, format: $('st-savefmt').value }).then(function (r) {
+          note.textContent = 'Saved ' + r.width + ' × ' + r.height + ' px (' + (r.bytes / 1048576).toFixed(1) + ' MB)' + (r.clipped ? ' — this graphics card could not go to ' + r.asked + ' px wide, so it is the largest it can draw.' : '.');
+        }).catch(function (e) { note.textContent = (e && e.message) || 'Could not save the picture.'; }).then(function () { btn.disabled = false; });
+      }, 30);
+    });
+    $('st-behind').addEventListener('change', function () { behind = this.value; pushTrans(); });
     $('st-side').addEventListener('click', function () {
       showBack = !showBack; this.textContent = showBack ? 'Show face' : 'Show back';
       if (cloth) cloth.setView(showBack ? 'back' : 'front');
@@ -1818,6 +1902,7 @@
     $('st-play').addEventListener('click', function () { this.textContent = race.toggle() ? 'Pause' : 'Play'; });
     $('st-anibed').addEventListener('change', function () { race.reset(); cycle.refresh(); });
     cycle.bind();
+    bindClothState();
     YROWS.forEach(function (R) { $(R.f).addEventListener('change', function () { yarnTypes(R); }); });
     YROWS.forEach(function (R) { $(R.t).addEventListener('change', function () { filamentFields(R); }); });
     $('st-editor').addEventListener('change', function (e) { if (e.target.getAttribute('data-k') === 'role') showYarnRows(); });
@@ -1898,6 +1983,35 @@
       rd.readAsText(file); this.value = '';
     });
     $('st-print').addEventListener('click', function () { window.print(); });
+    // Fabric DNA: the open schema-3.0 document of this design, and back
+    $('st-dnaout').addEventListener('click', function () {
+      var btn = this; btn.disabled = true; xStat('Writing the Fabric DNA…');
+      apiFetch('/api/studio/dna/export', { method: 'POST', body: { design: payload(), name: $('st-name').value || '' } }).then(function (r) {
+        var dna = r.dna; dna.knitadvisor = dna.knitadvisor || {}; dna.knitadvisor.studio_design = designNow();
+        var blob = new Blob([JSON.stringify(dna, null, 2)], { type: 'application/json' });
+        var a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+        a.download = (($('st-name').value || 'fabric').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '_') || 'fabric') + '.fabric-dna.json';
+        document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+        xStat('Saved the Fabric DNA (' + (dna.yarns || []).length + ' yarn channel' + ((dna.yarns || []).length === 1 ? '' : 's') + ', verdict ' + esc(dna.feasibilityVerdict ? dna.feasibilityVerdict.verdict : '—') + ').');
+      }).catch(function (e) { xStat(esc((e.data && e.data.error) || e.message || 'Could not write the Fabric DNA.'), true); })
+        .then(function () { btn.disabled = !last; });
+    });
+    $('st-dnain').addEventListener('change', function () {
+      var file = this.files && this.files[0]; if (!file) return;
+      var rd = new FileReader();
+      rd.onload = function () {
+        var dna; try { dna = JSON.parse(rd.result); } catch (e) { xStat('That file is not JSON.', true); return; }
+        // a DNA this Studio wrote carries the design as drawn: it opens as it was
+        var own = dna && dna.knitadvisor && dna.knitadvisor.studio_design;
+        if (own && Array.isArray(own.C)) { try { loadDesign(own); xStat('Opened the Fabric DNA.'); } catch (e) { xStat(esc(e.message), true); } return; }
+        apiFetch('/api/studio/dna/import', { method: 'POST', body: { dna: dna } }).then(function (r) {
+          ['st-gauge', 'st-dia', 'st-rpm', 'st-feeders', 'st-sl', 'st-gsm', 'st-width', 'yb-count', 'yl-count', 'yp-count'].forEach(function (id) { if ($(id)) $(id).value = ''; });
+          loadDesign(window.KAStudioGates.dnaToDesign(r.input, dna.name));
+          xStat('Opened the Fabric DNA' + (r.notes && r.notes.length ? ': ' + esc(r.notes.join(' ')) : '.'));
+        }).catch(function (e) { xStat(esc((e.data && e.data.error) || e.message || 'Could not read the Fabric DNA.'), true); });
+      };
+      rd.readAsText(file); this.value = '';
+    });
     refreshSaved(); loadAccount();
     loadTemplates().then(function () { applyTemplate(S.templateId); undo = []; var t0 = null; try { t0 = localStorage.getItem('ka-studio-tech'); } catch (_) {} if (t0 === 'warp') setTech('warp'); })
       .catch(function (e) { $('st-status').innerHTML = '<div class="st-err">' + esc(e.message || 'Could not load the fabric catalogue.') + '</div>'; renderAll(); });

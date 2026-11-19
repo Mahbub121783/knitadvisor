@@ -1294,7 +1294,7 @@ router.get('/color/shade-check', (req, res) => {
 // calculation limit (the /api rate limiter still applies). Signed-in only,
 // like the calculator it sits beside.
 router.get('/studio/templates', requireUser, (req, res) => {
-  res.json({ success: true, templates: fabricStudio.listTemplates(), fibres: fabricStudio.FIBRES, limits: fabricStudio.LIMITS, machines: knitMachine.list(), melange: require('../engine/domain/melange-engine').catalogue(), blend: require('../engine/domain/blend-yarn-engine').catalogue(), chemistry: require('../engine/domain/yarn-chemistry-engine').catalogue(), recovery: require('../engine/domain/yarn-recovery-engine').catalogue(), fancy: require('../engine/domain/fancy-yarn-engine').catalogue(),
+  res.json({ success: true, templates: fabricStudio.listTemplates(), fibres: fabricStudio.FIBRES, limits: fabricStudio.LIMITS, machines: knitMachine.list(), melange: require('../engine/domain/melange-engine').catalogue(), blend: require('../engine/domain/blend-yarn-engine').catalogue(), chemistry: require('../engine/domain/yarn-chemistry-engine').catalogue(), recovery: require('../engine/domain/yarn-recovery-engine').catalogue(), fancy: require('../engine/domain/fancy-yarn-engine').catalogue(), hand: require('../engine/domain/fabric-hand-engine').catalogue(), colour: require('../engine/domain/colour-target-engine').catalogue(),
     warp: { templates: warpStudio.TEMPLATES, machines: Object.fromEntries(Object.entries(warpStudio.MACHINES).map(([k, m]) => [k, { label: m.label, gauges: m.gauges, bars: m.bars, speed: m.speed, use: m.use, beds: m.beds }])), fibres: Object.fromEntries(Object.entries(warpStudio.FIBRES).map(([k, f]) => [k, f.label])) } });
 });
 
@@ -1368,6 +1368,47 @@ router.post('/studio/fabric-look', requireUser, (req, res) => {
     if (err instanceof fabricLookEngine.LookError || (err && err.constructor && err.constructor.name === 'BlendError')) return res.status(400).json({ success: false, error: err.message });
     console.error('[studio] fabric look failed:', err);
     res.status(500).json({ success: false, error: 'The fabric look engine could not work this cloth out.' });
+  }
+});
+
+// Fabric hand — the physics numbers of a knit (tensile, shear, bending, compression, surface, weight) and the hand they give, from the yarn,
+// the loops and the finish (engine/domain/fabric-hand-engine.js). The Studio also runs it inside /studio/analyse (the `hand` input).
+const fabricHandEngine = require('../engine/domain/fabric-hand-engine');
+router.get('/studio/fabric-hand/catalogue', requireUser, (req, res) => res.json({ success: true, ...fabricHandEngine.catalogue() }));
+router.post('/studio/fabric-hand', requireUser, (req, res) => {
+  try {
+    res.json(fabricHandEngine.analyse(req.body || {}));
+  } catch (err) {
+    if (err instanceof fabricHandEngine.HandError || (err && err.constructor && err.constructor.name === 'BlendError')) return res.status(400).json({ success: false, error: err.message });
+    console.error('[studio] fabric hand failed:', err);
+    res.status(500).json({ success: false, error: 'The fabric hand engine could not work this cloth out.' });
+  }
+});
+
+// Colour target — a Pantone TCX code or name, a Lab reading, an RGB or a hex turned into the screen colour, the depth of shade, the dye on the
+// weight of fibre and a lab-dip check (engine/domain/colour-target-engine.js). The Studio also runs it inside /studio/analyse (the `colour` input).
+const colourTargetEngine = require('../engine/domain/colour-target-engine');
+router.get('/studio/colour-target/catalogue', requireUser, (req, res) => res.json({ success: true, ...colourTargetEngine.catalogue() }));
+router.post('/studio/colour-target', requireUser, (req, res) => {
+  try {
+    res.json(colourTargetEngine.analyse(req.body || {}));
+  } catch (err) {
+    if (err instanceof colourTargetEngine.ColourError) return res.status(400).json({ success: false, error: err.message });
+    console.error('[studio] colour target failed:', err);
+    res.status(500).json({ success: false, error: 'The colour target engine could not work this colour out.' });
+  }
+});
+
+// Fabric light — how much light a knit lets through: open area, opacity, contrast ratio, stretched, and the glow the 3D view shows
+// (engine/domain/fabric-light-engine.js). The Studio also runs it inside /studio/analyse (the `light` result, with the look).
+const fabricLightEngine = require('../engine/domain/fabric-light-engine');
+router.post('/studio/fabric-light', requireUser, (req, res) => {
+  try {
+    res.json(fabricLightEngine.analyse(req.body || {}));
+  } catch (err) {
+    if (err instanceof fabricLightEngine.LightError) return res.status(400).json({ success: false, error: err.message });
+    console.error('[studio] fabric light failed:', err);
+    res.status(500).json({ success: false, error: 'The fabric light engine could not work this cloth out.' });
   }
 });
 
@@ -1648,6 +1689,40 @@ router.post('/studio/analyse', requireUser, async (req, res) => {
   }
 });
 
+// Feasibility: the three gates and the 20 rules every weft analysis carries (engine/domain/feasibility-engine.js)
+const feasibilityEngine = require('../engine/domain/feasibility-engine');
+router.get('/studio/feasibility/catalogue', requireUser, (req, res) => res.json({ success: true, ...feasibilityEngine.catalogue() }));
+
+// Fabric DNA: a weft design as an open schema-3.0 JSON document, and back (engine/domain/fabric-dna.js)
+const fabricDna = require('../engine/domain/fabric-dna');
+router.post('/studio/dna/export', requireUser, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const design = b.design && typeof b.design === 'object' ? b.design : null;
+    if (!design) return res.status(400).json({ success: false, error: 'Give the design.' });
+    const hit = await studioAnswer(req.user.id, design);
+    if (hit.status !== 200) return res.status(hit.status).type('application/json').send(hit.body);
+    const { floor_machine_id: _m, floor: _f, ...clean } = design;
+    const dna = fabricDna.toDNA({ ...clean, ...(b.name ? { name: String(b.name).slice(0, 60) } : {}) }, JSON.parse(hit.body));
+    res.json({ success: true, dna });
+  } catch (err) {
+    if (err instanceof fabricDna.DnaError) return res.status(400).json({ success: false, error: err.message });
+    console.error('[studio] dna export failed:', err);
+    res.status(500).json({ success: false, error: 'Could not write the Fabric DNA.' });
+  }
+});
+router.post('/studio/dna/import', requireUser, (req, res) => {
+  try {
+    const b = req.body || {};
+    const out = fabricDna.fromDNA(b.dna || b);
+    res.json({ success: true, ...out });
+  } catch (err) {
+    if (err instanceof fabricDna.DnaError) return res.status(400).json({ success: false, error: err.message });
+    console.error('[studio] dna import failed:', err);
+    res.status(500).json({ success: false, error: 'Could not read the Fabric DNA.' });
+  }
+});
+
 // Part 0 - the stitch graph: the interlocking of any weft or warp design, as the machine makes it
 // (engine/domain/stitch-graph.js). Pure logic, no data; every later part reads it.
 const stitchGraph = require('../engine/domain/stitch-graph');
@@ -1804,6 +1879,11 @@ router.post('/studio/export', requireUser, exportLimiter, async (req, res) => {
     if (hit.status !== 200) return res.status(hit.status).type('application/json').send(hit.body);
     const out = JSON.parse(hit.body);
     const fmt = ['pdf', 'png', 'bmp', 'csv', 'calib'].includes(b.format) ? b.format : 'pdf';
+    // a design that fails a feasibility gate (FATAL) gets no factory file until it is fixed (engine/domain/feasibility-engine.js)
+    if (out.feasibility && out.feasibility.export_locked) {
+      const fatal = out.feasibility.rules.filter((r) => r.status === 'fatal').map((r) => `${r.id} ${r.name}: ${r.text}`).concat(Object.values(out.feasibility.gates).flatMap((g) => g.other || []));
+      return res.status(409).json({ success: false, code: 'FEASIBILITY_FATAL', error: 'This design fails a feasibility gate, so the factory files are locked until it is fixed: ' + fatal[0], fatal, repair: out.feasibility.repair });
+    }
     const name = String(b.name || '').replace(/\s+/g, ' ').trim().slice(0, 60);
     const slug = machineExport.slug(name || (out.structure.match && out.structure.match.name));
     if (fmt === 'calib') {
