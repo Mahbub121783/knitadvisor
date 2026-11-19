@@ -401,6 +401,7 @@
         <div class="st-card" id="hd-card"></div>
         <div class="st-card" id="cl-card"></div>
         <div class="st-card" id="lb-card"></div>
+        <div class="st-card" id="in-card"></div>
         <div class="st-card" id="ml-card"></div>
 
         <div class="st-card">
@@ -635,6 +636,7 @@
             <button type="button" data-tab="hand">Fabric hand</button>
             <button type="button" data-tab="colour">Colour</button>
             <button type="button" data-tab="lab">Lab</button>
+            <button type="button" data-tab="inspect">Inspect</button>
             <button type="button" data-tab="melange">Melange</button>
           </div>
 
@@ -692,6 +694,7 @@
               <label>Colour <input type="color" id="st-col" value="#3d5a80"></label>
               <button type="button" class="st-btn" id="st-side">Show back</button>
               <span class="st-zoom" id="st-zoom"><button type="button" class="st-btn on" data-z="loops" title="Every loop of your programme, in real yarn">Loops</button><button type="button" class="st-btn" data-z="swatch" title="A 4 cm swatch">4 cm</button><button type="button" class="st-btn" data-z="cloth" title="The whole piece of cloth">Cloth</button></span>
+              <label title="The light the cloth is seen under: daylight, a shop fluorescent (TL84, CWF) or tungsten">Light <select id="st-light"><option value="D65">Daylight D65</option><option value="TL84">Shop TL84</option><option value="CWF">Shop CWF</option><option value="A">Tungsten A</option></select></label>
               <label title="What is behind the cloth: a light (the cloth glows where it is thin), or skin, a dark or a white backing (what shows through)">Behind <select id="st-behind"><option value="off">Nothing</option><option value="back">A light</option><option value="skin">Skin</option><option value="white">White</option><option value="dark">Dark</option></select></label>
               <span id="st-3dnote"></span>
             </div>
@@ -758,6 +761,7 @@
           <div class="st-pane" id="pane-hand"></div>
           <div class="st-pane" id="pane-colour"></div>
           <div class="st-pane" id="pane-lab"></div>
+          <div class="st-pane" id="pane-inspect"></div>
           <div class="st-pane" id="pane-melange"></div>
         </div>
       </section>
@@ -856,8 +860,9 @@
 <script src="assets/js/studio-hand.js?v=20261120a"></script>
 <script src="assets/js/studio-colour.js?v=20261120b"></script>
 <script src="assets/js/studio-lab.js?v=20261121a"></script>
+<script src="assets/js/studio-inspect.js?v=20261121a"></script>
 <script src="assets/js/studio-capture.js?v=20261120b"></script>
 <script src="assets/js/studio-gates.js?v=20261121b"></script>
-<script src="assets/js/studio.js?v=20261121d"></script>
+<script src="assets/js/studio.js?v=20261121e"></script>
 </body>
 </html>

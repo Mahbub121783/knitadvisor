@@ -2167,6 +2167,16 @@ export class Knit3D {
     rig.forEach((l) => { if (l.userData.kaBase == null) l.userData.kaBase = l.intensity; l.intensity = l.userData.kaBase * (mode === 'back' ? 0.18 : 1); });
   }
 
+  // The colour of the light the cloth is seen under (a daylight, a shop fluorescent, tungsten): t = [r, g, b] multipliers on the rig's colours
+  setIlluminant(t) {
+    this._illum = Array.isArray(t) && t.length === 3 ? t : null;
+    const k = this._illum || [1, 1, 1];
+    [this._key, this._fill, this._rim, this._hemi].filter(Boolean).forEach((l) => {
+      if (!l.userData.kaCol) l.userData.kaCol = l.color.clone();
+      const b = l.userData.kaCol; l.color.setRGB(b.r * k[0], b.g * k[1], b.b * k[2]);
+    });
+  }
+
   setView(which) {
     if (!this._pivot) return;
     const back = which === 'back';

@@ -169,6 +169,7 @@
       if (window.KAStudioHand) window.KAStudioHand.setCatalogue(d.hand);
       if (window.KAStudioColour) window.KAStudioColour.setCatalogue(d.colour);
       if (window.KAStudioLab) window.KAStudioLab.setCatalogue(d.lab);
+      if (window.KAStudioInspect) window.KAStudioInspect.setCatalogue(d.inspect);
       var fib = $('st-fibre');
       var fopts = Object.keys(d.fibres || {}).map(function (k) { return '<option value="' + k + '">' + esc(d.fibres[k].label) + '</option>'; }).join('');
       document.querySelectorAll('.st-yfibre').forEach(function (x) { var keep = x.value; x.innerHTML = fopts; if (keep) x.value = keep; });
@@ -647,6 +648,7 @@
       colour: window.KAStudioColour ? window.KAStudioColour.payload() : null,
       lab: window.KAStudioLab ? window.KAStudioLab.payload() : null,
       trim: window.KAStudioLab ? window.KAStudioLab.trimPayload() : null,
+      inspect: window.KAStudioInspect ? window.KAStudioInspect.payload() : null,
       state: clothState,
       look: window.KAStudioLook ? window.KAStudioLook.payload() : null,
       plush: { cut: $('st-cut').checked, sinker_mm: num('st-sinker'), arrangement: $('st-parr').value },
@@ -696,6 +698,7 @@
       if (window.KAStudioHand) window.KAStudioHand.studioResult(r);
       if (window.KAStudioColour) window.KAStudioColour.studioResult(r);
       if (window.KAStudioLab) window.KAStudioLab.studioResult(r);
+      if (window.KAStudioInspect) window.KAStudioInspect.studioResult(r);
       showClothState(r);
       pushTrans();
       if (window.KAStudioLook) window.KAStudioLook.studioResult(r);
@@ -1250,6 +1253,7 @@
 
   // ── 3D ───────────────────────────────────────────────────────────────────
   var showBack = false;
+  var illum = 'D65';           // the light the cloth is seen under in the real view: D65, TL84, CWF, A
   var behind = 'off';          // what is behind the cloth in the real view: off, back (a light), skin, white, dark
   function hexRgb(h) { var n = parseInt(h.slice(1), 16); return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 }; }
 
@@ -1470,6 +1474,11 @@
     };
   }
   // the engine's light-through figures for the cloth in view, handed to the real view
+  // the light's own colour, given to the real view (lightbox-engine.js tints, from the catalogue)
+  function pushIllum() {
+    if (!cloth || !cloth.setIlluminant) return;
+    cloth.setIlluminant(window.KAStudioInspect ? window.KAStudioInspect.tint(illum) : [1, 1, 1]);
+  }
   function pushTrans() {
     if (!cloth || !cloth.setTranslucency) return;
     var L = last && last.light;
@@ -1482,7 +1491,7 @@
     if (cloth && key === clothKey) { cloth.setColor(o.baseHex); return; }
     clothKey = key;
     $('st-cloth-wait').hidden = false;
-    import('/assets/js/knit3d/index.js?v=20261120b').then(function (mod) {
+    import('/assets/js/knit3d/index.js?v=20261121a').then(function (mod) {
       if (my !== clothSeq || mode3d !== 'cloth') return;
       if (cloth) { try { cloth.dispose(); } catch (_) {} cloth = null; }
       Array.prototype.forEach.call(host.querySelectorAll('canvas'), function (c) { c.remove(); });
@@ -1490,6 +1499,7 @@
       try { k.mount(host, o); } catch (e) { try { k.dispose(); } catch (_) {} throw e; }
       cloth = k;
       pushTrans();
+      pushIllum();
       if (showBack) k.setView('back');
       if (zoom !== 'loops') k.frame(zoom);
       $('st-cloth-wait').hidden = true;
@@ -1669,6 +1679,7 @@
     if (window.KAStudioHand) o.hand = window.KAStudioHand.state();
     if (window.KAStudioColour) o.colour = window.KAStudioColour.state();
     if (window.KAStudioLab) o.lab = window.KAStudioLab.state();
+    if (window.KAStudioInspect) o.inspect = window.KAStudioInspect.state();
     o.cloth_state = clothState;
     if (window.KAStudioLook) o.look = window.KAStudioLook.state();
     return o;
@@ -1762,6 +1773,7 @@
     if (window.KAStudioHand) window.KAStudioHand.setState(o.hand || null);
     if (window.KAStudioColour) window.KAStudioColour.setState(o.colour || null);
     if (window.KAStudioLab) window.KAStudioLab.setState(o.lab || null);
+    if (window.KAStudioInspect) window.KAStudioInspect.setState(o.inspect || null);
     setClothState(o.cloth_state || 'finished');
     if (window.KAStudioLook) window.KAStudioLook.setState(o.look || null);
     markCustom();
@@ -1864,6 +1876,9 @@
     // the fabric hand card likewise
     var hdc = $('hd-card');
     if (hdc) hdc.addEventListener('change', schedule);
+    // the inspection card likewise
+    var inc = $('in-card');
+    if (inc) { inc.addEventListener('change', schedule); inc.addEventListener('input', function (e) { if (e.target.type === 'number') schedule(); }); }
     // the virtual lab card likewise
     var lbc = $('lb-card');
     if (lbc) { lbc.addEventListener('change', schedule); lbc.addEventListener('input', function (e) { if (e.target.type === 'number') schedule(); }); }
@@ -1896,6 +1911,7 @@
       }, 30);
     });
     $('st-behind').addEventListener('change', function () { behind = this.value; pushTrans(); });
+    $('st-light').addEventListener('change', function () { illum = this.value; pushIllum(); });
     $('st-side').addEventListener('click', function () {
       showBack = !showBack; this.textContent = showBack ? 'Show face' : 'Show back';
       if (cloth) cloth.setView(showBack ? 'back' : 'front');

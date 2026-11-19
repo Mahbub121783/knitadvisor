@@ -48,6 +48,9 @@ const LIGHT = require('./fabric-light-engine');
 const FEAS = require('./feasibility-engine');
 const PE = require('./process-effects');
 const LAB = require('./virtual-lab-engine');
+const LB = require('./lightbox-engine');
+const BO = require('./burnout-engine');
+const DEF = require('./defects-engine');
 const LOOK = require('./fabric-look-engine');
 const SE = require('./stretch-engine');
 const FY = require('./fancy-yarn-engine');
@@ -1767,6 +1770,8 @@ function analyse(input) {
       },
     };
     // the three gates: does it hold together, does the yarn fit, can a machine knit it and every fibre survive the route (feasibility-engine.js)
+    // the inspection room (lightbox, burnout, barré, grinning) on request: the gates read it for U-15 and U-20
+    out.inspect = input.inspect && input.inspect.enabled ? inspectSummary(input, out, clothState, S) : null;
     out.feasibility = FEAS.assess(out, input, { thickness_mm: thickMm, thickness_basis: 'estimate (hand model T0)' });
     // the virtual lab (air permeability, thermal resistance, a hundred rolls) and the matching collar and cuff, on request
     out.lab = input.lab && input.lab.enabled ? labSummary(input, out, clothState, thickMm, S, plush) : null;
@@ -1829,6 +1834,44 @@ function lookSummary(opt, S, roleYarn, feedRows, st, gating, chemOut, cs) {
     });
   } catch (e) { if (e instanceof LOOK.LookError) return { success: false, error: e.message }; if (e instanceof BY.BlendError) return null; throw e; }
 }
+// ── the inspection room: the lightbox, the burnout lab, barré and grinning (lightbox-engine.js, burnout-engine.js, defects-engine.js) ──
+const SHADE_HEX = { white: '#f4f4f0', pastel: '#cdd8e4', light: '#8fa6c2', medium: '#3f5f8f', dark: '#1c2b46', black: '#121212' };
+function inspectSummary(input, out, cs, S) {
+  const o = input.inspect || {};
+  const res = { success: true };
+  try {
+    const shade = (input.chemistry && input.chemistry.shade) || (input.look && input.look.shade) || 'medium';
+    const face = /^#[0-9a-f]{6}$/i.test(o.colour || '') ? o.colour : /^#[0-9a-f]{6}$/i.test((input.look || {}).colour || '') ? input.look.colour : SHADE_HEX[shade] || SHADE_HEX.medium;
+    const cc = FEAS.clothChemistry(S, input);
+    const ids = cc ? cc.steps.map((x) => x.id) : [];
+    const classes = [...new Set(ids.filter((x) => /^dye_/.test(x)).map((x) => x.slice(4)))];
+    const soft = cc ? cc.steps.find((x) => x.id === 'soften') : null;
+    res.colour = { hex: face, shade, source: /^#[0-9a-f]{6}$/i.test(o.colour || '') ? 'the Inspect card' : /^#[0-9a-f]{6}$/i.test((input.look || {}).colour || '') ? 'the colour you set (Look / Colour)' : 'a typical ' + shade + ' shade (set a colour in Look or Colour for yours)' };
+    // the lightbox
+    try {
+      res.lightbox = LB.analyse({ colour: face, shade, oba: ids.includes('oba'), classes, spectra: o.spectra, softener: soft && (soft.chem || []).some(([n]) => /^Cationic softener/i.test(n)) ? 'cationic' : undefined });
+      res.tints = Object.fromEntries(LB.SOURCES.map((s) => [s.id, LB.tint(s.id)]));
+    } catch (e) { if (!(e instanceof LB.LightboxError)) throw e; res.lightbox = { success: false, error: e.message }; }
+    // the burnout lab: every feed with the fibres of its yarn
+    const feeds = (out.yarn.feeds || []).map((f, i) => ({ feed: f.feed, role: f.role, mix: FEAS.mixOfFeed(f), mass_share_pct: f.mass_share_pct, knits: [out.structure.beds.C, out.structure.beds.D].filter(Boolean).some((g) => g[i] && g[i].includes('K')) }));
+    res.burnout = BO.analyse({ fibres: FEAS.clothFibres(out), feeds: feeds.length === out.structure.beds.C.length ? feeds : [], gsm: cs.gsm });
+    // barré: the feeder-to-feeder spread of loop length and yarn count
+    const fam = String(out.structure.family || '');
+    const kind = /plush|terry/.test(fam) ? 'terry' : /fleece/.test(fam) ? 'fleece' : /pique/.test(fam) ? 'pique' : /interlock/.test(fam) ? 'interlock' : /rib/.test(fam) ? 'rib' : 'jersey';
+    res.barre = DEF.barre({ sl_mm: out.fabric.sl_mm, feeders: out.machine.feeders, tol_sl_mm: o.tol_sl_mm, cv_count: o.cv_count, shade, kind });
+    // grinning: a back, loop or binder yarn behind the face; the open area of the cloth at rest and stretched
+    const roles = (out.yarn.feeds || []).map((f) => f.role);
+    const backKind = (out.yarn.feeds || []).some((f) => f.plated) ? 'plated' : roles.includes('loop') ? 'loop' : roles.includes('binder') ? 'binder' : null;
+    let op = [0, 0, 0];
+    try {
+      const li = LIGHT.analyse({ wpc: cs.wpc, cpc: cs.cpc, loop_mm: S.lref, yarn_d_mm: S.gfit.yarn_d_mm, gsm: cs.gsm, layers: out.structure.bed === 'double' ? 2 : 1, colour: face, shade });
+      op = [li.render.open, li.stretched[0].open_area.value / 100, li.stretched[1].open_area.value / 100];
+    } catch (e) { if (!(e instanceof LIGHT.LightError)) throw e; }
+    res.grinning = DEF.grinning({ face_hex: face, back_hex: o.back_colour, back_kind: backKind, open_rest: op[0], open_20: op[1], open_40: op[2] });
+  } catch (e) { return { success: false, error: e.message }; }
+  return res;
+}
+
 // ── the virtual lab: air permeability, thermal resistance and a hundred rolls (virtual-lab-engine.js) ──
 function labSummary(input, out, cs, thickMm, S, plush) {
   const o = input.lab || {};

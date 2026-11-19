@@ -352,11 +352,22 @@ function assess(out, input, extra) {
   {
     const grin = findCheck(/grin/i, ['warn', 'note', 'error']);
     const multi = new Set(feeds.map((f) => f.role)).size > 1 || feeds.some((f) => f.plated);
-    if (!multi) rule('U-15', 'na', 'One yarn: nothing behind the face to show through.', { basis: 'estimate' });
+    const ig = out.inspect && out.inspect.grinning;
+    if (ig && ig.applicable && ig.status !== 'not_checked') {
+      if (ig.status === 'warn') rule('U-15', 'warn', ig.text, { basis: 'estimate', value: ig.delta_e && ig.delta_e.value, repair: { text: ig.repair || 'Dye the back yarn near the face colour.', changes: [] } });
+      else rule('U-15', 'pass', ig.text, { basis: 'estimate' });
+    } else if (ig && ig.applicable) rule('U-15', 'not_checked', ig.text, { basis: 'estimate' });
+    else if (!multi) rule('U-15', 'na', 'One yarn: nothing behind the face to show through.', { basis: 'estimate' });
     else if (grin.length) rule('U-15', 'warn', grin[0].text, { basis: 'estimate', repair: { text: 'Dye or choose the back yarn near the face colour (a melange or a matched shade), or close the cloth.', changes: [] } });
     else rule('U-15', 'pass', 'No back yarn is expected to show through the face.', { basis: 'estimate' });
   }
-  rule('U-20', 'not_checked', 'Metamerism under the shop\'s lights (D65 against TL84 and CWF) needs the lightbox: not yet in the Studio. A melange design is checked D65 against A in its own card.', { basis: 'estimate' });
+  {
+    const mm = out.inspect && out.inspect.lightbox && out.inspect.lightbox.metamerism;
+    if (!mm) rule('U-20', 'not_checked', 'Metamerism under the shop\'s lights (D65 against TL84 and CWF): switch on the Inspect card to check it. A melange design is checked D65 against A in its own card.', { basis: 'estimate' });
+    else if (mm.measured) rule('U-20', mm.risk === 'high' ? 'warn' : 'pass', mm.risk === 'high' ? `The two dyed curves part by ΔE ${mm.worst_de} under a shop light (above 0.8): reformulate the dye recipe.` : `The two dyed curves part by at most ΔE ${mm.worst_de} under the shop lights: inside 0.8.`, { basis: 'law', value: mm.worst_de, repair: mm.risk === 'high' ? { text: 'Reformulate the disperse / reactive recipe with dyes that match in spectral shape, then re-read both fibres under TL84 and CWF.', changes: [] } : undefined });
+    else if (mm.risk === 'high') rule('U-20', 'warn', `${mm.verdict}. ${mm.need}`, { basis: 'estimate', repair: { text: 'Read both dyed fibres on a spectrophotometer, or give the two 31-band curves in the Inspect card, before bulk dyeing.', changes: [] } });
+    else rule('U-20', 'pass', mm.verdict + '.', { basis: 'estimate' });
+  }
 
   // ── the gates ────────────────────────────────────────────────────────────────────────────────────
   // the Studio's own errors that no rule above covers still stop the design: they go to the gate they belong to

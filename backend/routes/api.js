@@ -1294,7 +1294,7 @@ router.get('/color/shade-check', (req, res) => {
 // calculation limit (the /api rate limiter still applies). Signed-in only,
 // like the calculator it sits beside.
 router.get('/studio/templates', requireUser, (req, res) => {
-  res.json({ success: true, templates: fabricStudio.listTemplates(), fibres: fabricStudio.FIBRES, limits: fabricStudio.LIMITS, machines: knitMachine.list(), melange: require('../engine/domain/melange-engine').catalogue(), lab: require('../engine/domain/virtual-lab-engine').catalogue(), blend: require('../engine/domain/blend-yarn-engine').catalogue(), chemistry: require('../engine/domain/yarn-chemistry-engine').catalogue(), recovery: require('../engine/domain/yarn-recovery-engine').catalogue(), fancy: require('../engine/domain/fancy-yarn-engine').catalogue(), hand: require('../engine/domain/fabric-hand-engine').catalogue(), colour: require('../engine/domain/colour-target-engine').catalogue(),
+  res.json({ success: true, templates: fabricStudio.listTemplates(), fibres: fabricStudio.FIBRES, limits: fabricStudio.LIMITS, machines: knitMachine.list(), melange: require('../engine/domain/melange-engine').catalogue(), lab: require('../engine/domain/virtual-lab-engine').catalogue(), inspect: { lightbox: require('../engine/domain/lightbox-engine').catalogue(), burnout: require('../engine/domain/burnout-engine').catalogue() }, blend: require('../engine/domain/blend-yarn-engine').catalogue(), chemistry: require('../engine/domain/yarn-chemistry-engine').catalogue(), recovery: require('../engine/domain/yarn-recovery-engine').catalogue(), fancy: require('../engine/domain/fancy-yarn-engine').catalogue(), hand: require('../engine/domain/fabric-hand-engine').catalogue(), colour: require('../engine/domain/colour-target-engine').catalogue(),
     warp: { templates: warpStudio.TEMPLATES, machines: Object.fromEntries(Object.entries(warpStudio.MACHINES).map(([k, m]) => [k, { label: m.label, gauges: m.gauges, bars: m.bars, speed: m.speed, use: m.use, beds: m.beds }])), fibres: Object.fromEntries(Object.entries(warpStudio.FIBRES).map(([k, f]) => [k, f.label])) } });
 });
 
@@ -1702,6 +1702,25 @@ router.post('/studio/virtual-lab', requireUser, (req, res) => {
     res.status(500).json({ success: false, error: 'The virtual lab could not work this cloth out.' });
   }
 });
+
+// The inspection room: the lightbox (colour under D65, TL84, CWF, A and a black light, brightener, metamerism), the burnout lab (which reagent
+// dissolves which fibre), barré and grinning (engine/domain/lightbox-engine.js, burnout-engine.js, defects-engine.js). The Studio also runs
+// them inside /studio/analyse (the `inspect` input).
+const lightboxEngine = require('../engine/domain/lightbox-engine');
+const burnoutEngine = require('../engine/domain/burnout-engine');
+const defectsEngine = require('../engine/domain/defects-engine');
+router.get('/studio/lightbox/catalogue', requireUser, (req, res) => res.json({ success: true, ...lightboxEngine.catalogue() }));
+const inspectRoute = (name, fn, errs) => (req, res) => {
+  try { res.json(fn(req.body || {})); } catch (err) {
+    if (errs.some((E) => err instanceof E) || (err && /^Give /.test(err.message || ''))) return res.status(400).json({ success: false, error: err.message });
+    console.error(`[studio] ${name} failed:`, err);
+    res.status(500).json({ success: false, error: `The ${name} could not work this out.` });
+  }
+};
+router.post('/studio/lightbox', requireUser, inspectRoute('lightbox', lightboxEngine.analyse, [lightboxEngine.LightboxError, require('../engine/domain/spectral').SpectrumError]));
+router.post('/studio/burnout', requireUser, inspectRoute('burnout lab', burnoutEngine.analyse, []));
+router.post('/studio/stripes', requireUser, inspectRoute('barre simulator', defectsEngine.barre, []));
+router.post('/studio/grinning', requireUser, inspectRoute('grinning check', defectsEngine.grinning, []));
 
 // Feasibility: the three gates and the 20 rules every weft analysis carries (engine/domain/feasibility-engine.js)
 const feasibilityEngine = require('../engine/domain/feasibility-engine');

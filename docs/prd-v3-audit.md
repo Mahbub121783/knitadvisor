@@ -57,6 +57,16 @@ On scientific grounding, KnitAdvisor is ahead of the PRD. Every number carries a
 - **Score changes:** Module 6 58 → 80 %, end-use and lab coverage up. **Overall ≈ 71 → 75 %.**
 - **Still open:** all the lab numbers are estimates until ISO 9237 air permeability, ISO 11092 Rct and a 100-roll weight log from a mill replace them. The Uster CVm is not yet linked to the count spread.
 
+### Update, 2026-11-19: Phase D done
+
+- **Lightbox** (`lightbox-engine.js`): a colour under D65, TL84, CWF, tungsten A and a UV black light, with ΔE2000 (Bradford-adapted), swatches, colour inconstancy, the optical brightener (a glow band at 440 nm, strong in daylight and UV, weak in a shop fluorescent, none under tungsten) and metamerism. With two measured curves the ΔE under each light is law. Without them it gives a risk from the dye classes and the depth, not an invented number. The Studio's real 3D view has a Light selector (D65 / TL84 / CWF / A). D65 and A are the CIE tables. TL84 and CWF are modelled and fitted to their published chromaticity, so tagged estimate.
+- **U-20** now reads this: a dual-dye cloth (disperse + reactive) in a medium or dark shade is a high-risk WARN; measured curves above ΔE 0.8 are a WARN.
+- **Burnout lab** (`burnout-engine.js`): which of six reagents dissolves which fibre, the weight left, the g/m², the residue, and per feed whether the yarn vanishes and whether what is left still holds together. A fleece's cotton ground dissolving in acid leaves loose polyester loops.
+- **Barré simulator** (`defects-engine.js`): the feeder-to-feeder loop-length and count spread gives a cover spread, a lightness step ΔL*, visibility, the loop tolerance that keeps it invisible, and a stripe preview.
+- **Universal grinning** (U-15): ΔE between face and back yarn, the visible share at rest, 20 % and 40 % stretch, and the rule ΔE > 25, porosity > 15 % and visible share > 8 %. It reads the back yarn colour you give; without one it says "not checked".
+- **Score changes:** Module 5 55 → 72 %, guardrails 92 → 97 % (U-15 and U-20 now real), Module 2 grinning done. **Overall ≈ 75 → 79 %.**
+- **Still open:** the burnout view is a table, not a 3D dissolve; the DWR droplet is not built; the lamp spectra and brightener strength need a spectrophotometer; the barré and grinning thresholds need a mill's rating.
+
 ---
 
 ## 2. Module-by-module
