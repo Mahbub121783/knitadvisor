@@ -63,6 +63,8 @@ const ENDPOINTS = [
   E('GET',  '/studio/feasibility/catalogue', G.studio, 'The three feasibility gates and the 20 guardrail rules (U-01 … U-20) every weft analysis is checked against', true),
   E('POST', '/studio/dna/export',        G.studio, 'Fabric DNA: a weft design written as an open schema-3.0 JSON document (yarn channels, unit cell, machine, wet route, feasibility)', true),
   E('POST', '/studio/dna/import',        G.studio, 'Fabric DNA: a schema-3.0 JSON document read back into a Studio design', true),
+  E('GET',  '/studio/virtual-lab/catalogue', G.studio, 'Virtual lab end uses and the default spreads of count, stitch length and finishing', true),
+  E('POST', '/studio/virtual-lab',       G.studio, 'Virtual lab: air permeability, thermal resistance and a hundred rolls (weight and width Cp/Cpk, shade pass rate) of a drawn cloth', true),
   E('POST', '/studio/fabric-light',      G.studio, 'Fabric light: open area, opacity, contrast ratio and show-through of a knit, flat and stretched', true),
   E('POST', '/studio/fabric-hand',       G.studio, 'Fabric hand: tensile, shear, bending, compression and surface numbers of a knit, five hand scores in words, set against a reference jersey', true),
   E('GET',  '/studio/fabric-hand/catalogue', G.studio, 'Fabric hand structures, finishes, loads and end uses', true),

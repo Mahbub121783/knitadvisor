@@ -168,6 +168,7 @@
       if (window.KAStudioRecovery) window.KAStudioRecovery.setCatalogue(d.recovery);
       if (window.KAStudioHand) window.KAStudioHand.setCatalogue(d.hand);
       if (window.KAStudioColour) window.KAStudioColour.setCatalogue(d.colour);
+      if (window.KAStudioLab) window.KAStudioLab.setCatalogue(d.lab);
       var fib = $('st-fibre');
       var fopts = Object.keys(d.fibres || {}).map(function (k) { return '<option value="' + k + '">' + esc(d.fibres[k].label) + '</option>'; }).join('');
       document.querySelectorAll('.st-yfibre').forEach(function (x) { var keep = x.value; x.innerHTML = fopts; if (keep) x.value = keep; });
@@ -500,7 +501,8 @@
         for (var a = 0; a < g.length; a++) for (var b = 0; b < g[a].length; b++) if (a % fR === i && b % wR === j) g[a][b] = c.to;
         return;
       }
-      if (c.field === 'sl_mm') $('st-sl').value = c.to;
+      if (/^chemistry\.process\./.test(c.field)) { if (window.KAStudioChem) window.KAStudioChem.clearProcess(c.field.slice(18)); }
+      else if (c.field === 'sl_mm') $('st-sl').value = c.to;
       else if (c.field === 'machine.gauge') $('st-gauge').value = c.to;
       else if (c.field === 'machine.rpm') $('st-rpm').value = c.to;
     });
@@ -643,6 +645,8 @@
       recovery: window.KAStudioRecovery ? window.KAStudioRecovery.payload() : null,
       hand: window.KAStudioHand ? window.KAStudioHand.payload() : null,
       colour: window.KAStudioColour ? window.KAStudioColour.payload() : null,
+      lab: window.KAStudioLab ? window.KAStudioLab.payload() : null,
+      trim: window.KAStudioLab ? window.KAStudioLab.trimPayload() : null,
       state: clothState,
       look: window.KAStudioLook ? window.KAStudioLook.payload() : null,
       plush: { cut: $('st-cut').checked, sinker_mm: num('st-sinker'), arrangement: $('st-parr').value },
@@ -691,6 +695,7 @@
       if (window.KAStudioRecovery) window.KAStudioRecovery.studioResult(r);
       if (window.KAStudioHand) window.KAStudioHand.studioResult(r);
       if (window.KAStudioColour) window.KAStudioColour.studioResult(r);
+      if (window.KAStudioLab) window.KAStudioLab.studioResult(r);
       showClothState(r);
       pushTrans();
       if (window.KAStudioLook) window.KAStudioLook.studioResult(r);
@@ -1428,7 +1433,7 @@
 
   // ── 3D: the real fabric — the calculator's knit3d engine ──────────────
   var cloth = null, clothSeq = 0, clothKey = '', zoom = 'loops';   // the real view opens on the loops: a drawn programme must be readable stitch by stitch
-  var FIBRE_3D = { cotton: 'cotton', cvc: 'cotton', polyester_spun: 'polyester', polyester_filament: 'polyester', nylon_filament: 'nylon', viscose: 'viscose', wool: 'wool', acrylic: 'acrylic', silk: 'silk', linen: 'linen', modal: 'modal' };
+  var FIBRE_3D = { cotton: 'cotton', cvc: 'cotton', polyester_spun: 'polyester', polyester_filament: 'polyester', nylon_filament: 'nylon', viscose: 'viscose', wool: 'wool', acrylic: 'acrylic', silk: 'silk', linen: 'linen', modal: 'modal', polypropylene: 'polyester' };
   var cellOf = function (x) { return x === 'K' ? 'K' : x === 'T' ? 'T' : 'M'; };   // transfer and empty needle read as a float
   /** The drawn programme as the 3D engine's construction, pattern and needle sampler. */
   function stripeOf() {
@@ -1663,6 +1668,7 @@
     if (window.KAStudioRecovery) o.recovery = window.KAStudioRecovery.state();
     if (window.KAStudioHand) o.hand = window.KAStudioHand.state();
     if (window.KAStudioColour) o.colour = window.KAStudioColour.state();
+    if (window.KAStudioLab) o.lab = window.KAStudioLab.state();
     o.cloth_state = clothState;
     if (window.KAStudioLook) o.look = window.KAStudioLook.state();
     return o;
@@ -1755,6 +1761,7 @@
     if (window.KAStudioRecovery) window.KAStudioRecovery.setState(o.recovery || null);
     if (window.KAStudioHand) window.KAStudioHand.setState(o.hand || null);
     if (window.KAStudioColour) window.KAStudioColour.setState(o.colour || null);
+    if (window.KAStudioLab) window.KAStudioLab.setState(o.lab || null);
     setClothState(o.cloth_state || 'finished');
     if (window.KAStudioLook) window.KAStudioLook.setState(o.look || null);
     markCustom();
@@ -1857,6 +1864,9 @@
     // the fabric hand card likewise
     var hdc = $('hd-card');
     if (hdc) hdc.addEventListener('change', schedule);
+    // the virtual lab card likewise
+    var lbc = $('lb-card');
+    if (lbc) { lbc.addEventListener('change', schedule); lbc.addEventListener('input', function (e) { if (e.target.type === 'number') schedule(); }); }
     var clc = $('cl-card');
     if (clc) { clc.addEventListener('change', schedule); clc.addEventListener('input', function (e) { if (e.target.type === 'text' || e.target.type === 'number') schedule(); }); }
     // the blend yarn card likewise

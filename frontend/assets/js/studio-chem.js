@@ -22,7 +22,7 @@
 
   function $(id) { return document.getElementById(id); }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]; }); }
-  function blank() { return { enabled: false, shade: 'medium', liquor: '', mercerise: false, biopolish: true, heatset: '' }; }
+  function blank() { return { enabled: false, shade: 'medium', liquor: '', mercerise: false, biopolish: true, heatset: '', process: {} }; }
 
   var CSS = '.ch-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:2px}' +
     '.ch-step{display:grid;grid-template-columns:26px 1fr;gap:10px;margin:0 0 4px}.ch-step i{width:26px;height:26px;border-radius:50%;background:var(--accent-tint);color:var(--accent);font:700 12px var(--head);display:flex;align-items:center;justify-content:center;font-style:normal;margin-top:2px}' +
@@ -51,6 +51,18 @@
       '<label class="st-check"><input type="checkbox" id="ch-merc"' + (c.mercerise ? ' checked' : '') + '> Mercerise the cotton</label>' +
       '<label class="st-check"><input type="checkbox" id="ch-bio"' + (c.biopolish ? ' checked' : '') + '> Bio-polish the cellulosic fibres</label>' +
       '<div class="st-row one"><div class="st-f"><label for="ch-hs">Heat-setting</label><select id="ch-hs">' + opts([['', 'As the yarn needs'], ['before', 'Before dyeing'], ['none', 'None']], c.heatset) + '</select></div></div>' +
+      '<details class="gt-force"' + (Object.keys(c.process || {}).length ? ' open' : '') + '><summary>Force the process (against the compiler\'s advice)</summary>' +
+      '<p class="st-hint" style="margin:4px 0">The route is compiled so that every fibre survives it. Ask for something else here and the feasibility gate shows what it would do to the cloth, and refuses it if it destroys a fibre.</p>' +
+      '<label class="st-check"><input type="checkbox" id="ch-p-caustic"' + (c.process.scour_caustic ? ' checked' : '') + '> Scour with caustic soda</label>' +
+      '<label class="st-check"><input type="checkbox" id="ch-p-killer"' + (c.process.skip_killer ? ' checked' : '') + '> Skip the peroxide killer after bleaching</label>' +
+      '<label class="st-check"><input type="checkbox" id="ch-p-rf"' + (c.process.reactive_first ? ' checked' : '') + '> Dye the reactive before the disperse</label>' +
+      '<div class="st-row"><div class="st-f"><label for="ch-p-disp">Disperse dyeing (°C)</label><input id="ch-p-disp" type="number" min="60" max="160" step="1" placeholder="auto" value="' + esc(c.process.disperse_c || '') + '"></div>' +
+      '<div class="st-f"><label for="ch-p-hs">Heat-set (°C)</label><input id="ch-p-hs" type="number" min="80" max="240" step="1" placeholder="auto" value="' + esc(c.process.heatset_c || '') + '"></div></div>' +
+      '<div class="st-row one"><div class="st-f"><label for="ch-p-soft">Softener</label><select id="ch-p-soft">' + opts([['', 'As the route needs'], ['cationic', 'Cationic'], ['silicone', 'Silicone'], ['nonionic', 'Non-ionic']], c.process.softener || '') + '</select></div></div>' +
+      '<div class="st-hint" style="margin:6px 0 2px">Extra finishes</div>' +
+      [['dwr', 'Water repellent (DWR)'], ['wet_rub', 'Wet-rubbing improver'], ['gsm_improver', 'GSM improver'], ['hydrophilic', 'Hydrophilic softener'], ['anti_crease', 'Anti-creasing agent'], ['oil_remover', 'Oil remover']].map(function (f) {
+        return '<label class="st-check"><input type="checkbox" class="ch-p-fin" value="' + f[0] + '"' + ((c.process.finishes || []).indexOf(f[0]) > -1 ? ' checked' : '') + '> ' + f[1] + '</label>'; }).join('') +
+      '</details>' +
       '<div class="ml-sum" id="ch-sum"></div>' +
       '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><button type="button" class="st-btn" id="ch-open">Open the chemistry analysis</button></div></div>';
     summary();
@@ -59,6 +71,18 @@
     var on = $('ch-on'); if (!on) return;
     S.enabled = on.checked;
     if ($('ch-shade')) { S.shade = $('ch-shade').value; S.liquor = $('ch-lr').value; S.mercerise = $('ch-merc').checked; S.biopolish = $('ch-bio').checked; S.heatset = $('ch-hs').value; }
+    if ($('ch-p-caustic')) {
+      var p = {}, n;
+      if ($('ch-p-caustic').checked) p.scour_caustic = true;
+      if ($('ch-p-killer').checked) p.skip_killer = true;
+      if ($('ch-p-rf').checked) p.reactive_first = true;
+      n = parseFloat($('ch-p-disp').value); if (n > 0) p.disperse_c = n;
+      n = parseFloat($('ch-p-hs').value); if (n > 0) p.heatset_c = n;
+      if ($('ch-p-soft').value) p.softener = $('ch-p-soft').value;
+      var fin = Array.prototype.map.call(document.querySelectorAll('.ch-p-fin:checked'), function (x) { return x.value; });
+      if (fin.length) p.finishes = fin;
+      S.process = p;
+    }
   }
   function summary() {
     var el = $('ch-sum'); if (!el) return;
@@ -144,13 +168,15 @@
     readCard();
     if (!S.enabled) return null;
     var n = parseFloat(S.liquor);
-    return { enabled: true, shade: S.shade, liquor_ratio: n > 0 ? n : undefined, mercerise: !!S.mercerise, biopolish: S.biopolish ? undefined : false, heatset: S.heatset || undefined };
+    return { enabled: true, shade: S.shade, liquor_ratio: n > 0 ? n : undefined, mercerise: !!S.mercerise, biopolish: S.biopolish ? undefined : false, heatset: S.heatset || undefined, process: S.process && Object.keys(S.process).length ? S.process : undefined };
   }
+  // a repair from the feasibility gates: clear one forced setting
+  function clearProcess(key) { if (S.process) delete S.process[key]; buildCard(); }
   function state() { readCard(); return JSON.parse(JSON.stringify(S)); }
-  function setState(o) { S = Object.assign(blank(), o || {}); lastResult = null; buildCard(); render(null); }
+  function setState(o) { S = Object.assign(blank(), o || {}); if (!S.process) S.process = {}; lastResult = null; buildCard(); render(null); }
   function setCatalogue(c) { CAT = c || null; buildCard(); }
   function studioResult(r) { lastResult = r && r.chemistry ? r.chemistry : null; summary(); render(lastResult); }
 
-  window.KAStudioChem = { payload: payload, state: state, setState: setState, setCatalogue: setCatalogue, studioResult: studioResult };
+  window.KAStudioChem = { clearProcess: clearProcess, payload: payload, state: state, setState: setState, setCatalogue: setCatalogue, studioResult: studioResult };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { buildCard(); bind(); render(null); }); else { buildCard(); bind(); render(null); }
 })();

@@ -273,11 +273,14 @@ function assess(out, input, extra) {
 
   // ── GATE 3: chemistry — the route the whole cloth goes through (every yarn together) ─────────────────
   const shade = (inp.chemistry && inp.chemistry.shade) || (inp.look && inp.look.shade) || 'medium';
-  let route = null, routeErr = null;
+  let route = null, safeRoute = null, routeErr = null;
+  const proc = CHEMY.cleanProcess(inp.chemistry && inp.chemistry.process);          // what the technologist forced against the compiler's advice
   try {
     const groundTex = (yarn.ground && yarn.ground.tex) || 20;
-    const prof = CHEMY.profileOf(fibres, groundTex, { shade: CHEMY.DEPTHS.includes(shade) ? shade : 'medium', mercerise: !!(inp.chemistry && inp.chemistry.mercerise), heatset: inp.chemistry && inp.chemistry.heatset });
+    const base = { shade: CHEMY.DEPTHS.includes(shade) ? shade : 'medium', mercerise: !!(inp.chemistry && inp.chemistry.mercerise), heatset: inp.chemistry && inp.chemistry.heatset };
+    const prof = CHEMY.profileOf(fibres, groundTex, { ...base, process: proc });
     route = prof ? prof.route.steps : null;
+    if (Object.keys(proc).length) { const sp = CHEMY.profileOf(fibres, groundTex, base); safeRoute = sp ? sp.route.steps : null; }
   } catch (e) { routeErr = e.message; }
   const has = (k) => (fibres[k] || 0) > 0;
   const protein = has('wool') || has('silk');
@@ -287,7 +290,8 @@ function assess(out, input, extra) {
   const caustic = steps.filter((s) => (s.chemicals || []).some((c) => /caustic/i.test(c.name)));
   if (!protein) rule('U-09', 'na', 'No wool or silk in the cloth.', { basis: 'chemistry' });
   else if (caustic.length) rule('U-09', 'fatal', `Wool or silk is in the cloth and the route uses caustic soda (${caustic.map((s) => s.label).join(', ')}): alkali dissolves protein fibres.`, { basis: 'chemistry', repair: { text: 'A mild non-ionic scour (pH ≤ 9, no caustic) and an acid clearing instead of caustic reduction clearing.', changes: [] } });
-  else rule('U-09', 'pass', 'Wool or silk is in the cloth: the route uses no caustic soda (mild non-ionic scour, acid clearing).', { basis: 'chemistry' });
+  else if (steps.some((x) => +x.t_c > 110 && x.id !== 'heatset')) { const h = steps.filter((x) => +x.t_c > 110 && x.id !== 'heatset'); rule('U-09', 'warn', `Wool or silk is in the cloth and ${h.map((x) => x.label + ' ' + x.t_c + ' °C').join(', ')} is hotter than about 105–110 °C: wool felts and yellows, silk loses strength.`, { basis: 'chemistry', repair: { text: 'Hold the disperse bath at 105 °C with a wool protector (or use a carrier), and heat-set at 170 °C.', changes: [] } }); }
+  else rule('U-09', 'pass', 'Wool or silk is in the cloth: the route uses no caustic soda (mild non-ionic scour, acid clearing) and no bath hotter than 110 °C.', { basis: 'chemistry' });
   const hot = steps.filter((s) => +s.t_c > 125);
   if (!pp) rule('U-10', 'na', 'No polypropylene in the cloth.', { basis: 'chemistry' });
   else if (hot.length) rule('U-10', 'fatal', `Polypropylene softens from about 140 °C and melts at 165 °C: the route reaches ${Math.max(...hot.map((s) => s.t_c))} °C (${hot.map((s) => s.label).join(', ')}).`, { basis: 'chemistry', repair: { text: 'Dope-dyed polypropylene only: wash and dry at 115 °C or below, no disperse dyeing and no heat-setting.', changes: [] } });
@@ -334,6 +338,16 @@ function assess(out, input, extra) {
     }
   }
 
+  // a failure that comes from something the technologist FORCED is repaired by clearing it: the compiled route avoids it
+  {
+    const FIX = { 'U-09': ['scour_caustic', 'disperse_c'], 'U-10': ['disperse_c', 'heatset_c'], 'U-11': ['reactive_first'], 'U-12': ['skip_killer'], 'U-18': ['softener'], 'U-19': ['heatset_c'] };
+    const NAME = { scour_caustic: 'caustic scour', disperse_c: 'the disperse temperature', heatset_c: 'the heat-set temperature', skip_killer: 'skipping the peroxide killer', softener: 'the softener', reactive_first: 'reactive before disperse' };
+    rules.forEach((r) => {
+      const keys = (FIX[r.id] || []).filter((k) => proc[k] != null);
+      if ((r.status === 'fatal' || r.status === 'warn') && keys.length) r.repair = { text: `Clear what was forced (${keys.map((k) => NAME[k]).join(', ')}): the compiled route avoids it.`, forced: true, changes: keys.map((k) => ({ field: 'chemistry.process.' + k, from: proc[k], to: null, why: 'back to the compiled, safe route' })) };
+    });
+  }
+
   // ── QUALITY: grinning, metamerism ────────────────────────────────────────────────────────────────
   {
     const grin = findCheck(/grin/i, ['warn', 'note', 'error']);
@@ -368,7 +382,9 @@ function assess(out, input, extra) {
     rules,
     packing,
     fibres,
-    route: steps.map((s) => ({ id: s.id, label: s.label, t_c: s.t_c, ph: s.ph })),
+    route: steps.map((s) => ({ id: s.id, label: s.label, t_c: s.t_c, ph: s.ph, chemicals: (s.chemicals || []).map((c) => c.name), requested: !!s.requested })),
+    process_forced: proc,
+    safe_route: safeRoute ? safeRoute.map((s) => ({ id: s.id, label: s.label, t_c: s.t_c })) : null,
     route_error: routeErr,
     repair,
     counts: { fatal: rules.filter((r) => r.status === 'fatal').length + others.length, warn: rules.filter((r) => r.status === 'warn').length, pass: rules.filter((r) => r.status === 'pass').length, not_applicable: rules.filter((r) => r.status === 'na').length, not_checked: rules.filter((r) => r.status === 'not_checked').length },
@@ -380,4 +396,16 @@ function catalogue() {
   return { rules: Object.entries(RULES).map(([id, r]) => ({ id, ...r })), statuses: ['pass', 'warn', 'fatal', 'na', 'not_checked'], phi: { yarn_packing: PSI, close_packing: r3(PHI_CLOSE), sleazy_below: PHI_SLEAZY, jam_warn_above: PHI_JAM } };
 }
 
-module.exports = { assess, catalogue, clothFibres, mixOfFeed, RULES };
+// the wet-process chemistry of the whole cloth from the Studio's solved feeds (before the answer is assembled): fibres, the compiled route
+// (with anything forced), and the chemical names of every bath — what process-effects.js reads
+function clothChemistry(S, input) {
+  const src = { yarn: { feeds: S.feeds || [], composition: S.composition || [] } };
+  const fibres = clothFibres(src);
+  const inp = input || {};
+  const ch = inp.chemistry || {};
+  const shade = ch.shade || (inp.look && inp.look.shade) || 'medium';
+  const prof = CHEMY.profileOf(fibres, (S.ground && S.ground.tex) || 20, { shade: CHEMY.DEPTHS.includes(shade) ? shade : 'medium', mercerise: !!ch.mercerise, heatset: ch.heatset, process: ch.process });
+  return prof ? { fibres, shade, steps: prof.route.steps, bath_chemicals: ((prof.recipe && prof.recipe.chemicals) || []).map((c) => c.name) } : null;
+}
+
+module.exports = { clothChemistry, assess, catalogue, clothFibres, mixOfFeed, RULES };

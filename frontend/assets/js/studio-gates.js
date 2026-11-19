@@ -15,7 +15,7 @@
   var $ = function (id) { return document.getElementById(id); };
   var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
   var WORD = { pass: 'PASS', warn: 'WARN', fatal: 'FATAL', na: '—', not_checked: 'not checked' };
-  var APPLIES = /^(grid\.[CD]\[\d+\]\[\d+\]|sl_mm|machine\.gauge|machine\.rpm)$/;
+  var APPLIES = /^(grid\.[CD]\[\d+\]\[\d+\]|sl_mm|machine\.gauge|machine\.rpm|chemistry\.process\.[a-z_]+)$/;
   var open = false;
 
   function chip(label, g) {
@@ -28,6 +28,15 @@
       (r.basis ? ' <span class="gt-basis">' + esc(r.basis) + '</span>' : '') +
       '<div class="gt-text">' + esc(r.text) + '</div>' +
       (fix ? '<div class="gt-fix">Fix: ' + esc(fix.text) + (can ? ' <button type="button" class="st-btn" data-gt-apply="' + i + '">Apply</button>' : '') + '</div>' : '') + '</li>';
+  }
+
+  function effectsBlock(P) {
+    var T = P.totals;
+    var sg = function (v, d) { return (v > 0 ? '+' : '') + (+v).toFixed(d == null ? 1 : d); };
+    return '<details class="gt-idle"><summary>What the chemicals of the route do to the cloth (' + P.chemicals.length + ' chemicals, estimate)</summary>' +
+      '<p class="st-hint" style="margin:4px 0">Bending × ' + T.bending + ' · friction × ' + T.friction + ' · hairiness × ' + T.hairiness + ' · weight ' + sg(T.gsm_pct) + ' % · colour Δb* ' + sg(T.delta_b) + ', ΔL* ' + sg(T.delta_L) + ' · wet rubbing ' + sg(T.wet_rub_grades) + ' grade. ' + esc(P.colour.note) + '. The Hand card works with these (softener as its own finish, every other chemical on top).</p>' +
+      '<ul class="gt-list">' + P.chemicals.map(function (c) { return '<li class="gt-rule"><span class="gt-id">' + c.id + '</span> <b>' + esc(c.name) + '</b> <span class="gt-basis">' + esc(c.stage) + '</span><div class="gt-text">' + esc(c.effect) + '</div></li>'; }).join('') + '</ul>' +
+      '<p class="st-hint" style="margin:4px 0">' + esc(P.note) + '</p></details>';
   }
 
   function render(r, opt) {
@@ -51,6 +60,7 @@
       (others.length ? '<ul class="gt-list">' + others.map(function (t) { return '<li class="gt-rule fatal"><b>Studio check</b> <span class="gt-st">FATAL</span><div class="gt-text">' + esc(t) + '</div></li>'; }).join('') + '</ul>' : '') +
       '<ul class="gt-list">' + act.map(function (x) { return ruleRow(x, all.indexOf(x)); }).join('') + ok.map(function (x) { return ruleRow(x, all.indexOf(x)); }).join('') + '</ul>' +
       (idle.length ? '<details class="gt-idle"><summary>' + idle.length + ' rules not applicable or not checked</summary><ul class="gt-list">' + idle.map(function (x) { return ruleRow(x, all.indexOf(x)); }).join('') + '</ul></details>' : '') +
+      (r.process_effects ? effectsBlock(r.process_effects) : '') +
       (F.route && F.route.length ? '<div class="gt-route">Wet route of the whole cloth (' + esc(Object.keys(F.fibres || {}).map(function (k) { return k + ' ' + F.fibres[k] + ' %'; }).join(', ')) + '): ' + F.route.map(function (s) { return esc(s.label) + (s.t_c ? ' ' + s.t_c + ' °C' : ''); }).join(' → ') + '</div>' : '') +
       '<p class="st-hint" style="margin:6px 0 0">' + esc(F.note) + '</p></details>';
     var det = box.querySelector('.gt-det'); if (det) det.addEventListener('toggle', function () { open = det.open; });

@@ -137,8 +137,8 @@ const finite = (o, path = '') => {
     const q = C.analyse({ fibres: f, count: { value: ne, unit: 'ne' }, shade, mercerise: rnd() < 0.3, filament: rnd() < 0.15, liquor_ratio: 4 + Math.floor(rnd() * 12), fineness: rnd() < 0.3 ? { [pick[0]]: 0.7 + rnd() * 3 } : undefined });
     finite(q);
     assert(q.route.steps.length >= 2 && q.resistance.length === C.AGENTS.length && q.sweep.depth.length === 6);
-    assert(q.strength.retained_pct.value > 30 && q.strength.retained_pct.value < 115, `retained ${q.strength.retained_pct.value} for ${JSON.stringify(f)} ${shade}`);
-    if (shade !== 'white') assert(q.recipe.dyes.length >= 1 || Object.keys(f).every((x) => x === 'elastane'), 'a dyed shade has a dye: ' + JSON.stringify(f));
+    assert(q.strength.retained_pct.value > (f.polypropylene ? 5 : 30) && q.strength.retained_pct.value < 115, `retained ${q.strength.retained_pct.value} for ${JSON.stringify(f)} ${shade}`);
+    if (shade !== 'white') assert(q.recipe.dyes.length >= 1 || Object.keys(f).every((x) => x === 'elastane' || x === 'polypropylene'), 'a dyed shade has a dye: ' + JSON.stringify(f));
     assert(!q.route.steps.some((x) => x.chemicals.some((c) => /ypochlorite|chlorine/i.test(c.name))));
   }
   console.log('✓ moisture, derivations, bad input in words, prototype keys refused, 400 random yarns finite');

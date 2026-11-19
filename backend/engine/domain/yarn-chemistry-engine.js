@@ -65,6 +65,7 @@ const FIB = {
   acrylic:   { label: 'Acrylic',           family: 'acrylic', polymer: 'polyacrylonitrile copolymer', primary: 'cationic', alt: [], dtex: 1.70, depth: 1.00, tbl: 'acrylic', by: 'acrylic' },
   wool:      { label: 'Wool',              family: 'protein', polymer: 'keratin', primary: 'acid', alt: ['reactive'], dtex: 4.10, depth: 1.00, tbl: 'wool', by: 'wool' },
   silk:      { label: 'Silk',              family: 'protein', polymer: 'fibroin', primary: 'acid', alt: ['reactive'], dtex: 1.10, depth: 1.00, tbl: 'silk', by: null },
+  polypropylene: { label: 'Polypropylene',  family: 'polyolefin', polymer: 'isotactic polypropylene', primary: 'dope', alt: [], dtex: 2.20, depth: 1.00, tbl: 'polypropylene', by: 'polypropylene' },
   elastane:  { label: 'Elastane',          family: 'elastane', polymer: 'segmented polyurethane-urea', primary: 'disperse', alt: ['acid'], dtex: 0, depth: 1.00, tbl: 'elastane', by: null, rides: true },
 };
 const FIBRE_IDS = Object.keys(FIB);
@@ -149,6 +150,7 @@ const RES = {
   polyester: [4, 3, 3, 1, 4, 4, 3, 3, 4, 3, 4], cdp: [4, 3, 2, 1, 4, 4, 3, 3, 4, 3, 4],
   nylon:     [2, 0, 3, 2, 1, 2, 3, 4, 4, 1, 4], acrylic: [4, 3, 3, 1, 3, 3, 3, 3, 4, 4, 4],
   wool:      [4, 2, 1, 0, 0, 2, 2, 3, 4, 1, 2], silk: [3, 1, 2, 0, 0, 2, 3, 4, 4, 0, 2],
+  polypropylene: [4, 4, 4, 4, 4, 4, 4, 2, 4, 1, 4],
   elastane:  [3, 2, 3, 2, 0, 2, 3, 2, 4, 2, 4],
 };
 const RES_NOTE = {
@@ -170,19 +172,19 @@ const PROC = {
   bleach:    { label: 'Peroxide bleaching', t: 95, ph: 10.8, time: 45, chem: [['Hydrogen peroxide (50 %)', 4], ['Caustic soda', 1.5], ['Peroxide stabiliser', 1], ['Sequestering agent', 1]], why: 'removes the natural colour and the seed-coat; a white ground for pastels and whites', ret: { cotton: 0.95, linen: 0.93, viscose: 0.93, modal: 0.94, tencel: 0.94, bamboo: 0.93, polyester: 1, cdp: 1, nylon: 0.97, acrylic: 0.98, wool: 0.9, silk: 0.9, elastane: 0.95 } },
   mercerise: { label: 'Mercerising', t: 20, ph: 14, time: 1, chem: [['Caustic soda (24–28 °Bé)', 270]], why: 'swells the cotton round under tension: more lustre, dye uptake and strength', ret: { cotton: 1.08, linen: 1.05, viscose: 0.85, modal: 0.9, tencel: 0.9, bamboo: 0.85, polyester: 1, cdp: 1, nylon: 1, acrylic: 0.97, wool: 0.4, silk: 0.4, elastane: 0.9 } },
   dye_reactive: { label: 'Reactive dyeing', t: 60, ph: 11, time: 60, ret: { cotton: 0.97, linen: 0.97, viscose: 0.95, modal: 0.96, tencel: 0.95, bamboo: 0.95, polyester: 1, cdp: 1, nylon: 0.99, acrylic: 0.99, wool: 0.95, silk: 0.95, elastane: 0.99 } },
-  dye_disperse: { label: 'Disperse dyeing', t: 130, ph: 5, time: 45, ret: { cotton: 0.96, linen: 0.95, viscose: 0.93, modal: 0.94, tencel: 0.94, bamboo: 0.93, polyester: 0.97, cdp: 0.97, nylon: 0.95, acrylic: 0.85, wool: 0.7, silk: 0.7, elastane: 0.85 } },
+  dye_disperse: { label: 'Disperse dyeing', t: 130, ph: 5, time: 45, ret: { polypropylene: 0.3, cotton: 0.96, linen: 0.95, viscose: 0.93, modal: 0.94, tencel: 0.94, bamboo: 0.93, polyester: 0.97, cdp: 0.97, nylon: 0.95, acrylic: 0.85, wool: 0.7, silk: 0.7, elastane: 0.85 } },
   dye_acid:  { label: 'Acid dyeing', t: 98, ph: 5, time: 50, ret: { cotton: 0.99, viscose: 0.98, modal: 0.98, tencel: 0.98, bamboo: 0.98, polyester: 1, cdp: 1, nylon: 0.97, acrylic: 1, wool: 0.95, silk: 0.95, elastane: 0.97, linen: 0.99 } },
   dye_cationic: { label: 'Cationic dyeing', t: 98, ph: 4.5, time: 50, ret: { cotton: 0.99, viscose: 0.98, modal: 0.98, tencel: 0.98, bamboo: 0.98, polyester: 1, cdp: 0.98, nylon: 1, acrylic: 0.98, wool: 0.95, silk: 0.95, elastane: 0.97, linen: 0.99 } },
   reduction_clear: { label: 'Reduction clearing', t: 75, ph: 12, time: 20, chem: [['Sodium hydrosulphite', 2], ['Caustic soda', 2]], why: 'strips the disperse dye left on the surface and on the cotton: the wash and rubbing fastness of a polyester blend depends on it', ret: { cotton: 0.99, linen: 0.99, viscose: 0.96, modal: 0.97, tencel: 0.97, bamboo: 0.96, polyester: 0.99, cdp: 0.99, nylon: 0.98, acrylic: 0.98, wool: 0.8, silk: 0.85, elastane: 0.95 } },
   soap:      { label: 'Soaping and rinsing', t: 95, ph: 7, time: 15, chem: [['Soaping agent', 1]], why: 'washes off hydrolysed and unfixed dye: the reactive dyeing\'s rubbing fastness', ret: { cotton: 1, linen: 1, viscose: 0.99, modal: 1, tencel: 1, bamboo: 0.99, polyester: 1, cdp: 1, nylon: 1, acrylic: 1, wool: 0.98, silk: 0.98, elastane: 1 } },
   biopolish: { label: 'Bio-polishing', t: 55, ph: 5, time: 40, chem: [['Cellulase (acid)', 1], ['Acetic acid', 0.5]], why: 'cuts the surface hairs of the cellulosic fibres: a smooth face, less pilling', ret: { cotton: 0.96, linen: 0.95, viscose: 0.9, modal: 0.92, tencel: 0.88, bamboo: 0.9, polyester: 1, cdp: 1, nylon: 1, acrylic: 1, wool: 1, silk: 1, elastane: 1 } },
-  heatset:   { label: 'Heat-setting', t: 190, ph: null, time: 0.6, chem: [], why: 'fixes the width and shape of the polyester and elastane; done before dyeing, it stops creasing and unlevel dyeing', ret: { cotton: 0.92, linen: 0.9, viscose: 0.9, modal: 0.9, tencel: 0.9, bamboo: 0.9, polyester: 1, cdp: 1, nylon: 0.95, acrylic: 0.85, wool: 0.6, silk: 0.7, elastane: 0.9 } },
+  heatset:   { label: 'Heat-setting', t: 190, ph: null, time: 0.6, chem: [], why: 'fixes the width and shape of the polyester and elastane; done before dyeing, it stops creasing and unlevel dyeing', ret: { polypropylene: 0.2, cotton: 0.92, linen: 0.9, viscose: 0.9, modal: 0.9, tencel: 0.9, bamboo: 0.9, polyester: 1, cdp: 1, nylon: 0.95, acrylic: 0.85, wool: 0.6, silk: 0.7, elastane: 0.9 } },
   killer:    { label: 'Peroxide killer', t: 40, ph: 6.5, time: 15, chem: [['Catalase (peroxide killer)', 0.2], ['Acetic acid', 0.5]], why: 'breaks down the peroxide left after bleaching: it would oxidise the reactive dye and kill the cellulase of the bio-polish', ret: {} },
   oba:       { label: 'Optical brightening', t: 60, ph: 8.5, time: 20, chem: [['Optical brightener', 0.8]], why: 'a fluorescent whitener: the cellulosic and the polyester each need their own type, matched in tone', ret: {} },
   soften:    { label: 'Softening', t: 40, ph: 5.5, time: 20, chem: [['Cationic or silicone softener', 2.5]], why: 'handle and lubricity; a finish for the knitting and for the wearer', ret: {} },
 };
 // boil-off shrinkage of the yarn, % (typical)
-const BOILOFF = { cotton: 2.5, linen: 2, viscose: 3, modal: 2.5, tencel: 2, bamboo: 3, polyester: 3, cdp: 3, nylon: 6, acrylic: 2, wool: 5, silk: 2, elastane: 0 };
+const BOILOFF = { polypropylene: 0, cotton: 2.5, linen: 2, viscose: 3, modal: 2.5, tencel: 2, bamboo: 3, polyester: 3, cdp: 3, nylon: 6, acrylic: 2, wool: 5, silk: 2, elastane: 0 };
 // a filament yarn shrinks more in the bath than a staple yarn of the same polymer (typical)
 const FILAMENT_BOILOFF = { polyester: 7, cdp: 7, nylon: 9 };
 
@@ -229,6 +231,7 @@ function classesFor(fibres, variantDisperseOnCdp) {
   fibres.forEach((f) => {
     if (FIB[f.id].rides && fibres.length > 1) return;                  // elastane rides with the face fibre's bath
     let cls = FIB[f.id].primary;
+    if (cls === 'dope') return;                                        // polypropylene takes no dye in the piece: its colour is spun in
     if (f.id === 'cdp' && variantDisperseOnCdp) cls = 'disperse';
     if (['direct', 'vat', 'sulphur'].includes(cls)) cls = 'reactive';
     set.add(cls);
@@ -248,6 +251,49 @@ function compatibility(classes, depthIdx) {
   return { one_bath: false, baths: classes.length, why: 'One bath per dye class: the classes need different pH and temperature.' };
 }
 
+// What a technologist may ASK for against the compiler's advice (the Fabric Studio's "force the process" options): the route is rebuilt as
+// asked, so the feasibility gate can show what it would do and why it is refused. The compiled (safe) route is the one without them.
+const PROCESS_KEYS = ['scour_caustic', 'disperse_c', 'heatset_c', 'skip_killer', 'softener', 'reactive_first', 'finishes'];
+function cleanProcess(p) {
+  const o = {};
+  if (!p || typeof p !== 'object') return o;
+  if (p.scour_caustic === true || p.scour_caustic === 'caustic') o.scour_caustic = true;
+  if (+p.disperse_c >= 60 && +p.disperse_c <= 160) o.disperse_c = Math.round(+p.disperse_c);
+  if (+p.heatset_c >= 80 && +p.heatset_c <= 240) o.heatset_c = Math.round(+p.heatset_c);
+  if (p.skip_killer === true) o.skip_killer = true;
+  if (['cationic', 'silicone', 'nonionic'].includes(p.softener)) o.softener = p.softener;
+  if (p.reactive_first === true) o.reactive_first = true;
+  if (Array.isArray(p.finishes)) { const f = p.finishes.filter((x) => ['dwr', 'wet_rub', 'gsm_improver', 'hydrophilic', 'oil_remover', 'anti_crease'].includes(x)); if (f.length) o.finishes = [...new Set(f)]; }
+  return o;
+}
+function applyProcess(steps, process, f) {
+  const o = cleanProcess(process);
+  if (!Object.keys(o).length) return steps;
+  const out = steps.map((x) => ({ ...x }));
+  const mark = (x, note) => { x.requested = true; x.temp_note = [x.temp_note, note].filter(Boolean).join(' · '); };
+  if (o.scour_caustic) {
+    const sc = out.find((x) => x.proc === 'scour');
+    const patch = { t: 95, ph: 12, chem: [['Caustic soda', 3], ['Detergent / wetting agent', 1], ['Sequestering agent', 1]], label: 'Scouring (caustic soda, as asked)' };
+    if (sc) { Object.assign(sc, patch); mark(sc, 'as you asked'); } else { const n = { proc: 'scour', ...PROC.scour, ...patch }; mark(n, 'as you asked'); out.unshift(n); }
+  }
+  if (o.disperse_c) out.filter((x) => x.proc === 'dye_disperse').forEach((x) => { x.t = o.disperse_c; x.label = x.label.replace(/\(lowered to \d+ °C[^)]*\)/, '').trim() + ` at ${o.disperse_c} °C (as asked)`; mark(x, 'as you asked'); });
+  if (o.heatset_c) {
+    const hs = out.filter((x) => x.proc === 'heatset');
+    if (hs.length) hs.forEach((x) => { x.t = o.heatset_c; x.label = `Heat-setting at ${o.heatset_c} °C (as asked)`; mark(x, 'as you asked'); });
+    else { const n = { proc: 'heatset', ...PROC.heatset, t: o.heatset_c, label: `Heat-setting at ${o.heatset_c} °C (as asked)` }; mark(n, 'as you asked'); out.splice(Math.max(0, out.length - 1), 0, n); }
+  }
+  if (o.skip_killer) { const k = out.findIndex((x) => x.proc === 'killer'); if (k > -1) out.splice(k, 1); }
+  if (o.softener) {
+    const sf = out.find((x) => x.proc === 'soften');
+    if (sf) { sf.chem = [[o.softener === 'cationic' ? 'Cationic softener' : o.softener === 'silicone' ? 'Silicone softener' : 'Non-ionic softener', 2.5]]; mark(sf, 'as you asked'); }
+  }
+  if (o.reactive_first) {
+    const r = out.findIndex((x) => x.proc === 'dye_reactive'), d = out.findIndex((x) => x.proc === 'dye_disperse');
+    if (r > -1 && d > -1 && r > d) { const [x] = out.splice(r, 1); mark(x, 'as you asked: before the disperse dyeing'); out.splice(d, 0, x); }
+  }
+  return out;
+}
+
 function routeFor(spec, fibres, classes, comp, depthIdx, opt) {
   const steps = [];
   const ids = fibres.map((f) => f.id);
@@ -255,11 +301,12 @@ function routeFor(spec, fibres, classes, comp, depthIdx, opt) {
   const cellulosic = ids.some((i) => FIB[i].family === 'cellulosic');
   const cotton = has('cotton') || has('linen');
   const poly = has('polyester') || has('cdp');
-  const elast = has('elastane'), nylon = has('nylon'), wool = has('wool') || has('silk');
+  const elast = has('elastane'), nylon = has('nylon'), wool = has('wool') || has('silk'), pp = has('polypropylene');
   const add = (proc, extra) => steps.push({ proc, ...PROC[proc], ...(extra || {}) });
   // pre-treatment
   if (poly || elast) if (opt.heatset_first !== false && (elast || spec.heatset === 'before')) add('heatset', { ...(wool ? { t: 170 } : {}), label: 'Heat-setting (before dyeing)', temp_note: 'stabilises the width and the shape; 180–190 °C for polyester, 170–190 °C with elastane (not above what the elastane stands)' });
-  if (wool) add('scour', { label: 'Scouring (mild, no caustic)', t: 60, ph: 9, chem: [['Non-ionic detergent', 1], ['Soda ash (mild)', 0.5], ['Sequestering agent', 1]], why: 'a mild non-ionic scour: caustic soda dissolves wool and silk, so it is left out' });
+  if (pp && !cellulosic && !wool) add('scour', { label: 'Washing (mild, polypropylene)', t: 60, ph: 8, chem: [['Non-ionic detergent', 1]], why: 'polypropylene is dope-dyed and takes no scour: a mild warm wash removes the spinning finish; the bath stays well under its softening point' });
+  else if (wool) add('scour', { label: 'Scouring (mild, no caustic)', t: 60, ph: 9, chem: [['Non-ionic detergent', 1], ['Soda ash (mild)', 0.5], ['Sequestering agent', 1]], why: 'a mild non-ionic scour: caustic soda dissolves wool and silk, so it is left out' });
   else add('scour', cellulosic ? {} : { ph: 9.5, chem: [['Detergent / wetting agent', 1], ['Soda ash', 1]], why: 'removes spinning oil and dirt; a gentler alkali for a synthetic' });
   if (depthIdx === 0 || depthIdx === 1 || cellulosic && depthIdx <= 2 || spec.bleach === true) {
     if (cellulosic || wool) {
@@ -268,7 +315,7 @@ function routeFor(spec, fibres, classes, comp, depthIdx, opt) {
     }
   }
   if (steps.some((x) => x.proc === 'bleach')) add('killer');
-  if (depthIdx === 0) add('oba');
+  if (depthIdx === 0 && !(pp && ids.every((i) => ['polypropylene', 'elastane'].includes(i)))) add('oba');
   if (spec.mercerise && cotton && !ids.some((i) => ['viscose', 'bamboo', 'wool', 'silk'].includes(i))) add('mercerise');
   // dyeing, in the order the chemistry allows
   if (depthIdx > 0) {
@@ -297,7 +344,7 @@ function routeFor(spec, fibres, classes, comp, depthIdx, opt) {
   if (cellulosic && spec.biopolish !== false && !wool) add('biopolish');
   if ((poly || elast) && spec.heatset !== 'none' && spec.heatset !== 'before' && !elast) add('heatset', wool ? { t: 170, label: 'Heat-setting (after dyeing, wool-safe 170 °C)', temp_note: 'a wool or silk blend is set at about 170 °C with a short dwell: at the 190 °C of a polyester alone the wool yellows and scorches' } : { label: 'Heat-setting (after dyeing)', temp_note: 'sets the polyester; done after dyeing it risks thermomigration of disperse dye to the surface and yellowing of the white' });
   add('soften', depthIdx === 0 ? { chem: [['Silicone or non-ionic softener (no cationic on an optical white: it yellows it)', 2.5]] } : undefined);
-  return steps;
+  return applyProcess(steps, spec.process, { poly, elast, wool, pp });
 }
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════
@@ -326,12 +373,13 @@ function analyse(input) {
   const ids = fibres.map((f) => f.id);
   const has = (id) => ids.includes(id);
   const cellulosic = fibres.some((f) => f.family === 'cellulosic');
-  const spec = { mercerise: !!input.mercerise, biopolish: input.biopolish === false ? false : undefined, heatset: input.heatset, bleach: input.bleach };
+  const spec = { mercerise: !!input.mercerise, biopolish: input.biopolish === false ? false : undefined, heatset: input.heatset, bleach: input.bleach, process: cleanProcess(input.process) };
 
   // forbidden / dangerous combinations
   if (has('elastane') && fibres.length > 1) say('note', 'Elastane rides with the other fibre: it is dyed in the same bath at a lower temperature, never bleached with chlorine, and heat-set no hotter than it stands.');
   if (['nylon', 'wool', 'silk', 'elastane'].some(has)) say('warn', 'Chlorine bleach (hypochlorite) is not used on this yarn: it damages nylon, wool, silk and elastane. Peroxide only.');
   if (has('wool') && cellulosic) say('warn', 'Wool and cellulosic fibres in one yarn: the alkali that cellulose needs (scouring, reactive dyeing) attacks the wool; the wool\'s acid dyeing does not suit the cellulose. Keep the alkali mild and cool, or dye the fibres before blending.');
+  if (has('polypropylene')) say('note', 'Polypropylene takes no dye in the piece: its colour is spun in (dope-dyed), so the shade chosen is for the other fibres. It softens from about 140 °C and melts at 165-170 °C: keep every bath, the drying and the heat-set at 115 °C or below.');
   if (has('wool') && input.agitation !== false) say('note', 'Wool felts with heat, moisture and agitation: dye in a gentle machine and avoid shock cooling.');
   if (spec.mercerise && ids.some((i) => ['viscose', 'bamboo', 'wool', 'silk'].includes(i))) say('warn', 'Mercerising is left out: caustic at that strength damages viscose, bamboo, wool and silk.');
   if (spec.mercerise && !(has('cotton') || has('linen'))) say('note', 'Mercerising is for cotton and linen: there is none in this yarn.');
@@ -356,7 +404,7 @@ function analyse(input) {
   if (depthIdx > 0) {
     fibres.forEach((f) => {
       if (f.rides && fibres.length > 1) return;
-      let cls = f.primary; if (f.id === 'cdp' && input.cdp_disperse) cls = 'disperse'; if (['direct', 'vat', 'sulphur'].includes(cls)) cls = 'reactive';
+      let cls = f.primary; if (cls === 'dope') return; if (f.id === 'cdp' && input.cdp_disperse) cls = 'disperse'; if (['direct', 'vat', 'sulphur'].includes(cls)) cls = 'reactive';
       const base = OWF[cls][depthIdx];
       const fin = f.dtex > 0 ? Math.sqrt(FIB[f.id].dtex / f.dtex) : 1;
       const owf = base * fin * f.depth;
@@ -416,7 +464,7 @@ function analyse(input) {
     const t = tenacityWith(toBy(cum));
     const after = start && t ? { tenacity: r1(t.tenacity), retained_pct: r1((t.tenacity / start.tenacity) * 100), elongation: r1(t.elong) } : null;
     trace.push(after);
-    return { id: s.proc, label: s.label, t_c: s.t, ph: s.ph, time_min: s.time, chemicals: (s.chem || []).map(([n, g]) => ({ name: n, g_per_l: g })), purpose: s.why || null, note: s.temp_note || null, classes: s.classes || null,
+    return { id: s.proc, label: s.label, t_c: s.t, ph: s.ph, time_min: s.time, chemicals: (s.chem || []).map(([n, g]) => ({ name: n, g_per_l: g })), purpose: s.why || null, note: s.temp_note || null, classes: s.classes || null, requested: !!s.requested,
       retention: Object.fromEntries(fibres.map((f) => [f.id, r2(ret[f.id])])), yarn_after: after };
   });
   const endT = start ? tenacityWith(toBy(cum)) : null;
@@ -434,7 +482,7 @@ function analyse(input) {
 
   // ── fastness ──────────────────────────────────────────────────────────────────────────────
   let fastness = null;
-  if (depthIdx > 0) {
+  if (depthIdx > 0 && classes.length) {
     const per = classes.map((c) => ({ class: c, class_label: CLASS_LABEL[c], grades: Object.fromEntries(FAST_KEYS.map(([k]) => [k, FAST[c][k][depthIdx]])) }));
     const overall = Object.fromEntries(FAST_KEYS.map(([k]) => [k, [Math.min(...per.map((p) => p.grades[k][0])), Math.min(...per.map((p) => p.grades[k][p.grades[k].length - 1]))]]));
     const risks = [];
@@ -472,7 +520,7 @@ function analyse(input) {
   const sweep = DEPTHS.map((d, k) => {
     const cl = k === 0 ? [] : classesFor(list, !!input.cdp_disperse);
     let dyeKg = 0;
-    if (k > 0) fibres.forEach((f) => { if (f.rides && fibres.length > 1) return; let c = f.primary; if (f.id === 'cdp' && input.cdp_disperse) c = 'disperse'; if (['direct', 'vat', 'sulphur'].includes(c)) c = 'reactive'; dyeKg += (OWF[c][k] * (f.dtex > 0 ? Math.sqrt(FIB[f.id].dtex / f.dtex) : 1) * f.depth / 100) * f.dry * dryYarnKg; });
+    if (k > 0) fibres.forEach((f) => { if (f.rides && fibres.length > 1) return; let c = f.primary; if (c === 'dope') return; if (f.id === 'cdp' && input.cdp_disperse) c = 'disperse'; if (['direct', 'vat', 'sulphur'].includes(c)) c = 'reactive'; dyeKg += (OWF[c][k] * (f.dtex > 0 ? Math.sqrt(FIB[f.id].dtex / f.dtex) : 1) * f.depth / 100) * f.dry * dryYarnKg; });
     const saltG = cl.includes('reactive') ? CHEM.reactive[0].g[k] : 0, alkG = cl.includes('reactive') ? CHEM.reactive[1].g[k] : 0;
     const cp = compatibility(cl, k);
     const rt = routeFor(spec, list, cl, cp, k, { heatset_first: true });
@@ -507,7 +555,7 @@ function profileOf(mix, tex, opts) {
   for (const [f, v] of Object.entries(mix || {})) { const k = f === 'spandex' ? 'elastane' : f; if (own(FIB, k) && +v > 0) fibres[k] = (fibres[k] || 0) + +v; }
   if (!Object.keys(fibres).length) return null;
   const o = opts || {};
-  return analyse({ fibres, count: { value: tex, unit: 'tex' }, filament: o.filament, shade: o.shade, liquor_ratio: o.liquor_ratio, mercerise: o.mercerise, biopolish: o.biopolish, heatset: o.heatset, spinning: o.spinning, grade: o.grade, cdp_disperse: o.cdp_disperse, yarn_kg: o.yarn_kg });
+  return analyse({ fibres, count: { value: tex, unit: 'tex' }, filament: o.filament, shade: o.shade, liquor_ratio: o.liquor_ratio, mercerise: o.mercerise, biopolish: o.biopolish, heatset: o.heatset, spinning: o.spinning, grade: o.grade, cdp_disperse: o.cdp_disperse, yarn_kg: o.yarn_kg, process: o.process });
 }
 
-module.exports = { analyse, profileOf, catalogue, ChemError, FIB, DEPTHS, DEPTH_LABEL, AGENTS, PROC, RES, OWF, BATH, CHEM, FAST };
+module.exports = { cleanProcess, PROCESS_KEYS, analyse, profileOf, catalogue, ChemError, FIB, DEPTHS, DEPTH_LABEL, AGENTS, PROC, RES, OWF, BATH, CHEM, FAST };

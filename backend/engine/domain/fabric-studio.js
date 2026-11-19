@@ -46,6 +46,8 @@ const HAND = require('./fabric-hand-engine');
 const CT = require('./colour-target-engine');
 const LIGHT = require('./fabric-light-engine');
 const FEAS = require('./feasibility-engine');
+const PE = require('./process-effects');
+const LAB = require('./virtual-lab-engine');
 const LOOK = require('./fabric-look-engine');
 const SE = require('./stretch-engine');
 const FY = require('./fancy-yarn-engine');
@@ -136,6 +138,8 @@ const FIBRES = {
   acrylic:           { label: 'Acrylic',              dFactor: 1.14 },
   silk:              { label: 'Silk (spun)',          dFactor: 1.07 },
   linen:             { label: 'Linen',                dFactor: 1.00 },
+  // polypropylene is dope-dyed (colour spun in): no dye class, wet route kept to 115 °C or less; d ∝ √(1.52 ÷ 0.91)
+  polypropylene:     { label: 'Polypropylene (spun, dope-dyed)', dFactor: 1.29 },
 };
 
 const FAMILY = {
@@ -324,7 +328,7 @@ function readYarn(y, fallback) {
 const FIBRE_MIX = {
   cotton: { cotton: 100 }, cvc: { cotton: 60, polyester: 40 }, polyester_spun: { polyester: 100 },
   viscose: { viscose: 100 }, modal: { modal: 100 }, polyester_filament: { polyester: 100 }, nylon_filament: { nylon: 100 },
-  wool: { wool: 100 }, acrylic: { acrylic: 100 }, silk: { silk: 100 }, linen: { linen: 100 },
+  wool: { wool: 100 }, acrylic: { acrylic: 100 }, silk: { silk: 100 }, linen: { linen: 100 }, polypropylene: { polypropylene: 100 },
 };
 function characterOf(y) {
   if (!y) return null;
@@ -1594,7 +1598,15 @@ function analyse(input) {
       vs_finished: stateRow ? { length_pct: stateRow.length_pct, width_pct: stateRow.width_pct } : { length_pct: 0, width_pct: 0 },
       note: stateRow ? (stateId === 'finished' ? 'The finished state is the one the factory records measure; every other state is placed against it.' : 'The loop length is what the machine knitted; the loops take the shape of this state, so the wales, courses, weight and width follow it. The numbers of the Hand and Look cards and the 3D cloth are worked in it.') : 'This structure has no relaxation model: the finished state is shown.',
     };
-    const handOut = input.hand && input.hand.enabled ? handSummary(input.hand, input, S, family, match, recOut, !!plush, clothState) : null;
+    // what the wet-process chemicals of the cloth's route do to it (process-effects.js), when the Yarn chemistry card is on
+    let processOut = null;
+    if (input.chemistry && input.chemistry.enabled) {
+      try {
+        const cc = FEAS.clothChemistry(S, input);
+        if (cc) { processOut = PE.effects(cc.steps, { bath_chemicals: cc.bath_chemicals, dark: ['dark', 'black'].includes(cc.shade), finishes: (CHEMY.cleanProcess(input.chemistry.process) || {}).finishes }); processOut.fibres = cc.fibres; processOut.route = cc.steps.map((x) => ({ id: x.id, label: x.label, t_c: x.t, requested: !!x.requested })); }
+      } catch (_) { processOut = null; }
+    }
+    const handOut = input.hand && input.hand.enabled ? handSummary(input.hand, input, S, family, match, recOut, !!plush, clothState, processOut) : null;
     // …and how much light the cloth lets through (opacity, show-through, stretched) and the glow a back-lit cloth shows (fabric-light-engine.js)
     let lightOut = null;
     if (input.look && typeof input.look === 'object') {
@@ -1659,6 +1671,7 @@ function analyse(input) {
       recovery: recOut,
       look: lookOut,
       hand: handOut,
+      process_effects: processOut,
       light: lightOut,
       state: clothState,
       colour: colourOut,
@@ -1755,6 +1768,9 @@ function analyse(input) {
     };
     // the three gates: does it hold together, does the yarn fit, can a machine knit it and every fibre survive the route (feasibility-engine.js)
     out.feasibility = FEAS.assess(out, input, { thickness_mm: thickMm, thickness_basis: 'estimate (hand model T0)' });
+    // the virtual lab (air permeability, thermal resistance, a hundred rolls) and the matching collar and cuff, on request
+    out.lab = input.lab && input.lab.enabled ? labSummary(input, out, clothState, thickMm, S, plush) : null;
+    out.trim = input.trim && input.trim.enabled ? trimSummary(input, out) : null;
     return out;
   } catch (e) {
     if (e instanceof StudioError || e instanceof MEL.MelangeError || e instanceof BY.BlendError) return { success: false, error: e.message };
@@ -1813,10 +1829,58 @@ function lookSummary(opt, S, roleYarn, feedRows, st, gating, chemOut, cs) {
     });
   } catch (e) { if (e instanceof LOOK.LookError) return { success: false, error: e.message }; if (e instanceof BY.BlendError) return null; throw e; }
 }
+// ── the virtual lab: air permeability, thermal resistance and a hundred rolls (virtual-lab-engine.js) ──
+function labSummary(input, out, cs, thickMm, S, plush) {
+  const o = input.lab || {};
+  try {
+    const loopFeed = (out.yarn.feeds || []).find((f) => f.role === 'loop');
+    const acc = out.fabric.accuracy && out.fabric.accuracy.gsm ? out.fabric.accuracy.gsm.typical_error_pct : null;
+    const shade = (input.chemistry && input.chemistry.shade) || (input.look && input.look.shade) || 'medium';
+    return LAB.analyse({
+      wpc: cs.wpc, cpc: cs.cpc, loop_mm: S.lref, yarn_d_mm: S.gfit.yarn_d_mm, gsm: cs.gsm, thickness_mm: thickMm || 0.6,
+      fibres: FEAS.clothFibres(out), layers: out.structure.bed === 'double' ? 2 : 1, shade,
+      brushed: out.finish && out.finish.brushed && out.finish.brushed !== 'none' ? out.finish.brushed : undefined,
+      nap_mm: plush ? plush.pile.finished_pile_mm : out.finish ? out.finish.nap_mm : 0, loop_d_mm: !plush && loopFeed ? loopFeed.d_mm : 0,
+      end_use: o.end_use, rolls: o.rolls, cv_count: o.cv_count, tol_sl_mm: o.tol_sl_mm, cv_finish: o.cv_finish, spec_pct: o.spec_pct, spec_width_pct: o.spec_width_pct,
+      model_error_pct: acc > 0 ? acc : undefined,
+    });
+  } catch (e) { if (e instanceof LAB.LabError || e instanceof LIGHT.LightError) return { success: false, error: e.message }; throw e; }
+}
+
+// ── the collar and cuff that match this body fabric: a lycra rib on the same yarn and shade, worked out by the Studio itself ──
+function trimSummary(input, out) {
+  const y = input.yarn || {};
+  const keep = {}; ['fibre', 'type', 'ply', 'filaments', 'lustre', 'section', 'blend', 'mix', 'blend_density'].forEach((k) => { if (y[k] != null) keep[k] = y[k]; });
+  const body = out.fabric.gsm, shade = (input.look && input.look.shade) || undefined;
+  const rowOf = (id, label, ratio, denier) => {
+    const t = byId(id); if (!t) return null;
+    const tp = templateOf(t);
+    const trimIn = { bed: tp.bed, gating: tp.gating, grid: tp.grid, feeds: tp.roles.map((r) => ({ role: r })), yarn: keep, elastane: { denier, draft: 2.8, every: 'all' }, target: { gsm: Math.round(body * ratio) }, machine: {}, ...(shade ? { look: { shade } } : {}) };
+    const a = analyse(trimIn);
+    if (!a.success) return { id, label, error: a.error };
+    const el = (a.yarn.composition || []).find((c) => /elastane/i.test(c.part));
+    return { id, label, structure: a.structure.identity ? a.structure.identity.title : a.structure.family_label, yarn: a.yarn.ground.count, yarn_ne: r1(590.5 / a.yarn.ground.tex), tex: a.yarn.ground.tex, gauge: a.machine.gauge, dia: a.machine.dia, needles: a.machine.needles,
+      sl_mm: a.fabric.sl_mm, gsm: a.fabric.gsm, width_open_in: a.fabric.width_open_in, elastane_pct: el ? el.pct : 0, elastane: `${denier} D at a draft of 2.8`, verdict: a.feasibility ? a.feasibility.verdict : null, fibres: a.feasibility ? a.feasibility.fibres : null, route: a.feasibility ? a.feasibility.route.map((x) => x.label + (x.t_c ? ' ' + x.t_c + ' °C' : '')) : null, ok_to_knit: a.ok_to_knit };
+  };
+  const collar = rowOf('lycra_rib_1x1', 'Collar / neckband: 1×1 lycra rib', 1.25, 40);
+  const cuff = rowOf('lycra_rib_2x2', 'Cuff / hem band: 2×2 lycra rib', 1.35, 40);
+  const rows = [collar, cuff].filter(Boolean);
+  const bodyRoute = ((out.feasibility && out.feasibility.route) || []).map((q) => q.label + (q.t_c ? ' ' + q.t_c + ' °C' : '')).join('|');
+  const same = rows.every((x) => x.route && x.route.length && bodyRoute === x.route.join('|'));
+  const bodyEl = (out.yarn.composition || []).some((c) => /elastane/i.test(c.part));
+  const notes = [];
+  if (!bodyEl) notes.push('The trim has elastane and the body has none: the elastane is heat-set before dyeing and dyed no hotter than it stands, so the trim cannot share the body\'s bath. Dye it in its own bath and match the shade by lab dip, in the same dye class and lot of dye.');
+  else notes.push('Body and trim both carry elastane: the same pre-heat-set and the same dye route suit both.');
+  if (same) notes.push('The trim\'s wet route is the body\'s: it can be dyed in the same bath and lot.');
+  else notes.push('The trim\'s wet route differs from the body\'s (see each route): dye it in its own bath from the same dye lot, and check the shade under more than one light.');
+  notes.push('A rib is knitted tighter and shrinks more across than the body: cut the band 5-10 % shorter than the opening it closes, then check it on a trial piece. Flat-knit collars are made on 12-14 GG flat machines from the same yarn.');
+  return { collar, cuff, dye_sync: { same_route: same }, notes, basis: 'The rib is worked out by the Studio itself (the factory records of a lycra rib), on the body\'s yarn fibre and shade; its weight is the body\'s times 1.25 (collar) and 1.35 (cuff), a typical ratio, an estimate.' };
+}
+
 function chemistrySummary(opt, S, roleYarn, feedRows) {
   const roles = {};
   yarnsInUse(S, roleYarn, feedRows).forEach((u) => {
-    try { const p = CHEMY.profileOf(u.mix, u.tex, { filament: u.filament, shade: opt.shade, liquor_ratio: opt.liquor_ratio, mercerise: !!opt.mercerise, biopolish: opt.biopolish === false ? false : undefined, heatset: opt.heatset, spinning: u.spinning, cdp_disperse: !!opt.cdp_disperse }); if (p) roles[u.role] = p; } catch (e) { if (!(e instanceof CHEMY.ChemError)) throw e; }
+    try { const p = CHEMY.profileOf(u.mix, u.tex, { filament: u.filament, shade: opt.shade, liquor_ratio: opt.liquor_ratio, process: opt.process, mercerise: !!opt.mercerise, biopolish: opt.biopolish === false ? false : undefined, heatset: opt.heatset, spinning: u.spinning, cdp_disperse: !!opt.cdp_disperse }); if (p) roles[u.role] = p; } catch (e) { if (!(e instanceof CHEMY.ChemError)) throw e; }
   });
   return Object.keys(roles).length ? roles : null;
 }
@@ -1861,7 +1925,7 @@ function stretchSummary(input, S, family, match, rec, isPlush) {
     };
   } catch (e) { return null; }
 }
-function handSummary(opt, input, S, family, match, recOut, isPlush, cs) {
+function handSummary(opt, input, S, family, match, recOut, isPlush, cs, pe) {
   try {
     const y = S.ground;
     const mix = Object.assign({}, y.mix || FIBRE_MIX[y.fibre] || { cotton: 100 });
@@ -1869,13 +1933,13 @@ function handSummary(opt, input, S, family, match, recOut, isPlush, cs) {
     const el = input.elastane || {};
     const brush = input.finish && ['face', 'back'].includes(input.finish.brush) ? input.finish.brush : input.finish && input.finish.brush && input.finish.brush !== 'none' ? 'back' : (input.look && ['face', 'back'].includes(input.look.brushed) ? input.look.brushed : 'none');
     const soft = input.look && input.look.softener;
-    const chemical = ['none', 'softener', 'silicone', 'resin'].includes(opt.finish) ? opt.finish : soft ? 'softener' : 'none';
+    const chemical = ['none', 'softener', 'silicone', 'resin'].includes(opt.finish) ? opt.finish : soft ? 'softener' : (pe && pe.hand.finish) || 'none';
     const rec = recOut && recOut.ground && recOut.ground.for_stretch ? recOut.ground.for_stretch : undefined;
     return HAND.analyse({
       fabricId: isPlush ? 'velour_plush' : (match && match.id) || FAMILY[family].anchor, category: family === 'rib' ? 'rib' : family === 'interlock' ? 'interlock' : '',
       fibres: Object.fromEntries(Object.entries(mix).filter(([k]) => BY.FIB[k])), count: { value: y.tex, unit: 'tex' }, spinning: y.type && BY.GEO[y.type] ? y.type : undefined, filament: FILAMENT_FIBRES.includes(y.fibre),
       loop_mm: S.lref, gsm: cs ? cs.gsm : S.gsm, wpc: cs ? cs.wpc : S.wpc, cpc: cs ? cs.cpc : S.cpc, yarn_d_mm: S.gfit.yarn_d_mm, elastane_pct: elast, elastane_denier: +el.denier > 0 ? +el.denier : undefined,
-      finish: { chemical, brushed: brush }, load_gf_cm: +opt.load_gf_cm > 0 ? +opt.load_gf_cm : undefined, yarnRecovery: rec,
+      finish: { chemical, brushed: brush, process: pe ? { bending: pe.hand.bending, friction: pe.hand.friction } : undefined }, load_gf_cm: +opt.load_gf_cm > 0 ? +opt.load_gf_cm : undefined, yarnRecovery: rec,
     });
   } catch (e) { if (e instanceof HAND.HandError) return { success: false, error: e.message }; if (e instanceof BY.BlendError) return null; return null; }
 }

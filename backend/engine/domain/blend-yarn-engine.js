@@ -64,6 +64,7 @@ const FIB = {
   wool:      { label: 'Wool',       code: 'WO',  dtex: 4.10, staple: 65, hair: 1.3,  surface: 0.90, cellulosic: false, natural: true },
   silk:      { label: 'Silk (spun)', code: 'SE', dtex: 1.10, staple: 60, hair: 0.35, surface: 2.20, cellulosic: false, natural: true },
   linen:     { label: 'Linen',      code: 'LI',  dtex: 5.00, staple: 40, hair: 0.8,  surface: 0.90, cellulosic: true,  natural: true },
+  polypropylene: { label: 'Polypropylene (staple)', code: 'PP', dtex: 2.20, staple: 51, hair: 0.5, surface: 1.20, cellulosic: false, synthetic: true },
 };
 // tensile figures the tables do not carry (typical; marked so)
 const TYPICAL_TENSILE = { tencel: { tenacity: 0.40, extension: 14, modulus: 8.5, wet: { ten: 0.88, ext: 1.1, mod: 0.4 }, hot_wet: { ten: 0.85, ext: 1.1, mod: 0.4 }, note: 'lyocell, typical staple' } };

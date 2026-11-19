@@ -34,6 +34,29 @@ On scientific grounding, KnitAdvisor is ahead of the PRD. Every number carries a
   - The catalogue's `relief_single` knits two separate cloths as drawn.
   - The DNA's unit-cell law disagrees with the Studio by more than 50 % on fleece and French terry. The Studio's fleece courses-per-cm is not mass-consistent; to be investigated.
 
+### Update, 2026-11-19: Phase B done
+
+- **Polypropylene** is a Studio fibre (spun, dope-dyed). It takes no dye class in the piece, and its route stays at 115 °C or below. Beside polyester, the 130 °C disperse route is flagged FATAL (U-10).
+- **Hard blocks.** The Yarn chemistry card has a "Force the process" section: caustic scour, disperse °C, heat-set °C, skip the peroxide killer, softener type, and reactive before disperse. Each forced setting is run through the gates. U-09, U-10, U-11 and U-12 can go FATAL (U-10 only when the route actually reaches PP-melting temperatures); U-18 and U-19 are warnings. Every failure comes with a one-click repair that clears exactly that setting, and the compiled safe route is shown beside it.
+- **27 chemicals** (`process-effects.js`). The route's chemicals, plus the dye-bath chemicals and any extra finishes (DWR, wet-rub improver, GSM improver, hydrophilic softener, anti-creasing, oil remover), are added up into bending, friction, hairiness, weight, Δb*/ΔL* and wet-rubbing effects. The Hand card works with them: the softener is the hand engine's own finish, and every other chemical's bending and friction ride on top. The Studio's weight is deliberately not changed. All of it is tagged estimate.
+- **Score changes:** Module 4 78 → 90 %, guardrails 83 → 92 %, Module 2 (fibre matrix) 64 → 68 %. **Overall ≈ 68 → 71 %.**
+- **Still open in chemistry:** the per-chemical numbers have no mill measurement behind them, and Δb*/ΔL* are reported but not yet fed into the Colour card.
+
+### Update, 2026-11-19: Phase C done
+
+- **Virtual lab** (`virtual-lab-engine.js`, Studio card + Lab tab, `/studio/virtual-lab`):
+  - **Air permeability** at 100 Pa, built from the loop geometry's open area, the thickness, and the flow through the fibre mass. A raised nap and a pile or loop yarn are layers in series. The calibration is a 30s jersey = 700 mm/s, tagged estimate.
+  - **Thermal resistance** (Rct, clo) from the thickness and a fibre-and-air conductivity.
+  - **End-use fit** for six uses.
+  - The PRD's air-permeability formula (no thickness, no pore size) was not copied.
+- **SPC.** A hundred rolls (up to 1000), seeded:
+  - Yarn count, stitch length and finishing spreads add in quadrature.
+  - Output: weight σ, Cp, Cpk, % of rolls in spec, a histogram, the width Cp, and a shade ΔE00 pass rate.
+  - Cpk is given twice: machine set to target, and set from the Studio's number untried, with the model's own typical error as the bias.
+- **Collar and cuff matcher.** The Studio itself works out a 1×1 lycra rib collar (×1.25 body weight) and a 2×2 cuff (×1.35): yarn count, gauge, diameter, GSM, width. It also says whether they can share the body's dye bath.
+- **Score changes:** Module 6 58 → 80 %, end-use and lab coverage up. **Overall ≈ 71 → 75 %.**
+- **Still open:** all the lab numbers are estimates until ISO 9237 air permeability, ISO 11092 Rct and a 100-roll weight log from a mill replace them. The Uster CVm is not yet linked to the count spread.
+
 ---
 
 ## 2. Module-by-module

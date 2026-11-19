@@ -45,7 +45,7 @@ const GF_CM_TO_N_M = 0.980665;             // 1 gf/cm = 9.80665 mN / 0.01 m = 0.
 const TF_REF = 15.9;                       // the tightness factor of the reference (30s Ne on 2.8 mm)
 const TWIST_LOCK = { carded: 1.5, combed: 1.6, compact: 1.8, siro: 1.7, siro_compact: 1.9, open_end: 1.4, vortex: 1.5, filament: 1.0 };   // twist stops fibres sliding: a yarn is stiffer than the free sum
 // fibre-on-fibre friction (dry), mass-weighted for the yarn
-const MU = { cotton: 0.36, polyester: 0.34, viscose: 0.30, modal: 0.30, tencel: 0.28, bamboo: 0.30, nylon: 0.30, acrylic: 0.30, wool: 0.28, silk: 0.24, linen: 0.30 };
+const MU = { cotton: 0.36, polyester: 0.34, viscose: 0.30, modal: 0.30, tencel: 0.28, bamboo: 0.30, nylon: 0.30, acrylic: 0.30, polypropylene: 0.28, wool: 0.28, silk: 0.24, linen: 0.30 };
 // structure: bending carried by the loops, shear stiffness, how many yarn diameters thick, how much it compresses, surface relief
 const STRUCT = {
   jersey:    { bend: 1.00, shear: 1.00, thick: 3.1, comp: 0.40, lc: 0.40, relief: 1.0, rc: 0 },
@@ -123,7 +123,11 @@ function prepare(input) {
 
 function compute(input, isRef) {
   const P = prepare(input), { p, fibres, elast, prof, tex, kind, fin, brushed, loadGf } = P;
-  const K = STRUCT[kind] || STRUCT.jersey, F = FINISHES[fin], BR = BRUSHED[brushed];
+  // the wet-process chemicals of the route (process-effects.js, when the chemistry card is on): their bending and friction on top of the finish
+  const PX = p.finish && p.finish.process && typeof p.finish.process === 'object' ? p.finish.process : null;
+  const pxB = PX && +PX.bending > 0 ? clamp(+PX.bending, 0.5, 1.6) : 1, pxM = PX && +PX.friction > 0 ? clamp(+PX.friction, 0.5, 1.5) : 1;
+  const F0 = FINISHES[fin], F = pxB === 1 && pxM === 1 ? F0 : { ...F0, B: F0.B * pxB, HB: F0.HB * pxB, G: F0.G * (1 + 0.5 * (pxB - 1)), MIU: F0.MIU * pxM };
+  const K = STRUCT[kind] || STRUCT.jersey, BR = BRUSHED[brushed];
   const loopMm = +p.loop_mm > 0.5 ? +p.loop_mm : r2(10 * Math.sqrt(tex) / TF_REF);
   const stretchIn = { fabricId: fabricIdOf(p, kind), category: p.category || '', loopMm, tex, countNe: 590.5 / tex, fibers: elast > 0 ? { ...scaleTo(fibres, 100 - elast), elastane: elast } : fibres, elastanePct: elast, rkm: prof.tensile.tenacity.value,
     yarnDiaMm: +p.yarn_d_mm > 0 ? +p.yarn_d_mm : undefined, gsm: +p.gsm > 0 ? +p.gsm : undefined, lycraDenier: +p.elastane_denier > 0 ? +p.elastane_denier : null, yarnRecovery: p.yarnRecovery };
@@ -189,7 +193,7 @@ function compute(input, isRef) {
 
   const out = {
     kind, kind_label: SE._KINDS[kind] ? SE._KINDS[kind].label : kind,
-    inputs: { loopMm, tex, gsm, wpc, cpc, d, ratio, tf, mu, hair, lock, tight, free, By, fin, brushed, elast, spinning: P.spinning || (p.filament ? 'filament' : 'combed'), ST, loadGf },
+    inputs: { loopMm, tex, gsm, wpc, cpc, d, ratio, tf, mu, hair, lock, tight, free, By, fin, brushed, elast, process_chemicals: !!PX, spinning: P.spinning || (p.filament ? 'filament' : 'combed'), ST, loadGf },
     num: { bwale, bcourse, bmean, hbRatio, G, HG, HG5, tw, tl, T0, Tm, comp, LC, WC, RC, SMD, MIU, MMD, wMgCm2, cMean, cw: cLen(bwale), cc: cLen(bcourse) },
     scores: { stiff, smooth, full, spring, drape },
   };
@@ -285,7 +289,7 @@ function analyse(input) {
 
   return {
     success: true,
-    identity: { structure: c.kind_label, yarn: { count_tex: r1(I.tex), count_ne: r1(590.5 / I.tex), spinning: I.spinning, hairiness_vs_combed_cotton: r2(I.hair), friction: r2(I.mu) }, finish: { chemical: FINISHES[I.fin].label, brushed: I.brushed }, load_gf_cm: I.loadGf },
+    identity: { structure: c.kind_label, yarn: { count_tex: r1(I.tex), count_ne: r1(590.5 / I.tex), spinning: I.spinning, hairiness_vs_combed_cotton: r2(I.hair), friction: r2(I.mu) }, finish: { chemical: FINISHES[I.fin].label, brushed: I.brushed, process_chemicals: I.process_chemicals }, load_gf_cm: I.loadGf },
     geometry: { loop_mm: r2(I.loopMm), wales_per_cm: r1(I.wpc), courses_per_cm: r1(I.cpc), yarn_d_mm: r3(I.d), gsm: r1(I.gsm), yarn_ratio: r2(I.ratio), tightness_factor: r1(I.tf) },
     tensile, shear, bending, compression, surface, weight,
     hand: { summary: sum, scores, use_fit: useFit, note: 'The five scores run 0–10 on this engine\'s own scale, set against the same cloth\'s reference (30s combed cotton single jersey, same finish). They are read from the numbers above — they are not a published hand-value formula.' },

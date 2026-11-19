@@ -1294,7 +1294,7 @@ router.get('/color/shade-check', (req, res) => {
 // calculation limit (the /api rate limiter still applies). Signed-in only,
 // like the calculator it sits beside.
 router.get('/studio/templates', requireUser, (req, res) => {
-  res.json({ success: true, templates: fabricStudio.listTemplates(), fibres: fabricStudio.FIBRES, limits: fabricStudio.LIMITS, machines: knitMachine.list(), melange: require('../engine/domain/melange-engine').catalogue(), blend: require('../engine/domain/blend-yarn-engine').catalogue(), chemistry: require('../engine/domain/yarn-chemistry-engine').catalogue(), recovery: require('../engine/domain/yarn-recovery-engine').catalogue(), fancy: require('../engine/domain/fancy-yarn-engine').catalogue(), hand: require('../engine/domain/fabric-hand-engine').catalogue(), colour: require('../engine/domain/colour-target-engine').catalogue(),
+  res.json({ success: true, templates: fabricStudio.listTemplates(), fibres: fabricStudio.FIBRES, limits: fabricStudio.LIMITS, machines: knitMachine.list(), melange: require('../engine/domain/melange-engine').catalogue(), lab: require('../engine/domain/virtual-lab-engine').catalogue(), blend: require('../engine/domain/blend-yarn-engine').catalogue(), chemistry: require('../engine/domain/yarn-chemistry-engine').catalogue(), recovery: require('../engine/domain/yarn-recovery-engine').catalogue(), fancy: require('../engine/domain/fancy-yarn-engine').catalogue(), hand: require('../engine/domain/fabric-hand-engine').catalogue(), colour: require('../engine/domain/colour-target-engine').catalogue(),
     warp: { templates: warpStudio.TEMPLATES, machines: Object.fromEntries(Object.entries(warpStudio.MACHINES).map(([k, m]) => [k, { label: m.label, gauges: m.gauges, bars: m.bars, speed: m.speed, use: m.use, beds: m.beds }])), fibres: Object.fromEntries(Object.entries(warpStudio.FIBRES).map(([k, f]) => [k, f.label])) } });
 });
 
@@ -1686,6 +1686,20 @@ router.post('/studio/analyse', requireUser, async (req, res) => {
   } catch (err) {
     console.error('[studio] analyse failed:', err);
     res.status(500).json({ success: false, error: 'The studio could not analyse this structure.' });
+  }
+});
+
+// Virtual lab: air permeability, thermal resistance and a hundred rolls of a drawn cloth (engine/domain/virtual-lab-engine.js).
+// The Studio also runs it inside /studio/analyse (the `lab` input, with the collar and cuff matcher `trim`).
+const virtualLab = require('../engine/domain/virtual-lab-engine');
+router.get('/studio/virtual-lab/catalogue', requireUser, (req, res) => res.json({ success: true, ...virtualLab.catalogue() }));
+router.post('/studio/virtual-lab', requireUser, (req, res) => {
+  try {
+    res.json(virtualLab.analyse(req.body || {}));
+  } catch (err) {
+    if (err instanceof virtualLab.LabError || (err && err.name === 'LightError')) return res.status(400).json({ success: false, error: err.message });
+    console.error('[studio] virtual lab failed:', err);
+    res.status(500).json({ success: false, error: 'The virtual lab could not work this cloth out.' });
   }
 });
 

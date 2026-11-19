@@ -47,7 +47,7 @@ const SHADES = Object.keys(BODY);
 // a cotton-raw yarn's specular reflectance (Fresnel at n ≈ 1.55): the sheen index 100
 const R_COTTON = Math.pow((1.55 - 1) / (1.55 + 1), 2);
 // the renderer's fibre keys
-const FIBRE_3D = { cotton: 'cotton', polyester: 'polyester', viscose: 'viscose', modal: 'modal', tencel: 'viscose', bamboo: 'viscose', nylon: 'nylon', acrylic: 'acrylic', wool: 'wool', silk: 'silk', linen: 'linen', elastane: 'spandex' };
+const FIBRE_3D = { cotton: 'cotton', polyester: 'polyester', viscose: 'viscose', modal: 'modal', tencel: 'viscose', bamboo: 'viscose', nylon: 'nylon', acrylic: 'acrylic', polypropylene: 'polyester', wool: 'wool', silk: 'silk', linen: 'linen', elastane: 'spandex' };
 
 // the lustre scale of the yarn-character engine (0–1) and the sheen index, both ways
 const lustreOf = (index) => clamp(1 - Math.exp(-(index - 60) / 220), 0, 0.99);
