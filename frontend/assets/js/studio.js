@@ -174,6 +174,7 @@
       if (window.KAStudioColour) window.KAStudioColour.setCatalogue(d.colour);
       if (window.KAStudioLab) window.KAStudioLab.setCatalogue(d.lab);
       if (window.KAStudioInspect) window.KAStudioInspect.setCatalogue(d.inspect);
+      if (window.KAStudioDrape) { window.KAStudioDrape.setCatalogue(d.drape); window.KAStudioDrape.setHost({ design: payload, fetch: apiFetch }); }
       if (window.KAStudioVbed) window.KAStudioVbed.setCatalogue(d.vbed);
       var fib = $('st-fibre');
       var fopts = Object.keys(d.fibres || {}).map(function (k) { return '<option value="' + k + '">' + esc(d.fibres[k].label) + '</option>'; }).join('');
@@ -656,6 +657,7 @@
       lab: window.KAStudioLab ? window.KAStudioLab.payload() : null,
       trim: window.KAStudioLab ? window.KAStudioLab.trimPayload() : null,
       inspect: window.KAStudioInspect ? window.KAStudioInspect.payload() : null,
+      drape: window.KAStudioDrape ? window.KAStudioDrape.payload() : null,
       vbed: window.KAStudioVbed ? window.KAStudioVbed.payload() : null,
       plating: num('st-platr') ? { tension_ratio: num('st-platr') } : null,
       state: clothState,
@@ -708,6 +710,7 @@
       if (window.KAStudioColour) window.KAStudioColour.studioResult(r);
       if (window.KAStudioLab) window.KAStudioLab.studioResult(r);
       if (window.KAStudioInspect) window.KAStudioInspect.studioResult(r);
+      if (window.KAStudioDrape) window.KAStudioDrape.studioResult(r);
       if (window.KAStudioVbed) window.KAStudioVbed.studioResult(r);
       showClothState(r);
       pushTrans();
@@ -1690,6 +1693,7 @@
     if (window.KAStudioColour) o.colour = window.KAStudioColour.state();
     if (window.KAStudioLab) o.lab = window.KAStudioLab.state();
     if (window.KAStudioInspect) o.inspect = window.KAStudioInspect.state();
+    if (window.KAStudioDrape) o.drape = window.KAStudioDrape.state();
     if (window.KAStudioVbed) o.vbed = window.KAStudioVbed.state();
     o.tech = techNow === 'vbed' ? 'vbed' : 'weft';
     o.cloth_state = clothState;
@@ -1786,6 +1790,7 @@
     if (window.KAStudioColour) window.KAStudioColour.setState(o.colour || null);
     if (window.KAStudioLab) window.KAStudioLab.setState(o.lab || null);
     if (window.KAStudioInspect) window.KAStudioInspect.setState(o.inspect || null);
+    if (window.KAStudioDrape) window.KAStudioDrape.setState(o.drape || null);
     if (window.KAStudioVbed) window.KAStudioVbed.setState(o.vbed || null);
     if (o.tech === 'vbed' && techNow !== 'vbed') setTech('vbed');
     else if (o.tech !== 'vbed' && techNow === 'vbed') setTech('weft');
@@ -1891,6 +1896,9 @@
     // the fabric hand card likewise
     var hdc = $('hd-card');
     if (hdc) hdc.addEventListener('change', schedule);
+    // the drape card likewise (the drape itself is run on its button)
+    var dpc = $('dp-card');
+    if (dpc) dpc.addEventListener('change', schedule);
     // the inspection card likewise
     var inc = $('in-card');
     if (inc) { inc.addEventListener('change', schedule); inc.addEventListener('input', function (e) { if (e.target.type === 'number') schedule(); }); }

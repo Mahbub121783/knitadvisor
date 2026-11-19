@@ -78,6 +78,17 @@ On scientific grounding, KnitAdvisor is ahead of the PRD. Every number carries a
 - **Score changes:** Module 3 61 → 80 %, Module 2 68 → 74 %, guardrails 97 → 98 %. **Overall ≈ 79 → 84 %.**
 - **Still open:** the flat-bed fabric uses the circular factory records (so panel weight is an estimate until a trial panel is weighed); no fully-fashioned shaping, intarsia or cable-by-cable stitch-cam programme; no machine-maker file export; the V-bed production and efficiency are typical, not a data sheet.
 
+### Update, 2026-11-19: Phase F done
+
+- **Drape from the tester numbers** (`drape-engine.js`, `POST /studio/drape`, a Drape & drop card and a Drape tab). The cloth is a lattice of particles whose stiffnesses are the hand engine's own numbers: stretch = load ÷ extension along each direction, shear = G, bending = B along the courses and the wales, weight = GSM. It is hung under gravity (implicit Euler with conjugate gradients), and a Cusick test (30 cm sample, 18 cm clamped discs) reads the drape coefficient and the folds.
+  - Hand-engine cloths read 35 % for a limp silk, 44-49 % for a cotton jersey, ~87 % stiff, ~98 % board. A softener lowers it, a resin finish raises it.
+  - The coefficient is the mean of two lattices and the spread is shown as the range.
+  - The first solver (position-based) was rejected: it was 6× too soft on a cantilever against theory. The final one matches an analytic cantilever within about 30 % (coarse lattice) and orders cloths correctly.
+- **Garment-level drape**: a circular skirt hung from a 66 cm waist ring (hem sweep, hang, folds). It is one garment, not a pattern-piece garment: no body collision, no seams.
+- **Water drop** (`repellency-engine.js`): contact angle from the fibre's flat angle and the loop's solid share (Cassie–Baxter for a hydrophobic surface, Wenzel for a wetting one), spray rating, roll-off tilt, wicking, and the angle at 20 % stretch. DWR choices: none, non-fluorinated (~108° flat), fluorocarbon C6 (~118° flat). The Drape tab animates the drop as the cloth is tilted. A polyester jersey with C6 reads ~140° (spray 90, rolls off at ~12°); untreated cotton wicks.
+- **Score changes:** Module 5 72 → 88 %. **Overall ≈ 84 → 87 %.**
+- **Still open:** no self-collision, so folds may pass through each other (a very limp cloth reads a little low); no garment body, seams or pattern pieces; one skirt only; the stretch stiffness is capped at 30 N/m for speed (a drape load is tiny); a Cusick reading of the mill's own cloth is what turns the number from estimate into measured.
+
 ---
 
 ## 2. Module-by-module

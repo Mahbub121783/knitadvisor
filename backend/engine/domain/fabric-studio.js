@@ -52,6 +52,7 @@ const LB = require('./lightbox-engine');
 const BO = require('./burnout-engine');
 const DEF = require('./defects-engine');
 const VB = require('./vbed-compiler');
+const REP = require('./repellency-engine');
 const LOOK = require('./fabric-look-engine');
 const SE = require('./stretch-engine');
 const FY = require('./fancy-yarn-engine');
@@ -1777,6 +1778,14 @@ function analyse(input) {
     // the inspection room (lightbox, burnout, barré, grinning) on request: the gates read it for U-15 and U-20
     out.inspect = input.inspect && input.inspect.enabled ? inspectSummary(input, out, clothState, S) : null;
     // the flat V-bed compiler: what a flat machine makes of this programme (vbed-compiler.js)
+    // what a drop of water does on the cloth, with or without a water-repellent finish (repellency-engine.js)
+    out.repel = null;
+    if (input.drape && input.drape.enabled) {
+      try {
+        const li = LIGHT.analyse({ wpc: clothState.wpc, cpc: clothState.cpc, loop_mm: S.lref, yarn_d_mm: S.gfit.yarn_d_mm, gsm: clothState.gsm, layers: out.structure.bed === 'double' ? 2 : 1, shade: (input.look && input.look.shade) || 'medium' });
+        out.repel = REP.analyse({ fibres: FEAS.clothFibres(out), open_rest: li.render.open, open_20: li.stretched[0].open_area.value / 100, finish: input.drape.dwr });
+      } catch (e) { if (!(e instanceof LIGHT.LightError)) throw e; out.repel = null; }
+    }
     out.vbed = null;
     if (input.vbed && input.vbed.enabled) {
       try { out.vbed = VB.compile(out, input, { plate_tex: roleYarn.plate ? roleYarn.plate.tex * (roleYarn.plate.ply || 1) : 0, fibres: FEAS.clothFibres(out), spinning: S.ground.type }); } catch (e) { if (!(e instanceof VB.VbedError)) throw e; out.vbed = { success: false, error: e.message }; }
