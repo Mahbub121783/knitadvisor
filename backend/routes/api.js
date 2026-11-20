@@ -1669,7 +1669,7 @@ async function studioAnswer(userId, input) {
   else {
     const out = fabricStudio.analyse(body);
     // a second opinion from the stitches themselves (brick laws, no family table) — never allowed to break the answer
-    if (out.success) { try { out.fabric.second_opinion = secondOpinion.forDesign(body.melange ? require('../engine/domain/melange-engine').applyToInput(body).input : body, out); } catch (err) { console.error('[studio] second opinion failed:', err.message); } }
+    if (out.success) { try { out.fabric.second_opinion = secondOpinion.forDesign(out._design ? out._design : body.melange ? require('../engine/domain/melange-engine').applyToInput(body).input : body, out); } catch (err) { console.error('[studio] second opinion failed:', err.message); } }
     hit = { status: out.success ? 200 : 400, body: JSON.stringify(out) };
     if (key.length < 32768) {
       studioCache.set(key, hit);

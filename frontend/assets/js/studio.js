@@ -670,7 +670,7 @@
       finish: { brush: $('st-brush').value, passes: num('st-passes'), sheared: $('st-shear').checked, set_width_in: num('st-setw') },
       floor_machine_id: $('st-fm').value ? +$('st-fm').value : null,
       elastane: $('st-lycra').checked ? { denier: +$('st-lyd').value, draft: num('st-lydraft') || 2.6, every: $('st-lyevery').value } : null,
-      target: { gsm: num('st-gsm'), width_in: num('st-width'), shrinkage_pct: num('st-shr') },
+      target: { gsm: num('st-gsm'), width_in: num('st-width'), shrinkage_pct: num('st-shr'), composition: $('st-comp') && $('st-comp').value.trim() ? $('st-comp').value.trim() : undefined },
       calibration: $('st-userolls').checked && completeRolls().length ? { rolls: completeRolls() } : null,
       machine: {
         gauge: num('st-gauge'), dia: num('st-dia'), feeders: num('st-feeders'), rpm: num('st-rpm'),
@@ -728,6 +728,18 @@
   }
 
   // ── rendering the answer ─────────────────────────────────────────────────
+  // the composition solver's report: what was asked, what the cloth is, what was set to get there
+  function compSolveLine(c) {
+    if (!c) return '';
+    var fmt = function (o) { return Object.keys(o).map(function (k) { return o[k] + '% ' + k; }).join(' · '); };
+    var set = [];
+    if (c.solved && c.solved.elastane) set.push('elastane ' + c.solved.elastane.denier + ' D at a draft of ' + c.solved.elastane.draft + (c.solved.elastane.every === 'alternate' ? ' on alternate feeders' : ' on every feeder'));
+    if (c.solved && c.solved.roles) Object.keys(c.solved.roles).forEach(function (k) { var g = c.solved.roles[k]; set.push(g.roles.join(' + ') + ' ' + k + ' ' + g.count_ne[0] + 's Ne' + (g.kept ? ' (as given)' : ' (solved)')); });
+    if (c.solved && c.solved.yarn && Object.keys(c.solved.yarn.fibres).length > 1) set.push('yarn ' + fmt(c.solved.yarn.fibres));
+    var ok = c.largest_miss_pts <= 0.5;
+    return '<div style="flex-basis:100%;font-size:12px;color:var(--t2)"><b>Composition target</b> ' + esc(fmt(c.target)) + ' → the cloth is ' + esc(fmt(c.achieved)) + ' <span class="st-badge ' + (ok ? 'ok' : 'estimate') + '">' + esc(c.held) + '</span>' +
+      (set.length ? '<br>Set for you: ' + esc(set.join('; ')) + '.' : '') + (c.notes && c.notes.length ? '<br>' + esc(c.notes.join(' ')) : '') + '</div>';
+  }
   function renderResult() {
     var r = last;
     var errs = r.checks.filter(function (c) { return c.level === 'error'; }).length;
@@ -742,6 +754,7 @@
       (r.structure.identity ? '<div style="flex-basis:100%;font-size:12px;color:var(--t2)">' + esc(r.structure.identity.detail) + '</div>' : '') +
       '<div style="flex-basis:100%;font-size:12px;color:var(--t2)">Weight is currently borrowed from the measured constants of: ' + esc(r.structure.family_label) + '.</div>' +
       '<div style="flex-basis:100%;font-size:12px;color:var(--t2)">' + esc(conf.why) + '</div>' +
+      compSolveLine(r.composition_solve) +
       (r.structure.reduced ? '<div style="flex-basis:100%;font-size:12px;color:var(--t2)">Your repeat of ' + esc(r.structure.reduced.from) + ' is the same fabric as its smallest repeat, ' + esc(r.structure.reduced.to) + ' — the set-out below uses that.</div>' : '');
     $('st-checks').innerHTML = r.checks.map(function (c) { return '<li class="' + c.level + '">' + esc(c.text) + '</li>'; }).join('');
     if (window.KAStudioGates) window.KAStudioGates.render(r, { onApply: applyRepair });
@@ -1682,7 +1695,7 @@
   var STORE = 'ka_studio_designs';
   function readStore() { try { return JSON.parse(localStorage.getItem(STORE) || '[]'); } catch (_) { return []; } }
   function writeStore(a) { try { localStorage.setItem(STORE, JSON.stringify(a)); return true; } catch (_) { return false; } }
-  var FIELDS = ['st-elcon', 'st-elstate', 'st-elcfib', 'st-elcd', 'st-elcf', 'st-elct', 'st-lus', 'st-sec', 'st-nip', 'st-cc', 'yb-lus', 'yb-sec', 'yb-nip', 'yb-cc', 'yl-lus', 'yl-sec', 'yl-nip', 'yl-cc', 'yp-lus', 'yp-sec', 'yp-nip', 'yp-cc', 'st-ne', 'st-unit', 'st-ply', 'st-ytype', 'st-fil', 'yb-count', 'yb-unit', 'yb-fibre', 'yb-type', 'yb-ply', 'yb-fil', 'yl-count', 'yl-unit', 'yl-fibre', 'yl-type', 'yl-ply', 'yl-fil', 'st-fibre', 'st-gsm', 'st-width', 'st-gauge', 'st-dia', 'st-feeders', 'st-rpm', 'st-sl', 'st-eff', 'st-tc', 'st-td', 'st-lyd', 'st-lydraft', 'st-lyevery', 'st-v1r', 'st-v1l', 'st-v2r', 'st-v2l', 'st-sinker', 'st-parr', 'st-mprof', 'st-brush', 'st-passes', 'st-pile', 'st-tdir', 'st-shr', 'st-camd', 'st-timing', 'st-dgap', 'st-c1r', 'st-c1l', 'st-c2r', 'st-c2l', 'st-stripe', 'st-setw', 'st-sc-A', 'st-sc-B', 'st-sc-C', 'st-sc-D', 'st-sc-E', 'st-sc-F'];
+  var FIELDS = ['st-comp', 'st-elcon', 'st-elstate', 'st-elcfib', 'st-elcd', 'st-elcf', 'st-elct', 'st-lus', 'st-sec', 'st-nip', 'st-cc', 'yb-lus', 'yb-sec', 'yb-nip', 'yb-cc', 'yl-lus', 'yl-sec', 'yl-nip', 'yl-cc', 'yp-lus', 'yp-sec', 'yp-nip', 'yp-cc', 'st-ne', 'st-unit', 'st-ply', 'st-ytype', 'st-fil', 'yb-count', 'yb-unit', 'yb-fibre', 'yb-type', 'yb-ply', 'yb-fil', 'yl-count', 'yl-unit', 'yl-fibre', 'yl-type', 'yl-ply', 'yl-fil', 'st-fibre', 'st-gsm', 'st-width', 'st-gauge', 'st-dia', 'st-feeders', 'st-rpm', 'st-sl', 'st-eff', 'st-tc', 'st-td', 'st-lyd', 'st-lydraft', 'st-lyevery', 'st-v1r', 'st-v1l', 'st-v2r', 'st-v2l', 'st-sinker', 'st-parr', 'st-mprof', 'st-brush', 'st-passes', 'st-pile', 'st-tdir', 'st-shr', 'st-camd', 'st-timing', 'st-dgap', 'st-c1r', 'st-c1l', 'st-c2r', 'st-c2l', 'st-stripe', 'st-setw', 'st-sc-A', 'st-sc-B', 'st-sc-C', 'st-sc-D', 'st-sc-E', 'st-sc-F'];
   function designNow() {
     var o = { v: 2, name: $('st-name').value || 'Untitled design', bed: S.bed, C: S.C, D: S.D, feeds: S.feeds, rolls: rolls, lycra: $('st-lycra').checked, cut: $('st-cut').checked, colour: $('st-col').value, fields: {} };
     FIELDS.forEach(function (id) { o.fields[id] = $(id).value; });

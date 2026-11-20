@@ -40,6 +40,7 @@ const KR = require('./knit-relax');
 const YC = require('./yarn-character');
 const MEL = require('./melange-engine');
 const BY = require('./blend-yarn-engine');
+const CSOLVE = require('./composition-solver');
 const CHEMY = require('./yarn-chemistry-engine');
 const RECY = require('./yarn-recovery-engine');
 const HAND = require('./fabric-hand-engine');
@@ -787,7 +788,7 @@ function solve(ctx, ground) {
   const loopYarn = (() => {
     const tex = ground.tex * ANCHOR_LOOP_TEX_RATIO;
     const ne = COUNTS.reduce((b, c) => (Math.abs(590.5 / c - tex) < Math.abs(590.5 / b - tex) ? c : b), COUNTS[0]);
-    return { tex: 590.5 / ne, ne, label: `${ne}s Ne (assumed)`, fibre: ground.fibre, fibre_label: ground.fibre_label };
+    return { tex: 590.5 / ne, ne, label: `${ne}s Ne (assumed)`, fibre: ground.fibre, fibre_label: ground.fibre_label, ...(ground.blend && ground.mix ? { mix: ground.mix, blend: true, blend_density: ground.blend_density } : {}) };   // an assumed loop yarn is spun of the ground's own blend
   })();
   const yarns = feedRows.map((f) => {
     const y = f.yarn || (f.role === 'loop' ? loopYarn : ground);
@@ -1191,6 +1192,8 @@ function reduceRepeat(C, D, feedRows, altPlating) {
 // ── public ──────────────────────────────────────────────────────────────────
 function analyse(input) {
   try {
+    // a target composition ("95% CO 5% EL"): the yarn's fibres, the elastane's denier / draft / feeding (and the counts of per-role fibres) are solved (composition-solver.js)
+    if (input && input.target && input.target.composition) return CSOLVE.solve(input, analyse);
     // melange / marl / heather yarns: each role's melange is worked out first (melange-engine.js) and its resultant
     // count, nearest fibre family and spinning system become that role's yarn; the full analysis rides along
     // fancy yarns (slub, bouclé, chenille …) give a role its form; blend yarns (CVC, PC, …) its fibres; a melange on the same role still wins
@@ -1813,7 +1816,7 @@ function analyse(input) {
     out.trim = input.trim && input.trim.enabled ? trimSummary(input, out) : null;
     return out;
   } catch (e) {
-    if (e instanceof StudioError || e instanceof MEL.MelangeError || e instanceof BY.BlendError) return { success: false, error: e.message };
+    if (e instanceof StudioError || e instanceof MEL.MelangeError || e instanceof BY.BlendError || e instanceof CSOLVE.CompositionError) return { success: false, error: e.message };
     throw e;
   }
 }

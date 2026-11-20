@@ -47,7 +47,7 @@ function coursesPerRepeat(C, roles) {
 
 function toDNA(input, out) {
   if (!out || !out.success) throw new DnaError('Analyse the design first: the DNA is written from the answer.');
-  const inp = input || {};
+  const inp = out._design || input || {};      // a solved composition: the design the solver wrote
   const st = out.structure || {}, fab = out.fabric || {}, mach = out.machine || {}, yarn = out.yarn || {}, feas = out.feasibility || null;
   const C = st.beds && st.beds.C, D = st.beds && st.beds.D;
   const W = C && C[0] ? C[0].length : 1;
