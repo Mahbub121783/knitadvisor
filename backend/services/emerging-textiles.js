@@ -54,7 +54,7 @@ async function clearKey() {
 }
 
 // ── tables ────────────────────────────────────────────────────────────────────────────────────────────────────
-const TABLE_COLS = `id, catalogue_id, category, title, dataset, sheet, country, mapping, enabled, last_fetched_at, last_ok, last_error`;
+const TABLE_COLS = `id, catalogue_id, category, title, dataset, sheet, kind, country, mapping, enabled, last_fetched_at, last_ok, last_error`;
 const CATS = new Set([...CATEGORIES.map((c) => c.id), 'other']);
 
 async function listTables() { return query(`SELECT ${TABLE_COLS} FROM et_tables ORDER BY category, id`).then((r) => r.rows || r); }
@@ -76,11 +76,11 @@ async function addTable(b) {
   if (!dataset || !sheet) throw new EtError('Give the dataset and the sheet.');
   const category = CATS.has(b.category) ? b.category : 'other';
   const row = await queryOne(
-    `INSERT INTO et_tables (catalogue_id, category, title, dataset, sheet, country, mapping)
-     VALUES ($1,$2,$3,$4,$5,$6,$7)
+    `INSERT INTO et_tables (catalogue_id, category, title, dataset, sheet, country, mapping, kind)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
      ON CONFLICT (dataset, sheet) DO UPDATE SET catalogue_id = COALESCE(EXCLUDED.catalogue_id, et_tables.catalogue_id), title = EXCLUDED.title, category = EXCLUDED.category
      RETURNING ${TABLE_COLS}`,
-    [b.catalogue_id || null, category, String(b.title || `${dataset} / ${sheet}`).slice(0, 160), dataset, sheet, b.country ? String(b.country).toUpperCase().slice(0, 2) : null, b.mapping ? JSON.stringify(cleanMapping(b.mapping)) : null]);
+    [b.catalogue_id || null, category, String(b.title || `${dataset} / ${sheet}`).slice(0, 160), dataset, sheet, b.country ? String(b.country).toUpperCase().slice(0, 2) : null, b.mapping ? JSON.stringify(cleanMapping(b.mapping)) : null, b.kind === 'csv' ? 'csv' : 'sheets']);
   return row;
 }
 
@@ -176,7 +176,7 @@ function registerProvider() {
     const tables = (await listTables()).filter((t) => t.enabled);
     const byUrl = new Map();
     const endpoints = tables.map((t) => {
-      const ep = { dataset: t.dataset, sheet: t.sheet, country: t.country || undefined, _id: t.id, label: t.title, ...(t.mapping || {}) };
+      const ep = { dataset: t.dataset, sheet: t.sheet, kind: t.kind, country: t.country || undefined, _id: t.id, label: t.title, ...(t.mapping || {}) };
       byUrl.set(`${t.dataset}/${t.sheet}`, t);
       return ep;
     });
@@ -239,54 +239,93 @@ function parseListing(text) {
   return { datasets: [...datasets], pairs };
 }
 
-async function discover() {
-  if (!(await getKey())) throw new EtError('Save the API key first.');
-  const s = await settings();
-  const base = ET.BASE(s.base_url);
-  const tried = [];
-  const get = async (url) => { try { const r = await ET.fetchRaw(url); tried.push({ url, status: r.status }); return r; } catch (e) { tried.push({ url, error: e.message }); return null; } };
-  let pairs = [], datasets = [];
-  const root = await get(base);
-  if (root && root.ok) { const p = parseListing(root.text); pairs = p.pairs; datasets = p.datasets; }
-  // datasets named but their sheets not: ask each one
-  const missing = datasets.filter((d) => !pairs.some((p) => p[0] === d)).slice(0, 60);
-  for (const d of missing) {
-    const r = await get(`${base}/${encodeURIComponent(d)}`);
-    if (r && r.ok) parseListing(r.text).datasets.forEach((sh) => pairs.push([d, sh]));
-  }
-  let added = 0, matched = 0;
-  const found = [];
-  for (const [dataset, sheet] of pairs.slice(0, 600)) {
-    const slot = matchSlot(dataset, sheet);
-    const cat = slot ? slot.category : categoryOf(`${dataset} ${sheet}`);
-    const row = await addTable({ dataset, sheet, category: cat, title: slot ? slot.title : `${dataset.replace(/[-_]/g, ' ')} / ${sheet.replace(/[-_]/g, ' ')}`, catalogue_id: slot ? slot.id : null, country: slot ? slot.country : null });
-    added++; if (slot) matched++;
-    found.push({ id: row.id, dataset, sheet, slot: slot ? slot.title : null });
-  }
-  const note = pairs.length ? `Found ${pairs.length} tables; ${matched} matched to the publisher's menu.`
-    : 'The API did not list its tables at the address tried. Add a table by hand with its dataset and sheet name (the names on the publisher\'s API page, or in the Excel / API links of each table).';
-  return { ok: pairs.length > 0, added, matched, tried, note, found: found.slice(0, 50) };
+// ── the endpoints ─────────────────────────────────────────────────────────────────────────────────────────────
+// The publisher has no listing of its tables: each subscriber is GIVEN their endpoints (by email on activation, and as an
+// "API / Excel" link on each table). What can be done without them is to try the endpoints its documentation names; what
+// cannot be guessed is pasted in ("Paste endpoints").
+const DOC_SAMPLES = [
+  { dataset: 'Bangladesh-Yarn-Prices_Weekly', sheet: 'cotton-yarn-indicator' },
+  { dataset: 'New-York_Cotton-Futures', sheet: 'NY-Daily-Prices' },
+];
+
+/** A dataset and a sheet from a pasted line: an API link (either form, any key in it is dropped), or "dataset/sheet". */
+function parseEndpoint(line) {
+  const raw = String(line || '').trim().replace(/^["'`]|["'`,;]$/g, '');
+  if (!raw) return null;
+  let m = /\/api\/(sheets|csv)\/([^\/?#\s]+)\/([^\/?#\s]+)/i.exec(raw);
+  if (m) return { kind: m[1].toLowerCase() === 'csv' ? 'csv' : 'sheets', dataset: decodeURIComponent(m[2]), sheet: decodeURIComponent(m[3]) };
+  m = /^([A-Za-z0-9._~-]+)\s*[\/ ,]\s*([A-Za-z0-9._~-]+)$/.exec(raw);
+  if (m) return { kind: 'sheets', dataset: m[1], sheet: m[2] };
+  return null;
 }
 
-/** Does the key work? The first enabled table is fetched; with none, the listing is asked for. */
-async function testConnection() {
+/** Paste what the subscription email (or each table's API link) gave: one endpoint per line. Keys inside links are never kept. */
+async function importEndpoints(text) {
+  const lines = String(text || '').split(/\r?\n/).map((x) => x.trim()).filter(Boolean).slice(0, 300);
+  if (!lines.length) throw new EtError('Paste at least one endpoint: the link of a table, or dataset/sheet.');
+  const added = [], skipped = [];
+  for (const line of lines) {
+    const p = parseEndpoint(line);
+    if (!p) { skipped.push({ line: line.replace(/api_key=[^&\s]+/i, 'api_key=…').slice(0, 90), why: 'not an API link or dataset/sheet' }); continue; }
+    const slot = matchSlot(p.dataset, p.sheet);
+    const cat = slot ? slot.category : categoryOf(`${p.dataset} ${p.sheet}`);
+    const row = await addTable({ ...p, category: cat, title: slot ? slot.title : `${p.dataset.replace(/[-_]/g, ' ')} / ${p.sheet.replace(/[-_]/g, ' ')}`, catalogue_id: slot ? slot.id : null, country: slot ? slot.country : null });
+    added.push({ id: row.id, dataset: p.dataset, sheet: p.sheet, kind: p.kind, slot: slot ? slot.title : null });
+  }
+  return { added, skipped, note: `${added.length} table${added.length === 1 ? '' : 's'} added${skipped.length ? `, ${skipped.length} line${skipped.length === 1 ? '' : 's'} not understood` : ''}. Press Refresh everything to fetch them.` };
+}
+
+/** "Find my tables": the API has no listing, so the endpoints its documentation names are tried; each one that answers is added. */
+async function discover() {
   const key = await getKey();
   if (!key) throw new EtError('Save the API key first.');
   const s = await settings();
-  const tables = (await listTables()).filter((t) => t.enabled);
-  let ok = false, note = '';
-  try {
-    if (tables.length) {
-      const t = tables[0];
-      await ET.fetchTable({ dataset: t.dataset, sheet: t.sheet });
-      ok = true; note = `The key works: ${t.dataset} / ${t.sheet} was read.`;
-    } else {
-      const r = await ET.fetchRaw(ET.BASE(s.base_url));
-      ok = r.ok || r.status === 404 ? r.status !== 401 && r.status !== 403 : false;
-      note = r.status === 401 || r.status === 403 ? `Emerging Textiles refused the key (HTTP ${r.status}): check the key, and that the subscription is Corporate (API access).`
-        : r.ok ? 'The key was accepted. Press "Find my tables".' : `The key was not refused (HTTP ${r.status}). Press "Find my tables", or add a table by hand.`;
+  const tried = [], found = [];
+  for (const ep of DOC_SAMPLES) {
+    const url = ET.urlOf(ep, s.base_url);
+    try {
+      await ET.fetchTable(ep);
+      tried.push({ url, status: 200 });
+      const slot = matchSlot(ep.dataset, ep.sheet);
+      const row = await addTable({ ...ep, category: slot ? slot.category : categoryOf(`${ep.dataset} ${ep.sheet}`), title: slot ? slot.title : `${ep.dataset.replace(/[-_]/g, ' ')} / ${ep.sheet.replace(/[-_]/g, ' ')}`, catalogue_id: slot ? slot.id : null, country: slot ? slot.country : null });
+      found.push({ id: row.id, dataset: ep.dataset, sheet: ep.sheet, slot: slot ? slot.title : null });
+    } catch (e) {
+      const m = /HTTP (\d{3})/.exec(e.message);
+      tried.push({ url, status: m ? +m[1] : null, error: e.message });
     }
-  } catch (e) { note = e.message; }
+  }
+  const refused = tried.some((t) => t.status === 401 || t.status === 403);
+  const note = found.length ? `${found.length} of the documented tables answered and were added. Emerging Textiles gives each subscriber their own table endpoints (by email, and as the API link on each table): paste them with "Paste endpoints" to fill the rest of the menu.`
+    : refused ? 'Emerging Textiles refused the key: check it, and that the subscription includes API access.'
+    : 'The key was not refused, but the documented sample tables are not in this subscription. Emerging Textiles has no list of tables to read: paste your endpoints (from the activation email, or the API / Excel link on each table) with "Paste endpoints".';
+  return { ok: found.length > 0, added: found.length, matched: found.filter((f) => f.slot).length, tried, note, found };
+}
+
+/**
+ * Does the key work? The first enabled table is fetched; with none, the documented sample tables are tried.
+ * Only HTTP 401 / 403 mean "refused". Anything else (a 400 at an address that is not a table, a 404 for a table the
+ * subscription does not include) says the key was not refused, and leaves the verdict open.
+ */
+async function testConnection() {
+  const key = await getKey();
+  if (!key) throw new EtError('Save the API key first.');
+  const tables = (await listTables()).filter((t) => t.enabled);
+  const eps = tables.length ? [{ dataset: tables[0].dataset, sheet: tables[0].sheet, kind: tables[0].kind }] : DOC_SAMPLES;
+  let ok = null, note = '';
+  let refused = false, notFound = 0, other = 0;
+  for (const ep of eps) {
+    try { await ET.fetchTable(ep); ok = true; note = `The key works: ${ep.dataset} / ${ep.sheet} was read.`; break; }
+    catch (e) {
+      const m = /HTTP (\d{3})/.exec(e.message);
+      if (m && (m[1] === '401' || m[1] === '403')) refused = true;
+      else if (/not found|404/.test(e.message)) notFound++;
+      else other++;
+    }
+  }
+  if (ok !== true) {
+    if (refused) { ok = false; note = 'Emerging Textiles refused the key (HTTP 401/403): check the key, and that the subscription is Corporate (API access).'; }
+    else { ok = null; note = notFound ? 'The key was not refused, but the sample tables are not in this subscription. Paste your own endpoints (the activation email, or the API / Excel link on a table) to confirm it.' : 'The key was not refused, but no table could be read to prove it works. Paste a table endpoint to test it.'; }
+  }
   await query('UPDATE et_settings SET tested_at = now(), test_ok = $1, test_note = $2 WHERE id = 1', [ok, note.slice(0, 300)]);
   return { ok, note };
 }
@@ -296,7 +335,7 @@ async function refreshTable(id) {
   const t = await queryOne(`SELECT ${TABLE_COLS} FROM et_tables WHERE id = $1`, [id]);
   if (!t) throw new EtError('No such table.');
   try {
-    const { table } = await ET.fetchTable({ dataset: t.dataset, sheet: t.sheet });
+    const { table } = await ET.fetchTable({ dataset: t.dataset, sheet: t.sheet, kind: t.kind });
     await saveSnapshot(id, table);
     return getSnapshot(id);
   } catch (e) { await noteFailure(id, e.message); throw new EtError(e.message); }
@@ -351,4 +390,4 @@ async function search(q) {
 }
 
 module.exports = { EtError, getKey, saveKey, clearKey, status, overview, listTables, addTable, updateTable, deleteTable, getSnapshot, refreshTable, discover, testConnection, search,
-  registerProvider, summarise, suggestMapping, matchSlot, parseListing, categoryOf, cleanMapping };
+  registerProvider, importEndpoints, parseEndpoint, DOC_SAMPLES, summarise, suggestMapping, matchSlot, parseListing, categoryOf, cleanMapping };

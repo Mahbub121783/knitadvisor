@@ -62,6 +62,7 @@
       '<span style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap">' +
       '<button id="et-test" class="btn btn-ghost btn-sm">Test key</button>' +
       '<button id="et-discover" class="btn btn-ghost btn-sm">Find my tables</button>' +
+      '<button id="et-paste" class="btn btn-ghost btn-sm">Paste endpoints</button>' +
       '<button id="et-refresh" class="btn btn-sm" style="background:var(--a1);color:#fff;font-weight:700">Refresh everything</button>' +
       '<button id="et-replace" class="btn btn-ghost btn-sm">Replace key</button></span></div>' +
       (st.test_note ? '<div style="font-size:10px;color:var(--t3);margin-top:6px">' + esc(st.test_note) + (st.tested_at ? ' (' + ago(st.tested_at) + ')' : '') + '</div>' : '') +
@@ -123,6 +124,7 @@
         [['Tables', tt.tables], ['Enabled', tt.enabled], ['Fetched', tt.fetched], ['Feeding costing', tt.costing], ['Failing', tt.failing]].map(function (k) {
           return '<div class="stat-card" style="flex:1;min-width:110px"><div class="stat-val" style="' + (k[0] === 'Failing' && k[1] ? 'color:#B23B3B' : '') + '">' + k[1] + '</div><div class="stat-lbl">' + k[0] + '</div></div>';
         }).join('') + '</div>' +
+        (tt.tables ? '' : '<div class="card" style="padding:14px 16px;margin-bottom:14px;border-color:#9A5B0055"><div style="font-size:12px;font-weight:700;margin-bottom:4px">Next: tell the dashboard which tables you have</div><div style="font-size:11px;color:var(--t2);line-height:1.7">Emerging Textiles has no public list of tables: it gives each subscriber their own API endpoints (in the activation email, and as the <b>API / Excel</b> link on each table of your account). Press <b>Paste endpoints</b> and paste them, one per line, in any of these forms:<br><code>https://api.emergingtextiles.com/api/sheets/Bangladesh-Yarn-Prices_Weekly/cotton-yarn-indicator</code><br><code>https://api.emergingtextiles.com/api/csv/…/…?api_key=…</code> (the key inside is dropped, never stored)<br><code>dataset/sheet</code><br>The dashboard files each one on the right shelf of the menu and fetches it. If the email did not come, ask Emerging Textiles support for "the API endpoint list for my Corporate subscription".</div></div>') +
         '<div style="display:flex;gap:8px;margin-bottom:10px"><input id="et-find" class="input" placeholder="Find a price: e.g. bangladesh combed, polyester india, viscose…" style="flex:1"><button id="et-add" class="btn btn-ghost btn-sm">Add a table by hand</button></div><div id="et-found"></div>' +
         '<div class="card" style="padding:0 16px 14px"><div style="display:flex;gap:2px;flex-wrap:wrap;border-bottom:2px solid var(--a1);margin:0 -16px 14px;padding:0 10px;background:var(--bg3)">' + tabs + '</div>' + menuHtml(cur) + '</div>' : '');
     bind();
@@ -204,6 +206,35 @@
       act(e.target, 'Adding…', async function () { var r = await api('/admin/api/et/tables', 'POST', v); try { await api('/admin/api/et/tables/' + r.table.id + '/refresh', 'POST'); } catch (er) { /* shown on the table */ } m.remove(); await load(); }); };
   }
 
+  function pasteModal() {
+    modal('<div style="font-size:14px;font-weight:700;margin-bottom:6px">Paste your Emerging Textiles endpoints</div>' +
+      '<div style="font-size:11px;color:var(--t2);line-height:1.7;margin-bottom:8px">One per line: the API link of a table (the <code>/api/sheets/…</code> JSON form or the <code>/api/csv/…</code> CSV form) or <code>dataset/sheet</code>. They come from the activation email, or from the <b>API / Excel</b> link of each table in your account. An <code>api_key=…</code> inside a link is dropped: the key you saved is the only one used.</div>' +
+      '<textarea id="pe-text" class="input" rows="9" spellcheck="false" placeholder="https://api.emergingtextiles.com/api/sheets/Bangladesh-Yarn-Prices_Weekly/cotton-yarn-indicator\nIndia-Yarn-Prices_Weekly/cotton-yarn-indicator" style="width:100%;font-family:var(--mono,monospace);font-size:11px"></textarea>' +
+      '<div id="pe-out" style="font-size:11px;margin-top:8px"></div>' +
+      '<div style="display:flex;gap:6px;margin-top:12px"><button id="pe-go" class="btn btn-sm" style="background:var(--a1);color:#fff">Add and fetch</button><button id="pe-x" class="btn btn-ghost btn-sm" style="margin-left:auto">Cancel</button></div>');
+    var m = $('et-modal');
+    $('pe-x').onclick = function () { m.remove(); };
+    $('pe-go').onclick = function (e) {
+      var text = $('pe-text').value;
+      act(e.target, 'Adding…', async function () {
+        var r = await api('/admin/api/et/import', 'POST', { text: text });
+        var res = r.result;
+        $('pe-out').innerHTML = esc(res.note) + (res.skipped.length ? '<div style="color:#9A5B00;margin-top:4px">Not understood: ' + res.skipped.map(function (x) { return esc(x.line); }).join(' | ') + '</div>' : '');
+        if (res.added.length) {
+          $('pe-out').innerHTML += '<div style="margin-top:4px;color:var(--t3)">Fetching…</div>';
+          var ok = 0, bad = [];
+          for (var i = 0; i < res.added.length; i++) {
+            try { await api('/admin/api/et/tables/' + res.added[i].id + '/refresh', 'POST'); ok++; }
+            catch (er) { bad.push(res.added[i].dataset + '/' + res.added[i].sheet + ': ' + er.message); }
+          }
+          await load();
+          var m2 = $('et-modal'); if (m2) m2.remove();
+          note(ok + ' of ' + res.added.length + ' tables fetched and filed on the menu.' + (bad.length ? '<br><span style="color:#9A5B00">' + bad.slice(0, 6).map(esc).join('<br>') + '</span>' : ''), bad.length ? 'warn' : 'good');
+        }
+      });
+    };
+  }
+
   // ── wiring ────────────────────────────────────────────────────────────────────────────────────────────────
   function bind() {
     var el = $('et-root');
@@ -214,9 +245,10 @@
     var rep = $('et-replace'); if (rep) rep.onclick = function () { var b = $('et-replace-box'); b.style.display = b.style.display === 'none' ? 'flex' : 'none'; };
     var rm = $('et-remove'); if (rm) rm.onclick = function () { if (!confirm('Remove the API key? Stored tables stay; nothing will update until a key is saved again.')) return; act(rm, '…', async function () { await api('/admin/api/et/key', 'DELETE'); await load(); }); };
     var test = $('et-test'); if (test) test.onclick = function () { act(test, 'Testing…', async function () { var r = await api('/admin/api/et/test', 'POST'); await load(); note(esc(r.result.note), r.result.ok ? 'good' : 'bad'); }); };
-    var dis = $('et-discover'); if (dis) dis.onclick = function () { act(dis, 'Looking…', async function () { var r = await api('/admin/api/et/discover', 'POST'); await load(); note(esc(r.result.note) + (r.result.ok ? ' Press <b>Refresh everything</b> to fetch them.' : '') + '<div style="font-size:9px;color:var(--t3);margin-top:4px">tried: ' + r.result.tried.map(function (t) { return esc(t.url) + ' → ' + (t.status || t.error); }).join(' · ') + '</div>', r.result.ok ? 'good' : 'warn'); }); };
+    var dis = $('et-discover'); if (dis) dis.onclick = function () { act(dis, 'Looking…', async function () { var r = await api('/admin/api/et/discover', 'POST'); await load(); note(esc(r.result.note) + '<div style="font-size:9px;color:var(--t3);margin-top:4px">tried: ' + r.result.tried.map(function (t) { return esc(t.url) + ' → ' + esc(t.status || t.error); }).join(' · ') + '</div>', r.result.ok ? 'good' : 'warn'); }); };
     var ref = $('et-refresh'); if (ref) ref.onclick = function () { act(ref, 'Fetching every table…', async function () { var r = await api('/admin/api/et/refresh', 'POST'); D = r.overview; render(); var s = r.sync.source; note('Done. ' + (s ? (s.rows ? s.rows.length : (s.stored != null ? s.stored : 0)) + ' prices read for costing' + (s.rejected && s.rejected.length ? '; ' + s.rejected.length + ' refused: ' + s.rejected.slice(0, 3).map(function (x) { return esc(x.why); }).join(' | ') : '') : '') + (r.sync.ok ? '' : ' <b>' + esc(r.sync.error || 'the price sync reported a problem') + '</b>'), r.sync.ok ? 'good' : 'warn'); }); };
     var add = $('et-add'); if (add) add.onclick = function () { addModal(); };
+    var paste = $('et-paste'); if (paste) paste.onclick = pasteModal;
     var find = $('et-find'); if (find) { var tm; find.oninput = function () { clearTimeout(tm); tm = setTimeout(async function () { var q = find.value.trim(); if (!q) { $('et-found').innerHTML = ''; return; } var r = await api('/admin/api/et/search?q=' + encodeURIComponent(q)); $('et-found').innerHTML = '<div class="card" style="padding:6px 14px;margin-bottom:12px">' + ((r.tables || []).length ? r.tables.map(function (t) { return rowHtml(t, false); }).join('') : '<div style="font-size:11px;color:var(--t3);padding:6px 0">Nothing stored matches. A table appears here once it has been found and fetched.</div>') + '</div>'; $('et-found').querySelectorAll('.et-open').forEach(function (rr) { rr.onclick = function () { openTable(+rr.getAttribute('data-id')); }; }); }, 250); }; }
   }
 

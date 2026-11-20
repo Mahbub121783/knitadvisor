@@ -21,7 +21,7 @@ async function query(sql, p = []) {
   if (/^INSERT INTO et_tables/.test(s)) {
     let t = db.tables.find((x) => x.dataset === p[3] && x.sheet === p[4]);
     if (t) { t.catalogue_id = p[0] || t.catalogue_id; t.title = p[2]; t.category = p[1]; }
-    else { t = { id: ++db.seq, catalogue_id: p[0], category: p[1], title: p[2], dataset: p[3], sheet: p[4], country: p[5], mapping: p[6] ? json(p[6]) : null, enabled: true, last_fetched_at: null, last_ok: null, last_error: null }; db.tables.push(t); }
+    else { t = { id: ++db.seq, catalogue_id: p[0], category: p[1], title: p[2], dataset: p[3], sheet: p[4], country: p[5], mapping: p[6] ? json(p[6]) : null, kind: p[7] || 'sheets', enabled: true, last_fetched_at: null, last_ok: null, last_error: null }; db.tables.push(t); }
     return [t];
   }
   if (/^UPDATE et_tables SET last_fetched_at = now\(\), last_ok = true/.test(s)) { const t = db.tables.find((x) => x.id === p[0]); Object.assign(t, { last_fetched_at: new Date(), last_ok: true, last_error: null }); return []; }
@@ -79,31 +79,43 @@ const asRes = (body, ctype, status) => ({ ok: (status || 200) < 400, status: sta
 
   // the daily sync reads the key and the tables through the provider; each fetched table is kept
   E.registerProvider();
-  const LISTING = { datasets: [{ name: 'Bangladesh-Yarn-Prices_Weekly', sheets: ['cotton-yarn-indicator', 'polyester-yarn-indicator'] }, { name: 'US-Apparel-Imports', sheets: ['knit-apparel-products'] }, { name: 'Mystery-Data', sheets: ['x'] }] };
   const TABLES = {
     'cotton-yarn-indicator': { columns: ['Week', '30s Carded', '40s Combed'], rows: Array.from({ length: 30 }, (_, i) => [`2026-0${1 + Math.floor(i / 8)}-${String(1 + (i % 8) * 3).padStart(2, '0')}`, +(3 + i * 0.01).toFixed(2), +(3.6 + i * 0.012).toFixed(2)]) },
     'polyester-yarn-indicator': { data: [{ Date: '2026-07-06', 'Price USD': 2.1 }, { Date: '2026-07-13', 'Price USD': 2.05 }] },
-    'knit-apparel-products': [['Month', 'Imports USD m'], ['Jun 2026', 910], ['Jul 2026', 950]],
+    'knit-apparel-products': 'Month,Imports USD m\nJun 2026,910\nJul 2026,950\n',
     x: 'not a table at all <html>',
   };
   const seen = [];
   const realFetch = globalThis.fetch;
   globalThis.fetch = async (url, opts) => {
     seen.push([url, opts.headers['X-API-Key']]);
-    if (/\/api\/sheets\/?$/.test(url)) return asRes(LISTING);
-    const sheet = decodeURIComponent(url.split('/').pop());
-    if (!(sheet in TABLES)) return asRes('nope', 'text/plain', 404);
-    return asRes(TABLES[sheet], typeof TABLES[sheet] === 'string' ? 'text/html' : 'application/json');
+    // there is NO listing: the base address is a 400, as the real API answers
+    if (/\/api\/(sheets|csv)\/?$/.test(url.split('?')[0])) return asRes('missing dataset', 'text/plain', 400);
+    const sheet = decodeURIComponent(url.split('?')[0].split('/').pop());
+    if (!(sheet in TABLES)) return asRes('nope', 'text/plain', 404);      // NY-Daily-Prices is not in this subscription
+    const csv = typeof TABLES[sheet] === 'string' && !/html/.test(TABLES[sheet]);
+    return asRes(TABLES[sheet], typeof TABLES[sheet] === 'string' ? (csv ? 'text/csv' : 'text/html') : 'application/json');
   };
   try {
+    // Find my tables: the API has no list, so the documented samples are tried; the ones that answer are added
     const found = await E.discover();
-    assert(found.ok && found.added === 4, JSON.stringify(found));
-    assert(seen.every(([, k]) => k === KEY) && seen.every(([u]) => u.startsWith('https://')), 'the sealed key is the one sent, over HTTPS');
+    assert(found.ok && found.added === 1 && found.tried.length === 2, JSON.stringify(found));
+    assert(found.tried.some((t) => t.status === 404) && /paste/i.test(found.note), 'it says to paste the subscription\'s own endpoints');
+    // pasted endpoints, in every form: the JSON link, the CSV link (with a key in it), dataset/sheet, a line that is not one
+    const pasted = await E.importEndpoints([
+      'https://api.emergingtextiles.com/api/sheets/Bangladesh-Yarn-Prices_Weekly/polyester-yarn-indicator',
+      `https://api.emergingtextiles.com/api/csv/US-Apparel-Imports/knit-apparel-products?api_key=${KEY}`,
+      'Mystery-Data/x',
+      'this is not an endpoint at all',
+    ].join('\n'));
+    assert.strictEqual(pasted.added.length, 3); assert.strictEqual(pasted.skipped.length, 1);
+    assert(!JSON.stringify(pasted).includes(KEY) && !JSON.stringify(await E.listTables()).includes(KEY), 'a key inside a pasted link is dropped, never stored');
     const tables = await E.listTables();
     const cotton = tables.find((t) => t.sheet === 'cotton-yarn-indicator'), apparel = tables.find((t) => t.sheet === 'knit-apparel-products'), mystery = tables.find((t) => t.sheet === 'x');
     assert.strictEqual(cotton.category, 'cotton'); assert.strictEqual(cotton.catalogue_id, 'cotton:database:yarns:bangladesh-yarn-market'); assert.strictEqual(cotton.country, 'BD');
-    assert.strictEqual(apparel.category, 'apparel'); assert.strictEqual(mystery.category, 'other'); assert(mystery.catalogue_id === null);
-    console.log('✓ "Find my tables": the listing is read, each table is matched to its slot on the publisher\'s menu (Bangladesh cotton yarn -> Cotton / Yarns / Bangladesh Yarn Market), unknown ones go to "Other"');
+    assert.strictEqual(apparel.category, 'apparel'); assert.strictEqual(apparel.kind, 'csv'); assert.strictEqual(cotton.kind, 'sheets'); assert.strictEqual(mystery.category, 'other'); assert(mystery.catalogue_id === null);
+    assert.deepStrictEqual(E.parseEndpoint('Dataset-One / sheet-two'), { kind: 'sheets', dataset: 'Dataset-One', sheet: 'sheet-two' });
+    console.log('✓ no listing exists: "Find my tables" tries the documented samples (the 404 is reported); pasted endpoints in the JSON, CSV and dataset/sheet forms are filed on the publisher\'s menu, a key inside a link is dropped, a bad line is reported');
 
     // refreshing keeps the whole table; a table that is not a table is a failure shown on that table only
     for (const t of tables) { try { await E.refreshTable(t.id); } catch (_) { /* recorded on the table */ } }
@@ -167,6 +179,18 @@ const asRes = (body, ctype, status) => ({ ok: (status || 200) < 400, status: sta
     const t2 = await E.testConnection();
     assert(!t2.ok && /refused/.test(t2.note));
     assert.strictEqual((await E.status()).test_ok, false);
+    // a 400 is not a refusal: the key was not refused, the verdict stays open (the dashboard said "refused" for this once)
+    globalThis.fetch = async () => asRes('missing dataset', 'text/plain', 400);
+    const t3 = await E.testConnection();
+    assert(t3.ok === null && /not refused/.test(t3.note), JSON.stringify(t3));
+    assert.strictEqual((await E.status()).test_ok, null);
+    // the CSV form sends the key as a query parameter to the API, and shows it nowhere
+    let sentUrl = null;
+    globalThis.fetch = async (url) => { sentUrl = url; return asRes('Date,USD' + String.fromCharCode(10) + '2026-07-13,3.2' + String.fromCharCode(10), 'text/csv'); };
+    const csvRes = await ET.fetchTable({ dataset: 'D', sheet: 'S', kind: 'csv' });
+    assert(/\/api\/csv\/D\/S\?api_key=/.test(sentUrl) && !csvRes.url.includes('api_key') && !csvRes.url.includes(KEY), 'api_key goes to the API, never into the URL that is shown');
+    globalThis.fetch = async () => asRes('x', 'text/plain', 500);
+    await assert.rejects(() => ET.fetchTable({ dataset: 'D', sheet: 'S', kind: 'csv' }), (e) => !e.message.includes(KEY) && !e.message.includes('api_key'));
     await E.clearKey();
     assert.strictEqual((await E.status()).has_key, false); assert.strictEqual(await E.getKey(), null);
     assert.strictEqual((await ET.collect()).configured, false, 'no key: the source is not configured, not failed');

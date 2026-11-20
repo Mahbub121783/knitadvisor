@@ -1252,6 +1252,7 @@ router.get('/api/et', adminAuth, etWrap(() => etSvc().overview()));
 router.post('/api/et/key', adminAuth, etWrap(async (req) => ({ status: await etSvc().saveKey((req.body || {}).key, (req.body || {}).base_url) })));
 router.delete('/api/et/key', adminAuth, etWrap(async () => ({ status: await etSvc().clearKey() })));
 router.post('/api/et/test', adminAuth, etWrap(async () => ({ result: await etSvc().testConnection(), status: await etSvc().status() })));
+router.post('/api/et/import', adminAuth, etWrap(async (req) => ({ result: await etSvc().importEndpoints((req.body || {}).text) })));
 router.post('/api/et/discover', adminAuth, etWrap(async () => ({ result: await etSvc().discover() })));
 router.post('/api/et/tables', adminAuth, etWrap(async (req) => ({ table: await etSvc().addTable(req.body || {}) })));
 router.patch('/api/et/tables/:id', adminAuth, etWrap(async (req) => ({ table: await etSvc().updateTable(+req.params.id, req.body || {}) })));

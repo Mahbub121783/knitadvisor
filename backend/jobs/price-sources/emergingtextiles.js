@@ -71,7 +71,9 @@ const BASE = (b) => String(b || process.env.ET_BASE || DEFAULT_BASE).replace(/\/
 /** The URL of an endpoint entry: a full `url`, or `dataset` + `sheet` on the API base. */
 function urlOf(ep, base) {
   if (ep.url) return String(ep.url);
-  if (ep.dataset && ep.sheet) return `${BASE(base)}/${encodeURIComponent(ep.dataset)}/${encodeURIComponent(ep.sheet)}`;
+  // the CSV form lives beside the JSON one: /api/csv/{dataset}/{sheet}
+  const root = ep.kind === 'csv' ? BASE(base).replace(/\/sheets$/, '/csv') : BASE(base);
+  if (ep.dataset && ep.sheet) return `${root}/${encodeURIComponent(ep.dataset)}/${encodeURIComponent(ep.sheet)}`;
   return null;
 }
 
@@ -101,7 +103,9 @@ async function fetchOne(ep, fetchImpl, key, base) {
   const url = urlOf(ep, base);
   if (!url) throw new Error('endpoint needs a url, or a dataset and a sheet');
   if (!/^https:\/\//i.test(url)) throw new Error(`${url} is not HTTPS: the API rejects plain HTTP`);
-  const res = await doFetch(url, {
+  // the CSV form takes the key as a query parameter; it is added only to the request, never to the URL shown in a message
+  const target = ep.kind === 'csv' ? url + (url.includes('?') ? '&' : '?') + 'api_key=' + encodeURIComponent(key) : url;
+  const res = await doFetch(target, {
     headers: {
       'X-API-Key': key,
       'Content-Type': 'application/json',
