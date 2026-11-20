@@ -42,6 +42,7 @@ const MEL = require('./melange-engine');
 const BY = require('./blend-yarn-engine');
 const CSOLVE = require('./composition-solver');
 const RDG = require('./mill-readings');
+const PDIM = require('./process-dimensions');
 const CHEMY = require('./yarn-chemistry-engine');
 const RECY = require('./yarn-recovery-engine');
 const HAND = require('./fabric-hand-engine');
@@ -1817,6 +1818,11 @@ function analyse(input) {
       } catch (_) { yarnForce = 0; }
     }
     out.feasibility = FEAS.assess(out, input, { thickness_mm: thickMm, thickness_basis: rd.values.thickness_mm ? 'measured at your mill (ISO 5084)' : 'estimate (hand model T0)', yarn_force_cn: yarnForce });
+    // what the wet route does to the size of the cloth beyond the usual route the records carry (process-dimensions.js): an estimate, the weight and width are not moved
+    try {
+      const st = (out.fabric.relaxation && out.fabric.relaxation.states) || [], fin = st.find((x) => x.state === 'finished'), wash = st.find((x) => x.state === 'full');
+      out.process_dimensions = out.feasibility && out.feasibility.route ? PDIM.analyse({ fibres: FEAS.clothFibres(out), steps: out.feasibility.route.map((x) => ({ id: x.id, label: x.label, t_c: x.t_c, ph: x.ph, chemicals: x.chemicals })), shade: (input.chemistry && input.chemistry.shade) || (input.look && input.look.shade) || null, finishes: (input.chemistry && input.chemistry.process && input.chemistry.process.finishes) || [], base: { length_pct: fin && wash ? wash.length_pct - fin.length_pct : 0, width_pct: fin && wash ? wash.width_pct - fin.width_pct : 0 } }) : null;
+    } catch (_) { out.process_dimensions = null; }
     // the virtual lab (air permeability, thermal resistance, a hundred rolls) and the matching collar and cuff, on request
     out.lab = input.lab && input.lab.enabled ? labSummary(input, out, clothState, thickMm, S, plush, rd.values) : null;
     out.trim = input.trim && input.trim.enabled ? trimSummary(input, out) : null;

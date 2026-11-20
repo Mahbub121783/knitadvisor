@@ -718,6 +718,7 @@
       showClothState(r);
       pushTrans();
       if (window.KAStudioLook) window.KAStudioLook.studioResult(r);
+      document.dispatchEvent(new CustomEvent('ka-studio-result'));      // the development sheet follows the drawing
     }).catch(function (e) {
       if (my !== reqSeq) return;
       last = null;

@@ -296,6 +296,17 @@
         <div class="st-f"><label for="sh-width">Open width (in)</label><input id="sh-width" type="number" min="20" max="110" step="0.5" placeholder="optional"></div>
         <div class="st-f"><label for="sh-shr">Max shrinkage (%)</label><input id="sh-shr" type="number" min="1" max="15" step="0.5" placeholder="optional"></div>
       </div>
+      <details class="st-det" id="sh-vdq"><summary class="st-hint" style="cursor:pointer;margin:2px 0">My machine's VDQ pulley (optional): reading → course length</summary>
+        <div class="st-hint" style="margin:4px 0">One or two settings you already run: the pulley reading and the yarn length per revolution it makes. The sheet then gives every feeder's pulley reading.</div>
+        <div class="st-row">
+          <div class="st-f"><label for="sh-v1r">Reading 1</label><input id="sh-v1r" type="number" min="0" step="0.1"></div>
+          <div class="st-f"><label for="sh-v1l">Course length 1 (m)</label><input id="sh-v1l" type="number" min="0" step="0.01"></div>
+        </div>
+        <div class="st-row">
+          <div class="st-f"><label for="sh-v2r">Reading 2</label><input id="sh-v2r" type="number" min="0" step="0.1"></div>
+          <div class="st-f"><label for="sh-v2l">Course length 2 (m)</label><input id="sh-v2l" type="number" min="0" step="0.01"></div>
+        </div>
+      </details>
       <button type="button" class="st-btn" id="sh-go">Make the development sheet</button>
       <span id="sh-note" class="st-hint" style="margin:0 0 0 8px"></span>
     </div>
@@ -915,7 +926,8 @@
 <script src="assets/js/studio-drape.js?v=20261121c"></script>
 <script src="assets/js/pbr-package.js?v=20261122a"></script>
 <script src="assets/js/studio-pbr.js?v=20261122a"></script>
-<script src="assets/js/studio-sheet.js?v=20261122a"></script>
+<script src="assets/js/studio-sheet.js?v=20261122b"></script>
+<script src="assets/js/studio-mode.js?v=20261122b"></script>
 <script src="assets/js/studio-vbed.js?v=20261121a"></script>
 <script src="assets/js/studio-capture.js?v=20261120b"></script>
 <script src="assets/js/studio-gates.js?v=20261121b"></script>

@@ -46,6 +46,8 @@ function designOf(raw) {
   d.look = { ...(d.look && typeof d.look === 'object' ? d.look : {}), shade, ...(raw.colour && /^#[0-9a-f]{6}$/i.test(raw.colour) ? { colour: raw.colour } : {}) };
   d.finish = { ...(d.finish || {}), brush };
   d.hand = { ...(d.hand || {}), enabled: true };
+  const pts = (Array.isArray(raw.vdq_points) ? raw.vdq_points : []).filter((p) => +p.reading > 0 && +p.course_length_m > 0).slice(0, 2).map((p) => ({ reading: +p.reading, course_length_m: +p.course_length_m }));
+  if (pts.length) d.machine.vdq = { points: pts };
   return { design: d, shade, brush };
 }
 
@@ -76,6 +78,7 @@ const feedingWord = (every) => (every === 'alternate' ? 'half feeder: elastane o
 function build(raw, analyse) {
   const { design, shade, brush } = designOf(raw);
   let out = analyse(clean(design));
+  if (out && out.success === false && /no elastane in the probe/.test(out.error || '')) throw new SheetError('This design (a sinker-loop plush / terry) does not carry elastane in the Studio: give the composition without elastane.');
   if (!out || out.success === false) throw new SheetError(out && out.error ? out.error : 'The Studio could not work this design out.');
   const conf = out.structure.confidence || {};
   const recordBacked = conf.level === 'verified' || conf.level === 'calibrated';
@@ -140,26 +143,52 @@ function build(raw, analyse) {
   const natW = f.width_open_in, finW = finished ? finished.width_in : natW;
   const lenShr = washed && finished ? r1(Math.abs(washed.length_pct - finished.length_pct)) : null;
   const gsmNow = (finished ? finished.gsm : f.gsm) * kG;
+  // the route's effect on size beyond the usual route (process-dimensions.js, an estimate)
+  const pd = out.process_dimensions || null;
+  const washLen = pd ? pd.after_wash.length_pct : washed && finished ? washed.length_pct - finished.length_pct : null;
+  const washWid = pd ? pd.after_wash.width_pct : washed && finished ? washed.width_pct - finished.width_pct : null;
+  const limit = +raw.shrinkage_pct > 0 ? +raw.shrinkage_pct : 5;
+  // the compaction that brings the residual length shrinkage under the buyer's limit: the cloth is shortened on the compactor by the excess
+  const compactPct = washLen != null ? r1(Math.max(0, Math.abs(washLen) - limit + 0.5)) : null;
+  const overfeed = washLen != null ? r1(Math.max(0, Math.min(15, Math.abs(washLen) - limit + 2.5))) : null;
+  const fibresOut = out.feasibility && out.feasibility.fibres ? out.feasibility.fibres : {};
+  const cellulosic = Object.keys(fibresOut).some((k) => /cotton|viscose|modal|linen|tencel/.test(k));
+  const pickup = pol && !cellulosic ? 55 : pol ? 68 : 80;                                   // wet pick-up after the squeeze, % of the dry cloth weight (typical)
+  const regain = cellulosic ? 8.5 : 2;
+  const dryLoad = Math.round(gsmNow * Math.max(0, pickup - regain) / 100);               // grams of water to evaporate per m² (physics: pick-up less the regain the cloth keeps)
+  const dryTemp = lycra || pol ? 170 : 140;
+  const speed = gsmNow > 260 ? 15 : gsmNow > 180 ? 20 : 25;
   const finishing = {
     heat_set: heatset ? { temp_c: heatset.t_c, time_s: lycra ? 45 : 30, when: heatset.t_c && /before|pre/i.test(heatset.label || '') ? 'before dyeing' : 'after dyeing', basis: 'typical for the fibres; the route sets the temperature' } : null,
     stenter: {
-      set_width_in: r1(finW * kW), temp_c: lycra || pol ? 170 : 140, speed_m_min: gsmNow > 260 ? 15 : gsmNow > 180 ? 20 : 25,
-      overfeed_pct: finished && washed ? r1(Math.max(0, Math.min(15, -washed.length_pct + 2))) : null,
-      basis: 'width from the finished state; temperature, speed and overfeed are typical settings for this weight and fibres (modelled): a first roll confirms them',
+      set_width_in: r1(finW * kW), temp_c: dryTemp, speed_m_min: speed, overfeed_pct: overfeed, pickup_pct: pickup, water_to_evaporate_g_m2: dryLoad,
+      basis: 'width from the finished state; the water to evaporate is pick-up less regain (physics); temperature and speed are typical settings for this weight and fibres, overfeed is what brings the residual shrinkage under the limit (modelled): a first roll confirms them',
     },
-    compaction: { target_cpc: f.cpc, note: (out.checks.find((c) => /compact/i.test(c.text)) || {}).text || null },
+    compaction: { target_cpc: f.cpc, shorten_pct: compactPct, limit_pct: limit, note: (out.checks.find((c) => /compact/i.test(c.text)) || {}).text || null },
     brushing: out.finish && brush !== 'none' ? { side: brush === 'face' ? 'face (peach)' : brush, passes: out.finish.passes, nap_mm: out.finish.nap_mm, weight_loss_pct: out.finish.fabric_loss_pct, basis: out.finish.basis } : null,
-    shrinkage_after_wash_pct: lenShr != null && washed ? { length: washed.length_pct, width: washed.width_pct } : null,
+    shrinkage_after_wash_pct: washLen != null ? { length: r1(washLen), width: r1(washWid), usual_route: pd ? { length: pd.after_wash.base.length_pct, width: pd.after_wash.base.width_pct } : null, route_changes: pd ? pd.changes : [], basis: pd ? pd.basis : 'modelled' } : null,
   };
+  // the order the cloth goes through the finishing house, each step with its numbers
+  finishing.sequence = [
+    ...(heatset && /before|pre/i.test(heatset.label || '') ? [{ step: 'Heat-set', params: `${finishing.heat_set.temp_c} °C, ${finishing.heat_set.time_s} s, pinned to ${r1(finW * kW)}"`, basis: 'typical' }] : []),
+    { step: 'Wet processing', params: 'scour, dye, soap, soften as in the dyeing route', basis: 'engine' },
+    { step: 'Squeeze / hydro-extract', params: `to about ${pickup} % pick-up`, basis: 'typical' },
+    { step: 'Dry on the stenter', params: `${dryTemp} °C, ${speed} m/min, width ${r1(finW * kW)}", overfeed ${overfeed != null ? overfeed : '—'} %, ${dryLoad} g/m² of water to evaporate`, basis: 'physics (load), typical (settings)' },
+    ...(heatset && !/before|pre/i.test(heatset.label || '') ? [{ step: 'Heat-set', params: `${finishing.heat_set.temp_c} °C, ${finishing.heat_set.time_s} s`, basis: 'typical' }] : []),
+    { step: 'Compact', params: compactPct != null ? `shorten the cloth by ${compactPct} % so the wash shrinkage is under ${limit} % (finished ${f.cpc} courses/cm)` : 'to the finished density', basis: 'modelled' },
+    ...(finishing.brushing ? [{ step: brush === 'face' ? 'Peach the face' : 'Brush', params: `${finishing.brushing.passes} passes, nap about ${finishing.brushing.nap_mm} mm, weight loss ${finishing.brushing.weight_loss_pct} %`, basis: 'modelled' }] : []),
+    { step: 'Check', params: `weight ${Math.round(gsmNow)} g/m², width ${r1(finW * kW)}", length shrinkage after wash ${washLen != null ? r1(washLen) : '—'} %, width ${washWid != null ? r1(washWid) : '—'} %`, basis: 'targets' },
+  ];
 
   // ── VDQ: the course length is physics; the pulley scale is the machine's own ─────────────────────────────
-  const vdq = out.vdq ? { groups: out.vdq.groups.map((g) => ({ feeds: g.feeds, course_length_m: g.course_length_m, yarn_speed_m_min: g.yarn_speed_m_min })), pulley_reading: null, note: 'The quality-pulley reading is not the same on any two makes: enter one or two settings you already run (Machine step) and the Studio turns course length into pulley readings.' } : null;
+  const vdq = out.vdq ? { groups: out.vdq.groups.map((g) => ({ feeds: g.feeds, course_length_m: g.course_length_m, yarn_speed_m_min: g.yarn_speed_m_min, pulley_reading: g.vdq_reading != null ? g.vdq_reading : null })), pulley_method: out.vdq.method || null, note: out.vdq.method ? 'The pulley readings are worked out from your own reference setting' + ((design.machine.vdq && design.machine.vdq.points.length > 1) ? 's' : '') + ': ' + out.vdq.method + '.' : 'The quality-pulley scale is not the same on any two makes. Give one or two settings you already run (reading and the course length it makes) and the sheet turns every feeder\'s course length into a pulley reading.' } : null;
 
   const warns = (out.checks || []).filter((c) => c.level === 'error' || c.level === 'warn').map((c) => ({ level: c.level, text: c.text }));
   const verdict = out.feasibility ? out.feasibility.verdict : null;
   const sheet = {
     success: true,
     inputs: { composition: raw.composition, gsm: +raw.gsm, shade, brush, dia: m.dia, width_in: +raw.width_in || null, shrinkage_pct: +raw.shrinkage_pct || null },
+    design: { bed: out.structure.bed, gating: out.structure.gating, feeds: out.structure.feeds, repeat: `${out.structure.feeds} feeds × ${out.structure.needles_per_repeat} needles`, roles: out.structure.roles_drawn, counts: out.structure.identity.counts, longest_float: out.structure.identity.longest_float, family: out.structure.family_label, transfers: (out.structure.identity.counts || {}).E + (out.structure.identity.counts || {}).R > 0, notes: (out.checks || []).filter((c) => c.level === 'note').slice(0, 6).map((c) => c.text) },
     fabric: { title: out.structure.identity.title, detail: out.structure.identity.detail, family: out.structure.family_label, matches: out.structure.match ? out.structure.match.name : null, confidence: conf.level, confidence_why: conf.why },
     weight_basis: weightPath,
     yarn: { feeds, composition: out.yarn.composition, composition_solved: out.composition_solve ? { target: out.composition_solve.target, achieved: out.composition_solve.achieved, held: out.composition_solve.held } : null, elastane: el ? { denier: el.denier, draft: el.draft, feeding: feedingWord(el.every), every: el.every } : null },
@@ -168,7 +197,7 @@ function build(raw, analyse) {
       stitch_length_mm: f.sl_mm, stitch_length_range_mm: f.sl_range_mm || null, tracks: out.setup ? out.setup.tracks : null, cam_chart: out.setup ? out.setup.cam_chart : null, vdq,
       sinker: ms.profile && ms.profile.sinker ? ms.profile.sinker.text : null,
     },
-    greige: greige ? { gsm: Math.round(greige.gsm * kG), gsm_range: gsmRange(greige.gsm * kG), width_in: r1(greige.width_in * kW), wales_per_cm: greige.wpc, courses_per_cm: greige.cpc, note: 'off the machine, relaxed flat' } : null,
+    greige: greige ? { gsm: Math.round(greige.gsm * kG), gsm_range: gsmRange(greige.gsm * kG), width_in: r1(greige.width_in * kW), wales_per_cm: greige.wpc, courses_per_cm: greige.cpc, note: 'off the machine, relaxed flat' } : { gsm: Math.round(f.gsm * kG), gsm_range: gsmRange(f.gsm * kG), width_in: r1(f.width_open_in * kW), wales_per_cm: f.wpc, courses_per_cm: f.cpc, note: 'this structure has no separate relaxed state in the Studio: its own weight and width are shown' },
     dyeing,
     finishing,
     finished: { gsm: Math.round((finished ? finished.gsm : f.gsm) * kG), gsm_range: gsmRange((finished ? finished.gsm : f.gsm) * kG), width_in: r1((finished ? finished.width_in : f.width_open_in) * kW), wales_per_cm: f.wpc, courses_per_cm: f.cpc, spirality_helix_deg: out.spirality ? out.spirality.helix_deg : null, thickness_mm: out.hand && out.hand.compression ? out.hand.compression.T0.value : null },
