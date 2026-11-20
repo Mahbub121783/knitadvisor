@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import './studio-loop-geom.js?v=20261122c';
 import './view-guard.js?v=20261111b';
+import { fibresGeometry, materialFor } from './yarn-real.js?v=20261122a';
 
 // dyed-yarn tones, not plastic primaries: each feeder still reads apart
 const FEED_COLOURS = ['#34558f', '#3f8a6e', '#b8613a', '#6d5aa6', '#b48a35', '#3a7d8f', '#a5486f', '#5f7f3a', '#8e4b2f', '#4a5568', '#3d6fa5', '#9a7a2e'];
@@ -82,7 +83,7 @@ export class LoopView {
     this._unguard = window.KAViewGuard ? window.KAViewGuard.wheel(this.renderer.domElement, this.controls) : null;
     this.scene.environment = studioEnvironment(this.renderer);
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x6f7480, 0.55));
-    const key = new THREE.DirectionalLight(0xfff8ef, 1.5); key.position.set(-4, 7, 10); this.scene.add(key);
+    const key = new THREE.DirectionalLight(0xfff8ef, 1.5); key.position.set(-4, 7, 10); this.scene.add(key); this._key = key;
     const rim = new THREE.DirectionalLight(0xe8f0ff, 0.7); rim.position.set(5, -3, -9); this.scene.add(rim);
     this.group = new THREE.Group(); this.scene.add(this.group);
     this.meshes = [];
@@ -134,7 +135,10 @@ export class LoopView {
 
   draw(spec) {
     this.spec = spec;
+    if (this._close) { this.closeUp(true); return this._geometry(spec); }
     this._clear();
+    if (this.camera.near !== 0.1) { this.camera.near = 0.1; this.camera.far = 500; this.camera.updateProjectionMatrix(); }
+    if (this.scene.background) { this.scene.background = null; this._key.castShadow = false; this._key.position.set(-4, 7, 10); this.renderer.shadowMap.enabled = false; }
     // a ready-made geometry (warp: one path per end) or the weft programme's, relaxed
     const geo = this._geometry(spec);
     this.geo = geo;
@@ -196,6 +200,108 @@ export class LoopView {
     this._dims = dims;
     this.redraw();
     return geo;
+  }
+
+  // ── fibre close-up: the yarn engine's own fibres (yarn-real-geom.js), laid along the relaxed loops ─────────────
+  // A few loops in the middle of the swatch, each yarn built fibre by fibre for its real count, fibre, spinning system and
+  // twist, then bent onto the yarn's path in the cloth: the fibre's place across the yarn rides a frame carried along the
+  // path, so the twist, the migration and the hairs follow every bend of the loop. In millimetres.
+  closeUp(on) {
+    this._close = !!on;
+    if (!this.spec) return;
+    if (!on) { this.draw(this.spec); return; }
+    const spec = this.spec, geo = this._geometry(spec);
+    const G = globalThis.KAYarnGeom;
+    if (!G || !fibresGeometry) return;
+    this._clear();
+    const mm = spec.waleMm || 0.57;                                   // one wale in mm
+    const cxw = (geo.wales - 1) / 2, mid = Math.floor(geo.rows / 2);
+    const half = 1.05, x0 = cxw - half, x1 = cxw + half;
+    const ylo = (mid - 0.9) * (geo.step || geo.h), yhi = (mid + 1.25) * (geo.step || geo.h);
+    this._clip = [
+      new THREE.Plane(new THREE.Vector3(1, 0, 0), -(x0 - cxw) * mm), new THREE.Plane(new THREE.Vector3(-1, 0, 0), (x1 - cxw) * mm),
+      new THREE.Plane(new THREE.Vector3(0, 1, 0), -(ylo - mid * (geo.step || geo.h)) * mm), new THREE.Plane(new THREE.Vector3(0, -1, 0), (yhi - mid * (geo.step || geo.h)) * mm),
+    ];
+    const cyw = mid * (geo.step || geo.h);
+    let fibreCount = 0, meta = null;
+    geo.courses.forEach((co) => {
+      if (co.course < mid - 3 || co.course > mid + 2) return;
+      // the run of this yarn inside the window (with a margin: the clip cuts it clean)
+      const P = co.points, run = [];
+      let best = [], cur = [];
+      P.forEach((p) => { if (p.x > x0 - 0.7 && p.x < x1 + 0.7) cur.push(p); else { if (cur.length > best.length) best = cur; cur = []; } });
+      if (cur.length > best.length) best = cur;
+      if (best.length < 4) return;
+      best.forEach((p) => run.push(new THREE.Vector3((p.x - cxw) * mm, (p.y - cyw) * mm, p.z * mm)));
+      // a frame carried along the path (parallel transport): tangent, normal, binormal at every point
+      const n = run.length, S = new Float64Array(n), T = [], N = [], B = [];
+      for (let i = 0; i < n; i++) {
+        if (i) S[i] = S[i - 1] + run[i].distanceTo(run[i - 1]);
+        const a = run[Math.max(0, i - 1)], b = run[Math.min(n - 1, i + 1)];
+        T.push(new THREE.Vector3().subVectors(b, a).normalize());
+      }
+      let nn = new THREE.Vector3(0, 0, 1); if (Math.abs(nn.dot(T[0])) > 0.9) nn.set(1, 0, 0);
+      nn.sub(T[0].clone().multiplyScalar(nn.dot(T[0]))).normalize();
+      for (let i = 0; i < n; i++) {
+        if (i) { const t = T[i]; nn = N[i - 1].clone().sub(t.clone().multiplyScalar(N[i - 1].dot(t))); if (nn.lengthSq() < 1e-10) nn = N[i - 1].clone(); nn.normalize(); }
+        N.push(nn.clone()); B.push(new THREE.Vector3().crossVectors(T[i], nn).normalize());
+      }
+      const L = S[n - 1];
+      const yarn = (spec.yarnOf && spec.yarnOf(co.feed)) || { fibre: 'cotton', type: 'combed', tex: 19.7, ply: 1 };
+      let built;
+      try { built = G.build(yarn, { length: L, maxFibres: 240, step: 0.045, seed: co.course * 31 + co.feed }); } catch (e) { return; }
+      meta = built.meta;
+      const rDraw = ((spec.radius && spec.radius[co.feed]) || 0.13) * mm;
+      const kr = built.meta && built.meta.diameter_mm ? rDraw / (built.meta.diameter_mm / 2) : 1;
+      let seg = 0;
+      const at = (s) => {
+        s = Math.max(0, Math.min(L, s));
+        while (seg > 0 && S[seg] > s) seg--;
+        while (seg < n - 2 && S[seg + 1] < s) seg++;
+        const f = (s - S[seg]) / Math.max(1e-9, S[seg + 1] - S[seg]);
+        return { P: run[seg].clone().lerp(run[seg + 1], f), N: N[seg].clone().lerp(N[seg + 1], f).normalize(), B: B[seg].clone().lerp(B[seg + 1], f).normalize() };
+      };
+      const sc = built.length > 0 ? L / built.length : 1;          // the built length onto the path's length
+      const fibres = built.fibres.filter((fb, i) => fb.kind !== 'hair' || i % 2 === 0).map((fb) => {
+        const p = fb.p, out = new Float32Array(p.length);
+        seg = 0;
+        for (let k = 0; k < p.length; k += 3) {
+          const q = at(p[k + 1] * sc);
+          out[k] = q.P.x + (q.N.x * p[k] + q.B.x * p[k + 2]) * kr;
+          out[k + 1] = q.P.y + (q.N.y * p[k] + q.B.y * p[k + 2]) * kr;
+          out[k + 2] = q.P.z + (q.N.z * p[k] + q.B.z * p[k + 2]) * kr;
+        }
+        return Object.assign({}, fb, { p: out, rf: fb.rf * kr });
+      });
+      fibreCount += fibres.length;
+      const colour = spec.colourBy === 'one' || spec.real ? (spec.colour || '#f1ead9') : feedColour(spec, co.feed);
+      const mat = materialFor(built.meta, colour);
+      mat.clippingPlanes = this._clip; mat.side = THREE.DoubleSide;
+      if (mat.sheenColor) mat.sheenColor = new THREE.Color(colour).lerp(new THREE.Color(0xffffff), 0.3).multiplyScalar(0.6);
+      mat.envMapIntensity = 0.5;
+      const mesh = new THREE.Mesh(fibresGeometry(fibres, 0), mat);
+      mesh.castShadow = true; mesh.receiveShadow = true;
+      mesh.userData = { course: co.course, feed: co.feed, fibres: true, base: 1 };
+      this.group.add(mesh); this.meshes.push(mesh);
+    });
+    this.closeInfo = { fibres: fibreCount, meta };
+    // a dark stage and a key light that casts shadows between the yarns: the depth of the interlooping reads
+    this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.scene.background = new THREE.Color('#23272e');
+    const key = this._key; key.castShadow = true;
+    const ext = Math.max((x1 - x0), (yhi - ylo)) * mm;
+    key.position.set(-ext * 1.2, ext * 2.2, ext * 3); key.target.position.set(0, ((ylo + yhi) / 2 - cyw) * mm, 0); this.scene.add(key.target);
+    Object.assign(key.shadow.camera, { left: -ext, right: ext, top: ext, bottom: -ext, near: ext * 0.2, far: ext * 10 }); key.shadow.camera.updateProjectionMatrix();
+    key.shadow.mapSize.set(2048, 2048); key.shadow.bias = -0.0004; key.shadow.normalBias = 0.002;
+    if (key.shadow.map) { key.shadow.map.dispose(); key.shadow.map = null; }
+    // frame the window
+    const w = (x1 - x0) * mm, hgt = (yhi - ylo) * mm, t = 2 * Math.tan((this.camera.fov * Math.PI) / 360);
+    const d = 1.15 * Math.max(w / (t * this.camera.aspect), hgt / t);
+    this.camera.near = d / 200; this.camera.far = d * 50; this.camera.updateProjectionMatrix();
+    const cyWin = ((ylo + yhi) / 2 - cyw) * mm;
+    this.camera.position.set(-d * 0.12, cyWin + d * 0.1, d); this.controls.target.set(0, cyWin, 0); this.camera.up.set(0, 1, 0); this.controls.update();
+    this.redraw();
+    return this.closeInfo;
   }
 
   view(name) {

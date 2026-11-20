@@ -1583,6 +1583,8 @@
       filament: /filament/.test(($('st-fibre') || {}).value || ''),
       hair: ({ carded: 1.35, combed: 1, compact: 0.6, siro: 0.8, siro_compact: 0.55, open_end: 0.85, vortex: 0.5 })[(($('st-ytype') || {}).value) || 'combed'] || 1,
       twist: 'Z',
+      waleMm: 10 / f.wpc,
+      yarnOf: function (fi) { var role = (feeds[fi] || {}).role || 'ground'; if (role === 'face') role = 'ground'; try { var v = yarnForView(role); return v && v.yarn ? v.yarn : null; } catch (e) { return null; } },
       stripeColour: (function () { var st = stripeOf(); return st ? function (c) { return st.colours[st.seq[((c % st.seq.length) + st.seq.length) % st.seq.length]]; } : null; })(),
     };
     // plush: the ground yarn is drawn on the loop feeder, the pile behind it
@@ -1604,7 +1606,7 @@
   function renderLoops() {
     var host = $('st-loops');
     if (!loopPromise) {
-      loopPromise = import('/assets/js/studio-loops.js?v=20261122c').then(function (mod) {
+      loopPromise = import('/assets/js/studio-loops.js?v=20261122e').then(function (mod) {
         loopView = new mod.LoopView(host, showTip);
         loopView.feedColour = mod.feedColour;
         return loopView;
@@ -1679,7 +1681,12 @@
       if (lp && loopView) loopPromise.then(function (v) { v.view('angle'); });
     });
     $('st-loopbar').addEventListener('click', function (e) {
-      var b = e.target.closest('[data-view]'); if (b && loopView) loopView.view(b.getAttribute('data-view'));
+      var b = e.target.closest('[data-view]'); if (b && loopView) { if (loopView._close) { loopView._close = false; $('st-fibrecu').classList.remove('on'); loopView.draw(loopSpec()); } loopView.view(b.getAttribute('data-view')); }
+      if (e.target.closest('#st-fibrecu') && loopView) {
+        var on = !loopView._close; $('st-fibrecu').classList.toggle('on', on); $('st-fibrecu').textContent = on ? 'Back to loops' : 'Fibre close-up';
+        if (on) $('st-3dnote').textContent = 'Building every fibre…';
+        setTimeout(function () { loopView.spec = loopSpec(); var info = loopView.closeUp(on); if (on && info && info.meta) $('st-3dnote').textContent = 'Fibre close-up: ' + info.fibres + ' fibres of ' + (info.meta.fibre_label || info.meta.fibre || 'the yarn') + ', ' + (info.meta.system_label || info.meta.system || '') + ', ' + (info.meta.tpm ? info.meta.tpm + ' turns/m, ' : '') + 'twist angle ' + (info.meta.twist_angle_deg || '—') + '°, laid along the relaxed loops. Drag to turn; Ctrl + wheel to zoom.'; else if (!on) $('st-3dnote').textContent = ''; }, 30);
+      }
     });
     $('st-twinbar').addEventListener('click', function (e) {
       var b = e.target.closest('[data-tview]'); if (b && twinView) twinView.view(b.getAttribute('data-tview'));

@@ -393,3 +393,6 @@ export class YarnView {
     this.renderer.domElement.remove(); this.over.remove(); this.bar.remove();
   }
 }
+
+// the loop view lays these same fibres along the loops of the cloth (studio-loops.js, fibre close-up)
+export { fibresGeometry, materialFor };
