@@ -1643,6 +1643,8 @@ function analyse(input) {
     // the mill's own readings (thickness, air permeability, Rct) replace the estimates they measure (mill-readings.js)
     const rd = RDG.read(input);
     if (rd.error) throw new StudioError(rd.error);
+    // a plush or terry stands its pile on the ground: the cloth is as thick as the ground plus the pile (the hand model's T0 is the ground)
+    if (plush && plush.pile && +plush.pile.finished_pile_mm > 0 && thickMm) thickMm = thickMm + +plush.pile.finished_pile_mm;
     const thickModel = thickMm;
     if (rd.values.thickness_mm) thickMm = rd.values.thickness_mm;
     const out = {

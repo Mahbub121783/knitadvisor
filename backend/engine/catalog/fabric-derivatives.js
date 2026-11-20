@@ -1956,12 +1956,13 @@ const FABRIC_DERIVATIVES = [
       wales_per_repeat: 2,
       beds: ['cylinder', 'dial'],
       pattern: {
-        C: [['K'],['K'],['K'],['M']],
+        C: [['K'],['K'],['K'],['K']],
         D: [['M'],['M'],['M'],['K']]
       },
       cam: [
         { feed: '1-3', cylinder: 'K all', dial: 'M (held)', note: 'Cylinder knits 3 courses, dial holds loops' },
-        { feed: 4, cylinder: 'M', dial: 'K', note: 'Dial knits and releases held loops, forming relief cord' }
+        // the tie course: the dial alone would make a second cloth that never joins the first; knitting both beds here ties them
+        { feed: 4, cylinder: 'K', dial: 'K', note: 'Both beds knit: the dial releases its held loops and ties the cylinder welts to the back, forming the relief cord' }
       ],
       needle_arrangement: {
         butt_pattern: 'Standard interlock',

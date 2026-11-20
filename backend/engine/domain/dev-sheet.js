@@ -112,6 +112,7 @@ function build(raw, analyse) {
     } else if (s && s.reason) weightPath.why = 'family table kept: ' + s.reason;
     if (weightPath.band_pct == null) weightPath.band_pct = 25;        // a structure outside the records, and no physics answer to check it: the honest band is wide
   }
+  if (weightPath.band_pct == null) weightPath.band_pct = recordBacked ? 5 : 25;         // e.g. a plush: no physics check, a wide band
   const f = out.fabric, m = out.machine, ms = out.machine_setup || {};
   const states = (f.relaxation && f.relaxation.states) || [];
   const stateOf = (id) => states.find((s) => s.state === id) || null;

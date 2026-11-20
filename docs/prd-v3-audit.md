@@ -136,6 +136,8 @@ Method: Done = 1, Partial = 0.5, Missing = 0 for presence; then every number the
 - **Step 5, VDQ pulley:** one or two of the machine's own reference settings (saved in the browser) give every feeder's pulley reading in the sheet.
 - 98/98 suites.
 
+**Final pre-presentation audit, 2026-11-20.** All 63 templates x 3 compositions (100 % CO, 95/5 CO/EL, 60/40 CVC) through the development sheet: 189 sheets, every one with yarn, machine set-up, cam chart, greige, dyeing, finishing and finished cloth, finished weight on target. Fixed: the Single Relief template knitted its two beds on different feeds only (two cloths that never join, U-01 FATAL on every composition): its fourth feed now knits both beds (the tie course); a plush / terry packing gate used the ground thickness without the pile (Phi > 1, FATAL on CVC): the pile height is now added; a plush sheet carried no accuracy band: it now says +/-25 %. Weight bands across the 189 sheets: +/-5 % on 16 (structures in the factory records), +/-14 % on 78 (stitch-graph laws, inside the factory tightness window), +/-25 % on 46, wider (to +/-62 %) where the two engines disagree and the gap is stated. Direct to machine without a trial: the needle programme, cam chart, track set-out, gauge, diameter, feeders and the yarn per feeder; the stitch length is a starting setting inside the stated band; a first roll calibrates it.
+
 **Gaps that hold the score down**
 1. "Zero presets": the Studio still has 63 templates and 18 family branches in the solver.
 2. No composition-vector solver: the elastane share is an input, not solved from a target composition.
