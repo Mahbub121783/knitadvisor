@@ -917,7 +917,15 @@ function solve(ctx, ground) {
   // courses you count on the face: where loops are held, one face course
   // takes 1 ÷ loop rate feeds (interlock's own constants already count so)
   const rate = ctx.rate == null ? 1 : ctx.rate;
-  const cpc = (KS.med / (bedsLoops * KW.med)) / lcm * rate / (family === 'interlock' ? 0.5 : 1);
+  // A fleece's measured stitch-density constant (Ks = 10·GSM·ℓ/tex) was taken on the whole yarn of the cloth, the loop yarn that floats behind included.
+  // Ks ÷ Kw ÷ ℓ is a count of courses only when every gram sits in a knitted course, so it is scaled to the knitting yarn's share of the mass: without
+  // this a fleece reported ~1.6× the courses it has, and Σ(L·Tex) ÷ A_cell disagreed with the weight by the same factor (audit 2026-11-20).
+  const knitMassShare = (() => {
+    if (family !== 'fleece' || !feeds.some((f) => f.role === 'loop')) return 1;
+    const km = feeds.reduce((t, f, i) => t + (f.role !== 'loop' && [st.beds.C, st.beds.D].filter(Boolean).some((g) => g[i].includes('K')) ? f.mass : 0), 0);
+    return massTot > 0 && km > 0 ? Math.min(1, km / massTot) : 1;
+  })();
+  const cpc = (KS.med / (bedsLoops * KW.med)) / lcm * rate / (family === 'interlock' ? 0.5 : 1) * knitMassShare;
 
   // TF
   const groundIdx = feedRows.findIndex((f, i) => ['ground', 'face'].includes(f.role) && [st.beds.C, st.beds.D].filter(Boolean).some((g) => g[i].includes('K')));
@@ -1998,6 +2006,7 @@ function stretchSummary(input, S, family, match, rec, isPlush) {
     };
   } catch (e) { return null; }
 }
+const loopFeedD = (S) => { const f = (S.feeds || []).find((x) => x.role === 'loop' && (x.d_mm > 0 || x.tex > 0)); return f ? (f.d_mm > 0 ? f.d_mm : Math.sqrt(f.tex) / 28) : 0; };
 function handSummary(opt, input, S, family, match, recOut, isPlush, cs, pe) {
   try {
     const y = S.ground;
@@ -2011,7 +2020,7 @@ function handSummary(opt, input, S, family, match, recOut, isPlush, cs, pe) {
     return HAND.analyse({
       fabricId: isPlush ? 'velour_plush' : (match && match.id) || FAMILY[family].anchor, category: family === 'rib' ? 'rib' : family === 'interlock' ? 'interlock' : '',
       fibres: Object.fromEntries(Object.entries(mix).filter(([k]) => BY.FIB[k])), count: { value: y.tex, unit: 'tex' }, spinning: y.type && BY.GEO[y.type] ? y.type : undefined, filament: FILAMENT_FIBRES.includes(y.fibre),
-      loop_mm: S.lref, gsm: cs ? cs.gsm : S.gsm, wpc: cs ? cs.wpc : S.wpc, cpc: cs ? cs.cpc : S.cpc, yarn_d_mm: S.gfit.yarn_d_mm, elastane_pct: elast, elastane_denier: +el.denier > 0 ? +el.denier : undefined,
+      loop_mm: S.lref, gsm: cs ? cs.gsm : S.gsm, wpc: cs ? cs.wpc : S.wpc, cpc: cs ? cs.cpc : S.cpc, yarn_d_mm: S.gfit.yarn_d_mm, loop_d_mm: !isPlush && loopFeedD(S) ? loopFeedD(S) : undefined, elastane_pct: elast, elastane_denier: +el.denier > 0 ? +el.denier : undefined,
       finish: { chemical, brushed: brush, process: pe ? { bending: pe.hand.bending, friction: pe.hand.friction } : undefined }, load_gf_cm: +opt.load_gf_cm > 0 ? +opt.load_gf_cm : undefined, yarnRecovery: rec,
     });
   } catch (e) { if (e instanceof HAND.HandError) return { success: false, error: e.message }; if (e instanceof BY.BlendError) return null; return null; }

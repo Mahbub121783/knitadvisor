@@ -59,6 +59,7 @@ const STRUCT = {
   mesh:      { bend: 0.85, shear: 0.80, thick: 3.2, comp: 0.35, lc: 0.40, relief: 1.8, rc: 0 },
   warp:      { bend: 1.20, shear: 2.20, thick: 3.0, comp: 0.30, lc: 0.45, relief: 0.8, rc: 1 },
 };
+const LOOP_LAYER = 2.2;                       // loop-yarn diameters of thickness a fleece's back layer adds (estimate)
 // finishes: multipliers on the numbers (bending, bending hysteresis, shear, friction, roughness, compression resilience, compressibility)
 const FINISHES = {
   none:     { label: 'No chemical finish', B: 1.00, HB: 1.00, G: 1.00, MIU: 1.00, SMD: 1.00, RC: 0, comp: 1.00 },
@@ -170,7 +171,10 @@ function compute(input, isRef) {
 
   // ── compression (estimated) ───────────────────────────────────────────────────────────────────
   const hair = prof.texture.hairiness_vs_combed_cotton.value;
-  const T0 = d * K.thick * Math.pow(clamp(tf / TF_REF, 0.6, 1.6), 0.35) * ((SE._KINDS[kind] && SE._KINDS[kind].bulk) || 1) * (BR ? BR.T : 1) * (elast > 0 ? 1 - Math.min(0.12, elast * 0.01) : 1);
+  // a fleece or a loopback is a jersey ground PLUS a layer of the loop yarn lying on its back: that layer is about two loop-yarn diameters (the floats
+  // arched over the needles), so it is added when the loop yarn's diameter is known (modelled; before this a fleece was as thin as the jersey it is built on)
+  const loopD = (kind === 'fleece' || kind === 'terry') && +p.loop_d_mm > 0 ? +p.loop_d_mm : 0;
+  const T0 = (d * K.thick * Math.pow(clamp(tf / TF_REF, 0.6, 1.6), 0.35) * ((SE._KINDS[kind] && SE._KINDS[kind].bulk) || 1) + loopD * LOOP_LAYER) * (BR ? BR.T : 1) * (elast > 0 ? 1 - Math.min(0.12, elast * 0.01) : 1);
   const comp = clamp(K.comp * F.comp * (BR ? BR.comp : 1) * (1 + 0.12 * (hair - 1)) * (elast > 0 ? 0.92 : 1), 0.12, 0.8);
   const Tm = T0 * (1 - comp), dT = (T0 - Tm) / 10;                                   // cm
   const LC = K.lc, WC = LC * 25 * dT;

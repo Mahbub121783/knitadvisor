@@ -70,4 +70,16 @@ const bare = (d) => { const x = JSON.parse(JSON.stringify(d)); delete x.knitadvi
   assert.throws(() => DNA.fromDNA({ schemaVersion: '3.0.0', unitCell: { topologyGraph: { yarnPaths: [{ yarnId: 'Y1', ops: 'KXQ' }] } }, yarns: [{ yarnId: 'Y1', count: 30, unit: 'Ne' }], fabric: { gsm: 150 } }), /needle row/);
   console.log('✓ a 60/40 blend channel becomes a blend yarn; woven, old schemas and bad rows are refused with a reason');
 }
+{
+  // a fleece's courses count the knitting yarn only: the unit-cell law holds, and the loop yarn's layer makes it thicker than a jersey
+  for (const id of ['fleece_3_thread', 'fleece_2_thread', 'french_terry', 'fleece_diagonal']) {
+    const inp = tpl(id), out = S.analyse(JSON.parse(JSON.stringify(inp)));
+    const d = DNA.toDNA(inp, out);
+    assert(Math.abs(d.universalLaw.agreement_pct) <= 3, `${id}: law vs Studio ${d.universalLaw.agreement_pct} %`);
+    assert(out.fabric.cpc < 1.3 * out.fabric.wpc * 1.6 && out.fabric.cpc > 12, `${id}: cpc ${out.fabric.cpc}`);
+    assert(out.feasibility.packing.thickness_mm > 0.9, `${id}: thickness ${out.feasibility.packing.thickness_mm}`);
+    assert(out.feasibility.packing.phi < 0.5, `${id}: phi ${out.feasibility.packing.phi}`);
+  }
+  console.log('✓ fleece, loopback: the unit-cell law is within 3 % of the weight, courses are the knitted ones, thickness about 1.1 mm, Φ about 0.3');
+}
 console.log('Fabric DNA tests passed');

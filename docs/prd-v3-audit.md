@@ -101,6 +101,49 @@ On scientific grounding, KnitAdvisor is ahead of the PRD. Every number carries a
 - **Score changes:** Module 6 80 → 90 % (the U3MA/ZFAB item stays at zero). **Overall ≈ 87 → 90 %.**
 - **What is still open across the whole PRD:** woven in the Studio (deferred by choice); the closed CAD formats; Lurex as a 3D ribbon; a real viewer's check of the glTF; the garment as pattern pieces on a body; and above all the mill's own readings (Cusick, KES/FAST, opacity, air permeability, spectrophotometer, a 100-roll weight log, ISO 9237/11092), which turn the estimate tags into measured ones.
 
+### Deep audit, 2026-11-19: scored by running the system against the PRD and the Excel, not by feature presence
+
+Method: Done = 1, Partial = 0.5, Missing = 0 for presence; then every number the Excel or the PRD gives was run through the real code and compared. Scratch probes: audit1-5.js.
+
+**Measured facts**
+- 63 of 63 templates solve to the target GSM (62 within 0.8 %, worst 1.9 %); 150 random designs with every card on: 0 crashes, 0 non-finite numbers. Latency 7-10 ms plain, about 60 ms with every card on. 12 yarn channels, each with its own fibre and count, work.
+- Unit-cell law GSM = sum(L.Tex)/A_cell against the Studio: 35/63 within 2 %, 54/63 within 10 %. Worst: fleece_2/3_thread and french_terry (+56 to +103 %), bourrelet/relief_single (-33 %). Cause not yet proven; the likely suspects are the fleece course count (cpc) being counted twice and the fleece thickness in Phi being too low. Both open.
+- Excel tab 2 scenario 1 (micro jersey): law 143.8 GSM, Studio 134 (-6.8 %). Scenario 3 (CVC fleece): 266.3 vs 266 (solved to the target, but Phi 0.53 against the Excel's 0.41).
+- Excel tab 3 (9 fibres x 4 chemicals): 29 of 36 cells match; 6 differ by one class (ours WARN where the Excel says SAFE), 1 by more (nylon/hypochlorite: ours WARN, Excel FATAL).
+- Excel tab 4: needles 2638 vs 2639 (rounding). The woven Peirce saturation 67.6 % agrees with the Excel's K_total 0.681.
+- Excel tab 5: routes are generated per blend and are sensible (heat-set first for elastane, disperse before reactive for CVC); not compared step by step.
+- Excel tab 6 carbon: cotton reactive 8.13 vs 7.5; CVC 9.02 vs 10.8; polypropylene 4.62 vs dope-dyed 4.8; wool/poly 40.6 vs 10.2 (the Excel figure ignores wool's fibre footprint; ours is the sourced one).
+- PRD Test 4 (wool + NaOH): FATAL, export locked. PRD Test 2 (10 % melange in a yarn): the cloth composition carries it by mass share (10 % in the yarn gives 6.3 % in the cloth for the grey_90_10 preset), by law.
+- DNA schema 3.0: top-level, unit-cell, machine, feasibility contracts complete; yarn node is missing twistDir, tm, csp, uster, melangePercent, slub, elastaneDraftRatio, tensionCN, colorLab; topology nodes and activeChemicals absent.
+
+**Fleece fix, 2026-11-20 (first of the five).** Cause found: the fleece's measured Ks (10.GSM.l/tex) was taken on the whole yarn, the floating loop yarn included, so Ks / Kw / l over-counted courses by the loop yarn's mass share (about 1.6x on a 3-thread, 2.0x on a 2-thread). The cpc is now scaled to the knitting yarn's share of the mass (fleece family with a loop feed only; weight is unchanged). The hand model's T0 also gave a fleece the thickness of its jersey ground (0.62 mm); it now adds a loop-yarn layer of 2.2 loop diameters (modelled, about 1.17 mm, French terry about the same; brushing raises it). Result: law vs Studio on the fleece family from +56..+103 % to within 1.5 %; Phi 0.64 to 0.34. Templates within 10 % of the law: 54/63 to 58/63. Still outside 10 %: bourrelet and relief_single (-33 %), half_milano (-25 %), blister_single (-17 %), texipique (-15 %): tuck/relief cells whose course count in the cell is approximate. 94/94 suites pass; regression test added to fabric_dna.test.js.
+
+**Gaps that hold the score down**
+1. "Zero presets": the Studio still has 63 templates and 18 family branches in the solver.
+2. No composition-vector solver: the elastane share is an input, not solved from a target composition.
+3. Fleece family: law/Studio disagreement and Phi (above).
+4. Woven is a separate calculator, not inside the Studio, the gates or the DNA.
+5. No .xlsx costing/ERP export; 3D and the tech-pack are not feasibility-locked (only /studio/export is).
+6. U3MA/ZFAB/SBSAR not written (closed formats).
+7. Every estimate tag still waits for the mill's own readings.
+
+**Score**
+| Area | Score |
+|---|---|
+| 1 Architecture / unit-cell / DNA / zero presets | 70 % |
+| 2 N-yarn compiler | 85 % |
+| 3 Feasibility gates | 88 % |
+| 4 Machine compiler | 80 % |
+| 5 Chemistry (27 chemicals, multi-fibre) | 85 % |
+| 6 Lab, lightbox, eco, export | 80 % |
+| 7 Woven in the Studio | 25 % |
+| PRD overall (with woven) | about 74 % |
+| PRD overall (knit only) | about 80 % |
+| Excel overall (tabs 1-6) | about 81 % |
+| **Both together** | **about 77 % (about 81 % knit only)** |
+
+The earlier "about 90 %" counted features present. Against measured agreement it is about 77 %. The fastest points: fix the fleece cpc/thickness, a composition solver, the DNA yarn fields, an .xlsx workbook, and woven inside the Studio.
+
 ---
 
 ## 2. Module-by-module
