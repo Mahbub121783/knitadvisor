@@ -221,5 +221,7 @@
   }
 
   async function load() { D = await api('/admin/api/et'); render(); }
+  // the link on the Yarn Prices tab (no inline handler: the page's CSP forbids them)
+  document.addEventListener('click', function (e) { var l = e.target.closest && e.target.closest('#et-open-link'); if (l) { e.preventDefault(); if (typeof switchTab === 'function') switchTab('tab-et'); } });
   window.loadEmergingTextiles = function () { return load().catch(function (e) { var el = $('et-root'); if (el) el.innerHTML = '<div style="color:#B23B3B;font-size:12px">' + esc(e.message) + '</div>'; }); };
 })();
