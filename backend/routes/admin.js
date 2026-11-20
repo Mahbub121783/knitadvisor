@@ -1151,8 +1151,26 @@ router.get('/api/yarn-prices', adminAuth, async (req, res) => {
          FROM yarn_price_quotes
         ORDER BY market, item_key, count_ne, quoted_on DESC`);
 
+    // Every Emerging Textiles quote as it stands, ALL countries: the costing table above keeps one row per product, which
+    // would hide China, India and Pakistan behind Bangladesh. This is the whole subscription on one screen.
+    const etQuotes = await dbQuery(
+      `SELECT DISTINCT ON (country, market, item_key, count_ne)
+              country, market, item_key, count_ne, raw_label, price_usd_kg, quoted_on, fetched_at
+         FROM yarn_price_quotes WHERE source = $1
+        ORDER BY country, market, item_key, count_ne, quoted_on DESC`, [et.SOURCE]);
+
     res.json({
       status: yarnPrices.status(),
+      et: {
+        configured: et.isConfigured(),
+        has_key: !!process.env.ET_API_KEY,
+        tables: (() => { try { return JSON.parse(process.env.ET_ENDPOINTS || '[]').length; } catch (_) { return 0; } })(),
+        quotes: etQuotes.map(q => ({
+          country: q.country, item_key: q.item_key, count_ne: Number(q.count_ne), label: q.raw_label,
+          usd_per_kg: Number(q.price_usd_kg), quoted_on: String(q.quoted_on).slice(0, 10), fetched_at: q.fetched_at,
+          in_costing: q.market === yarnPrices.COSTING_MARKET,
+        })),
+      },
       // the free benchmarks that bring an old quote forward, with publisher and licence (admin only)
       benchmarks: yarnPrices.benchmarks.status(),
       refresh_days: REFRESH_DAYS,
@@ -1214,6 +1232,22 @@ router.post('/api/open-access', adminAuth, (req, res) => {
     res.json({ success: true, ...openAccess.stats() });
   } catch (err) {
     res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+// "Test a table": fetch ONE Emerging Textiles table with the server's key and show what came back and what the reader made
+// of it. Nothing is stored. The key never leaves the server and is not echoed.
+router.post('/api/yarn-prices/et-probe', adminAuth, async (req, res) => {
+  try {
+    const et = require('../jobs/price-sources/emergingtextiles');
+    const b = req.body || {};
+    const ep = { dataset: String(b.dataset || '').trim(), sheet: String(b.sheet || '').trim(), url: String(b.url || '').trim() || undefined,
+      country: b.country, item_key: b.item_key, count_ne: b.count_ne, column: b.column };
+    if (!ep.url && !(ep.dataset && ep.sheet)) return res.status(400).json({ ok: false, error: 'Give the dataset and the sheet (or a full https URL).' });
+    res.json(await et.probe(ep));
+  } catch (err) {
+    console.error('[ET probe error]', err);
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 

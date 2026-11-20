@@ -1503,6 +1503,22 @@
       <div class="section-sub mb-12">Merged, freshest quote wins; if every source fails the built-in price list answers</div>
       <div id="prices-sources" class="mb-20"></div>
 
+      <div class="card mb-20" id="et-panel" style="padding:14px 16px;">
+        <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
+          <strong style="font-size:12px;">Emerging Textiles — every price in the subscription</strong>
+          <span id="et-state" style="font-size:10px;color:var(--t3);"></span>
+        </div>
+        <div style="overflow-x:auto;"><table class="data-table" style="width:100%;font-size:11px;"><thead><tr><th>Country</th><th>Product</th><th>Ne</th><th>USD / kg</th><th>Quoted</th><th>Costing</th></tr></thead><tbody id="et-tbody"></tbody></table></div>
+        <details style="margin-top:10px;"><summary style="cursor:pointer;font-size:11px;color:var(--t2);">Test a table (see what the API returns before adding it to ET_ENDPOINTS)</summary>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0;">
+            <input id="et-dataset" class="input" placeholder="dataset, e.g. Bangladesh-Yarn-Prices_Weekly" style="flex:2;min-width:220px;">
+            <input id="et-sheet" class="input" placeholder="sheet, e.g. cotton-yarn-indicator" style="flex:2;min-width:200px;">
+            <button id="et-probe-btn" class="btn btn-sm" style="background:var(--a1);color:#fff;">Test</button>
+          </div>
+          <div id="et-probe-out" style="font-size:10px;line-height:1.6;"></div>
+        </details>
+      </div>
+
       <div class="tbl-wrap">
         <table class="tbl">
           <thead><tr>

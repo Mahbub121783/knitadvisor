@@ -2122,6 +2122,21 @@ async function loadYarnPrices() {
       priceMsg('');
     }
 
+    // ── Emerging Textiles: the whole subscription, every country ────────
+    const et = d.et || {};
+    const etState = document.getElementById('et-state');
+    if (etState) {
+      etState.textContent = !et.has_key ? 'no API key on the server (set ET_API_KEY)'
+        : !et.tables ? 'key set, no tables chosen (set ET_ENDPOINTS: use Test a table below)'
+        : `${et.tables} table${et.tables > 1 ? 's' : ''} read daily; ${(et.quotes || []).length} prices stored`;
+      document.getElementById('et-tbody').innerHTML = (et.quotes || []).map(q => `<tr>
+        <td>${esc(q.country)}</td><td style="font-size:10px;">${esc(q.label || q.item_key)}</td><td>${q.count_ne || '—'}</td>
+        <td style="font-variant-numeric:tabular-nums;">$${q.usd_per_kg.toFixed(2)}</td>
+        <td style="font-size:10px;color:var(--t3);">${esc(q.quoted_on)}</td>
+        <td style="font-size:10px;color:${q.in_costing ? '#1E7A54' : 'var(--t3)'};">${q.in_costing ? 'feeds costing' : 'shown only'}</td>
+      </tr>`).join('') || '<tr><td colspan="6" style="color:var(--t3);font-size:11px;">No Emerging Textiles prices stored yet.</td></tr>';
+    }
+
     // ── Sources ─────────────────────────────────────────────────────────
     const srcEl = document.getElementById('prices-sources');
     srcEl.innerHTML = (d.sources || []).map(s => {
@@ -2175,6 +2190,26 @@ async function loadYarnPrices() {
   } catch (err) {
     priceMsg(`Could not load prices: ${esc(err.message)}`, 'bad');
   }
+}
+
+// "Test a table": what an Emerging Textiles table returns, and what the reader made of it
+async function probeEt() {
+  const out = document.getElementById('et-probe-out'), btn = document.getElementById('et-probe-btn');
+  const dataset = document.getElementById('et-dataset').value.trim(), sheet = document.getElementById('et-sheet').value.trim();
+  if (!dataset || !sheet) { out.innerHTML = 'Give the dataset and the sheet.'; return; }
+  btn.disabled = true; out.textContent = 'Asking the API…';
+  try {
+    const r = await api('/admin/api/yarn-prices/et-probe', 'POST', { dataset, sheet });
+    if (!r.ok) { out.innerHTML = `<span style="color:#B23B3B;">${esc(r.error || 'failed')}</span>` + (r.raw_start ? `<pre style="white-space:pre-wrap;">${esc(r.raw_start)}</pre>` : ''); return; }
+    const t = r.table || {};
+    out.innerHTML = `<div><strong>${esc(r.url)}</strong></div>` +
+      `<div>${t.row_count} rows · columns: ${(t.columns || []).map(esc).join(' | ')}</div>` +
+      `<div>date column: <b>${esc(t.date_column || 'not found')}</b> · price columns: <b>${(t.price_columns || []).map(esc).join(', ') || 'none'}</b></div>` +
+      `<div style="color:var(--t3);">last rows: ${(t.last_rows || []).map(x => esc(x.join(' | '))).join(' ⏎ ')}</div>` +
+      `<div style="margin-top:6px;">To read it, add to ET_ENDPOINTS: <code>{"dataset":"${esc(dataset)}","sheet":"${esc(sheet)}","country":"BD","item_key":"cotton_carded","count_ne":30}</code> ` +
+      `(or <code>"columns":[{"column":"…","item_key":"…","count_ne":…}]</code> for one column per count).</div>`;
+  } catch (e) { out.innerHTML = `<span style="color:#B23B3B;">${esc(e.message)}</span>`; }
+  finally { btn.disabled = false; }
 }
 
 async function updateYarnPrices() {
@@ -2804,6 +2839,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Cache
   document.getElementById('cache-flush-btn').addEventListener('click', flushCache);
   document.getElementById('prices-reload-btn').addEventListener('click', loadYarnPrices);
+  const etb = document.getElementById('et-probe-btn'); if (etb) etb.addEventListener('click', probeEt);
   document.getElementById('prices-update-btn').addEventListener('click', updateYarnPrices);
   document.getElementById('dyeing-prices-reload-btn').addEventListener('click', loadDyeingPrices);
   initChargesTab();
