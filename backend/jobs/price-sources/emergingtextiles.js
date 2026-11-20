@@ -65,12 +65,13 @@ function endpoints() {
   }
 }
 
-const BASE = () => (process.env.ET_BASE || 'https://api.emergingtextiles.com/api/sheets').replace(/\/+$/, '');
+const DEFAULT_BASE = 'https://api.emergingtextiles.com/api/sheets';
+const BASE = (b) => String(b || process.env.ET_BASE || DEFAULT_BASE).replace(/\/+$/, '');
 
 /** The URL of an endpoint entry: a full `url`, or `dataset` + `sheet` on the API base. */
-function urlOf(ep) {
+function urlOf(ep, base) {
   if (ep.url) return String(ep.url);
-  if (ep.dataset && ep.sheet) return `${BASE()}/${encodeURIComponent(ep.dataset)}/${encodeURIComponent(ep.sheet)}`;
+  if (ep.dataset && ep.sheet) return `${BASE(base)}/${encodeURIComponent(ep.dataset)}/${encodeURIComponent(ep.sheet)}`;
   return null;
 }
 
@@ -79,17 +80,30 @@ function isConfigured() {
 }
 
 /**
+ * Where the key and the table list come from. The admin dashboard registers a provider that reads them from the database
+ * (the key sealed at rest); with none registered, or one that answers null, the environment (ET_API_KEY, ET_ENDPOINTS) is used.
+ * The provider may also return `onTable(ep, table, url)`: called with every table fetched, so the dashboard can keep the whole
+ * table, not just the one price the costing reads.
+ */
+let provider = null;
+function setProvider(fn) { provider = typeof fn === 'function' ? fn : null; }
+async function config() {
+  if (provider) { const c = await provider(); if (c && c.key) return c; }
+  return { key: process.env.ET_API_KEY, endpoints: endpoints(), base: process.env.ET_BASE, onTable: null };
+}
+
+/**
  * One table, fetched. The key goes in the X-API-Key header (a key in a URL
  * ends up in proxy logs and browser history). HTTPS only: the API refuses plain HTTP.
  */
-async function fetchOne(ep, fetchImpl) {
+async function fetchOne(ep, fetchImpl, key, base) {
   const doFetch = fetchImpl || globalThis.fetch;
-  const url = urlOf(ep);
+  const url = urlOf(ep, base);
   if (!url) throw new Error('endpoint needs a url, or a dataset and a sheet');
   if (!/^https:\/\//i.test(url)) throw new Error(`${url} is not HTTPS: the API rejects plain HTTP`);
   const res = await doFetch(url, {
     headers: {
-      'X-API-Key': process.env.ET_API_KEY,
+      'X-API-Key': key,
       'Content-Type': 'application/json',
       'Accept': 'application/json, text/csv',
       'User-Agent': 'KnitAdvisor/1.0 (+https://knitadvisor.onlinetextileschool.com)',
@@ -256,26 +270,40 @@ function rowsOf(ep, table) {
  * talking to.
  */
 async function collect(opts = {}) {
-  if (!process.env.ET_API_KEY) {
+  const cfg = await config();
+  if (!cfg.key) {
     return { source: SOURCE, configured: false, rows: [], rejected: [],
-      reason: 'no ET_API_KEY is set, so this source has never been connected' };
+      reason: 'no API key is set (admin dashboard, Emerging Textiles), so this source has never been connected' };
   }
-  const eps = endpoints();
+  const eps = cfg.endpoints || [];
   if (!eps.length) {
     return { source: SOURCE, configured: false, rows: [], rejected: [],
-      reason: 'ET_API_KEY is set but ET_ENDPOINTS is empty, so there is nothing to read' };
+      reason: 'a key is set but no table is chosen, so there is nothing to read' };
   }
-  const rows = [], rejected = [];
+  const rows = [], rejected = [], tables = [];
   for (const ep of eps) {
-    if (!urlOf(ep)) { rejected.push({ label: JSON.stringify(ep).slice(0, 80), why: 'endpoint needs a url, or a dataset and a sheet' }); continue; }
+    const url = urlOf(ep, cfg.base);
+    if (!url) { rejected.push({ label: JSON.stringify(ep).slice(0, 80), why: 'endpoint needs a url, or a dataset and a sheet' }); continue; }
     let got;
-    try { got = await fetchOne(ep, opts.fetchImpl); } catch (e) { rejected.push({ label: urlOf(ep), why: e.message }); continue; }
+    try { got = await fetchOne(ep, opts.fetchImpl, cfg.key, cfg.base); } catch (e) {
+      rejected.push({ label: url, why: e.message });
+      if (cfg.onTable) await cfg.onTable(ep, null, url, e.message);
+      continue;
+    }
     const table = toTable(got.text, got.ctype);
-    if (!table) { rejected.push({ label: urlOf(ep), why: 'the response is not a table this reader understands' }); continue; }
+    if (!table) {
+      rejected.push({ label: url, why: 'the response is not a table this reader understands' });
+      if (cfg.onTable) await cfg.onTable(ep, null, url, 'the response is not a table this reader understands');
+      continue;
+    }
+    if (cfg.onTable) await cfg.onTable(ep, table, url, null);
+    tables.push(url);
+    // a table with no price mapping is kept for the dashboard only: it feeds no costing
+    if (!(ep.item_key || (Array.isArray(ep.columns) && ep.columns.length))) continue;
     const r = rowsOf(ep, table);
     rows.push(...r.rows); rejected.push(...r.rejected);
   }
-  return { source: SOURCE, configured: true, rows, rejected };
+  return { source: SOURCE, configured: true, rows, rejected, tables: tables.length };
 }
 
 /**
@@ -283,12 +311,34 @@ async function collect(opts = {}) {
  * report what came back and what this reader made of it. Nothing is stored.
  */
 async function probe(ep, opts = {}) {
-  if (!process.env.ET_API_KEY) return { ok: false, error: 'ET_API_KEY is not set on this server' };
+  const cfg = await config();
+  if (!cfg.key) return { ok: false, error: 'no API key is set: save the key first' };
   let got;
-  try { got = await fetchOne(ep, opts.fetchImpl); } catch (e) { return { ok: false, error: e.message }; }
+  try { got = await fetchOne(ep, opts.fetchImpl, cfg.key, cfg.base); } catch (e) { return { ok: false, error: e.message }; }
   const table = toTable(got.text, got.ctype);
   if (!table) return { ok: false, url: got.url, error: 'the response is not a table this reader understands', raw_start: String(got.text).slice(0, 400) };
-  return { ok: true, url: got.url, table: describe(table), as_rows: ep.item_key || ep.columns ? rowsOf(ep, table) : null };
+  return { ok: true, url: got.url, table: describe(table), as_rows: ep.item_key || ep.columns ? rowsOf(ep, table) : null, _table: table };
 }
 
-module.exports = { SOURCE, collect, probe, isConfigured, parseCsv, toTable, latest, readDate, urlOf, toRow, rowsOf, LICENCE_NOTE };
+/** Fetch one table with the configured key and hand back the table itself (the dashboard stores it). */
+async function fetchTable(ep, opts = {}) {
+  const cfg = await config();
+  if (!cfg.key) throw new Error('no API key is set: save the key first');
+  const got = await fetchOne(ep, opts.fetchImpl, cfg.key, cfg.base);
+  const table = toTable(got.text, got.ctype);
+  if (!table) throw new Error('the response is not a table this reader understands');
+  return { table, url: got.url, raw: opts.raw ? got.text : undefined };
+}
+
+/** What a response of unknown shape contains, for finding the names of the datasets and sheets of a subscription. */
+async function fetchRaw(url, opts = {}) {
+  const cfg = await config();
+  if (!cfg.key) throw new Error('no API key is set: save the key first');
+  const doFetch = opts.fetchImpl || globalThis.fetch;
+  if (!/^https:\/\//i.test(url)) throw new Error('only HTTPS');
+  const res = await doFetch(url, { headers: { 'X-API-Key': cfg.key, 'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'KnitAdvisor/1.0' } });
+  const text = await res.text();
+  return { status: res.status, ok: res.ok, text };
+}
+
+module.exports = { SOURCE, DEFAULT_BASE, BASE, setProvider, config, fetchTable, fetchRaw, describe, collect, probe, isConfigured, parseCsv, toTable, latest, readDate, urlOf, toRow, rowsOf, LICENCE_NOTE };

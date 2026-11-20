@@ -67,6 +67,8 @@ const referenceReady = reference.load()
 // empty — before the first sync it is, and a costing then falls back to the
 // reference price list and says so. So a failure here is logged and not fatal.
 const yarnPrices = require('./db/repositories/yarn-price-repo');
+// the Emerging Textiles key and table list live in the database (admin dashboard); the daily sync reads them through this
+require('./services/emerging-textiles').registerProvider();
 yarnPrices.load()
   .then(r => console.log(`[Prices] ${r.quotes} market quotes over ${r.items} items, newest ${r.newest || 'none'}`))
   .catch(err => console.warn('[Prices] no market quotes loaded, the reference list will answer:', err.message));

@@ -1235,6 +1235,40 @@ router.post('/api/open-access', adminAuth, (req, res) => {
   }
 });
 
+// ══ Emerging Textiles dashboard ═══════════════════════════════════════════════════════════════════════════════════
+// The key is entered here, kept sealed, and never sent back (only its last four characters). Everything else follows from it:
+// find the subscription's tables, lay them out as the publisher's menu does, keep the latest copy of each, and let a table
+// whose columns are yarn counts feed costing. See services/emerging-textiles.js.
+const etSvc = () => require('../services/emerging-textiles');
+const etWrap = (fn) => async (req, res) => {
+  try { res.json({ success: true, ...(await fn(req)) }); }
+  catch (err) {
+    if (err instanceof etSvc().EtError) return res.status(400).json({ success: false, error: err.message });
+    console.error('[ET dashboard]', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+router.get('/api/et', adminAuth, etWrap(() => etSvc().overview()));
+router.post('/api/et/key', adminAuth, etWrap(async (req) => ({ status: await etSvc().saveKey((req.body || {}).key, (req.body || {}).base_url) })));
+router.delete('/api/et/key', adminAuth, etWrap(async () => ({ status: await etSvc().clearKey() })));
+router.post('/api/et/test', adminAuth, etWrap(async () => ({ result: await etSvc().testConnection(), status: await etSvc().status() })));
+router.post('/api/et/discover', adminAuth, etWrap(async () => ({ result: await etSvc().discover() })));
+router.post('/api/et/tables', adminAuth, etWrap(async (req) => ({ table: await etSvc().addTable(req.body || {}) })));
+router.patch('/api/et/tables/:id', adminAuth, etWrap(async (req) => ({ table: await etSvc().updateTable(+req.params.id, req.body || {}) })));
+router.delete('/api/et/tables/:id', adminAuth, etWrap(async (req) => { await etSvc().deleteTable(+req.params.id); return {}; }));
+router.get('/api/et/tables/:id', adminAuth, etWrap(async (req) => etSvc().getSnapshot(+req.params.id)));
+router.post('/api/et/tables/:id/refresh', adminAuth, etWrap(async (req) => etSvc().refreshTable(+req.params.id)));
+router.get('/api/et/search', adminAuth, etWrap(async (req) => ({ tables: await etSvc().search(String(req.query.q || '')) })));
+// every table now, and the costing quotes of the mapped ones (the same sync the daily job runs)
+router.post('/api/et/refresh', adminAuth, etWrap(async () => {
+  const { syncYarnPrices } = require('../jobs/yarn-price-sync');
+  const yarnPrices = require('../db/repositories/yarn-price-repo');
+  const result = await syncYarnPrices({ trigger: 'manual', force: true });
+  await yarnPrices.load().catch(() => {});
+  const src = (result.sources || []).find((x) => x.source === 'emergingtextiles') || null;
+  return { sync: { ok: result.ok, error: result.error || null, stored: result.stored, source: src }, overview: await etSvc().overview() };
+}));
+
 // "Test a table": fetch ONE Emerging Textiles table with the server's key and show what came back and what the reader made
 // of it. Nothing is stored. The key never leaves the server and is not echoed.
 router.post('/api/yarn-prices/et-probe', adminAuth, async (req, res) => {
@@ -1244,7 +1278,8 @@ router.post('/api/yarn-prices/et-probe', adminAuth, async (req, res) => {
     const ep = { dataset: String(b.dataset || '').trim(), sheet: String(b.sheet || '').trim(), url: String(b.url || '').trim() || undefined,
       country: b.country, item_key: b.item_key, count_ne: b.count_ne, column: b.column };
     if (!ep.url && !(ep.dataset && ep.sheet)) return res.status(400).json({ ok: false, error: 'Give the dataset and the sheet (or a full https URL).' });
-    res.json(await et.probe(ep));
+    const out = await et.probe(ep); delete out._table;
+    res.json(out);
   } catch (err) {
     console.error('[ET probe error]', err);
     res.status(500).json({ ok: false, error: err.message });

@@ -121,7 +121,7 @@ const TAB_TITLES = {
   'tab-cache': 'Cache', 'tab-prices': 'Yarn Prices', 'tab-charges': 'Knit & Dye Charges', 'tab-dyeing-prices': 'Dyeing Prices',
   'tab-validation': 'Real-Order Validation', 'tab-inquiries': 'Inquiries', 'tab-rfq': 'RFQ / Quotes',
   'tab-users': 'Users', 'tab-students': 'Student Plan', 'tab-settings': 'Settings', 'tab-apikeys': 'API Keys',
-  'tab-open': 'Open Access',
+  'tab-open': 'Open Access', 'tab-et': 'Emerging Textiles',
 };
 
 function switchTab(tabId) {
@@ -164,6 +164,8 @@ function switchTab(tabId) {
   } else if (tabId === 'tab-rfq' && !tabState.loaded.rfq) {
     tabState.loaded.rfq = true;
     loadRfqList(1, {});
+  } else if (tabId === 'tab-et') {
+    if (window.loadEmergingTextiles) window.loadEmergingTextiles();
   } else if (tabId === 'tab-prices' && !tabState.loaded.prices) {
     tabState.loaded.prices = true;
     loadYarnPrices();
