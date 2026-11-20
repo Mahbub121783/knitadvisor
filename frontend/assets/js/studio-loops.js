@@ -4,12 +4,56 @@
 // needle to needle; the geometry is in studio-loop-geom.js.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import './studio-loop-geom.js?v=20261110c';
+import './studio-loop-geom.js?v=20261122c';
 import './view-guard.js?v=20261111b';
 
-const FEED_COLOURS = ['#1857C4', '#0f9d76', '#c2410c', '#7a4fc2', '#b8860b', '#0e7490', '#be185d', '#4d7c0f', '#9a3412', '#334155', '#0369a1', '#a16207'];
-const ROLE_COLOURS = { ground: '#1857C4', face: '#1857C4', binder: '#7a4fc2', loop: '#c2410c' };
+// dyed-yarn tones, not plastic primaries: each feeder still reads apart
+const FEED_COLOURS = ['#34558f', '#3f8a6e', '#b8613a', '#6d5aa6', '#b48a35', '#3a7d8f', '#a5486f', '#5f7f3a', '#8e4b2f', '#4a5568', '#3d6fa5', '#9a7a2e'];
+const ROLE_COLOURS = { ground: '#34558f', face: '#34558f', binder: '#6d5aa6', loop: '#b8613a' };
 const ELASTANE = '#f5f5f4';
+
+// ── the yarn's surface: fibres twisted round the yarn, and the loose fibre ends that stand off it ─────────────
+// A tube's u runs along the yarn and v round it, so a helix is a straight slanted line in (u, v): one tile is one
+// twist pitch. Drawn once, shared by every yarn (each mesh repeats it by its own length).
+let FIBRE_TEX = null, FUZZ_TEX = null;
+function fibreTexture() {
+  if (FIBRE_TEX) return FIBRE_TEX;
+  const c = document.createElement('canvas'); c.width = 256; c.height = 128;
+  const g = c.getContext('2d');
+  g.fillStyle = '#d4d4d4'; g.fillRect(0, 0, 256, 128);
+  let seed = 7; const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  for (let k = 0; k < 520; k++) {
+    const x = rnd() * 256, l = 0.55 + rnd() * 0.45, v = Math.round(150 + rnd() * 105);
+    g.strokeStyle = 'rgb(' + v + ',' + v + ',' + v + ')'; g.lineWidth = 0.6 + rnd() * 1.4;
+    // one tile across = one turn round the yarn: the fibre climbs the full height over the tile's width
+    for (const dx of [-256, 0, 256]) { g.beginPath(); g.moveTo(x + dx, 128); g.lineTo(x + dx + 256 * l * 0.9, 128 - 128 * l); g.stroke(); }
+  }
+  FIBRE_TEX = new THREE.CanvasTexture(c);
+  FIBRE_TEX.wrapS = FIBRE_TEX.wrapT = THREE.RepeatWrapping; FIBRE_TEX.colorSpace = THREE.SRGBColorSpace; FIBRE_TEX.anisotropy = 4;
+  return FIBRE_TEX;
+}
+function fuzzTexture() {
+  if (FUZZ_TEX) return FUZZ_TEX;
+  const c = document.createElement('canvas'); c.width = 256; c.height = 64;
+  const g = c.getContext('2d');
+  g.fillStyle = '#000'; g.fillRect(0, 0, 256, 64);
+  let seed = 11; const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  for (let k = 0; k < 900; k++) { const x = rnd() * 256, y = rnd() * 64, a = rnd() * Math.PI, l = 2 + rnd() * 7, v = Math.round(90 + rnd() * 165); g.strokeStyle = 'rgb(' + v + ',' + v + ',' + v + ')'; g.lineWidth = 0.5; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke(); }
+  FUZZ_TEX = new THREE.CanvasTexture(c); FUZZ_TEX.wrapS = FUZZ_TEX.wrapT = THREE.RepeatWrapping;
+  return FUZZ_TEX;
+}
+// soft studio light for the yarn's sheen: a grey room with three light panels, pre-filtered once
+function studioEnvironment(renderer) {
+  const pm = new THREE.PMREMGenerator(renderer);
+  const room = new THREE.Scene();
+  room.add(new THREE.Mesh(new THREE.SphereGeometry(10, 24, 12), new THREE.MeshBasicMaterial({ color: 0x8c9098, side: THREE.BackSide })));
+  [[0, 8, 6, 6], [-8, 3, 2, 3], [7, 2, -6, 2]].forEach(([x, y, z, k]) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(5, 3), new THREE.MeshBasicMaterial({ color: new THREE.Color(1, 1, 1).multiplyScalar(k), side: THREE.DoubleSide }));
+    m.position.set(x, y, z); m.lookAt(0, 0, 0); room.add(m);
+  });
+  const env = pm.fromScene(room, 0.04).texture; pm.dispose();
+  return env;
+}
 
 export function feedColour(spec, f) {
   if (spec.colours && spec.colourBy !== 'one') return spec.colours[f % spec.colours.length];   // warp: one colour per guide bar
@@ -25,6 +69,8 @@ export class LoopView {
     const w = host.clientWidth || 600, hh = host.clientHeight || 420;
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
     this.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping; this.renderer.toneMappingExposure = 1.05;
+    this.renderer.localClippingEnabled = true;        // the swatch is cut clean at its edges, like a cut sample
     this.renderer.setSize(w, hh);
     host.appendChild(this.renderer.domElement);
     this.scene = new THREE.Scene();
@@ -34,9 +80,10 @@ export class LoopView {
     this.controls.addEventListener('change', () => this.redraw());
     // the wheel scrolls the page past the view; Ctrl/⌘ + wheel, a pinch, or a click first zooms it
     this._unguard = window.KAViewGuard ? window.KAViewGuard.wheel(this.renderer.domElement, this.controls) : null;
-    this.scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8f99, 1.6));
-    const key = new THREE.DirectionalLight(0xffffff, 1.7); key.position.set(-4, 7, 10); this.scene.add(key);
-    const rim = new THREE.DirectionalLight(0xffffff, 0.8); rim.position.set(5, -3, -9); this.scene.add(rim);
+    this.scene.environment = studioEnvironment(this.renderer);
+    this.scene.add(new THREE.HemisphereLight(0xffffff, 0x6f7480, 0.55));
+    const key = new THREE.DirectionalLight(0xfff8ef, 1.5); key.position.set(-4, 7, 10); this.scene.add(key);
+    const rim = new THREE.DirectionalLight(0xe8f0ff, 0.7); rim.position.set(5, -3, -9); this.scene.add(rim);
     this.group = new THREE.Group(); this.scene.add(this.group);
     this.meshes = [];
     this.ray = new THREE.Raycaster();
@@ -53,49 +100,91 @@ export class LoopView {
     this._raf = requestAnimationFrame(() => { this._raf = 0; this.renderer.render(this.scene, this.camera); });
   }
 
+  // the relaxed yarn paths of a programme: solid yarns that do not pass through each other (studio-loop-geom.js relax)
+  _geometry(spec) {
+    if (spec.geo) return spec.geo;
+    const key = JSON.stringify([spec.C, spec.D, spec.bed, (spec.feeds || []).map((f) => f && f.role), spec.radius, spec.h, spec.wales, spec.courses, spec.transferDir, spec.pileFeeds, spec.pileH, spec.pileArrangement]);
+    if (this._gkey === key && this._gcache) return this._gcache;
+    const geo = globalThis.KALoopGeom.buildLoopPaths({ ...spec, lead: 1, relax: !spec.real });
+    this._gkey = key; this._gcache = geo;
+    return geo;
+  }
+
+  _yarnMaterial(colour, len, r) {
+    const tex = fibreTexture().clone(); tex.needsUpdate = true;
+    // one tile = one twist pitch; an S-twisted yarn's fibres slant the other way
+    tex.repeat.set(Math.max(1, len / (8 * r)), (this.spec && this.spec.twist === 'S') ? -1 : 1);
+    if (this.spec && this.spec.filament) return new THREE.MeshPhysicalMaterial({ color: colour, roughness: 0.38, metalness: 0, clearcoat: 0.25, clearcoatRoughness: 0.4, sheen: 0.3, envMapIntensity: 0.8, side: THREE.DoubleSide, clippingPlanes: this._clip, transparent: true, opacity: 1 });
+    return new THREE.MeshPhysicalMaterial({
+      color: colour, map: tex, bumpMap: tex, bumpScale: 1.6, roughness: 0.86, metalness: 0,
+      sheen: 1, sheenRoughness: 0.5, sheenColor: new THREE.Color(colour).lerp(new THREE.Color(0xffffff), 0.55),
+      envMapIntensity: 0.55, side: THREE.DoubleSide, clippingPlanes: this._clip, transparent: true, opacity: 1,
+    });
+  }
+
+  _fuzz(curve, segs, r, colour, len, course, feed) {
+    const t = fuzzTexture().clone(); t.needsUpdate = true; t.repeat.set(Math.max(1, len / (3 * r)), 1);
+    const m = new THREE.Mesh(new THREE.TubeGeometry(curve, segs, r * 1.28, 10, false),
+      new THREE.MeshStandardMaterial({ color: new THREE.Color(colour).lerp(new THREE.Color(0xffffff), 0.25), alphaMap: t, transparent: true, opacity: 0.5, depthWrite: false, roughness: 1, clippingPlanes: this._clip }));
+    const hair = this.spec && this.spec.hair != null ? this.spec.hair : 1;
+    m.material.opacity = Math.min(0.85, 0.42 * hair);
+    m.userData = { course, feed, fuzz: true, base: m.material.opacity };
+    return m;
+  }
+
   draw(spec) {
     this.spec = spec;
     this._clear();
-    // a ready-made geometry (warp: one path per end) or the weft programme's
-    const geo = spec.geo || globalThis.KALoopGeom.buildLoopPaths(spec);
+    // a ready-made geometry (warp: one path per end) or the weft programme's, relaxed
+    const geo = this._geometry(spec);
     this.geo = geo;
     const cx = (geo.wales - 1) / 2 + (spec.D && geo.bed === 'rib' ? 0.25 : 0), cy = (geo.rows - 1) * geo.h / 2 + 0.4 * geo.h;
     this.centre = new THREE.Vector3(cx, cy, 0);
-    geo.courses.forEach((co) => {
+    // cut the swatch clean: part-way up the course below the first one, and just outside the outer wales
+    const step = geo.step || geo.h;
+    this._clip = spec.geo ? [] : [
+      new THREE.Plane(new THREE.Vector3(0, 1, 0), -(-step + 0.42 * geo.h - cy)),
+      new THREE.Plane(new THREE.Vector3(1, 0, 0), -(-0.62 - cx)),
+      new THREE.Plane(new THREE.Vector3(-1, 0, 0), (geo.wales - 0.38 - cx)),
+    ];
+    const tube = (co, lead) => {
       const r = (spec.radius && spec.radius[co.feed]) || 0.13;
       const v = co.points.map((p) => new THREE.Vector3(p.x - cx, p.y - cy, p.z));
       const curve = new THREE.CatmullRomCurve3(v, false, 'centripetal', 0.5);
-      const tube = new THREE.TubeGeometry(curve, Math.max(48, v.length * (spec.real ? 3 : 4)), r, spec.real ? 7 : 8, false);
-      // real view: a spun yarn's soft sheen instead of the diagram's plastic
-      const mat = spec.real
-        ? new THREE.MeshPhysicalMaterial({ color: spec.colour || '#3d5a80', roughness: 0.88, metalness: 0, sheen: 1, sheenRoughness: 0.55, sheenColor: new THREE.Color(0xffffff).multiplyScalar(0.35), transparent: true, opacity: 1 })
-        : new THREE.MeshStandardMaterial({ color: spec.colourBy === 'stripe' && spec.stripeColour ? spec.stripeColour(co.course) : feedColour(spec, co.feed), roughness: 0.62, metalness: 0.02, transparent: true, opacity: 1 });
-      const mesh = new THREE.Mesh(tube, mat);
-      mesh.userData = { course: co.course, feed: co.feed };
+      const len = curve.getLength(), segs = Math.max(64, Math.min(2400, Math.round(len / (r * 0.35))));
+      const colour = spec.real ? (spec.colour || '#3d5a80') : spec.colourBy === 'stripe' && spec.stripeColour ? spec.stripeColour(co.course) : feedColour(spec, co.feed);
+      const mesh = new THREE.Mesh(new THREE.TubeGeometry(curve, segs, r, 14, false), this._yarnMaterial(colour, len, r));
+      mesh.userData = { course: co.course, feed: co.feed, lead: !!lead, base: 1 };
       this.group.add(mesh); this.meshes.push(mesh);
+      // the loose fibre ends round a spun yarn (not on the diagram of a warp)
+      if (!spec.geo && !spec.filament) { const f = this._fuzz(curve, Math.round(segs / 2), r, colour, len, co.course, co.feed); f.userData.lead = !!lead; this.group.add(f); this.meshes.push(f); }
+      return r;
+    };
+    (geo.lead || []).forEach((co) => tube(co, true));
+    geo.courses.forEach((co) => {
+      const r = tube(co, false);
       if (co.pile) {
         // plush: the pile yarn, its standing loops on the back
         const pv = co.pile.map((p) => new THREE.Vector3(p.x - cx, p.y - cy, p.z));
-        const pm = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pv, false, 'centripetal', 0.5), Math.max(48, pv.length * 4), (spec.pileRadius || r), 8, false),
-          new THREE.MeshStandardMaterial({ color: spec.pileColour || '#c2410c', roughness: 0.7, metalness: 0.02, transparent: true, opacity: 1 }));
-        pm.userData = { course: co.course, feed: co.feed, pile: true };
-        if (spec.real) pm.material.color.set(spec.colour || '#3d5a80');
+        const pc = new THREE.CatmullRomCurve3(pv, false, 'centripetal', 0.5);
+        const pr = spec.pileRadius || r;
+        const pm = new THREE.Mesh(new THREE.TubeGeometry(pc, Math.max(64, pv.length * 6), pr, 12, false), this._yarnMaterial(spec.real ? (spec.colour || '#3d5a80') : (spec.pileColour || '#c2410c'), pc.getLength(), pr));
+        pm.userData = { course: co.course, feed: co.feed, pile: true, base: 1 };
         this.group.add(pm); this.meshes.push(pm);
       }
       if (spec.plated && spec.plated[co.feed]) {
-        // the elastane is plated: it follows the ground yarn's path, one
-        // yarn's width toward the technical back of whichever bed it is on
-        const e = co.points.map((p, i) => new THREE.Vector3(p.x - cx, p.y - cy, p.z - co.side[i] * (r * 1.1)));
+        // the elastane is plated: it follows the ground yarn's path, one yarn's width toward the technical back of its bed
+        const e = co.points.map((p, i) => new THREE.Vector3(p.x - cx, p.y - cy, p.z - (co.side[i] || 1) * (r * 1.1)));
         const ec = new THREE.CatmullRomCurve3(e, false, 'centripetal', 0.5);
-        const em = new THREE.Mesh(new THREE.TubeGeometry(ec, Math.max(48, e.length * 4), r * 0.42, 6, false),
-          new THREE.MeshStandardMaterial({ color: ELASTANE, roughness: 0.3, metalness: 0.05, transparent: true, opacity: 1 }));
-        em.userData = { course: co.course, feed: co.feed, elastane: true };
+        const em = new THREE.Mesh(new THREE.TubeGeometry(ec, Math.max(64, e.length), r * 0.42, 8, false),
+          new THREE.MeshPhysicalMaterial({ color: ELASTANE, roughness: 0.35, clearcoat: 0.4, metalness: 0, transparent: true, opacity: 1, clippingPlanes: this._clip, side: THREE.DoubleSide }));
+        em.userData = { course: co.course, feed: co.feed, elastane: true, base: 1 };
         this.group.add(em); this.meshes.push(em);
       }
     });
     if (spec.real) {
       // the real view is the whole cloth: no build step, no picked-out feeder
-      this.meshes.forEach((m) => { m.visible = true; m.material.opacity = 1; m.material.depthWrite = true; });
+      this.meshes.forEach((m) => { m.visible = true; m.material.opacity = m.userData.base || 1; });
     } else {
       this.setStep(this._step == null ? null : this._step);
       this.highlight(this._hl == null ? null : this._hl);
@@ -138,7 +227,7 @@ export class LoopView {
 
   highlight(feed) {
     this._hl = feed;
-    this.meshes.forEach((m) => { m.material.opacity = feed == null || m.userData.feed === feed ? 1 : 0.12; m.material.depthWrite = feed == null || m.userData.feed === feed; });
+    this.meshes.forEach((m) => { const on = feed == null || m.userData.feed === feed; m.material.opacity = (m.userData.base || 1) * (on ? 1 : 0.12); m.material.depthWrite = on && !m.userData.fuzz; });
     this.redraw();
   }
 
@@ -147,7 +236,7 @@ export class LoopView {
     const r = this.renderer.domElement.getBoundingClientRect();
     this.mouse.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
     this.ray.setFromCamera(this.mouse, this.camera);
-    const hits = this.ray.intersectObjects(this.meshes.filter((m) => m.visible && m.material.opacity > 0.5), false);
+    const hits = this.ray.intersectObjects(this.meshes.filter((m) => m.visible && !m.userData.fuzz && !m.userData.lead && m.material.opacity > 0.5), false);
     if (!hits.length) return this.onHover(null);
     const hit = hits[0], co = this.geo.courses[hit.object.userData.course];
     const px = hit.point.x + this.centre.x, pz = hit.point.z;

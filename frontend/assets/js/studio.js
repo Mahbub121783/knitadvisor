@@ -1579,6 +1579,10 @@
       radius: feeds.map(function (fd) { var c = +fd.count > 0 ? +fd.count : +fd.ne; var ne = c > 0 ? (fd.count ? 590.5 / TEX[fd.unit || 'ne'](c) : c) : groundNe; return clamp(0.5 * 1.3 * (0.907 / Math.sqrt(ne)) * f.wpc / 10, 0.07, 0.24); }),
       plated: feeds.map(function (fd, i) { return !!ly && fd.role !== 'loop' && (ly === 'all' || i % 2 === 0); }),
       colourBy: real ? 'one' : $('st-colby').value, colour: $('st-col').value,
+      // the yarn's own character on its surface: hairs from the spinning system, a filament smooth
+      filament: /filament/.test(($('st-fibre') || {}).value || ''),
+      hair: ({ carded: 1.35, combed: 1, compact: 0.6, siro: 0.8, siro_compact: 0.55, open_end: 0.85, vortex: 0.5 })[(($('st-ytype') || {}).value) || 'combed'] || 1,
+      twist: 'Z',
       stripeColour: (function () { var st = stripeOf(); return st ? function (c) { return st.colours[st.seq[((c % st.seq.length) + st.seq.length) % st.seq.length]]; } : null; })(),
     };
     // plush: the ground yarn is drawn on the loop feeder, the pile behind it
@@ -1600,7 +1604,7 @@
   function renderLoops() {
     var host = $('st-loops');
     if (!loopPromise) {
-      loopPromise = import('/assets/js/studio-loops.js?v=20261111b').then(function (mod) {
+      loopPromise = import('/assets/js/studio-loops.js?v=20261122c').then(function (mod) {
         loopView = new mod.LoopView(host, showTip);
         loopView.feedColour = mod.feedColour;
         return loopView;

@@ -98,4 +98,22 @@ const zAt = (list, y) => list.reduce((b, p) => (Math.abs(p.y - y) < Math.abs(b.y
   assert(pile && Math.min(...pile.map((p) => p.z)) <= -1.79, 'loops stand the sinker height off the back');
   assert(Math.max(...pile.map((p) => p.z)) < Math.max(...g.courses[3].points.map((p) => p.z)) - 0.1, 'plated: the pile lies behind the ground yarn on the face');
 }
+// the relaxed view: solid yarns of the real diameter never pass through each other, the topology is kept, and a course below is laid for the cut edge
+{
+  const G = require('../../frontend/assets/js/studio-loop-geom.js');
+  const cases = { jersey: { C: [['K']] }, rib: { C: [['K', '-']], D: [['-', 'K']], bed: 'rib' }, interlock: { C: [['K', '-'], ['-', 'K']], D: [['-', 'K'], ['K', '-']], bed: 'interlock' }, pique: { C: [['K', 'K'], ['T', 'K'], ['K', 'K'], ['K', 'T']] }, fleece: { C: [['K', 'K', 'K', 'K'], ['K', 'K', 'K', 'K'], ['M', 'M', 'M', 'T'], ['K', 'K', 'K', 'K'], ['K', 'K', 'K', 'K'], ['M', 'T', 'M', 'M']], feeds: [{ role: 'binder' }, { role: 'face' }, { role: 'loop' }, { role: 'binder' }, { role: 'face' }, { role: 'loop' }] } };
+  for (const [name, c] of Object.entries(cases)) {
+    const t0 = Date.now();
+    const g = G.buildLoopPaths({ ...c, h: 0.75, lead: 1, radius: 0.19, relax: true });
+    assert(g.relaxed && g.clearance >= 0.94, name + ': yarns overlap, clearance ' + g.clearance);
+    assert(g.lead.length === 1 && g.lead[0].course === -1, name + ': one course below for the cut edge');
+    assert(Date.now() - t0 < 4000, name + ': relaxation is quick enough to draw');
+  }
+  // the jersey still intermeshes after relaxing: the new loop's legs cross in front of the old head
+  const g = G.buildLoopPaths({ C: [['K']], h: 0.75, lead: 1, radius: 0.19, relax: true });
+  const crownOld = g.courses[3].points.filter((p) => Math.abs(p.x - 4) < 0.08).reduce((b, p) => (p.y > b.y ? p : b));
+  const legsNew = g.courses[4].points.filter((p) => Math.abs(p.x - 4) < 0.45 && Math.abs(p.y - crownOld.y) < 0.12);
+  assert(legsNew.length && legsNew.some((p) => p.z > crownOld.z + 0.2), 'the new legs pass in front of the old head');
+  console.log('relaxed loops: no yarn passes through another (clearance >= 0.94 of the radii) on jersey, rib, interlock, pique and fleece; the intermeshing is kept');
+}
 console.log('studio loop geometry: ok');
