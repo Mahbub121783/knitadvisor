@@ -417,6 +417,18 @@
             <div class="st-f" style="flex:1 1 100%"><label for="st-comp">Target composition (optional)</label><input id="st-comp" type="text" maxlength="120" placeholder="e.g. 95% CO 5% EL, or 60% cotton 40% polyester" title="Write what the cloth must be. The Studio then solves the yarn's fibres and the elastane's denier, draft and feeding so the cloth comes out at those shares. Leave empty to choose the yarn and the elastane yourself."></div>
           </div>
         </div>
+        <div class="st-card">
+          <div class="st-step"><b>3b</b> Mill readings (optional)</div>
+          <div class="st-hint" style="margin:0 0 6px">Your tester's numbers for THIS cloth replace the model's estimates, and the gap shows how far the model was. Leave empty to keep the estimates.</div>
+          <div class="st-row">
+            <div class="st-f"><label for="st-rd-t">Thickness (mm, ISO 5084)</label><input id="st-rd-t" type="number" min="0.1" max="8" step="0.01" placeholder="e.g. 0.62"></div>
+            <div class="st-f"><label for="st-rd-air">Air perm. (mm/s, ISO 9237)</label><input id="st-rd-air" type="number" min="1" max="6000" step="1" placeholder="e.g. 610"></div>
+          </div>
+          <div class="st-row">
+            <div class="st-f"><label for="st-rd-rct">Rct (m²·K/W, ISO 11092)</label><input id="st-rd-rct" type="number" min="0.001" max="0.5" step="0.001" placeholder="e.g. 0.021"></div>
+            <div class="st-f"><label for="st-rd-dc">Drape coeff. (%, Cusick)</label><input id="st-rd-dc" type="number" min="5" max="100" step="0.1" placeholder="e.g. 48"></div>
+          </div>
+        </div>
 
         <div class="st-card" id="vb-card" hidden></div>
         <div class="st-card">
@@ -877,11 +889,11 @@
 <script src="assets/js/studio-lab.js?v=20261121a"></script>
 <script src="assets/js/studio-inspect.js?v=20261121a"></script>
 <script src="assets/js/studio-drape.js?v=20261121c"></script>
-<script src="assets/js/pbr-package.js?v=20261121b"></script>
-<script src="assets/js/studio-pbr.js?v=20261121b"></script>
+<script src="assets/js/pbr-package.js?v=20261122a"></script>
+<script src="assets/js/studio-pbr.js?v=20261122a"></script>
 <script src="assets/js/studio-vbed.js?v=20261121a"></script>
 <script src="assets/js/studio-capture.js?v=20261120b"></script>
 <script src="assets/js/studio-gates.js?v=20261121b"></script>
-<script src="assets/js/studio.js?v=20261122a"></script>
+<script src="assets/js/studio.js?v=20261122b"></script>
 </body>
 </html>

@@ -670,6 +670,7 @@
       finish: { brush: $('st-brush').value, passes: num('st-passes'), sheared: $('st-shear').checked, set_width_in: num('st-setw') },
       floor_machine_id: $('st-fm').value ? +$('st-fm').value : null,
       elastane: $('st-lycra').checked ? { denier: +$('st-lyd').value, draft: num('st-lydraft') || 2.6, every: $('st-lyevery').value } : null,
+      readings: readingsPayload(),
       target: { gsm: num('st-gsm'), width_in: num('st-width'), shrinkage_pct: num('st-shr'), composition: $('st-comp') && $('st-comp').value.trim() ? $('st-comp').value.trim() : undefined },
       calibration: $('st-userolls').checked && completeRolls().length ? { rolls: completeRolls() } : null,
       machine: {
@@ -740,6 +741,18 @@
     return '<div style="flex-basis:100%;font-size:12px;color:var(--t2)"><b>Composition target</b> ' + esc(fmt(c.target)) + ' → the cloth is ' + esc(fmt(c.achieved)) + ' <span class="st-badge ' + (ok ? 'ok' : 'estimate') + '">' + esc(c.held) + '</span>' +
       (set.length ? '<br>Set for you: ' + esc(set.join('; ')) + '.' : '') + (c.notes && c.notes.length ? '<br>' + esc(c.notes.join(' ')) : '') + '</div>';
   }
+  // the mill's own readings (step 3b): only the filled fields are sent
+  function readingsPayload() {
+    var r = {}, m = { 'st-rd-t': 'thickness_mm', 'st-rd-air': 'air_perm_mm_s', 'st-rd-rct': 'rct', 'st-rd-dc': 'drape_dc_pct' };
+    Object.keys(m).forEach(function (id) { var e = $(id), v = e && e.value !== '' ? parseFloat(e.value) : NaN; if (isFinite(v)) r[m[id]] = v; });
+    return Object.keys(r).length ? r : undefined;
+  }
+  function readingsLine(rd) {
+    if (!rd || !rd.applied || !rd.applied.length) return '';
+    return '<div style="flex-basis:100%;font-size:12px;color:var(--t2)"><b>Mill readings used</b> ' + rd.applied.map(function (x) {
+      return esc(x.label) + ' ' + x.measured + ' ' + esc(x.unit) + (x.model != null ? ' (model said ' + x.model + ', ' + (x.error_pct > 0 ? '+' : '') + x.error_pct + '%)' : '');
+    }).join(' · ') + ' <span class="st-badge ok">measured</span></div>';
+  }
   function renderResult() {
     var r = last;
     var errs = r.checks.filter(function (c) { return c.level === 'error'; }).length;
@@ -755,6 +768,7 @@
       '<div style="flex-basis:100%;font-size:12px;color:var(--t2)">Weight is currently borrowed from the measured constants of: ' + esc(r.structure.family_label) + '.</div>' +
       '<div style="flex-basis:100%;font-size:12px;color:var(--t2)">' + esc(conf.why) + '</div>' +
       compSolveLine(r.composition_solve) +
+      readingsLine(r.readings) +
       (r.structure.reduced ? '<div style="flex-basis:100%;font-size:12px;color:var(--t2)">Your repeat of ' + esc(r.structure.reduced.from) + ' is the same fabric as its smallest repeat, ' + esc(r.structure.reduced.to) + ' — the set-out below uses that.</div>' : '');
     $('st-checks').innerHTML = r.checks.map(function (c) { return '<li class="' + c.level + '">' + esc(c.text) + '</li>'; }).join('');
     if (window.KAStudioGates) window.KAStudioGates.render(r, { onApply: applyRepair });
@@ -1695,7 +1709,7 @@
   var STORE = 'ka_studio_designs';
   function readStore() { try { return JSON.parse(localStorage.getItem(STORE) || '[]'); } catch (_) { return []; } }
   function writeStore(a) { try { localStorage.setItem(STORE, JSON.stringify(a)); return true; } catch (_) { return false; } }
-  var FIELDS = ['st-comp', 'st-elcon', 'st-elstate', 'st-elcfib', 'st-elcd', 'st-elcf', 'st-elct', 'st-lus', 'st-sec', 'st-nip', 'st-cc', 'yb-lus', 'yb-sec', 'yb-nip', 'yb-cc', 'yl-lus', 'yl-sec', 'yl-nip', 'yl-cc', 'yp-lus', 'yp-sec', 'yp-nip', 'yp-cc', 'st-ne', 'st-unit', 'st-ply', 'st-ytype', 'st-fil', 'yb-count', 'yb-unit', 'yb-fibre', 'yb-type', 'yb-ply', 'yb-fil', 'yl-count', 'yl-unit', 'yl-fibre', 'yl-type', 'yl-ply', 'yl-fil', 'st-fibre', 'st-gsm', 'st-width', 'st-gauge', 'st-dia', 'st-feeders', 'st-rpm', 'st-sl', 'st-eff', 'st-tc', 'st-td', 'st-lyd', 'st-lydraft', 'st-lyevery', 'st-v1r', 'st-v1l', 'st-v2r', 'st-v2l', 'st-sinker', 'st-parr', 'st-mprof', 'st-brush', 'st-passes', 'st-pile', 'st-tdir', 'st-shr', 'st-camd', 'st-timing', 'st-dgap', 'st-c1r', 'st-c1l', 'st-c2r', 'st-c2l', 'st-stripe', 'st-setw', 'st-sc-A', 'st-sc-B', 'st-sc-C', 'st-sc-D', 'st-sc-E', 'st-sc-F'];
+  var FIELDS = ['st-rd-t', 'st-rd-air', 'st-rd-rct', 'st-rd-dc', 'st-comp', 'st-elcon', 'st-elstate', 'st-elcfib', 'st-elcd', 'st-elcf', 'st-elct', 'st-lus', 'st-sec', 'st-nip', 'st-cc', 'yb-lus', 'yb-sec', 'yb-nip', 'yb-cc', 'yl-lus', 'yl-sec', 'yl-nip', 'yl-cc', 'yp-lus', 'yp-sec', 'yp-nip', 'yp-cc', 'st-ne', 'st-unit', 'st-ply', 'st-ytype', 'st-fil', 'yb-count', 'yb-unit', 'yb-fibre', 'yb-type', 'yb-ply', 'yb-fil', 'yl-count', 'yl-unit', 'yl-fibre', 'yl-type', 'yl-ply', 'yl-fil', 'st-fibre', 'st-gsm', 'st-width', 'st-gauge', 'st-dia', 'st-feeders', 'st-rpm', 'st-sl', 'st-eff', 'st-tc', 'st-td', 'st-lyd', 'st-lydraft', 'st-lyevery', 'st-v1r', 'st-v1l', 'st-v2r', 'st-v2l', 'st-sinker', 'st-parr', 'st-mprof', 'st-brush', 'st-passes', 'st-pile', 'st-tdir', 'st-shr', 'st-camd', 'st-timing', 'st-dgap', 'st-c1r', 'st-c1l', 'st-c2r', 'st-c2l', 'st-stripe', 'st-setw', 'st-sc-A', 'st-sc-B', 'st-sc-C', 'st-sc-D', 'st-sc-E', 'st-sc-F'];
   function designNow() {
     var o = { v: 2, name: $('st-name').value || 'Untitled design', bed: S.bed, C: S.C, D: S.D, feeds: S.feeds, rolls: rolls, lycra: $('st-lycra').checked, cut: $('st-cut').checked, colour: $('st-col').value, fields: {} };
     FIELDS.forEach(function (id) { o.fields[id] = $(id).value; });

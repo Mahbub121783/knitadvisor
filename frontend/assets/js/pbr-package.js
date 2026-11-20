@@ -10,6 +10,8 @@
  *   plane({ width_m, height_m, tile_cm })  a flat swatch whose UVs repeat the tile
  *   draped(mesh, tile_cm)                  the lattice of a draped sample (drape-engine.js) as triangles, UVs from the flat lattice
  *   glb(geometry, images, material, extras)  Uint8Array of a glTF 2.0 binary
+ *   materialx({ name, sheen, height_scale })  text of a MaterialX 1.38 document (standard_surface on the package's PNG files)
+ *   usda({ name })                         text of a USD ASCII file with a UsdPreviewSurface material on the same PNG files
  *   zip(files)                             Uint8Array of a ZIP (stored, no compression) from [{ name, bytes }]
  *   crc32(bytes)
  */
@@ -186,5 +188,55 @@
     });
   }
 
-  return { pack: pack, plane: plane, draped: draped, glb: glb, zip: zip, crc32: crc32, encodePng: encodePng };
+  // ── open material formats, as text ─────────────────────────────────────────────────────────────────────────────
+  // MaterialX 1.38 (the Academy Software Foundation's open standard; read by Substance 3D, Maya, Houdini, Blender add-ons): a standard_surface fed by the
+  // package's own PNG files. Data maps are linear; the normal map is OpenGL (+Y up), the MaterialX normalmap node's convention.
+  function materialx(o) {
+    o = o || {};
+    var nm = String(o.name || 'knit').replace(/[^A-Za-z0-9_]/g, '_').replace(/^(\d)/, '_$1') || 'knit';
+    var f = function (v, d) { return (isFinite(+v) ? +v : d); };
+    var sheen = o.sheen || { strength: 0.5 }, sc = f(sheen.strength, 0.5);
+    var tile = function (n, type, file, cs) {
+      return '  <tiledimage name="img_' + n + '" type="' + type + '">\n    <input name="file" type="filename" value="' + file + '" colorspace="' + cs + '" />\n    <input name="uvtiling" type="vector2" value="1, 1" />\n  </tiledimage>\n';
+    };
+    var x = '<?xml version="1.0"?>\n<materialx version="1.38" colorspace="srgb_texture">\n' +
+      tile('albedo', 'color3', 'albedo.png', 'srgb_texture') + tile('rough', 'float', 'roughness.png', 'lin_rec709') + tile('normal', 'vector3', 'normal.png', 'lin_rec709') +
+      tile('ao', 'float', 'ao.png', 'lin_rec709') + tile('opacity', 'color3', 'opacity.png', 'lin_rec709') + tile('height', 'float', 'displacement.png', 'lin_rec709') +
+      '  <normalmap name="nm_normal" type="vector3">\n    <input name="in" type="vector3" nodename="img_normal" />\n  </normalmap>\n' +
+      '  <standard_surface name="SR_' + nm + '" type="surfaceshader">\n' +
+      '    <input name="base" type="float" value="1" />\n    <input name="base_color" type="color3" nodename="img_albedo" />\n' +
+      '    <input name="metalness" type="float" value="0" />\n    <input name="specular_roughness" type="float" nodename="img_rough" />\n' +
+      '    <input name="normal" type="vector3" nodename="nm_normal" />\n    <input name="opacity" type="color3" nodename="img_opacity" />\n' +
+      '    <input name="sheen" type="float" value="' + sc + '" />\n    <input name="sheen_roughness" type="float" value="0.6" />\n' +
+      '  </standard_surface>\n' +
+      '  <displacement name="disp_' + nm + '" type="displacementshader">\n    <input name="displacement" type="float" nodename="img_height" />\n    <input name="scale" type="float" value="' + f(o.height_scale, 0.001) + '" />\n  </displacement>\n' +
+      '  <surfacematerial name="' + nm + '" type="material">\n    <input name="surfaceshader" type="surfaceshader" nodename="SR_' + nm + '" />\n    <input name="displacementshader" type="displacementshader" nodename="disp_' + nm + '" />\n  </surfacematerial>\n</materialx>\n';
+    return x;
+  }
+
+  // USD ASCII (.usda) with a UsdPreviewSurface, the material every USD viewer (Apple Quick Look, Omniverse, Blender, usdview) reads. One UV unit = one tile.
+  function usda(o) {
+    o = o || {};
+    var nm = String(o.name || 'Knit').replace(/[^A-Za-z0-9_]/g, '_').replace(/^(\d)/, '_$1') || 'Knit';
+    var P = '/' + nm;
+    var tex = function (n, file, cs, out) {
+      return '    def Shader "' + n + '"\n    {\n        uniform token info:id = "UsdUVTexture"\n        asset inputs:file = @' + file + '@\n        float2 inputs:st.connect = <' + P + '/stReader.outputs:result>\n' +
+        '        token inputs:wrapS = "repeat"\n        token inputs:wrapT = "repeat"\n        token inputs:sourceColorSpace = "' + cs + '"\n' +
+        (out === 'normal' ? '        float4 inputs:scale = (2, 2, 2, 1)\n        float4 inputs:bias = (-1, -1, -1, 0)\n' : '') +
+        '        float3 outputs:rgb\n        float outputs:r\n        float outputs:a\n    }\n';
+    };
+    return '#usda 1.0\n(\n    defaultPrim = "' + nm + '"\n    metersPerUnit = 1\n    upAxis = "Y"\n)\n\n' +
+      'def Material "' + nm + '"\n{\n    token outputs:surface.connect = <' + P + '/PreviewSurface.outputs:surface>\n\n' +
+      '    def Shader "PreviewSurface"\n    {\n        uniform token info:id = "UsdPreviewSurface"\n' +
+      '        color3f inputs:diffuseColor.connect = <' + P + '/albedoTex.outputs:rgb>\n' +
+      '        float inputs:roughness.connect = <' + P + '/roughTex.outputs:r>\n' +
+      '        float inputs:occlusion.connect = <' + P + '/aoTex.outputs:r>\n' +
+      '        normal3f inputs:normal.connect = <' + P + '/normalTex.outputs:rgb>\n' +
+      '        float inputs:metallic = 0\n        float inputs:opacity.connect = <' + P + '/albedoTex.outputs:a>\n        float inputs:opacityThreshold = 0.5\n' +
+      '        token outputs:surface\n    }\n\n' +
+      '    def Shader "stReader"\n    {\n        uniform token info:id = "UsdPrimvarReader_float2"\n        token inputs:varname = "st"\n        float2 outputs:result\n    }\n\n' +
+      tex('albedoTex', 'albedo.png', 'sRGB') + tex('roughTex', 'roughness.png', 'raw') + tex('aoTex', 'ao.png', 'raw') + tex('normalTex', 'normal.png', 'raw', 'normal') + '}\n';
+  }
+
+  return { pack: pack, plane: plane, draped: draped, glb: glb, zip: zip, crc32: crc32, encodePng: encodePng, materialx: materialx, usda: usda };
 }));

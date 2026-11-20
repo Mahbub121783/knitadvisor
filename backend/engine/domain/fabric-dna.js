@@ -18,6 +18,9 @@
 'use strict';
 
 const { mixOfFeed } = require('./feasibility-engine');
+const BY = require('./blend-yarn-engine');
+const MEL = require('./melange-engine');
+const PE = require('./process-effects');
 
 class DnaError extends Error { constructor(m) { super(m); this.name = 'DnaError'; } }
 
@@ -45,6 +48,77 @@ function coursesPerRepeat(C, roles) {
   return Math.max(1, best);
 }
 
+
+const FILAMENT = ['fdy', 'dty', 'aty', 'mono'];
+const hexOk = (h) => typeof h === 'string' && /^#[0-9a-f]{6}$/i.test(h);
+
+// the yarn fields the PRD's DNA names that a bare channel does not carry: twist, CSP, Uster numbers, melange share, slub, tension, colour.
+// Staple yarns are read from the blend-yarn engine at the channel's count, fibre mix and spinning system; every number says what it rests on.
+function yarnExtras(c, f, inp, out) {
+  const role = [...c.roles][0];
+  const spin = f.yarn_type && BY.GEO[f.yarn_type] ? f.yarn_type : undefined;
+  const filament = FILAMENT.includes(f.yarn_type) || /filament/i.test(f.fibre || '');
+  const mix = Object.fromEntries(Object.entries(mixOfFeed(f)).filter(([k]) => BY.FIB[k]));
+  const ex = { twistDir: null, tm: null, csp: null, uster: null, melangePercent: null, slub: null, elastaneDraftRatio: null, tensionCN: null, colorLab: null, detail: {} };
+  // twist, CSP, evenness: a staple yarn's profile (counts above 120 tex are weighed as 120 and scaled, as the Studio's speed rule does)
+  if (!filament && Object.keys(mix).length) {
+    try {
+      const tex = +c.tex;
+      const p = BY.analyse({ fibres: mix, count: { value: Math.min(tex, 120), unit: 'tex' }, spinning: spin });
+      const g = p.geometry, ev = p.evenness, force = p.tensile.breaking_force.value * (tex > 120 ? tex / 120 : 1);
+      const given = +((inp.yarn || {}).csp) > 0 && role === 'ground';
+      ex.twistDir = String((inp.yarn || {}).twist_dir || (inp.yarn || {}).twistDir || 'Z').toUpperCase().startsWith('S') ? 'S' : 'Z';
+      ex.tm = g.twist_multiplier.value;
+      ex.csp = given ? +inp.yarn.csp : Math.round(force * 0.2518 * (590.5 / tex));
+      ex.uster = { uPercent: ev.u_pct.value, cvmPercent: ev.cvm_pct.value, thin: ev.imperfections_per_km.thin, thick: ev.imperfections_per_km.thick, neps: ev.imperfections_per_km.neps, ipi: ev.imperfections_per_km.ipi, hairinessH: ev.hairiness_h.value };
+      ex.detail.twist = { tpi: g.tpi.value, tpm: g.tpm.value, basis: g.twist_multiplier.basis + '; direction Z is the ring-spinning convention' };
+      ex.detail.csp = { basis: given ? 'given' : 'estimate: breaking force x 0.2518 x Ne (160 strands, 0.7 efficiency)', breakingForceCN: Math.round(force * 10) / 10 };
+      ex.detail.uster = { basis: 'blend: fibre-count-limited CV x the spinning system index of irregularity', cvLimitPercent: ev.cv_limit_pct.value };
+    } catch (_) { /* a yarn the blend engine does not cover: the fields stay null */ }
+  } else if (filament) ex.detail.twist = { basis: 'a flat filament yarn: no twist multiplier' };
+  // melange share: the coloured (not raw) fibres' dry share of the yarn
+  const mel = out.melange && out.melange.roles && out.melange.roles[role] ? out.melange.roles[role] : null;
+  if (mel && Array.isArray(mel.components) && mel.components.length) {
+    const dyed = mel.components.filter((k) => k.method && k.method !== 'raw').reduce((t, k) => t + (+k.dry_share_pct || 0), 0);
+    const big = Math.max(...mel.components.map((k) => +k.dry_share_pct || 0));
+    ex.melangePercent = r1(dyed > 0 && dyed < 100 ? dyed : 100 - big);
+    ex.detail.melange = { basis: 'law: the coloured components dry mass share of the yarn', components: mel.components.map((k) => ({ fibre: k.fibre, dryPercent: k.dry_share_pct, hex: k.hex })) };
+  }
+  // slub: a fancy slub yarn's own numbers
+  const fz = out.fancy && out.fancy[role] && out.fancy[role].success !== false ? out.fancy[role] : null;
+  if (fz && fz.identity && fz.identity.form === 'slub' && fz.count) ex.slub = { slubsPerKm: fz.count.slubs_per_km, shareOfLengthPercent: fz.count.slub_share_of_length_pct, extraMassPercent: fz.count.extra_mass_pct, baseTex: fz.count.declared_base_tex };
+  // tension: the feeder's running tension (cN), the middle of the range
+  if (Array.isArray(f.tension_cN) && f.tension_cN.length === 2) { ex.tensionCN = r1((f.tension_cN[0] + f.tension_cN[1]) / 2); ex.detail.tension = { minCN: f.tension_cN[0], maxCN: f.tension_cN[1], basis: 'estimate: 0.12-0.16 cN per tex on a knitting feed, 0.08-0.10 on a loop feed' }; }
+  // colour: a melange yarn's blend, or the cloth's chosen colour
+  const hex = mel && mel.colour && mel.colour.blend && hexOk(mel.colour.blend.hex) ? mel.colour.blend.hex : inp.look && hexOk(inp.look.colour) ? inp.look.colour : null;
+  if (hex) { const lab = MEL.hexToLab(hex); ex.colorLab = { L: r1(lab[0]), a: r1(lab[1]), b: r1(lab[2]) }; ex.detail.colour = { hex, basis: mel ? 'the melange blend (colour model)' : 'the cloth colour chosen in the look card' }; }
+  return ex;
+}
+
+// the stitch graph as nodes: one per loop-forming needle position of the unit cell
+function topologyNodes(C, D, paths, widthMm, heightMm) {
+  if (!C || !C.length) return [];
+  const W = C[0].length, n = C.length, nodes = [];
+  const pitch = widthMm && W ? widthMm / W : null;
+  const rowsOf = [['C', C], ...(D ? [['D', D]] : [])];
+  rowsOf.forEach(([bed, rows]) => rows.forEach((row, i) => row.forEach((op, j) => {
+    if (op === '-' || op === 'M') return;
+    const p = paths[i];
+    nodes.push({ id: `${bed}${i + 1}.${j + 1}`, feed: i + 1, needle: j + 1, bed: bed === 'C' ? 'cylinder' : 'dial', op, yarnId: p ? p.yarnId : null, xMm: pitch ? r3((j + 0.5) * pitch) : null, yMm: heightMm ? r3(((i + 0.5) / n) * heightMm) : null, z: bed === 'D' ? 1 : (p && p.zOrder) || 0 });
+  })));
+  return nodes;
+}
+
+// the chemicals of the compiled route (the 27-chemical table), whether or not the chemistry card is on
+function activeChemicals(feas, inp, out) {
+  if (out.process_effects && Array.isArray(out.process_effects.chemicals)) return out.process_effects.chemicals.map((c) => ({ id: c.id, stage: c.stage, name: c.name, usedIn: c.in }));
+  if (!feas || !Array.isArray(feas.route) || !feas.route.length) return [];
+  const steps = feas.route.map((s) => ({ id: s.id, label: s.label, chemicals: (s.chemicals || []).map((n) => ({ name: n })) }));
+  const fin = (inp.chemistry && inp.chemistry.process && inp.chemistry.process.finishes) || [];
+  const e = PE.effects(steps, { finishes: Array.isArray(fin) ? fin : [], dark: !!(inp.chemistry && /dark/.test(inp.chemistry.shade || '')) || !!(inp.look && inp.look.shade === 'dark') });
+  return e.chemicals.map((c) => ({ id: c.id, stage: c.stage, name: c.name, usedIn: c.in }));
+}
+
 function toDNA(input, out) {
   if (!out || !out.success) throw new DnaError('Analyse the design first: the DNA is written from the answer.');
   const inp = out._design || input || {};      // a solved composition: the design the solver wrote
@@ -60,13 +134,13 @@ function toDNA(input, out) {
     const mix = mixOfFeed(f);
     const tot = Object.values(mix).reduce((t, v) => t + (+v || 0), 0) || 100;
     const c = { yarnId: `Y${channels.length + 1}`, roles: new Set([f.role]), label: f.yarn, fiberBlend: Object.entries(mix).map(([k, v]) => ({ fiber: FIBRE_OUT[k] || k.toUpperCase(), fraction: r3((+v || 0) / tot) })),
-      spinning: f.yarn_type || null, count: r2(+f.tex), unit: 'tex', tex: r2(+f.tex), share: +f.mass_share_pct || 0, d_mm: f.d_mm };
+      spinning: f.yarn_type || null, count: r2(+f.tex), unit: 'tex', tex: r2(+f.tex), share: +f.mass_share_pct || 0, d_mm: f.d_mm, feed: f };
     channels.push(c); chanOf.set(key, c);
   });
   const el = inp.elastane && +inp.elastane.denier > 0 ? inp.elastane : null;
   const elPart = (yarn.composition || []).find((c) => /elastane/i.test(c.part || ''));
-  const yarns = channels.map((c) => ({ yarnId: c.yarnId, label: [...c.roles].join(' + ') + (c.label ? ` · ${c.label}` : ''), roles: [...c.roles], fiberBlend: c.fiberBlend, spinning: c.spinning, count: c.count, unit: c.unit, tex: c.tex, diameterMm: c.d_mm || null, massSharePercent: r1(c.share) }));
-  if (el) yarns.push({ yarnId: `Y${yarns.length + 1}`, label: 'elastane (plated with the ground)', roles: ['elastane'], fiberBlend: [{ fiber: 'ELASTANE', fraction: 1 }], spinning: 'BARE_ELASTANE', count: +el.denier, unit: 'Denier', tex: r2(+el.denier / 9), elastaneDraftRatio: +el.draft || null, feeds: el.every === 'alternate' ? 'alternate' : 'every', massSharePercent: elPart ? +elPart.pct : null });
+  const yarns = channels.map((c) => { const x = yarnExtras(c, c.feed, inp, out); return { yarnId: c.yarnId, label: [...c.roles].join(' + ') + (c.label ? ` · ${c.label}` : ''), roles: [...c.roles], fiberBlend: c.fiberBlend, spinning: c.spinning, count: c.count, unit: c.unit, tex: c.tex, diameterMm: c.d_mm || null, massSharePercent: r1(c.share), twistDir: x.twistDir, tm: x.tm, csp: x.csp, uster: x.uster, melangePercent: x.melangePercent, slub: x.slub, elastaneDraftRatio: x.elastaneDraftRatio, tensionCN: x.tensionCN, colorLab: x.colorLab, detail: x.detail }; });
+  if (el) yarns.push({ yarnId: `Y${yarns.length + 1}`, label: 'elastane (plated with the ground)', roles: ['elastane'], fiberBlend: [{ fiber: 'ELASTANE', fraction: 1 }], spinning: 'BARE_ELASTANE', count: +el.denier, unit: 'Denier', tex: r2(+el.denier / 9), twistDir: null, tm: null, csp: null, uster: null, melangePercent: null, slub: null, tensionCN: null, colorLab: null, detail: { twist: { basis: 'a bare elastane filament: no twist multiplier' } }, elastaneDraftRatio: +el.draft || null, feeds: el.every === 'alternate' ? 'alternate' : 'every', massSharePercent: elPart ? +elPart.pct : null });
   // the unit cell
   const pitchW = fab.wpc > 0 ? 10 / fab.wpc : null, pitchC = fab.cpc > 0 ? 10 / fab.cpc : null;
   const cpr = coursesPerRepeat(C, feeds.map((f) => f.role));
@@ -99,6 +173,7 @@ function toDNA(input, out) {
       topologyGraph: {
         notation: 'K knit, T tuck, M miss, - needle out of action, E loop transfer to the next needle, R transfer to the other bed; one row per feed, one letter per needle',
         beds: { cylinder: C ? C.map((r) => r.join('')) : null, dial: D ? D.map((r) => r.join('')) : null },
+        nodes: topologyNodes(C, D, paths, widthMm, heightMm),
         yarnPaths: paths,
       },
     },
@@ -118,6 +193,7 @@ function toDNA(input, out) {
       fibres: feas ? feas.fibres : null,
       steps: feas ? feas.route : [],
       autoCompiledRoute: feas && feas.route.length ? feas.route.map((s) => s.id).join(' > ') : null,
+      activeChemicals: activeChemicals(feas, inp, out),
       finishingMechanics: { brushed: (inp.finish && inp.finish.brush) || 'none', heatSetTempC: (feas && (feas.route.find((s) => s.id === 'heatset') || {}).t_c) || null, stenter: fab.stenter || null },
     },
     fabric: { gsm: fab.gsm, gsmRange: fab.gsm_range, widthOpenInch: fab.width_open_in, stitchLengthMm: fab.sl_mm, walesPerCm: fab.wpc, coursesPerCm: fab.cpc, tightnessFactor: fab.tf },
@@ -148,6 +224,8 @@ function studioYarn(y, notes) {
   const count = unit === 'tex' && !(+y.count > 0) ? +y.tex : +y.count;
   if (!unit || !(count > 0)) throw new DnaError(`Yarn ${y.yarnId || ''}: give its count and unit (Ne, Nm, tex, dtex or denier) or its tex.`);
   const out = { count, unit };
+  if (+y.csp > 0) out.csp = +y.csp;                                  // the yarn's own CSP: the speed rule uses it instead of its estimate
+  if (/^[SZ]$/i.test(String(y.twistDir || ''))) out.twist_dir = String(y.twistDir).toUpperCase();
   if (spin) out.type = spin;
   if (main.length === 1 || !main.length) {
     const id = main.length ? main[0].id : 'cotton';

@@ -149,5 +149,25 @@ const cloth = (extra) => S.analyse({ bed: 'single', grid: { C: ['K'], D: null },
   assert.strictEqual(raw.length, (w * 4 + 1) * h);
   for (let y = 0; y < h; y++) { assert.strictEqual(raw[y * (w * 4 + 1)], 0); assert.deepStrictEqual(Array.from(raw.subarray(y * (w * 4 + 1) + 1, (y + 1) * (w * 4 + 1))), Array.from(rgba.subarray(y * w * 4, (y + 1) * w * 4))); }
   console.log('✓ png: signature, IHDR, per-chunk CRCs, IDAT inflates to the exact RGBA (the colour under a transparent pixel kept)');
+  // the open material files: well-formed, wired to the package's own PNGs, and honest about what they are
+  {
+    const mx = P.materialx({ name: '3-thread fleece', sheen: { strength: 0.4 }, height_scale: 0.0012 });
+    const stack = []; const tags = mx.replace(/<\?xml[^>]*\?>/, '').match(/<\/?[A-Za-z_][^>]*>/g) || [];
+    tags.forEach((t) => { if (/^<\//.test(t)) assert.strictEqual(stack.pop(), t.slice(2, -1).trim(), 'balanced ' + t); else if (!/\/>$/.test(t)) stack.push(t.slice(1).split(/[\s>]/)[0]); });
+    assert.strictEqual(stack.length, 0, 'every element is closed');
+    assert(/<materialx version="1\.38"/.test(mx) && /<standard_surface/.test(mx) && /<surfacematerial name="_?3_thread_fleece"/.test(mx.replace('name="_3', 'name="_3')) || /<surfacematerial name="[A-Za-z_][A-Za-z0-9_]*"/.test(mx));
+    ['albedo', 'roughness', 'normal', 'ao', 'opacity', 'displacement'].forEach((n) => assert(mx.includes(`value="${n}.png"`), n + '.png wired'));
+    assert(/colorspace="srgb_texture"/.test(mx) && /colorspace="lin_rec709"/.test(mx), 'colour map sRGB, data maps linear');
+    assert(/<normalmap name="nm_normal"/.test(mx) && /name="scale" type="float" value="0.0012"/.test(mx) && /name="sheen" type="float" value="0.4"/.test(mx));
+    const us = P.usda({ name: '3-thread fleece' });
+    assert(us.startsWith('#usda 1.0') && /defaultPrim = "_?3_thread_fleece"/.test(us) && /info:id = "UsdPreviewSurface"/.test(us) && /info:id = "UsdUVTexture"/.test(us) && /UsdPrimvarReader_float2/.test(us));
+    ['albedo', 'roughness', 'ao', 'normal'].forEach((n) => assert(us.includes(`@${n}.png@`), n + '.png wired'));
+    assert(/inputs:scale = \(2, 2, 2, 1\)/.test(us) && /inputs:bias = \(-1, -1, -1, 0\)/.test(us), 'the normal map is unpacked');
+    assert.strictEqual((us.match(/\{/g) || []).length, (us.match(/\}/g) || []).length, 'braces balance');
+    const fm = M.formats();
+    assert(fm.written.some((f) => f.id === 'mtlx') && fm.written.some((f) => f.id === 'usda') && fm.not_written.some((f) => f.id === 'zfab'));
+    assert(/material\.mtlx/.test(M.readme({ structure: {}, fabric: { gsm: 200 } }, { files: [] })) && /not been opened/.test(M.readme({ structure: {}, fabric: { gsm: 200 } }, {})));
+    console.log('✓ MaterialX and USD files: well-formed, wired to the six PNGs, linear data maps, OpenGL normal unpacked; the README says they are written to the specs, not opened in a tool');
+  }
   console.log('Material package tests passed');
 })().catch((e) => { console.error(e); process.exit(1); });

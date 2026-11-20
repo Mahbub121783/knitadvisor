@@ -103,6 +103,8 @@ function formats() {
     written: [
       { id: 'png', what: 'albedo (with opacity in the alpha channel), normal (tangent space, OpenGL: +Y up), roughness, ambient occlusion, displacement (height), opacity, and ORM (occlusion, roughness, metallic packed)' },
       { id: 'gltf', what: 'a glTF 2.0 binary (.glb): a tiled swatch, with the maps embedded and the sheen extension (KHR_materials_sheen)' },
+      { id: 'mtlx', what: 'a MaterialX 1.38 document (open ASWF standard): a standard_surface on the PNG files, with a normal map node, displacement and sheen' },
+      { id: 'usda', what: 'a USD ASCII file with a UsdPreviewSurface material on the same PNG files (Apple Quick Look, Omniverse, Blender, usdview)' },
       { id: 'json', what: 'the physics of the cloth in SI and in the tester\'s units, on the garment tools\' axes' },
     ],
     not_written: [
@@ -138,6 +140,11 @@ function readme(out, extra) {
     '',
     'GLTF',
     '  swatch.glb        a flat swatch with the maps embedded; UVs repeat the tile (sampler wrap = REPEAT). Material: metallic 0, roughness from the file, KHR_materials_sheen for the yarn fuzz.',
+    '',
+    'OPEN MATERIAL FILES',
+    '  material.mtlx     MaterialX 1.38 (open standard): standard_surface wired to the PNGs; data maps are linear, the normal map is OpenGL. Opens in Substance 3D, Maya, Houdini and Blender add-ons.',
+    '  material.usda     USD ASCII, UsdPreviewSurface on the same PNGs; one UV unit = one tile. Opens in Quick Look, Omniverse, Blender, usdview.',
+    '                    Both are written to the published specifications and have not been opened in those tools here: validate in yours before relying on them.',
     '',
     'PHYSICS',
     '  physics.json      weight, thickness, bending, shear, stretch under load, friction, on knit axes: x = course direction (weft), y = wale direction (warp), in SI and in',

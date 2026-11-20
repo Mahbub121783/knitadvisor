@@ -46,7 +46,7 @@
       var run = window.KAStudioDrape && window.KAStudioDrape.lastRun ? window.KAStudioDrape.lastRun() : null;
       var wantDrape = $('st-pbrgeo') && $('st-pbrgeo').value === 'draped' && run && run.mesh;
       Promise.all(maps.map(function (x) { return P.encodePng(w, h, x[1]); })).then(function (pngs) {
-        var files = ['albedo.png', 'normal.png', 'roughness.png', 'ao.png', 'displacement.png', 'opacity.png', 'orm.png', 'swatch.glb', 'physics.json', 'material.json', 'README.txt'];
+        var files = ['albedo.png', 'normal.png', 'roughness.png', 'ao.png', 'displacement.png', 'opacity.png', 'orm.png', 'swatch.glb', 'material.mtlx', 'material.usda', 'physics.json', 'material.json', 'README.txt'];
         note('Writing the physics and the glTF…');
         return H.fetch('/api/studio/material', { method: 'POST', body: { design: H.design(), name: H.name(), roughness: m.roughness, tile_cm: m.tile_cm, files: files, drape: run && run.success !== false ? { success: true, test: run.test, drape_coefficient: run.drape_coefficient, folds: run.folds, skirt: run.skirt } : null } }).then(function (r) {
           var mat = r.material, byName = {}; maps.forEach(function (x, k) { byName[x[0]] = pngs[k]; });
@@ -59,7 +59,7 @@
           var z = P.zip([
             { name: 'albedo.png', bytes: byName.albedo }, { name: 'normal.png', bytes: byName.normal }, { name: 'roughness.png', bytes: byName.roughness }, { name: 'ao.png', bytes: byName.ao },
             { name: 'displacement.png', bytes: byName.displacement }, { name: 'opacity.png', bytes: byName.opacity }, { name: 'orm.png', bytes: byName.orm },
-            { name: 'swatch.glb', bytes: glb }, { name: 'physics.json', bytes: enc.encode(JSON.stringify(r.physics, null, 2)) }, { name: 'material.json', bytes: enc.encode(JSON.stringify({ material: mat, tile_cm: m.tile_cm, tile_pixels: m.size, formats: r.formats }, null, 2)) },
+            { name: 'swatch.glb', bytes: glb }, { name: 'material.mtlx', bytes: enc.encode(P.materialx({ name: slug(H.name()), sheen: mat.sheen, height_scale: (r.physics && r.physics.fabric && r.physics.fabric.thickness_mm > 0 ? r.physics.fabric.thickness_mm : 0.6) / 1000 })) }, { name: 'material.usda', bytes: enc.encode(P.usda({ name: slug(H.name()) })) }, { name: 'physics.json', bytes: enc.encode(JSON.stringify(r.physics, null, 2)) }, { name: 'material.json', bytes: enc.encode(JSON.stringify({ material: mat, tile_cm: m.tile_cm, tile_pixels: m.size, formats: r.formats }, null, 2)) },
             { name: 'README.txt', bytes: enc.encode(r.readme) },
           ]);
           var blob = new Blob([z], { type: 'application/zip' }), a = document.createElement('a');

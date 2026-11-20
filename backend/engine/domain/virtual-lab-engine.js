@@ -95,13 +95,15 @@ function analyse(input) {
   const phi = phiOf(gsmBase, rho, T0);                                             // fibre fraction of the base cloth
   const qHole = K_AIR * holeAir(open, cell, T0), qFibre = (1 - open) * fibreAir(phi, T0), qBase = qHole + qFibre;
   const resAir = (1 / qBase) + layers.reduce((t, x) => t + 1 / fibreAir(x.phi, x.h), 0);   // series: flow resistances add
-  const ap = 1 / resAir;
+  const apModel = 1 / resAir;
+  const ap = +p.air_perm_measured > 0 ? +p.air_perm_measured : apModel;      // the mill's own ISO 9237 reading replaces the model (mill-readings.js)
   const lamOf = (f) => 0.5 * (((1 - f) * LAMBDA_AIR + f * LAMBDA_FIBRE) + 1 / ((1 - f) / LAMBDA_AIR + f / LAMBDA_FIBRE));
   const lam = lamOf(phi);
-  const rct = (T0 / 1000) / lam + layers.reduce((t, x) => t + (x.h / 1000) / lamOf(x.phi), 0);
+  const rctModel = (T0 / 1000) / lam + layers.reduce((t, x) => t + (x.h / 1000) / lamOf(x.phi), 0);
+  const rct = +p.rct_measured > 0 ? +p.rct_measured : rctModel;               // the mill's own ISO 11092 reading
   const apLo = ap / 1.6, apHi = ap * 1.6;
   const air = {
-    air_permeability: V(Math.round(ap), 'mm/s at 100 Pa', 'estimate', { range: [Math.round(apLo), Math.round(apHi)] }),
+    air_permeability: +p.air_perm_measured > 0 ? V(Math.round(ap), 'mm/s at 100 Pa', 'measured', { model_value: Math.round(apModel) }) : V(Math.round(ap), 'mm/s at 100 Pa', 'estimate', { range: [Math.round(apLo), Math.round(apHi)] }),
     cfm: V(r1(ap * 0.19685), 'ft³/min per ft²', 'estimate'),
     open_area: V(r1(open * 100), '% of the cloth', 'law'),
     hole_side: V(r3(Math.sqrt(open * cell)), 'mm', 'law'),
@@ -110,7 +112,7 @@ function analyse(input) {
     word: ap >= 1200 ? 'very breathable' : ap >= 400 ? 'breathable' : ap >= 150 ? 'moderate' : ap >= 40 ? 'low: warm and wind-resistant' : 'nearly airtight',
   };
   const thermal = {
-    rct: V(r3(rct), 'm²·K/W', 'estimate'), clo: V(r3(rct / CLO), 'clo', 'estimate'),
+    rct: +p.rct_measured > 0 ? V(r3(rct), 'm²·K/W', 'measured', { model_value: r3(rctModel) }) : V(r3(rct), 'm²·K/W', 'estimate'), clo: V(r3(rct / CLO), 'clo', +p.rct_measured > 0 ? 'measured' : 'estimate'),
     conductivity: V(r3(lam), 'W/(m·K)', 'estimate'), fibre_fraction: V(r3(phi), 'of the cloth volume', 'estimate'),
     word: rct / CLO >= 0.45 ? 'a heavy insulating cloth' : rct / CLO >= 0.25 ? 'warm' : rct / CLO >= 0.10 ? 'moderate' : 'a light, cool cloth',
   };

@@ -41,6 +41,7 @@ const YC = require('./yarn-character');
 const MEL = require('./melange-engine');
 const BY = require('./blend-yarn-engine');
 const CSOLVE = require('./composition-solver');
+const RDG = require('./mill-readings');
 const CHEMY = require('./yarn-chemistry-engine');
 const RECY = require('./yarn-recovery-engine');
 const HAND = require('./fabric-hand-engine');
@@ -1638,6 +1639,11 @@ function analyse(input) {
     const handT = (h) => (h && h.compression && h.compression.T0 && h.compression.T0.value > 0 ? h.compression.T0.value : null);
     let thickMm = handOut && handOut.success !== false && clothState.selected === 'finished' ? handT(handOut) : null;
     if (thickMm == null) { try { thickMm = handT(handSummary({}, input, S, family, match, recOut, !!plush, null)); } catch (_) { thickMm = null; } }
+    // the mill's own readings (thickness, air permeability, Rct) replace the estimates they measure (mill-readings.js)
+    const rd = RDG.read(input);
+    if (rd.error) throw new StudioError(rd.error);
+    const thickModel = thickMm;
+    if (rd.values.thickness_mm) thickMm = rd.values.thickness_mm;
     const out = {
       success: true,
       structure: {
@@ -1810,10 +1816,11 @@ function analyse(input) {
         yarnForce = yb.tensile.breaking_force.value * (S.ground.tex > 120 ? S.ground.tex / 120 : 1);
       } catch (_) { yarnForce = 0; }
     }
-    out.feasibility = FEAS.assess(out, input, { thickness_mm: thickMm, thickness_basis: 'estimate (hand model T0)', yarn_force_cn: yarnForce });
+    out.feasibility = FEAS.assess(out, input, { thickness_mm: thickMm, thickness_basis: rd.values.thickness_mm ? 'measured at your mill (ISO 5084)' : 'estimate (hand model T0)', yarn_force_cn: yarnForce });
     // the virtual lab (air permeability, thermal resistance, a hundred rolls) and the matching collar and cuff, on request
-    out.lab = input.lab && input.lab.enabled ? labSummary(input, out, clothState, thickMm, S, plush) : null;
+    out.lab = input.lab && input.lab.enabled ? labSummary(input, out, clothState, thickMm, S, plush, rd.values) : null;
     out.trim = input.trim && input.trim.enabled ? trimSummary(input, out) : null;
+    RDG.apply(out, rd.values, { thickness_mm: thickModel });
     return out;
   } catch (e) {
     if (e instanceof StudioError || e instanceof MEL.MelangeError || e instanceof BY.BlendError || e instanceof CSOLVE.CompositionError) return { success: false, error: e.message };
@@ -1914,7 +1921,7 @@ function inspectSummary(input, out, cs, S) {
 }
 
 // ── the virtual lab: air permeability, thermal resistance and a hundred rolls (virtual-lab-engine.js) ──
-function labSummary(input, out, cs, thickMm, S, plush) {
+function labSummary(input, out, cs, thickMm, S, plush, rv) {
   const o = input.lab || {};
   try {
     const loopFeed = (out.yarn.feeds || []).find((f) => f.role === 'loop');
@@ -1926,7 +1933,7 @@ function labSummary(input, out, cs, thickMm, S, plush) {
       brushed: out.finish && out.finish.brushed && out.finish.brushed !== 'none' ? out.finish.brushed : undefined,
       nap_mm: plush ? plush.pile.finished_pile_mm : out.finish ? out.finish.nap_mm : 0, loop_d_mm: !plush && loopFeed ? loopFeed.d_mm : 0,
       end_use: o.end_use, rolls: o.rolls, cv_count: o.cv_count, tol_sl_mm: o.tol_sl_mm, cv_finish: o.cv_finish, spec_pct: o.spec_pct, spec_width_pct: o.spec_width_pct,
-      model_error_pct: acc > 0 ? acc : undefined,
+      model_error_pct: acc > 0 ? acc : undefined, air_perm_measured: rv && rv.air_perm_mm_s, rct_measured: rv && rv.rct,
     });
   } catch (e) { if (e instanceof LAB.LabError || e instanceof LIGHT.LightError) return { success: false, error: e.message }; throw e; }
 }

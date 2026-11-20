@@ -1724,7 +1724,7 @@ router.post('/studio/drape', requireUser, drapeLimiter, async (req, res) => {
       drapeCache.set(key, out);
       if (drapeCache.size > 40) drapeCache.delete(drapeCache.keys().next().value);
     }
-    res.json({ ...out, from_hand: { gsm: params.gsm, bending_course: params.B_course, bending_wale: params.B_wale, shear: params.G, stretch_course_pct: params.EMT_course, stretch_wale_pct: params.EMT_wale, load_gf_cm: params.load_gf_cm } });
+    res.json({ ...require('../engine/domain/mill-readings').drapeCheck(out, require('../engine/domain/mill-readings').read(design).values), from_hand: { gsm: params.gsm, bending_course: params.B_course, bending_wale: params.B_wale, shear: params.G, stretch_course_pct: params.EMT_course, stretch_wale_pct: params.EMT_wale, load_gf_cm: params.load_gf_cm } });
   } catch (err) {
     if (err instanceof drapeEngine.DrapeError) return res.status(400).json({ success: false, error: err.message });
     console.error('[studio] drape failed:', err);
