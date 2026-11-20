@@ -1527,20 +1527,25 @@
     var L = last && last.light;
     cloth.setTranslucency(L && L.render ? { open: L.render.open, fibre: L.render.fibre, tint: L.render.tint, gain: L.render.gain, mode: behind } : null);
   }
+  var clothBusy = false;
   function renderCloth() {
-    var host = $('st-cloth'), o = clothOpts(), my = ++clothSeq;
+    var host = $('st-cloth'), o = clothOpts();
     // rebuild only when the structure or its numbers changed; a colour change repaints
     var key = JSON.stringify([o.yarnLook || null, o.physics || null, o.dyeMethod || null, o.fiberType, stripeOf(), o.construction, o.pattern.grid, o.pattern.dial, o.pattern.feedYarns, Math.round(o.density.wpc * 10), Math.round(o.density.cpc * 10), Math.round(o.countNe), o.gsm, o.fiberType, o.elastanePct]);
-    if (cloth && key === clothKey) { cloth.setColor(o.baseHex); return; }
-    clothKey = key;
+    // the same structure: repaint, or let the build already running finish (bumping the sequence here used to cancel
+    // that build with nothing to replace it, and the view stayed on the old design under "Knitting the swatch…")
+    if (key === clothKey) { if (cloth && !clothBusy) cloth.setColor(o.baseHex); return; }
+    var my = ++clothSeq;
+    clothKey = key; clothBusy = true;
     $('st-cloth-wait').hidden = false;
     import('/assets/js/knit3d/index.js?v=20261121b').then(function (mod) {
-      if (my !== clothSeq || mode3d !== 'cloth') return;
+      if (my !== clothSeq) return;
+      if (mode3d !== 'cloth') { clothBusy = false; clothKey = ''; return; }      // left the real view before it was built: build it when it is opened again
       if (cloth) { try { cloth.dispose(); } catch (_) {} cloth = null; }
       Array.prototype.forEach.call(host.querySelectorAll('canvas'), function (c) { c.remove(); });
       var k = new mod.Knit3D();
       try { k.mount(host, o); } catch (e) { try { k.dispose(); } catch (_) {} throw e; }
-      cloth = k;
+      cloth = k; clothBusy = false;
       pushTrans();
       pushIllum();
       if (showBack) k.setView('back');
@@ -1550,6 +1555,7 @@
       $('st-3dnote').textContent = con.label + ' · ' + o.density.wpc.toFixed(1) + ' wales × ' + o.density.cpc.toFixed(1) + ' courses /cm · ' + Math.round(o.countNe) + 's · ' + Math.round(o.gsm) + ' GSM' + (o.notes.length ? ' — ' + o.notes.join(' ') : '');
     }).catch(function (e) {
       if (window.console) console.error(e);
+      if (my === clothSeq) { clothBusy = false; clothKey = ''; }      // a failed build is not a built one: the next edit tries again
       $('st-cloth-wait').hidden = false;
       $('st-cloth-wait').textContent = 'The real view could not draw this programme: ' + (e && e.message || e);
     });
