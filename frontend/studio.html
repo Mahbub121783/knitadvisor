@@ -190,6 +190,12 @@
     @media (max-width: 640px) { #st-loops { height: 360px; } }
     #st-cloth { width: 100%; min-height: 380px; border-radius: 12px; background: #e9ebef; position: relative; overflow: hidden; touch-action: none; }
     #st-cloth canvas { height: 460px !important; }
+    /* loops + real: both views live, one above the other, beside the design */
+    #pane-3d.both #st-loops { height: clamp(240px, calc((100vh - 360px) / 2), 420px) !important; }
+    #pane-3d.both #st-cloth { min-height: 0; margin-top: 8px; }
+    #pane-3d.both #st-cloth canvas { height: clamp(240px, calc((100vh - 360px) / 2), 420px) !important; }
+    #pane-3d .st-livetag { display: inline-block; font: 600 11px var(--mono, monospace); color: #0f7a4a; background: #e6f6ee; border-radius: 999px; padding: 2px 8px; margin: 0 0 6px; }
+    #pane-3d .st-livetag.busy { color: #8a5a00; background: #fff4dc; }
     @media (max-width: 640px) { #st-cloth canvas { height: 360px !important; } }
     .st-cloth-wait { position: absolute; inset: 0; display: grid; place-items: center; color: var(--t3); font-size: 13px; pointer-events: none; }
     .st-3dmode { margin-bottom: 8px; }
@@ -708,8 +714,9 @@
               <span id="st-pbrnote" class="st-hint" style="margin:0"></span>
             </div>
             <div class="st-seg st-3dmode" id="st-3dmode">
+              <button type="button" class="on" data-mode="both" title="The loop structure and the real fabric together, both following every edit">Loops + real</button>
               <button type="button" data-mode="yarn">Yarn (real view)</button>
-              <button type="button" class="on" data-mode="loops">Loop structure</button>
+              <button type="button" data-mode="loops">Loop structure</button>
               <button type="button" data-mode="cloth">Fabric (real view)</button>
               <button type="button" data-mode="twin">Yarn physics</button>
             </div>
@@ -928,10 +935,10 @@
 <script src="assets/js/pbr-package.js?v=20261122a"></script>
 <script src="assets/js/studio-pbr.js?v=20261122a"></script>
 <script src="assets/js/studio-sheet.js?v=20261122b"></script>
-<script src="assets/js/studio-mode.js?v=20261122b"></script>
+<script src="assets/js/studio-mode.js?v=20261122d"></script>
 <script src="assets/js/studio-vbed.js?v=20261121a"></script>
 <script src="assets/js/studio-capture.js?v=20261120b"></script>
 <script src="assets/js/studio-gates.js?v=20261121b"></script>
-<script src="assets/js/studio.js?v=20261122e"></script>
+<script src="assets/js/studio.js?v=20261122h"></script>
 </body>
 </html>

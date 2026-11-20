@@ -629,6 +629,7 @@
     timer = setTimeout(analyse, 280);
     // the real view is a heavy rebuild: wait for a pause in the editing
     clearTimeout(timer3d); timer3d = setTimeout(render3D, mode3d === 'cloth' || mode3d === 'twin' ? 700 : mode3d === 'yarn' ? 350 : 120);
+    live3d(true);
   }
 
   function num(id) { var v = parseFloat($(id).value); return isFinite(v) && v > 0 ? v : null; }
@@ -1301,7 +1302,11 @@
   function hexRgb(h) { var n = parseInt(h.slice(1), 16); return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 }; }
 
   // ── 3D: the loop structure ─────────────────────────────────────────────
-  var mode3d = 'loops', loopView = null, loopPromise = null, buildTimer = null;
+  var mode3d = 'both', loopView = null, loopPromise = null, buildTimer = null, clothTimer = null;
+  var clothOn = function () { return mode3d === 'cloth' || mode3d === 'both'; };
+  var loopsOn = function () { return mode3d === 'loops' || mode3d === 'both'; };
+  // the little 'live' tag over the views: updating while an edit is being worked out, live once it is drawn
+  function live3d(busy) { var t = $('st-livetag'); if (!t) return; t.classList.toggle('busy', !!busy); t.textContent = busy ? '● updating to your design…' : '● live: follows every edit'; }
   // Both 3D views are drawn from the programme as it stands in the editor —
   // they never wait for the engine. The engine's answer only refines the
   // loop shape (wales and courses per cm) and the yarn thickness; while it is
@@ -1309,7 +1314,8 @@
   // jersey's) is used and the 3D still shows exactly what is drawn.
   function render3D() {
     if (!$('pane-3d').classList.contains('on')) return;
-    if (mode3d === 'cloth') renderCloth(); else if (mode3d === 'twin') renderTwin(); else if (mode3d === 'yarn') renderYarn(); else renderLoops();
+    if (mode3d === 'both') { renderLoops(); clearTimeout(clothTimer); clothTimer = setTimeout(renderCloth, 500); }
+    else if (mode3d === 'cloth') renderCloth(); else if (mode3d === 'twin') renderTwin(); else if (mode3d === 'yarn') renderYarn(); else renderLoops();
   }
 
   // ── the yarn, real view: every fibre of the chosen yarn (yarn-real.js) ──
@@ -1534,13 +1540,13 @@
     var key = JSON.stringify([o.yarnLook || null, o.physics || null, o.dyeMethod || null, o.fiberType, stripeOf(), o.construction, o.pattern.grid, o.pattern.dial, o.pattern.feedYarns, Math.round(o.density.wpc * 10), Math.round(o.density.cpc * 10), Math.round(o.countNe), o.gsm, o.fiberType, o.elastanePct]);
     // the same structure: repaint, or let the build already running finish (bumping the sequence here used to cancel
     // that build with nothing to replace it, and the view stayed on the old design under "Knitting the swatch…")
-    if (key === clothKey) { if (cloth && !clothBusy) cloth.setColor(o.baseHex); return; }
+    if (key === clothKey) { if (cloth && !clothBusy) { cloth.setColor(o.baseHex); live3d(false); } return; }
     var my = ++clothSeq;
     clothKey = key; clothBusy = true;
     $('st-cloth-wait').hidden = false;
     import('/assets/js/knit3d/index.js?v=20261121b').then(function (mod) {
       if (my !== clothSeq) return;
-      if (mode3d !== 'cloth') { clothBusy = false; clothKey = ''; return; }      // left the real view before it was built: build it when it is opened again
+      if (!clothOn()) { clothBusy = false; clothKey = ''; return; }      // left the real view before it was built: build it when it is opened again
       if (cloth) { try { cloth.dispose(); } catch (_) {} cloth = null; }
       Array.prototype.forEach.call(host.querySelectorAll('canvas'), function (c) { c.remove(); });
       var k = new mod.Knit3D();
@@ -1550,7 +1556,7 @@
       pushIllum();
       if (showBack) k.setView('back');
       if (zoom !== 'loops') k.frame(zoom);
-      $('st-cloth-wait').hidden = true;
+      $('st-cloth-wait').hidden = true; live3d(false);
       var con = o.construction;
       $('st-3dnote').textContent = con.label + ' · ' + o.density.wpc.toFixed(1) + ' wales × ' + o.density.cpc.toFixed(1) + ' courses /cm · ' + Math.round(o.countNe) + 's · ' + Math.round(o.gsm) + ' GSM' + (o.notes.length ? ' — ' + o.notes.join(' ') : '');
     }).catch(function (e) {
@@ -1612,7 +1618,7 @@
   function renderLoops() {
     var host = $('st-loops');
     if (!loopPromise) {
-      loopPromise = import('/assets/js/studio-loops.js?v=20261122e').then(function (mod) {
+      loopPromise = import('/assets/js/studio-loops.js?v=20261122g').then(function (mod) {
         loopView = new mod.LoopView(host, showTip);
         loopView.feedColour = mod.feedColour;
         return loopView;
@@ -1621,6 +1627,7 @@
     loopPromise.then(function (v) {
       var spec = loopSpec();
       var geo = v.draw(spec);
+      if (mode3d === 'loops') live3d(false);
       if (spec.real) { $('st-3dnote').textContent = geo.wales + ' needles × ' + geo.rows + ' courses, ' + (geo.wales / geo.W) + ' × ' + (geo.rows / geo.F) + ' repeats of your programme'; return; }
       var bs = $('st-bstep');
       bs.max = String(geo.rows); bs.value = String(geo.rows); v.setStep(null); stopBuild();
@@ -1675,17 +1682,20 @@
       var b = e.target.closest('button'); if (!b) return;
       mode3d = b.getAttribute('data-mode');
       Array.prototype.forEach.call(this.children, function (x) { x.classList.toggle('on', x === b); });
-      var lp = mode3d === 'loops', tw = mode3d === 'twin', cl = mode3d === 'cloth', yr = mode3d === 'yarn';
+      var lp = loopsOn(), tw = mode3d === 'twin', cl = clothOn(), yr = mode3d === 'yarn';
+      $('pane-3d').classList.toggle('both', mode3d === 'both');
       $('st-yarnbar').hidden = !yr; $('st-yarn').hidden = !yr; $('st-yarnnote').hidden = !yr;
       $('st-loopbar').hidden = !lp; $('st-build').hidden = !lp; $('st-feedkey').hidden = !lp; $('st-loophint').hidden = !lp;
       $('st-clothbar').hidden = !cl; $('st-clothhint').hidden = !cl;
       $('st-loops').hidden = !lp; $('st-cloth').hidden = !cl;
       $('st-twinbar').hidden = !tw; $('st-twin').hidden = !tw || !twinView; $('st-twinnote').hidden = !tw;
       if (!tw) twinSeq++;
-      if (lp && cloth) { try { cloth.dispose(); } catch (_) {} cloth = null; clothKey = ''; }
+      if (mode3d === 'loops' && cloth) { try { cloth.dispose(); } catch (_) {} cloth = null; clothKey = ''; }
       render3D();
       if (lp && loopView) loopPromise.then(function (v) { v.view('angle'); });
     });
+    // open on the mode marked in the page (loops + real): show its hosts and bars
+    setTimeout(function () { var on = $('st-3dmode').querySelector('.on'); if (on && !$('pane-3d').classList.contains('both') && on.getAttribute('data-mode') === 'both') on.click(); }, 0);
     $('st-loopbar').addEventListener('click', function (e) {
       var b = e.target.closest('[data-view]'); if (b && loopView) { if (loopView._close) { loopView._close = false; $('st-fibrecu').classList.remove('on'); loopView.draw(loopSpec()); } loopView.view(b.getAttribute('data-view')); }
       if (e.target.closest('#st-fibrecu') && loopView) {
@@ -1702,7 +1712,7 @@
     document.addEventListener('ka-melange', function () { if (mode3d === 'yarn') renderYarn(); });
     document.addEventListener('ka-blend-result', function () { if (mode3d === 'yarn') renderYarn(); });
     document.addEventListener('ka-fancy-result', function () { if (mode3d === 'yarn') renderYarn(); });
-    document.addEventListener('ka-look', function () { if (mode3d === 'cloth') renderCloth(); });
+    document.addEventListener('ka-look', function () { if (clothOn()) renderCloth(); });
     document.addEventListener('ka-look-input', function () { schedule(); });
     $('st-yarnbar').addEventListener('click', function (e) {
       var b = e.target.closest('[data-yview]'); if (b && yarnView) yarnView.view(b.getAttribute('data-yview'));
@@ -1970,7 +1980,7 @@
       if (cloth) cloth.frame(zoom);
     });
     $('st-savepic').addEventListener('click', function () {
-      var btn = this, note = $('st-savenote'), view = mode3d === 'cloth' ? cloth : mode3d === 'yarn' ? yarnView : mode3d === 'loops' ? loopView : null;
+      var btn = this, note = $('st-savenote'), view = clothOn() ? cloth : mode3d === 'yarn' ? yarnView : mode3d === 'loops' ? loopView : null;
       if (!view || !view.renderer) { note.textContent = 'Open the Yarn, Loop structure or Fabric (real view) picture first: those are the ones that can be saved.'; return; }
       var w = parseInt($('st-savesize').value, 10) || 3840, nm = ($('st-name').value || 'studio-design').trim().replace(/[^A-Za-z0-9_-]+/g, '-').slice(0, 40) + '-' + mode3d;
       btn.disabled = true; note.textContent = 'Drawing at ' + w + ' px…';

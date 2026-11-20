@@ -310,7 +310,7 @@ export class LoopView {
     const g = this.geo; if (!g) return;
     // fit the swatch to whichever of width and height binds at this aspect
     const t = 2 * Math.tan((this.camera.fov * Math.PI) / 360);
-    const d = 1.12 * Math.max(g.wales / (t * this.camera.aspect), (g.rows * (g.step || g.h) + g.h) / t);
+    const d = 0.96 * Math.max(g.wales / (t * this.camera.aspect), (g.rows * (g.step || g.h) + g.h) / t);
     // edge: from above, along the wales — the cross-section, where the two
     // beds, the tucks behind the held loops and the floats separate in depth
     const at = {
@@ -359,6 +359,8 @@ export class LoopView {
     const w = this.host.clientWidth, h = this.host.clientHeight;
     if (!w || !h) return;
     this.camera.aspect = w / h; this.camera.updateProjectionMatrix(); this.renderer.setSize(w, h);
+    // the frame follows the box: a view that changes size is fitted again (the close-up keeps its own frame)
+    if (this.geo && this._lastView && !this._close) this.view(this._lastView);
     this.redraw();
   }
 
