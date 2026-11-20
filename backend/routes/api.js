@@ -1777,6 +1777,20 @@ router.get('/studio/feasibility/catalogue', requireUser, (req, res) => res.json(
 
 // Fabric DNA: a weft design as an open schema-3.0 JSON document, and back (engine/domain/fabric-dna.js)
 const fabricDna = require('../engine/domain/fabric-dna');
+// The development sheet (engine/domain/dev-sheet.js): the R&D person gives composition, weight, colour depth, diameter, brushing and the design;
+// the whole development roll comes back on one sheet.
+const sheetLimiter = createRateLimiter({ name: 'studio_sheet', max: 20, windowMs: 60 * 1000, message: 'Too many development sheets — wait a minute.' });
+router.post('/studio/dev-sheet', requireUser, sheetLimiter, (req, res) => {
+  try {
+    const devSheet = require('../engine/domain/dev-sheet');
+    res.json(devSheet.build(req.body || {}, (d) => fabricStudio.analyse(d)));
+  } catch (err) {
+    if (err instanceof require('../engine/domain/dev-sheet').SheetError) return res.status(400).json({ success: false, error: err.message });
+    console.error('[studio] development sheet failed:', err);
+    res.status(500).json({ success: false, error: 'The development sheet could not be worked out.' });
+  }
+});
+
 router.post('/studio/dna/export', requireUser, async (req, res) => {
   try {
     const b = req.body || {};

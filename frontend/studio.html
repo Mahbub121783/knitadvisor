@@ -278,6 +278,28 @@
       <p>Design a new weft-knitted fabric needle by needle. Pick the machine type, the yarns and the target, draw the knit, tuck and miss programme, and the studio checks it, sets out the cams and needles, works out the yarn on every feeder and shows the fabric in 3D. Every figure is tagged <span class="src m">measured</span> from factory records, <span class="src c">calculated</span> from your inputs, or <span class="src e">estimated</span>.</p>
     </div>
 
+    <div class="st-card" id="sh-card">
+      <div class="st-step"><b>R&amp;D</b> Development sheet</div>
+      <div class="st-hint" style="margin:0 0 6px">Give what you know, draw the needle design below, and get the whole development roll on one sheet: yarn, machine set-up, greige, dyeing, finishing, finished cloth.</div>
+      <div class="st-row">
+        <div class="st-f" style="flex:1 1 100%"><label for="sh-comp">Composition</label><input id="sh-comp" type="text" maxlength="120" value="100% CO" placeholder="e.g. 95% CO 5% EL"></div>
+      </div>
+      <div class="st-row">
+        <div class="st-f"><label for="sh-gsm">Finished GSM</label><input id="sh-gsm" type="number" min="60" max="700" step="1" value="180"></div>
+        <div class="st-f"><label for="sh-dia">Machine dia (in)</label><input id="sh-dia" type="number" min="8" max="60" step="1" placeholder="auto"></div>
+      </div>
+      <div class="st-row">
+        <div class="st-f"><label for="sh-shade">Colour depth</label><select id="sh-shade"><option value="white">White / RFD</option><option value="light">Light</option><option value="medium" selected>Medium</option><option value="dark">Dark / navy / black</option></select></div>
+        <div class="st-f"><label for="sh-brush">Brushing</label><select id="sh-brush"><option value="none">Not brushed</option><option value="face">Peach (face)</option><option value="back">Brushed back</option><option value="both">Brushed both sides</option></select></div>
+      </div>
+      <div class="st-row">
+        <div class="st-f"><label for="sh-width">Open width (in)</label><input id="sh-width" type="number" min="20" max="110" step="0.5" placeholder="optional"></div>
+        <div class="st-f"><label for="sh-shr">Max shrinkage (%)</label><input id="sh-shr" type="number" min="1" max="15" step="0.5" placeholder="optional"></div>
+      </div>
+      <button type="button" class="st-btn" id="sh-go">Make the development sheet</button>
+      <span id="sh-note" class="st-hint" style="margin:0 0 0 8px"></span>
+    </div>
+
     <div class="st-card st-tech">
       <div class="st-step"><b>0</b> What are you making?</div>
       <div class="st-seg st-techseg" id="st-tech" role="group" aria-label="Knitting technology">
@@ -644,6 +666,7 @@
             <button type="button" data-tab="notation">Notation</button>
             <button type="button" data-tab="setup">Cam &amp; needle set-out</button>
             <button type="button" data-tab="needle">Needle action</button>
+            <button type="button" data-tab="sheet">Development sheet</button>
             <button type="button" data-tab="results">Fabric &amp; yarn</button>
             <button type="button" data-tab="machine">Machine &amp; VDQ</button>
             <button type="button" data-tab="blend">Blend yarn</button>
@@ -776,6 +799,7 @@
             <div class="st-needles" id="st-needletypes"></div>
           </div>
 
+          <div class="st-pane" id="pane-sheet"><div class="st-hint">Fill the R&amp;D card, draw the design, then press “Make the development sheet”.</div></div>
           <div class="st-pane" id="pane-results"></div>
           <div class="st-pane" id="pane-machine"></div>
           <div class="st-pane" id="pane-blend"></div>
@@ -891,9 +915,10 @@
 <script src="assets/js/studio-drape.js?v=20261121c"></script>
 <script src="assets/js/pbr-package.js?v=20261122a"></script>
 <script src="assets/js/studio-pbr.js?v=20261122a"></script>
+<script src="assets/js/studio-sheet.js?v=20261122a"></script>
 <script src="assets/js/studio-vbed.js?v=20261121a"></script>
 <script src="assets/js/studio-capture.js?v=20261120b"></script>
 <script src="assets/js/studio-gates.js?v=20261121b"></script>
-<script src="assets/js/studio.js?v=20261122b"></script>
+<script src="assets/js/studio.js?v=20261122c"></script>
 </body>
 </html>
