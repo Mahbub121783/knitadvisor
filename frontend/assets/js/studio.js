@@ -1302,7 +1302,7 @@
   function hexRgb(h) { var n = parseInt(h.slice(1), 16); return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 }; }
 
   // ── 3D: the loop structure ─────────────────────────────────────────────
-  var mode3d = 'both', loopView = null, loopPromise = null, buildTimer = null, clothTimer = null;
+  var mode3d = 'loops', loopView = null, loopPromise = null, buildTimer = null, clothTimer = null;
   var clothOn = function () { return mode3d === 'cloth' || mode3d === 'both'; };
   var loopsOn = function () { return mode3d === 'loops' || mode3d === 'both'; };
   // the little 'live' tag over the views: updating while an edit is being worked out, live once it is drawn
