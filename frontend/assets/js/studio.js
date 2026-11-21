@@ -1618,7 +1618,7 @@
   function renderLoops() {
     var host = $('st-loops');
     if (!loopPromise) {
-      loopPromise = import('/assets/js/studio-loops.js?v=20261122g').then(function (mod) {
+      loopPromise = import('/assets/js/studio-loops.js?v=20261122i').then(function (mod) {
         loopView = new mod.LoopView(host, showTip);
         loopView.feedColour = mod.feedColour;
         return loopView;

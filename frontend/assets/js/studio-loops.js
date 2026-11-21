@@ -4,7 +4,7 @@
 // needle to needle; the geometry is in studio-loop-geom.js.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import './studio-loop-geom.js?v=20261122c';
+import './studio-loop-geom.js?v=20261122d';
 import './view-guard.js?v=20261111b';
 import { fibresGeometry, materialFor } from './yarn-real.js?v=20261122a';
 
@@ -66,10 +66,11 @@ export function feedColour(spec, f) {
 export class LoopView {
   constructor(host, onHover) {
     this.host = host;
+    window.__loopView = this;      // for the performance checks in the headless tests
     this.onHover = onHover || (() => {});
     const w = host.clientWidth || 600, hh = host.clientHeight || 420;
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
-    this.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+    this.renderer.setPixelRatio(Math.min(1.5, window.devicePixelRatio || 1));
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping; this.renderer.toneMappingExposure = 1.05;
     this.renderer.localClippingEnabled = true;        // the swatch is cut clean at its edges, like a cut sample
     this.renderer.setSize(w, hh);
@@ -101,14 +102,62 @@ export class LoopView {
     this._raf = requestAnimationFrame(() => { this._raf = 0; this.renderer.render(this.scene, this.camera); });
   }
 
-  // the relaxed yarn paths of a programme: solid yarns that do not pass through each other (studio-loop-geom.js relax)
-  _geometry(spec) {
+  // What the relaxed yarn paths depend on, rounded so that a tiny change of the density (every analysis moves wpc / cpc a little)
+  // does not count as a new design: the loop spacing to 0.05 wale, a yarn's radius to 0.01.
+  _plain(spec) {
+    const q = (v, k) => Math.round(v / k) * k;
+    return {
+      C: spec.C, D: spec.D, bed: spec.bed, feeds: (spec.feeds || []).map((f) => ({ role: f && f.role, course: f && f.course })), transferDir: spec.transferDir,
+      h: q(spec.h || 0.75, 0.05), wales: spec.wales, courses: spec.courses, radius: (spec.radius || []).map((r) => q(r, 0.01)),
+      pileFeeds: spec.pileFeeds, pileH: spec.pileH, pileArrangement: spec.pileArrangement, lead: 1,
+    };
+  }
+
+  // the relaxed paths of a programme (solid yarns that do not pass through each other: studio-loop-geom.js relax). Relaxing takes about
+  // half a second, so it runs in a worker: the view draws the plain paths at once and swaps the relaxed ones in when they arrive.
+  _geometry(spec, sync) {
     if (spec.geo) return spec.geo;
-    const key = JSON.stringify([spec.C, spec.D, spec.bed, (spec.feeds || []).map((f) => f && f.role), spec.radius, spec.h, spec.wales, spec.courses, spec.transferDir, spec.pileFeeds, spec.pileH, spec.pileArrangement]);
-    if (this._gkey === key && this._gcache) return this._gcache;
-    const geo = globalThis.KALoopGeom.buildLoopPaths({ ...spec, lead: 1, relax: !spec.real });
-    this._gkey = key; this._gcache = geo;
-    return geo;
+    const plain = this._plain(spec), key = JSON.stringify(plain);
+    this._cache = this._cache || new Map();
+    if (spec.real) {
+      return globalThis.KALoopGeom.buildLoopPaths({ ...spec, lead: 1, relax: false });
+    }
+    if (this._cache.has(key)) return this._cache.get(key);
+    if (sync) {                                                       // the fibre close-up needs the relaxed paths now
+      const g = globalThis.KALoopGeom.buildLoopPaths({ ...plain, relax: true });
+      this._cache.set(key, g); return g;
+    }
+    this._wanted = key;
+    this._relaxInWorker(plain, key);
+    this._fast = this._fast || new Map();
+    if (!this._fast.has(key)) { this._fast.set(key, globalThis.KALoopGeom.buildLoopPaths({ ...plain, relax: false })); if (this._fast.size > 6) this._fast.delete(this._fast.keys().next().value); }
+    return this._fast.get(key);
+  }
+
+  _relaxInWorker(plain, key) {
+    if (this._pending === key) return;
+    this._pending = key;
+    if (this._worker === undefined) {
+      try {
+        const url = new URL('./studio-loop-geom.js?v=20261122d', import.meta.url).href;
+        const src = "importScripts('" + url + "');self.onmessage=function(e){var d=e.data;var g=self.KALoopGeom.buildLoopPaths(Object.assign({},d.spec,{relax:true}));postMessage({key:d.key,geo:g});};";
+        this._worker = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+        this._worker.onmessage = (e) => {
+          const { key: k, geo } = e.data;
+          this._cache.set(k, geo); if (this._cache.size > 6) this._cache.delete(this._cache.keys().next().value);
+          if (this._pending === k) this._pending = null;
+          // still the design on screen: draw the relaxed paths
+          if (this._wanted === k && this.spec && !this._close) { this._relaxedNow = true; this.draw(this.spec); }
+        };
+        this._worker.onerror = () => { this._worker = null; };
+      } catch (_) { this._worker = null; }
+    }
+    if (this._worker) this._worker.postMessage({ spec: plain, key });
+    else {                                                            // no worker (a locked-down browser): relax here, once
+      this._pending = null;
+      const g = globalThis.KALoopGeom.buildLoopPaths({ ...plain, relax: true });
+      this._cache.set(key, g);
+    }
   }
 
   _yarnMaterial(colour, len, r) {
@@ -125,7 +174,7 @@ export class LoopView {
 
   _fuzz(curve, segs, r, colour, len, course, feed) {
     const t = fuzzTexture().clone(); t.needsUpdate = true; t.repeat.set(Math.max(1, len / (3 * r)), 1);
-    const m = new THREE.Mesh(new THREE.TubeGeometry(curve, segs, r * 1.28, 10, false),
+    const m = new THREE.Mesh(new THREE.TubeGeometry(curve, segs, r * 1.28, 6, false),
       new THREE.MeshStandardMaterial({ color: new THREE.Color(colour).lerp(new THREE.Color(0xffffff), 0.25), alphaMap: t, transparent: true, opacity: 0.5, depthWrite: false, roughness: 1, clippingPlanes: this._clip }));
     const hair = this.spec && this.spec.hair != null ? this.spec.hair : 1;
     m.material.opacity = Math.min(0.85, 0.42 * hair);
@@ -135,7 +184,7 @@ export class LoopView {
 
   draw(spec) {
     this.spec = spec;
-    if (this._close) { this.closeUp(true); return this._geometry(spec); }
+    if (this._close) { this.closeUp(true); return this._geometry(spec, true); }
     this._clear();
     if (this.camera.near !== 0.1) { this.camera.near = 0.1; this.camera.far = 500; this.camera.updateProjectionMatrix(); }
     if (this.scene.background) { this.scene.background = null; this._key.castShadow = false; this._key.position.set(-4, 7, 10); this.renderer.shadowMap.enabled = false; }
@@ -155,13 +204,13 @@ export class LoopView {
       const r = (spec.radius && spec.radius[co.feed]) || 0.13;
       const v = co.points.map((p) => new THREE.Vector3(p.x - cx, p.y - cy, p.z));
       const curve = new THREE.CatmullRomCurve3(v, false, 'centripetal', 0.5);
-      const len = curve.getLength(), segs = Math.max(64, Math.min(2400, Math.round(len / (r * 0.35))));
+      const len = curve.getLength(), segs = Math.max(40, Math.min(420, Math.round(len / (r * 1.3))));
       const colour = spec.real ? (spec.colour || '#3d5a80') : spec.colourBy === 'stripe' && spec.stripeColour ? spec.stripeColour(co.course) : feedColour(spec, co.feed);
-      const mesh = new THREE.Mesh(new THREE.TubeGeometry(curve, segs, r, 14, false), this._yarnMaterial(colour, len, r));
+      const mesh = new THREE.Mesh(new THREE.TubeGeometry(curve, segs, r, 8, false), this._yarnMaterial(colour, len, r));
       mesh.userData = { course: co.course, feed: co.feed, lead: !!lead, base: 1 };
       this.group.add(mesh); this.meshes.push(mesh);
       // the loose fibre ends round a spun yarn (not on the diagram of a warp)
-      if (!spec.geo && !spec.filament) { const f = this._fuzz(curve, Math.round(segs / 2), r, colour, len, co.course, co.feed); f.userData.lead = !!lead; this.group.add(f); this.meshes.push(f); }
+      if (!spec.geo && !spec.filament) { const f = this._fuzz(curve, Math.round(segs / 3), r, colour, len, co.course, co.feed); f.userData.lead = !!lead; this.group.add(f); this.meshes.push(f); }
       return r;
     };
     (geo.lead || []).forEach((co) => tube(co, true));
@@ -172,7 +221,7 @@ export class LoopView {
         const pv = co.pile.map((p) => new THREE.Vector3(p.x - cx, p.y - cy, p.z));
         const pc = new THREE.CatmullRomCurve3(pv, false, 'centripetal', 0.5);
         const pr = spec.pileRadius || r;
-        const pm = new THREE.Mesh(new THREE.TubeGeometry(pc, Math.max(64, pv.length * 6), pr, 12, false), this._yarnMaterial(spec.real ? (spec.colour || '#3d5a80') : (spec.pileColour || '#c2410c'), pc.getLength(), pr));
+        const pm = new THREE.Mesh(new THREE.TubeGeometry(pc, Math.max(48, Math.min(500, pv.length * 3)), pr, 8, false), this._yarnMaterial(spec.real ? (spec.colour || '#3d5a80') : (spec.pileColour || '#c2410c'), pc.getLength(), pr));
         pm.userData = { course: co.course, feed: co.feed, pile: true, base: 1 };
         this.group.add(pm); this.meshes.push(pm);
       }
@@ -180,7 +229,7 @@ export class LoopView {
         // the elastane is plated: it follows the ground yarn's path, one yarn's width toward the technical back of its bed
         const e = co.points.map((p, i) => new THREE.Vector3(p.x - cx, p.y - cy, p.z - (co.side[i] || 1) * (r * 1.1)));
         const ec = new THREE.CatmullRomCurve3(e, false, 'centripetal', 0.5);
-        const em = new THREE.Mesh(new THREE.TubeGeometry(ec, Math.max(64, e.length), r * 0.42, 8, false),
+        const em = new THREE.Mesh(new THREE.TubeGeometry(ec, Math.max(48, Math.min(500, e.length)), r * 0.42, 6, false),
           new THREE.MeshPhysicalMaterial({ color: ELASTANE, roughness: 0.35, clearcoat: 0.4, metalness: 0, transparent: true, opacity: 1, clippingPlanes: this._clip, side: THREE.DoubleSide }));
         em.userData = { course: co.course, feed: co.feed, elastane: true, base: 1 };
         this.group.add(em); this.meshes.push(em);
@@ -210,7 +259,7 @@ export class LoopView {
     this._close = !!on;
     if (!this.spec) return;
     if (!on) { this.draw(this.spec); return; }
-    const spec = this.spec, geo = this._geometry(spec);
+    const spec = this.spec, geo = this._geometry(spec, true);
     const G = globalThis.KAYarnGeom;
     if (!G || !fibresGeometry) return;
     this._clear();
@@ -375,6 +424,7 @@ export class LoopView {
     this._ro.disconnect();
     this.renderer.domElement.removeEventListener('pointermove', this._move);
     this.renderer.domElement.removeEventListener('pointerleave', this._leave);
+    if (this._worker) { this._worker.terminate(); this._worker = null; }
     this._clear(); this.controls.dispose(); this.renderer.dispose();
     if (this.renderer.domElement.parentNode) this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);
   }

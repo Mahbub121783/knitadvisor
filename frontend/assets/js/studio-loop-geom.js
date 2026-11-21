@@ -233,7 +233,7 @@
     var all = (geo.lead || []).concat(geo.courses);
     var rOf = function (co) { var r = opt.radius; return Array.isArray(r) ? (r[co.feed] || 0.13) : (r || 0.13); };
     var rMax = all.reduce(function (m, co) { return Math.max(m, rOf(co)); }, 0.05);
-    var ds = Math.max(0.03, rMax * 0.6), gap = opt.gap == null ? 1.0 : opt.gap;
+    var ds = Math.max(0.04, rMax * 0.8), gap = opt.gap == null ? 1.0 : opt.gap;
     all.forEach(function (co) { var dz = densify(co.points, co.side, ds); co.points = dz.pts; co.side = dz.side; });
     // flat arrays: every point of every course
     var N = all.reduce(function (t, co) { return t + co.points.length; }, 0);
@@ -280,10 +280,10 @@
       }
       if (anchor) for (var k2 = 0; k2 < N; k2++) { X[k2] += anchor * (AX[k2] - X[k2]); Y[k2] += anchor * (AY[k2] - Y[k2]); }
     };
-    var iters = opt.iterations || 48;
+    var iters = opt.iterations || 32;
     for (var it = 0; it < iters; it++) pass(0.06, 0.18);
-    for (var it2 = 0; it2 < 14; it2++) pass(0, 0.04);
-    for (var it3 = 0; it3 < 6; it3++) pass(0, 0);
+    for (var it2 = 0; it2 < 8; it2++) pass(0, 0.04);
+    for (var it3 = 0; it3 < 4; it3++) pass(0, 0);
     pass(0, 0, true);
     o = 0;
     all.forEach(function (co) { co.points.forEach(function (p) { p.x = X[o]; p.y = Y[o]; p.z = Z[o]; o++; }); });
