@@ -1780,6 +1780,30 @@ const fabricDna = require('../engine/domain/fabric-dna');
 // The development sheet (engine/domain/dev-sheet.js): the R&D person gives composition, weight, colour depth, diameter, brushing and the design;
 // the whole development roll comes back on one sheet.
 const sheetLimiter = createRateLimiter({ name: 'studio_sheet', max: 20, windowMs: 60 * 1000, message: 'Too many development sheets — wait a minute.' });
+// A cam sheet from the floor (tracks x feeders, a needle setting, feeder colours) as the Studio's drawing (engine/domain/cam-sheet.js).
+router.get('/studio/cam-sheet/catalogue', requireUser, (req, res) => {
+  const cs = require('../engine/domain/cam-sheet');
+  res.json({ success: true, legends: Object.entries(cs.LEGENDS).map(([id, l]) => ({ id, label: l.label })), examples: cs.EXAMPLES, colours: Object.keys(cs.COLOURS) });
+});
+router.post('/studio/cam-sheet', requireUser, (req, res) => {
+  const cs = require('../engine/domain/cam-sheet');
+  try { res.json({ success: true, ...cs.build(req.body || {}) }); }
+  catch (err) {
+    if (err instanceof cs.CamSheetError) return res.status(400).json({ success: false, error: err.message });
+    console.error('[studio] cam sheet failed:', err);
+    res.status(500).json({ success: false, error: 'The cam sheet could not be read.' });
+  }
+});
+
+router.post('/studio/cam-sheet/needles', requireUser, sheetLimiter, (req, res) => {
+  const cs = require('../engine/domain/cam-sheet');
+  try { const b = req.body || {}; res.json({ success: true, ...cs.suggestNeedles(b, { gsm: +b.gsm || 200, min_length: +b.min_length > 0 ? +b.min_length : undefined, max_length: +b.max_length > 0 ? +b.max_length : undefined, limit: 12 }) }); }
+  catch (err) {
+    if (err instanceof cs.CamSheetError) return res.status(400).json({ success: false, error: err.message });
+    console.error('[studio] needle settings failed:', err);
+    res.status(500).json({ success: false, error: 'The needle settings could not be searched.' });
+  }
+});
 router.post('/studio/dev-sheet', requireUser, sheetLimiter, (req, res) => {
   try {
     const devSheet = require('../engine/domain/dev-sheet');

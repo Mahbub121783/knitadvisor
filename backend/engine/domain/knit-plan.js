@@ -194,7 +194,12 @@ function structureChecks(st, T, machine) {
   for (let i = 0; i < st.feeds; i++) {
     const all = beds.flatMap(([b]) => st.beds[b][i]);
     const inlay = st.yarn[i] && /fleece|loop|pile|inlay/i.test(st.yarn[i]);
-    if (!all.includes('K') && !inlay) add('error', `Feed ${i + 1} knits on no needle — every loop is held, nothing is cast off.`);
+    if (!all.includes('K') && !inlay) {
+      // a feeder that only TUCKS lays its yarn in tuck stitches: the held loops are cast off at the next feeder that knits them. That is a
+      // tuck feeder (crepe, cross-tuck, cellular): not an error. A feeder that neither knits nor tucks catches its yarn nowhere.
+      if (all.includes('T')) add('note', `Feed ${i + 1} only tucks: its yarn is held in tuck stitches and cast off at the next feeder that knits those needles (a tuck feeder).`);
+      else add('error', `Feed ${i + 1} knits on no needle — every loop is held, nothing is cast off.`);
+    }
   }
   for (const [b, name] of beds) {
     const g = st.beds[b];

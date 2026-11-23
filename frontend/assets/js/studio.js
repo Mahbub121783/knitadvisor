@@ -59,7 +59,7 @@
   // the technology comes first: weft (circular) or warp (tricot / raschel)
   var techNow = 'weft';
   // what the material package (studio-pbr.js) needs of the page
-  window.KAStudioHost = { cloth: function () { return cloth; }, design: function () { return payload(); }, fetch: function (u, o) { return apiFetch(u, o); }, colour: function () { var c = $('st-col'); return (c && /^#[0-9a-f]{6}$/i.test(c.value)) ? c.value : '#808080'; }, name: function () { return ($('st-name') && $('st-name').value) || 'fabric'; } };
+  window.KAStudioHost = { load: function (o) { return loadDesign(o); }, cloth: function () { return cloth; }, design: function () { return payload(); }, fetch: function (u, o) { return apiFetch(u, o); }, colour: function () { var c = $('st-col'); return (c && /^#[0-9a-f]{6}$/i.test(c.value)) ? c.value : '#808080'; }, name: function () { return ($('st-name') && $('st-name').value) || 'fabric'; } };
   function setTech(t) {
     Array.prototype.forEach.call($('st-tech').children, function (b) { b.classList.toggle('on', b.getAttribute('data-tech') === t); });
     $('st-weft').hidden = t !== 'weft' && t !== 'vbed'; $('st-warp').hidden = t !== 'warp';
@@ -1591,6 +1591,7 @@
       radius: feeds.map(function (fd) { var c = +fd.count > 0 ? +fd.count : +fd.ne; var ne = c > 0 ? (fd.count ? 590.5 / TEX[fd.unit || 'ne'](c) : c) : groundNe; return clamp(0.5 * 1.3 * (0.907 / Math.sqrt(ne)) * f.wpc / 10, 0.07, 0.24); }),
       plated: feeds.map(function (fd, i) { return !!ly && fd.role !== 'loop' && (ly === 'all' || i % 2 === 0); }),
       colourBy: real ? 'one' : $('st-colby').value, colour: $('st-col').value,
+      colours: feeds.some(function (fd) { return fd && /^[A-F]$/.test(fd.colour || ''); }) ? feeds.map(function (fd, i) { var c = $('st-sc-' + ((fd && fd.colour) || '')); return c && /^#[0-9a-f]{6}$/i.test(c.value) ? c.value : null; }).map(function (v) { return v || '#808080'; }) : null,
       // the yarn's own character on its surface: hairs from the spinning system, a filament smooth
       filament: /filament/.test(($('st-fibre') || {}).value || ''),
       hair: ({ carded: 1.35, combed: 1, compact: 0.6, siro: 0.8, siro_compact: 0.55, open_end: 0.85, vortex: 0.5 })[(($('st-ytype') || {}).value) || 'combed'] || 1,

@@ -317,6 +317,29 @@
       <span id="sh-note" class="st-hint" style="margin:0 0 0 8px"></span>
     </div>
 
+    <div class="st-card" id="cs-card">
+      <details>
+        <summary class="st-step" style="cursor:pointer"><b>&#9638;</b> Load a cam sheet from the floor</summary>
+        <div class="st-hint" style="margin:6px 0">A cam sheet gives one row per cam track (a symbol for each feeder) and the needle setting (the track of each needle). The Studio turns it into the drawing, then everything follows: knittable checks, the 3D, the set-up, the sheet.</div>
+        <div class="st-row"><div class="st-f" style="flex:1 1 100%"><label for="cs-example">Start from an example</label><select id="cs-example"><option value="">none: type my own</option></select></div></div>
+        <div class="st-row"><div class="st-f" style="flex:1 1 100%"><label for="cs-tracks">Cylinder tracks: one line per track, one symbol per feeder</label><textarea id="cs-tracks" class="st-ta" rows="4" spellcheck="false" placeholder="K--K-KK--K-&#10;K-K--K-K-KK&#10;-KK-K--KK-K&#10;-K-KK-K-K--" style="font-family:var(--mono,monospace);width:100%"></textarea></div></div>
+        <div class="st-row"><div class="st-f" style="flex:1 1 100%"><label for="cs-needles">Needle setting (track of each needle)</label><input id="cs-needles" type="text" placeholder="1 2 3 4 1 2 3 4 3 2 1 4 3 2"></div></div>
+        <div class="st-row"><div class="st-f" style="flex:1 1 100%"><label for="cs-colours">Colour of each feeder (optional)</label><input id="cs-colours" type="text" placeholder="White Black White Black …  or  WBWBWBWBWBW"></div></div>
+        <div class="st-row"><div class="st-f" style="flex:1 1 100%"><label for="cs-legend">Symbols on the sheet</label><select id="cs-legend"></select></div></div>
+        <details style="margin:4px 0"><summary class="st-hint" style="cursor:pointer;margin:0">Two beds: add the dial</summary>
+          <div class="st-row"><div class="st-f" style="flex:1 1 100%"><label for="cs-dtracks">Dial tracks</label><textarea id="cs-dtracks" class="st-ta" rows="3" spellcheck="false" style="font-family:var(--mono,monospace);width:100%"></textarea></div></div>
+          <div class="st-row"><div class="st-f"><label for="cs-dneedles">Dial needle setting</label><input id="cs-dneedles" type="text" placeholder="1 2 1 2"></div><div class="st-f"><label for="cs-gating">Gating</label><select id="cs-gating"><option value="rib">Rib</option><option value="interlock">Interlock</option></select></div></div>
+        </details>
+        <button type="button" class="st-btn" id="cs-go">Build the programme</button>
+        <details style="margin:8px 0 0"><summary class="st-hint" style="cursor:pointer;margin:0">The sheet has no needle setting? Find the settings that knit</summary>
+          <div class="st-hint" style="margin:6px 0">Fill the tracks above and leave the needle setting empty. If you know how many needles the repeat has, say so: the search is then exact.</div>
+          <div class="st-row"><div class="st-f"><label for="cs-len">Needles in the repeat (if known)</label><input id="cs-len" type="number" min="2" max="16" step="1" placeholder="e.g. 4"></div><div class="st-f" style="align-self:end"><button type="button" class="st-btn" id="cs-find">Find needle settings</button></div></div>
+          <div id="cs-found" class="st-hint" style="margin:6px 0 0"></div>
+        </details>
+        <div id="cs-out" class="st-hint" style="margin:6px 0 0"></div>
+      </details>
+    </div>
+
     <div class="st-card st-tech">
       <div class="st-step"><b>0</b> What are you making?</div>
       <div class="st-seg st-techseg" id="st-tech" role="group" aria-label="Knitting technology">
@@ -936,9 +959,10 @@
 <script src="assets/js/studio-pbr.js?v=20261122a"></script>
 <script src="assets/js/studio-sheet.js?v=20261122b"></script>
 <script src="assets/js/studio-mode.js?v=20261122e"></script>
+<script src="assets/js/studio-camsheet.js?v=20261124b"></script>
 <script src="assets/js/studio-vbed.js?v=20261121a"></script>
 <script src="assets/js/studio-capture.js?v=20261120b"></script>
 <script src="assets/js/studio-gates.js?v=20261121b"></script>
-<script src="assets/js/studio.js?v=20261122j"></script>
+<script src="assets/js/studio.js?v=20261124a"></script>
 </body>
 </html>
