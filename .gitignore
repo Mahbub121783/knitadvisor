@@ -51,3 +51,4 @@ __pycache__/
 
 # photos people send to teach or debug the scanner: private, server-side only
 backend/uploads/
+backend/tmp/
