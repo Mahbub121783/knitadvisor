@@ -191,6 +191,7 @@ function analyse(spec) {
     if (c.below_min_lot) say('warn', `${c.name || c.letter}: ${c.kg_yarn} kg of yarn is under the dyer's minimum lot of ${c.lot_min_kg} kg — you pay for the minimum (${c.short_by_kg} kg of yarn you will not use) or plan a second order of the same colour.`);
     if (c.white) say('note', `${c.name || c.letter}: a white in the stripe is bleached and brightened as YARN (peroxide, optical brightener); do not bleach the knitted cloth, it would damage the dyed yarns next to it.`);
   });
+  say('note', 'The weight, width and shrinkage constants of the Studio are measured on piece-dyed cloth. A yarn-dyed cloth is dyed before knitting (the yarn is relaxed in the dye package and then waxed), so its stitch length and shrinkage can differ: knit a trial roll before you commit.', 'typical');
   if (colours.some((c) => !c.white)) say('note', 'Dye all yarn of one colour in ONE lot, and mix cones from one lot at the knitting machine: two lots of the same colour a ΔE00 above about 0.8–1 apart show as a band across the stripe repeats.');
   if (colours.some((c) => !c.white)) say('note', 'Dyed yarn is waxed at winding (paraffin) so its friction is as the undyed yarn\'s; otherwise the stitch length drifts and needles wear faster.');
 

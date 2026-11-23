@@ -1,5 +1,5 @@
 {
- "generated": "2026-11-10",
+ "generated": "2026-11-23",
  "method": "5-fold cross-validation and leave-one-family-out on the factory records; every constant re-derived without the records predicted",
  "records": 2075,
  "refused": 1304,

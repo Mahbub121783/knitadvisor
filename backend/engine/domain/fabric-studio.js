@@ -1197,6 +1197,9 @@ function reduceRepeat(C, D, feedRows, altPlating) {
 
 // ── public ──────────────────────────────────────────────────────────────────
 function analyse(input) {
+  // an engine that fails is recorded, not swallowed: the answer says which part is missing (and a test asserts there are none)
+  const faults = [];
+  const fault = (engine, e) => { faults.push({ engine, error: String((e && e.message) || e).slice(0, 160) }); };
   try {
     // a target composition ("95% CO 5% EL"): the yarn's fibres, the elastane's denier / draft / feeding (and the counts of per-role fibres) are solved (composition-solver.js)
     if (input && input.target && input.target.composition) return CSOLVE.solve(input, analyse);
@@ -1206,6 +1209,13 @@ function analyse(input) {
     // a colour target (a Pantone code, Lab, RGB or hex) sets the shade of the look and chemistry cards and the target of a melange (colour-target-engine.js)
     // a flat V-bed: its gauge is the machine's gauge (the loops are knitted at it)
     if (input && input.vbed && input.vbed.enabled && +input.vbed.gauge > 0) input = { ...input, machine: { ...(input.machine || {}), gauge: +input.vbed.gauge } };
+    // The core engines answer every design the Studio is asked about, whatever cards are open: the wet route and its chemistry, the yarn's recovery, the
+    // look and the light through the cloth, and the hand. They used to run only when their card was switched on, so Simple and Expert (and the development sheet)
+    // gave different answers. A card still adds its own inputs, and {enabled: false} turns one off. (Bulk callers, like the invent search, do not ask for it.)
+    if (input && input.core_engines) {
+      const on = (k, v) => (input[k] == null ? { ...v } : input[k]);
+      input = { ...input, chemistry: on('chemistry', { enabled: true, shade: (input.look && input.look.shade) || 'medium' }), hand: on('hand', { enabled: true }), recovery: on('recovery', { enabled: true }), look: on('look', {}) };
+    }
     let colourOut = null;
     if (input && input.colour) { const c = CT.applyToInput(input); input = c.input; colourOut = c.result; }
     if (input && input.fancy) input = FY.applyToInput(input);
@@ -1603,7 +1613,7 @@ function analyse(input) {
     const blendOut = input.blend ? blendSummary(input.blend, S, roleYarn, feedRows) : null;
     if (blendOut) blendOut.checks.forEach((c) => checks.push(c));
     // the chemistry of each yarn at the count the Studio settled on, when it is asked for (yarn-chemistry-engine.js)
-    const chemOut = input.chemistry && input.chemistry.enabled ? chemistrySummary(input.chemistry, S, roleYarn, feedRows) : null;
+    const chemOut = input.chemistry && input.chemistry.enabled ? chemistrySummary(input.chemistry, S, roleYarn, feedRows, !!stripeSeq && new Set(stripeSeq).size > 1) : null;
     // …and its recovery, creep and cycles (yarn-recovery-engine.js)
     const recOut = input.recovery && input.recovery.enabled ? recoverySummary(input.recovery, S, roleYarn, feedRows) : null;
     // …the effect each fancy yarn is built from: its parts, strength, evenness, diameter and what the 3D view draws (fancy-yarn-engine.js)
@@ -1628,9 +1638,9 @@ function analyse(input) {
     let processOut = null;
     if (input.chemistry && input.chemistry.enabled) {
       try {
-        const cc = FEAS.clothChemistry(S, input);
+        const cc = FEAS.clothChemistry(S, input, !!stripeSeq && new Set(stripeSeq).size > 1);
         if (cc) { processOut = PE.effects(cc.steps, { bath_chemicals: cc.bath_chemicals, dark: ['dark', 'black'].includes(cc.shade), finishes: (CHEMY.cleanProcess(input.chemistry.process) || {}).finishes }); processOut.fibres = cc.fibres; processOut.route = cc.steps.map((x) => ({ id: x.id, label: x.label, t_c: x.t, requested: !!x.requested })); }
-      } catch (_) { processOut = null; }
+      } catch (e) { processOut = null; fault('process_effects', e); }
     }
     const handOut = input.hand && input.hand.enabled ? handSummary(input.hand, input, S, family, match, recOut, !!plush, clothState, processOut) : null;
     // …and how much light the cloth lets through (opacity, show-through, stretched) and the glow a back-lit cloth shows (fabric-light-engine.js)
@@ -1644,7 +1654,7 @@ function analyse(input) {
     // the cloth's thickness for the packing gate: the hand model's T0 (finished state), worked quietly when the Hand card is off
     const handT = (h) => (h && h.compression && h.compression.T0 && h.compression.T0.value > 0 ? h.compression.T0.value : null);
     let thickMm = handOut && handOut.success !== false && clothState.selected === 'finished' ? handT(handOut) : null;
-    if (thickMm == null) { try { thickMm = handT(handSummary({}, input, S, family, match, recOut, !!plush, null)); } catch (_) { thickMm = null; } }
+    if (thickMm == null) { try { thickMm = handT(handSummary({}, input, S, family, match, recOut, !!plush, null)); } catch (e) { thickMm = null; fault('hand_thickness', e); } }
     // the mill's own readings (thickness, air permeability, Rct) replace the estimates they measure (mill-readings.js)
     const rd = RDG.read(input);
     if (rd.error) throw new StudioError(rd.error);
@@ -1802,6 +1812,7 @@ function analyse(input) {
     };
     // several yarn colours dyed as yarn: stripes, wale stripes, jacquard (colourway.js)
     out.colourway = null;
+    out.engine_faults = faults;
     if (stripeSeq || feedColours.some(Boolean)) {
       try {
         const gu = yarnsInUse(S, roleYarn, feedRows).find((u) => u.role === 'ground');
@@ -1837,14 +1848,14 @@ function analyse(input) {
         const gm = Object.fromEntries(Object.entries(S.ground.mix || FIBRE_MIX[S.ground.fibre] || { cotton: 100 }).filter(([k]) => BY.FIB[k]));
         const yb = BY.analyse({ fibres: gm, count: { value: Math.min(S.ground.tex, 120), unit: 'tex' }, spinning: S.ground.type && BY.GEO[S.ground.type] ? S.ground.type : undefined });
         yarnForce = yb.tensile.breaking_force.value * (S.ground.tex > 120 ? S.ground.tex / 120 : 1);
-      } catch (_) { yarnForce = 0; }
+      } catch (e) { yarnForce = 0; fault('yarn_force', e); }
     }
     out.feasibility = FEAS.assess(out, input, { thickness_mm: thickMm, thickness_basis: rd.values.thickness_mm ? 'measured at your mill (ISO 5084)' : 'estimate (hand model T0)', yarn_force_cn: yarnForce });
     // what the wet route does to the size of the cloth beyond the usual route the records carry (process-dimensions.js): an estimate, the weight and width are not moved
     try {
       const st = (out.fabric.relaxation && out.fabric.relaxation.states) || [], fin = st.find((x) => x.state === 'finished'), wash = st.find((x) => x.state === 'full');
       out.process_dimensions = out.feasibility && out.feasibility.route ? PDIM.analyse({ fibres: FEAS.clothFibres(out), steps: out.feasibility.route.map((x) => ({ id: x.id, label: x.label, t_c: x.t_c, ph: x.ph, chemicals: x.chemicals })), shade: (input.chemistry && input.chemistry.shade) || (input.look && input.look.shade) || null, finishes: (input.chemistry && input.chemistry.process && input.chemistry.process.finishes) || [], base: { length_pct: fin && wash ? wash.length_pct - fin.length_pct : 0, width_pct: fin && wash ? wash.width_pct - fin.width_pct : 0 } }) : null;
-    } catch (_) { out.process_dimensions = null; }
+    } catch (e) { out.process_dimensions = null; fault('process_dimensions', e); }
     // the virtual lab (air permeability, thermal resistance, a hundred rolls) and the matching collar and cuff, on request
     out.lab = input.lab && input.lab.enabled ? labSummary(input, out, clothState, thickMm, S, plush, rd.values) : null;
     out.trim = input.trim && input.trim.enabled ? trimSummary(input, out) : null;
@@ -1918,7 +1929,7 @@ function inspectSummary(input, out, cs, S) {
   try {
     const shade = (input.chemistry && input.chemistry.shade) || (input.look && input.look.shade) || 'medium';
     const face = /^#[0-9a-f]{6}$/i.test(o.colour || '') ? o.colour : /^#[0-9a-f]{6}$/i.test((input.look || {}).colour || '') ? input.look.colour : SHADE_HEX[shade] || SHADE_HEX.medium;
-    const cc = FEAS.clothChemistry(S, input);
+    const cc = FEAS.clothChemistry(S, input, !!(out.colourway && out.colourway.colours_n > 1));
     const ids = cc ? cc.steps.map((x) => x.id) : [];
     const classes = [...new Set(ids.filter((x) => /^dye_/.test(x)).map((x) => x.slice(4)))];
     const soft = cc ? cc.steps.find((x) => x.id === 'soften') : null;
@@ -1996,10 +2007,10 @@ function trimSummary(input, out) {
   return { collar, cuff, dye_sync: { same_route: same }, notes, basis: 'The rib is worked out by the Studio itself (the factory records of a lycra rib), on the body\'s yarn fibre and shade; its weight is the body\'s times 1.25 (collar) and 1.35 (cuff), a typical ratio, an estimate.' };
 }
 
-function chemistrySummary(opt, S, roleYarn, feedRows) {
+function chemistrySummary(opt, S, roleYarn, feedRows, yarnDyed) {
   const roles = {};
   yarnsInUse(S, roleYarn, feedRows).forEach((u) => {
-    try { const p = CHEMY.profileOf(u.mix, u.tex, { filament: u.filament, shade: opt.shade, liquor_ratio: opt.liquor_ratio, process: opt.process, mercerise: !!opt.mercerise, biopolish: opt.biopolish === false ? false : undefined, heatset: opt.heatset, spinning: u.spinning, cdp_disperse: !!opt.cdp_disperse }); if (p) roles[u.role] = p; } catch (e) { if (!(e instanceof CHEMY.ChemError)) throw e; }
+    try { const p = CHEMY.profileOf(u.mix, u.tex, { filament: u.filament, shade: opt.shade, liquor_ratio: opt.liquor_ratio, process: opt.process, mercerise: !!opt.mercerise, biopolish: opt.biopolish === false ? false : undefined, heatset: opt.heatset, spinning: u.spinning, cdp_disperse: !!opt.cdp_disperse, yarn_dyed: !!yarnDyed }); if (p) roles[u.role] = p; } catch (e) { if (!(e instanceof CHEMY.ChemError)) throw e; }
   });
   return Object.keys(roles).length ? roles : null;
 }
@@ -2011,7 +2022,8 @@ function stretchSummary(input, S, family, match, rec, isPlush) {
     const elastEntry = (S.composition || []).filter((c) => /elastane|lycra|spandex/i.test(c.part)).reduce((t, c) => t + (+c.pct || 0), 0);
     const fibres = Object.assign({}, mix);
     if (elastEntry > 0) { const t = Object.values(fibres).reduce((a, b) => a + b, 0) || 100; Object.keys(fibres).forEach((k) => { fibres[k] = (fibres[k] / t) * (100 - elastEntry); }); fibres.elastane = elastEntry; }
-    const BYlocal = BY.analyse({ fibres: Object.fromEntries(Object.entries(mix).filter(([k]) => BY.FIB[k])), count: { value: y.tex / (y.ply || 1), unit: 'tex' }, spinning: y.type && BY.GEO[y.type] ? y.type : undefined });
+    const BYlocal = BY.analyse({ fibres: Object.fromEntries(Object.entries(mix).filter(([k]) => BY.FIB[k])), count: { value: Math.min(120, y.tex / (y.ply || 1)), unit: 'tex' },      // the blend model covers 2–120 tex: a coarser yarn is taken at 120 (its tenacity per tex barely moves)
+      spinning: y.type && BY.GEO[y.type] ? y.type : undefined });
     const el = input.elastane || {};
     const base = {
       fabricId: isPlush ? 'velour_plush' : (match && match.id) || FAMILY[family].anchor, category: family === 'rib' ? 'rib' : family === 'interlock' ? 'interlock' : '',
@@ -2042,7 +2054,7 @@ function stretchSummary(input, S, family, match, rec, isPlush) {
       },
       basis: { measured: withYarn.basis.measured, modelled: withYarn.basis.modelled },
     };
-  } catch (e) { return null; }
+  } catch (e) { console.error('[studio] the stretch summary failed:', e && e.message); return null; }
 }
 const loopFeedD = (S) => { const f = (S.feeds || []).find((x) => x.role === 'loop' && (x.d_mm > 0 || x.tex > 0)); return f ? (f.d_mm > 0 ? f.d_mm : Math.sqrt(f.tex) / 28) : 0; };
 function handSummary(opt, input, S, family, match, recOut, isPlush, cs, pe) {

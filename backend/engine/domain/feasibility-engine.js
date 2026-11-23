@@ -292,7 +292,7 @@ function assess(out, input, extra) {
   const proc = CHEMY.cleanProcess(inp.chemistry && inp.chemistry.process);          // what the technologist forced against the compiler's advice
   try {
     const groundTex = (yarn.ground && yarn.ground.tex) || 20;
-    const base = { shade: CHEMY.DEPTHS.includes(shade) ? shade : 'medium', mercerise: !!(inp.chemistry && inp.chemistry.mercerise), heatset: inp.chemistry && inp.chemistry.heatset };
+    const base = { yarn_dyed: !!(out.colourway && out.colourway.colours_n > 1), shade: CHEMY.DEPTHS.includes(shade) ? shade : 'medium', mercerise: !!(inp.chemistry && inp.chemistry.mercerise), heatset: inp.chemistry && inp.chemistry.heatset };
     const prof = CHEMY.profileOf(fibres, groundTex, { ...base, process: proc });
     route = prof ? prof.route.steps : null;
     if (Object.keys(proc).length) { const sp = CHEMY.profileOf(fibres, groundTex, base); safeRoute = sp ? sp.route.steps : null; }
@@ -454,13 +454,13 @@ function catalogue() {
 
 // the wet-process chemistry of the whole cloth from the Studio's solved feeds (before the answer is assembled): fibres, the compiled route
 // (with anything forced), and the chemical names of every bath — what process-effects.js reads
-function clothChemistry(S, input) {
+function clothChemistry(S, input, yarnDyed) {
   const src = { yarn: { feeds: S.feeds || [], composition: S.composition || [] } };
   const fibres = clothFibres(src);
   const inp = input || {};
   const ch = inp.chemistry || {};
   const shade = ch.shade || (inp.look && inp.look.shade) || 'medium';
-  const prof = CHEMY.profileOf(fibres, (S.ground && S.ground.tex) || 20, { shade: CHEMY.DEPTHS.includes(shade) ? shade : 'medium', mercerise: !!ch.mercerise, heatset: ch.heatset, process: ch.process });
+  const prof = CHEMY.profileOf(fibres, (S.ground && S.ground.tex) || 20, { shade: CHEMY.DEPTHS.includes(shade) ? shade : 'medium', mercerise: !!ch.mercerise, heatset: ch.heatset, process: ch.process, yarn_dyed: !!yarnDyed });
   return prof ? { fibres, shade, steps: prof.route.steps, bath_chemicals: ((prof.recipe && prof.recipe.chemicals) || []).map((c) => c.name) } : null;
 }
 

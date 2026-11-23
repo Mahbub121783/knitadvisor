@@ -296,6 +296,16 @@ function applyProcess(steps, process, f) {
 
 function routeFor(spec, fibres, classes, comp, depthIdx, opt) {
   const steps = [];
+  if (opt && opt.yarn_dyed) {
+    // a cloth knitted from yarn dyed beforehand (stripes, jacquard): no scour, no bleach, no dye bath: the knitted cloth is washed off and softened.
+    // Bleach or caustic would strip the dyed yarns; elastane or polyester is still heat-set.
+    const idsY = fibres.map((f) => f.id), setNeeded = idsY.includes('elastane') || idsY.includes('polyester') || idsY.includes('cdp');
+    const addY = (proc, extra) => steps.push({ proc, ...PROC[proc], ...(extra || {}) });
+    addY('scour', { label: 'Wash-off (neutral, no alkali, no bleach)', t: 50, ph: 7, chem: [['Non-ionic detergent', 1]], why: 'the yarn was scoured and dyed before knitting: the cloth only loses the knitting oil and the winding wax; alkali or peroxide would strip the dyed yarns and stain the light colours' });
+    if (setNeeded && spec.heatset !== 'none') addY('heatset', { label: 'Heat-setting (after the wash-off)' });
+    addY('soften');
+    return applyProcess(steps, spec.process, { poly: idsY.includes('polyester'), elast: idsY.includes('elastane'), wool: idsY.includes('wool') || idsY.includes('silk'), pp: idsY.includes('polypropylene') });
+  }
   const ids = fibres.map((f) => f.id);
   const has = (id) => ids.includes(id);
   const cellulosic = ids.some((i) => FIB[i].family === 'cellulosic');
@@ -355,7 +365,7 @@ function analyse(input) {
   const list = readFibres(input);
   const tex = readCountTex(input);
   const shade = own(DEPTH_LABEL, input.shade) ? input.shade : 'medium';
-  const depthIdx = DEPTHS.indexOf(shade);
+  const depthIdx = input.yarn_dyed ? 0 : DEPTHS.indexOf(shade);      // a yarn-dyed cloth has no dye bath of its own
   const LR = clamp(+input.liquor_ratio > 0 ? +input.liquor_ratio : 8, 3, 30);
   const filament = !!input.filament;
   const warnings = [], say = (level, text) => warnings.push({ level, text });
@@ -388,7 +398,8 @@ function analyse(input) {
   // dye classes, compatibility, route
   const classes = depthIdx === 0 ? [] : classesFor(fibres, !!input.cdp_disperse);
   const comp = compatibility(classes, depthIdx);
-  const stepsRaw = routeFor(spec, list, classes, comp, depthIdx, { heatset_first: true });
+  const stepsRaw = routeFor(spec, list, classes, comp, depthIdx, { heatset_first: true, yarn_dyed: !!input.yarn_dyed });
+  if (input.yarn_dyed) say('note', 'Yarn-dyed cloth: each colour is dyed as yarn (see the Colours tab); the knitted cloth is only washed off and softened, so there is no scour, bleach or dye bath here.');
   if (comp.baths > 1 && depthIdx > 0) say('note', `${comp.baths} dye baths are needed: ${comp.why}`);
   // dye-rate differences between the fibres of one class
   const orient = (() => { try { const m = {}; fibres.forEach((f) => { if (FP[FIB[f.id].tbl]) m[FIB[f.id].tbl] = (m[FIB[f.id].tbl] || 0) + f.label_share * 100; }); return Y.molecularOrientation(m); } catch (e) { return null; } })();
@@ -555,7 +566,7 @@ function profileOf(mix, tex, opts) {
   for (const [f, v] of Object.entries(mix || {})) { const k = f === 'spandex' ? 'elastane' : f; if (own(FIB, k) && +v > 0) fibres[k] = (fibres[k] || 0) + +v; }
   if (!Object.keys(fibres).length) return null;
   const o = opts || {};
-  return analyse({ fibres, count: { value: tex, unit: 'tex' }, filament: o.filament, shade: o.shade, liquor_ratio: o.liquor_ratio, mercerise: o.mercerise, biopolish: o.biopolish, heatset: o.heatset, spinning: o.spinning, grade: o.grade, cdp_disperse: o.cdp_disperse, yarn_kg: o.yarn_kg, process: o.process });
+  return analyse({ fibres, count: { value: tex, unit: 'tex' }, filament: o.filament, shade: o.shade, liquor_ratio: o.liquor_ratio, mercerise: o.mercerise, biopolish: o.biopolish, heatset: o.heatset, spinning: o.spinning, grade: o.grade, cdp_disperse: o.cdp_disperse, yarn_kg: o.yarn_kg, process: o.process, yarn_dyed: o.yarn_dyed });
 }
 
 module.exports = { cleanProcess, PROCESS_KEYS, analyse, profileOf, catalogue, ChemError, FIB, DEPTHS, DEPTH_LABEL, AGENTS, PROC, RES, OWF, BATH, CHEM, FAST };

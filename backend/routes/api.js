@@ -1658,7 +1658,7 @@ async function floorFor(userId, machineId) {
 // One answer for a design, from memory when the same design was answered before.
 async function studioAnswer(userId, input) {
   const { floor_machine_id, floor: _f, ...rest } = input || {};
-  const body = rest;
+  const body = { ...rest, core_engines: true };           // the Studio page, the exports and the sheet get the core engines whatever cards are open
   const ff = await floorFor(userId, floor_machine_id);
   if (ff.notFound) return { status: 404, body: JSON.stringify({ success: false, error: 'Floor machine not found.' }) };
   if (ff.floor) body.floor = ff.floor;
