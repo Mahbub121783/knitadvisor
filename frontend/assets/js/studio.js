@@ -335,12 +335,12 @@
     snapshot();
     var all = beds().map(function (b) { return b[1]; });
     var F = nFeeds(), W = nNeedles();
-    if (name === 'addFeed' && F < 96) {
+    if (name === 'addFeed' && F < 192) {
       all.forEach(function (g) { g.push(g[F - 1].slice()); });
       S.feeds.push({ role: (S.feeds[F - 1] || {}).role || 'ground' });
     } else if (name === 'delFeed' && F > 1) {
       all.forEach(function (g) { g.pop(); }); S.feeds.pop();
-    } else if (name === 'addNeedle' && W < 48) {
+    } else if (name === 'addNeedle' && W < 96) {
       all.forEach(function (g) { g.forEach(function (r) { r.push(r[W - 1]); }); });
     } else if (name === 'delNeedle' && W > 1) {
       all.forEach(function (g) { g.forEach(function (r) { r.pop(); }); });

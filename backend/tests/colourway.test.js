@@ -124,9 +124,9 @@ const errs = (r) => (r.checks || []).filter((c) => c.level === 'error').map((c) 
   assert.throws(() => J.build({ motif: ['AAB', 'AB'] }), /same width/);
   assert.throws(() => J.build({ motif: ['AAA'] }), /at least two colours/);
   assert.throws(() => J.build({ motif: ['AAXB'] }), /letters A to F/);
-  assert.throws(() => J.build({ motif: ['A'.repeat(49)] }), /holds 48/);
+  assert.throws(() => J.build({ motif: ['AB'.repeat(J.MAX_WIDTH / 2 + 1)] }), new RegExp('holds ' + J.MAX_WIDTH));
   assert.throws(() => J.build({ motif: J.PRESETS.find((p) => p.id === 'plaid').rows, bed: 'rib', back: 'negative' }), /exactly two colours/);
-  assert.throws(() => J.build({ motif: Array.from({ length: 40 }, (_, i) => 'ABC'.repeat(2).slice(i % 3, (i % 3) + 4).padEnd(4, 'A')) }), /needs \d+ feeds/);
+  assert.throws(() => J.build({ motif: Array.from({ length: 80 }, (_, i) => 'ABC'.repeat(2).slice(i % 3, (i % 3) + 4).padEnd(4, 'A')) }), /needs \d+ feeds/);
   console.log('✓ a float over the limit is named by row and colour; a ragged motif, one colour, a bad letter, too wide, a three-colour exchanged back and too many feeds are each refused in words');
 }
 {

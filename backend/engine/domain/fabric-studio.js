@@ -126,7 +126,7 @@ const r3 = (v) => Math.round(v * 1000) / 1000;
 const mean = (a) => (a.length ? a.reduce((t, x) => t + x, 0) / a.length : 0);
 const quant = (arr, q) => { const a = [...arr].sort((x, y) => x - y); return a[Math.min(a.length - 1, Math.max(0, Math.floor(q * (a.length - 1))))]; };
 
-const LIMITS = { feeds: 96, needles: 48 };
+const LIMITS = { feeds: 192, needles: 96 };
 const ROLES = ['ground', 'face', 'binder', 'loop'];
 const COUNTS = [10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 40, 45, 50, 60];
 

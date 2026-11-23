@@ -13,7 +13,7 @@
 
   function blank(w, h) { var r = []; for (var y = 0; y < h; y++) r.push(new Array(w + 1).join('A')); return r; }
   function resize() {
-    var w = Math.max(2, Math.min(48, parseInt($('jq-w').value, 10) || W)), h = Math.max(2, Math.min(96, parseInt($('jq-h').value, 10) || Hh));
+    var w = Math.max(2, Math.min(96, parseInt($('jq-w').value, 10) || W)), h = Math.max(2, Math.min(192, parseInt($('jq-h').value, 10) || Hh));
     var next = [];
     for (var y = 0; y < h; y++) { var src = rows[y] || '', line = ''; for (var x = 0; x < w; x++) line += src[x] || 'A'; next.push(line); }
     rows = next; W = w; Hh = h; $('jq-w').value = w; $('jq-h').value = h; drawGrid();

@@ -169,8 +169,8 @@ function fromImage(spec) {
   const wpc = +spec.wpc > 0 ? +spec.wpc : null, cpc = +spec.cpc > 0 ? +spec.cpc : null;
   const aspect = +spec.pixel_aspect > 0 ? +spec.pixel_aspect : wpc && cpc ? cpc / wpc : bed === 'single' ? 0.86 : 1.0;
   const maxFloat = clamp(Math.round(+spec.max_float) || 4, 2, 12);
-  let W = clamp(Math.round(+spec.needles) || 24, 6, 48);
-  if (bed === 'interlock' && W % 2) W += W < 48 ? 1 : -1;
+  let W = clamp(Math.round(+spec.needles) || 24, 6, JB.MAX_WIDTH);
+  if (bed === 'interlock' && W % 2) W += W < JB.MAX_WIDTH ? 1 : -1;
   const notes = [], checks = [];
   const startW = W;
 

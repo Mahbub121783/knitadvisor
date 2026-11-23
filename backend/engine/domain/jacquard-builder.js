@@ -21,8 +21,8 @@
 'use strict';
 
 const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
-const MAX = 48;              // needles across
-const MAX_FEEDS = 96;        // feeds in one repeat (the Studio's LIMITS.feeds)
+const MAX = 96;              // needles across
+const MAX_FEEDS = 192;       // feeds in one repeat (the Studio's LIMITS.feeds)
 
 class JacquardError extends Error { constructor(m) { super(m); this.name = 'JacquardError'; } }
 
@@ -167,4 +167,4 @@ function catalogue() {
   return { presets: PRESETS.map((p) => ({ id: p.id, label: p.label, colours: p.colours, rows: p.rows })), backs: [{ id: 'same', label: 'Same motif on the back' }, { id: 'negative', label: 'Back with the two colours exchanged (reversible)' }, { id: 'plain', label: 'Plain back in one colour' }], limits: { max_width: MAX, max_feeds: MAX_FEEDS, letters: LETTERS } };
 }
 
-module.exports = { MAX_FEEDS, build, catalogue, readMotif, PRESETS, JacquardError };
+module.exports = { MAX_WIDTH: MAX, MAX_FEEDS, build, catalogue, readMotif, PRESETS, JacquardError };
