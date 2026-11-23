@@ -86,6 +86,21 @@ const errs = (r) => (r.checks || []).filter((c) => c.level === 'error').map((c) 
     go(p, 'single'); go(p, 'rib', 'same'); go(p, 'rib', 'plain');
     if (p.colours.length === 2) go(p, 'rib', 'negative');
   });
+  // interlock jacquard: every preset with an even width knits, each needle of each bed knits once per pixel row, and facing needles never knit at one feed
+  J.PRESETS.forEach((p) => {
+    [['same'], ['plain'], ['negative']].forEach(([back]) => {
+      if (back === 'negative' && p.colours.length !== 2) return;
+      let d; try { d = J.build({ motif: p.rows, bed: 'interlock', back }); } catch (e) { assert(/needs \d+ feeds/.test(e.message), e.message); return; }
+      d.C.forEach((cr, f) => cr.forEach((x, w) => assert(!(x === 'K' && d.D[f][w] === 'K'), `${p.id} ${back}: facing needles ${w} knit together at feed ${f + 1}`)));
+      const r = run({ bed: 'double', gating: 'interlock', grid: { C: d.C.map((x) => x.join('')), D: d.D.map((x) => x.join('')) }, feeds: d.feeds, target: { gsm: 260 }, colourway: { colours: { A: '#1b2a4a', B: '#e9e4d8', C: '#a8322d' } } });
+      assert(r.success && r.ok_to_knit, `${p.id} interlock ${back}: ${r.error || errs(r).join('; ')}`);
+      assert(r.colourway && (r.colourway.kind === 'motif' || r.colourway.kind === 'wale stripe'));
+    });
+  });
+  assert.throws(() => J.build({ motif: ['AAB', 'ABB'], bed: 'interlock' }), /even number of needles/);
+  const il = J.build({ motif: ['AABB'], bed: 'interlock', back: 'same' });
+  assert.deepStrictEqual(il.C.map((r) => r.join('')), ['KMMM', 'MKMM', 'MMKM', 'MMMK'], 'two colours x two parities: four feeds, one cylinder needle each');
+  assert.deepStrictEqual(il.D.map((r) => r.join('')), ['MKMM', 'KMMM', 'MMMK', 'MMKM'], 'the dial needle facing it knits at the other feed of the pair');
   // the programme: at the feed of colour X a needle knits where the motif has X, and misses elsewhere
   const d = J.build({ motif: ['AB', 'BB'], bed: 'single' });
   assert.deepStrictEqual(d.C.map((r) => r.join('')), ['KM', 'MK', 'KK'], 'row 1 is two feeds (A then B), row 2 is one feed of B knitting every needle');

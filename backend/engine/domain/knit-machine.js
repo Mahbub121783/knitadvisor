@@ -117,9 +117,14 @@ const PROFILES = {
     needle: { C: 'latch needle on a selector jack', D: LATCH }, sinker: 'none', transfer: false, timing: ['delayed', 'synchronised'], technique: '3way', fpi: 1.6, sf: 600, gauges: [14, 28], dia: [30, 38],
     use: 'double jacquard, blister, any cylinder repeat with a 2-track dial',
   },
+  dj_jacquard_full: {
+    label: 'Double jersey, electronic jacquard, both beds selected (rib / interlock gating)', kind: 'double', gatings: ['rib', 'interlock'], selection: 'needle', tracks: { C: Infinity, D: Infinity }, cams: { C: ['K', 'T', 'M'], D: ['K', 'T', 'M'] },
+    needle: { C: 'latch needle on a selector jack', D: 'latch needle on a selector jack' }, sinker: 'none', transfer: false, timing: ['delayed', 'synchronised'], technique: '3way', fpi: 1.4, sf: 520, gauges: [14, 28], dia: [30, 38],
+    use: 'jacquard where the back is knitted in its own pattern too: reversible and same-motif double jacquard, on rib or interlock gating (check that your machine selects the dial needles)',
+  },
 };
 // simplest first: auto picks the first that knits the design without an error
-const ORDER = ['sj_2track', 'sj_4track', 'fleece_3t', 'terry', 'sj_striper', 'sj_mech_jacquard', 'sj_jacquard_2way', 'sj_jacquard', 'pointelle', 'rib_dj', 'interlock_2x2', 'dj_multi', 'dj_striper', 'dj_jacquard', 'dj_transfer'];
+const ORDER = ['sj_2track', 'sj_4track', 'fleece_3t', 'terry', 'sj_striper', 'sj_mech_jacquard', 'sj_jacquard_2way', 'sj_jacquard', 'pointelle', 'rib_dj', 'interlock_2x2', 'dj_multi', 'dj_striper', 'dj_jacquard', 'dj_jacquard_full', 'dj_transfer'];
 
 const SINKER = {
   jersey: 'Single-level jersey sinker: its throat holds the old loop down while the needle rises, its belly is the knock-over level the new loop is drawn over.',

@@ -11,8 +11,10 @@
  *     same           the dial knits where the pixel is X — the back shows the same motif
  *     plain          the dial knits every needle in one ground colour — a plain back (an extra feed is added to a row without that colour)
  *
- * Interlock gating is not built here: its two feeders of one course knit alternate wales, so a motif needs the colours in the wale
- * order, not needle by needle (stripes and wale stripes on an interlock are made by the stripe and the colour-per-feeder inputs).
+ *   interlock      each cylinder needle faces a dial needle and the two never knit at the same feed, so a course takes TWO feeds per colour:
+ *                  feed a knits the even cylinder needles and the odd dial needles, feed b the odd cylinder needles and the even dial needles.
+ *                  At the feeds of colour X the cylinder knits the even (a) or odd (b) needles whose pixel is X; the dial follows the back
+ *                  (same / negative / plain) on its own parity. A pixel row of n colours is 2n feeds; the width must be even.
  *
  * Each colour feed is checked for its longest float and the colours in a row against what circular jacquards carry.
  */
@@ -51,11 +53,13 @@ function readMotif(motif) {
 
 function build(spec) {
   const { rows, W } = readMotif(spec.motif);
-  const bed = spec.bed === 'rib' || spec.bed === 'double' ? 'double' : 'single';
+  const gatingIn = spec.bed === 'interlock' ? 'interlock' : spec.bed === 'rib' || spec.bed === 'double' ? 'rib' : 'single';
+  const bed = gatingIn === 'single' ? 'single' : 'double';
   const back = bed === 'double' ? (['negative', 'same', 'plain'].includes(spec.back) ? spec.back : 'same') : null;
   const maxFloat = Math.min(12, Math.max(2, +spec.max_float || 6));
   const used = [...new Set(rows.join('').split(''))].sort();
   if (used.length < 2) throw new JacquardError('A motif of one colour is a plain fabric: paint at least two colours.');
+  if (gatingIn === 'interlock' && W % 2) throw new JacquardError(`An interlock repeat needs an even number of needles (each feed pair knits the even and the odd ones); this motif is ${W} wide.`);
   if (bed === 'double' && back === 'negative' && used.length !== 2) throw new JacquardError(`The exchanged-colour back needs exactly two colours; this motif has ${used.length}. Choose "same" or "plain" for the back.`);
   let ground = spec.ground_colour && LETTERS.includes(spec.ground_colour) ? spec.ground_colour : used[0];
   if (bed === 'double' && back === 'plain' && !used.includes(ground)) ground = used[0];
@@ -68,24 +72,38 @@ function build(spec) {
     const order = inRow.slice().sort((a, b) => (back === 'plain' ? (a === ground ? 1 : 0) - (b === ground ? 1 : 0) : 0) || a.localeCompare(b));
     const needGround = bed === 'double' && back === 'plain' && !inRow.includes(ground);
     order.forEach((X) => {
-      C.push(row.split('').map((p) => (p === X ? 'K' : 'M')));
-      if (bed === 'double') {
-        D.push(row.split('').map((p) => {
-          if (inRow.length === 1) return 'K';                        // a solid row: both beds knit it
-          if (back === 'negative') return p !== X ? 'K' : 'M';
-          if (back === 'same') return p === X ? 'K' : 'M';
-          return X === ground ? 'K' : 'M';                           // plain
-        }));
+      const faceOn = row.split('').map((p) => p === X);
+      const dialOn = row.split('').map((p) => {
+        if (inRow.length === 1) return true;                         // a solid row: both beds knit it
+        if (back === 'negative') return p !== X;
+        if (back === 'same') return p === X;
+        return X === ground;                                         // plain
+      });
+      if (gatingIn === 'interlock') {
+        [0, 1].forEach((par) => {
+          // feed a (par 0): even cylinder needles, odd dial needles; feed b (par 1): odd cylinder, even dial
+          const cr = faceOn.map((on, w) => (on && w % 2 === par ? 'K' : 'M')), dr = dialOn.map((on, w) => (on && w % 2 !== par ? 'K' : 'M'));
+          if (!cr.includes('K') && !dr.includes('K')) return;          // this colour has no needle of this parity: no feed
+          C.push(cr); D.push(dr); feeds.push({ colour: X }); rowOfFeed.push(ri + 1);
+        });
+        return;
       }
+      C.push(faceOn.map((on) => (on ? 'K' : 'M')));
+      if (bed === 'double') D.push(dialOn.map((on) => (on ? 'K' : 'M')));
       feeds.push({ colour: X }); rowOfFeed.push(ri + 1);
     });
-    if (needGround) { C.push(Array(W).fill('M')); D.push(Array(W).fill('K')); feeds.push({ colour: ground }); rowOfFeed.push(ri + 1); }
+    if (needGround) {
+      if (gatingIn === 'interlock') [0, 1].forEach((par) => { C.push(Array(W).fill('M')); D.push(Array.from({ length: W }, (_, w) => (w % 2 !== par ? 'K' : 'M'))); feeds.push({ colour: ground }); rowOfFeed.push(ri + 1); });
+      else { C.push(Array(W).fill('M')); D.push(Array(W).fill('K')); feeds.push({ colour: ground }); rowOfFeed.push(ri + 1); }
+    }
   });
   if (C.length > MAX) throw new JacquardError(`This motif needs ${C.length} feeds (${rows.length} pixel rows, ${used.length} colours); the Studio holds ${MAX}. Make the motif shorter, or use fewer colours in a row.`);
 
   // floats: the longest run of missed needles at each colour feed, round the repeat
   let worst = 0, worstAt = null;
-  C.forEach((r, i) => {
+  C.forEach((cr, i) => {
+    // the yarn is caught by a needle of either bed: a float is a run of needles where neither bed knits
+    const r = cr.map((x, w) => (x === 'K' || (bed === 'double' && D[i][w] === 'K') ? 'K' : 'M'));
     if (!r.includes('K')) return;
     let best = 0, run = 0;
     for (let k = 0; k < 2 * W; k++) { if (r[k % W] === 'M') { run++; best = Math.max(best, Math.min(run, W - 1)); } else run = 0; }
@@ -99,10 +117,11 @@ function build(spec) {
   if (bed === 'double' && back === 'negative') notes.push('Exchanged-colour back: the back shows the same motif with the two colours swapped (reversible jacquard).');
   if (bed === 'double' && back === 'same') notes.push('Same-colour back: each dial needle knits in the colour of its face needle, so the back repeats the motif.');
   if (bed === 'double' && back === 'plain') notes.push(`Plain back in colour ${ground}: the dial knits one colour; a row without that colour gets an extra feed for the back.`);
+  if (gatingIn === 'interlock') notes.push('Interlock: every colour takes two feeds (even and odd needles), so the face and the back are both closed; the cloth is firmer and heavier than the single-jersey jacquard.');
   notes.push(`${rows.length} pixel rows × ${W} needles → ${C.length} feeds. The Studio picks an electronic jacquard machine for it.`);
 
   return {
-    bed, gating: bed === 'double' ? 'rib' : 'single', C, D: bed === 'double' ? D : null, feeds,
+    bed, gating: gatingIn === 'single' ? 'single' : gatingIn, C, D: bed === 'double' ? D : null, feeds,
     motif: { rows, width: W, height: rows.length }, colours: used, feeds_total: C.length, colours_per_row: perRow, back, ground: back === 'plain' ? ground : null,
     longest_float: worst, notes, checks, name: String(spec.name || 'Jacquard').slice(0, 60),
   };

@@ -52,7 +52,7 @@
     var body = { motif: rows, bed: bedv, back: $('jq-back').value, max_float: +$('jq-float').value || 6, ground_colour: 'A', name: 'Jacquard ' + W + '×' + Hh };
     H.fetch('/api/studio/jacquard', { method: 'POST', body: body }).then(function (r) {
       var fields = { 'st-colby': 'feed', 'st-stripe': '' };
-      H.load({ bed: r.bed === 'double' ? 'rib' : 'single', C: r.C, D: r.D, feeds: r.feeds, name: r.name, fields: fields });
+      H.load({ bed: r.bed === 'double' ? r.gating : 'single', C: r.C, D: r.D, feeds: r.feeds, name: r.name, fields: fields });
       out('<b>Built:</b> ' + r.motif.height + ' pixel rows × ' + r.motif.width + ' needles → ' + r.feeds_total + ' feeds' + (r.D ? ' on two beds' : '') + ', ' + r.colours.length + ' colours (' + r.colours.join(' ') + '), longest float ' + r.longest_float + ' needle' + (r.longest_float === 1 ? '' : 's') + '. The drawing below is now this motif; the Colours tab shows the yarn plan.' +
         r.checks.map(function (c) { return '<div style="color:' + (c.level === 'warn' ? '#9A5B00' : 'inherit') + ';margin-top:3px">' + esc(c.text) + '</div>'; }).join('') +
         r.notes.map(function (n) { return '<div style="margin-top:3px">' + esc(n) + '</div>'; }).join(''));

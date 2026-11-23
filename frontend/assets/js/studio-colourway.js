@@ -12,7 +12,7 @@
   var LET = ['A', 'B', 'C', 'D', 'E', 'F'], last = null, S = blank(), moved = false;
   function $(id) { return document.getElementById(id); }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]; }); }
-  function blank() { return { names: {}, kg: '', loss: '', lot: '' }; }
+  function blank() { return { names: {}, codes: {}, kg: '', loss: '', lot: '' }; }
   function hex(l) { var e = $('st-sc-' + l); return e && /^#[0-9a-f]{6}$/i.test(e.value) ? e.value : '#808080'; }
   function ensureCss() {
     if ($('cw-css')) return;
@@ -63,7 +63,7 @@
     // the stripe text and the six colour pickers live here (they stay the Studio's own fields: their ids and listeners move with them)
     if (slot && stf && sw && !moved) { slot.appendChild(stf); slot.appendChild(sw); moved = true; }
     var names = $('cw-names');
-    if (names) names.innerHTML = LET.map(function (l) { return '<div><label for="cw-nm-' + l + '">' + l + ' name</label><input id="cw-nm-' + l + '" class="cw-nm" data-l="' + l + '" type="text" maxlength="24" placeholder="e.g. Navy" value="' + esc(S.names[l] || '') + '"></div>'; }).join('');
+    if (names) names.innerHTML = '<div class="st-hint" style="grid-column:1/-1;margin:0">Give a colour as a Pantone TCX code or name, a hex, an RGB or a Lab reading: the swatch is set from it (a physical swatch still rules).</div>' + LET.map(function (l) { return '<div><label for="cw-cd-' + l + '">' + l + ' colour code</label><input id="cw-cd-' + l + '" class="cw-cd" data-l="' + l + '" type="text" maxlength="60" placeholder="19-4052 · classic blue · #0f4c81" value="' + esc(S.codes[l] || '') + '"><input id="cw-nm-' + l + '" class="cw-nm" data-l="' + l + '" type="text" maxlength="24" placeholder="name, e.g. Navy" value="' + esc(S.names[l] || '') + '" style="margin-top:2px"><div class="st-hint cw-cdo" id="cw-cdo-' + l + '" style="margin:1px 0 0"></div></div>'; }).join('');
     ['kg', 'loss', 'lot'].forEach(function (k) { var e = $('cw-' + k); if (e) e.value = S[k] || ''; });
     card.setAttribute('data-ready', '1');
     drawBuilder();
@@ -76,12 +76,28 @@
       var t = e.target;
       if (t.classList && (t.classList.contains('cw-c') || t.classList.contains('cw-n'))) writeRows(rowsFromDom());
       else if (t.classList && t.classList.contains('cw-nm')) { S.names[t.getAttribute('data-l')] = t.value.trim(); poke(); }
+      else if (t.classList && t.classList.contains('cw-cd')) setFromCode(t.getAttribute('data-l'), t.value.trim());
       else if (/^cw-(kg|loss|lot)$/.test(t.id)) { S[t.id.slice(3)] = t.value; poke(); }
     });
     // the colours changed: the depth, route and fastness follow
     if (sw) sw.addEventListener('change', poke);
     var inp = $('st-stripe');
     if (inp) inp.addEventListener('change', drawBuilder);
+  }
+  // a colour given as a code: the engine resolves it (Pantone TCX, hex, RGB, Lab) and the swatch takes it
+  function setFromCode(l, text) {
+    var H = window.KAStudioHost, out = $('cw-cdo-' + l); S.codes[l] = text;
+    if (!text) { if (out) out.textContent = ''; return; }
+    if (!H) return;
+    if (out) { out.textContent = 'Looking it up…'; out.style.color = ''; }
+    H.fetch('/api/studio/colour-target', { method: 'POST', body: { target: text } }).then(function (r) {
+      var sw = $('st-sc-' + l); if (!sw) return;
+      sw.value = r.colour.hex; sw.dispatchEvent(new Event('input', { bubbles: true })); sw.dispatchEvent(new Event('change', { bubbles: true }));
+      var nm = $('cw-nm-' + l), cat = r.colour.catalogue;
+      if (nm && !nm.value.trim() && cat && cat.name) { nm.value = cat.name; S.names[l] = cat.name; }
+      if (out) { out.textContent = r.colour.hex + ' · ' + r.colour.words + (cat && cat.name ? ' · ' + cat.name : ''); out.style.color = ''; }
+      poke();
+    }).catch(function (e) { if (out) { out.textContent = (e && e.data && e.data.error) || 'That colour could not be read.'; out.style.color = 'var(--danger, #b3261e)'; } });
   }
   function poke() { var H = window.KAStudioHost; if (H && H.schedule) H.schedule(); }
 
@@ -94,10 +110,10 @@
   }
   function state() { return JSON.parse(JSON.stringify(S)); }
   function setState(o) {
-    S = Object.assign(blank(), o || {}); S.names = Object.assign({}, S.names);
+    S = Object.assign(blank(), o || {}); S.names = Object.assign({}, S.names); S.codes = Object.assign({}, S.codes);
     var card = $('cw-card');
     if (card && card.getAttribute('data-ready')) {
-      LET.forEach(function (l) { var e = $('cw-nm-' + l); if (e) e.value = S.names[l] || ''; });
+      LET.forEach(function (l) { var e = $('cw-nm-' + l), c = $('cw-cd-' + l); if (e) e.value = S.names[l] || ''; if (c) c.value = S.codes[l] || ''; });
       ['kg', 'loss', 'lot'].forEach(function (k) { var e = $('cw-' + k); if (e) e.value = S[k] || ''; });
       drawBuilder();
     }
