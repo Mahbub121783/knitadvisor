@@ -894,7 +894,7 @@ function solve(ctx, ground) {
   });
   const massTot = feeds.reduce((t, f) => t + f.mass, 0);
   const elastTot = feeds.reduce((t, f) => t + f.elastane_mass, 0);
-  feeds.forEach((f) => { f.mass_share_pct = r1((f.mass / (massTot + elastTot)) * 100); });
+  feeds.forEach((f) => { f.mass_share_pct = massTot + elastTot > 0 ? r1((f.mass / (massTot + elastTot)) * 100) : 0; });
 
   // composition by role
   const byRole = {};
@@ -908,8 +908,8 @@ function solve(ctx, ground) {
     }
     const k = `${f.role}: ${f.yarn} ${f.fibre}`; byRole[k] = (byRole[k] || 0) + f.mass;
   });
-  const composition = Object.entries(byRole).map(([k, m]) => ({ part: k, pct: r1((m / (massTot + elastTot)) * 100) }));
-  if (elastTot > 0) composition.push({ part: `elastane ${ctx.elastane.denier} D (draft ${ctx.elastane.draft})`, pct: r1((elastTot / (massTot + elastTot)) * 100) });
+  const composition = Object.entries(byRole).map(([k, m]) => ({ part: k, pct: massTot + elastTot > 0 ? r1((m / (massTot + elastTot)) * 100) : 0 }));
+  if (elastTot > 0) composition.push({ part: `elastane ${ctx.elastane.denier} D (draft ${ctx.elastane.draft})`, pct: massTot + elastTot > 0 ? r1((elastTot / (massTot + elastTot)) * 100) : 0 });
 
   // production
   const gPerRev = (feeders / feedsRep) * feeds.reduce((t, f, i) => t + f.course_length_m * yarns[i].tex, 0) / 1000;

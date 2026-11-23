@@ -106,8 +106,11 @@ function analyse(spec) {
   const N = seq ? seq.length : F;
   const total = Math.min(2400, seq ? lcm(F, N) : F);
   const colourOf = seq ? (c) => seq[c % N] : (c) => feedCol[c % F] || 'A';
-  const rowsC = faceRows(C, colourOf, total);
+  let rowsC = faceRows(C, colourOf, total);
   const rowsD = D ? faceRows(D, colourOf, total) : null;
+  // a cloth whose cylinder only tucks or misses shows the dial's loops: the face map is then the dial's
+  if (!rowsC.length && rowsD && rowsD.length) rowsC = rowsD;
+  if (!rowsC.length) return null;
   const kind = kindOf(rowsC);
   const used = [...new Set([...rowsC, ...(rowsD || [])].flatMap((r) => r.filter(Boolean)))].sort();
   if (used.length < 2) return null;
