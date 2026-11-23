@@ -33,7 +33,7 @@
     H.fetch('/api/studio/cam-sheet', { method: 'POST', body: body() }).then(function (r) {
       var fields = {};
       if (r.colours) Object.keys(r.colours.hex).forEach(function (k) { fields['st-sc-' + k] = r.colours.hex[k]; });
-      fields['st-colby'] = 'feed';
+      fields['st-colby'] = 'feed'; fields['st-stripe'] = '';
       H.load({ bed: r.bed === 'double' ? r.gating : 'single', C: r.C, D: r.D, feeds: r.feeds, name: r.read.name || 'Cam sheet', fields: fields });
       out('<b>Built:</b> ' + r.read.feeders + ' feeders × ' + r.read.needles + ' needles' + (r.D ? ' on two beds' : '') + (r.colours ? ', ' + Object.keys(r.colours.letters).map(function (k) { return k + ' = ' + esc(r.colours.letters[k]); }).join(', ') : '') +
         '. The drawing below is now this sheet.<pre style="margin:6px 0 0;font:11px/1.35 var(--mono,monospace);white-space:pre;overflow:auto;max-height:160px">' + esc(r.preview.join('\n')) + '</pre>' +

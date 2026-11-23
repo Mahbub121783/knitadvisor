@@ -1795,6 +1795,20 @@ router.post('/studio/cam-sheet', requireUser, (req, res) => {
   }
 });
 
+// A colour motif painted pixel by pixel as the Studio's needle programme: single or double jersey jacquard (engine/domain/jacquard-builder.js).
+router.get('/studio/jacquard/catalogue', requireUser, (req, res) => {
+  res.json({ success: true, ...require('../engine/domain/jacquard-builder').catalogue() });
+});
+router.post('/studio/jacquard', requireUser, (req, res) => {
+  const jb = require('../engine/domain/jacquard-builder');
+  try { res.json({ success: true, ...jb.build(req.body || {}) }); }
+  catch (err) {
+    if (err instanceof jb.JacquardError) return res.status(400).json({ success: false, error: err.message });
+    console.error('[studio] jacquard failed:', err);
+    res.status(500).json({ success: false, error: 'The motif could not be built.' });
+  }
+});
+
 router.post('/studio/cam-sheet/needles', requireUser, sheetLimiter, (req, res) => {
   const cs = require('../engine/domain/cam-sheet');
   try { const b = req.body || {}; res.json({ success: true, ...cs.suggestNeedles(b, { gsm: +b.gsm || 200, min_length: +b.min_length > 0 ? +b.min_length : undefined, max_length: +b.max_length > 0 ? +b.max_length : undefined, limit: 12 }) }); }

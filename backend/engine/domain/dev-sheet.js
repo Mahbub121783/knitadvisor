@@ -137,6 +137,16 @@ function build(raw, analyse) {
     basis: 'route and chemistry from the fibre-by-fibre engine; amounts typical for the depth (a lab dip sets the exact dose)',
   } : null;
 
+  // ── several yarn colours: dyed as yarn, one lot each (colourway.js) ────────────────────────────────────────
+  const cw = out.colourway && out.colourway.success !== false ? out.colourway : null;
+  const colours = cw ? {
+    kind: cw.kind, rows: cw.rows, feeds_per_row: cw.feeds_per_row, colours_per_row: cw.colours_per_row, order: cw.order, machine: cw.machine,
+    colours: cw.colours.map((c) => ({ letter: c.letter, name: c.name, hex: c.hex, depth: c.depth_label, yarn_pct: c.yarn_pct, face_pct: c.face_pct, kg_yarn: c.kg_yarn, below_min_lot: c.below_min_lot, feeders: c.feeders, route: c.route, dye: c.dye, fastness: c.fastness ? c.fastness.overall : null })),
+    pairs: cw.pairs.filter((p) => p.risk !== 'ok'),
+    checks: cw.checks.filter((c) => c.level !== 'ok').map((c) => ({ level: c.level, text: c.text })),
+    basis: 'colours as yarn: law (the drawing), typical (loss, lot, fastness grades), estimate (dye amount from the luminance); the lab dips of the yarn dyer replace the estimates',
+  } : null;
+
   // ── finishing: a prescription from the route, the cloth's own shrinkage and its weight ─────────────────────
   const heatset = ch ? ch.route.steps.find((s) => /heat/i.test(s.label || s.id || '')) : null;
   const lycra = !!el || (out.composition_solve && (out.composition_solve.achieved || {}).elastane > 0) || /elastane/i.test(JSON.stringify(out.yarn.composition || []));
@@ -172,7 +182,7 @@ function build(raw, analyse) {
   // the order the cloth goes through the finishing house, each step with its numbers
   finishing.sequence = [
     ...(heatset && /before|pre/i.test(heatset.label || '') ? [{ step: 'Heat-set', params: `${finishing.heat_set.temp_c} °C, ${finishing.heat_set.time_s} s, pinned to ${r1(finW * kW)}"`, basis: 'typical' }] : []),
-    { step: 'Wet processing', params: 'scour, dye, soap, soften as in the dyeing route', basis: 'engine' },
+    { step: 'Wet processing', params: colours ? 'wash off and soften only: the yarn is dyed before knitting. No bleach and no peroxide on the knitted cloth, it would damage the dyed yarns; neutral wash, cold to warm' : 'scour, dye, soap, soften as in the dyeing route', basis: colours ? 'typical' : 'engine' },
     { step: 'Squeeze / hydro-extract', params: `to about ${pickup} % pick-up`, basis: 'typical' },
     { step: 'Dry on the stenter', params: `${dryTemp} °C, ${speed} m/min, width ${r1(finW * kW)}", overfeed ${overfeed != null ? overfeed : '—'} %, ${dryLoad} g/m² of water to evaporate`, basis: 'physics (load), typical (settings)' },
     ...(heatset && !/before|pre/i.test(heatset.label || '') ? [{ step: 'Heat-set', params: `${finishing.heat_set.temp_c} °C, ${finishing.heat_set.time_s} s`, basis: 'typical' }] : []),
@@ -200,6 +210,7 @@ function build(raw, analyse) {
     },
     greige: greige ? { gsm: Math.round(greige.gsm * kG), gsm_range: gsmRange(greige.gsm * kG), width_in: r1(greige.width_in * kW), wales_per_cm: greige.wpc, courses_per_cm: greige.cpc, note: 'off the machine, relaxed flat' } : { gsm: Math.round(f.gsm * kG), gsm_range: gsmRange(f.gsm * kG), width_in: r1(f.width_open_in * kW), wales_per_cm: f.wpc, courses_per_cm: f.cpc, note: 'this structure has no separate relaxed state in the Studio: its own weight and width are shown' },
     dyeing,
+    colours,
     finishing,
     finished: { gsm: Math.round((finished ? finished.gsm : f.gsm) * kG), gsm_range: gsmRange((finished ? finished.gsm : f.gsm) * kG), width_in: r1((finished ? finished.width_in : f.width_open_in) * kW), wales_per_cm: f.wpc, courses_per_cm: f.cpc, spirality_helix_deg: out.spirality ? out.spirality.helix_deg : null, thickness_mm: out.hand && out.hand.compression ? out.hand.compression.T0.value : null },
     verdict, export_locked: out.feasibility ? !!out.feasibility.export_locked : false, warnings: warns,

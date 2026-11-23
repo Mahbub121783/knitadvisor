@@ -13,8 +13,8 @@
   var KEY = 'ka_studio_mode';
   var EXPERT_IDS = ['bl-card', 'fy-card', 'ch-card', 'rc-card', 'hd-card', 'cl-card', 'lb-card', 'in-card', 'dp-card', 'ml-card', 'vb-card', 'inv-card'];
   var EXPERT_STEPS = /^(2|3|3b|4)\b|Calibration measurements|Design from a goal/;
-  var SIMPLE_TABS = ['3d', 'notation', 'setup', 'sheet', 'results'];
-  var ORDER = ['3d', 'notation', 'setup', 'sheet', 'results', 'needle', 'machine'];
+  var SIMPLE_TABS = ['3d', 'notation', 'setup', 'sheet', 'colours', 'results'];
+  var ORDER = ['3d', 'notation', 'setup', 'sheet', 'colours', 'results', 'needle', 'machine'];
   var mode = 'simple';
   function $(id) { return document.getElementById(id); }
   function get() { try { return localStorage.getItem(KEY) === 'expert' ? 'expert' : 'simple'; } catch (_) { return 'simple'; } }

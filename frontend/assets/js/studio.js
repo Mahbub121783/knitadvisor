@@ -59,7 +59,7 @@
   // the technology comes first: weft (circular) or warp (tricot / raschel)
   var techNow = 'weft';
   // what the material package (studio-pbr.js) needs of the page
-  window.KAStudioHost = { load: function (o) { return loadDesign(o); }, cloth: function () { return cloth; }, design: function () { return payload(); }, fetch: function (u, o) { return apiFetch(u, o); }, colour: function () { var c = $('st-col'); return (c && /^#[0-9a-f]{6}$/i.test(c.value)) ? c.value : '#808080'; }, name: function () { return ($('st-name') && $('st-name').value) || 'fabric'; } };
+  window.KAStudioHost = { load: function (o) { return loadDesign(o); }, schedule: function () { schedule(); }, cloth: function () { return cloth; }, design: function () { return payload(); }, fetch: function (u, o) { return apiFetch(u, o); }, colour: function () { var c = $('st-col'); return (c && /^#[0-9a-f]{6}$/i.test(c.value)) ? c.value : '#808080'; }, name: function () { return ($('st-name') && $('st-name').value) || 'fabric'; } };
   function setTech(t) {
     Array.prototype.forEach.call($('st-tech').children, function (b) { b.classList.toggle('on', b.getAttribute('data-tech') === t); });
     $('st-weft').hidden = t !== 'weft' && t !== 'vbed'; $('st-warp').hidden = t !== 'warp';
@@ -657,6 +657,7 @@
       recovery: window.KAStudioRecovery ? window.KAStudioRecovery.payload() : null,
       hand: window.KAStudioHand ? window.KAStudioHand.payload() : null,
       colour: window.KAStudioColour ? window.KAStudioColour.payload() : null,
+      colourway: window.KAStudioColourway ? window.KAStudioColourway.payload() : null,
       lab: window.KAStudioLab ? window.KAStudioLab.payload() : null,
       trim: window.KAStudioLab ? window.KAStudioLab.trimPayload() : null,
       inspect: window.KAStudioInspect ? window.KAStudioInspect.payload() : null,
@@ -712,6 +713,7 @@
       if (window.KAStudioRecovery) window.KAStudioRecovery.studioResult(r);
       if (window.KAStudioHand) window.KAStudioHand.studioResult(r);
       if (window.KAStudioColour) window.KAStudioColour.studioResult(r);
+      if (window.KAStudioColourway) window.KAStudioColourway.studioResult(r);
       if (window.KAStudioLab) window.KAStudioLab.studioResult(r);
       if (window.KAStudioInspect) window.KAStudioInspect.studioResult(r);
       if (window.KAStudioDrape) window.KAStudioDrape.studioResult(r);
@@ -1749,6 +1751,7 @@
     if (window.KAStudioRecovery) o.recovery = window.KAStudioRecovery.state();
     if (window.KAStudioHand) o.hand = window.KAStudioHand.state();
     if (window.KAStudioColour) o.colour = window.KAStudioColour.state();
+    if (window.KAStudioColourway) o.colourway = window.KAStudioColourway.state();
     if (window.KAStudioLab) o.lab = window.KAStudioLab.state();
     if (window.KAStudioInspect) o.inspect = window.KAStudioInspect.state();
     if (window.KAStudioDrape) o.drape = window.KAStudioDrape.state();
@@ -1846,6 +1849,7 @@
     if (window.KAStudioRecovery) window.KAStudioRecovery.setState(o.recovery || null);
     if (window.KAStudioHand) window.KAStudioHand.setState(o.hand || null);
     if (window.KAStudioColour) window.KAStudioColour.setState(o.colour || null);
+    if (window.KAStudioColourway) window.KAStudioColourway.setState(o.colourway || null);
     if (window.KAStudioLab) window.KAStudioLab.setState(o.lab || null);
     if (window.KAStudioInspect) window.KAStudioInspect.setState(o.inspect || null);
     if (window.KAStudioDrape) window.KAStudioDrape.setState(o.drape || null);

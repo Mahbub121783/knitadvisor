@@ -43,7 +43,18 @@
     if (m.sinker) mr.push(row('Sinker', esc(m.sinker)));
     h += sec('2 · Machine set-up', mr);
     if (s.greige) h += sec('3 · Greige (off the machine, relaxed)', [row('Weight', range(s.greige.gsm, s.greige.gsm_range, 'g/m²')), row('Width', s.greige.width_in + '"'), row('Density', s.greige.wales_per_cm + ' wales × ' + s.greige.courses_per_cm + ' courses per cm')]);
-    if (s.dyeing) {
+    if (s.colours) {
+      var cs = s.colours, cr = [row('Colour effect', esc(cs.kind) + ' · ' + cs.rows + ' pixel row' + (cs.rows === 1 ? '' : 's') + ' · ' + cs.colours_per_row + ' yarn' + (cs.colours_per_row === 1 ? '' : 's') + ' a row · ' + cs.feeds_per_row + ' feed' + (cs.feeds_per_row === 1 ? '' : 's') + ' a row')];
+      cs.colours.forEach(function (c) {
+        cr.push(row('<span style="display:inline-block;width:12px;height:12px;border-radius:50%;border:1px solid var(--line);background:' + esc(c.hex) + ';vertical-align:-1px;margin-right:6px"></span>' + esc(c.name || c.letter) + (c.name ? ' (' + c.letter + ')' : ''),
+          esc(c.depth) + ' · ' + c.yarn_pct + ' % of the yarn' + (c.kg_yarn != null ? ' · <b>' + c.kg_yarn + ' kg to dye</b>' + (c.below_min_lot ? ' (under the minimum lot)' : '') : '') +
+          '<br><span class="st-hint" style="margin:0">' + esc(c.route.join(' → ')) + (c.dye.length ? ' · ' + esc(c.dye.map(function (d) { return d.owf_pct + ' % ' + d.class; }).join(', ')) + ' on the weight of yarn' : ' · no dye') + (c.fastness ? ' · staining ' + c.fastness.stain[0] + '–' + c.fastness.stain[1] + ', wet rub ' + c.fastness.rub_wet[0] + '–' + c.fastness.rub_wet[1] : '') + '</span>'));
+      });
+      if (cs.order) cr.push(row('Order', cs.order.fabric_kg + ' kg of fabric → ' + cs.order.yarn_kg_total + ' kg of yarn to dye, ' + cs.order.loss_pct + ' % lost in dyeing and winding'));
+      cs.pairs.forEach(function (p) { cr.push('<tr><td colspan="2" class="st-hint">' + (p.risk === 'stain' ? '⚠ ' : '↳ ') + esc(p.a + ' – ' + p.b + ': ' + p.words) + '</td></tr>'); });
+      cs.checks.filter(function (c) { return c.level === 'warn'; }).forEach(function (c) { cr.push('<tr><td colspan="2" class="st-hint">⚠ ' + esc(c.text) + '</td></tr>'); });
+      h += sec('4 · Yarn dyeing — one lot per colour', cr, cs.basis);
+    } else if (s.dyeing) {
       var dr = s.dyeing.route.map(function (st) { return row(st.step + '. ' + st.name, (st.temp_c ? st.temp_c + ' °C' : '') + (st.time_min ? ', ' + st.time_min + ' min' : '') + (st.ph ? ', pH ' + st.ph : '') + (st.chemicals.length ? '<br><span class="st-hint" style="margin:0">' + esc(st.chemicals.map(function (c) { return c.name + (c.g_per_l != null ? ' ' + c.g_per_l + ' g/l' : ''); }).join(' · ')) + '</span>' : '')); });
       s.dyeing.dyes.forEach(function (d) { dr.push(row('Dye · ' + d.class, d.owf_pct + '% owf (' + d.kg_per_100kg + ' kg per 100 kg yarn), fixation ' + d.fixation_pct + '%')); });
       dr.push(row('Total / liquor', s.dyeing.total_time_h + ' h, liquor ' + s.dyeing.liquor_ratio + ':1'));

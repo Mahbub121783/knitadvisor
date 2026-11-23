@@ -47,6 +47,7 @@ const CHEMY = require('./yarn-chemistry-engine');
 const RECY = require('./yarn-recovery-engine');
 const HAND = require('./fabric-hand-engine');
 const CT = require('./colour-target-engine');
+const CW = require('./colourway');
 const LIGHT = require('./fabric-light-engine');
 const FEAS = require('./feasibility-engine');
 const PE = require('./process-effects');
@@ -1237,6 +1238,7 @@ function analyse(input) {
     });
     // stripe colours as drawn, feed by feed (before the repeat is reduced)
     const feedColours = C.map((_, i) => { const c = ((input.feeds || [])[i] || {}).colour; return /^[A-F]$/.test(c || '') ? c : null; });
+    const drawnC = C.map((r) => r.slice()), drawnD = D ? D.map((r) => r.slice()) : null;     // the drawing as drawn, for the colourway
     const elIn = input.elastane || {};
     // part-plating on alternate feeders needs an even number of feeds to be a repeat
     if (elIn.every === 'alternate' && C.length % 2) {
@@ -1770,7 +1772,8 @@ function analyse(input) {
           const sp = KM.stripePlan(stripeSeq, st.feeds, S.feeders, profile, S.feeds.length === st.feeds ? S.feeds.map((f) => f.mass || f.mass_share_pct || 1) : Array(st.feeds).fill(1));
           // stripe height in the cloth: the design repeat's feeds make its face courses
           const kf = Array.from({ length: st.feeds }, (_, i) => i).filter((i) => [st.beds.C, st.beds.D].filter(Boolean).some((g) => g[i].includes('K'))).length;
-          const coursesPerFeed = kf / st.feeds / (st.beds.D ? 2 : 1) * (st.beds.D ? 2 : 1);
+          // an interlock course is made by two feeders (each knits every other wale), so one feed is half a course; elsewhere one feed is one course
+          const coursesPerFeed = st.beds.D && gating === 'interlock' ? kf / st.feeds / 2 : kf / st.feeds;
           sp.repeat_mm = r1((sp.courses * coursesPerFeed / S.cpc) * 10);
           sp.runs = sp.runs.map((x) => ({ ...x, mm: r1((x.courses * coursesPerFeed / S.cpc) * 10) }));
           return sp;
@@ -1794,6 +1797,20 @@ function analyse(input) {
         estimated: 'family constant carried to a new structure, or a rule of thumb',
       },
     };
+    // several yarn colours dyed as yarn: stripes, wale stripes, jacquard (colourway.js)
+    out.colourway = null;
+    if (stripeSeq || feedColours.some(Boolean)) {
+      try {
+        const gu = yarnsInUse(S, roleYarn, feedRows).find((u) => u.role === 'ground');
+        const cwIn = input.colourway && typeof input.colourway === 'object' ? input.colourway : {};
+        const gmix = gu ? Object.fromEntries(Object.entries(gu.mix).filter(([k]) => k !== 'elastane')) : null;
+        out.colourway = CW.analyse({
+          C: drawnC, D: drawnD, feedColours, seq: (input.stripes || {}).sequence ? stripeSeq : (feedColours.some(Boolean) ? null : stripeSeq),
+          colours: cwIn.colours, names: cwIn.names, gating, plan: out.machine_setup.stripes, mix: gmix && Object.keys(gmix).length ? gmix : null, tex: gu ? gu.tex : 0,
+          feeders: S.feeders, order: cwIn.order,
+        });
+      } catch (e) { if (!(e instanceof CW.ColourwayError)) throw e; out.colourway = { success: false, error: e.message }; }
+    }
     // the three gates: does it hold together, does the yarn fit, can a machine knit it and every fibre survive the route (feasibility-engine.js)
     // the inspection room (lightbox, burnout, barré, grinning) on request: the gates read it for U-15 and U-20
     out.inspect = input.inspect && input.inspect.enabled ? inspectSummary(input, out, clothState, S) : null;
