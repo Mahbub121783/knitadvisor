@@ -57,7 +57,7 @@
     }
     var tone = st.test_ok === true ? 'good' : st.test_ok === false ? 'bad' : 'mute';
     return '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">' +
-      '<span style="font-size:12px;font-weight:700">Emerging Textiles</span>' + chip(st.test_ok === true ? 'connected' : st.test_ok === false ? 'refused' : 'key saved, not tested', tone) +
+      '<span style="font-size:12px;font-weight:700">Emerging Textiles</span>' + (st.test_ok === true ? '<span style="display:inline-flex;align-items:center;gap:6px;border:1px solid #1E7A5566;background:#1E7A5416;color:#1E7A54;border-radius:999px;padding:2px 10px;font-size:11px;font-weight:700"><span style="width:8px;height:8px;border-radius:50%;background:#1E7A54;box-shadow:0 0 0 3px #1E7A5430"></span>Connected</span>' : chip(st.test_ok === false ? 'refused' : 'key saved, not proven yet', tone)) +
       '<span style="font-size:11px;color:var(--t3)">key ····' + esc(st.key_last4 || '') + ' · ' + esc(st.key_from || '') + (st.saved_at ? ' · saved ' + ago(st.saved_at) : '') + '</span>' +
       '<span style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap">' +
       '<button id="et-test" class="btn btn-ghost btn-sm">Test key</button>' +
@@ -208,7 +208,7 @@
 
   function pasteModal() {
     modal('<div style="font-size:14px;font-weight:700;margin-bottom:6px">Paste your Emerging Textiles endpoints</div>' +
-      '<div style="font-size:11px;color:var(--t2);line-height:1.7;margin-bottom:8px">One per line: the API link of a table (the <code>/api/sheets/…</code> JSON form or the <code>/api/csv/…</code> CSV form) or <code>dataset/sheet</code>. They come from the activation email, or from the <b>API / Excel</b> link of each table in your account. An <code>api_key=…</code> inside a link is dropped: the key you saved is the only one used.</div>' +
+      '<div style="font-size:11px;color:var(--t2);line-height:1.7;margin-bottom:8px">Paste what the green <b>Copy API Endpoint</b> button gives you, <b>exactly as it is</b> (with <code>api_key=YOUR_API_KEY</code> in it), one per line. You do not type your key: the key saved on this page is put in automatically, every time, and whatever stands after <code>api_key=</code> in a pasted link is thrown away. The <code>/api/sheets/…</code> JSON form and plain <code>dataset/sheet</code> work too.</div>' +
       '<textarea id="pe-text" class="input" rows="9" spellcheck="false" placeholder="https://api.emergingtextiles.com/api/sheets/Bangladesh-Yarn-Prices_Weekly/cotton-yarn-indicator\nIndia-Yarn-Prices_Weekly/cotton-yarn-indicator" style="width:100%;font-family:var(--mono,monospace);font-size:11px"></textarea>' +
       '<div id="pe-out" style="font-size:11px;margin-top:8px"></div>' +
       '<div style="display:flex;gap:6px;margin-top:12px"><button id="pe-go" class="btn btn-sm" style="background:var(--a1);color:#fff">Add and fetch</button><button id="pe-x" class="btn btn-ghost btn-sm" style="margin-left:auto">Cancel</button></div>');
@@ -229,7 +229,7 @@
           }
           await load();
           var m2 = $('et-modal'); if (m2) m2.remove();
-          note(ok + ' of ' + res.added.length + ' tables fetched and filed on the menu.' + (bad.length ? '<br><span style="color:#9A5B00">' + bad.slice(0, 6).map(esc).join('<br>') + '</span>' : ''), bad.length ? 'warn' : 'good');
+          note((ok ? '<b style="color:#1E7A54">● Connected.</b> ' : '') + ok + ' of ' + res.added.length + ' tables fetched and filed on the menu with your saved key.' + (bad.length ? '<br><span style="color:#9A5B00">' + bad.slice(0, 6).map(esc).join('<br>') + '</span>' : ''), bad.length && !ok ? 'warn' : 'good');
         }
       });
     };

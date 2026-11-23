@@ -111,9 +111,13 @@ async function saveSnapshot(id, table) {
      ON CONFLICT (table_id) DO UPDATE SET fetched_at = now(), header = EXCLUDED.header, rows = EXCLUDED.rows, row_count = EXCLUDED.row_count`,
     [id, JSON.stringify(table.header), JSON.stringify(rows), table.rows.length]);
   await query('UPDATE et_tables SET last_fetched_at = now(), last_ok = true, last_error = NULL WHERE id = $1', [id]);
+  // a table was read with the saved key: that is the proof the key works, whenever and however it was fetched
+  await query('UPDATE et_settings SET tested_at = now(), test_ok = true, test_note = $1 WHERE id = 1', ['Connected: a table was read with this key just now (' + table.rows.length + ' rows).']);
 }
 async function noteFailure(id, message) {
   await query('UPDATE et_tables SET last_fetched_at = now(), last_ok = false, last_error = $2 WHERE id = $1', [id, String(message).slice(0, 300)]);
+  // only the publisher refusing the key (401 / 403) turns the badge red; a wrong table name or a server error says nothing about the key
+  if (/HTTP 40[13]\b/.test(String(message))) await query('UPDATE et_settings SET tested_at = now(), test_ok = false, test_note = $1 WHERE id = 1', ['Emerging Textiles refused the key (HTTP 401/403): check the key, and that the subscription includes API access.']);
 }
 async function getSnapshot(id) {
   const t = await queryOne(`SELECT ${TABLE_COLS} FROM et_tables WHERE id = $1`, [id]);

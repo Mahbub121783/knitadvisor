@@ -15,6 +15,8 @@ async function query(sql, p = []) {
   if (/^SELECT \* FROM et_settings/.test(s)) return [{ ...db.settings }];
   if (/^UPDATE et_settings SET api_key_sealed = \$1/.test(s)) { Object.assign(db.settings, { api_key_sealed: p[0], key_last4: p[1], base_url: p[2], saved_at: new Date(), tested_at: null, test_ok: null, test_note: null }); return []; }
   if (/^UPDATE et_settings SET api_key_sealed = NULL/.test(s)) { Object.assign(db.settings, { api_key_sealed: null, key_last4: null, saved_at: null, tested_at: null, test_ok: null, test_note: null }); return []; }
+  if (/^UPDATE et_settings SET tested_at = now\(\), test_ok = true, test_note = \$1/.test(s)) { Object.assign(db.settings, { tested_at: new Date(), test_ok: true, test_note: p[0] }); return []; }
+  if (/^UPDATE et_settings SET tested_at = now\(\), test_ok = false, test_note = \$1/.test(s)) { Object.assign(db.settings, { tested_at: new Date(), test_ok: false, test_note: p[0] }); return []; }
   if (/^UPDATE et_settings SET tested_at/.test(s)) { Object.assign(db.settings, { tested_at: new Date(), test_ok: p[0], test_note: p[1] }); return []; }
   if (/^SELECT .* FROM et_tables ORDER BY/.test(s)) return db.tables.slice().sort((a, b) => (a.category < b.category ? -1 : a.category > b.category ? 1 : a.id - b.id));
   if (/^SELECT .* FROM et_tables WHERE id = \$1/.test(s)) return db.tables.filter((t) => t.id === p[0]);
@@ -120,6 +122,8 @@ const asRes = (body, ctype, status) => ({ ok: (status || 200) < 400, status: sta
     // refreshing keeps the whole table; a table that is not a table is a failure shown on that table only
     for (const t of tables) { try { await E.refreshTable(t.id); } catch (_) { /* recorded on the table */ } }
     const after = await E.listTables();
+    assert.strictEqual((await E.status()).test_ok, true, 'a table read with the saved key proves the key: the badge goes green by itself');
+    assert(/Connected/.test((await E.status()).test_note));
     assert(after.find((t) => t.sheet === 'cotton-yarn-indicator').last_ok === true);
     assert(after.find((t) => t.sheet === 'x').last_ok === false && /not a table/.test(after.find((t) => t.sheet === 'x').last_error));
     const snap = await E.getSnapshot(cotton.id);
