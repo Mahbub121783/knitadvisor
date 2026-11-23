@@ -150,6 +150,7 @@ function analyse(spec) {
       fastness: prof && prof.fastness ? { overall: prof.fastness.overall, risks: prof.fastness.risks } : null,
       strength_retained_pct: prof && prof.strength && prof.strength.retained_pct ? prof.strength.retained_pct.value : null,
       white: trueWhite,
+      pantone: ct && ct.nearest && ct.nearest[0] ? { code: ct.nearest[0].code, name: ct.nearest[0].name, delta_e00: ct.nearest[0].delta_e00 } : null,
     };
   });
   const byL = Object.fromEntries(colours.map((c) => [c.letter, c]));
@@ -200,6 +201,8 @@ function analyse(spec) {
   colours.forEach((c) => { c.feeders = feedersBy[c.letter] != null ? feedersBy[c.letter] : null; });
 
   return {
+    motif: rowsC.length <= 300 ? { face: rowsC.map((r) => r.map((x) => x || '-').join('')), back: rowsD ? rowsD.map((r) => r.map((x) => x || '-').join('')) : null, width: rowsC[0].length, height: rowsC.length } : null,
+    size_cm: +spec.wpc > 0 && +spec.cpc > 0 ? { width: r1(rowsC[0].length / +spec.wpc), height: r1(rowsC.length / +spec.cpc), basis: 'the repeat as the Studio finishes the cloth: needles ÷ wales per cm, rows ÷ courses per cm' } : null,
     kind, colours_n: used.length, rows: rowsC.length, feeds_per_row: feedsPerRow, colours_per_row: perRow,
     colours, pairs, checks,
     machine: {

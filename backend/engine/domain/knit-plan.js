@@ -203,24 +203,37 @@ function structureChecks(st, T, machine) {
   }
   for (const [b, name] of beds) {
     const g = st.beds[b];
+    // A COURSE is the run of feeds in which every needle knits once: a jacquard row of three colours is three feeds and one course, an interlock
+    // course is two feeds. The misses of a needle are counted in courses, not in feeds (a plain structure has one feed to a course: the same count).
+    const groups = [];
+    { let cur = null, seen = null;
+      for (let i = 0; i < st.feeds; i++) {
+        const knits = g[i].map((x, j) => (x === 'K' ? j : -1)).filter((j) => j >= 0);
+        if (!cur || knits.some((j) => seen[j])) { cur = []; seen = new Array(st.width).fill(false); groups.push(cur); }
+        cur.push(i); knits.forEach((j) => { seen[j] = true; });
+      } }
     for (let j = 0; j < st.width; j++) {
       const col = g.map((r) => r[j]);
       if (col.every((x) => x === '-')) continue;
       if (!col.includes('K')) add('error', `${name} needle ${j + 1} never knits in the repeat — its loops are never cleared.`);
-      const run = (sym) => { let r = 0, m = 0; for (const x of [...col, ...col]) { r = x === sym ? r + 1 : 0; m = Math.max(m, r); } return m >= 2 * col.length ? col.length : m; };
-      const t = run('T'), m = run('M');
+      const cc = groups.map((gr) => { const xs = gr.map((i) => col[i]); return xs.includes('K') ? 'K' : xs.includes('T') ? 'T' : xs.includes('M') ? 'M' : '-'; });
+      const run = (seq, sym) => { let r = 0, m = 0; for (const x of [...seq, ...seq]) { r = x === sym ? r + 1 : 0; m = Math.max(m, r); } return m >= 2 * seq.length ? seq.length : m; };
+      const t = run(col, 'T'), m = run(cc, 'M');      // tucks feed by feed; misses in courses
       if (t > 4) add('warn', `${name} needle ${j + 1} tucks ${t} times running: ${t + 1} loops in one hook — needs fine yarn, low tension, and risks hook damage and press-off.`);
       else if (t === 4) add('note', `${name} needle ${j + 1} holds 4 tucks — the practical limit; keep the yarn fine and the take-down even.`);
       else if (t === 3) add('note', `${name} needle ${j + 1} holds 3 tucks (4 loops in one hook): flat-bed practice caps a needle at 3 loops, so use a fine yarn and a loose take-down.`);
       if (m > 4) add('warn', `${name} needle ${j + 1} misses ${m} feeds running — its held loop is stretched over ${m} courses.`);
     }
-    // horizontal floats: consecutive missing needles in one feed
+    // horizontal floats: consecutive missing needles in one feed. On a double bed the yarn is caught by a needle of either bed, so a float is a run
+    // of needles where NEITHER bed knits or tucks it (checked once, under the cylinder); on a single bed the cylinder alone.
+    if (b === 'D') continue;
     for (let i = 0; i < st.feeds; i++) {
-      const row = g[i];
-      if (!row.includes('K') && !row.includes('T')) continue;
+      const row = g[i], other = st.beds.D ? st.beds.D[i] : null;
+      if (!row.includes('K') && !row.includes('T') && !(other && (other.includes('K') || other.includes('T')))) continue;
+      const miss = row.map((x, j) => x === 'M' && !(other && (other[j] === 'K' || other[j] === 'T')));
       let r = 0, m = 0;
-      for (const x of [...row, ...row]) { r = x === 'M' ? r + 1 : 0; m = Math.max(m, r); }
-      if (m >= 5 && m < row.length) add('warn', `Feed ${i + 1}, ${name}: a float across ${m} needles — snags; keep floats to 4 or fewer.`);
+      for (const x of [...miss, ...miss]) { r = x ? r + 1 : 0; m = Math.max(m, r); }
+      if (m >= 5 && m < row.length) add('warn', `Feed ${i + 1}, ${other ? 'behind both beds' : name}: a float across ${m} needles — snags; keep floats to 4 or fewer.`);
     }
   }
   const nTracks = Math.max(...beds.map(([b]) => (T[b] ? T[b].sequences.length : 0)));

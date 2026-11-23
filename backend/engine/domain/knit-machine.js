@@ -64,12 +64,12 @@ const PROFILES = {
   },
   sj_jacquard: {
     label: 'Single jersey, electronic jacquard', kind: 'single', gatings: ['single'], selection: 'needle', tracks: { C: Infinity }, cams: { C: ['K', 'T', 'M'] },
-    needle: { C: 'latch needle on a selector jack' }, sinker: 'jersey', transfer: false, technique: '3way', fpi: 2.0, sf: 700, gauges: [16, 32], dia: [26, 38],
-    use: 'any knit / tuck / miss repeat, needle by needle at every feeder (3-way selection)',
+    needle: { C: 'latch needle on a selector jack' }, sinker: 'jersey', transfer: false, technique: '3way', striper: 4, fpi: 2.0, sf: 700, gauges: [16, 32], dia: [26, 38],
+    use: 'any knit / tuck / miss repeat, needle by needle at every feeder (3-way selection); coloured motifs taller than the feeders use its 4-finger yarn changers (check yours)',
   },
   sj_jacquard_2way: {
     label: 'Single jersey, electronic jacquard, 2-way selection', kind: 'single', gatings: ['single'], selection: 'needle', tracks: { C: Infinity }, cams: { C: ['K', 'T', 'M'] },
-    needle: { C: 'latch needle on a selector jack' }, sinker: 'jersey', transfer: false, technique: '2way', fpi: 2.4, sf: 750, gauges: [16, 32], dia: [26, 38],
+    needle: { C: 'latch needle on a selector jack' }, sinker: 'jersey', transfer: false, technique: '2way', striper: 4, fpi: 2.4, sf: 750, gauges: [16, 32], dia: [26, 38],
     use: 'knit / miss or tuck / miss patterns needle by needle: each feeder\'s cam is knit OR tuck, the selection raises a needle to it or leaves it down',
   },
   sj_mech_jacquard: {
@@ -114,12 +114,12 @@ const PROFILES = {
   },
   dj_jacquard: {
     label: 'Double jersey, electronic jacquard (cylinder selection, dial 2 tracks)', kind: 'double', gatings: ['rib', 'interlock'], selection: 'needle', tracks: { C: Infinity, D: 2 }, cams: { C: ['K', 'T', 'M'], D: ['K', 'T', 'M'] },
-    needle: { C: 'latch needle on a selector jack', D: LATCH }, sinker: 'none', transfer: false, timing: ['delayed', 'synchronised'], technique: '3way', fpi: 1.6, sf: 600, gauges: [14, 28], dia: [30, 38],
+    needle: { C: 'latch needle on a selector jack', D: LATCH }, sinker: 'none', transfer: false, timing: ['delayed', 'synchronised'], technique: '3way', striper: 4, fpi: 1.6, sf: 600, gauges: [14, 28], dia: [30, 38],
     use: 'double jacquard, blister, any cylinder repeat with a 2-track dial',
   },
   dj_jacquard_full: {
     label: 'Double jersey, electronic jacquard, both beds selected (rib / interlock gating)', kind: 'double', gatings: ['rib', 'interlock'], selection: 'needle', tracks: { C: Infinity, D: Infinity }, cams: { C: ['K', 'T', 'M'], D: ['K', 'T', 'M'] },
-    needle: { C: 'latch needle on a selector jack', D: 'latch needle on a selector jack' }, sinker: 'none', transfer: false, timing: ['delayed', 'synchronised'], technique: '3way', fpi: 1.4, sf: 520, gauges: [14, 28], dia: [30, 38],
+    needle: { C: 'latch needle on a selector jack', D: 'latch needle on a selector jack' }, sinker: 'none', transfer: false, timing: ['delayed', 'synchronised'], technique: '3way', striper: 4, fpi: 1.4, sf: 520, gauges: [14, 28], dia: [30, 38],
     use: 'jacquard where the back is knitted in its own pattern too: reversible and same-motif double jacquard, on rib or interlock gating (check that your machine selects the dial needles)',
   },
 };

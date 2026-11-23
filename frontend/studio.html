@@ -344,17 +344,28 @@
       <details>
         <summary class="st-step" style="cursor:pointer"><b>&#9703;</b> Paint a colour motif (jacquard)</summary>
         <div class="st-hint" style="margin:6px 0">Paint pixels in up to six yarn colours: one pixel is one needle, one row is one course. The Studio makes the needle programme (a row of n colours takes n feeds; the yarn that does not knit floats behind), checks the floats, picks the machine and shows the yarn plan in the Colours tab. Pick the colours in the Colours card.</div>
+        <div style="border:1px dashed var(--line);border-radius:8px;padding:8px;margin:6px 0">
+          <div class="st-hint" style="margin:0 0 4px"><b>Or give a picture and paint nothing:</b> a logo, a graphic or a scanned pattern (flat colours work best). The Studio picks the yarn colours, sizes the motif to the proportions of the loop, binds long floats with tucks and builds the programme.</div>
+          <div class="st-row">
+            <div class="st-f"><label for="jq-img">Picture</label><input id="jq-img" type="file" accept="image/*"></div>
+            <div class="st-f"><label for="jq-imgw">Needles across</label><input id="jq-imgw" type="number" min="6" max="48" step="1" value="24"></div>
+            <div class="st-f"><label for="jq-imgk">Colours</label><select id="jq-imgk"><option value="auto">as few as it needs</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select></div>
+            <div class="st-f"><label for="jq-imgmax">Yarns the machine carries (most)</label><input id="jq-imgmax" type="number" min="2" max="6" step="1" value="4"></div>
+          </div>
+          <label class="st-check"><input type="checkbox" id="jq-tie" checked> Bind long floats with tuck stitches (the picture does not change)</label>
+          <div id="jq-imgout" class="st-hint" style="margin:6px 0 0"></div>
+        </div>
         <div class="st-row">
           <div class="st-f"><label for="jq-preset">Start from</label><select id="jq-preset"><option value="">a blank motif</option></select></div>
           <div class="st-f"><label for="jq-w">Needles wide</label><input id="jq-w" type="number" min="2" max="48" step="1"></div>
-          <div class="st-f"><label for="jq-h">Rows high</label><input id="jq-h" type="number" min="2" max="48" step="1"></div>
+          <div class="st-f"><label for="jq-h">Rows high</label><input id="jq-h" type="number" min="2" max="96" step="1"></div>
         </div>
         <div id="jq-pal" style="margin:4px 0"></div>
         <div id="jq-grid" style="overflow:auto;max-height:380px;margin:4px 0;padding:2px"></div>
         <div class="st-row">
           <div class="st-f"><label for="jq-bed">Fabric</label><select id="jq-bed"><option value="single">Single jersey</option><option value="rib">Double jersey (rib gating)</option><option value="interlock">Interlock (needs an even width)</option></select></div>
           <div class="st-f" id="jq-backrow"><label for="jq-back">The back</label><select id="jq-back"><option value="same">Same motif on the back</option></select></div>
-          <div class="st-f"><label for="jq-float">Longest float (needles)</label><input id="jq-float" type="number" min="2" max="12" step="1" value="6"></div>
+          <div class="st-f"><label for="jq-float">Longest float (needles)</label><input id="jq-float" type="number" min="2" max="12" step="1" value="4"></div>
         </div>
         <button type="button" class="st-btn" id="jq-go">Build the programme</button> <button type="button" class="st-btn" id="jq-clear">Clear the motif</button>
         <div id="jq-out" class="st-hint" style="margin:6px 0 0"></div>
@@ -658,6 +669,8 @@
             <button type="button" class="st-btn" data-xf="png" disabled>Programme (PNG)</button>
             <button type="button" class="st-btn" data-xf="bmp" disabled>Programme (BMP)</button>
             <button type="button" class="st-btn" data-xf="csv" disabled>Cam chart (CSV)</button>
+            <button type="button" class="st-btn" data-xf="motif" disabled title="The colour motif, one pixel per needle per row, in the yarn colours: what a jacquard machine's pattern software takes (the Bitmap of box picks the face or the back)">Colour motif (PNG)</button>
+            <button type="button" class="st-btn" data-xf="colours" disabled title="Each yarn colour with its Pantone match, share, kilograms and dye route, and the motif as letters">Yarn colours (CSV)</button>
             <button type="button" class="st-btn" data-xf="calib" disabled title="The protocol for measuring this cloth, with what the Studio expects filled in">Calibration sheet (PDF)</button>
           </div>
           <div class="st-tools" style="margin:8px 0 0">
@@ -998,11 +1011,11 @@
 <script src="assets/js/studio-sheet.js?v=20261125a"></script>
 <script src="assets/js/studio-mode.js?v=20261125a"></script>
 <script src="assets/js/studio-camsheet.js?v=20261125a"></script>
-<script src="assets/js/studio-colourway.js?v=20261125b"></script>
-<script src="assets/js/studio-jacquard.js?v=20261125b"></script>
+<script src="assets/js/studio-colourway.js?v=20261125c"></script>
+<script src="assets/js/studio-jacquard.js?v=20261125d"></script>
 <script src="assets/js/studio-vbed.js?v=20261121a"></script>
 <script src="assets/js/studio-capture.js?v=20261120b"></script>
 <script src="assets/js/studio-gates.js?v=20261121b"></script>
-<script src="assets/js/studio.js?v=20261125a"></script>
+<script src="assets/js/studio.js?v=20261125d"></script>
 </body>
 </html>

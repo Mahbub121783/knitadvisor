@@ -59,7 +59,7 @@
   // the technology comes first: weft (circular) or warp (tricot / raschel)
   var techNow = 'weft';
   // what the material package (studio-pbr.js) needs of the page
-  window.KAStudioHost = { load: function (o) { return loadDesign(o); }, schedule: function () { schedule(); }, cloth: function () { return cloth; }, design: function () { return payload(); }, fetch: function (u, o) { return apiFetch(u, o); }, colour: function () { var c = $('st-col'); return (c && /^#[0-9a-f]{6}$/i.test(c.value)) ? c.value : '#808080'; }, name: function () { return ($('st-name') && $('st-name').value) || 'fabric'; } };
+  window.KAStudioHost = { load: function (o) { return loadDesign(o); }, schedule: function () { schedule(); }, density: function () { var f = last && last.fabric; return f && f.wpc > 0 && f.cpc > 0 ? { wpc: f.wpc, cpc: f.cpc } : null; }, cloth: function () { return cloth; }, design: function () { return payload(); }, fetch: function (u, o) { return apiFetch(u, o); }, colour: function () { var c = $('st-col'); return (c && /^#[0-9a-f]{6}$/i.test(c.value)) ? c.value : '#808080'; }, name: function () { return ($('st-name') && $('st-name').value) || 'fabric'; } };
   function setTech(t) {
     Array.prototype.forEach.call($('st-tech').children, function (b) { b.classList.toggle('on', b.getAttribute('data-tech') === t); });
     $('st-weft').hidden = t !== 'weft' && t !== 'vbed'; $('st-warp').hidden = t !== 'warp';
@@ -335,7 +335,7 @@
     snapshot();
     var all = beds().map(function (b) { return b[1]; });
     var F = nFeeds(), W = nNeedles();
-    if (name === 'addFeed' && F < 48) {
+    if (name === 'addFeed' && F < 96) {
       all.forEach(function (g) { g.push(g[F - 1].slice()); });
       S.feeds.push({ role: (S.feeds[F - 1] || {}).role || 'ground' });
     } else if (name === 'delFeed' && F > 1) {
@@ -491,7 +491,7 @@
     sel.querySelector('option[value="D"]').disabled = !dial;
     if (!dial) sel.value = 'C';
     var locked = !!(last.feasibility && last.feasibility.export_locked);
-    document.querySelectorAll('#st-xcard [data-xf]').forEach(function (b) { b.disabled = locked; });
+    document.querySelectorAll('#st-xcard [data-xf]').forEach(function (b) { var colourFile = b.getAttribute('data-xf') === 'motif' || b.getAttribute('data-xf') === 'colours'; b.disabled = locked || (colourFile && !(last.colourway && last.colourway.motif)); });
     $('st-dnaout').disabled = false;
     if (locked) xStat('A feasibility gate is FATAL: the machine files are locked until it is fixed (see the gates above the checks).', true);
     else if (!last.ok_to_knit) xStat('This design will not knit as drawn yet — the sheet says so, and lists what to fix.', true); else if (/will not knit|locked until/.test($('st-xstat').textContent)) xStat('');
@@ -1621,7 +1621,7 @@
   function renderLoops() {
     var host = $('st-loops');
     if (!loopPromise) {
-      loopPromise = import('/assets/js/studio-loops.js?v=20261122i').then(function (mod) {
+      loopPromise = import('/assets/js/studio-loops.js?v=20261125b').then(function (mod) {
         loopView = new mod.LoopView(host, showTip);
         loopView.feedColour = mod.feedColour;
         return loopView;
@@ -1634,7 +1634,7 @@
       if (spec.real) { $('st-3dnote').textContent = geo.wales + ' needles × ' + geo.rows + ' courses, ' + (geo.wales / geo.W) + ' × ' + (geo.rows / geo.F) + ' repeats of your programme'; return; }
       var bs = $('st-bstep');
       bs.max = String(geo.rows); bs.value = String(geo.rows); v.setStep(null); stopBuild();
-      $('st-bnote').textContent = geo.rows + ' courses · ' + geo.wales + ' needles a bed · ' + (geo.rows / geo.F) + ' × ' + (geo.wales / geo.W) + ' repeats';
+      $('st-bnote').textContent = geo.rows + ' courses · ' + geo.wales + ' needles a bed · ' + (geo.rows / geo.F) + ' × ' + (geo.wales / geo.W) + ' repeats' + (v._relaxSkipped ? ' · a large programme: drawn without the relaxing step (a smaller repeat relaxes)' : '');
       var F = geo.F, hl = v._hl;
       $('st-feedkey').innerHTML = '<span>Feeders:</span>' + Array.from({ length: F }, function (_, i) {
         var fd = spec.feeds[i] || {};

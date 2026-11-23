@@ -160,7 +160,21 @@
     if (host && inp && !host.contains(document.activeElement) && stripeText(parseStripe(inp.value)) !== stripeText(rowsFromDom())) drawBuilder();
   }
 
-  window.KAStudioColourway = { payload: payload, state: state, setState: setState, studioResult: studioResult };
+  // yarn colours given by another tool (a picture's palette): the swatch, the code and the name of each letter
+  function setColours(list) {
+    (list || []).forEach(function (c) {
+      var l = c.letter, sw = $('st-sc-' + l); if (!sw || !/^#[0-9a-f]{6}$/i.test(c.hex || '')) return;
+      sw.value = c.hex; sw.dispatchEvent(new Event('input', { bubbles: true })); sw.dispatchEvent(new Event('change', { bubbles: true }));
+      if (c.pantone) {
+        S.codes[l] = c.pantone.code; S.names[l] = c.pantone.name;
+        var cd = $('cw-cd-' + l), nm = $('cw-nm-' + l), out = $('cw-cdo-' + l);
+        if (cd) cd.value = c.pantone.code; if (nm) nm.value = c.pantone.name;
+        if (out) { out.textContent = c.hex + ' · nearest Pantone TCX, ΔE00 ' + c.pantone.delta_e00; out.style.color = ''; }
+      }
+    });
+  }
+
+  window.KAStudioColourway = { setColours: setColours, payload: payload, state: state, setState: setState, studioResult: studioResult };
   function init() { build(); render(); }
   if (document.readyState === 'complete') setTimeout(init, 200); else window.addEventListener('load', function () { setTimeout(init, 200); });
 })();

@@ -126,7 +126,7 @@ const r3 = (v) => Math.round(v * 1000) / 1000;
 const mean = (a) => (a.length ? a.reduce((t, x) => t + x, 0) / a.length : 0);
 const quant = (arr, q) => { const a = [...arr].sort((x, y) => x - y); return a[Math.min(a.length - 1, Math.max(0, Math.floor(q * (a.length - 1))))]; };
 
-const LIMITS = { feeds: 48, needles: 48 };
+const LIMITS = { feeds: 96, needles: 48 };
 const ROLES = ['ground', 'face', 'binder', 'loop'];
 const COUNTS = [10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 40, 45, 50, 60];
 
@@ -1144,12 +1144,15 @@ function checksFor(ctx, S, T) {
   }
   // floats in millimetres
   const pitchFab = 10 / S.wpc; // mm between wales, finished
+  // on a double bed the yarn is caught by a needle of either bed: a float is a run where NEITHER bed knits or tucks it (checked once, under the cylinder)
   for (const [b, name] of [['C', 'cylinder'], ['D', 'dial']]) {
-    const g = st.beds[b]; if (!g) continue;
+    const g = st.beds[b]; if (!g || (b === 'D' && st.beds.C)) continue;
     g.forEach((row, i) => {
-      if (feedRows[i].role === 'loop' || (!row.includes('K') && !row.includes('T'))) return;
-      const m = maxRun(row, 'M');
-      if (m >= 2 && m < row.length && m * pitchFab > 10) add('warn', `Feed ${i + 1}, ${name}: float of ${m} needles ≈ ${r1(m * pitchFab)} mm in the finished fabric — over 10 mm snags in wear.`);
+      const other = b === 'C' && st.beds.D ? st.beds.D[i] : null;
+      const catches = (x) => x === 'K' || x === 'T';
+      if (feedRows[i].role === 'loop' || (!row.some(catches) && !(other && other.some(catches)))) return;
+      const m = maxRun(row.map((x, j) => (x === 'M' && !(other && catches(other[j])) ? 'M' : '.')), 'M');
+      if (m >= 2 && m < row.length && m * pitchFab > 10) add('warn', `Feed ${i + 1}, ${other ? 'behind both beds' : name}: float of ${m} needles ≈ ${r1(m * pitchFab)} mm in the finished fabric — over 10 mm snags in wear.`);
     });
   }
   if (feedRows.some((f, i) => f.sl_mm || f.sl_ratio !== 1)) add('note', 'Per-feeder stitch lengths change the yarn each feeder lays; the width and density of the cloth follow the knitting feeders\' mean length.');
@@ -1807,7 +1810,7 @@ function analyse(input) {
         out.colourway = CW.analyse({
           C: drawnC, D: drawnD, feedColours, seq: (input.stripes || {}).sequence ? stripeSeq : (feedColours.some(Boolean) ? null : stripeSeq),
           colours: cwIn.colours, names: cwIn.names, gating, plan: out.machine_setup.stripes, mix: gmix && Object.keys(gmix).length ? gmix : null, tex: gu ? gu.tex : 0,
-          feeders: S.feeders, order: cwIn.order,
+          feeders: S.feeders, order: cwIn.order, wpc: S.wpc, cpc: S.cpc,
         });
       } catch (e) { if (!(e instanceof CW.ColourwayError)) throw e; out.colourway = { success: false, error: e.message }; }
     }

@@ -178,6 +178,14 @@ function toDNA(input, out) {
       },
     },
     yarns,
+    // several yarn colours dyed as yarn (colourway.js): the colour effect, each colour with its Pantone match, share and route, and the motif
+    colourway: out.colourway && out.colourway.success !== false ? {
+      dyeing: 'yarn-dyed', effect: out.colourway.kind, pixelRows: out.colourway.rows, feedsPerRow: out.colourway.feeds_per_row,
+      repeatCm: out.colourway.size_cm ? { width: out.colourway.size_cm.width, height: out.colourway.size_cm.height } : null,
+      colours: out.colourway.colours.map((c) => ({ letter: c.letter, name: c.name, hex: c.hex, labD65: c.lab, pantoneTcx: c.pantone ? { code: c.pantone.code, name: c.pantone.name, deltaE00: c.pantone.delta_e00 } : null, depth: c.depth, yarnSharePercent: c.yarn_pct, faceSharePercent: c.face_pct, dyeRoute: c.route })),
+      motif: out.colourway.motif ? { face: out.colourway.motif.face, back: out.colourway.motif.back } : null,
+      basis: 'law: the drawing; typical: loss, lot and fastness grades; estimate: dye amounts from the luminance',
+    } : null,
     universalLaw: {
       formula: 'GSM = Σ (L_i × Tex_i) ÷ A_cell',
       gsm_law: gsmLaw ? Math.round(gsmLaw) : null, gsm_studio: fab.gsm, agreement_pct: gsmLaw && fab.gsm ? r1((gsmLaw / fab.gsm - 1) * 100) : null,

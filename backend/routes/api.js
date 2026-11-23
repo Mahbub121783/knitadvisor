@@ -1809,6 +1809,17 @@ router.post('/studio/jacquard', requireUser, (req, res) => {
   }
 });
 
+// A picture (logo, graphic, scanned pattern) as the jacquard motif: yarn colours, needle grid, floats and feeds worked out (engine/domain/motif-from-image.js).
+router.post('/studio/jacquard/from-image', requireUser, sheetLimiter, (req, res) => {
+  const mi = require('../engine/domain/motif-from-image');
+  try { res.json({ success: true, ...mi.fromImage(req.body || {}) }); }
+  catch (err) {
+    if (err instanceof mi.MotifImageError || err instanceof require('../engine/domain/jacquard-builder').JacquardError) return res.status(400).json({ success: false, error: err.message });
+    console.error('[studio] motif from image failed:', err);
+    res.status(500).json({ success: false, error: 'The picture could not be turned into a motif.' });
+  }
+});
+
 router.post('/studio/cam-sheet/needles', requireUser, sheetLimiter, (req, res) => {
   const cs = require('../engine/domain/cam-sheet');
   try { const b = req.body || {}; res.json({ success: true, ...cs.suggestNeedles(b, { gsm: +b.gsm || 200, min_length: +b.min_length > 0 ? +b.min_length : undefined, max_length: +b.max_length > 0 ? +b.max_length : undefined, limit: 12 }) }); }
@@ -2012,7 +2023,7 @@ router.post('/studio/export', requireUser, exportLimiter, async (req, res) => {
     const hit = await studioAnswer(req.user.id, b.design);
     if (hit.status !== 200) return res.status(hit.status).type('application/json').send(hit.body);
     const out = JSON.parse(hit.body);
-    const fmt = ['pdf', 'png', 'bmp', 'csv', 'calib'].includes(b.format) ? b.format : 'pdf';
+    const fmt = ['pdf', 'png', 'bmp', 'csv', 'calib', 'motif', 'colours'].includes(b.format) ? b.format : 'pdf';
     // a design that fails a feasibility gate (FATAL) gets no factory file until it is fixed (engine/domain/feasibility-engine.js)
     if (out.feasibility && out.feasibility.export_locked) {
       const fatal = out.feasibility.rules.filter((r) => r.status === 'fatal').map((r) => `${r.id} ${r.name}: ${r.text}`).concat(Object.values(out.feasibility.gates).flatMap((g) => g.other || []));
@@ -2033,6 +2044,18 @@ router.post('/studio/export', requireUser, exportLimiter, async (req, res) => {
       res.setHeader('Content-Disposition', `attachment; filename="SetupSheet-${slug}.pdf"`);
       doc.pipe(res); doc.end();
       return;
+    }
+    if (fmt === 'colours') {
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="YarnColours-${slug}.csv"`);
+      return res.send(machineExport.colourCsv(out, name));
+    }
+    if (fmt === 'motif') {
+      const P = machineExport.motifProgramme(out, b.bed === 'D' ? 'back' : 'face');
+      const k = Math.min(16, Math.max(1, parseInt(b.scale, 10) || 1));
+      res.setHeader('Content-Type', 'image/png');
+      res.setHeader('Content-Disposition', `attachment; filename="Motif-${slug}-${b.bed === 'D' ? 'back' : 'face'}.png"`);
+      return res.send(machineExport.png(P, k));
     }
     if (fmt === 'csv') {
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');

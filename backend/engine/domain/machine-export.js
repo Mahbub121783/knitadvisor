@@ -64,14 +64,14 @@ const scaled = (P, k) => {
   for (const row of P.px) { const wide = new Uint8Array(P.W * k); for (let c = 0; c < P.W; c++) wide.fill(row[c], c * k, c * k + k); for (let j = 0; j < k; j++) rows.push(wide); }
   return { W: P.W * k, H: P.H * k, rows };
 };
-const palette = () => SYMS.flatMap((s) => PALETTE[s].rgb);
+const palette = (P) => (P && P.pal ? P.pal.flat() : SYMS.flatMap((s) => PALETTE[s].rgb));
 
 function png(P, k = 1) {
   const { W, H, rows } = scaled(P, k);
   const raw = Buffer.alloc((W + 1) * H);
   rows.forEach((row, r) => { raw[r * (W + 1)] = 0; Buffer.from(row.buffer, row.byteOffset, W).copy(raw, r * (W + 1) + 1); });
   const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(W, 0); ihdr.writeUInt32BE(H, 4); ihdr[8] = 8; ihdr[9] = 3;
-  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('PLTE', Buffer.from(palette())), chunk('IDAT', zlib.deflateSync(raw, { level: 9 })), chunk('IEND', Buffer.alloc(0))]);
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('PLTE', Buffer.from(palette(P))), chunk('IDAT', zlib.deflateSync(raw, { level: 9 })), chunk('IEND', Buffer.alloc(0))]);
 }
 
 function bmp(P, k = 1) {
@@ -84,6 +84,41 @@ function bmp(P, k = 1) {
   SYMS.forEach((s, i) => { const [r, g, bl] = PALETTE[s].rgb; b[54 + i * 4] = bl; b[55 + i * 4] = g; b[56 + i * 4] = r; });
   for (let r = 0; r < H; r++) Buffer.from(rows[H - 1 - r].buffer, rows[H - 1 - r].byteOffset, W).copy(b, 54 + 1024 + r * stride);
   return b;
+}
+
+// ── the colour motif: one pixel per needle per pixel row, in the yarn colours (what an electronic jacquard's pattern software takes) ─────────
+function motifProgramme(out, side = 'face') {
+  const cw = out && out.colourway;
+  if (!cw || cw.success === false || !cw.motif) throw new ExportError('This design has no colours to export: give two or more feeders a colour, type a stripe, or paint a motif.');
+  const rows = side === 'back' ? cw.motif.back : cw.motif.face;
+  if (!rows || !rows.length) throw new ExportError('This design has no colour motif on that side.');
+  const letters = cw.colours.map((c) => c.letter);
+  const hexRgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const pal = [[255, 255, 255]].concat(cw.colours.map((c) => hexRgb(c.hex)));
+  const px = rows.map((r) => Uint8Array.from(r.split('').map((ch) => (letters.indexOf(ch) < 0 ? 0 : letters.indexOf(ch) + 1))));
+  return { px, W: rows[0].length, H: rows.length, pal, letters, rows };
+}
+
+/** The colour list: each yarn colour with its Pantone match, share, kilograms and dye route; then the motif as letters. */
+function colourCsv(out, name) {
+  const cw = out && out.colourway;
+  if (!cw || cw.success === false) throw new ExportError('This design has no colours to export.');
+  const L = [];
+  L.push(line(['KnitAdvisor — yarn colours', name || '']));
+  L.push(line(['Colour effect', cw.kind, 'pixel rows', cw.rows, 'feeds per row', cw.feeds_per_row, 'yarns per row', cw.colours_per_row]));
+  if (cw.size_cm) L.push(line(['Repeat on the finished cloth (cm)', cw.size_cm.width + ' wide', cw.size_cm.height + ' high']));
+  L.push('');
+  L.push(line(['Letter', 'Name', 'Hex', 'Nearest Pantone TCX', 'Delta E00', 'Depth', 'Yarn share %', 'On the face %', 'Feeders', 'Yarn to dye kg', 'Dye', 'Route']));
+  cw.colours.forEach((c) => L.push(line([c.letter, c.name || '', c.hex, c.pantone ? c.pantone.code + ' ' + c.pantone.name : '', c.pantone ? c.pantone.delta_e00 : '', c.depth_label, c.yarn_pct, c.face_pct, c.feeders == null ? '' : c.feeders, c.kg_yarn == null ? '' : c.kg_yarn, c.dye.map((d) => d.owf_pct + '% ' + d.class).join('; ') || 'none (bleached)', c.route.join(' > ')])));
+  L.push('');
+  L.push(line(['The screen colours are approximate: the physical shade card and the dyer\'s lab dip rule.']));
+  if (cw.motif) {
+    L.push('');
+    L.push(line(['Motif — face (rows are pixel rows, one letter per needle)']));
+    cw.motif.face.forEach((r, i) => L.push(line(['Row ' + (i + 1), r])));
+    if (cw.motif.back) { L.push(line(['Motif — back'])); cw.motif.back.forEach((r, i) => L.push(line(['Row ' + (i + 1), r]))); }
+  }
+  return '﻿' + L.join('\r\n') + '\r\n';
 }
 
 // ── CSV ──────────────────────────────────────────────────────────────────────
@@ -322,4 +357,4 @@ function calibrationSheet(out, o = {}) {
 
 const slug = (s) => String(s || 'design').replace(/[^A-Za-z0-9_.-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || 'design';
 
-module.exports = { programme, png, bmp, csv, sheet, calibrationSheet, slug, ExportError, SYMS, PALETTE };
+module.exports = { programme, motifProgramme, colourCsv, png, bmp, csv, sheet, calibrationSheet, slug, ExportError, SYMS, PALETTE };

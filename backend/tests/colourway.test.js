@@ -126,7 +126,7 @@ const errs = (r) => (r.checks || []).filter((c) => c.level === 'error').map((c) 
   assert.throws(() => J.build({ motif: ['AAXB'] }), /letters A to F/);
   assert.throws(() => J.build({ motif: ['A'.repeat(49)] }), /holds 48/);
   assert.throws(() => J.build({ motif: J.PRESETS.find((p) => p.id === 'plaid').rows, bed: 'rib', back: 'negative' }), /exactly two colours/);
-  assert.throws(() => J.build({ motif: Array.from({ length: 30 }, (_, i) => 'ABC'.repeat(2).slice(i % 3, (i % 3) + 4).padEnd(4, 'A')) }), /needs \d+ feeds/);
+  assert.throws(() => J.build({ motif: Array.from({ length: 40 }, (_, i) => 'ABC'.repeat(2).slice(i % 3, (i % 3) + 4).padEnd(4, 'A')) }), /needs \d+ feeds/);
   console.log('✓ a float over the limit is named by row and colour; a ragged motif, one colour, a bad letter, too wide, a three-colour exchanged back and too many feeds are each refused in words');
 }
 {
@@ -139,5 +139,79 @@ const errs = (r) => (r.checks || []).filter((c) => c.level === 'error').map((c) 
   const plain = DS.build({ design: { bed: 'single', grid: { C: ['K'] } }, composition: '100% CO', gsm: 180, shade: 'medium' }, S.analyse);
   assert.strictEqual(plain.colours, null);
   console.log('✓ the development sheet: a yarn-dyed design gets its colour section (kg per colour, route, fastness) and a wet process that does not bleach the cloth; a plain cloth has none');
+}
+{
+  // a picture instead of a painted motif: colours picked, motif sized to the loop, floats tied with tucks, programme built
+  const MI = require('../engine/domain/motif-from-image');
+  const X = require('../engine/domain/machine-export');
+  const pic = (w, h, f) => { const b = Buffer.alloc(w * h * 3); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const c = f(x / w, y / h); b[(y * w + x) * 3] = c[0]; b[(y * w + x) * 3 + 1] = c[1]; b[(y * w + x) * 3 + 2] = c[2]; } return { width: w, height: h, rgb: b.toString('base64') }; };
+  const NAVY = [18, 41, 90], CREAM = [239, 230, 210], RED = [179, 32, 42];
+  const circle = pic(120, 120, (u, v) => (Math.hypot(u - 0.5, v - 0.5) < 0.38 ? NAVY : CREAM));
+  const r = MI.fromImage({ ...circle, needles: 24, bed: 'single', wpc: 12.2, cpc: 10.5 });
+  assert.strictEqual(r.palette.length, 2); assert.strictEqual(r.palette[0].letter, 'A');
+  assert(r.palette[0].share_pct > r.palette[1].share_pct, 'A is the commonest colour (the ground)');
+  assert(r.palette.every((p) => p.pantone && p.pantone.code), 'each yarn colour is matched to a Pantone TCX');
+  assert.strictEqual(r.colour_error.quality, 'good');
+  assert.strictEqual(r.width, 24); assert.strictEqual(r.height, Math.round(24 * (10.5 / 12.2)), 'rows follow the loop: a pixel is 1/wpc wide and 1/cpc high');
+  assert(Math.abs(r.size.width_cm / r.size.height_cm - 1) < 0.06, 'a circle stays a circle: the motif is as wide as it is high in cm, not in pixels');
+  // the picture is the circle: the middle is navy (B), the corners cream (A), and it is symmetric
+  const mid = r.motif[Math.floor(r.height / 2)];
+  assert(mid[12] !== mid[0], 'the middle and the corner are different colours');
+  r.motif.slice(5, 9).forEach((row) => assert.strictEqual(row, row.split('').reverse().join(''), 'a row through the circle reads the same from both ends'));
+  // floats are bound with tucks, and the picture is untouched: every pixel of the motif still knits at its own colour's feed
+  const d = J.build({ motif: r.motif, bed: 'single', tie_floats: true });
+  assert(d.longest_float <= 4 && d.ties > 0, `floats are tied: longest ${d.longest_float}, ${d.ties} tucks`);
+  let ri = 0, f = 0;
+  while (ri < r.motif.length) {
+    const row = r.motif[ri], cols = [...new Set(row.split(''))].sort();
+    cols.forEach((X1) => { d.C[f].forEach((x, w) => { if (x === 'K') assert.strictEqual(row[w], X1, 'a knit is where the picture has that colour'); if (row[w] === X1) assert.strictEqual(x, 'K', 'every pixel of that colour knits'); }); f++; });
+    ri++;
+  }
+  const an = run({ bed: 'single', grid: { C: d.C.map((x) => x.join('')) }, feeds: d.feeds, colourway: { colours: { A: r.palette[0].hex, B: r.palette[1].hex } } });
+  assert(an.success && an.ok_to_knit && an.colourway.kind === 'motif', an.error || errs(an).join('; '));
+  assert(!an.checks.some((c) => /a float across/.test(c.text)), 'the Studio\'s own float check is satisfied after the ties');
+  // flat stripes: three colours, a clean result, no ties needed
+  const flag = MI.fromImage({ ...pic(150, 100, (u, v) => (v < 0.34 ? NAVY : v < 0.67 ? CREAM : RED)), needles: 24, bed: 'single' });
+  assert.strictEqual(flag.palette.length, 3); assert(flag.motif.every((row) => new Set(row).size === 1), 'every row is one colour: no blended edge colour appears');
+  // a photograph-like gradient and noise are told to be simplified
+  assert.strictEqual(MI.fromImage({ ...pic(100, 100, (u, v) => [Math.round(255 * u), Math.round(255 * v), Math.round(255 * (1 - u))]), needles: 24, bed: 'single' }).colour_error.quality, 'poor');
+  // interlock: even width, two feeds a colour, fits the feeds the Studio holds by dropping colours, then size
+  const il = MI.fromImage({ ...pic(120, 120, (u, v) => (Math.hypot(u - 0.5, v - 0.5) < 0.4 ? (Math.hypot(u - 0.5, v - 0.5) < 0.2 ? [232, 195, 42] : NAVY) : CREAM)), needles: 25, bed: 'interlock', back: 'same' });
+  assert(il.width % 2 === 0 && il.programme.feeds <= J.MAX_FEEDS && il.palette.length >= 2, `interlock: ${il.width} wide, ${il.programme.feeds} feeds`);
+  const ild = J.build({ motif: il.motif, bed: 'interlock', back: 'same', tie_floats: true });
+  const ilr = run({ bed: 'double', gating: 'interlock', grid: { C: ild.C.map((x) => x.join('')), D: ild.D.map((x) => x.join('')) }, feeds: ild.feeds, target: { gsm: 260 } });
+  assert(ilr.success && ilr.ok_to_knit, ilr.error || errs(ilr).join('; '));
+  // refusals in words
+  assert.throws(() => MI.fromImage({ width: 10, height: 10, rgb: 'AAAA' }), /needs 300/);
+  assert.throws(() => MI.fromImage({ ...pic(40, 40, () => NAVY), needles: 12 }), /one colour/);
+  // the colour files: a PNG in the yarn colours and the colour list
+  const sheetOut = run({ bed: 'single', grid: { C: d.C.map((x) => x.join('')) }, feeds: d.feeds, colourway: { colours: { A: r.palette[0].hex, B: r.palette[1].hex }, order: { kg: 200 } } });
+  const P = X.motifProgramme(sheetOut, 'face');
+  assert.strictEqual(P.W, 24); assert.strictEqual(P.pal.length, 3);
+  const png = X.png(P, 4); assert.strictEqual(png.slice(1, 4).toString(), 'PNG');
+  assert.strictEqual(png.readUInt32BE(16), 24 * 4, 'the PNG is one pixel per needle (times the scale) wide');
+  const csv = X.colourCsv(sheetOut, 'circle');
+  assert(/Nearest Pantone TCX/.test(csv) && /Yarn to dye kg/.test(csv) && /Motif — face/.test(csv));
+  assert.throws(() => X.motifProgramme(run({ bed: 'single', grid: { C: ['K'] } })), /no colours to export/);
+  console.log('✓ a picture becomes the motif: the yarn colours are picked (A is the ground) and matched to Pantone, the rows follow the loop proportions, floats are tied with tucks without changing the picture, a gradient is told to be simplified, an interlock fits the feeds; the colour motif PNG and the yarn-colour CSV export');
+}
+{
+  // the Studio's own rules understand a jacquard: a course is the feeds in which every needle knits once, and on a double bed a float is where neither bed catches the yarn
+  const tri = J.build({ motif: ['AABBCC', 'ABCABC', 'CCBBAA', 'BCABCA'], bed: 'single' });
+  const a1 = run({ bed: 'single', grid: { C: tri.C.map((x) => x.join('')) }, feeds: tri.feeds });
+  assert(!a1.checks.some((c) => /misses \d+ feeds running/.test(c.text)), 'three colours a row: a needle misses two feeds in a course, not "stretched over courses"');
+  // a plain structure keeps the rule: one needle missing six feeds running is still flagged
+  const held = run({ bed: 'single', grid: { C: ['KK', 'KM', 'KM', 'KM', 'KM', 'KM', 'KM'] } });
+  assert(held.checks.some((c) => c.level === 'warn' && /misses 6 feeds running/.test(c.text)));
+  // a double-bed feed whose face needles miss but whose dial needles knit has no float
+  const dbl = J.build({ motif: J.PRESETS.find((p) => p.id === 'diamond').rows, bed: 'rib', back: 'negative' });
+  const a2 = run({ bed: 'double', gating: 'rib', grid: { C: dbl.C.map((x) => x.join('')), D: dbl.D.map((x) => x.join('')) }, feeds: dbl.feeds, target: { gsm: 240 } });
+  assert(!a2.checks.some((c) => /a float across|float of \d+ needles/.test(c.text)), 'the exchanged back catches every needle on one bed or the other: no float');
+  // the Studio holds 96 feeds
+  const tall = J.build({ motif: Array.from({ length: 40 }, (_, y) => 'AB'.repeat(8).slice(y % 2, y % 2 + 12)), bed: 'single' });
+  assert(tall.feeds_total === 80 && J.MAX_FEEDS === S.LIMITS.feeds, 'the builder and the Studio agree on the feed limit');
+  const a3 = run({ bed: 'single', grid: { C: tall.C.map((x) => x.join('')) }, feeds: tall.feeds });
+  assert(a3.success && a3.ok_to_knit, a3.error || errs(a3).join('; '));
+  console.log('✓ the Studio rules: misses are counted in courses (a jacquard row is one course), a double-bed float is where neither bed catches the yarn, and 96 feeds are held (the builder and the Studio agree)');
 }
 console.log('Colourway tests passed');

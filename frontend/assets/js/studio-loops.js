@@ -127,8 +127,10 @@ export class LoopView {
       const g = globalThis.KALoopGeom.buildLoopPaths({ ...plain, relax: true });
       this._cache.set(key, g); return g;
     }
-    this._wanted = key;
-    this._relaxInWorker(plain, key);
+    // relaxing grows faster than the number of loops (about 9 s for 2,800 loops): a big programme is drawn as the plain paths, a smaller repeat relaxes
+    this._relaxSkipped = plain.C.length * plain.C[0].length * (plain.D ? 2 : 1) > 1500;
+    this._wanted = this._relaxSkipped ? null : key;
+    if (!this._relaxSkipped) this._relaxInWorker(plain, key);
     this._fast = this._fast || new Map();
     if (!this._fast.has(key)) { this._fast.set(key, globalThis.KALoopGeom.buildLoopPaths({ ...plain, relax: false })); if (this._fast.size > 6) this._fast.delete(this._fast.keys().next().value); }
     return this._fast.get(key);

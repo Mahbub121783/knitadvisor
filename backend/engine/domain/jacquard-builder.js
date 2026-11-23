@@ -21,7 +21,8 @@
 'use strict';
 
 const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
-const MAX = 48;
+const MAX = 48;              // needles across
+const MAX_FEEDS = 96;        // feeds in one repeat (the Studio's LIMITS.feeds)
 
 class JacquardError extends Error { constructor(m) { super(m); this.name = 'JacquardError'; } }
 
@@ -51,12 +52,43 @@ function readMotif(motif) {
   return { rows, W };
 }
 
+// Long floats are bound with tuck stitches: where a colour's pixels are further apart than the float limit, a needle in the gap tucks that yarn (the needle knits
+// its own colour at its own feed, so the picture does not change; the tuck only catches the float on the back). par: the parity of an interlock feed (0 even, 1 odd).
+function tieRow(cr, dr, W, maxFloat, par) {
+  const hit = cr.map((x, i) => x !== 'M' || (dr && dr[i] === 'K'));
+  const pos = hit.map((h, i) => (h ? i : -1)).filter((i) => i >= 0);
+  if (!pos.length) return 0;
+  let n = 0;
+  const lim = par == null ? maxFloat : maxFloat - 1;            // an interlock tie must sit on the feed's own parity, which may cost a needle
+  for (let p = 0; p < pos.length; p++) {
+    const a = pos[p], b = p + 1 < pos.length ? pos[p + 1] : pos[0] + W, gap = b - a - 1;
+    if (gap <= maxFloat) continue;
+    const ties = Math.ceil((gap - lim) / (lim + 1));          // t ties cut the gap into t + 1 parts, each at most `lim`
+    for (let t = 1; t <= ties; t++) {
+      const ideal = a + Math.round((t * (gap + 1)) / (ties + 1));
+      for (let off = 0; off <= gap; off++) {
+        const cand = [ideal + off, ideal - off];
+        let done = false;
+        for (const c of cand) {
+          if (c <= a || c >= b) continue;
+          const w = ((c % W) + W) % W;
+          if ((par == null || w % 2 === par) && cr[w] === 'M' && !(dr && dr[w] === 'K')) { cr[w] = 'T'; n++; done = true; break; }
+        }
+        if (done) break;
+      }
+    }
+  }
+  return n;
+}
+
 function build(spec) {
   const { rows, W } = readMotif(spec.motif);
   const gatingIn = spec.bed === 'interlock' ? 'interlock' : spec.bed === 'rib' || spec.bed === 'double' ? 'rib' : 'single';
   const bed = gatingIn === 'single' ? 'single' : 'double';
   const back = bed === 'double' ? (['negative', 'same', 'plain'].includes(spec.back) ? spec.back : 'same') : null;
-  const maxFloat = Math.min(12, Math.max(2, +spec.max_float || 6));
+  const maxFloat = Math.min(12, Math.max(2, +spec.max_float || 4));
+  const tie = spec.tie_floats === true;
+  let tiesMade = 0;
   const used = [...new Set(rows.join('').split(''))].sort();
   if (used.length < 2) throw new JacquardError('A motif of one colour is a plain fabric: paint at least two colours.');
   if (gatingIn === 'interlock' && W % 2) throw new JacquardError(`An interlock repeat needs an even number of needles (each feed pair knits the even and the odd ones); this motif is ${W} wide.`);
@@ -84,12 +116,15 @@ function build(spec) {
           // feed a (par 0): even cylinder needles, odd dial needles; feed b (par 1): odd cylinder, even dial
           const cr = faceOn.map((on, w) => (on && w % 2 === par ? 'K' : 'M')), dr = dialOn.map((on, w) => (on && w % 2 !== par ? 'K' : 'M'));
           if (!cr.includes('K') && !dr.includes('K')) return;          // this colour has no needle of this parity: no feed
+          if (tie) tiesMade += tieRow(cr, dr, W, maxFloat, par);
           C.push(cr); D.push(dr); feeds.push({ colour: X }); rowOfFeed.push(ri + 1);
         });
         return;
       }
-      C.push(faceOn.map((on) => (on ? 'K' : 'M')));
-      if (bed === 'double') D.push(dialOn.map((on) => (on ? 'K' : 'M')));
+      const cr1 = faceOn.map((on) => (on ? 'K' : 'M')), dr1 = bed === 'double' ? dialOn.map((on) => (on ? 'K' : 'M')) : null;
+      if (tie) tiesMade += tieRow(cr1, dr1, W, maxFloat, null);
+      C.push(cr1);
+      if (bed === 'double') D.push(dr1);
       feeds.push({ colour: X }); rowOfFeed.push(ri + 1);
     });
     if (needGround) {
@@ -97,13 +132,13 @@ function build(spec) {
       else { C.push(Array(W).fill('M')); D.push(Array(W).fill('K')); feeds.push({ colour: ground }); rowOfFeed.push(ri + 1); }
     }
   });
-  if (C.length > MAX) throw new JacquardError(`This motif needs ${C.length} feeds (${rows.length} pixel rows, ${used.length} colours); the Studio holds ${MAX}. Make the motif shorter, or use fewer colours in a row.`);
+  if (C.length > MAX_FEEDS) throw new JacquardError(`This motif needs ${C.length} feeds (${rows.length} pixel rows, ${used.length} colours); the Studio holds ${MAX_FEEDS}. Make the motif shorter, or use fewer colours in a row.`);
 
   // floats: the longest run of missed needles at each colour feed, round the repeat
   let worst = 0, worstAt = null;
   C.forEach((cr, i) => {
     // the yarn is caught by a needle of either bed: a float is a run of needles where neither bed knits
-    const r = cr.map((x, w) => (x === 'K' || (bed === 'double' && D[i][w] === 'K') ? 'K' : 'M'));
+    const r = cr.map((x, w) => (x !== 'M' || (bed === 'double' && D[i][w] === 'K') ? 'K' : 'M'));
     if (!r.includes('K')) return;
     let best = 0, run = 0;
     for (let k = 0; k < 2 * W; k++) { if (r[k % W] === 'M') { run++; best = Math.max(best, Math.min(run, W - 1)); } else run = 0; }
@@ -113,6 +148,7 @@ function build(spec) {
   else checks.push({ level: 'ok', text: `The longest float is ${worst} needle${worst === 1 ? '' : 's'}, inside the ${maxFloat} you allow.` });
   const perRow = Math.max(...rows.map((r) => new Set(r.split('')).size));
   if (perRow > 4) checks.push({ level: 'note', text: `${perRow} colours in one pixel row: most circular jacquards carry 4 yarns per course (some 6); check yours before you commit.` });
+  if (tiesMade) notes.push(`${tiesMade} tuck stitch${tiesMade === 1 ? '' : 'es'} added to bind floats longer than ${maxFloat} needles: the needle tucks the floating yarn behind its own colour, so the picture does not change (a little yarn is added at the tuck).`);
   if (bed === 'single') notes.push('Single jersey jacquard: the yarn that does not knit floats behind the face. The back shows the floats, so it is not a reversible cloth.');
   if (bed === 'double' && back === 'negative') notes.push('Exchanged-colour back: the back shows the same motif with the two colours swapped (reversible jacquard).');
   if (bed === 'double' && back === 'same') notes.push('Same-colour back: each dial needle knits in the colour of its face needle, so the back repeats the motif.');
@@ -123,12 +159,12 @@ function build(spec) {
   return {
     bed, gating: gatingIn === 'single' ? 'single' : gatingIn, C, D: bed === 'double' ? D : null, feeds,
     motif: { rows, width: W, height: rows.length }, colours: used, feeds_total: C.length, colours_per_row: perRow, back, ground: back === 'plain' ? ground : null,
-    longest_float: worst, notes, checks, name: String(spec.name || 'Jacquard').slice(0, 60),
+    longest_float: worst, ties: tiesMade, notes, checks, name: String(spec.name || 'Jacquard').slice(0, 60),
   };
 }
 
 function catalogue() {
-  return { presets: PRESETS.map((p) => ({ id: p.id, label: p.label, colours: p.colours, rows: p.rows })), backs: [{ id: 'same', label: 'Same motif on the back' }, { id: 'negative', label: 'Back with the two colours exchanged (reversible)' }, { id: 'plain', label: 'Plain back in one colour' }], limits: { max_width: MAX, max_feeds: MAX, letters: LETTERS } };
+  return { presets: PRESETS.map((p) => ({ id: p.id, label: p.label, colours: p.colours, rows: p.rows })), backs: [{ id: 'same', label: 'Same motif on the back' }, { id: 'negative', label: 'Back with the two colours exchanged (reversible)' }, { id: 'plain', label: 'Plain back in one colour' }], limits: { max_width: MAX, max_feeds: MAX_FEEDS, letters: LETTERS } };
 }
 
-module.exports = { build, catalogue, readMotif, PRESETS, JacquardError };
+module.exports = { MAX_FEEDS, build, catalogue, readMotif, PRESETS, JacquardError };
