@@ -1,0 +1,105 @@
+/* Fabric Studio — the workspace (assets/js/studio-shell.js): a guided, step-by-step layout over the same cards. */
+
+/* the technology switch: a slim bar, not a card */
+.ws-techcard { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 8px 12px !important; margin: 0 0 12px !important; background: var(--bg2, #f4f6f9); border-color: transparent !important; }
+.ws-techlabel { font: 700 11px var(--head); letter-spacing: .6px; text-transform: uppercase; color: var(--t3); }
+.ws-techcard .st-techseg { margin: 0; flex: 1 1 520px; max-width: 760px; border-radius: 10px; background: var(--bg); }
+.ws-techcard .st-techseg button { flex-direction: row; align-items: baseline; gap: 8px; padding: 7px 14px; white-space: nowrap; min-width: 0; }
+.ws-techcard .st-techseg button b { font-size: 13px; }
+.ws-techcard .st-techseg button small { font-size: 11px; opacity: .75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 1180px) { .ws-techcard .st-techseg button small { display: none; } }
+
+/* the welcome */
+.ws-banner { display: flex; gap: 14px; align-items: center; justify-content: space-between; padding: 10px 14px; margin: 0 0 12px; border-radius: 10px; background: var(--accent-soft, rgba(24,87,196,.07)); border: 1px solid var(--accent-line, rgba(24,87,196,.25)); font-size: 13px; line-height: 1.5; color: var(--t1); }
+.ws-banner .st-btn { flex: none; white-space: nowrap; }
+.ws-banner[hidden] { display: none !important; }
+
+/* the steps */
+.ws-steps { position: sticky; top: var(--ws-top, 56px); z-index: 30; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 0; margin: 0 0 14px; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,.04); }
+.ws-chip { display: flex; align-items: center; gap: 9px; padding: 10px 12px; border: 0; border-right: 1px solid var(--line); background: var(--bg); text-align: left; cursor: pointer; color: var(--t2); min-width: 0; position: relative; font-family: var(--head); }
+.ws-chip:last-child { border-right: 0; }
+.ws-chip:hover { background: var(--bg2, #f4f6f9); }
+.ws-n { flex: none; width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font: 700 12px var(--head); background: var(--bg2, #eef1f6); color: var(--t2); border: 1px solid var(--line2, var(--line)); }
+.ws-t { display: flex; flex-direction: column; min-width: 0; }
+.ws-t b { font-size: 13px; color: var(--t1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ws-t small { font-size: 11px; color: var(--t3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ws-chip.on { background: var(--accent); color: var(--on-accent, #fff); }
+.ws-chip.on .ws-t b, .ws-chip.on .ws-t small { color: var(--on-accent, #fff); }
+.ws-chip.on .ws-n { background: rgba(255,255,255,.2); color: var(--on-accent, #fff); border-color: rgba(255,255,255,.5); }
+.ws-chip.seen .ws-n { background: var(--accent-soft, rgba(24,87,196,.1)); color: var(--accent); border-color: var(--accent-line, var(--accent)); }
+.ws-chip.ok .ws-n { background: var(--good, #1e7a54); color: #fff; border-color: var(--good, #1e7a54); }
+.ws-chip.warn .ws-n { background: var(--warn, #9a5b00); color: #fff; border-color: var(--warn, #9a5b00); }
+.ws-chip.bad .ws-n { background: var(--danger, #b23b3b); color: #fff; border-color: var(--danger, #b23b3b); }
+.ws-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+@media (max-width: 1250px) { .ws-t small { display: none; } }
+@media (max-width: 900px) {
+  .ws-steps { grid-auto-columns: minmax(118px, 1fr); overflow-x: auto; }
+  .ws-t b { font-size: 12px; }
+}
+
+/* the body: the step on the left, the cloth on the right */
+.ws-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (min-width: 1100px) { .ws-body { grid-template-columns: minmax(0, 1.04fr) minmax(0, 1fr); } }
+@media (min-width: 1700px) { .ws-body { grid-template-columns: minmax(0, 1fr) minmax(0, 1.12fr); } }
+.ws-left, .ws-right { min-width: 0; }
+@media (min-width: 1100px) {
+  .ws-right { position: sticky; top: calc(var(--ws-top, 56px) + var(--ws-steps, 64px) + 14px); max-height: calc(100vh - var(--ws-top, 56px) - var(--ws-steps, 64px) - 26px); overflow-y: auto; scrollbar-width: thin; padding-right: 2px; }
+}
+
+.ws-stage[hidden], .ws-subpane[hidden] { display: none !important; }
+.ws-stagehead { margin: 0 0 12px; }
+.ws-kick { font: 700 11px var(--head); letter-spacing: .7px; text-transform: uppercase; color: var(--accent); margin-bottom: 2px; }
+.ws-stagehead h2 { margin: 0 0 4px; font-size: 22px; line-height: 1.25; }
+.ws-stagehead h2 span { font-weight: 500; font-size: 15px; color: var(--t3); margin-left: 6px; }
+.ws-stagehead p { margin: 0 0 8px; font-size: 13px; line-height: 1.55; color: var(--t2); max-width: 720px; }
+.ws-gets { display: inline-block; padding: 3px 10px; border-radius: 99px; background: var(--bg2, #eef1f6); font-size: 11px; color: var(--t2); }
+
+/* sub-tabs inside a step */
+.ws-subs, .ws-dockbar { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+.ws-sub { padding: 6px 13px; border: 1px solid var(--line2, var(--line)); border-radius: 99px; background: var(--bg); font: 600 12px var(--head); color: var(--t2); cursor: pointer; }
+.ws-sub:hover { border-color: var(--accent); color: var(--accent); }
+.ws-sub.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent, #fff); }
+.ws-dockbar { margin-top: 0; }
+
+.ws-nav { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 16px 0 6px; padding-top: 14px; border-top: 1px solid var(--line); }
+.ws-nav .st-btn { padding: 9px 16px; font-size: 13px; }
+.ws-nav .st-btn[hidden] { display: none; }
+
+/* the verdict strip over the cloth */
+.ws-verdict { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 9px 14px; margin: 0 0 10px; border-radius: 10px; background: var(--bg2, #f4f6f9); border: 1px solid var(--line); cursor: pointer; font-size: 12px; color: var(--t2); }
+.ws-verdict:hover { border-color: var(--accent); }
+.ws-badge { padding: 3px 11px; border-radius: 99px; font: 700 12px var(--head); background: var(--bg); color: var(--t2); border: 1px solid var(--line2, var(--line)); }
+.ws-verdict.ok .ws-badge { background: rgba(30,122,84,.12); color: var(--good, #1e7a54); border-color: rgba(30,122,84,.3); }
+.ws-verdict.warn .ws-badge { background: rgba(154,91,0,.1); color: var(--warn, #9a5b00); border-color: rgba(154,91,0,.3); }
+.ws-verdict.bad .ws-badge { background: rgba(178,59,59,.1); color: var(--danger, #b23b3b); border-color: rgba(178,59,59,.3); }
+.ws-verdict.bad .ws-vtext { color: #7d2222; }
+.ws-k { display: inline-flex; flex-direction: column; line-height: 1.15; }
+.ws-k small { font-size: 10px; letter-spacing: .4px; text-transform: uppercase; color: var(--t3); }
+.ws-k b { font-size: 13px; color: var(--t1); }
+.ws-more { margin-left: auto; font-weight: 600; color: var(--accent); }
+
+/* the cards inside a step: no extra gap at the end of a pane, the cloth card flush */
+.ws-subpane > .st-card:last-child { margin-bottom: 0; }
+.ws-right > .st-card { margin-bottom: 0; }
+.ws-dockcard[hidden] { display: none !important; }
+@media (min-width: 1100px) {
+  .ws-right .st-view #st-loops, .ws-right .st-view #st-twin, .ws-right .st-view #st-yarn { height: clamp(360px, calc(100vh - 380px), 640px); }
+  .ws-right .st-view #st-cloth canvas { height: clamp(360px, calc(100vh - 380px), 640px) !important; }
+}
+/* the 3D tab bar is a row of sub-tabs */
+.ws-right .st-tabs { flex-wrap: wrap; overflow: visible; row-gap: 2px; }
+
+/* a printed job card: every step, no controls */
+@media print {
+  .ws-steps, .ws-subs, .ws-nav, .ws-banner, .ws-techcard, .ws-verdict, .ws-dockbar, .ws-stagehead .ws-gets { display: none !important; }
+  .ws-stage[hidden], .ws-subpane[hidden], .ws-dockcard[hidden] { display: block !important; }
+  .ws-body { display: block; }
+  .ws-right { position: static; max-height: none; overflow: visible; }
+}
+
+/* the old numbered bubbles on the cards would clash with the step numbers */
+.ws-subpane .st-step > b, .ws-dockcard .st-step > b { display: none; }
+.ws-subpane .st-step, .ws-dockcard .st-step { font-size: 12px; }
+.ws-tools { margin: 0 0 8px; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; background: var(--bg2, #f4f6f9); }
+.ws-tools > summary { cursor: pointer; font: 600 12px var(--head); color: var(--t2); }
+.ws-tools[open] > summary { margin-bottom: 8px; }

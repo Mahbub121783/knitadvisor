@@ -752,12 +752,13 @@
       showClothState(r);
       pushTrans();
       if (window.KAStudioLook) window.KAStudioLook.studioResult(r);
-      document.dispatchEvent(new CustomEvent('ka-studio-result'));      // the development sheet follows the drawing
+      document.dispatchEvent(new CustomEvent('ka-studio-result', { detail: r }));      // the development sheet follows the drawing; the workspace's verdict strip reads it
     }).catch(function (e) {
       if (my !== reqSeq) return;
       last = null;
       var msg = (e.data && e.data.error) || e.message || 'Could not analyse.';
       $('st-status').innerHTML = '<div class="st-err">' + esc(msg) + '</div>';
+      document.dispatchEvent(new CustomEvent('ka-studio-result', { detail: { success: false, error: msg } }));
       $('st-checks').innerHTML = '';
       if (window.KAStudioGates) window.KAStudioGates.render(null);
     });
@@ -1840,7 +1841,7 @@
   function runInvent() {
     if (INV.busy) return;
     var gsm = num('st-gsm');
-    if (!(gsm >= 80)) { $('inv-out').innerHTML = '<div class="st-err">Give the target GSM (in Target, on the left) first.</div>'; return; }
+    if (!(gsm >= 80)) { $('inv-out').innerHTML = '<div class="st-err">Give the target GSM first (step 1, Targets).</div>'; return; }
     INV.busy = true; $('inv-go').disabled = true; $('inv-go').textContent = 'Searching…';
     $('inv-out').innerHTML = '<p class="st-hint">The Studio is knitting hundreds of programmes to find the best…</p>';
     var body = { gsm: gsm, width_in: num('st-width') || null, bed: INV.bed, prefs: INV.prefs, novelty: INV.novelty, max_needles: +$('inv-needles').value, max_feeds: +$('inv-feeds').value,

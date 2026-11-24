@@ -272,6 +272,7 @@
     }
   </style>
   <link rel="stylesheet" href="assets/css/theme-v2.css?v=20261112c">
+  <link rel="stylesheet" href="assets/css/studio-shell.css?v=20261127a">
   <script src="assets/js/app-shell.js?v=20261112e" defer></script>
 </head>
 <body>
@@ -281,7 +282,7 @@
   <main class="container st-main">
     <div class="st-head">
       <h1>Fabric Studio</h1>
-      <p>Design a new weft-knitted fabric needle by needle. Pick the machine type, the yarns and the target, draw the knit, tuck and miss programme, and the studio checks it, sets out the cams and needles, works out the yarn on every feeder and shows the fabric in 3D. Every figure is tagged <span class="src m">measured</span> from factory records, <span class="src c">calculated</span> from your inputs, or <span class="src e">estimated</span>.</p>
+      <p>Design a knitted fabric in seven steps: say what it is, choose the yarn, draw it, pick the machine, check it, finish it, and take it to the floor. The cloth on the right follows every change. Every figure is tagged <span class="src m">measured</span> from factory records, <span class="src c">calculated</span> from your inputs, or <span class="src e">estimated</span>.</p>
     </div>
 
     <div class="st-card" id="sh-card">
@@ -399,7 +400,7 @@
 
     <div class="st-layout" id="st-weft">
       <aside>
-        <div class="st-card">
+        <div class="st-card" id="ws-c-fab">
           <div class="st-step"><b>1</b> Fabrication</div>
           <div class="st-f st-row one"><div>
             <label for="st-template">Start from</label>
@@ -413,7 +414,7 @@
           <p class="st-hint" id="st-bed-hint"></p>
         </div>
 
-        <div class="st-card">
+        <div class="st-card" id="ws-c-yarn">
           <div class="st-step"><b>2</b> Yarn</div>
           <p class="st-hint" style="margin-top:0">Every yarn the design uses — set by the roles you give the feeders (face / ground, binder, loop or pile). Any count system: Ne, Nm, tex, dtex, denier, worsted; ply (2/40s) and filaments (75D/72F).</p>
             <div class="st-yrow" data-yrole="ground">
@@ -516,7 +517,7 @@
         <div class="st-card" id="dp-card"></div>
         <div class="st-card" id="ml-card"></div>
 
-        <div class="st-card">
+        <div class="st-card" id="ws-c-target">
           <div class="st-step"><b>3</b> Target</div>
           <div class="st-row">
             <div class="st-f"><label for="st-gsm">Finished GSM</label><input id="st-gsm" type="number" min="60" max="700" step="1" value="180"></div>
@@ -527,7 +528,7 @@
             <div class="st-f" style="flex:1 1 100%"><label for="st-comp">Target composition (optional)</label><input id="st-comp" type="text" maxlength="120" placeholder="e.g. 95% CO 5% EL, or 60% cotton 40% polyester" title="Write what the cloth must be. The Studio then solves the yarn's fibres and the elastane's denier, draft and feeding so the cloth comes out at those shares. Leave empty to choose the yarn and the elastane yourself."></div>
           </div>
         </div>
-        <div class="st-card">
+        <div class="st-card" id="ws-c-readings">
           <div class="st-step"><b>3b</b> Mill readings (optional)</div>
           <div class="st-hint" style="margin:0 0 6px">Your tester's numbers for THIS cloth replace the model's estimates, and the gap shows how far the model was. Leave empty to keep the estimates.</div>
           <div class="st-row">
@@ -541,7 +542,7 @@
         </div>
 
         <div class="st-card" id="vb-card" hidden></div>
-        <div class="st-card">
+        <div class="st-card" id="ws-c-machine">
           <div class="st-step"><b>4</b> Machine <span style="text-transform:none;font-weight:400;letter-spacing:0">(empty = recommended)</span></div>
           <div class="st-f st-row one"><div>
             <label for="st-mprof">Machine type</label>
@@ -606,7 +607,7 @@
           </details>
         </div>
 
-        <div class="st-card">
+        <div class="st-card" id="ws-c-rolls">
           <div class="st-step"><b>5</b> Trial rolls <span style="text-transform:none;font-weight:400;letter-spacing:0">(your mill's own cloth)</span></div>
           <p class="st-hint" style="margin-top:0">Knit a roll of this design, finish it (dyed, compacted) and measure it. The studio then uses your mill's numbers instead of the factory-record constants, for this design only. One roll corrects the level; two at different stitch lengths also show the scatter.</p>
           <div id="st-rolls"></div>
@@ -646,7 +647,7 @@
           </div>
         </div>
 
-        <div class="st-card st-noprint">
+        <div class="st-card st-noprint" id="ws-c-save">
           <div class="st-step"><b>6</b> Save</div>
           <div class="st-row one"><div class="st-f"><label for="st-name">Design name</label><input id="st-name" type="text" maxlength="60" placeholder="e.g. Polo pique 2-tuck"></div></div>
           <div class="st-tools" style="margin:0">
@@ -708,7 +709,7 @@
           <button type="button" class="st-btn primary" id="inv-go">Find structures</button>
           <div id="inv-out" style="margin-top:10px"></div>
         </div>
-        <div class="st-card">
+        <div class="st-card" id="ws-c-draw">
           <div class="st-step"><b>7</b> Design the needle programme</div>
           <div class="st-tools" id="st-edtools">
             <div class="st-pal" id="st-pal" role="group" aria-label="Brush">
@@ -741,13 +742,13 @@
           <p class="st-hint">Rows are feeders in the order the needles meet them, columns are needles in one repeat. Click or drag to paint. On a double bed the dial needle sits between two cylinder needles on rib gating, and face to face with one on interlock gating.</p>
         </div>
 
-        <div class="st-card">
+        <div class="st-card" id="ws-c-status">
           <div class="st-status" id="st-status">Draw a structure to begin.</div>
           <div id="st-gates" hidden></div>
           <ul class="st-checks" id="st-checks"></ul>
         </div>
 
-        <div class="st-card st-view">
+        <div class="st-card st-view" id="ws-view">
           <div class="st-seg" id="st-state" role="group" aria-label="State of the cloth" style="margin-bottom:6px">
             <button type="button" data-state="dry" title="Off the machine, conditioned flat (greige)">As knitted</button>
             <button type="button" data-state="wet" title="Soaked and dried flat">Wet relaxed</button>
@@ -896,7 +897,7 @@
             <div class="st-needles" id="st-needletypes"></div>
           </div>
 
-          <div class="st-pane" id="pane-sheet"><div class="st-hint">Fill the R&amp;D card, draw the design, then press “Make the development sheet”.</div></div>
+          <div class="st-pane" id="pane-sheet"><div class="st-hint">Draw the design (step 3), then open step 7, Make &amp; prove, and press “Make the development sheet”.</div></div>
           <div class="st-pane" id="pane-colours"></div>
           <div class="st-pane" id="pane-results"></div>
           <div class="st-pane" id="pane-machine"></div>
@@ -918,14 +919,14 @@
 
     <div class="st-layout" id="st-warp" hidden>
       <aside>
-        <div class="st-card">
+        <div class="st-card" id="ws-w-struct">
           <div class="st-step"><b>1</b> Structure</div>
           <div class="st-f st-row one"><div><label for="wp-template">Start from</label><select id="wp-template"></select></div></div>
           <p class="st-hint">Each guide bar has its own warp ends. Write its lapping course by course: <code>1-0/1-2//</code> is tricot, <code>1-0/2-3//</code> a 2-needle underlap, <code>1-0/0-1//</code> pillar, <code>0-0/2-2//</code> an inlay. Bar 1 is the front bar. On a double-needle-bar machine the pairs alternate front bed, back bed (<code>1-0/1-1//</code> = a loop on the front bed only; <code>1-0/0-1//</code> = a spacer yarn looping on both), or write a course as four numbers, <code>1-0-0-1</code>.</p>
           <div id="wp-bars"></div>
           <button type="button" class="st-btn" id="wp-addbar">+ Guide bar</button>
         </div>
-        <div class="st-card">
+        <div class="st-card" id="ws-w-machine">
           <div class="st-step"><b>2</b> Machine</div>
           <div class="st-f st-row one"><div><label for="wp-mtype">Machine</label><select id="wp-mtype"></select></div></div>
           <div class="st-row">
@@ -952,7 +953,7 @@
             <div class="st-f"><label for="wp-bbar">Of bar (GB)</label><input id="wp-bbar" type="number" min="1" max="8" step="1" value="1"></div>
           </div>
         </div>
-        <div class="st-card">
+        <div class="st-card" id="ws-w-target">
           <div class="st-step"><b>3</b> Target</div>
           <div class="st-row">
             <div class="st-f"><label for="wp-gsm">Finished GSM</label><input id="wp-gsm" type="number" min="20" max="900" step="1"></div>
@@ -977,8 +978,8 @@
         </div>
       </aside>
       <section>
-        <div class="st-card"><div class="st-step"><b>4</b> Result</div><div class="wp-jobhead" id="wp-jobhead"></div><div id="wp-status"></div><div id="wp-out"></div></div>
-        <div class="st-card"><div class="st-step"><b>5</b> 3D fabric</div>
+        <div class="st-card" id="ws-w-result"><div class="st-step"><b>4</b> Result</div><div class="wp-jobhead" id="wp-jobhead"></div><div id="wp-status"></div><div id="wp-out"></div></div>
+        <div class="st-card" id="ws-w-3d"><div class="st-step"><b>5</b> 3D fabric</div>
           <div class="st-seg" id="wp-3dmode" role="group" aria-label="3D view"><button type="button" data-m="loops" class="on">Loop structure</button><button type="button" data-m="cloth">Fabric (real view)</button></div>
           <div class="st-3dbar" id="wp-loopbar"><span class="st-zoom" id="wp-lview"><button type="button" class="st-btn" data-v="face">Face</button><button type="button" class="st-btn" data-v="back">Back</button><button type="button" class="st-btn" data-v="edge">Edge</button><button type="button" class="st-btn on" data-v="angle">Angle</button></span></div>
           <div class="st-3dbar" id="wp-clothbar" hidden><span class="st-zoom" id="wp-zoom"><button type="button" class="st-btn on" data-z="loops" title="Every loop, in real yarn">Loops</button><button type="button" class="st-btn" data-z="swatch" title="A 4 cm swatch">4 cm</button><button type="button" class="st-btn" data-z="cloth" title="The whole piece of cloth">Cloth</button></span>
@@ -987,8 +988,8 @@
           <div id="wp-cloth" hidden style="height:420px;position:relative;border-radius:10px;overflow:hidden"></div>
           <p class="st-hint" id="wp-3dhint">Each tube is one warp end, coloured by its guide bar. Every loop is drawn through the loop below it on the same needle; the underlaps run across the technical back — the front bar’s outermost. Closed laps cross at the loop’s foot. Drag to turn, Ctrl + scroll to zoom.</p>
         </div>
-        <div class="st-card"><div class="st-step"><b>6</b> Lapping diagram</div><div id="wp-lap"></div></div>
-        <div class="st-card st-noprint">
+        <div class="st-card" id="ws-w-lap"><div class="st-step"><b>6</b> Lapping diagram</div><div id="wp-lap"></div></div>
+        <div class="st-card st-noprint" id="ws-w-save">
           <div class="st-step"><b>7</b> Save</div>
           <div class="st-row one"><div class="st-f"><label for="wp-name">Design name</label><input id="wp-name" type="text" maxlength="60" placeholder="e.g. Locknit 40D E28"></div></div>
           <div class="st-tools" style="margin:0">
@@ -1015,7 +1016,7 @@
 <script src="assets/js/api.js"></script>
 <script src="assets/js/studio-cloth-map.js?v=20261110d"></script>
 <script src="assets/js/studio-warp-geom.js?v=20261111a"></script>
-<script src="assets/js/studio-warp.js?v=20261126a"></script>
+<script src="assets/js/studio-warp.js?v=20261127a"></script>
 <script src="assets/js/studio-needle.js?v=20261110d"></script>
 <script src="assets/js/studio-melange.js?v=20261118c"></script>
 <script src="assets/js/studio-blend.js?v=20261118d"></script>
@@ -1031,13 +1032,13 @@
 <script src="assets/js/pbr-package.js?v=20261122a"></script>
 <script src="assets/js/studio-pbr.js?v=20261122a"></script>
 <script src="assets/js/studio-sheet.js?v=20261126a"></script>
-<script src="assets/js/studio-mode.js?v=20261125a"></script>
+<script src="assets/js/studio-shell.js?v=20261127a"></script>
 <script src="assets/js/studio-camsheet.js?v=20261125a"></script>
 <script src="assets/js/studio-colourway.js?v=20261126b"></script>
 <script src="assets/js/studio-jacquard.js?v=20261125e"></script>
 <script src="assets/js/studio-vbed.js?v=20261121a"></script>
 <script src="assets/js/studio-capture.js?v=20261120b"></script>
 <script src="assets/js/studio-gates.js?v=20261121b"></script>
-<script src="assets/js/studio.js?v=20261126b"></script>
+<script src="assets/js/studio.js?v=20261127a"></script>
 </body>
 </html>
