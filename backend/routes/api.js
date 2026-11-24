@@ -1460,6 +1460,31 @@ router.post('/studio/warp/analyse', requireUser, (req, res) => {
   }
 });
 
+// Warp machine files: the set-up sheet (PDF) and the lapping chart (CSV), drawn from the same answer the page shows (engine/domain/warp-export.js).
+const warpExport = require('../engine/domain/warp-export');
+const warpExportLimiter = createRateLimiter({ name: 'warp_export', max: 30, windowMs: 60 * 1000, message: 'Too many exports - wait a minute.' });
+router.post('/studio/warp/export', requireUser, warpExportLimiter, (req, res) => {
+  try {
+    const b = req.body || {};
+    const out = warpStudio.analyse(b.design || {});
+    if (!out.success) return res.status(400).json({ success: false, error: out.error });
+    const name = String(b.name || '').replace(/\s+/g, ' ').trim().slice(0, 60), slug = warpExport.slug(name || out.structure.name);
+    if (b.format === 'csv') {
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="WarpChart-${slug}.csv"`);
+      return res.send(warpExport.lappingCsv(out, name));
+    }
+    const doc = warpExport.sheet(out, { name });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="WarpSetupSheet-${slug}.pdf"`);
+    doc.pipe(res); doc.end();
+  } catch (err) {
+    if (err instanceof warpExport.WarpExportError) return res.status(409).json({ success: false, code: 'WARP_LOCKED', error: err.message });
+    console.error('[studio] warp export failed:', err);
+    if (!res.headersSent) res.status(500).json({ success: false, error: 'Could not make the file.' });
+  }
+});
+
 // Costing is done in the Calculator, on a design saved from the Studio (the Studio never prices a design).
 router.post('/studio/warp/cost', requireUser, async (req, res) => {
   try {
@@ -1468,7 +1493,7 @@ router.post('/studio/warp/cost', requireUser, async (req, res) => {
     const row = (await studioRepo.designs.list(req.user.id)).find((d) => d.id === id);
     const w = row && row.design && row.design.tech === 'warp' ? row.design.warp : null;
     if (!w) return res.status(404).json({ success: false, error: 'That warp design was not found in your account.' });
-    const a = warpStudio.analyse({ machine: w.machine, bars: w.bars.map((b) => ({ notation: b.notation, threading: b.threading, yarn: b.yarn })), target: w.target, beams: w.beams });
+    const a = warpStudio.analyse({ machine: w.machine, bars: w.bars.map((b) => ({ notation: b.notation, threading: b.threading, yarn: b.yarn })), target: w.target, calibration: w.calibration || undefined, chemistry: w.chemistry || undefined, beams: w.beams });
     if (!a.success) return res.status(400).json({ success: false, error: a.error });
     const prices = (req.body || {}).prices || {};
     const cost = warpStudio.costOf(a, prices);
@@ -2134,7 +2159,7 @@ router.post('/cost-sheet/shell-from-studio', requireUser, async (req, res) => {
     let a, built;
     if (d.tech === 'warp') {
       const w = d.warp;
-      a = warpStudio.analyse({ machine: w.machine, bars: w.bars.map((b) => ({ notation: b.notation, threading: b.threading, yarn: b.yarn })), target: w.target, beams: w.beams });
+      a = warpStudio.analyse({ machine: w.machine, bars: w.bars.map((b) => ({ notation: b.notation, threading: b.threading, yarn: b.yarn })), target: w.target, calibration: w.calibration || undefined, chemistry: w.chemistry || undefined, beams: w.beams });
       if (!a.success) return res.status(400).json({ success: false, error: a.error });
       if (!a.ok_to_knit) return res.status(400).json({ success: false, error: 'This design does not knit as drawn — fix it in the Studio first.' });
       built = costSheet.shellFromWarp(a, row.name);

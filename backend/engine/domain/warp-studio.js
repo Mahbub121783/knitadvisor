@@ -61,6 +61,7 @@ const gcd = (a, b) => (b ? gcd(b, a % b) : a);
 const lcm = (a, b) => (a / gcd(a, b)) * b;
 
 class WarpError extends Error {}
+const WP = require('./warp-process');
 
 const RACK = 480;
 // how right the finished weight and width are: leave-one-out on the published tricots (tools/warp-crossval.js)
@@ -484,20 +485,52 @@ function analyse(input) {
     const wpcMachine = E / 2.54;
     if (tgtW > 0) kw = (needles / (tgtW * 2.54)) / wpcMachine;
 
-    // GSM at a machine course density
-    const at = (cpcM) => {
-      const c = 10 / cpcM;
+    // GSM at a machine course density. fcal is the yarn per course of the person's own trial rolls against the model (1 = no roll), kwX a width of its own
+    let fcal = 1;
+    const at = (cpcM, kwX, fX) => {
+      const c = 10 / cpcM, kwU = kwX || kw, fU = fX || fcal;
       const per = bars.map((b) => {
         const dn = beds === 2 ? dnbLength(b.pairs, p, c, b.yarn.d_mm, G) : null;
-        const lc = dn ? dn.perCourse : courseLength(b.laps, p, c, b.yarn.d_mm);      // mm of yarn per end per course (on the machine)
+        const lc = (dn ? dn.perCourse : courseLength(b.laps, p, c, b.yarn.d_mm)) * fU;      // mm of yarn per end per course (on the machine)
         const fed = lc / b.yarn.draft;                           // relaxed yarn per course (the mass): elastane is knitted drafted
         const runin = fed * b.yarn.beamDraft;                    // off the beam, where it is already wound stretched
-        const ends = wpcMachine * kw * b.thread.fraction;        // ends per cm, finished
+        const ends = wpcMachine * kwU * b.thread.fraction;       // ends per cm, finished
         const gsm = (ends * cpcM * kc * fed * b.yarn.tex) / 100;
         return { lc, fed, runin, ends, gsm, dn };
       });
       return { per, gsm: per.reduce((t, x) => t + x.gsm, 0) };
     };
+    // trial rolls: the mill's own cloth replaces the published constants. Each roll gives the finished weight (and/or a measured runner per bar) at the quality it was
+    // knitted at and, if measured, its finished width; the yarn per course and the finished width of the rolls (geometric means) stand in for the model's
+    let calib = null;
+    const rollsIn = input.calibration && Array.isArray(input.calibration.rolls) ? input.calibration.rolls : null;
+    if (rollsIn && rollsIn.length) {
+      if (rollsIn.length > 12) throw new WarpError('At most 12 trial rolls.');
+      const lf = [], lk = [], per = [];
+      rollsIn.forEach((r, n) => {
+        const cpcR = +r.cpc, gsmR = +r.gsm, widthR = +r.width_in;
+        if (!(cpcR >= 3 && cpcR <= 60)) throw new WarpError(`Trial roll ${n + 1}: give the courses per cm the machine knitted at (the quality), between 3 and 60.`);
+        if (!(gsmR > 0) && !(Array.isArray(r.runner_mm_per_rack) && r.runner_mm_per_rack.some((v) => +v > 0))) throw new WarpError(`Trial roll ${n + 1}: give the finished weight (GSM) or the measured runner of a bar.`);
+        if (gsmR > 0 && !(gsmR >= 10 && gsmR <= 1500)) throw new WarpError(`Trial roll ${n + 1}: the finished GSM must be between 10 and 1500.`);
+        if (widthR > 0 && !(widthR >= 10 && widthR <= 250)) throw new WarpError(`Trial roll ${n + 1}: the finished width must be between 10 and 250 in.`);
+        const kwR = widthR > 0 ? (needles / (widthR * 2.54)) / wpcMachine : kw, row = { roll: n + 1, cpc: cpcR };
+        const base0 = at(cpcR, kwR, 1);
+        if (gsmR > 0) { const f = gsmR / base0.gsm; lf.push(Math.log(f)); row.gsm = gsmR; row.model_gsm = Math.round(base0.gsm); row.f_gsm = r3(f); }
+        if (Array.isArray(r.runner_mm_per_rack)) {
+          const fr = [];
+          r.runner_mm_per_rack.forEach((v, i) => { if (+v > 0 && base0.per[i]) { const f = +v / (base0.per[i].lc * RACK); fr.push(f); lf.push(Math.log(f)); } });
+          if (fr.length) row.f_runner = r3(Math.exp(fr.reduce((t, x) => t + Math.log(x), 0) / fr.length));
+        }
+        if (widthR > 0) { lk.push(Math.log(kwR)); row.width_in = widthR; row.kw = r3(kwR); }
+        per.push(row);
+      });
+      const gm = (a) => (a.length ? Math.exp(a.reduce((t, x) => t + x, 0) / a.length) : null);
+      const sd = (a) => { if (a.length < 2) return 0; const m = a.reduce((t, x) => t + x, 0) / a.length; return Math.sqrt(a.reduce((t, x) => t + (x - m) ** 2, 0) / (a.length - 1)); };
+      const f = gm(lf), kwC = gm(lk);
+      if (f) fcal = f;
+      if (kwC && !(+((input.target || {}).width_in) > 0)) kw = kwC;
+      calib = { n: per.length, f_lc: f ? r3(f) : null, f_vs_model_pct: f ? r1((f - 1) * 100) : null, kw: kwC ? r3(kwC) : null, kw_vs_model_pct: kwC ? r1((kwC / (elastic ? 1.8 : M.kw) - 1) * 100) : null, scatter_pct: r1(Math.max(sd(lf), sd(lk)) * 100), rolls: per };
+    }
     const tg = +((input.target || {}).gsm);
     let cpcM, cpcSource;
     if (+m.cpc > 0) { cpcM = +m.cpc; cpcSource = 'your machine setting'; }
@@ -612,7 +645,7 @@ function analyse(input) {
       const runner = x.lc * RACK;
       return {
         bar: b.n, notation: b.notation, kind: b.kind.label, bed: b.role || 'front', threading: b.thread.pattern, threaded_pct: r1(b.thread.fraction * 100),
-        yarn: b.yarn.label, fibre: b.yarn.fibre_label, tex: r2(b.yarn.tex), draft: b.yarn.draft > 1 ? b.yarn.draft : null,
+        yarn: b.yarn.label, fibre: b.yarn.fibre_label, fibre_id: b.yarn.fibre, mono: !!b.yarn.mono, filament: !!b.yarn.mono || /filament|elastane|polypropylene/.test(b.yarn.fibre), tex: r2(b.yarn.tex), draft: b.yarn.draft > 1 ? b.yarn.draft : null,
         laps: b.laps.map((l) => ({ course: l.course, overlap: l.inlay ? 0 : l.o, underlap: l.u, lap: l.inlay ? 'inlay' : l.closed ? 'closed' : 'open' })),
         d_mm: r3(b.yarn.d_mm), mm_per_course: r3(x.lc), runner_mm_per_rack: Math.round(runner), fed_mm_per_rack: Math.round(x.runin * RACK), beam_draft: b.yarn.beamDraft > 1 ? r2(b.yarn.beamDraft) : null,
         ends, gsm: r1(x.gsm), pct: r1((x.gsm / R.gsm) * 100),
@@ -620,22 +653,24 @@ function analyse(input) {
         kg_per_1000m: r2((ends * (x.fed / 1000) * (cpcM * 100) * 1000 * b.yarn.tex) / 1e6),
       };
     });
+    if (calib) add('note', `Calibrated on your ${calib.n} trial roll${calib.n === 1 ? '' : 's'}: ${calib.f_lc ? `yarn per course ${calib.f_vs_model_pct > 0 ? '+' : ''}${calib.f_vs_model_pct} % against the model` : ''}${calib.f_lc && calib.kw ? ', ' : ''}${calib.kw ? `finished width factor ${calib.kw} (${calib.kw_vs_model_pct > 0 ? '+' : ''}${calib.kw_vs_model_pct} % against the model)` : ''}${calib.scatter_pct ? `; the rolls scatter ${calib.scatter_pct} %` : ''}.`);
     const beamPlan = planBeams({ bars, per: R.per, barsOut, mType, widthIn, cpcM, kc, speed, eff, beam: input.beams || {}, orderM: +((input.target || {}).order_m) });
     if (beamPlan.warn) add('warn', beamPlan.warn);
     const lappingPaths = bars.map((b) => ({ bar: b.n, pairs: b.pairs, role: b.role || null }));
-    return {
+    const out = {
       success: true,
       tech: 'warp',
       structure: { name: nameOf(bars), bars: bars.length, repeat_courses: repeat, counter_lapped: counter, beds, gap_mm: G || null },
       checks: checks.sort((a, b) => ({ error: 0, warn: 1, note: 2, ok: 3 }[a.level] - { error: 0, warn: 1, note: 2, ok: 3 }[b.level])),
       ok_to_knit: !checks.some((c) => c.level === 'error'),
       machine: {
-        type: mType, label: M.label, needle: M.needle, gauge: E, pitch_mm: r3(p), width_in: widthIn, needles, speed_cpm: speed, efficiency_pct: Math.round(eff * 100),
+        type: mType, label: M.label, needle: M.needle, gauge: E, pitch_mm: r3(p), width_in: widthIn, needles, speed_cpm: speed, speed_range: M.speed, efficiency_pct: Math.round(eff * 100),
         cpc_machine: r2(cpcM), cpc_source: cpcSource, m_per_hour: r1(mPerH), finished_m_per_hour: r1(finishedMperH), kg_per_hour: r2(kgh), use: M.use,
       },
       fabric: {
         accuracy: (() => {
           const tg = +((input.target || {}).width_in) > 0;
+          if (calib) return { checked: true, own_rolls: true, interval_pct: 80, basis: `calibrated on your ${calib.n} trial roll${calib.n === 1 ? '' : 's'}${calib.scatter_pct ? ', which scatter ' + calib.scatter_pct + ' %' : ' (one roll shows no scatter)'}`, method: 'trial rolls', gsm: { range: [Math.round(R.gsm * (1 - Math.max(0.03, calib.scatter_pct / 100) * 1.28)), Math.round(R.gsm * (1 + Math.max(0.03, calib.scatter_pct / 100) * 1.28))], typical_error_pct: Math.max(3, calib.scatter_pct), within_5_pct: null, within_8_pct: null }, width: null };
           if (WARP_ACCURACY && mType === 'tricot' && !elastic && beds === 1) {
             const A = WARP_ACCURACY.tricot, rng = (v, e, d) => [v / (1 + e.p90), v / (1 + e.p10)].map((x) => Math.round(x * 10 ** d) / 10 ** d);
             return { checked: true, interval_pct: 80, basis: `checked on ${A.gsm.n} published nylon tricots, each predicted without itself (leave-one-out)`, method: WARP_ACCURACY.method,
@@ -654,8 +689,14 @@ function analyse(input) {
       beams: beamPlan,
       character,
       lapping: lappingPaths,
+      calibration: calib,
       basis: 'geometry derived (loop legs, needle wrap, diagonal underlap), checked on 31 published constructions — runner median error about 4 %; wrap radius and the pillar term fitted there; tricot finished-state factors from 15 published nylon tricots; raschel factors and shog limits modelled; no factory warp records yet',
     };
+    // the rest of what a mill asks of a design: the wet route, the cloth in every state, the guide-bar drive, the open area, the gates (warp-process.js)
+    const proc = WP.analyse(out, input);
+    out.chemistry = proc.chemistry; out.states = proc.states; out.drive = proc.drive; out.open_area = proc.open_area; out.gates = proc.gates;
+    out.engine_faults = proc.faults;
+    return out;
   } catch (e) {
     if (e instanceof WarpError) return { success: false, error: e.message };
     throw e;

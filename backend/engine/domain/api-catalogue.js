@@ -75,7 +75,7 @@ const ENDPOINTS = [
   E('POST', '/studio/fabric-light',      G.studio, 'Fabric light: open area, opacity, contrast ratio and show-through of a knit, flat and stretched', true),
   E('POST', '/studio/fabric-hand',       G.studio, 'Fabric hand: tensile, shear, bending, compression and surface numbers of a knit, five hand scores in words, set against a reference jersey', true),
   E('GET',  '/studio/fabric-hand/catalogue', G.studio, 'Fabric hand structures, finishes, loads and end uses', true),
-  E('POST', '/studio/warp/analyse',      G.studio, 'Warp design: lapping, runner, GSM, width, beams, production, checks', true),
+  E('POST', '/studio/warp/analyse',      G.studio, 'Warp design: lapping, runner, GSM, width, beams, production, the wet route, the cloth in every state, guide-bar drive, open area, gates; trial rolls (calibration.rolls) replace the published constants', true),
 
   E('POST', '/cost',                     G.cost,   'Fabric cost', true),
   E('POST', '/garment-costing',          G.cost,   'Cut-make-trim and fabric FOB estimate', true),

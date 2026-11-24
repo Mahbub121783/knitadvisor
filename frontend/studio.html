@@ -961,6 +961,20 @@
           </div>
           <p class="st-hint">Give the GSM and the studio solves the quality (courses/cm); give the quality and it works out the GSM. A finished width you know replaces the modelled narrowing.</p>
         </div>
+        <div class="st-card" id="wp-proc-card">
+          <div class="st-step"><b>3b</b> Dyeing and trial rolls</div>
+          <div class="st-row"><div class="st-f"><label for="wp-shade">Shade depth (for the wet route and the dye)</label><select id="wp-shade"><option value="">Medium (default)</option><option value="white">White</option><option value="light">Light</option><option value="medium">Medium</option><option value="dark">Dark</option><option value="black">Black</option></select></div></div>
+          <div class="st-sub" style="margin-top:8px">Trial rolls (your machine's own cloth)</div>
+          <p class="st-hint" style="margin-top:0">Knit the design at a quality you set, finish it and measure it: the finished weight, the finished width and, if you can, the runner of each bar. The Studio then uses your mill's yarn per course and width instead of the published constants. One roll corrects the level; two or three at different qualities also show the scatter.</p>
+          <div id="wp-rolls"></div>
+          <div class="st-tools" style="margin:6px 0 0">
+            <button type="button" class="st-btn" id="wp-addroll">+ Trial roll</button>
+            <label class="st-check" style="margin:0"><input type="checkbox" id="wp-userolls" checked> Use my rolls</label>
+            <button type="button" class="st-btn" id="wp-rollcsv" title="A CSV saved from the Warp rolls sheet of the template">Load rolls from a CSV</button>
+            <input type="file" id="wp-rollfile" accept=".csv,text/csv" hidden>
+            <a class="st-hint" style="margin:0" href="assets/downloads/KnitAdvisor-trial-roll-template.xlsx" download>Trial roll template (Excel)</a>
+          </div>
+        </div>
       </aside>
       <section>
         <div class="st-card"><div class="st-step"><b>4</b> Result</div><div class="wp-jobhead" id="wp-jobhead"></div><div id="wp-status"></div><div id="wp-out"></div></div>
@@ -984,6 +998,9 @@
             <button type="button" class="st-btn" id="wp-export">Export file</button>
             <label class="st-btn" style="display:inline-block">Import<input type="file" id="wp-import" accept="application/json" hidden></label>
             <button type="button" class="st-btn" id="wp-print">Print job card</button>
+            <button type="button" class="st-btn" data-wx="pdf" title="One A4: bars, lapping on point paper, pattern chain and shog, beams, the wet route, every state, the gates">Set-up sheet (PDF)</button>
+            <button type="button" class="st-btn" data-wx="csv" title="Every bar and course: guide positions, overlap, underlap, shog in mm, chain links; threading; beams; the route">Lapping chart (CSV)</button>
+            <span class="st-hint" id="wp-xstat" style="margin:0"></span>
             <a class="st-btn" id="wp-cost" href="#" hidden style="text-decoration:none">Cost this design in the Calculator →</a>
             <a class="st-btn" id="wp-sheet" href="#" hidden style="text-decoration:none">Use it in a costing sheet →</a>
           </div>
@@ -998,7 +1015,7 @@
 <script src="assets/js/api.js"></script>
 <script src="assets/js/studio-cloth-map.js?v=20261110d"></script>
 <script src="assets/js/studio-warp-geom.js?v=20261111a"></script>
-<script src="assets/js/studio-warp.js?v=20261111i"></script>
+<script src="assets/js/studio-warp.js?v=20261126a"></script>
 <script src="assets/js/studio-needle.js?v=20261110d"></script>
 <script src="assets/js/studio-melange.js?v=20261118c"></script>
 <script src="assets/js/studio-blend.js?v=20261118d"></script>

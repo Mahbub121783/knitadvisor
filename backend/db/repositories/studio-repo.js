@@ -29,6 +29,7 @@ function cleanDesign(body) {
       if (!b.yarn || typeof b.yarn !== 'object') throw new DesignError(`Guide bar ${i + 1}: give its yarn.`);
     });
     if (!w.machine || typeof w.machine !== 'object') throw new DesignError('Nothing to save.');
+    if (w.rolls != null && (!Array.isArray(w.rolls) || w.rolls.length > 12)) throw new DesignError('At most 12 trial rolls.');
     const json = JSON.stringify({ ...d, name });
     if (Buffer.byteLength(json) > MAX_BYTES) throw new DesignError('This design is too large to save.');
     return { name, json };

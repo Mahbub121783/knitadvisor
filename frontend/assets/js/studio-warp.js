@@ -9,7 +9,7 @@
   var BAR_COL = ['#1857C4', '#c2410c', '#0f9d76', '#7a4fc2', '#b8860b', '#0e7490', '#be185d', '#4d7c0f'];
   var HINT_LOOPS = 'Each tube is one warp end, coloured by its guide bar. Every loop is drawn through the loop below it on the same needle; the underlaps run across the technical back — the front bar’s outermost. Closed laps cross at the loop’s foot. Drag to turn, Ctrl + scroll to zoom.', HINT_CLOTH = 'The real view: the knit3d engine draws every end from the same lapping in real yarn, at the finished wales and courses. Drag to turn, Ctrl + scroll to zoom; Show back shows the underlaps.';
   function barCol(i) { return (W.bars[i] && W.bars[i].colour) || BAR_COL[i % 8]; }
-  var W = { bars: [], templates: [], fibres: {}, machines: {}, last: null, seq: 0, timer: null };
+  var W = { bars: [], templates: [], fibres: {}, machines: {}, last: null, seq: 0, timer: null, rolls: [] };
 
   function fibreOpts(sel) { return Object.keys(W.fibres).map(function (k) { return '<option value="' + k + '"' + (k === sel ? ' selected' : '') + '>' + esc(W.fibres[k]) + '</option>'; }).join(''); }
   var UNITS = [['denier', 'D'], ['dtex', 'dtex'], ['tex', 'tex'], ['ne', 'Ne'], ['nm', 'Nm'], ['mm', 'mm (mono Ø)']];
@@ -36,6 +36,8 @@
     var n = function (id) { var v = parseFloat($(id).value); return isFinite(v) && v > 0 ? v : null; };
     return {
       machine: { type: $('wp-mtype').value, gauge: n('wp-gauge'), width_in: n('wp-width'), speed_cpm: n('wp-speed'), efficiency: n('wp-eff'), cpc: n('wp-cpc'), notation_step: +$('wp-nstep').value, gap_mm: n('wp-gap') },
+      chemistry: $('wp-shade').value ? { shade: $('wp-shade').value } : undefined,
+      calibration: $('wp-userolls').checked && cleanRolls().length ? { rolls: cleanRolls() } : undefined,
       bars: W.bars.map(function (b) { return { notation: b.notation, threading: b.threading, yarn: b.yarn }; }), target: { gsm: n('wp-gsm'), width_in: n('wp-fwidth'), order_m: n('wp-order') },
       beams: { flange_in: n('wp-bflange'), barrel_in: n('wp-bbarrel'), width_in: n('wp-bwidth'), full_kg: n('wp-bkg'), full_m: n('wp-bm'), full_bar: n('wp-bbar'), residue_pct: $('wp-bresidue').value === '' ? null : +$('wp-bresidue').value, waste_pct: $('wp-bwaste').value === '' ? null : +$('wp-bwaste').value },
     };
@@ -64,6 +66,7 @@
     h += '<div class="st-kpis">' + kpi('Weight', F.gsm + ' GSM', 'finished' + (A ? ' · 8 in 10 land ' + A.gsm.range.join('–') : '')) + kpi('Width', F.width_in + '"', 'finished, from ' + M.width_in + '" on the machine' + (A && A.width ? ' · 8 in 10 land ' + A.width.range.join('–') + '"' : '')) + kpi('Wales × courses', F.wpc + ' × ' + F.cpc, 'per cm, finished') +
       kpi('Quality', M.cpc_machine + ' courses/cm', 'on the machine — ' + esc(M.cpc_source)) + kpi('Production', M.finished_m_per_hour + ' m/h', M.kg_per_hour + ' kg/h at ' + M.speed_cpm + ' courses/min, ' + M.efficiency_pct + '%') +
       (F.spacer ? kpi('Thickness', F.spacer.thickness_mm + ' mm', 'bed gap ' + F.spacer.gap_mm + ' mm; ' + F.spacer.spacer_yarns_per_cm2 + ' spacer yarns/cm² at ' + F.spacer.angle_deg + '°') : '') + '</div>';
+    h += processHtml(r);
     h += F.accuracy ? '<div class="st-acc"><b>How right is this?</b> ' + (A ? esc(A.basis.charAt(0).toUpperCase() + A.basis.slice(1)) + ': the finished weight was typically ' + A.gsm.typical_error_pct + '% off (' + A.gsm.within_5_pct + '% within ±5%, ' + A.gsm.within_8_pct + '% within ±8%)' + (A.width ? ' and the width ' + A.width.typical_error_pct + '%' : '') + '. Most of it is how much the cloth narrows and closes up in finishing — give your finished width to remove that part. The yarn per course (runner) is closer: about 4% on 31 published constructions.' : esc(F.accuracy.basis) + ' The yarn per course follows the same geometry that is within about 4% on published tricots.') + '</div>' : '';
     h += '<div class="st-sub">Guide bars</div><div class="st-scroll"><table class="st-t"><tr><th>Bar</th><th>Lapping</th><th>What it knits</th><th>Threading</th><th>Yarn</th><th>Yarn / course</th><th>Runner (mm/rack)</th><th>Ends</th><th>Share</th><th>kg per 1,000 m</th></tr>' +
       r.bars.map(function (b) {
@@ -84,7 +87,7 @@
     var fields = {};
     FIELDS.forEach(function (id) { fields[id] = $(id).value; });
     return { v: 3, tech: 'warp', name: $('wp-name').value.trim() || ((W.last && W.last.structure && W.last.structure.name) || 'Warp design'),
-      warp: { machine: payload().machine, target: payload().target, beams: payload().beams, fields: fields, barcol: $('wp-barcol').checked, colour: $('wp-col').value,
+      warp: { machine: payload().machine, target: payload().target, beams: payload().beams, rolls: W.rolls, shade: $('wp-shade').value, calibration: payload().calibration || null, chemistry: payload().chemistry || null, fields: fields, barcol: $('wp-barcol').checked, colour: $('wp-col').value,
         bars: W.bars.map(function (b) { return { notation: b.notation, threading: b.threading || 'X', yarn: b.yarn || {}, colour: b.colour || null }; }) } };
   }
   function loadDesign(o) {
@@ -92,6 +95,7 @@
     if (!o || o.tech !== 'warp' || !w || !Array.isArray(w.bars) || !w.bars.length) throw new Error('Not a warp design file.');
     W.bars = w.bars.slice(0, 8).map(function (b) { return { notation: b.notation, threading: b.threading || 'X', yarn: Object.assign({}, b.yarn), colour: b.colour || undefined }; });
     $('wp-name').value = o.name || '';
+    W.rolls = Array.isArray(w.rolls) ? w.rolls.slice(0, 12) : []; $('wp-shade').value = w.shade || ''; renderRolls();
     Object.keys(w.fields || {}).forEach(function (id) { if ($(id)) $(id).value = w.fields[id]; });
     $('wp-barcol').checked = !!w.barcol; if (w.colour) $('wp-col').value = w.colour;
     syncMachine(); clothKey = ''; renderBars(); schedule();
@@ -146,6 +150,107 @@
       $('wp-jobhead').innerHTML = '<b style="font-size:15px">' + esc($('wp-name').value || (W.last && W.last.structure && W.last.structure.name) || 'Warp design') + '</b><br>' + (m ? esc(m.label) + ' · E' + m.gauge + ' · ' + m.needles + ' needles · ' : '') + new Date().toLocaleDateString('en-GB');
       window.print();
     });
+  }
+
+  // ── trial rolls: the quality the roll was knitted at, its finished weight and width, the runner of each bar ──
+  var ROLL_F = [['cpc', 'Courses/cm (machine)', '0.1'], ['gsm', 'Finished GSM', '1'], ['width_in', 'Finished width in', '0.1'], ['runners', 'Runner mm/rack, bar 1, 2 …', 'text']];
+  function renderRolls() {
+    $('wp-rolls').innerHTML = W.rolls.map(function (r, i) {
+      return '<div class="st-roll" data-i="' + i + '">' + ROLL_F.map(function (f) {
+        return '<div><label>' + f[1] + '</label><input ' + (f[2] === 'text' ? 'type="text" placeholder="1565, 1143"' : 'type="number" step="' + f[2] + '"') + ' data-k="' + f[0] + '" value="' + esc(r[f[0]] == null ? '' : r[f[0]]) + '"></div>';
+      }).join('') + '<button type="button" data-del="' + i + '" aria-label="Remove roll">remove roll</button></div>';
+    }).join('') || '<p class="st-hint">No rolls yet.</p>';
+  }
+  function cleanRolls() {
+    return W.rolls.map(function (r) {
+      var run = String(r.runners || '').split(/[,;\s]+/).map(function (v) { return parseFloat(v) || 0; });
+      return { cpc: +r.cpc, gsm: +r.gsm || undefined, width_in: +r.width_in || undefined, runner_mm_per_rack: run.some(function (v) { return v > 0; }) ? run : undefined };
+    }).filter(function (r) { return r.cpc > 0 && (r.gsm > 0 || r.runner_mm_per_rack); });
+  }
+  // a CSV saved from the template's Warp rolls sheet: found by the headings (the quality, GSM, width, a runner column per bar)
+  function parseWarpRollCsv(text) {
+    var lines = text.replace(/^\ufeff/, '').split(/\r?\n/).filter(function (l) { return l.trim(); });
+    if (lines.length < 2) return { rows: [], why: 'it has no data lines.' };
+    var sep = (lines[0].match(/;/g) || []).length > (lines[0].match(/,/g) || []).length ? ';' : ',';
+    var cells = function (l) { var o = [], cur = '', q = false; for (var i = 0; i < l.length; i++) { var c = l[i]; if (c === '"') { if (q && l[i + 1] === '"') { cur += '"'; i++; } else q = !q; } else if (c === sep && !q) { o.push(cur); cur = ''; } else cur += c; } o.push(cur); return o; };
+    var head = cells(lines[0]).map(function (h) { return h.toLowerCase(); });
+    var at = function (re) { for (var i = 0; i < head.length; i++) if (re.test(head[i])) return i; return -1; };
+    var iq = at(/quality|courses/), ig = at(/gsm/), iw = at(/width/), ir = head.map(function (h, i) { return /runner/.test(h) ? i : -1; }).filter(function (i) { return i >= 0; });
+    var rows = [];
+    lines.slice(1).forEach(function (l) {
+      if (/example/i.test(l)) return;
+      var c = cells(l), num = function (i) { var v = parseFloat(String(c[i] || '').replace(',', '.')); return v > 0 ? v : ''; };
+      var r = { cpc: iq >= 0 ? num(iq) : '', gsm: ig >= 0 ? num(ig) : '', width_in: iw >= 0 ? num(iw) : '', runners: ir.map(function (i) { return num(i) || 0; }).join(', ').replace(/(, 0)+$/, '') };
+      if (r.cpc && (r.gsm || /[1-9]/.test(r.runners))) rows.push(r);
+    });
+    return { rows: rows, why: 'a roll needs the quality (courses/cm) and the finished GSM or a runner.' };
+  }
+  function bindRolls() {
+    $('wp-addroll').addEventListener('click', function () { var l = W.rolls[W.rolls.length - 1] || {}; W.rolls.push({ cpc: l.cpc || (W.last && W.last.machine ? W.last.machine.cpc_machine : ''), gsm: '', width_in: '', runners: '' }); renderRolls(); });
+    $('wp-rolls').addEventListener('input', function (e) {
+      var row = e.target.closest('.st-roll'); if (!row) return;
+      W.rolls[+row.getAttribute('data-i')][e.target.getAttribute('data-k')] = e.target.value; schedule();
+    });
+    $('wp-rolls').addEventListener('click', function (e) { var d = e.target.getAttribute('data-del'); if (d == null) return; W.rolls.splice(+d, 1); renderRolls(); schedule(); });
+    $('wp-rollcsv').addEventListener('click', function () { $('wp-rollfile').click(); });
+    $('wp-rollfile').addEventListener('change', function (e) {
+      var f = e.target.files && e.target.files[0]; if (!f) return;
+      var rd = new FileReader();
+      rd.onload = function () { var res = parseWarpRollCsv(String(rd.result || '')); if (!res.rows.length) $('wp-rolls').insertAdjacentHTML('beforeend', '<p class="st-hint">No usable roll in that file: ' + esc(res.why) + '</p>'); else { W.rolls = res.rows.slice(0, 12); renderRolls(); schedule(); } e.target.value = ''; };
+      rd.readAsText(f);
+    });
+    renderRolls();
+  }
+  // machine files
+  function bindExport() {
+    document.addEventListener('click', function (e) {
+      var btn = e.target.closest && e.target.closest('[data-wx]'); if (!btn || btn.disabled) return;
+      var fmt = btn.getAttribute('data-wx'), st = $('wp-xstat');
+      btn.disabled = true; st.textContent = 'Making the file…';
+      var base = typeof API_BASE !== 'undefined' ? API_BASE : '';
+      fetch(base + '/api/studio/warp/export', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ design: payload(), name: $('wp-name').value || '', format: fmt }) }).then(function (res) {
+        if (res.ok) { var m = (res.headers.get('Content-Disposition') || '').match(/filename="([^"]+)"/); return res.blob().then(function (blob) { return { blob: blob, name: m ? m[1] : 'warp-file.' + fmt }; }); }
+        return res.json().catch(function () { return {}; }).then(function (d) { throw new Error(d.error || 'Could not make the file (' + res.status + ').'); });
+      }).then(function (f) {
+        var a = document.createElement('a'); a.href = URL.createObjectURL(f.blob); a.download = f.name; document.body.appendChild(a); a.click();
+        setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 2000); st.textContent = 'Saved ' + f.name + '.';
+      }).catch(function (err) { st.textContent = err.message || 'Could not make the file.'; }).then(function () { btn.disabled = false; });
+    });
+  }
+
+  // ── the gates, the wet route, the cloth in every state, the drive, the open area ──
+  function processHtml(r) {
+    var h = '', sub = function (t) { return '<div class="st-sub">' + t + '</div>'; };
+    if (r.gates) {
+      var g = r.gates, tone = { pass: 'ok', warn: 'warn', fatal: 'error', na: 'note' };
+      h += sub('Gates <span class="st-badge ' + (g.verdict === 'pass' ? 'ok' : g.verdict === 'warn' ? 'estimate' : 'bad') + '">' + (g.verdict === 'pass' ? 'all pass' : g.verdict === 'warn' ? g.counts.warn + ' to check' : g.counts.fatal + ' fatal') + '</span>') +
+        '<ul class="st-checks">' + g.rules.map(function (x) { return '<li class="' + (tone[x.status] || 'note') + '"><b>' + esc(x.id + ' ' + x.name) + ':</b> ' + esc(x.text) + '</li>'; }).join('') + '</ul>';
+    }
+    if (r.calibration) {
+      var c = r.calibration;
+      h += '<div class="st-acc"><b>Your trial rolls (' + c.n + ').</b> ' + (c.f_lc ? 'Yarn per course ' + (c.f_vs_model_pct > 0 ? '+' : '') + c.f_vs_model_pct + ' % against the model. ' : '') + (c.kw ? 'Finished width factor ' + c.kw + ' (' + (c.kw_vs_model_pct > 0 ? '+' : '') + c.kw_vs_model_pct + ' %). ' : '') + (c.scatter_pct ? 'The rolls scatter ' + c.scatter_pct + ' %.' : 'One roll: no scatter to show.') + '</div>';
+    }
+    if (r.open_area) h += '<div class="st-kpis">' + kpi('Open area', r.open_area.open_area_pct + ' %', r.open_area.kind + (r.open_area.empty_cells_pct ? ' · ' + r.open_area.empty_cells_pct + ' % of the cells without a loop' : '')) + '</div>';
+    if (r.states) {
+      h += sub('The cloth in every state') + '<div class="st-scroll"><table class="st-t"><tr><th>State</th><th>Wales/cm</th><th>Courses/cm</th><th>GSM</th><th>Width</th></tr>' +
+        r.states.states.map(function (s) { return '<tr' + (s.state === 'finished' ? ' style="font-weight:600"' : '') + '><td>' + esc(s.label) + '<br><small>' + esc(s.basis) + '</small></td><td>' + s.wpc + '</td><td>' + s.cpc + '</td><td>' + s.gsm + '</td><td>' + s.width_in + '"</td></tr>'; }).join('') + '</table></div>' +
+        '<p class="st-hint">After washing: length ' + r.states.after_wash.length_pct + ' %, width ' + r.states.after_wash.width_pct + ' %. ' + esc(r.states.basis) + '.</p>';
+    }
+    if (r.chemistry && r.chemistry.success) {
+      var ch = r.chemistry;
+      h += sub('The wet route (' + esc(ch.shade) + ' shade; ' + Object.keys(ch.fibres).map(function (k) { return ch.fibres[k] + ' % ' + k; }).join(', ') + ')') +
+        '<div class="st-scroll"><table class="st-t"><tr><th>#</th><th>Step</th><th>Temp</th><th>Time</th><th>pH</th><th>Chemicals</th></tr>' +
+        ch.route.map(function (s, i) { return '<tr><td>' + (i + 1) + '</td><td>' + esc(s.label) + (s.note ? '<br><small>' + esc(s.note) + '</small>' : '') + '</td><td>' + (s.t_c ? s.t_c + ' °C' : '') + '</td><td>' + (s.time_min ? s.time_min + ' min' : '') + '</td><td>' + (s.ph || '') + '</td><td>' + esc((s.chemicals || []).join(', ')) + '</td></tr>'; }).join('') + '</table></div>' +
+        (ch.dyes.length ? '<p class="st-p" style="font-size:12px">' + ch.dyes.map(function (d) { return '<b>' + esc(d.class) + '</b> ' + d.owf_pct + ' % on the weight of yarn (fixation ' + d.fixation_pct + ' %)'; }).join('; ') + (ch.fastness ? ' · fastness (typical): wash ' + ch.fastness.wash.join('–') + ', staining ' + ch.fastness.stain.join('–') + ', wet rub ' + ch.fastness.rub_wet.join('–') + ', light ' + ch.fastness.light.join('–') : '') + '.</p>' : '') +
+        ch.warnings.filter(function (x) { return x.level === 'warn'; }).map(function (x) { return '<div class="st-hint">⚠ ' + esc(x.text) + '</div>'; }).join('');
+    }
+    if (r.drive) {
+      var d = r.drive;
+      h += sub('Guide-bar drive') + '<p class="st-p" style="font-size:12px">' + d.chain_links_total + ' chain links in all (two per course per bar). The longest shog is <b>' + d.longest_shog_needles + ' needle' + (d.longest_shog_needles === 1 ? '' : 's') + ' (' + d.longest_shog_mm + ' mm, bar ' + d.longest_shog_bar + ')</b>; this class runs up to about <b>' + d.speed_allowed_cpm + '</b> courses/min on it (modelled), set at ' + d.speed_cpm + '.</p>' +
+        '<div class="st-scroll"><table class="st-t"><tr><th>Bar</th><th>Pattern chain (links in order)</th><th>Links</th><th>Longest shog</th></tr>' + d.bars.map(function (b) { return '<tr><td>GB' + b.bar + '</td><td style="font-family:var(--mono)">' + esc(b.chain) + '</td><td>' + b.chain_links + '</td><td>' + b.max_underlap + ' n</td></tr>'; }).join('') + '</table></div>' +
+        '<p class="st-hint">' + esc(d.basis) + '.</p>';
+    }
+    return h;
   }
 
   // beams and let-off: what each bar's beam set holds, how long it runs, and an order's yarn
@@ -304,7 +409,8 @@
     });
     $('wp-mtype').addEventListener('change', syncMachine);
     $('wp-side').addEventListener('click', function () { showBack = !showBack; this.textContent = showBack ? 'Show face' : 'Show back'; if (cloth) cloth.setView(showBack ? 'back' : 'front'); });
-    ['wp-mtype', 'wp-gauge', 'wp-width', 'wp-speed', 'wp-eff', 'wp-cpc', 'wp-gsm', 'wp-fwidth', 'wp-nstep', 'wp-gap', 'wp-bflange', 'wp-bbarrel', 'wp-bwidth', 'wp-order', 'wp-bresidue', 'wp-bwaste', 'wp-bkg', 'wp-bm', 'wp-bbar'].forEach(function (id) { $(id).addEventListener('input', schedule); $(id).addEventListener('change', schedule); });
+    ['wp-mtype', 'wp-gauge', 'wp-width', 'wp-speed', 'wp-eff', 'wp-cpc', 'wp-gsm', 'wp-fwidth', 'wp-nstep', 'wp-gap', 'wp-bflange', 'wp-bbarrel', 'wp-bwidth', 'wp-order', 'wp-bresidue', 'wp-bwaste', 'wp-bkg', 'wp-bm', 'wp-bbar', 'wp-shade', 'wp-userolls'].forEach(function (id) { $(id).addEventListener('input', schedule); $(id).addEventListener('change', schedule); });
+    bindRolls(); bindExport();
   }
   function onBar(e) {
     var row = e.target.closest('.wp-bar'), k = e.target.getAttribute('data-k'); if (!row || !k) return;
