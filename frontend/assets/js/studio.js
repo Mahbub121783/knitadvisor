@@ -404,6 +404,24 @@
     return rolls.filter(function (r) { return r.sl_mm > 0 && r.gsm > 0 && r.width_in > 0 && r.dia > 0 && r.gauge > 0; })
       .map(function (r) { return { sl_mm: +r.sl_mm, ne: +r.ne > 0 ? +r.ne : null, gsm: +r.gsm, width_in: +r.width_in, dia: +r.dia, gauge: +r.gauge }; });
   }
+  // a CSV (commas or semicolons, quoted cells): the rows that carry the six measured numbers; a line marked "example" is skipped
+  function parseRollCsv(text) {
+    var lines = text.replace(/^\ufeff/, '').split(/\r?\n/).filter(function (l) { return l.trim(); });
+    if (lines.length < 2) return { rows: [], why: 'it has no data lines.' };
+    var sep = (lines[0].match(/;/g) || []).length > (lines[0].match(/,/g) || []).length ? ';' : ',';
+    var cells = function (l) { var o = [], cur = '', q = false; for (var i = 0; i < l.length; i++) { var c = l[i]; if (c === '"') { if (q && l[i + 1] === '"') { cur += '"'; i++; } else q = !q; } else if (c === sep && !q) { o.push(cur); cur = ''; } else cur += c; } o.push(cur); return o; };
+    var head = cells(lines[0]).map(function (h) { return h.toLowerCase(); });
+    var at = function (re, dflt) { for (var i = 0; i < head.length; i++) if (re.test(head[i])) return i; return dflt; };
+    var ix = { sl_mm: at(/stitch length/, 0), ne: at(/count|\bne\b/, 1), gsm: at(/gsm/, 2), width_in: at(/open width/, 3), dia: at(/diameter|\bdia\b/, 4), gauge: at(/gauge|\bgg\b/, 5) };
+    var rows = [];
+    lines.slice(1).forEach(function (l) {
+      if (/example/i.test(l)) return;
+      var c = cells(l), r = {}, n = 0;
+      Object.keys(ix).forEach(function (k) { var v = parseFloat(String(c[ix[k]] || '').replace(',', '.')); if (v > 0) { r[k] = v; n++; } });
+      if (r.sl_mm && r.gsm && r.width_in && r.dia && r.gauge) rows.push({ sl_mm: r.sl_mm, ne: r.ne || '', gsm: r.gsm, width_in: r.width_in, dia: r.dia, gauge: r.gauge });
+    });
+    return { rows: rows, why: 'a roll needs the stitch length, GSM, open width, diameter and gauge.' };
+  }
   function bindRolls() {
     $('st-addroll').addEventListener('click', function () {
       var last0 = rolls[rolls.length - 1] || {};
@@ -420,6 +438,19 @@
       rolls.splice(+d, 1); renderRolls(); writeRolls(); schedule();
     });
     $('st-userolls').addEventListener('change', schedule);
+    // rolls from a CSV saved from the template's Trial rolls sheet: the six measured columns, found by their headings (or, failing that, by position)
+    $('st-rollcsv').addEventListener('click', function () { $('st-rollfile').click(); });
+    $('st-rollfile').addEventListener('change', function (e) {
+      var f = e.target.files && e.target.files[0]; if (!f) return;
+      var rd = new FileReader();
+      rd.onload = function () {
+        var res = parseRollCsv(String(rd.result || ''));
+        if (!res.rows.length) { $('st-rolls').insertAdjacentHTML('beforeend', '<p class="st-hint">No usable roll in that file: ' + esc(res.why) + '</p>'); }
+        else { rolls = res.rows.slice(0, 12); renderRolls(); writeRolls(); schedule(); }
+        e.target.value = '';
+      };
+      rd.readAsText(f);
+    });
     bindFloor();
     bindExport();
     bindCalibration();
@@ -491,7 +522,7 @@
     sel.querySelector('option[value="D"]').disabled = !dial;
     if (!dial) sel.value = 'C';
     var locked = !!(last.feasibility && last.feasibility.export_locked);
-    document.querySelectorAll('#st-xcard [data-xf]').forEach(function (b) { var colourFile = b.getAttribute('data-xf') === 'motif' || b.getAttribute('data-xf') === 'colours'; b.disabled = locked || (colourFile && !(last.colourway && last.colourway.motif)); });
+    document.querySelectorAll('#st-xcard [data-xf]').forEach(function (b) { var xf = b.getAttribute('data-xf'), colourFile = xf === 'motif' || xf === 'colours'; b.disabled = locked || (colourFile && !(last.colourway && last.colourway.motif)) || (xf === 'stripe' && !last.stripe_engineering); });
     $('st-dnaout').disabled = false;
     if (locked) xStat('A feasibility gate is FATAL: the machine files are locked until it is fixed (see the gates above the checks).', true);
     else if (!last.ok_to_knit) xStat('This design will not knit as drawn yet — the sheet says so, and lists what to fix.', true); else if (/will not knit|locked until/.test($('st-xstat').textContent)) xStat('');
@@ -668,7 +699,7 @@
       look: window.KAStudioLook ? window.KAStudioLook.payload() : null,
       plush: { cut: $('st-cut').checked, sinker_mm: num('st-sinker'), arrangement: $('st-parr').value },
       pile: $('st-pile').value,
-      stripes: $('st-stripe').value.trim() ? { sequence: $('st-stripe').value } : null,
+      stripes: $('st-stripe').value.trim() ? Object.assign({ sequence: $('st-stripe').value }, window.KAStudioColourway && window.KAStudioColourway.stripeExtras ? window.KAStudioColourway.stripeExtras() : {}) : null,
       finish: { brush: $('st-brush').value, passes: num('st-passes'), sheared: $('st-shear').checked, set_width_in: num('st-setw') },
       floor_machine_id: $('st-fm').value ? +$('st-fm').value : null,
       elastane: $('st-lycra').checked ? { denier: +$('st-lyd').value, draft: num('st-lydraft') || 2.6, every: $('st-lyevery').value } : null,
@@ -1495,7 +1526,10 @@
   var cellOf = function (x) { return x === 'K' ? 'K' : x === 'T' ? 'T' : 'M'; };   // transfer and empty needle read as a float
   /** The drawn programme as the 3D engine's construction, pattern and needle sampler. */
   function stripeOf() {
-    var seq = [], m = ($('st-stripe').value || '').toUpperCase().match(/[A-F]\s*\d+/g);
+    var txt = $('st-stripe').value || '';
+    // widths typed in mm or cm: the engine's whole courses are what the 3D cloth shows
+    if (/(mm|cm)/i.test(txt) && last && last.stripe_engineering && last.stripe_engineering.fit) txt = last.stripe_engineering.fit.sequence;
+    var seq = [], m = txt.toUpperCase().match(/[A-F]\s*\d+/g);
     if (m) m.forEach(function (t) { var n = Math.min(500, +t.slice(1).trim()); for (var k = 0; k < n; k++) seq.push(t[0]); });
     if (!seq.length && S.feeds.some(function (f) { return f && f.colour; })) S.C.forEach(function (_, i) { seq.push((S.feeds[i] && S.feeds[i].colour) || 'A'); });
     if (!seq.length) return null;

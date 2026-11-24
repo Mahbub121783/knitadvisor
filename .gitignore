@@ -45,6 +45,7 @@ __pycache__/
 
 # buyer sheets, price lists and papers dropped in the repo root stay local
 /*.xlsx
+!frontend/assets/downloads/*.xlsx
 /*.xlsm
 /*.xls
 /*.pdf

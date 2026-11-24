@@ -23,17 +23,23 @@
  *   Complete stripe specification with mathematical proof per stripe.
  */
 
-const { FABRIC_DERIVATIVES, LL_MULTIPLIERS_COMPLETE } = require('../catalog/fabric-derivatives');
 const { parseComposition } = require('./composition-engine');
+const FS = require('./fabric-studio');
+const STR = require('./stripe-engineering');
 
 // ============================================================
 // CONSTANTS
 // ============================================================
 const YARDS_PER_METER = 1.0936;
-const METERS_PER_KG_FORMULA = (ne) => ne * 1693.6; // 1 Ne = Ne × 1693.6 m/kg (standard)
+const METERS_PER_KG_FORMULA = (ne) => ne * 1693.09; // 1 Ne = 1.69309 km per kg (840 yd per lb)
+const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
 // ============================================================
 // MAIN STRIPER CALCULATE FUNCTION
+//
+// The cloth under the stripe is the Fabric Studio's (stitch length, course density, needles, feeders, yarn per feed), so a stripe
+// here and a stripe in the Studio are the same figures. Stripe widths in mm become whole courses (stripe-engineering.js fitSpec:
+// the repeat keeps its length, no stripe under one course); the feeders, fingers and cones come from knitting the machine round.
 // ============================================================
 function calculateStriper(params) {
   const startTime = Date.now();
@@ -55,329 +61,144 @@ function calculateStriper(params) {
   if (!stripesInput || stripesInput.length === 0) return { error: 'stripes array is required', code: 'MISSING_STRIPES' };
   if (stripesInput.length > 64) return { error: 'Maximum 64 stripes per repeat', code: 'TOO_MANY_STRIPES' };
 
-  // --- 2. Machine Geometry ---
-  const needles = Math.round(gauge * dia * Math.PI); // N = G × π × D
-  const pitch_mm = 25.4 / gauge;
-  const circumference_mm = needles * pitch_mm;
-  const circumference_cm = circumference_mm / 10;
+  // --- 2. The cloth under the stripe: the Studio, for this fabric, weight, gauge and diameter ---
+  const templates = FS.listTemplates();
+  const tpl = templates.find((t) => t.id === fabric) || null;
+  if (!tpl) warnings.push(`Fabric "${fabric}" is not one of the Studio's structures: a plain single jersey is used for the cloth.`);
+  const base = tpl || templates.find((t) => t.id === 'single_jersey');
+  const firstNe = parseFloat(params.count_ne) || parseFloat((stripesInput.find((x) => parseFloat(x.count_ne)) || {}).count_ne) || null;
+  const input = {
+    bed: base.bed === 'double' ? 'double' : 'single', gating: base.bed === 'double' ? base.gating : undefined,
+    grid: { C: base.grid.C.map((r) => r.join('')), D: base.grid.D ? base.grid.D.map((r) => r.join('')) : null },
+    feeds: (base.roles || []).map((r) => ({ role: r })),
+    yarn: firstNe ? { fibre: 'cotton', count: firstNe, unit: 'ne' } : undefined,
+    target: { gsm },
+    machine: { gauge, dia, rpm, efficiency, ...(parseFloat(params.stitch_length) > 0 ? { sl_mm: parseFloat(params.stitch_length) } : {}), ...(parseInt(params.feeders_total, 10) > 0 ? { feeders: parseInt(params.feeders_total, 10) } : {}) },
+  };
+  let cloth;
+  try { cloth = FS.analyse(input); } catch (e) { return { error: 'The cloth could not be worked out: ' + e.message, code: 'CLOTH_ERROR' }; }
+  if (!cloth || !cloth.success) return { error: 'The cloth could not be worked out: ' + ((cloth && cloth.error) || 'unknown'), code: 'CLOTH_ERROR' };
+  const fin = (cloth.fabric.relaxation && cloth.fabric.relaxation.states.find((x) => x.state === 'finished')) || { cpc: cloth.fabric.cpc, width_in: cloth.fabric.width_open_in };
+  const needles = cloth.machine.needles, feeders = cloth.machine.feeders, baseSL = cloth.fabric.sl_mm;
+  const cpf = cloth.structure.courses_per_feed || 1, F = cloth.structure.feeds || 1;
+  const interlock = cloth.structure.gating === 'interlock';
+  const feedYarn = cloth.yarn.feeds;
+  const lenPerFeed = feedYarn.reduce((t, f) => t + (+f.course_length_m || 0), 0) / feedYarn.length;   // m of yarn one feed pass lays, mean over the design's feeds
+  const baseTex = feedYarn[0] ? +feedYarn[0].tex : null;
+  const circumference_cm = cloth.fabric.width_open_in * 2.54;
 
-  trace.push({
-    step: 1,
-    action: 'machine_geometry',
-    formula: 'N = G × π × D',
-    calculation: `N = ${gauge} × π × ${dia} = ${needles}`,
-    needles,
-    pitch_mm: parseFloat(pitch_mm.toFixed(4)),
-    circumference_cm: parseFloat(circumference_cm.toFixed(2)),
+  trace.push({ step: 1, action: 'cloth_from_studio', formula: 'Fabric Studio: stitch length, courses per cm, needles and feeders for this fabric, weight, gauge and diameter',
+    needles, feeders, sl_mm: baseSL, courses_per_cm_finished: fin.cpc, source: cloth.fabric.sl_source });
+  if (parseFloat(params.stitch_length) > 0) trace.push({ step: 2, action: 'stitch_length', source: 'USER_INPUT', value_mm: parseFloat(params.stitch_length) });
+
+  // --- 3. Stripes → whole courses: widths asked in mm of FINISHED cloth ---
+  const colourLetter = {};
+  const letterOf = (name) => { if (!(name in colourLetter)) colourLetter[name] = LETTERS[Object.keys(colourLetter).length] || '?'; return colourLetter[name]; };
+  const runsIn = [];
+  stripesInput.forEach((x, i) => {
+    const h = parseFloat(x.height_mm), color = x.color || `Color_${i + 1}`;
+    if (!h || isNaN(h) || h <= 0) { warnings.push(`Stripe ${i + 1} (${color}): invalid height_mm, skipping.`); return; }
+    runsIn.push({ colour: letterOf(color), name: color, value: h, unit: 'mm', src: x, i });
   });
+  if (!runsIn.length) return { error: 'No stripe has a usable height_mm', code: 'MISSING_STRIPES' };
+  let fit;
+  try { fit = STR.fitSpec(runsIn, { cpc: fin.cpc, cpf, unit_feeds: interlock ? 2 : 1 }); } catch (e) { return { error: e.message, code: 'STRIPE_FIT' }; }
+  const seq = []; fit.runs.forEach((x) => { for (let k = 0; k < x.feeds; k++) seq.push(x.colour); });
+  trace.push({ step: 3, action: 'widths_to_courses', formula: 'courses = mm × courses per cm ÷ 10, whole courses, the repeat keeps its length', repeat_asked_mm: fit.repeat_asked_mm, repeat_mm: fit.repeat_mm });
 
-  // --- 3. Get Fabric Definition & Base Stitch Length ---
-  const fabricDef = FABRIC_DERIVATIVES.find(f => f.id === fabric);
-  const llData = LL_MULTIPLIERS_COMPLETE[fabric];
+  // --- 4. The machine: feeders, fingers, cones; heights in every state ---
+  const states = ((cloth.fabric.relaxation && cloth.fabric.relaxation.states) || [{ state: 'finished', label: 'Finished', cpc: fin.cpc, width_in: cloth.fabric.width_open_in }]).map((x) => ({ state: x.state, label: x.label, cpc: x.cpc, width_in: x.width_in }));
+  const se = STR.analyse({ seq, F, feeders, gating: cloth.structure.gating, cpf, states, selected: 'finished', rpm, eff: efficiency / 100, striper: 0, panel_cm: garmentLength, fit, width_cm: circumference_cm });
+  if (se && se.checks) se.checks.filter((c) => c.level === 'warn').forEach((c) => warnings.push(c.text));
 
-  // Base SL formula: SL(mm) = (multiplier × 1257.77) / (Ne × GSM) × 10
-  // Or use user override
-  let baseSL_mm = params.stitch_length ? parseFloat(params.stitch_length) : null;
-  if (!baseSL_mm && llData) {
-    baseSL_mm = (llData.m * 1257.77) / (30 * gsm) * 10; // estimate with Ne=30 placeholder
-    baseSL_mm = parseFloat(baseSL_mm.toFixed(3));
-  }
-  if (!baseSL_mm || baseSL_mm <= 0) baseSL_mm = 2.8; // industry fallback
-
-  trace.push({
-    step: 2,
-    action: 'base_stitch_length',
-    value_mm: baseSL_mm,
-    source: params.stitch_length ? 'USER_INPUT' : (llData ? 'FORMULA_DERIVED' : 'FALLBACK'),
-  });
-
-  // --- 4. Courses Per mm ---
-  // CPI (courses per inch) = 25.4 / SL_mm
-  const courses_per_mm = 1 / baseSL_mm; // approximation for course height ≈ SL
-  // In reality, course height ≈ SL × row_factor, typically 0.7–0.9 for S/J
-  const row_factor = fabric.includes('rib') ? 0.60 : fabric.includes('interlock') ? 0.55 : 0.72;
-  const course_height_mm = baseSL_mm * row_factor;
-  const courses_per_mm_actual = 1 / course_height_mm;
-
-  trace.push({
-    step: 3,
-    action: 'course_density',
-    formula: 'course_height = SL × row_factor',
-    calculation: `${baseSL_mm} × ${row_factor} = ${course_height_mm.toFixed(3)} mm/course`,
-    courses_per_mm: parseFloat(courses_per_mm_actual.toFixed(4)),
-    courses_per_cm: parseFloat((courses_per_mm_actual * 10).toFixed(2)),
-    courses_per_inch: parseFloat((courses_per_mm_actual * 25.4).toFixed(2)),
-  });
-
-  // --- 5. Production Speed ---
-  // Courses/min = RPM × feeders_per_rev
-  // feeders_per_rev ≈ (dia × π × gauge × 0.075) — empirical for standard circular
-  const feeders_theoretical = Math.round(dia * Math.PI * gauge * 0.075);
-  const courses_per_min = rpm * feeders_theoretical * (efficiency / 100);
-  const courses_per_hour = courses_per_min * 60;
-
-  trace.push({
-    step: 4,
-    action: 'production_speed',
-    feeders: feeders_theoretical,
-    courses_per_min: parseFloat(courses_per_min.toFixed(1)),
-    courses_per_hour: parseFloat(courses_per_hour.toFixed(0)),
-  });
-
-  // --- 6. Process Each Stripe ---
-  const stripeResults = [];
-  let totalRepeatHeight_mm = 0;
-  let totalYarnWeight_g = 0;
-  const colorSummary = {}; // aggregate by color across repeats
-
-  for (let i = 0; i < stripesInput.length; i++) {
-    const s = stripesInput[i];
-    const color = s.color || `Color_${i + 1}`;
-    const height_mm = parseFloat(s.height_mm);
+  // --- 5. Each stripe: yarn from the course length the Studio gives, the stripe's own count ---
+  const courses_per_min = feeders * cpf * rpm * (efficiency / 100);
+  const stripeResults = [], colorSummary = {};
+  let totalRepeatHeight_mm = 0, totalYarnWeight_g = 0;
+  const carriers = se && se.machine.cones ? se.machine.cones.by_colour : {};
+  fit.runs.forEach((x, k) => {
+    const r = runsIn[k], s = r.src, color = r.name;
     const rawComposition = s.composition || params.composition || '100% Cotton';
     const parsedComp = parseComposition(rawComposition);
-
-    if (!height_mm || isNaN(height_mm) || height_mm <= 0) {
-      warnings.push(`Stripe ${i + 1} (${color}): invalid height_mm, skipping.`);
-      continue;
-    }
-
-    // Override SL per stripe if specified
-    let sl = s.stitch_length ? parseFloat(s.stitch_length) : baseSL_mm;
-    const ch = sl * row_factor; // course height for this stripe
-    
-    // Determine yarn count
-    let countNe = s.count_ne ? parseFloat(s.count_ne) : null;
-    if (!countNe) {
-      // Estimate from GSM and fabric type using simplified regression
-      countNe = estimateCountFromGSM(fabric, gsm);
-    }
-
-    // Courses for this stripe
-    const courses = Math.ceil(height_mm / ch);
-    // Round up to nearest even (machines often require even number of feeder rounds)
-    const coursesEven = courses % 2 === 0 ? courses : courses + 1;
-
-    // Actual height after rounding
-    const actualHeight_mm = coursesEven * ch;
-
-    // Yarn length per course per needle (meters)
-    // L_course = N × SL_mm / 1000
-    const yarnPerCourse_m = (needles * sl) / 1000;
-
-    // Total yarn length for this stripe
-    const yarnLength_m = yarnPerCourse_m * coursesEven;
-
-    // Yarn weight for this stripe
-    // W = (L_m / (Ne × 1693.6)) × 1000 grams
-    const metersPerKg = METERS_PER_KG_FORMULA(countNe);
-    const yarnWeight_g = (yarnLength_m / metersPerKg) * 1000;
-
-    // Feeder assignment
-    const feedersAssigned = s.feeders ? parseInt(s.feeders) : estimateFeedersForColor(i, stripesInput.length, feeders_theoretical);
-
-    // GSM contribution from this stripe (as fraction of total height)
-    const gsmContrib = gsm; // GSM is constant across stripes in same fabric type
-
-    // Accumulate
-    totalRepeatHeight_mm += actualHeight_mm;
-    totalYarnWeight_g += yarnWeight_g;
-
-    if (!colorSummary[color]) {
-      colorSummary[color] = {
-        color,
-        composition: rawComposition,
-        count_ne: countNe,
-        total_courses: 0,
-        total_yarn_length_m: 0,
-        total_yarn_weight_g: 0,
-        stripe_count: 0,
-      };
-    }
-    colorSummary[color].total_courses += coursesEven;
-    colorSummary[color].total_yarn_length_m += yarnLength_m;
-    colorSummary[color].total_yarn_weight_g += yarnWeight_g;
-    colorSummary[color].stripe_count += 1;
-
-    // Composition breakdown
-    const compBreakdown = buildCompositionBreakdown(parsedComp, yarnWeight_g);
-
+    const countNe = parseFloat(s.count_ne) || firstNe || (baseTex ? 590.54 / baseTex : null);
+    if (!countNe) warnings.push(`Stripe ${k + 1} (${color}): no yarn count, weight skipped.`);
+    const sl = parseFloat(s.stitch_length) > 0 ? parseFloat(s.stitch_length) : baseSL;
+    const faceCourses = x.feeds * cpf, ch = 10 / fin.cpc;                       // course height of the finished cloth
+    const yarnLength_m = x.feeds * lenPerFeed * (sl / baseSL);
+    const yarnWeight_g = countNe ? (yarnLength_m / METERS_PER_KG_FORMULA(countNe)) * 1000 : 0;
+    totalRepeatHeight_mm += x.mm; totalYarnWeight_g += yarnWeight_g;
+    if (!colorSummary[color]) colorSummary[color] = { color, composition: rawComposition, count_ne: countNe || 0, total_courses: 0, total_yarn_length_m: 0, total_yarn_weight_g: 0, stripe_count: 0 };
+    colorSummary[color].total_courses += faceCourses; colorSummary[color].total_yarn_length_m += yarnLength_m; colorSummary[color].total_yarn_weight_g += yarnWeight_g; colorSummary[color].stripe_count += 1;
+    const timeMin = faceCourses / courses_per_min;
     stripeResults.push({
-      index: i + 1,
-      color,
-      composition: rawComposition,
-      count_ne: parseFloat(countNe.toFixed(1)),
-      count_display: `${Math.round(countNe)}/1 (${rawComposition})`,
-      feeders: feedersAssigned,
-
-      height: {
-        requested_mm: parseFloat(height_mm.toFixed(2)),
-        actual_mm: parseFloat(actualHeight_mm.toFixed(2)),
-        actual_cm: parseFloat((actualHeight_mm / 10).toFixed(3)),
-        actual_inches: parseFloat((actualHeight_mm / 25.4).toFixed(3)),
-      },
-
-      stitch_length_mm: parseFloat(sl.toFixed(3)),
-      course_height_mm: parseFloat(ch.toFixed(4)),
-      courses: coursesEven,
-
-      yarn: {
-        yarn_per_course_m: parseFloat(yarnPerCourse_m.toFixed(4)),
-        total_length_m: parseFloat(yarnLength_m.toFixed(2)),
-        total_length_yards: parseFloat((yarnLength_m * YARDS_PER_METER).toFixed(2)),
-        weight_g: parseFloat(yarnWeight_g.toFixed(3)),
-        weight_kg: parseFloat((yarnWeight_g / 1000).toFixed(5)),
-      },
-
-      time_to_knit: {
-        courses_per_min: parseFloat(courses_per_min.toFixed(1)),
-        time_sec: parseFloat((coursesEven / courses_per_min * 60).toFixed(1)),
-        time_min: parseFloat((coursesEven / courses_per_min).toFixed(3)),
-      },
-
-      composition_breakdown: compBreakdown,
-
+      index: k + 1, color, composition: rawComposition, count_ne: countNe ? parseFloat(countNe.toFixed(1)) : null, count_display: countNe ? `${Math.round(countNe)}/1 (${rawComposition})` : null,
+      feeders: carriers[x.colour] != null ? carriers[x.colour] : 0,
+      height: { requested_mm: x.asked_mm, actual_mm: parseFloat(x.mm.toFixed(2)), actual_cm: parseFloat((x.mm / 10).toFixed(3)), actual_inches: parseFloat((x.mm / 25.4).toFixed(3)), error_mm: x.error_mm, error_pct: x.error_pct },
+      stitch_length_mm: parseFloat(sl.toFixed(3)), course_height_mm: parseFloat(ch.toFixed(4)), courses: parseFloat(faceCourses.toFixed(2)), feeds: x.feeds,
+      yarn: { yarn_per_course_m: parseFloat(((lenPerFeed / (cpf || 1)) * (sl / baseSL)).toFixed(4)), total_length_m: parseFloat(yarnLength_m.toFixed(2)), total_length_yards: parseFloat((yarnLength_m * YARDS_PER_METER).toFixed(2)), weight_g: parseFloat(yarnWeight_g.toFixed(3)), weight_kg: parseFloat((yarnWeight_g / 1000).toFixed(5)) },
+      time_to_knit: { courses_per_min: parseFloat(courses_per_min.toFixed(1)), time_sec: parseFloat((timeMin * 60).toFixed(1)), time_min: parseFloat(timeMin.toFixed(3)) },
+      composition_breakdown: buildCompositionBreakdown(parsedComp, yarnWeight_g),
       formula_trace: {
-        courses: `courses = ceil(${height_mm}mm / ${ch.toFixed(4)}mm) = ${courses} → rounded to ${coursesEven}`,
-        yarn_per_course: `L_course = ${needles} needles × ${sl}mm SL / 1000 = ${yarnPerCourse_m.toFixed(4)}m`,
-        total_yarn: `L_total = ${yarnPerCourse_m.toFixed(4)} × ${coursesEven} courses = ${yarnLength_m.toFixed(2)}m`,
-        weight: `W = (${yarnLength_m.toFixed(2)}m / (${countNe.toFixed(1)} × 1693.6)) × 1000 = ${yarnWeight_g.toFixed(2)}g`,
+        courses: `${x.feeds} feed${x.feeds === 1 ? '' : 's'} = ${faceCourses} face courses (asked ${x.asked_mm} mm ÷ ${ch.toFixed(4)} mm per course, whole courses, the repeat keeps its length)`,
+        yarn_per_course: `one feed lays ${lenPerFeed.toFixed(4)} m (needles × stitch length, from the Studio)`,
+        total_yarn: `L_total = ${lenPerFeed.toFixed(4)} m × ${x.feeds} feeds = ${yarnLength_m.toFixed(2)} m`,
+        weight: countNe ? `W = ${yarnLength_m.toFixed(2)} m ÷ (${countNe.toFixed(1)} Ne × 1693.09 m/kg) = ${yarnWeight_g.toFixed(2)} g` : null,
       },
     });
-  }
+  });
 
-  // --- 7. Color Summary ---
-  const colorSummaryList = Object.values(colorSummary).map(c => {
+  const colorSummaryList = Object.values(colorSummary).map((c) => {
     const pct = totalYarnWeight_g > 0 ? (c.total_yarn_weight_g / totalYarnWeight_g) * 100 : 0;
     return {
-      color: c.color,
-      composition: c.composition,
-      count_ne: parseFloat(c.count_ne.toFixed(1)),
-      stripe_count: c.stripe_count,
-      total_courses: c.total_courses,
-      yarn_length_m: parseFloat(c.total_yarn_length_m.toFixed(2)),
-      yarn_weight_g: parseFloat(c.total_yarn_weight_g.toFixed(2)),
-      yarn_weight_kg: parseFloat((c.total_yarn_weight_g / 1000).toFixed(4)),
-      consumption_pct: parseFloat(pct.toFixed(2)),
+      color: c.color, composition: c.composition, count_ne: parseFloat(c.count_ne.toFixed(1)), stripe_count: c.stripe_count, total_courses: parseFloat(c.total_courses.toFixed(2)),
+      yarn_length_m: parseFloat(c.total_yarn_length_m.toFixed(2)), yarn_weight_g: parseFloat(c.total_yarn_weight_g.toFixed(2)), yarn_weight_kg: parseFloat((c.total_yarn_weight_g / 1000).toFixed(4)), consumption_pct: parseFloat(pct.toFixed(2)),
     };
   }).sort((a, b) => b.consumption_pct - a.consumption_pct);
 
-  // --- 8. Repeat Summary ---
+  const timeRepeatSec = stripeResults.reduce((t, r) => t + r.time_to_knit.time_sec, 0);
   const repeatSummary = {
-    total_stripes: stripeResults.length,
-    total_height_mm: parseFloat(totalRepeatHeight_mm.toFixed(2)),
-    total_height_cm: parseFloat((totalRepeatHeight_mm / 10).toFixed(3)),
-    total_height_inches: parseFloat((totalRepeatHeight_mm / 25.4).toFixed(3)),
-    total_courses: stripeResults.reduce((s, r) => s + r.courses, 0),
-    total_yarn_weight_g: parseFloat(totalYarnWeight_g.toFixed(2)),
-    total_yarn_weight_kg: parseFloat((totalYarnWeight_g / 1000).toFixed(4)),
-    time_per_repeat_sec: parseFloat((stripeResults.reduce((s, r) => s + r.time_to_knit.time_sec, 0)).toFixed(1)),
+    total_stripes: stripeResults.length, total_height_mm: parseFloat(totalRepeatHeight_mm.toFixed(2)), total_height_cm: parseFloat((totalRepeatHeight_mm / 10).toFixed(3)), total_height_inches: parseFloat((totalRepeatHeight_mm / 25.4).toFixed(3)),
+    total_courses: parseFloat(stripeResults.reduce((t, r) => t + r.courses, 0).toFixed(2)), total_feeds: fit.feeds, total_yarn_weight_g: parseFloat(totalYarnWeight_g.toFixed(2)), total_yarn_weight_kg: parseFloat((totalYarnWeight_g / 1000).toFixed(4)),
+    asked_height_mm: fit.repeat_asked_mm, height_error_mm: fit.repeat_error_mm,
+    time_per_repeat_sec: parseFloat(timeRepeatSec.toFixed(1)), time_per_repeat_min: parseFloat((timeRepeatSec / 60).toFixed(2)), repeats_per_hour: timeRepeatSec > 0 ? parseFloat((3600 / timeRepeatSec).toFixed(1)) : null,
   };
 
-  repeatSummary.time_per_repeat_min = parseFloat((repeatSummary.time_per_repeat_sec / 60).toFixed(2));
-  repeatSummary.repeats_per_hour = parseFloat((3600 / repeatSummary.time_per_repeat_sec).toFixed(1));
-
-  // --- 9. Per-Garment Calculation (optional) ---
+  // --- 6. Per-garment (optional): the panel is cut to whole repeats; the tube's open width is the cloth's own ---
   let garmentResult = null;
   if (garmentLength && garmentWidth) {
-    const garmentHeight_mm = garmentLength * 10;
-    const garmentWidth_mm = garmentWidth * 10;
-    const repeatsNeeded = garmentHeight_mm / totalRepeatHeight_mm;
+    const repeatsNeeded = garmentLength / (totalRepeatHeight_mm / 10);
     const garmentYarnTotal_g = totalYarnWeight_g * repeatsNeeded;
-    // Factor in fabric width: the fabric tube = circumference. If garment width > tube, can't single tube.
-    const tubeWidth_cm = circumference_cm / 2; // tubular fabric opened = half circumference
-    const tubeWarning = garmentWidth > tubeWidth_cm
-      ? `⚠ Garment width (${garmentWidth}cm) exceeds tube open-width (${tubeWidth_cm.toFixed(1)}cm). Use a larger diameter machine.`
-      : null;
-
+    const tubeWidth_cm = circumference_cm / 2;   // a tube lying flat is half the open width
+    const tubeWarning = garmentWidth > tubeWidth_cm ? `Garment width (${garmentWidth} cm) exceeds the flat tube width (${tubeWidth_cm.toFixed(1)} cm) of this cloth. Use a larger diameter machine.` : null;
     garmentResult = {
-      garment_length_cm: garmentLength,
-      garment_width_cm: garmentWidth,
-      tube_open_width_cm: parseFloat(tubeWidth_cm.toFixed(1)),
-      repeats_needed: parseFloat(repeatsNeeded.toFixed(2)),
-      yarn_per_garment_g: parseFloat(garmentYarnTotal_g.toFixed(2)),
-      yarn_per_garment_kg: parseFloat((garmentYarnTotal_g / 1000).toFixed(4)),
-      yarn_per_color: colorSummaryList.map(c => ({
-        color: c.color,
-        weight_g: parseFloat((c.yarn_weight_g * repeatsNeeded).toFixed(2)),
-        weight_kg: parseFloat(((c.yarn_weight_g / 1000) * repeatsNeeded).toFixed(4)),
-      })),
+      garment_length_cm: garmentLength, garment_width_cm: garmentWidth, tube_open_width_cm: parseFloat(tubeWidth_cm.toFixed(1)), repeats_needed: parseFloat(repeatsNeeded.toFixed(2)),
+      panel: se ? se.panel : null,
+      yarn_per_garment_g: parseFloat(garmentYarnTotal_g.toFixed(2)), yarn_per_garment_kg: parseFloat((garmentYarnTotal_g / 1000).toFixed(4)),
+      yarn_per_color: colorSummaryList.map((c) => ({ color: c.color, weight_g: parseFloat((c.yarn_weight_g * repeatsNeeded).toFixed(2)), weight_kg: parseFloat(((c.yarn_weight_g / 1000) * repeatsNeeded).toFixed(4)) })),
       width_warning: tubeWarning,
     };
     if (tubeWarning) warnings.push(tubeWarning);
   }
 
-  // --- 10. Feeder Map ---
-  // Show which feeder positions are mapped to which color
-  const feederMap = buildFeederMap(stripeResults, feeders_theoretical);
+  // --- 7. Feeder map: the feeders each colour is threaded on ---
+  const feederMap = Object.keys(colourLetter).map((name) => {
+    const L = colourLetter[name], fixed = se && se.machine.threading;
+    return fixed ? { color: name, feeders: se.machine.threading.filter((t) => t.yarn === L).map((t) => t.feeder), feeder_count: carriers[L] || 0 }
+      : { color: name, feeders: [], feeder_count: carriers[L] || 0, note: 'striper: the colour sits on a finger of several feeders, see engineering.machine.schedule' };
+  });
 
-  // --- 11. Final Response ---
   return {
-    success: true,
-    response_ms: Date.now() - startTime,
-
-    machine: {
-      fabric,
-      gsm,
-      gauge,
-      dia,
-      rpm,
-      efficiency_pct: efficiency,
-      needles,
-      pitch_mm: parseFloat(pitch_mm.toFixed(4)),
-      circumference_cm: parseFloat(circumference_cm.toFixed(2)),
-      feeders_theoretical,
-    },
-
-    stitch_length: {
-      base_mm: baseSL_mm,
-      course_height_mm: parseFloat((baseSL_mm * row_factor).toFixed(4)),
-      courses_per_cm: parseFloat((1 / (baseSL_mm * row_factor) * 10).toFixed(2)),
-      courses_per_inch: parseFloat((1 / (baseSL_mm * row_factor) * 25.4).toFixed(2)),
-    },
-
-    stripes: stripeResults,
-
-    color_summary: colorSummaryList,
-
-    repeat_summary: repeatSummary,
-
-    feeder_map: feederMap,
-
-    garment: garmentResult,
-
-    warnings,
-    formula_trace: trace,
+    success: true, response_ms: Date.now() - startTime,
+    machine: { fabric, gsm, gauge, dia, rpm, efficiency_pct: efficiency, needles, pitch_mm: parseFloat((25.4 / gauge).toFixed(4)), circumference_cm: parseFloat(((needles * 25.4) / gauge / 10).toFixed(2)), feeders_theoretical: feeders, feeders, method: se ? se.machine.method : null, fingers_needed: se ? se.machine.fingers_needed : null, cones: se ? se.machine.cones.total : null },
+    stitch_length: { base_mm: baseSL, course_height_mm: parseFloat((10 / fin.cpc).toFixed(4)), courses_per_cm: parseFloat(fin.cpc.toFixed(2)), courses_per_inch: parseFloat((fin.cpc * 2.54).toFixed(2)), basis: cloth.fabric.sl_source },
+    stripes: stripeResults, color_summary: colorSummaryList, repeat_summary: repeatSummary, feeder_map: feederMap, garment: garmentResult,
+    engineering: se, warnings, formula_trace: trace,
   };
 }
 
 // ============================================================
 // HELPERS
 // ============================================================
-
-/** Estimate Ne count from GSM and fabric type using regression. */
-function estimateCountFromGSM(fabricId, gsm) {
-  const regressions = {
-    single_jersey:   { a: -0.141, b: 50.22 },
-    rib_1x1:         { a: -0.123, b: 54.57 },
-    rib_2x2:         { a: -0.108, b: 56.62 },
-    interlock:       { a: -0.206, b: 80.56 },
-    pique_single:    { a: -0.146, b: 57.16 },
-    fleece_2_thread: { a: -0.100, b: 44.00 },
-    fleece_3_thread: { a: -0.100, b: 44.00 },
-    french_terry:    { a: -0.100, b: 44.00 },
-  };
-  const reg = regressions[fabricId] || regressions.single_jersey;
-  const ne = reg.a * gsm + reg.b;
-  return Math.max(8, Math.min(80, ne)); // clamp to realistic range
-}
-
-/** Distribute feeders among colors as evenly as possible. */
-function estimateFeedersForColor(colorIndex, totalColors, totalFeeders) {
-  const basePerColor = Math.floor(totalFeeders / totalColors);
-  const extra = totalFeeders % totalColors;
-  return colorIndex < extra ? basePerColor + 1 : basePerColor;
-}
 
 /** Build fiber weight breakdown from composition and yarn weight. */
 function buildCompositionBreakdown(parsedComp, totalWeight_g) {
@@ -390,26 +211,6 @@ function buildCompositionBreakdown(parsedComp, totalWeight_g) {
     };
   }
   return breakdown;
-}
-
-/** Build a physical feeder assignment map. */
-function buildFeederMap(stripeResults, totalFeeders) {
-  const map = [];
-  let feederPos = 1;
-  for (const stripe of stripeResults) {
-    const assignedFeeders = [];
-    for (let f = 0; f < stripe.feeders; f++) {
-      assignedFeeders.push(feederPos);
-      feederPos = feederPos > totalFeeders ? 1 : feederPos + 1;
-    }
-    map.push({
-      color: stripe.color,
-      stripe_index: stripe.index,
-      feeders: assignedFeeders,
-      feeder_count: stripe.feeders,
-    });
-  }
-  return map;
 }
 
 // ============================================================

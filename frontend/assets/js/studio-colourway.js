@@ -9,10 +9,10 @@
  */
 (function () {
   'use strict';
-  var LET = ['A', 'B', 'C', 'D', 'E', 'F'], last = null, S = blank(), moved = false;
+  var LET = ['A', 'B', 'C', 'D', 'E', 'F'], last = null, lastSE = null, S = blank(), moved = false;
   function $(id) { return document.getElementById(id); }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]; }); }
-  function blank() { return { names: {}, codes: {}, kg: '', loss: '', lot: '' }; }
+  function blank() { return { names: {}, codes: {}, kg: '', loss: '', lot: '', panel: '', meas: '' }; }
   function hex(l) { var e = $('st-sc-' + l); return e && /^#[0-9a-f]{6}$/i.test(e.value) ? e.value : '#808080'; }
   function ensureCss() {
     if ($('cw-css')) return;
@@ -23,26 +23,34 @@
       '.cw-t{width:100%;border-collapse:collapse;font-size:12px}.cw-t th,.cw-t td{border-bottom:1px solid var(--line);padding:4px 6px;text-align:left;vertical-align:top}.cw-t th{font:600 11px var(--head);color:var(--t2)}' +
       '.cw-dot{display:inline-block;width:14px;height:14px;border-radius:50%;border:1px solid var(--line);vertical-align:-2px;margin-right:6px}' +
       '.cw-chip{display:inline-block;padding:2px 8px;border-radius:99px;font:600 11px var(--head);margin:2px 4px 2px 0}.cw-chip.ok{background:rgba(30,122,84,.12);color:var(--good)}.cw-chip.warn{background:rgba(154,91,0,.12);color:var(--warn)}.cw-chip.note{background:rgba(24,87,196,.1);color:var(--accent)}' +
-      '.cw-note{border-left:3px solid var(--line);padding:4px 8px;margin:4px 0;font-size:12px}.cw-note.warn{border-color:var(--warn)}.cw-note.ok{border-color:var(--good)}';
+      '.se-box{border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:12px}.se-chip{display:inline-block;min-width:16px;padding:0 4px;border-radius:3px;font:600 10px var(--head);font-style:normal;color:#fff;text-shadow:0 0 2px #000;text-align:center;margin:1px}.se-thread{line-height:1.7;word-break:break-all}.se-scale{height:34px}.cw-note{border-left:3px solid var(--line);padding:4px 8px;margin:4px 0;font-size:12px}.cw-note.warn{border-color:var(--warn)}.cw-note.ok{border-color:var(--good)}';
     document.head.appendChild(s);
   }
 
   // ── the stripe builder ──
   function parseStripe(t) {
-    var out = [], m = String(t || '').toUpperCase().match(/[A-F]\s*\d+/g);
-    if (m) m.forEach(function (x) { out.push({ c: x[0], n: Math.max(1, Math.min(500, parseInt(x.slice(1), 10) || 1)) }); });
+    var out = [], re = /([A-F])\s*(\d+(?:\.\d+)?)\s*(MM|CM)?/g, m, up = String(t || '').toUpperCase();
+    while ((m = re.exec(up))) {
+      var u = (m[3] || '').toLowerCase(), v = parseFloat(m[2]);
+      out.push({ c: m[1], u: u, n: u ? Math.max(0.1, Math.min(2000, v)) : Math.max(1, Math.min(500, Math.round(v))) });
+    }
     return out;
   }
-  function stripeText(rows) { return rows.map(function (r) { return r.c + r.n; }).join(' '); }
+  function stripeText(rows) { return rows.map(function (r) { return r.c + r.n + (r.u || ''); }).join(' '); }
   function drawBuilder() {
     var host = $('cw-builder'), inp = $('st-stripe'); if (!host || !inp) return;
-    var rows = parseStripe(inp.value), tot = rows.reduce(function (t, r) { return t + r.n; }, 0) || 1;
-    host.innerHTML = '<div class="st-hint" style="margin:6px 0 2px">Build the stripe course by course (feeds, as the machine counts them). On an interlock, count two feeds for one course: a one-course stripe is 2.</div>' +
-      '<div class="cw-bar" id="cw-bar">' + rows.map(function (r) { return '<i style="flex:' + r.n + ' 0 0;background:' + hex(r.c) + '" title="' + r.c + ' ' + r.n + '"></i>'; }).join('') + '</div>' +
+    var rows = parseStripe(inp.value), anyUnit = rows.some(function (r) { return r.u; });
+    // the bar is drawn to scale: a stripe typed in feeds is worth a course each (the engine's own height when it has answered), in mm its mm
+    var hh = lastSE && lastSE.heights && (lastSE.heights.filter(function (x) { return x.state === lastSE.state; })[0] || lastSE.heights[0]), cmm = hh && lastSE.repeat.feeds ? hh.repeat_mm / lastSE.repeat.feeds : 0.42;
+    var w = function (r) { return r.u === 'cm' ? r.n * 10 : r.u === 'mm' ? r.n : r.n * cmm; }, tot = rows.reduce(function (t, r) { return t + r.n; }, 0);
+    host.innerHTML = '<div class="st-hint" style="margin:6px 0 2px">Build the stripe stripe by stripe. Give a width in feeds (as the machine counts them; an interlock course is two) or in mm or cm of finished cloth: the engine turns it into whole courses and shows the error each stripe takes.</div>' +
+      '<div class="cw-bar" id="cw-bar">' + rows.map(function (r) { return '<i style="flex:' + w(r) + ' 0 0;background:' + hex(r.c) + '" title="' + r.c + ' ' + r.n + (r.u || ' feeds') + '"></i>'; }).join('') + '</div>' +
       rows.map(function (r, i) {
         return '<div class="cw-run" data-i="' + i + '"><select class="cw-c">' + LET.map(function (l) { return '<option' + (l === r.c ? ' selected' : '') + '>' + l + '</option>'; }).join('') + '</select>' +
-          '<input class="cw-n" type="number" min="1" max="500" step="1" value="' + r.n + '"><span class="st-hint" style="margin:0">feeds</span><button type="button" class="st-btn cw-del" style="padding:1px 8px">×</button></div>';
-      }).join('') + '<button type="button" class="st-btn" id="cw-add" style="margin-top:4px">Add a colour</button> <span class="st-hint" style="margin:0">' + (rows.length ? tot + ' feeds in the repeat' : 'or leave empty and give each feeder its colour in the drawing') + '</span>';
+          '<input class="cw-n" type="number" min="' + (r.u ? 0.1 : 1) + '" max="' + (r.u ? 2000 : 500) + '" step="' + (r.u ? 0.1 : 1) + '" value="' + r.n + '">' +
+          '<select class="cw-u">' + [['', 'feeds'], ['mm', 'mm'], ['cm', 'cm']].map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === (r.u || '') ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>' +
+          '<button type="button" class="st-btn cw-del" style="padding:1px 8px">×</button></div>';
+      }).join('') + '<button type="button" class="st-btn" id="cw-add" style="margin-top:4px">Add a stripe</button> <span class="st-hint" style="margin:0">' + (rows.length ? (anyUnit ? 'widths as asked: the Colours tab shows the whole courses they became' : tot + ' feeds in the repeat') : 'or leave empty and give each feeder its colour in the drawing') + '</span>';
   }
   function writeRows(rows) {
     var inp = $('st-stripe'); if (!inp) return;
@@ -52,10 +60,35 @@
   }
   function rowsFromDom() {
     return Array.prototype.map.call(document.querySelectorAll('#cw-builder .cw-run'), function (el) {
-      return { c: el.querySelector('.cw-c').value, n: Math.max(1, Math.min(500, parseInt(el.querySelector('.cw-n').value, 10) || 1)) };
+      var u = el.querySelector('.cw-u').value, v = parseFloat(el.querySelector('.cw-n').value);
+      return { c: el.querySelector('.cw-c').value, u: u, n: u ? Math.max(0.1, Math.min(2000, v || 1)) : Math.max(1, Math.min(500, Math.round(v) || 1)) };
     });
   }
 
+  var PRESETS = [
+    { name: 'Breton 1 × 1', text: 'A1 B1' }, { name: '2 × 2', text: 'A2 B2' }, { name: 'Pin stripe', text: 'A12 B1' },
+    { name: 'Graded bands', text: 'A2 B2 A4 B2 A6 B2 A4 B2' }, { name: 'Three colours, balanced', text: 'A8 B4 C2 B4' }, { name: 'Bar code', text: 'A1 B2 A3 B1 A2 B3 A1 B1' },
+    { name: 'Engineered 12 mm / 4 mm', text: 'A12mm B4mm' }];
+  // mirror and scale act on the stripe typed (feeds or mm alike)
+  function stripeTool(kind, v) {
+    var rows = rowsFromDom(); if (!rows.length) return;
+    if (kind === 'mirror') { if (rows.length < 3) return; rows = rows.concat(rows.slice(1, -1).reverse()); }
+    else if (kind === 'scale') { var f = parseFloat(v) || 1; rows = rows.map(function (r) { var n = r.n * f; return { c: r.c, u: r.u, n: r.u ? Math.max(0.1, Math.round(n * 10) / 10) : Math.max(1, Math.round(n)) }; }); }
+    writeRows(rows);
+  }
+  function stripeExtras() {
+    var o = {}, p = parseFloat(S.panel), m = parseFloat(S.meas);
+    if (p > 0) o.panel_cm = p;
+    if (m > 0) o.measured = { repeat_mm: m };
+    return o;
+  }
+  // the buttons in the Colours tab (outside the card): use one of the options
+  document.addEventListener('click', function (e) {
+    var t = e.target && e.target.closest ? e.target.closest('[data-use]') : null;
+    if (!t || !t.closest('#pane-colours')) return;
+    var inp = $('st-stripe'); if (!inp) return;
+    inp.value = t.getAttribute('data-use'); inp.dispatchEvent(new Event('input', { bubbles: true })); drawBuilder();
+  });
   function build() {
     var card = $('cw-card'); if (!card || card.getAttribute('data-ready')) return;
     ensureCss();
@@ -65,16 +98,27 @@
     var names = $('cw-names');
     if (names) names.innerHTML = '<div class="st-hint" style="grid-column:1/-1;margin:0">Give a colour as a Pantone TCX code or name, a hex, an RGB or a Lab reading: the swatch is set from it (a physical swatch still rules).</div>' + LET.map(function (l) { return '<div><label for="cw-cd-' + l + '">' + l + ' colour code</label><input id="cw-cd-' + l + '" class="cw-cd" data-l="' + l + '" type="text" maxlength="60" placeholder="19-4052 · classic blue · #0f4c81" value="' + esc(S.codes[l] || '') + '"><input id="cw-nm-' + l + '" class="cw-nm" data-l="' + l + '" type="text" maxlength="24" placeholder="name, e.g. Navy" value="' + esc(S.names[l] || '') + '" style="margin-top:2px"><div class="st-hint cw-cdo" id="cw-cdo-' + l + '" style="margin:1px 0 0"></div></div>'; }).join('');
     ['kg', 'loss', 'lot'].forEach(function (k) { var e = $('cw-' + k); if (e) e.value = S[k] || ''; });
+    var tools = $('cw-stripe-tools');
+    if (tools) tools.innerHTML = '<div class="cw-run" style="flex-wrap:wrap"><select id="cw-preset" title="A stripe to start from"><option value="">Start from a stripe…</option>' +
+      PRESETS.map(function (p) { return '<option value="' + esc(p.text) + '">' + esc(p.name) + ' — ' + esc(p.text) + '</option>'; }).join('') + '</select>' +
+      '<button type="button" class="st-btn" data-se="mirror" title="A B C becomes A B C B: the repeat read out and back">Mirror</button>' +
+      '<button type="button" class="st-btn" data-se="scale" data-v="2" title="Every stripe twice as wide">× 2</button>' +
+      '<button type="button" class="st-btn" data-se="scale" data-v="0.5" title="Every stripe half as wide">÷ 2</button></div>' +
+      '<div class="st-row"><div class="st-f"><label for="cw-panel">Garment panel length (cm)</label><input id="cw-panel" type="number" min="1" step="0.5" placeholder="optional: cut to whole stripe repeats" value="' + esc(S.panel || '') + '"></div>' +
+      '<div class="st-f"><label for="cw-meas">Stripe repeat measured on a finished trial roll (mm)</label><input id="cw-meas" type="number" min="0.5" step="0.1" placeholder="optional: replaces the modelled heights" value="' + esc(S.meas || '') + '"></div></div>';
     card.setAttribute('data-ready', '1');
     drawBuilder();
     card.addEventListener('click', function (e) {
       var t = e.target;
-      if (t.id === 'cw-add') { var r = rowsFromDom(); r.push({ c: LET[Math.min(5, r.length)] || 'A', n: 2 }); writeRows(r); }
+      if (t.id === 'cw-add') { var r = rowsFromDom(); r.push({ c: LET[Math.min(5, r.length)] || 'A', n: 2, u: r.length && r[r.length - 1].u ? r[r.length - 1].u : '' }); writeRows(r); }
+      else if (t.getAttribute && t.getAttribute('data-se')) stripeTool(t.getAttribute('data-se'), t.getAttribute('data-v'));
       else if (t.classList && t.classList.contains('cw-del')) { var rr = rowsFromDom(); rr.splice(+t.parentNode.getAttribute('data-i'), 1); writeRows(rr); }
     });
     card.addEventListener('change', function (e) {
       var t = e.target;
-      if (t.classList && (t.classList.contains('cw-c') || t.classList.contains('cw-n'))) writeRows(rowsFromDom());
+      if (t.classList && (t.classList.contains('cw-c') || t.classList.contains('cw-n') || t.classList.contains('cw-u'))) writeRows(rowsFromDom());
+      else if (t.id === 'cw-preset') { if (t.value) { var inp0 = $('st-stripe'); inp0.value = t.value; inp0.dispatchEvent(new Event('input', { bubbles: true })); drawBuilder(); } t.value = ''; }
+      else if (t.id === 'cw-panel' || t.id === 'cw-meas') { S[t.id === 'cw-panel' ? 'panel' : 'meas'] = t.value; poke(); }
       else if (t.classList && t.classList.contains('cw-nm')) { S.names[t.getAttribute('data-l')] = t.value.trim(); poke(); }
       else if (t.classList && t.classList.contains('cw-cd')) setFromCode(t.getAttribute('data-l'), t.value.trim());
       else if (/^cw-(kg|loss|lot)$/.test(t.id)) { S[t.id.slice(3)] = t.value; poke(); }
@@ -115,6 +159,7 @@
     if (card && card.getAttribute('data-ready')) {
       LET.forEach(function (l) { var e = $('cw-nm-' + l), c = $('cw-cd-' + l); if (e) e.value = S.names[l] || ''; if (c) c.value = S.codes[l] || ''; });
       ['kg', 'loss', 'lot'].forEach(function (k) { var e = $('cw-' + k); if (e) e.value = S[k] || ''; });
+      var pe = $('cw-panel'), me = $('cw-meas'); if (pe) pe.value = S.panel || ''; if (me) me.value = S.meas || '';
       drawBuilder();
     }
     last = null; render();
@@ -125,10 +170,10 @@
   function render() {
     var pane = $('pane-colours'), sum = $('cw-sum'); if (!pane) return;
     ensureCss();
-    var cw = last;
-    if (sum) sum.textContent = cw && cw.colours ? '· ' + cw.kind + ', ' + cw.colours_n + ' colours' + (cw.checks.some(function (c) { return c.level === 'warn'; }) ? ', ' + cw.checks.filter(function (c) { return c.level === 'warn'; }).length + ' to check' : '') : '';
-    if (!cw) { pane.innerHTML = '<p class="st-p">No colours yet. Give two or more feeders a colour in the drawing, type a stripe (A12 B4 C2) in the Colours card, or paint a motif in the jacquard card. This tab then shows the yarn each colour needs, how it is dyed, and which colours touch.</p>'; return; }
-    if (cw.success === false) { pane.innerHTML = '<div class="cw-note warn">' + esc(cw.error) + '</div>'; return; }
+    var cw = last, se = stripeHtml();
+    if (sum) sum.textContent = (lastSE ? '· stripe of ' + lastSE.repeat.feeds + ' feeds, ' + lastSE.machine.method + ' ' : '') + (cw && cw.colours ? '· ' + cw.kind + ', ' + cw.colours_n + ' colours' + (cw.checks.some(function (c) { return c.level === 'warn'; }) ? ', ' + cw.checks.filter(function (c) { return c.level === 'warn'; }).length + ' to check' : '') : '');
+    if (!cw) { pane.innerHTML = se || '<p class="st-p">No colours yet. Give two or more feeders a colour in the drawing, type a stripe (A12 B4 C2) in the Colours card, or paint a motif in the jacquard card. This tab then shows the yarn each colour needs, how it is dyed, and which colours touch.</p>'; return; }
+    if (cw.success === false) { pane.innerHTML = se + '<div class="cw-note warn">' + esc(cw.error) + '</div>'; return; }
     var h = '<div class="st-p"><b>' + esc(cw.kind.charAt(0).toUpperCase() + cw.kind.slice(1)) + '</b> · ' + cw.colours_n + ' colours · ' + cw.rows + ' pixel row' + (cw.rows === 1 ? '' : 's') + ' in the repeat · a row takes ' + cw.feeds_per_row + ' feed' + (cw.feeds_per_row === 1 ? '' : 's') + ' and ' + cw.colours_per_row + ' yarn' + (cw.colours_per_row === 1 ? '' : 's') + '</div>';
     h += '<div style="display:flex;height:22px;border:1px solid var(--line);border-radius:6px;overflow:hidden;margin:6px 0">' + cw.colours.map(function (c) { return '<i style="flex:' + Math.max(1, c.yarn_pct) + ' 0 0;background:' + esc(c.hex) + '" title="' + esc(c.name || c.letter) + ' ' + c.yarn_pct + ' % of the yarn"></i>'; }).join('') + '</div>';
     var ord = cw.order;
@@ -151,9 +196,65 @@
     h += '<div class="ml-h" style="margin-top:10px;font:600 12px var(--head)">On the machine</div><div class="st-p">' + esc(cw.machine.note) + ' ' + cw.machine.cones_to_hang + ' cones to hang' + (cw.machine.fingers_needed > 1 ? ', ' + cw.machine.fingers_needed + ' yarns at one feeder (' + (cw.machine.fingers_available || 0) + ' finger(s) on this machine)' : '') + '.</div>';
     h += '<div class="ml-h" style="margin-top:10px;font:600 12px var(--head)">Check before you order</div>' + cw.checks.map(function (c) { return '<div class="cw-note ' + (c.level === 'warn' ? 'warn' : c.level === 'ok' ? 'ok' : '') + '">' + esc(c.text) + '</div>'; }).join('');
     h += '<div class="st-hint" style="margin-top:8px">Law: ' + esc(cw.basis.law.join('; ')) + '. Typical: ' + esc(cw.basis.typical.join('; ')) + '. Estimated: ' + esc(cw.basis.estimate.join('; ')) + '. Replaced by ' + esc(cw.basis.replaced_by) + '.</div>';
-    pane.innerHTML = h;
+    pane.innerHTML = se + h;
+  }
+
+  // ── the engineering stripe: repeat, heights to scale, machine, helix, options, panel ──
+  // a colour chip with its letter, the letter dark on a light colour and white on a dark one
+  function chip(l) {
+    var h = hex(l), n = parseInt(h.slice(1), 16), y = 0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255);
+    return '<i class="se-chip" style="background:' + h + ';color:' + (y > 150 ? '#111' : '#fff') + ';text-shadow:none" title="' + l + '">' + l + '</i>';
+  }
+  function stripeHtml() {
+    var se = lastSE; if (!se || !se.success) return '';
+    var H = function (t) { return '<div class="ml-h" style="margin-top:12px;font:600 12px var(--head)">' + t + '</div>'; };
+    var sel = se.heights.filter(function (x) { return x.state === se.state; })[0] || se.heights[0], m = se.machine, g = se.geometry, rep = se.repeat;
+    var h = '<div class="se-box"><div class="st-p" style="margin:0"><b>Engineering stripe</b> · ' + rep.feeds + ' feed' + (rep.feeds === 1 ? '' : 's') + (rep.interlock_courses ? ' (' + rep.interlock_courses + ' interlock courses)' : '') + ' · ' + sel.repeat_mm + ' mm in the ' + esc(se.state_label.split(' —')[0].toLowerCase()) + ' cloth · <span class="cw-chip ' + (m.method === 'feeder stripe' ? 'ok' : 'note') + '">' + esc(m.method) + '</span>' + (se.calibration ? ' <span class="cw-chip ok">your trial roll</span>' : '') + '</div>';
+    if (rep.reduced) h += '<div class="st-hint" style="margin:2px 0">Drawn as ' + rep.from_feeds + ' feeds; it repeats itself ' + rep.factor + ' times, so the real repeat is ' + rep.feeds + '.</div>';
+    // to scale: every stripe as wide as it is in the cloth
+    h += '<div class="cw-bar se-scale" title="to scale, ' + sel.repeat_mm + ' mm">' + sel.runs.map(function (x) { return '<i style="flex:' + x.mm + ' 0 0;background:' + hex(x.colour) + '" title="' + x.colour + ' ' + x.mm + ' mm · ' + x.courses + ' courses"></i>'; }).join('') + '</div>';
+    // every stripe in every state
+    h += '<div class="bl-scroll"><table class="cw-t"><tr><th>Stripe</th><th>Feeds</th><th>Courses</th>' + se.heights.map(function (x) { return '<th>' + esc(x.label.split(' —')[0]) + ' (mm)</th>'; }).join('') + (se.fit ? '<th>Asked (mm)</th><th>Error</th>' : '') + '</tr>' +
+      rep.runs.map(function (x, i) {
+        var f = se.fit && se.fit.runs[i] && se.fit.runs[i].asked_mm != null ? se.fit.runs[i] : null;
+        return '<tr><td>' + chip(x.colour) + '</td><td>' + x.feeds + '</td><td>' + x.courses + '</td>' + se.heights.map(function (y) { return '<td' + (y.state === se.state ? ' style="font-weight:600"' : '') + '>' + y.runs[i].mm + '</td>'; }).join('') + (se.fit ? '<td>' + (f ? f.asked_mm : '') + '</td><td>' + (f ? (f.error_pct > 0 ? '+' : '') + f.error_pct + ' %' : '') + '</td>' : '') + '</tr>';
+      }).join('') +
+      '<tr><td><b>Repeat</b></td><td><b>' + rep.feeds + '</b></td><td></td>' + se.heights.map(function (y) { return '<td><b>' + y.repeat_mm + '</b></td>'; }).join('') + (se.fit ? '<td>' + se.fit.repeat_asked_mm + '</td><td>' + (se.fit.repeat_error_mm > 0 ? '+' : '') + se.fit.repeat_error_mm + ' mm</td>' : '') + '</tr></table></div>';
+    if (rep.combined_feeds > rep.feeds) h += '<div class="st-hint" style="margin:2px 0">With the design\'s ' + rep.design_feeds + '-feed repeat the whole pattern repeats every ' + rep.combined_feeds + ' feeds (' + rep.combined_mm + ' mm).</div>';
+    // the machine
+    h += H('On the machine');
+    if (m.method === 'feeder stripe') {
+      h += '<div class="st-p">Every feeder keeps one yarn; ' + (m.feeders / rep.feeds) + ' stripe repeat' + (m.feeders / rep.feeds === 1 ? '' : 's') + ' round the ' + m.feeders + ' feeders. Thread feeders 1 → ' + Math.min(m.feeders, 96) + ':</div><div class="se-thread">' + (m.threading || []).map(function (t) { return '<span title="feeder ' + t.feeder + '">' + chip(t.yarn) + '</span>'; }).join('') + (m.feeders > 96 ? ' …' : '') + '</div>';
+    } else {
+      h += '<div class="st-p">' + m.changing_feeders + ' of ' + m.feeders + ' feeders change yarn (up to ' + m.fingers_needed + ' on one' + (m.fingers_available ? ', the stripers have ' + m.fingers_available + ' fingers' : ', this machine has no stripers') + '); the other ' + m.fixed_feeders + ' keep one yarn. The stripe comes round every ' + m.cycle_revolutions + ' revolution' + (m.cycle_revolutions === 1 ? '' : 's') + '.</div>';
+      if (m.schedule) {
+        h += '<div class="bl-scroll"><table class="cw-t se-sched"><tr><th>Feeder</th><th>Fingers</th><th>Colour by revolution</th></tr>' + m.schedule.feeders.slice(0, 24).map(function (f) {
+          return '<tr><td>' + f.feeder + '</td><td>' + f.fingers.map(function (c, i) { return (i + 1) + '=' + chip(c); }).join(' ') + '</td><td>' + (f.by_revolution ? f.by_revolution.split('').map(function (c) { return c === '…' ? '…' : chip(c); }).join('') : '') + '</td></tr>';
+        }).join('') + '</table></div>' + (m.feeders > 24 ? '<div class="st-hint">The first 24 of ' + m.feeders + ' feeders; the whole programme is in the Stripe &amp; striper file.</div>' : '');
+      }
+    }
+    h += '<div class="st-p">' + m.cones.total + ' cones to hang (' + Object.keys(m.cones.by_colour).map(function (c) { return chip(c) + ' ' + m.cones.by_colour[c]; }).join(' · ') + ').' +
+      (m.changes.per_cycle ? ' The striper changes yarn ' + m.changes.per_revolution + ' times a revolution' + (m.changes.per_hour ? ', about ' + m.changes.per_hour.toLocaleString() + ' an hour at this speed' : '') + '.' : '') + '</div>';
+    if (se.production) h += '<div class="st-hint">One repeat takes ' + (se.production.seconds_per_repeat >= 60 ? Math.round(se.production.seconds_per_repeat / 6) / 10 + ' min' : se.production.seconds_per_repeat + ' s') + ' to knit: ' + se.production.cloth_m_per_hour + ' m of finished cloth an hour.</div>';
+    // the helix
+    h += H('Across the width') + '<div class="st-p">' + esc(g.note) + '</div>';
+    // options
+    var oc = se.options.feeder_counts, orp = se.options.repeats;
+    if (oc.length || orp.length) {
+      h += H('Without stripers');
+      if (oc.length) h += '<div class="bl-scroll"><table class="cw-t"><tr><th>Feeders</th><th>Stripe repeats round</th><th>Output</th><th>Edge fall across the width</th></tr>' + oc.map(function (x) { return '<tr><td><b>' + x.feeders + '</b></td><td>' + x.stripe_repeats_round + '</td><td>' + Math.round(x.relative_output * 100) + ' %</td><td>' + x.tilt_mm + ' mm</td></tr>'; }).join('') + '</table></div>';
+      if (orp.length) h += '<div class="bl-scroll"><table class="cw-t"><tr><th>A repeat that divides the ' + m.feeders + ' feeders</th><th>Repeat (mm)</th><th>Biggest change</th><th></th></tr>' + orp.map(function (x) { return '<tr><td>' + x.runs.map(function (r) { return chip(r.colour) + r.feeds; }).join(' ') + '</td><td>' + x.repeat_mm + '</td><td>' + x.max_error_mm + ' mm (' + x.max_error_pct + ' %)</td><td><button type="button" class="st-btn" data-use="' + esc(x.sequence) + '" style="padding:1px 8px">Use it</button></td></tr>'; }).join('') + '</table></div>';
+    }
+    // the panel
+    if (se.panel) { var p = se.panel; h += H('Garment panel') + '<div class="st-p">' + p.panel_cm + ' cm is ' + p.repeats_exact + ' stripe repeats of ' + p.repeat_cm + ' cm. ' + (p.whole ? 'It matches at the seams.' : 'Cut <b>' + p.nearest.length_cm + ' cm</b> (' + p.nearest.repeats + ' repeats, ' + (p.nearest.off_cm > 0 ? '+' : '') + p.nearest.off_cm + ' cm) so the stripes meet; the other whole lengths are ' + p.shorter.length_cm + ' and ' + p.longer.length_cm + ' cm.') + '</div>'; }
+    // checks
+    h += se.checks.filter(function (c) { return ['machine', 'geo', 'panel', 'fit', 'cal'].indexOf(c.tag) < 0; }).map(function (c) { return '<div class="cw-note ' + (c.level === 'warn' || c.level === 'error' ? 'warn' : c.level === 'ok' ? 'ok' : '') + '">' + esc(c.text) + '</div>'; }).join('');
+    if (se.calibration) h += '<div class="cw-note ok">Heights follow your trial roll (' + esc(se.calibration.how) + ', ' + (se.calibration.vs_model_pct > 0 ? '+' : '') + se.calibration.vs_model_pct + ' % against the model).</div>';
+    h += '<div class="st-hint" style="margin-top:6px">Law: ' + esc(se.basis.law.join('; ')) + '. Typical: ' + esc(se.basis.typical.join('; ')) + '. Estimated: ' + esc(se.basis.estimate.join('; ')) + '. Replaced by ' + esc(se.basis.replaced_by) + '.</div></div>';
+    return h;
   }
   function studioResult(r) {
+    lastSE = r && r.stripe_engineering && r.stripe_engineering.success ? r.stripe_engineering : null;
     last = r && r.colourway ? r.colourway : null; render();
     // a design that was loaded brings its own stripe: draw it, unless the person is typing in the builder
     var host = $('cw-builder'), inp = $('st-stripe');
@@ -174,7 +275,7 @@
     });
   }
 
-  window.KAStudioColourway = { setColours: setColours, payload: payload, state: state, setState: setState, studioResult: studioResult };
+  window.KAStudioColourway = { stripeExtras: stripeExtras, setColours: setColours, payload: payload, state: state, setState: setState, studioResult: studioResult };
   function init() { build(); render(); }
   if (document.readyState === 'complete') setTimeout(init, 200); else window.addEventListener('load', function () { setTimeout(init, 200); });
 })();

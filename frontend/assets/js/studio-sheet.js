@@ -60,6 +60,15 @@
       dr.push(row('Total / liquor', s.dyeing.total_time_h + ' h, liquor ' + s.dyeing.liquor_ratio + ':1'));
       h += sec('4 · Dyeing — ' + s.dyeing.shade, dr, s.dyeing.basis);
     }
+    if (s.stripe) {
+      var sx = s.stripe, sr = [row('Repeat', esc(sx.text) + ' · ' + sx.repeat_feeds + ' feeds · ' + sx.repeat_mm + ' mm on the finished cloth (' + sx.heights.map(function (x) { return esc(x.state) + ' ' + x.repeat_mm; }).join(' · ') + ' mm)')];
+      sx.runs.forEach(function (x) { sr.push(row(esc(x.colour), x.feeds + ' feeds · ' + x.courses + ' courses · ' + x.mm + ' mm')); });
+      sr.push(row('Machine', esc(sx.method) + ' on ' + sx.feeders + ' feeders' + (sx.fingers_needed > 1 ? ', up to ' + sx.fingers_needed + ' yarns on a feeder' : '') + ' · ' + sx.cones.total + ' cones to hang'));
+      sr.push(row('Edge fall across the width', sx.edge_fall_mm + ' mm (the feeders knit a helix)'));
+      if (sx.panel) sr.push(row('Panel', sx.panel.panel_cm + ' cm = ' + sx.panel.repeats_exact + ' repeats: cut ' + sx.panel.nearest.length_cm + ' cm'));
+      sx.checks.forEach(function (c) { sr.push('<tr><td colspan="2" class="st-hint">⚠ ' + esc(c.text) + '</td></tr>'); });
+      h += sec('Engineering stripe', sr, sx.basis);
+    }
     var f = s.finishing, fr = [];
     if (f.heat_set) fr.push(row('Heat-set', f.heat_set.temp_c + ' °C, ' + f.heat_set.time_s + ' s, ' + f.heat_set.when));
     fr.push(row('Stenter', 'width ' + f.stenter.set_width_in + '", ' + f.stenter.temp_c + ' °C, ' + f.stenter.speed_m_min + ' m/min' + (f.stenter.overfeed_pct != null ? ', overfeed ' + f.stenter.overfeed_pct + '%' : ''), 'typical (modelled)'));

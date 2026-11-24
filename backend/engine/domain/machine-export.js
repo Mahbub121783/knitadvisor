@@ -121,6 +121,39 @@ function colourCsv(out, name) {
   return '﻿' + L.join('\r\n') + '\r\n';
 }
 
+/** The stripe as the knitter and the creel hand need it: the repeat in courses and mm, the cones on every feeder, the yarn each feeder takes each revolution (striper). */
+function stripeCsv(out, name) {
+  const se = out && out.stripe_engineering;
+  if (!se || se.success === false) throw new ExportError('This design has no stripe to export: type a stripe (A12 B4 C2) in the Colours card.');
+  const L = [];
+  const colourName = (l) => { const c = out.colourway && out.colourway.colours ? out.colourway.colours.find((x) => x.letter === l) : null; return c && c.name ? c.name : ''; };
+  L.push(line(['KnitAdvisor — engineering stripe', name || '']));
+  L.push(line(['Machine', out.machine_setup && out.machine_setup.profile ? out.machine_setup.profile.label : '', 'feeders', se.machine.feeders, 'method', se.machine.method, 'stripers (fingers)', se.machine.fingers_available || 'none']));
+  L.push(line(['Repeat', se.repeat.feeds + ' feeds', se.repeat.colours.join(' '), se.repeat.reduced ? '(the drawn stripe repeats itself ' + se.repeat.factor + ' times)' : '']));
+  L.push('');
+  L.push(line(['Stripe', 'Colour', 'Name', 'Feeds', 'Courses'].concat(se.heights.map((h) => h.label + ' (mm)'))));
+  se.repeat.runs.forEach((x, i) => L.push(line([i + 1, x.colour, colourName(x.colour), x.feeds, x.courses].concat(se.heights.map((h) => h.runs[i] ? h.runs[i].mm : '')))));
+  L.push(line(['Whole repeat', '', '', se.repeat.feeds, se.repeat.runs.reduce((t, x) => t + x.courses, 0)].concat(se.heights.map((h) => h.repeat_mm))));
+  L.push('');
+  L.push(line(['Cones to hang', se.machine.cones.total].concat(Object.entries(se.machine.cones.by_colour).map(([k, v]) => k + ': ' + v))));
+  L.push(line(['Stripe edges across the open width', se.geometry.mm + ' mm', se.geometry.deg != null ? se.geometry.deg + ' degrees' : '', se.geometry.courses_per_rev + ' courses in the helix']));
+  if (se.panel) L.push(line(['Panel', se.panel.panel_cm + ' cm', 'cut', se.panel.nearest.length_cm + ' cm = ' + se.panel.nearest.repeats + ' repeats']));
+  L.push('');
+  // feeder by feeder: the yarn each feeder carries (feeder stripe) or the yarns on its fingers and the colour each revolution (striper)
+  const plan = se.machine.method === 'striper' && se.repeat.sequence ? require('./stripe-engineering').feederPlan(se.repeat.sequence.split(''), se.machine.feeders, 0, 0) : null;
+  if (se.machine.method === 'feeder stripe') {
+    L.push(line(['Feeder', 'Yarn', 'Name']));
+    (se.machine.threading || []).forEach((t) => L.push(line([t.feeder, t.yarn, colourName(t.yarn)])));
+    if (se.machine.feeders > (se.machine.threading || []).length) L.push(line(['…', 'the same ' + se.repeat.feeds + '-feeder pattern continues round the machine']));
+  } else if (plan) {
+    const R = se.machine.cycle_revolutions;
+    L.push(line(['Striper programme: the colour each feeder knits in each revolution (finger = order of first use at that feeder)']));
+    L.push(line(['Feeder', 'Fingers'].concat(Array.from({ length: R }, (_, r) => 'Rev ' + (r + 1)))));
+    plan.per.forEach((f) => L.push(line([f.feeder, f.colours.map((c, i) => (i + 1) + '=' + c).join(' '), ...(f.by_rev || '').split('')])));
+  }
+  return '\ufeff' + L.join('\r\n') + '\r\n';
+}
+
 // ── CSV ──────────────────────────────────────────────────────────────────────
 const cell = (v) => { const s = v == null ? '' : String(v); return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
 const line = (a) => a.map(cell).join(',');
@@ -357,4 +390,4 @@ function calibrationSheet(out, o = {}) {
 
 const slug = (s) => String(s || 'design').replace(/[^A-Za-z0-9_.-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || 'design';
 
-module.exports = { programme, motifProgramme, colourCsv, png, bmp, csv, sheet, calibrationSheet, slug, ExportError, SYMS, PALETTE };
+module.exports = { programme, motifProgramme, colourCsv, stripeCsv, png, bmp, csv, sheet, calibrationSheet, slug, ExportError, SYMS, PALETTE };

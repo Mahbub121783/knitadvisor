@@ -48,6 +48,7 @@ const RECY = require('./yarn-recovery-engine');
 const HAND = require('./fabric-hand-engine');
 const CT = require('./colour-target-engine');
 const CW = require('./colourway');
+const STR = require('./stripe-engineering');
 const LIGHT = require('./fabric-light-engine');
 const FEAS = require('./feasibility-engine');
 const PE = require('./process-effects');
@@ -1209,6 +1210,20 @@ function analyse(input) {
     // a colour target (a Pantone code, Lab, RGB or hex) sets the shade of the look and chemistry cards and the target of a melange (colour-target-engine.js)
     // a flat V-bed: its gauge is the machine's gauge (the loops are knitted at it)
     if (input && input.vbed && input.vbed.enabled && +input.vbed.gauge > 0) input = { ...input, machine: { ...(input.machine || {}), gauge: +input.vbed.gauge } };
+    // stripe widths given in mm or cm: the cloth's course density is needed to turn them into courses, so the design is read once without the stripe first
+    let stripeFit = null;
+    if (input && input.stripes && typeof input.stripes.sequence === 'string' && STR.parseSpec(input.stripes.sequence).has_units) {
+      const spec = STR.parseSpec(input.stripes.sequence);
+      const pre = analyse({ ...input, stripes: null, core_engines: false, chemistry: undefined, hand: undefined, recovery: undefined, look: undefined, lab: undefined, inspect: undefined, drape: undefined, colourway: undefined, floor: input.floor });
+      if (!pre || !pre.success) return pre;
+      const stN = ['dry', 'wet', 'finished', 'full'].includes(input.stripes.height_state) ? input.stripes.height_state : 'finished';
+      const row = pre.fabric.relaxation && pre.fabric.relaxation.states ? pre.fabric.relaxation.states.find((x) => x.state === stN) : null;
+      try {
+        stripeFit = STR.fitSpec(spec.runs, { cpc: row ? row.cpc : pre.fabric.cpc, cpf: pre.structure.courses_per_feed || 1, unit_feeds: pre.structure.gating === 'interlock' ? 2 : 1 });
+      } catch (e) { if (e instanceof STR.StripeError) return { success: false, error: e.message }; throw e; }
+      stripeFit.state = stN;
+      input = { ...input, stripes: { ...input.stripes, sequence: stripeFit.sequence } };
+    }
     // The core engines answer every design the Studio is asked about, whatever cards are open: the wet route and its chemistry, the yarn's recovery, the
     // look and the light through the cloth, and the hand. They used to run only when their card was switched on, so Simple and Expert (and the development sheet)
     // gave different answers. A card still adds its own inputs, and {enabled: false} turns one off. (Bulk callers, like the invent search, do not ask for it.)
@@ -1324,7 +1339,12 @@ function analyse(input) {
     // ── the machine: profile chosen (or picked) for what the notation asks ──
     ctx.transferDir = (input.machine || {}).transfer_dir === 'left' ? 'left' : 'right';
     // stripes: the yarn each course is knitted in
-    const stripeSeq = KM.parseStripe((input.stripes || {}).sequence, feedColours);
+    let stripeSeq = KM.parseStripe((input.stripes || {}).sequence, feedColours);
+    // the smallest repeat the stripe really has (A1 B1 A1 B1 is A1 B1): every feeder rule and check works from it
+    const stripeDrawn = stripeSeq;
+    if (stripeSeq) stripeSeq = STR.reduce(stripeSeq).seq;
+    // face courses one feed makes: 1 on a plain cloth, a half on an interlock (two feeds make a course), less where a feed does not knit the face
+    const cpfStripe = (() => { const kf = Array.from({ length: st.feeds }, (_, i) => i).filter((i) => [st.beds.C, st.beds.D].filter(Boolean).some((g) => g[i].includes('K'))).length; return st.beds.D && gating === 'interlock' ? kf / st.feeds / 2 : kf / st.feeds; })();
     const diaIn = +((input.machine || {}).dia) || 30;
     const req = KM.requirements(st, gating, feedRows, { pile: pileFeed > -1, transferDir: ctx.transferDir, stripe: KM.stripeRequirement(stripeSeq, st.feeds, diaIn) });
     const profile = KM.resolve(input.machine, req);
@@ -1506,6 +1526,17 @@ function analyse(input) {
         else if (sp.method === 'feeder stripe') add('ok', `Feeder stripe: ${sp.courses}-course repeat in ${new Set(stripeSeq).size} yarns — every feeder keeps one yarn (${S.feeders} feeders = ${S.feeders / sp.courses} stripe repeats per revolution).`);
         else add('ok', `Striper stripe: each feeder changes between up to ${sp.fingers_needed} yarns, the repeat takes ${sp.revolutions_per_repeat} revolution${sp.revolutions_per_repeat > 1 ? 's' : ''}.`);
         if (+((input.machine || {}).feeders) > 0 && sp.method === 'striper' && !profile.striper) add('note', 'Your feeder count is not a multiple of the stripe repeat, so the stripe cannot be threaded feeder by feeder.');
+        // the engineering stripe: heights in every state, the feeders and fingers, options, the helix, the panel (stripe-engineering.js)
+        try {
+          const sIn = input.stripes || {};
+          ctx.stripeEng = STR.analyse({
+            seq: stripeDrawn, F: st.feeds, feeders: S.feeders, gating, cpf: cpfStripe, striper: profile.striper || 0, rpm: S.rpm, eff: S.eff,
+            states: relax ? relax.states.map((x) => ({ state: x.state, label: x.label, cpc: x.cpc, width_in: x.width_in })) : [{ state: 'finished', label: 'Finished', cpc: S.cpc, width_in: S.width }],
+            selected: ['dry', 'wet', 'finished', 'full'].includes(sIn.height_state) ? sIn.height_state : (['dry', 'wet', 'finished', 'full'].includes(input.state) ? input.state : 'finished'),
+            panel_cm: sIn.panel_cm, measured: sIn.measured, fit: stripeFit,
+          });
+          if (ctx.stripeEng) ctx.stripeEng.checks.filter((c) => c.tag !== 'machine').forEach((c) => add(c.level, c.text));
+        } catch (e) { if (!(e instanceof STR.StripeError)) throw e; add('warn', e.message); }
       }
       if (relax) mc.push(...KR.checks(relax, family));
       // plating: which yarn shows where
@@ -1665,7 +1696,7 @@ function analyse(input) {
     const out = {
       success: true,
       structure: {
-        bed: D ? 'double' : 'single', gating, feeds: st.feeds, needles_per_repeat: st.width, beds: st.beds, roles, roles_drawn: feedRows.map((f) => f.drawn || f.role),
+        bed: D ? 'double' : 'single', gating, feeds: st.feeds, courses_per_feed: r3(cpfStripe), needles_per_repeat: st.width, beds: st.beds, roles, roles_drawn: feedRows.map((f) => f.drawn || f.role),
         identity: describeStructure(st, roles, gating, !!plush),
         family: plush ? 'plush' : family, family_label: plush ? 'Sinker-loop plush (terry / velour)' : FAMILY[family].label,
         anchor: plush ? { id: 'terry', name: 'factory loopback terry (loop size)' } : { id: anchorDef.id, name: anchorDef.name },
@@ -1811,6 +1842,7 @@ function analyse(input) {
       },
     };
     // several yarn colours dyed as yarn: stripes, wale stripes, jacquard (colourway.js)
+    out.stripe_engineering = ctx.stripeEng || null;
     out.colourway = null;
     out.engine_faults = faults;
     if (stripeSeq || feedColours.some(Boolean)) {

@@ -147,6 +147,17 @@ function build(raw, analyse) {
     basis: 'colours as yarn: law (the drawing), typical (loss, lot, fastness grades), estimate (dye amount from the luminance); the lab dips of the yarn dyer replace the estimates',
   } : null;
 
+  // ── an engineering stripe: the repeat in mm on the finished cloth, the machine, the cones, the panel (stripe-engineering.js) ──
+  const se = out.stripe_engineering && out.stripe_engineering.success ? out.stripe_engineering : null;
+  const stripe = se ? {
+    text: se.repeat.text, sequence: se.repeat.sequence, repeat_feeds: se.repeat.feeds, repeat_mm: (se.heights.find((h) => h.state === 'finished') || se.heights[0]).repeat_mm,
+    runs: se.repeat.runs.map((x, i) => ({ colour: x.colour, feeds: x.feeds, courses: x.courses, mm: (se.heights.find((h) => h.state === 'finished') || se.heights[0]).runs[i].mm })),
+    heights: se.heights.map((h) => ({ state: h.label.split(' —')[0], repeat_mm: h.repeat_mm })),
+    method: se.machine.method, feeders: se.machine.feeders, fingers_needed: se.machine.fingers_needed, cones: se.machine.cones, edge_fall_mm: se.geometry.mm, panel: se.panel,
+    checks: se.checks.filter((c) => c.level === 'warn' || c.level === 'error').map((c) => ({ level: c.level, text: c.text })),
+    basis: 'law (courses, feeder passes, the helix), typical (relaxation states), replaced by a repeat measured on a finished trial roll',
+  } : null;
+
   // ── finishing: a prescription from the route, the cloth's own shrinkage and its weight ─────────────────────
   const heatset = ch ? ch.route.steps.find((s) => /heat/i.test(s.label || s.id || '')) : null;
   const lycra = !!el || (out.composition_solve && (out.composition_solve.achieved || {}).elastane > 0) || /elastane/i.test(JSON.stringify(out.yarn.composition || []));
@@ -211,6 +222,7 @@ function build(raw, analyse) {
     greige: greige ? { gsm: Math.round(greige.gsm * kG), gsm_range: gsmRange(greige.gsm * kG), width_in: r1(greige.width_in * kW), wales_per_cm: greige.wpc, courses_per_cm: greige.cpc, note: 'off the machine, relaxed flat' } : { gsm: Math.round(f.gsm * kG), gsm_range: gsmRange(f.gsm * kG), width_in: r1(f.width_open_in * kW), wales_per_cm: f.wpc, courses_per_cm: f.cpc, note: 'this structure has no separate relaxed state in the Studio: its own weight and width are shown' },
     dyeing,
     colours,
+    stripe,
     finishing,
     finished: { gsm: Math.round((finished ? finished.gsm : f.gsm) * kG), gsm_range: gsmRange((finished ? finished.gsm : f.gsm) * kG), width_in: r1((finished ? finished.width_in : f.width_open_in) * kW), wales_per_cm: f.wpc, courses_per_cm: f.cpc, spirality_helix_deg: out.spirality ? out.spirality.helix_deg : null, thickness_mm: out.hand && out.hand.compression ? out.hand.compression.T0.value : null },
     verdict, export_locked: out.feasibility ? !!out.feasibility.export_locked : false, warnings: warns,

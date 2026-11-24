@@ -2023,7 +2023,7 @@ router.post('/studio/export', requireUser, exportLimiter, async (req, res) => {
     const hit = await studioAnswer(req.user.id, b.design);
     if (hit.status !== 200) return res.status(hit.status).type('application/json').send(hit.body);
     const out = JSON.parse(hit.body);
-    const fmt = ['pdf', 'png', 'bmp', 'csv', 'calib', 'motif', 'colours'].includes(b.format) ? b.format : 'pdf';
+    const fmt = ['pdf', 'png', 'bmp', 'csv', 'calib', 'motif', 'colours', 'stripe'].includes(b.format) ? b.format : 'pdf';
     // a design that fails a feasibility gate (FATAL) gets no factory file until it is fixed (engine/domain/feasibility-engine.js)
     if (out.feasibility && out.feasibility.export_locked) {
       const fatal = out.feasibility.rules.filter((r) => r.status === 'fatal').map((r) => `${r.id} ${r.name}: ${r.text}`).concat(Object.values(out.feasibility.gates).flatMap((g) => g.other || []));
@@ -2049,6 +2049,11 @@ router.post('/studio/export', requireUser, exportLimiter, async (req, res) => {
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
       res.setHeader('Content-Disposition', `attachment; filename="YarnColours-${slug}.csv"`);
       return res.send(machineExport.colourCsv(out, name));
+    }
+    if (fmt === 'stripe') {
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="Stripe-${slug}.csv"`);
+      return res.send(machineExport.stripeCsv(out, name));
     }
     if (fmt === 'motif') {
       const P = machineExport.motifProgramme(out, b.bed === 'D' ? 'back' : 'face');

@@ -186,6 +186,15 @@ function toDNA(input, out) {
       motif: out.colourway.motif ? { face: out.colourway.motif.face, back: out.colourway.motif.back } : null,
       basis: 'law: the drawing; typical: loss, lot and fastness grades; estimate: dye amounts from the luminance',
     } : null,
+    // an engineering stripe (stripe-engineering.js): the repeat, each stripe in mm on the finished cloth, how the machine knits it
+    stripe: out.stripe_engineering && out.stripe_engineering.success ? {
+      repeatFeeds: out.stripe_engineering.repeat.feeds, text: out.stripe_engineering.repeat.text, sequence: out.stripe_engineering.repeat.sequence,
+      runs: out.stripe_engineering.repeat.runs.map((x) => ({ colour: x.colour, feeds: x.feeds, courses: x.courses })),
+      heightsMm: Object.fromEntries(out.stripe_engineering.heights.map((h) => [h.state, { repeat: h.repeat_mm, runs: h.runs.map((x) => x.mm) }])),
+      method: out.stripe_engineering.machine.method, feeders: out.stripe_engineering.machine.feeders, fingersNeeded: out.stripe_engineering.machine.fingers_needed, conesTotal: out.stripe_engineering.machine.cones.total,
+      edgeFallMm: out.stripe_engineering.geometry.mm,
+      basis: 'law: courses, feeder passes and the helix; typical: the cloth\'s relaxation states; replaced by a stripe repeat measured on a finished trial roll',
+    } : null,
     universalLaw: {
       formula: 'GSM = Σ (L_i × Tex_i) ÷ A_cell',
       gsm_law: gsmLaw ? Math.round(gsmLaw) : null, gsm_studio: fab.gsm, agreement_pct: gsmLaw && fab.gsm ? r1((gsmLaw / fab.gsm - 1) * 100) : null,

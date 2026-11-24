@@ -378,6 +378,7 @@
         <div class="st-hint" style="margin:6px 0">Several colours in one cloth are yarn-dyed: each colour is its own yarn lot. Write a stripe (<code>A12 B4 C2</code>), build it row by row, or give each feeder its colour in the drawing. The Colours tab then shows what each colour needs, which colours touch and what to check before you order.</div>
         <div id="cw-slot"></div>
         <div id="cw-builder"></div>
+        <div id="cw-stripe-tools"></div>
         <div class="cw-names" id="cw-names"></div>
         <div class="st-row">
           <div class="st-f"><label for="cw-kg">Order (kg of fabric)</label><input id="cw-kg" type="number" min="1" step="1" placeholder="optional"></div>
@@ -612,6 +613,9 @@
           <div class="st-tools" style="margin:6px 0 0">
             <button type="button" class="st-btn" id="st-addroll">+ Trial roll</button>
             <label class="st-check" style="margin:0"><input type="checkbox" id="st-userolls" checked> Use my rolls</label>
+            <button type="button" class="st-btn" id="st-rollcsv" title="A CSV saved from the Trial rolls sheet of the template (the first six columns, or the same headings)">Load rolls from a CSV</button>
+            <input type="file" id="st-rollfile" accept=".csv,text/csv" hidden>
+            <a class="st-hint" style="margin:0" href="assets/downloads/KnitAdvisor-trial-roll-template.xlsx" download>Trial roll template (Excel)</a>
           </div>
           <div class="st-floor">
             <div class="st-sub" style="margin-top:10px">Floor machine — learn from every roll</div>
@@ -671,6 +675,7 @@
             <button type="button" class="st-btn" data-xf="csv" disabled>Cam chart (CSV)</button>
             <button type="button" class="st-btn" data-xf="motif" disabled title="The colour motif, one pixel per needle per row, in the yarn colours: what a jacquard machine's pattern software takes (the Bitmap of box picks the face or the back)">Colour motif (PNG)</button>
             <button type="button" class="st-btn" data-xf="colours" disabled title="Each yarn colour with its Pantone match, share, kilograms and dye route, and the motif as letters">Yarn colours (CSV)</button>
+            <button type="button" class="st-btn" data-xf="stripe" disabled title="The engineering stripe: stripe heights in every state, the cones on every feeder and the striper programme revolution by revolution">Stripe &amp; striper (CSV)</button>
             <button type="button" class="st-btn" data-xf="calib" disabled title="The protocol for measuring this cloth, with what the Studio expects filled in">Calibration sheet (PDF)</button>
           </div>
           <div class="st-tools" style="margin:8px 0 0">
@@ -1008,14 +1013,14 @@
 <script src="assets/js/studio-drape.js?v=20261121c"></script>
 <script src="assets/js/pbr-package.js?v=20261122a"></script>
 <script src="assets/js/studio-pbr.js?v=20261122a"></script>
-<script src="assets/js/studio-sheet.js?v=20261125a"></script>
+<script src="assets/js/studio-sheet.js?v=20261126a"></script>
 <script src="assets/js/studio-mode.js?v=20261125a"></script>
 <script src="assets/js/studio-camsheet.js?v=20261125a"></script>
-<script src="assets/js/studio-colourway.js?v=20261125c"></script>
+<script src="assets/js/studio-colourway.js?v=20261126b"></script>
 <script src="assets/js/studio-jacquard.js?v=20261125e"></script>
 <script src="assets/js/studio-vbed.js?v=20261121a"></script>
 <script src="assets/js/studio-capture.js?v=20261120b"></script>
 <script src="assets/js/studio-gates.js?v=20261121b"></script>
-<script src="assets/js/studio.js?v=20261125f"></script>
+<script src="assets/js/studio.js?v=20261126b"></script>
 </body>
 </html>

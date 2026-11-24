@@ -47,7 +47,13 @@ function randomDesign(R) {
     elastane: R() < 0.2 && fibre !== 'polypropylene' ? { denier: pick([20, 40, 70]), draft: 2.6, every: pick(['all', 'alternate']) } : null,
     core_engines: true,
   };
-  if (R() < 0.2) d.stripes = { sequence: pick(['A2 B2', 'A1 B1 C1', 'A3 B1', 'A4 B2 C2']) };
+  if (R() < 0.3) {
+    d.stripes = { sequence: pick(['A2 B2', 'A1 B1 C1', 'A3 B1', 'A4 B2 C2', 'A1 B1 A1 B1', 'A12mm B4mm', 'A8mm B3.5mm C2mm B3.5mm', 'A1cm B4mm', 'A6 B2 A6 B2 C1', 'A10 B4 C2 B4', 'A0.5mm B30mm']) };
+    if (R() < 0.3) d.stripes.panel_cm = pick([40, 55.5, 70, 85]);
+    if (R() < 0.15) d.stripes.measured = { repeat_mm: pick([5, 12, 22.5, 40]) };
+    if (R() < 0.15) d.stripes.height_state = pick(['dry', 'wet', 'finished', 'full']);
+    if (R() < 0.2) d.machine = { ...d.machine, feeders: pick([12, 24, 30, 36, 48, 72]) };
+  }
   if (R() < 0.15) d.finish = { brush: pick(['face', 'back', 'both']) };
   if (R() < 0.2) d.colourway = { colours: { A: '#0b1f4a', B: '#efe6d2', C: '#b3202a', D: '#e8c32a' }, order: { kg: 300 } };
   return d;
@@ -76,6 +82,17 @@ function fuzz(count, seed, opt = {}) {
     const syms = new Set(); [r.structure.beds.C, r.structure.beds.D].filter(Boolean).forEach((g) => g.forEach((row) => row.forEach((x) => syms.add(x))));
     const drawn = new Set((d.grid.C.join('') + (d.grid.D ? d.grid.D.join('') : '')).split(''));
     for (const x of syms) if (!drawn.has(x) && x !== '-') add('SYMBOL_INVENTED', i, x);
+    // the engineering stripe: whatever stripe is asked, its answer is whole, finite and agrees with the machine plan
+    if (r.stripe_engineering) {
+      const se = r.stripe_engineering;
+      if (se.success !== true) add('STRIPE_NOT_SUCCESS', i, '');
+      else {
+        if (r.machine_setup.stripes && se.machine.method !== r.machine_setup.stripes.method) add('STRIPE_METHOD_DISAGREES', i, `${se.machine.method} vs ${r.machine_setup.stripes.method}`);
+        for (const h of se.heights) if (Math.abs(h.runs.reduce((t, x) => t + x.mm, 0) - h.repeat_mm) > 0.2 + 0.01 * h.runs.length) add('STRIPE_HEIGHTS_DO_NOT_ADD', i, `${h.state} ${h.repeat_mm}`);
+        if (se.fit && se.fit.runs.some((x) => !(x.feeds >= 1))) add('STRIPE_FIT_EMPTY_RUN', i, '');
+        if (se.fit && Math.abs(se.fit.repeat_mm - se.fit.repeat_asked_mm) > 1.5 * 10 / (se.heights[0].cpc) + 0.02) add('STRIPE_FIT_REPEAT_DRIFT', i, `${se.fit.repeat_mm} vs ${se.fit.repeat_asked_mm}`);
+      }
+    }
     // the same input, the same answer
     if (i % 5 === 0) { const r2 = S.analyse(d); if (raw({ ...r, engine_faults: 0 }) !== raw({ ...r2, engine_faults: 0 })) add('NOT_DETERMINISTIC', i, ''); }
     // a design that knits survives its exports
@@ -97,6 +114,7 @@ function fuzz(count, seed, opt = {}) {
             if (a.length === b.length && a.some((row, k) => row !== b[k] && !/[-]/.test(row))) add('CAMSHEET_ROUNDTRIP', i, `${a.join('/')} vs ${b.join('/')}`);
           }
         }
+        if (r.stripe_engineering) MX.stripeCsv(r, 'fuzz');
         if (i % 9 === 0) DS.build({ design: d, composition: '100% CO', gsm: d.target.gsm, shade: 'medium' }, S.analyse);
       } catch (e) {
         if (!/StudioError|SheetError|DnaError|ExportError/.test(e.name || e.constructor.name)) add('EXPORT_THROW', i, `${e.name}: ${String(e.message).slice(0, 110)}`);
