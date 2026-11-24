@@ -1723,7 +1723,7 @@ const garmentLimiter = createRateLimiter({ name: 'garment_build', max: 240, wind
 router.get('/garment/template', requireUser, (req, res) => {
   const sizes = String(req.query.sizes || '').split(',').map((x) => x.trim()).filter(Boolean).slice(0, 8);
   const eng = garmentEngine(req.query.style);
-  res.json({ success: true, style: eng.STYLE, poms: eng.POMS.map((p) => ({ key: p.key, label: p.label, required: !!p.req })), ...eng.template(sizes.length ? sizes : undefined, req.query.unit === 'in' ? 'in' : 'cm') });
+  res.json({ success: true, style: eng.STYLE, poms: eng.POMS.map((p) => ({ key: p.key, label: p.label, required: !!p.req })), ...eng.template(sizes.length ? sizes : undefined, req.query.unit === 'in' ? 'in' : 'cm', String(req.query.kind || '')) });
 });
 router.post('/garment/parse', requireUser, garmentLimiter, (req, res) => {
   try {

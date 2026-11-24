@@ -64,15 +64,17 @@ export class GarmentView {
     this.host = host;
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
     this.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping; this.renderer.toneMappingExposure = 1.35;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping; this.renderer.toneMappingExposure = 1.12;
     host.appendChild(this.renderer.domElement);
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(30, 1, 1, 2000);
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true; this.controls.dampingFactor = 0.08;
-    this.scene.add(new THREE.HemisphereLight(0xffffff, 0xb9bfc9, 1.25));
-    const key = new THREE.DirectionalLight(0xfff6ea, 2.1); key.position.set(-60, 120, 140); this.scene.add(key);
-    const fill = new THREE.DirectionalLight(0xe6eeff, 0.55); fill.position.set(120, 40, -90); this.scene.add(fill);
+    this._studio();
+    this.scene.add(new THREE.HemisphereLight(0xffffff, 0xb9bfc9, 0.55));
+    const key = new THREE.DirectionalLight(0xfff6ea, 1.35); key.position.set(-60, 120, 140); this.scene.add(key);
+    const fill = new THREE.DirectionalLight(0xe6eeff, 0.35); fill.position.set(120, 40, -90); this.scene.add(fill);
+    const rim = new THREE.DirectionalLight(0xffffff, 0.5); rim.position.set(0, 60, -160); this.scene.add(rim);
     this.group = new THREE.Group(); this.scene.add(this.group);
     this.spin = false; this.colour = '#3d5a80'; this.mats = [];
     this._raf = 0; this._last = 0;
@@ -83,12 +85,38 @@ export class GarmentView {
     this._raf = requestAnimationFrame(this._loop);
   }
 
+  // a photographer's studio, made in code: a grey-to-white sky and three soft boxes, turned into the reflections and the soft light on the cloth
+  _studio() {
+    try {
+      const pm = new THREE.PMREMGenerator(this.renderer), env = new THREE.Scene();
+      env.add(new THREE.Mesh(new THREE.SphereGeometry(50, 32, 16), new THREE.ShaderMaterial({ side: THREE.BackSide, vertexShader: 'varying vec3 p; void main(){ p = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }', fragmentShader: 'varying vec3 p; void main(){ float h = normalize(p).y * 0.5 + 0.5; gl_FragColor = vec4(mix(vec3(0.42, 0.43, 0.46), vec3(0.95, 0.96, 1.0), h), 1.0); }' })));
+      const box = (x, y, z, w, h, i) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: new THREE.Color(i, i, i), side: THREE.DoubleSide })); m.position.set(x, y, z); m.lookAt(0, 0, 0); env.add(m); };
+      box(-22, 26, 26, 24, 18, 5); box(28, 10, 16, 10, 24, 2.5); box(0, 38, -22, 34, 8, 3.5);
+      this.scene.environment = pm.fromScene(env, 0.04).texture; pm.dispose();
+    } catch (e) { /* no environment: the lights alone */ }
+  }
+
+  // the thread of the seams, and the invisible fat line a click lands on
+  _mkThread() {
+    this._threadMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(this.colour).offsetHSL(0, 0, 0.16), roughness: 0.85, metalness: 0 });
+    this._seamHiMat = new THREE.MeshStandardMaterial({ color: 0xff7a1a, emissive: 0xff6a00, emissiveIntensity: 0.6, roughness: 0.5 });
+    this._pickMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
+    this.mats.push(this._threadMat, this._seamHiMat, this._pickMat);
+  }
+  _seam(id, pts, r, closed) {
+    if (!pts || pts.length < 2) return;
+    const curve = new THREE.CatmullRomCurve3(pts, !!closed, 'centripetal', 0.5), n = Math.max(24, pts.length * 4);
+    const vis = new THREE.Mesh(new THREE.TubeGeometry(curve, n, r, 5, !!closed), this._threadMat); vis.userData.seamVis = id; vis.userData.seamBase = this._threadMat;
+    const pick = new THREE.Mesh(new THREE.TubeGeometry(curve, n, Math.max(r * 4, 0.55), 5, !!closed), this._pickMat); pick.userData.seam = id;
+    this.group.add(vis, pick);
+  }
+
   resize() {
     const w = this.host.clientWidth, h = this.host.clientHeight; if (!w || !h) return;
     this.renderer.setSize(w, h); this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
   }
 
-  setColour(hex) { this.colour = hex; if (this.mats[0]) this.mats[0].color.set(hex); if (this.mats[1]) this.mats[1].color.set(hex).multiplyScalar(0.86); }
+  setColour(hex) { this.colour = hex; if (this._threadMat) this._threadMat.color.set(hex).offsetHSL(0, 0, 0.16); if (this.mats[0]) this.mats[0].color.set(hex); if (this.mats[1]) this.mats[1].color.set(hex).multiplyScalar(0.86); }
   setSpin(on) { this.spin = !!on; }
 
   clear() {
@@ -99,7 +127,7 @@ export class GarmentView {
 
   // size: one entry of result.by_size; fabric: result.fabric
   setGarment(size, fabric) {
-    this.clear();
+    this.clear(); this._mkThread();
     const m = size.m, d = size.derived, P = {}; size.pieces.forEach((p) => { P[p.id] = p; });
     const L = m.length, step = 0.6;
     const tex = knitTexture(fabric.wpc, fabric.cpc);
@@ -117,7 +145,8 @@ export class GarmentView {
       const w = Math.max(halfWidth(piece, yp), 0.5), Wt = Math.max(tubeW(piece)(yp), w), dr = dRatio(yp), tb = tab(dr);
       const a = (2 * Wt) / tb.total, th = angleAt(tb, (xp + w) / (2 * w));
       const x = -a * Math.cos(th), z = a * dr * Math.sin(th);
-      return new THREE.Vector3(front ? x : -x, L - yp, front ? z : -z);
+      const wob = 0.2 * Math.sin(0.33 * xp + 1.6 * Math.sin(0.1 * yp)) * Math.sin(0.17 * yp + 0.6) * smooth(2, 14, yp) * smooth(L, L - 8, yp);   // the cloth is never perfectly flat
+      return new THREE.Vector3(front ? x : -x, L - yp, front ? z + wob : -(z + wob));
     };
     const panel = (piece, front) => {
       const map = at(piece, front), pos = [], uv = [], idx = [];
@@ -178,16 +207,51 @@ export class GarmentView {
     this.group.add(tagged(new THREE.Mesh(new THREE.TubeGeometry(curve, 200, rr, 10, true), rib), 'band', rib));
 
     // the hems: a line of stitching round the body and round each sleeve
-    const ring = (pts, r, material) => this.group.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, true, 'centripetal', 0.5), 160, r, 6, true), material));
+    const ring = (pts, r, material, seamId) => { if (seamId) this._seam(seamId, pts, r, true); else this.group.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, true, 'centripetal', 0.5), 160, r, 6, true), material)); };
     {
       const yh = L - m.hem_h, wF = halfWidth(front, yh), wB = halfWidth(back, yh), pts = [];
       for (let i = 0; i <= 36; i++) pts.push(mapF(-wF + (2 * wF * i) / 36, yh));
       for (let i = 35; i >= 1; i--) pts.push(mapB(-wB + (2 * wB * i) / 36, yh));
-      ring(pts, 0.14, rib);
+      ring(pts, 0.16, rib, 'hem');
+      if (size.pieces.some((q) => q.id === 'hemband') && m.hemband_h > 0) {                    // a rib band round the hem, drawn in to its relaxed width
+        const ratio = Math.min(1, m.hemband_w / Math.max(1, m.hem)), R = 8, n = pts.length, y0 = pts[0].y, pos = [], idx = [];
+        for (let j = 0; j <= R; j++) { const t = j / R, sc = 1 + (ratio - 1) * smooth(0, 0.3, t); pts.forEach((v) => pos.push(v.x * sc, y0 - t * m.hemband_h, v.z * sc)); }
+        for (let j = 0; j < R; j++) for (let k = 0; k < n; k++) { const a = j * n + k, b = j * n + ((k + 1) % n), c = a + n, d = b + n; idx.push(a, c, b, b, c, d); }
+        const hg = new THREE.BufferGeometry(); hg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); hg.setIndex(idx); hg.computeVertexNormals();
+        this.group.add(tagged(new THREE.Mesh(hg, rib), 'hemband', rib));
+      }
       const ys = SL - m.sleeve_hem_h, w = Math.max(halfWidth(sl, ys), 0.1), r = w / Math.PI, top = shoulder.clone().addScaledVector(dir, ys), C = top.clone().addScaledVector(nrm, -r), sp = [];
       for (let i = 0; i < 36; i++) { const phi = -Math.PI + (i / 36) * TAU; sp.push(C.clone().addScaledVector(nrm, r * Math.cos(phi)).addScaledVector(zz, r * Math.sin(phi))); }
-      ring(sp, 0.14, rib);
-      const sp2 = sp.map((v) => new THREE.Vector3(-v.x, v.y, v.z)); ring(sp2, 0.14, rib);
+      ring(sp, 0.16, rib, 'sleeve_hem');
+      const sp2 = sp.map((v) => new THREE.Vector3(-v.x, v.y, v.z)); ring(sp2, 0.16, rib, 'sleeve_hem');
+    }
+    // the rib cuffs, when the garment has them: a ring at the end of each sleeve, drawn in from the sleeve opening to its relaxed width
+    if (size.pieces.some((q) => q.id === 'cuff') && m.cuff_h > 0) {
+      const r0 = Math.max(halfWidth(sl, SL - 0.05), 0.1) / Math.PI, rc = Math.min(r0, m.cuff_w / Math.PI), rowsN = 8, nC = 28, pos = [], idx = [];
+      for (let j = 0; j <= rowsN; j++) { const t = j / rowsN, yy = SL + t * m.cuff_h, r = r0 + (rc - r0) * smooth(0, 0.35, t), tp = shoulder.clone().addScaledVector(dir, yy), C = tp.clone().addScaledVector(nrm, -r);
+        for (let k = 0; k <= nC; k++) { const phi = (k / nC) * TAU, v = C.clone().addScaledVector(nrm, r * Math.cos(phi)).addScaledVector(zz, r * Math.sin(phi)); pos.push(v.x, v.y, v.z); } }
+      for (let j = 0; j < rowsN; j++) for (let k = 0; k < nC; k++) { const a = j * (nC + 1) + k, b = a + 1, c = a + nC + 1, d = c + 1; idx.push(a, c, b, b, c, d); }
+      const cg = new THREE.BufferGeometry(); cg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); cg.setIndex(idx); cg.computeVertexNormals();
+      const cr = new THREE.Mesh(cg, rib), cl = new THREE.Mesh(cg.clone(), rib); cl.scale.x = -1; this.group.add(tagged(cr, 'cuff', rib), tagged(cl, 'cuff', rib));
+    }
+    // the seams of the body and the sleeves, as thread: shoulder, side, armhole, underarm
+    {
+      const lp = (id) => size.pieces.find((q) => q.id === id), fids = lp('front') ? ['front'] : ['front_r', 'front_l'];
+      const runsOf = (ids, labels) => {
+        const out = [];
+        ids.forEach((pid) => { const q = lp(pid); if (!q) return; let cur = [];
+          q.finished.forEach((pt, i) => { if (labels.includes(q.finished_labels[i])) cur.push(pt); else if (cur.length) { cur.push(pt); out.push(cur); cur = []; } });
+          if (cur.length) { cur.push(q.finished[0]); out.push(cur); } });
+        return out;
+      };
+      const mid = (r) => r.reduce((a, q) => a + q[0], 0) / r.length;
+      runsOf(fids, ['shoulder']).forEach((r) => this._seam('shoulder', r.map(([x, y]) => mapF(x, y)), 0.13, false));
+      runsOf(fids, ['side', 'sidehem']).forEach((r) => this._seam('side', r.filter(([, y]) => y <= L - 0.3).map(([x, y]) => mapF(x, y)), 0.13, false));        // down to the hem edge: the folded strip below it has no width on the body
+      const up2 = (r) => (r[0][1] > r[r.length - 1][1] ? r.slice().reverse() : r), aF = runsOf(fids, ['armhole']).map(up2), aB = runsOf(['back'], ['armhole']).map(up2);       // each run from the shoulder tip down to the underarm
+      aF.forEach((rf) => { const rb = aB.find((q) => Math.sign(mid(q)) === -Math.sign(mid(rf))); if (!rb) return; this._seam('armhole', rf.map(([x, y]) => mapF(x, y)).concat(rb.slice().reverse().map(([x, y]) => mapB(x, y)).slice(1)), 0.14, false); });
+      const ch = d.cap_height || 10, up = [];
+      for (let y = ch; y <= SL - m.sleeve_hem_h; y += Math.max(0.6, (SL - ch) / 14)) { const w = Math.max(halfWidth(sl, y), 0.1), r = w / Math.PI, tp = shoulder.clone().addScaledVector(dir, y); up.push(tp.clone().addScaledVector(nrm, -2 * r)); }
+      if (up.length > 2) { this._seam('underarm', up, 0.13, false); this._seam('underarm', up.map((v) => new THREE.Vector3(-v.x, v.y, v.z)), 0.13, false); }
     }
 
     // a zipper down the centre front, from the neck seam, with its slider
@@ -220,7 +284,7 @@ export class GarmentView {
 
   // shorts: two legs, each a tube whose rings are as long round as the front leg piece plus the back leg piece are wide at that height; a waistband ring; a drawcord
   setShorts(size, fabric) {
-    this.clear();
+    this.clear(); this._mkThread();
     const m = size.m, fr = size.shape.front, bk = size.shape.back, F = m.waistband_h, Ll = m.outseam - F, top = m.outseam;
     const tex = knitTexture(fabric.wpc, fabric.cpc);
     const mat = new THREE.MeshStandardMaterial({ color: this.colour, map: tex, bumpMap: tex, bumpScale: 0.9, roughness: 0.94, metalness: 0, side: THREE.DoubleSide });
@@ -253,7 +317,13 @@ export class GarmentView {
     const last = rows[rows.length - 1];
     [1, -1].forEach((sg) => {
       const pts = []; for (let k = 0; k < 40; k++) { const t = (k / 40) * Math.PI * 2; pts.push(new THREE.Vector3(sg * (cx(last) + last.a * Math.cos(t)), top - F - Ll + m.hem_h * 0.9, last.b * Math.sin(t))); }
-      this.group.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, true), 120, 0.14, 5, true), dark));
+      this._seam('hem', pts, 0.16, true);
+    });
+    // the seams of the legs: the side, the inseam, and the rise, which is the same line (the inner edge of the tube) above the crotch
+    [1, -1].forEach((sg) => {
+      const side = [], inseam = [], rise = [], yc = size.derived.crotch_y;
+      rows.forEach((r) => { side.push(new THREE.Vector3(sg * (cx(r) + r.a), top - F - r.y, 0)); const inner = new THREE.Vector3(sg * (cx(r) - r.a), top - F - r.y, 0); (r.y <= yc ? rise : inseam).push(inner); });
+      this._seam('side', side, 0.14, false); this._seam('rise', rise, 0.14, false); this._seam('inseam', inseam, 0.14, false);
     });
     // the waistband: a ring round both legs
     const A = cx(rows[0]) + a0 + 0.25, B = rows[0].b + 0.3, bandPos = [], bandUv = [], bandIdx = [], nB = 72;
@@ -261,7 +331,7 @@ export class GarmentView {
     for (let k = 0; k < nB; k++) { const a = k, b = k + 1, c = k + nB + 1, d = c + 1; bandIdx.push(a, c, b, b, c, d); }
     const bg = new THREE.BufferGeometry(); bg.setAttribute('position', new THREE.Float32BufferAttribute(bandPos, 3)); bg.setAttribute('uv', new THREE.Float32BufferAttribute(bandUv, 2)); bg.setIndex(bandIdx); bg.computeVertexNormals();
     this.group.add(tagged(new THREE.Mesh(bg, rib), 'waistband', rib));
-    for (const yy of [top, top - F]) { const pts = []; for (let k = 0; k < 72; k++) { const t = (k / 72) * Math.PI * 2; pts.push(new THREE.Vector3(A * Math.cos(t), yy, B * Math.sin(t))); } this.group.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, true), 140, 0.12, 5, true), dark)); }
+    for (const yy of [top, top - F]) { const pts = []; for (let k = 0; k < 72; k++) { const t = (k / 72) * Math.PI * 2; pts.push(new THREE.Vector3(A * Math.cos(t), yy, B * Math.sin(t))); } if (yy === top - F) this._seam('waistband', pts, 0.15, true); else this.group.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, true), 140, 0.12, 5, true), dark)); }
     // the drawcord: two ends hanging from the eyelets at the front
     const vis = m.drawcord_len || 10, ex = (m.eyelet_dist || 4) / 2 + 0.3, cord = new THREE.MeshStandardMaterial({ color: 0xe9e6dd, roughness: 0.8 });
     this.mats.push(cord);
@@ -308,14 +378,15 @@ export class GarmentView {
   pick(cx, cy) {
     const r = this.renderer.domElement.getBoundingClientRect(); if (!r.width) return null;
     const rc = new THREE.Raycaster(); rc.setFromCamera(new THREE.Vector2(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1), this.camera);
-    const hit = rc.intersectObjects(this.group.children, false).find((h) => h.object.userData && h.object.userData.piece);
-    return hit ? hit.object.userData.piece : null;
+    const hit = rc.intersectObjects(this.group.children, false).find((h) => h.object.userData && (h.object.userData.seam || h.object.userData.piece));
+    return hit ? (hit.object.userData.seam ? 'seam:' + hit.object.userData.seam : hit.object.userData.piece) : null;
   }
   // a piece shown in the selection colour
   highlight(id) { this._hi = id || null; this._applyHi(); }
   _applyHi() {
     this._hiMats = this._hiMats || new Map();
     this.group.children.forEach((o) => {
+      if (o.userData && o.userData.seamVis) { o.material = this._hi === 'seam:' + o.userData.seamVis ? this._seamHiMat : o.userData.seamBase; o.scale.setScalar(1); return; }
       const base = o.userData && o.userData.base; if (!base) return;
       if (o.userData.piece === this._hi) {
         let h = this._hiMats.get(base); if (!h) { h = base.clone(); h.emissive = new THREE.Color(0x1857c4); h.emissiveIntensity = 0.42; this._hiMats.set(base, h); this.mats.push(h); }

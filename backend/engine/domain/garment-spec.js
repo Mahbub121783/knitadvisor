@@ -77,6 +77,10 @@ function headKind(t) {
 // ── what a point of measure is called (specific names first) ──
 const E = (key, name, group, re, tol, o) => Object.assign({ key, name, group, re, tol, engine: G.POM_KEYS.includes(key) }, o || {});
 const EXTRA = [
+  E('hemband_h', 'Hem rib height', 'Hem', /(hem|bottom)\s*(rib|band).*(height|depth|ht)|rib.*(hem|bottom).*(height|depth)/, 0.3),
+  E('hemband_w', 'Hem rib width, relaxed (flat)', 'Hem', /(hem|bottom)\s*(rib|band).*(width|relax|opening)|rib.*(hem|bottom).*(width|relax)/, 0.5, { halves: true }),
+  E('cuff_h', 'Cuff rib height', 'Sleeve', /(cuff|sleeve)\s*rib.*(height|depth|ht)|cuff.*rib.*(height|depth)/, 0.3),
+  E('cuff_w', 'Cuff rib width, relaxed (flat)', 'Sleeve', /(cuff|sleeve)\s*rib.*(width|relax|opening)|cuff.*relax/, 0.5, { halves: true }),
   E('eyelet_dist', 'Distance between drawcord eyelets', 'Waistband', /(eyelet|draw\s*cord).*(distance|between|apart|centre\s*to\s*centre|center\s*to\s*center)|distance.*(eyelet|draw\s*cord)/, 0.3),
   E('drawcord_len', 'Visible drawcord length (waistband extended)', 'Waistband', /draw\s*cord|draw\s*string/, 1.0, { note: 'a limit, not a size: kept and used for the drawcord in the bill of materials' }),
   E('pbag_w', 'Pocket bag width', 'Pockets', /pocket\s*bag.*(width|wid)/, 0.5),
@@ -476,7 +480,7 @@ function extract(rows, opt) {
   mapped.forEach((m) => { m.drawn = isDrawn(m.key, engineId); });
   const parts = PARTS.filter((p) => p.re.test(alltext)).map((p) => ({ id: p.id, name: p.name, drawn: p.drawn }));
   const isShort = style && style.id === 'trouser' && /\bshorts?\b(?!\s*sleeve)/.test(nameText + ' ' + alltext.slice(0, 600));
-  const styleOut = style ? { id: style.id === 'trouser' ? (isShort ? 'shorts' : 'trousers') : style.id, name: style.id === 'trouser' ? (isShort ? 'Shorts' : 'Trousers / joggers') : style.name, drawn: style.id === 'tee' || style.id === 'tank' || style.id === 'trouser' ? true : false, engine: style.id === 'trouser' ? 'shorts' : 'tee' } : { id: 'tee', name: 'T-shirt (assumed: the sheet does not name the style)', drawn: true, assumed: true };
+  const styleOut = style ? { id: style.id === 'trouser' ? (isShort ? 'shorts' : 'trousers') : style.id, name: style.id === 'trouser' ? (isShort ? 'Shorts' : 'Trousers / joggers') : style.name, drawn: style.id === 'tee' || style.id === 'tank' || style.id === 'trouser' || style.id === 'sweatshirt' ? true : false, engine: style.id === 'trouser' ? 'shorts' : 'tee' } : { id: 'tee', name: 'T-shirt (assumed: the sheet does not name the style)', drawn: true, assumed: true };
 
   const unmatched = mapped.filter((m) => !m.key).map((m) => m.label);
   const out = {

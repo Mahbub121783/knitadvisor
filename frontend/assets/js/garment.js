@@ -16,8 +16,8 @@
   var POMS = [], poms = {}, POMS_BY = {};
   var S = null, R = null, view3d = null, mod3d = null, reqSeq = 0, timer = 0;
   var SIZE_COL = ['#1857C4', '#c2410c', '#0e7490', '#7a4fc2', '#b48a35', '#a5486f', '#3f8a6e', '#4a5568'];
-  var EDGE = { waist: '#d97706', wband: '#d97706', centre: '#1857C4', crotch: '#7a4fc2', inseam: '#0e7490', inseamhem: '#0e7490', pocketopen: '#c2410c', pocketbag: '#c2410c', bpocket: '#c2410c', neck: '#d97706', bandneck: '#d97706', shoulder: '#7a4fc2', armhole: '#1857C4', cap: '#1857C4', side: '#0e7490', sidehem: '#0e7490', underarm: '#0e7490', underarmhem: '#0e7490', bandend: '#0e7490', hem: '#6b7280', shem: '#6b7280', cf: '#c2410c', faceend: '#6b7280', faceedge: '#6b7280' };
-  var SEAM_OF = { waist: 'waistband', wband: 'waistband', centre: 'rise', crotch: 'rise', inseam: 'inseam', inseamhem: 'inseam', pocketopen: 'pocket', pocketbag: 'pocket', bpocket: 'pocket', neck: 'neck', bandneck: 'neck', shoulder: 'shoulder', armhole: 'armhole', cap: 'armhole', side: 'side', sidehem: 'side', underarm: 'underarm', underarmhem: 'underarm', hem: 'hem', shem: 'sleeve_hem', bandend: 'band_end', cf: 'cf', faceend: 'facing_end', faceedge: 'facing_edge' };
+  var EDGE = { cuffattach: '#1857C4', cuffend: '#0e7490', hemattach: '#6b7280', hemend: '#0e7490', waist: '#d97706', wband: '#d97706', centre: '#1857C4', crotch: '#7a4fc2', inseam: '#0e7490', inseamhem: '#0e7490', pocketopen: '#c2410c', pocketbag: '#c2410c', bpocket: '#c2410c', neck: '#d97706', bandneck: '#d97706', shoulder: '#7a4fc2', armhole: '#1857C4', cap: '#1857C4', side: '#0e7490', sidehem: '#0e7490', underarm: '#0e7490', underarmhem: '#0e7490', bandend: '#0e7490', hem: '#6b7280', shem: '#6b7280', cf: '#c2410c', faceend: '#6b7280', faceedge: '#6b7280' };
+  var SEAM_OF = { cuffattach: 'sleeve_hem', cuffend: 'cuff_end', hemattach: 'hem', hemend: 'hemband_end', waist: 'waistband', wband: 'waistband', centre: 'rise', crotch: 'rise', inseam: 'inseam', inseamhem: 'inseam', pocketopen: 'pocket', pocketbag: 'pocket', bpocket: 'pocket', neck: 'neck', bandneck: 'neck', shoulder: 'shoulder', armhole: 'armhole', cap: 'armhole', side: 'side', sidehem: 'side', underarm: 'underarm', underarmhem: 'underarm', hem: 'hem', shem: 'sleeve_hem', bandend: 'band_end', cf: 'cf', faceend: 'facing_end', faceedge: 'facing_edge' };
 
   // ── the specification ──
   function defaults(tpl) {
@@ -49,6 +49,7 @@
     if (POMS_BY[style]) return Promise.resolve(POMS_BY[style]);
     return api('/api/garment/template?style=' + style + '&unit=cm').then(function (t) { POMS_BY[style] = t; return t; });
   }
+  var STARTERS = {};
   function setPoms(style) {
     var t = POMS_BY[style]; if (!t) return; S.style = style; POMS = t.poms; poms = {}; POMS.forEach(function (p) { poms[p.key] = p; });
     POMS.forEach(function (p) { if (!S.chart[p.key]) S.chart[p.key] = {}; });
@@ -56,13 +57,15 @@
     document.body.setAttribute('data-gstyle', style);
   }
   // another garment type: its own chart (the standard one), its own pieces
-  function switchStyle(style, keepChart) {
-    return ensureStyle(style).then(function (t) {
+  function switchStyle(style, keepChart, kind) {
+    return ensureStyle(style).then(function (t0) {
+      return kind ? api('/api/garment/template?style=' + style + '&unit=cm&kind=' + kind).then(function (t) { STARTERS[kind] = t; return t; }) : t0;
+    }).then(function (t) {
       S.style = style === 'shorts' ? 'shorts' : 'tee';
       if (!keepChart) {
         S.unit = t.unit || 'cm'; S.sizes = t.sizes.slice(); S.chart = JSON.parse(JSON.stringify(t.chart)); S.ratio = S.sizes.reduce(function (o, s) { o[s] = 1; return o; }, {});
         S.base = S.sizes.indexOf('M') >= 0 ? 'M' : S.sizes[0]; S.size = S.base; S.edits = {}; S.cornerFlags = {}; S.seams = {}; S.trims = []; S.tol = {}; S.spec = null; S.zipper = Object.assign({}, S.zipper, { on: false });
-        S.fabric = Object.assign({}, S.fabric, { gsm: S.style === 'shorts' ? 240 : 180 });
+        S.fabric = Object.assign({}, S.fabric, { gsm: S.style === 'shorts' ? 240 : 180 }); S.kind = kind || null;
       }
       setPoms(S.style); renderFabric(); renderChart(); renderZipper(); schedule();
       if (window.KAGarmentStudio) window.KAGarmentStudio.styleChanged();
@@ -260,7 +263,7 @@
   function pathOf(pts) { return 'M' + pts.map(function (p) { return p[0] + ' ' + p[1]; }).join('L'); }
   function patternsSvg(o, oneToOne) {
     // every piece that is cut, in the order it is read, flowed into rows
-    var order = R.style === 'shorts' ? o.pieces.map(function (q) { return q.id; }) : ['front', 'front_r', 'front_l', 'back', 'sleeve', 'band', 'facing', 'placket'], gap = 9, pad = 5, maxW = 150;
+    var order = R.style === 'shorts' ? o.pieces.map(function (q) { return q.id; }) : ['front', 'front_r', 'front_l', 'back', 'sleeve', 'band', 'cuff', 'hemband', 'facing', 'placket'], gap = 9, pad = 5, maxW = 150;
     var list = order.map(function (id) { return o.pieces.filter(function (p) { return p.id === id; })[0]; }).filter(Boolean);
     var x = pad, y = pad, rh = 0, W = 0, parts = [], sx = R.cut_factor.across, sy = R.cut_factor.along;
     list.forEach(function (p) {
@@ -274,7 +277,7 @@
       var p = q.p, tf = 'translate(' + q.ox + ' ' + q.oy + ')', cx = (q.b.x0 + q.b.x1) / 2, cy = (q.b.y0 + q.b.y1) / 2, horiz = p.grain === 'x';
       g += '<g class="gs-pp" data-piece="' + p.id + '" transform="' + tf + '">';
       g += '<path d="' + pathOf(p.cut) + 'Z" fill="rgba(24,87,196,.06)" stroke="none"/>';
-      runs(p.cut, p.labels).forEach(function (r) { g += '<path d="' + pathOf(r.pts) + '" fill="none" stroke="' + (EDGE[r.l] || '#0e7490') + '" stroke-width="0.35" stroke-linejoin="round" stroke-linecap="round"/>'; });
+      runs(p.cut, p.labels).forEach(function (r) { g += '<path class="gs-edge" data-seam="' + (SEAM_OF[r.l] || '') + '" d="' + pathOf(r.pts) + '" fill="none" stroke="' + (EDGE[r.l] || '#0e7490') + '" stroke-width="0.35" stroke-linejoin="round" stroke-linecap="round"/>'; });
       g += '<path d="' + pathOf(p.nominal) + 'Z" fill="none" stroke="#111" stroke-opacity=".55" stroke-width="0.18" stroke-dasharray="1 0.8"/>';
       (p.notches || []).forEach(function (nt) { g += '<line x1="' + (nt.x - nt.nx * 0.9) + '" y1="' + (nt.y - nt.ny * 0.9) + '" x2="' + (nt.x + nt.nx * 0.9) + '" y2="' + (nt.y + nt.ny * 0.9) + '" stroke="#111" stroke-width="0.32"/>'; });
       (p.marks || []).forEach(function (m) { g += '<line x1="' + (m.x1 * sx) + '" y1="' + (m.y1 * sy) + '" x2="' + (m.x2 * sx) + '" y2="' + (m.y2 * sy) + '" stroke="#c2410c" stroke-width="0.5" stroke-dasharray="1.4 0.8"/><text x="' + (m.x1 * sx + 1.6) + '" y="' + (m.y2 * sy) + '" font-size="1.9" fill="#c2410c">' + esc(m.label || 'slit') + '</text>'; });
@@ -391,7 +394,7 @@
   // ── the garment ──
   function ensure3D() {
     if (mod3d) return Promise.resolve(mod3d);
-    return import('/assets/js/garment-3d.js?v=20261203a').then(function (m) { mod3d = m; return m; });
+    return import('/assets/js/garment-3d.js?v=20261204a').then(function (m) { mod3d = m; return m; });
   }
   function render3D() {
     if (!view3d || !R || !R.success) return;

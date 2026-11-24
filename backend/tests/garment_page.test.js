@@ -37,7 +37,8 @@ const ids = new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]));
   const G = require('../engine/domain/garment-pattern');
   assert(G.POMS.length >= 14, 'the chart has its rows');
   const tpl = G.template(['S', 'M'], 'cm');
-  G.POM_KEYS.forEach((k) => assert(tpl.chart[k] && tpl.chart[k].S > 0, `the template gives ${k}`));
+  G.POM_KEYS.filter((k) => !/^(cuff|hemband)/.test(k)).forEach((k) => assert(tpl.chart[k] && tpl.chart[k].S > 0, `the template gives ${k}`));      // the rib parts are for a sweatshirt only
+  assert(G.template(['S'], 'cm', 'sweatshirt').chart.cuff_h.S > 0, 'a sweatshirt template has its rib cuff');
   assert(/ka_garment_fabric/.test(js) && /ka_garment_fabric/.test(read('assets', 'js', 'studio-fullwindow.js')), 'the Studio and the page share the hand-over key');
   const studio = read('assets', 'js', 'studio.js');
   assert(/fabric: function \(\) \{/.test(studio) && /shrink_len_pct/.test(studio), 'the Studio hands over weight, width, shrinkage, loops and colour');

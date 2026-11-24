@@ -45,14 +45,21 @@ const POMS = [
 ];
 const POM_KEYS = POMS.map((p) => p.key);
 
-function template(sizes, unit) {
+// the same legs, other lengths and cuts: shorts, joggers / trousers (a long leg that tapers), leggings (close-fitting, no pockets or drawcord)
+const KINDS = {
+  shorts: {},
+  joggers: { outseam: 100, front_rise: 29, back_rise: 35, waist: 38, waist_stretched: 54, seat_w: 58, thigh: 36, leg_opening: 17, hem_h: 3.5, seat_pos: 20, bpocket_l: 0 },
+  leggings: { outseam: 96, front_rise: 25, back_rise: 33, waist: 30, waist_stretched: 42, waistband_h: 6, seat_pos: 17, seat_w: 44, thigh: 27, leg_opening: 14, hem_h: 2, fpocket_l: 0, fpocket_w: 0, pbag_w: 0, pbag_l: 0, bpocket_l: 0, bpocket_w: 0, bpocket_pos: 0, drawcord_len: 0, eyelet_dist: 0 },
+};
+function template(sizes, unit, kind) {
   const S = sizes && sizes.length ? sizes : ['S', 'M', 'L', 'XL'];
   const mid = Math.max(0, S.indexOf('M') >= 0 ? S.indexOf('M') : Math.floor((S.length - 1) / 2));
   const base = { outseam: 47, front_rise: 28, back_rise: 33, waist: 36, waist_stretched: 52, waistband_h: 5, seat_pos: 19, seat_w: 54, thigh: 33, leg_opening: 30, hem_h: 3, fpocket_l: 16, fpocket_w: 6, pbag_w: 18, pbag_l: 26, bpocket_l: 15, bpocket_w: 14, bpocket_pos: 4, drawcord_len: 10, eyelet_dist: 5 };
   const step = { outseam: 1.5, front_rise: 1, back_rise: 1, waist: 4, waist_stretched: 5, waistband_h: 0, seat_pos: 0.7, seat_w: 4, thigh: 2, leg_opening: 2, hem_h: 0, fpocket_l: 0.5, fpocket_w: 0, pbag_w: 0.5, pbag_l: 1, bpocket_l: 0.5, bpocket_w: 0.5, bpocket_pos: 0, drawcord_len: 0, eyelet_dist: 0 };
+  Object.assign(base, KINDS[kind] || {});
   const k = unit === 'in' ? 1 / INCH : 1, chart = {};
-  POM_KEYS.forEach((key) => { chart[key] = {}; S.forEach((s, i) => { chart[key][s] = r2((base[key] + step[key] * (i - mid)) * k); }); });
-  return { sizes: S, unit: unit === 'in' ? 'in' : 'cm', chart };
+  POM_KEYS.forEach((key) => { if (base[key] === 0 && /pocket|pbag|drawcord|eyelet/.test(key)) return; chart[key] = {}; S.forEach((s, i) => { chart[key][s] = r2((base[key] + step[key] * (i - mid)) * k); }); });
+  return { sizes: S, unit: unit === 'in' ? 'in' : 'cm', chart, kind: KINDS[kind] ? kind : 'shorts' };
 }
 
 function measures(chart, size, unit, notes) {
@@ -303,4 +310,4 @@ function build(input) {
   };
 }
 
-module.exports = { STYLE, POMS, POM_KEYS, SEAM_OF, SEAM_DEFAULTS, build, template, measures, geometry, finishedPieces, measuredOf };
+module.exports = { KINDS, STYLE, POMS, POM_KEYS, SEAM_OF, SEAM_DEFAULTS, build, template, measures, geometry, finishedPieces, measuredOf };

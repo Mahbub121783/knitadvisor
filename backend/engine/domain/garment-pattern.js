@@ -43,6 +43,10 @@ const POMS = [
   { key: 'sleeve_hem_h', label: 'Sleeve hem height', req: false, abs: 2.0 },
   { key: 'rib_w', label: 'Neck band height (finished)', req: false, abs: 2.0 },
   { key: 'slope', label: 'Shoulder drop (slope)', req: false, abs: 2.5 },
+  { key: 'cuff_h', label: 'Cuff rib height (a sweatshirt, a long sleeve)', req: false, abs: 0 },
+  { key: 'cuff_w', label: 'Cuff rib width, relaxed (flat)', req: false, abs: 0 },
+  { key: 'hemband_h', label: 'Hem rib height', req: false, abs: 0 },
+  { key: 'hemband_w', label: 'Hem rib width, relaxed (flat)', req: false, abs: 0 },
 ];
 const POM_KEYS = POMS.map((p) => p.key);
 
@@ -117,14 +121,21 @@ function parseChart(text, unitHint) {
 }
 
 // a graded starting chart: a men's crew tee, a size step of 2 cm on the chest
-function template(sizes, unit) {
+// the same drafting, other garments: a long-sleeve tee (a folded hem and cuff), a sweatshirt (rib cuffs, a rib hem and neck, a dropped shoulder)
+const KINDS = {
+  tee: {},
+  longsleeve: { sleeve_l: 60, sleeve_o: 17, bicep: 19.5, sleeve_hem_h: 2.5 },
+  sweatshirt: { chest: 60, hem: 60, length: 68, shoulder: 52, armhole: 26, neck_w: 19, neck_df: 8.5, bicep: 23, sleeve_l: 58, sleeve_o: 20, cuff_h: 6, cuff_w: 9, hemband_h: 6, hemband_w: 25, rib_w: 2.5, hem_h: 0, sleeve_hem_h: 0, slope: 3.5 },
+};
+function template(sizes, unit, kind) {
   const S = sizes && sizes.length ? sizes : ['S', 'M', 'L', 'XL'];
   const mid = Math.max(0, S.indexOf('M') >= 0 ? S.indexOf('M') : Math.floor((S.length - 1) / 2));
-  const base = { chest: 52, length: 70, shoulder: 45, armhole: 23, neck_w: 18, neck_df: 8, neck_db: 2, sleeve_l: 21, bicep: 18.5, sleeve_o: 16.5, hem: 52, hem_h: 2.5, sleeve_hem_h: 2, rib_w: 2, slope: 2.5 };
-  const step = { chest: 2, length: 1.5, shoulder: 1.5, armhole: 1, neck_w: 0.5, neck_df: 0.3, neck_db: 0, sleeve_l: 0.7, bicep: 1, sleeve_o: 0.8, hem: 2, hem_h: 0, sleeve_hem_h: 0, rib_w: 0, slope: 0 };
+  const base = { chest: 52, length: 70, shoulder: 45, armhole: 23, neck_w: 18, neck_df: 8, neck_db: 2, sleeve_l: 21, bicep: 18.5, sleeve_o: 16.5, hem: 52, hem_h: 2.5, sleeve_hem_h: 2, rib_w: 2, slope: 2.5, cuff_h: 0, cuff_w: 0, hemband_h: 0, hemband_w: 0 };
+  const step = { chest: 2, length: 1.5, shoulder: 1.5, armhole: 1, neck_w: 0.5, neck_df: 0.3, neck_db: 0, sleeve_l: 0.7, bicep: 1, sleeve_o: 0.8, hem: 2, hem_h: 0, sleeve_hem_h: 0, rib_w: 0, slope: 0, cuff_h: 0, cuff_w: 0, hemband_h: 0, hemband_w: 0 };
+  Object.assign(base, KINDS[kind] || {});
   const k = unit === 'in' ? 1 / INCH : 1, chart = {};
-  POM_KEYS.forEach((key) => { chart[key] = {}; S.forEach((s, i) => { chart[key][s] = r2((base[key] + step[key] * (i - mid)) * k); }); });
-  return { sizes: S, unit: unit === 'in' ? 'in' : 'cm', chart };
+  POM_KEYS.forEach((key) => { if (base[key] === 0 && /^(cuff|hemband)/.test(key)) return; chart[key] = {}; S.forEach((s, i) => { chart[key][s] = r2((base[key] + step[key] * (i - mid)) * k); }); });
+  return { sizes: S, unit: unit === 'in' ? 'in' : 'cm', chart, kind: KINDS[kind] ? kind : 'tee' };
 }
 
 // ── geometry ──
@@ -357,12 +368,13 @@ const STITCH = {
 };
 const SEAM_LABELS = {                                                         // an edge's label -> its seam
   neck: 'neck', bandneck: 'neck', shoulder: 'shoulder', armhole: 'armhole', cap: 'armhole', side: 'side', sidehem: 'side', underarm: 'underarm', underarmhem: 'underarm',
-  hem: 'hem', shem: 'sleeve_hem', bandend: 'band_end', cf: 'cf', faceend: 'facing_end', faceedge: 'facing_edge', slitedge: 'cf',
+  hem: 'hem', shem: 'sleeve_hem', bandend: 'band_end', cf: 'cf', faceend: 'facing_end', faceedge: 'facing_edge', slitedge: 'cf', cuffattach: 'sleeve_hem', cuffend: 'cuff_end', hemattach: 'hem', hemend: 'hemband_end',
 };
 const SEAM_DEFAULTS = {
   shoulder: { name: 'Shoulder', type: '514', allowance: 1.0 }, side: { name: 'Side seam', type: '514', allowance: 1.0 }, armhole: { name: 'Sleeve set (armhole)', type: '514', allowance: 1.0 },
   underarm: { name: 'Sleeve underarm seam', type: '514', allowance: 1.0 }, neck: { name: 'Neck band attach', type: '514', allowance: 0.7 }, band_end: { name: 'Neck band closing', type: '301', allowance: 1.0 },
   hem: { name: 'Body hem', type: '605', allowance: 0 }, sleeve_hem: { name: 'Sleeve hem', type: '605', allowance: 0 }, cf: { name: 'Zipper (centre front)', type: '301', allowance: 1.5 },
+  cuff_end: { name: 'Cuff closing', type: '301', allowance: 1.0 }, hemband_end: { name: 'Hem rib closing', type: '301', allowance: 1.0 },
   facing_end: { name: 'Facing ends', type: '504', allowance: 1.0 }, facing_edge: { name: 'Facing free edge', type: '504', allowance: 0.6 },
 };
 const HEM_SEAMS = new Set(['hem', 'sleeve_hem']);                             // a hem's depth is in the drawing, not in an allowance
@@ -540,7 +552,7 @@ function measures(chart, size, unit, notes) {
       if (p.req && (p.key === 'chest' || p.key === 'length')) { m[p.key] = v; return; }
       v = p.share != null ? (p.key === 'sleeve_l' ? 0.4 : p.share) * m.chest : p.abs;
       if (p.key === 'hem') v = m.chest;
-      if (notes) notes.add(`${size}${p.label}: not in the chart, taken as ${r1(v)} cm for size ${size}`);
+      if (notes && p.abs !== 0) notes.add(`${size}${p.label}: not in the chart, taken as ${r1(v)} cm for size ${size}`);
     }
     m[p.key] = v;
   });
@@ -585,6 +597,10 @@ function build(input) {
   const add = (level, text, size) => checks.push({ level, text, size: size || null });
   const edits = inp.edits && typeof inp.edits === 'object' ? inp.edits : {};
   const seamCfg = seamConfig(inp.seams, allow);
+  const ribCuff = per.length > 0 && per.every((x) => x.m.cuff_h > 0 && x.m.cuff_w > 0), ribHem = per.length > 0 && per.every((x) => x.m.hemband_h > 0 && x.m.hemband_w > 0);
+  per.forEach((x) => { if (ribCuff) x.m.sleeve_hem_h = 0; if (ribHem) x.m.hem_h = 0; });         // a rib band is sewn on where a hem would be folded
+  const ribSeam = (id) => { const u = (inp.seams && inp.seams[id]) || {}; seamCfg[id] = Object.assign({}, seamCfg[id], { type: STITCH[u.type] ? u.type : '514', allowance: Number.isFinite(+u.allowance) && u.allowance !== '' ? Math.max(0, Math.min(5, +u.allowance)) : allow.seam }); };
+  if (ribCuff) ribSeam('sleeve_hem'); if (ribHem) ribSeam('hem');
   const zip = zipperOf(inp.zipper);
   const tol = Number.isFinite(+inp.tolerance_cm) ? Math.max(0.05, +inp.tolerance_cm) : 0.5;
   const tols = inp.tolerances && typeof inp.tolerances === 'object' ? inp.tolerances : {};      // a spec sheet's own tolerance per measure, in the chart's unit
@@ -641,6 +657,9 @@ function build(input) {
         } else src.push(rect('placket', 'Zipper placket', 1, zip.facing_w * 2));
       }
     }
+    const ribParts = {};
+    if (ribCuff) { const c = { id: 'cuff', name: 'Cuff rib', qty: 2, rib: true, grain: 'x', pts: { pts: [[0, 0], [2 * m.cuff_w, 0], [2 * m.cuff_w, 2 * m.cuff_h], [0, 2 * m.cuff_h]], labels: ['cuffattach', 'cuffend', 'cuffattach', 'cuffend'] } }; src.push(c); ribParts.cuff = c; }
+    if (ribHem) { const h = { id: 'hemband', name: 'Hem rib', qty: 1, rib: true, grain: 'x', pts: { pts: [[0, 0], [2 * m.hemband_w, 0], [2 * m.hemband_w, 2 * m.hemband_h], [0, 2 * m.hemband_h]], labels: ['hemattach', 'hemend', 'hemattach', 'hemend'] } }; src.push(h); ribParts.hemband = h; }
     const pieces = src.map((p) => {
       const rib = !!p.rib, cut = cutOutline(p, rib ? 1 : sx, rib ? 1 : sy, allowOf), fin = p.pts.pts, bb = bbox(cut.pts), bf = bbox(fin);
       const mk = { id: p.id, name: p.name, qty: p.qty, rib, grain: p.grain, source: p.source || p.id };
@@ -684,7 +703,9 @@ function build(input) {
     if (off.length) add('warn', `Size ${size}: the drawing is off the chart, outside the tolerance (${tol} cm unless the spec sheet gives another), on ${off.map((x) => `${x.label.split(',')[0].toLowerCase()} (${x.diff > 0 ? '+' : ''}${x.diff})`).join(', ')}. Set the chart from the pattern, or reset the piece.`, size);
 
     // the seams, the thread and the sewing order
-    const sew = sewingOf(fp, zinfo, seamCfg, opt, size, add);
+    if (ribCuff && m.sleeve_o / m.cuff_w - 1 > 1.6) add('warn', `Size ${size}: the cuff rib stretches ${Math.round((m.sleeve_o / m.cuff_w - 1) * 100)} % from relaxed (${r1(m.cuff_w)} cm) to the sleeve opening (${r1(m.sleeve_o)} cm): more than a rib recovers from.`, size);
+    if (ribHem && m.hem / m.hemband_w - 1 > 1.6) add('warn', `Size ${size}: the hem rib stretches ${Math.round((m.hem / m.hemband_w - 1) * 100)} % from relaxed (${r1(m.hemband_w)} cm) to the body hem (${r1(m.hem)} cm): more than a rib recovers from.`, size);
+    const sew = sewingOf(fp, zinfo, seamCfg, opt, size, add, ribParts);
     out.push({
       size, m: Object.fromEntries(Object.entries(m).map(([k, v]) => [k, r2(v)])), derived: Object.fromEntries(Object.entries(d).map(([k, v]) => [k, r2(v)])), pieces,
       shape: { front: fp.front.pts.pts.map(([x, y]) => [r2(x), r2(y)]), back: fp.back.pts.pts.map(([x, y]) => [r2(x), r2(y)]), sleeve: fp.sleeve.pts.pts.map(([x, y]) => [r2(x), r2(y)]) },
@@ -735,7 +756,7 @@ function build(input) {
   // the bill of materials for the size shown
   const bs = out.find((o) => o.size === base) || out[0], bom = [
     { item: 'Main fabric', qty: consumption.fabric_per_garment_m, unit: 'm', note: `${fabric.gsm} GSM, ${r1(fabric.width_cm)} cm wide: ${consumption.gross_kg_per_garment} kg a garment` },
-    { item: 'Neck rib', qty: consumption.rib_area_per_garment_cm2, unit: 'cm²', note: `${consumption.rib_kg_per_garment} kg at ${fabric.rib_gsm} GSM` },
+    { item: ribCuff || ribHem ? 'Rib (neck, cuffs, hem)' : 'Neck rib', qty: consumption.rib_area_per_garment_cm2, unit: 'cm²', note: `${consumption.rib_kg_per_garment} kg at ${fabric.rib_gsm} GSM` },
     { item: 'Sewing thread', qty: r1(bs.sewing.thread_m), unit: 'm', note: `${r1(bs.sewing.thread_m * 12)} m a dozen; a rule of thumb for the stitch types chosen: confirm with the thread supplier` },
   ];
   if (bs.zipper.on) bom.push({ item: `Zipper ${bs.zipper.standard_cm} cm`, qty: 1, unit: 'pc', note: `${bs.zipper.type_name.split(':')[0]}, ${bs.zipper.teeth} teeth #${bs.zipper.size}, tape ${bs.zipper.tape_w} cm; ${bs.zipper.opening_cm} cm of opening${bs.zipper.trim_cm > 0.4 ? `, trim ${bs.zipper.trim_cm} cm` : ''}` });
@@ -767,7 +788,7 @@ function build(input) {
 }
 
 // the seams of one size, the thread they take and the order they are sewn in
-function sewingOf(fp, zinfo, cfg, opt, size, add) {
+function sewingOf(fp, zinfo, cfg, opt, size, add, ribParts) {
   const F = fp.front, B = fp.back, S = fp.sleeve, N = fp.band, q = S.qty, d = fp.derived;
   const Ls = (pc, ...ls) => ls.reduce((a, l) => a + labelLen(pc, l), 0);
   const rows = [];
@@ -779,8 +800,11 @@ function sewingOf(fp, zinfo, cfg, opt, size, add) {
   const ua = (Ls(S, 'underarm', 'underarmhem') / 2) * q; row('underarm', ua, ua, ua);
   row('neck', Ls(F, 'neck') + Ls(B, 'neck'), Ls(N, 'bandneck') / 2, Ls(F, 'neck') + Ls(B, 'neck'), d.band_len - d.neck_len);
   row('band_end', Ls(N, 'bandend') / 2, Ls(N, 'bandend') / 2, Ls(N, 'bandend') / 2);
-  row('hem', Ls(F, 'hem'), Ls(B, 'hem'), Ls(F, 'hem') + Ls(B, 'hem'));
-  row('sleeve_hem', Ls(S, 'shem'), Ls(S, 'shem'), Ls(S, 'shem') * q);
+  const hb = ribParts && ribParts.hemband, cf = ribParts && ribParts.cuff;
+  if (hb) { const body = Ls(F, 'hem') + Ls(B, 'hem'), band = Ls(hb, 'hemattach') / 2; row('hem', body, band, body, band - body); row('hemband_end', Ls(hb, 'hemend') / 2, Ls(hb, 'hemend') / 2, Ls(hb, 'hemend') / 2); }
+  else row('hem', Ls(F, 'hem'), Ls(B, 'hem'), Ls(F, 'hem') + Ls(B, 'hem'));
+  if (cf) { const sl = Ls(S, 'shem') * q, cl = (Ls(cf, 'cuffattach') / 2) * q; row('sleeve_hem', sl, cl, sl, cl - sl); row('cuff_end', (Ls(cf, 'cuffend') / 2) * q, (Ls(cf, 'cuffend') / 2) * q, (Ls(cf, 'cuffend') / 2) * q); }
+  else row('sleeve_hem', Ls(S, 'shem'), Ls(S, 'shem'), Ls(S, 'shem') * q);
   if (zinfo.on) {
     const o2 = zinfo.opening_cm;
     row('cf', 2 * o2, 2 * o2, 4 * o2);                                       // each side attached and topstitched
@@ -793,6 +817,7 @@ function sewingOf(fp, zinfo, cfg, opt, size, add) {
   });
   const byId = Object.fromEntries(seams.map((s) => [s.id, s]));
   const order = zinfo.on ? ['shoulder', 'cf', 'band_end', 'neck', 'armhole', 'side', 'underarm', 'sleeve_hem', 'hem'] : ['shoulder', 'band_end', 'neck', 'armhole', 'side', 'underarm', 'sleeve_hem', 'hem'];
+  if (byId.cuff_end) order.splice(order.indexOf('sleeve_hem'), 0, 'cuff_end'); if (byId.hemband_end) order.splice(order.indexOf('hem'), 0, 'hemband_end');
   const ops = order.filter((id) => byId[id]).map((id, i) => ({ n: i + 1, seam: id, name: id === 'cf' ? 'Zipper attach and topstitch (both sides)' : byId[id].name, machine: byId[id].machine, type: byId[id].type, length_cm: byId[id].sewn_cm, thread_m: byId[id].thread_m }));
   const thread = seams.reduce((a, s) => a + s.thread_m, 0);
   let sam = null;
@@ -809,4 +834,4 @@ function sewingOf(fp, zinfo, cfg, opt, size, add) {
   return { seams, operations: ops, thread_m: r2(thread), thread_per_dozen_m: r1(thread * 12), sam };
 }
 
-module.exports = { anchor, cloneAnchors, cutOutline, notchesOf, edgeLen, dedupe2, bisect, labelLen, roleOf, r1, r2, ALIASES, STYLE, POMS, POM_KEYS, STITCH, ZIP_STANDARD, ZIP_TYPES, SEAM_DEFAULTS, SEAM_LABELS, build, parseChart, template, num, seamConfig, zipperOf, offsetPoly, selfCrossing, removeLoops, bez, plen, area, bbox, maskOf, lay, finishedPieces, measuredOf, sampleChain, polyOf, applyEdit, underarmY, armholeCurve, armholeCtl, capHalf, INCH };
+module.exports = { KINDS, anchor, cloneAnchors, cutOutline, notchesOf, edgeLen, dedupe2, bisect, labelLen, roleOf, r1, r2, ALIASES, STYLE, POMS, POM_KEYS, STITCH, ZIP_STANDARD, ZIP_TYPES, SEAM_DEFAULTS, SEAM_LABELS, build, parseChart, template, num, seamConfig, zipperOf, offsetPoly, selfCrossing, removeLoops, bez, plen, area, bbox, maskOf, lay, finishedPieces, measuredOf, sampleChain, polyOf, applyEdit, underarmY, armholeCurve, armholeCtl, capHalf, INCH };

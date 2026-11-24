@@ -129,7 +129,7 @@
 
   // ── what is selected ──
   var sel = { t: 'garment', id: '' }, creating = false, bound3d = false;
-  var SWC = { front: 0, back: -6, sleeve: -12, band: -30, waistband: -30, pbag: -16, bpocket: -16, front_r: 0, front_l: 0, facing: -18, placket: -18 };
+  var SWC = { front: 0, back: -6, sleeve: -12, band: -30, cuff: -30, hemband: -30, waistband: -30, pbag: -16, bpocket: -16, front_r: 0, front_l: 0, facing: -18, placket: -18 };
   var editable = function (id) { var o = cur(); return !!(o && o.edit && o.edit[id]); };
   function shade(hex, pct) { var n = parseInt(String(hex).slice(1), 16); if (!isFinite(n)) return '#3d5a80'; var f = function (c) { return clamp(Math.round(c + (pct / 100) * (pct < 0 ? c : 255 - c)), 0, 255); }; return '#' + ((1 << 24) | (f((n >> 16) & 255) << 16) | (f((n >> 8) & 255) << 8) | f(n & 255)).toString(16).slice(1); }
   function S() { return K() && K().state(); } function R() { return K() && K().result(); }
@@ -146,13 +146,14 @@
   }
   function mark() {
     qa('#gm-patterns .gs-pp').forEach(function (g) { g.classList.toggle('sel', sel.t === 'piece' && g.getAttribute('data-piece') === sel.id); });
-    var v = K() && K().view && K().view(); if (v && v.highlight) v.highlight(sel.t === 'piece' ? sel.id : sel.t === 'zipper' ? 'zipper' : (sel.t === 'rib' ? 'band' : null));
+    var v = K() && K().view && K().view(); if (v && v.highlight) v.highlight(sel.t === 'piece' ? sel.id : sel.t === 'seam' ? 'seam:' + sel.id : sel.t === 'zipper' ? 'zipper' : (sel.t === 'rib' ? 'band' : null));
+    qa('#gm-patterns .gs-edge').forEach(function (e) { e.classList.toggle('hot', sel.t === 'seam' && e.getAttribute('data-seam') === sel.id); });
     var t = { garment: 'Garment', piece: (pieceOf(sel.id) || {}).name || 'Piece', fabric: 'Main fabric', rib: 'Neck rib', cut: 'Cutting', seam: ((R() && R().seams && R().seams[sel.id]) || {}).name || 'Seam', measure: 'Measurement', spec: 'Spec measurement', zipper: 'Zipper', trim: 'Trim' }[sel.t] || '';
     $('gs-petitle').textContent = t;
   }
 
   // ── the object browser ──
-  var SEAM_ORDER = ['shoulder', 'armhole', 'underarm', 'neck', 'waistband', 'rise', 'inseam', 'pocket', 'side', 'band_end', 'hem', 'sleeve_hem', 'cf', 'facing_end', 'facing_edge'];
+  var SEAM_ORDER = ['shoulder', 'armhole', 'underarm', 'neck', 'waistband', 'rise', 'inseam', 'pocket', 'side', 'band_end', 'hem', 'sleeve_hem', 'hemband_end', 'cuff_end', 'cf', 'facing_end', 'facing_edge'];
   function orow(t, id, sw, title, sub, extra) {
     var on = sel.t === t && sel.id === id;
     return '<div class="gs-obr' + (on ? ' sel' : '') + '" role="option" aria-selected="' + on + '" tabindex="0" data-sel="' + t + '" data-id="' + esc(id) + '">' + (sw || '') + '<span class="gs-obt"><b>' + esc(title) + '</b>' + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</span>' + (extra || '') + '</div>';
@@ -211,7 +212,7 @@
     if ((t === 'seam' || t === 'piece' || t === 'measure' || t === 'spec' || t === 'trim' || t === 'garment') && (!r || !r.success || !o)) pb = 'garment';
     showPB(pb);
     if (pb === 'garment') {
-      var h = '<p class="gs-ph">' + (s.fabric.name ? esc(s.fabric.name) : s.style === 'shorts' ? 'Shorts' : 'T-shirt, crew neck') + '</p><p class="gs-ps">' + (o ? 'Size ' + esc(o.size) + (o.m.chest != null ? ' · chest ' + o.m.chest + ' cm flat · length ' + o.m.length + ' cm' : ' · seat ' + o.m.seat_w + ' cm flat · outside leg ' + o.m.outseam + ' cm') : 'Fill in the chest and the length to build the garment.') + '</p>';
+      var h = '<p class="gs-ph">' + (s.fabric.name ? esc(s.fabric.name) : ({ longsleeve: 'Long-sleeve tee', sweatshirt: 'Sweatshirt', joggers: 'Joggers / trousers', leggings: 'Leggings' })[s.kind] || (s.style === 'shorts' ? 'Shorts' : 'T-shirt, crew neck')) + '</p><p class="gs-ps">' + (o ? 'Size ' + esc(o.size) + (o.m.chest != null ? ' · chest ' + o.m.chest + ' cm flat · length ' + o.m.length + ' cm' : ' · seat ' + o.m.seat_w + ' cm flat · outside leg ' + o.m.outseam + ' cm') : 'Fill in the chest and the length to build the garment.') + '</p>';
       if (r && r.success) { var c = r.consumption, errs = r.checks.filter(function (x) { return x.level === 'error'; }).length, warns = r.checks.filter(function (x) { return x.level === 'warn'; }).length;
         h += '<div class="gs-pk">' + pk('Fabric / garment', c.fabric_per_garment_m + ' m') + pk('Weight', c.gross_kg_per_garment + ' kg') + pk('Marker', c.efficiency_pct + ' %') + pk('Thread', r1(r.sewing.thread_m) + ' m') + pk('Checks', errs ? errs + ' error' + (errs > 1 ? 's' : '') : warns ? warns + ' to look at' : 'all good', errs ? 'bad' : warns ? '' : 'ok') + pk('Pieces', o.pieces.length) + '</div>'; }
       h += '<div class="gs-ik">Document</div><div class="gs-pf"><label>Garment</label><div class="gs-seg gs-segw" id="pe-style"><button type="button" data-do="garment-style" data-g="tee" class="' + (s.style !== 'shorts' ? 'on' : '') + '">T-shirt</button><button type="button" data-do="garment-style" data-g="shorts" class="' + (s.style === 'shorts' ? 'on' : '') + '">Shorts</button></div></div><div class="gs-pf"><label>Units of the chart</label><div class="gs-seg gs-segw"><button type="button" data-unit="cm" class="' + (s.unit !== 'in' ? 'on' : '') + '">cm</button><button type="button" data-unit="in" class="' + (s.unit === 'in' ? 'on' : '') + '">inch</button></div></div>';
@@ -281,7 +282,8 @@
     host.addEventListener('pointerup', function (e) {
       if (!down) return; var d = Math.hypot(e.clientX - down.x, e.clientY - down.y), dt = Date.now() - down.t; down = null; if (d > 6 || dt > 600) return;
       var v = K().view(); if (!v || !v.pick) return; var id = v.pick(e.clientX, e.clientY);
-      if (id) select(id === 'zipper' ? 'zipper' : 'piece', id === 'zipper' ? 'zip' : id, { sheet: true, reveal: true }); else if (sel.t === 'piece') select('garment', '');
+      if (id && id.indexOf('seam:') === 0) select('seam', id.slice(5), { sheet: true, reveal: true });
+      else if (id) select(id === 'zipper' ? 'zipper' : 'piece', id === 'zipper' ? 'zip' : id, { sheet: true, reveal: true }); else if (sel.t === 'piece') select('garment', '');
     });
     host.addEventListener('dblclick', function (e) { var id = K().view().pick(e.clientX, e.clientY); if (id && editable(id)) { select('piece', id); show('edit'); } });
     var sp = $('gm-spin'); if (sp) { var obs = new MutationObserver(function () { sp.classList.toggle('on', sp.classList.contains('primary')); }); obs.observe(sp, { attributes: true, attributeFilter: ['class'] }); }
@@ -340,7 +342,7 @@
       case 'theme': lay.theme = lay.theme === 'dark' ? 'light' : 'dark'; applyLay(); break;
       case 'resetlayout': ['left', 'right', 'bottom', 'pe', 'views', 'L', 'R', 'B', 'view', 'scale', 'full'].forEach(function (n) { lay[n] = DEF[n]; }); if (window.innerWidth < 1100) { lay.L = 0; } applyLay(); toast('Layout reset.'); break;
       case 'help': openHelp(); break;
-      case 'garment-style': if (el && el.getAttribute('data-g') && el.getAttribute('data-g') !== (S().style || 'tee')) { toast('Loading the standard ' + el.getAttribute('data-g') + ' chart…'); k.switchStyle(el.getAttribute('data-g')); } break;
+      case 'garment-style': { var g = el && el.getAttribute('data-g'), kd = el && el.getAttribute('data-kind'); if (g && (g !== (S().style || 'tee') || (kd || null) !== (S().kind || null))) { toast('Loading the standard ' + (kd || g) + ' chart…'); k.switchStyle(g, false, kd || null); } break; }
       case 'edit-piece': if (sel.t === 'piece') { setMode('edit'); } break;
       case 'show3d': if (lay.view === '2d') setView('both'); if (phoneMQ.matches) { lay.pv = '3d'; applyLay(); sheet(null); } ensure3D(); mark(); break;
       case 'trim-remove': { var i = +el.getAttribute('data-idx'); S().trims.splice(i, 1); select('garment', ''); k.schedule(); break; }
@@ -417,7 +419,7 @@
     if (K() && K().result()) render();
   }
   function styleChanged() {
-    var s = S(); qa('#gs-garments [data-g]').forEach(function (b) { b.classList.toggle('on', s && b.getAttribute('data-g') === (s.style || 'tee')); });
+    var s = S(); qa('#gs-garments [data-g]').forEach(function (b) { b.classList.toggle('on', !!s && b.getAttribute('data-g') === (s.style || 'tee') && (b.getAttribute('data-kind') || null) === (s.kind || null)); });
     var E = window.KAGarmentEdit && window.KAGarmentEdit.state(); if (E) { E.pid = 'front'; E.sel = null; E.fitFor = ''; }
     var v = K() && K().view && K().view(); if (v) { v._placed = false; }
     select('garment', ''); render();

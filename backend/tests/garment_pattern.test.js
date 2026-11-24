@@ -255,5 +255,17 @@ const inside = (poly, x, y) => { let c = false; for (let i = 0, j = poly.length 
   assert(ok > 100, `${ok} edited builds`);
   console.log(`✓ 300 random edits (anchors, handles, zipper, seams): ${ok} built, ${refused} refused in words, none threw, no NaN, a crossing outline is always reported`);
 }
+{
+  // a sweatshirt: rib cuffs and a rib hem replace the folded hems; every figure of the chart still comes back; the rib parts have seams that match
+  ['tee', 'longsleeve', 'sweatshirt'].forEach((kind) => {
+    const T2 = G.template(['S', 'M', 'L', 'XL'], 'cm', kind), r = G.build({ sizes: T2.sizes, chart: T2.chart, unit: 'cm', fabric: fab });
+    assert(r.success, `${kind}: ${r.error}`);
+    r.by_size.forEach((o) => { o.measured.forEach((m) => near(m.pattern, m.chart, 0.02, `${kind} ${o.size} ${m.key}`)); o.pieces.forEach((p) => assert(p.simple, `${kind} ${p.name} is simple`)); assert(o.sewing.seams.every((s) => s.match), `${kind} ${o.size}: every seam matches`); });
+    const ids = r.by_size[1].pieces.map((p) => p.id);
+    if (kind === 'sweatshirt') { assert(ids.includes('cuff') && ids.includes('hemband'), 'a sweatshirt has its rib cuff and hem band'); assert(r.seams.sleeve_hem.type === '514' && r.seams.sleeve_hem.allowance > 0, 'the rib is sewn on like a seam, not folded'); assert(r.bom.some((b) => /Rib \(neck, cuffs, hem\)/.test(b.item)), 'the bill of materials says where the rib goes'); assert(r.by_size[1].pieces.find((p) => p.id === 'cuff').rib && !r.marker.pieces.some((p) => p.piece === 'cuff'), 'the rib is not on the marker of the main fabric'); }
+    else assert(!ids.includes('cuff'), `${kind} has no rib cuff`);
+  });
+  console.log('✓ the tee family: a tee, a long-sleeve tee and a sweatshirt (rib cuffs and hem) all build, every figure comes back, the rib parts are sewn on and kept off the main marker');
+}
 console.log('Garment pattern tests passed');
 

@@ -65,6 +65,17 @@ const R = SH.build({ sizes: T.sizes, chart: T.chart, unit: 'cm', fabric: fab, st
   console.log(`✓ 300 random charts: ${built} built, ${refused} refused in words, none threw, no NaN`);
 }
 
+{
+  // the same legs as joggers (long, tapering) and leggings (close, no pockets or drawcord)
+  ['joggers', 'leggings'].forEach((kind) => {
+    const Tk = SH.template(['S', 'M', 'L', 'XL'], 'cm', kind), r = SH.build({ sizes: Tk.sizes, chart: Tk.chart, fabric: fab }); assert(r.success, `${kind}: ${r.error}`);
+    r.by_size.forEach((o) => o.measured.forEach((m) => near(m.pattern, m.chart, 0.02, `${kind} ${o.size} ${m.key}`)));
+    assert(r.by_size[1].m.outseam > 85, `${kind} is a long leg`);
+    if (kind === 'leggings') assert(!r.by_size[1].pieces.some((p) => p.id === 'pbag' || p.id === 'bpocket') && !r.bom.some((b) => b.item === 'Eyelets' && false), 'leggings have no pocket pieces');
+  });
+  console.log('✓ joggers and leggings are the same legs, long: every figure comes back, leggings have no pockets');
+}
+
 (async () => {
   // the buyer's layout, drawn as a PDF page: sizes on two lines (3 over yr), Tol over +/-, long labels, a label that wraps with its figures between the lines,
   // MIN and MAX tolerances, section rows and codes
