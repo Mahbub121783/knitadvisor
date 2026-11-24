@@ -3,19 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <script src="assets/js/auth-guard.js?v=20261112a"></script>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Garment Studio — KnitAdvisor</title>
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-  <meta name="description" content="Give a measurement chart: the pattern pieces are drawn with your fabric's shrinkage, laid on a marker for the fabric per garment, and made into a 3D garment.">
-  <meta name="theme-color" content="#FFFFFF">
+  <meta name="description" content="A garment design studio: upload a buyer's spec sheet or give a measurement chart, and the pattern pieces, the cut with your fabric's shrinkage, the marker, the sewing and a 3D garment follow, in docked, resizable windows.">
+  <meta name="theme-color" content="#1b1e22">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/css/style.css?v=20260603c">
   <link rel="stylesheet" href="assets/css/theme-v2.css?v=20261112c">
-  <link rel="stylesheet" href="assets/css/garment.css?v=20261201a">
+  <link rel="stylesheet" href="assets/css/garment.css?v=20261202b">
+  <link rel="stylesheet" href="assets/css/garment-studio.css?v=20261202b">
   <script type="importmap">
   {
     "imports": {
@@ -26,185 +27,352 @@
   </script>
   <script src="assets/js/app-shell.js?v=20261201a" defer></script>
 </head>
-<body>
+<body class="gs-body">
 <div class="page-wrap">
   <header class="hdr"></header>
 
-  <main class="container gm-main">
-    <div class="gm-head">
-      <h1>Garment Studio</h1>
-      <p>Give the measurement chart. The pattern pieces are drawn from it, cut larger by your fabric's own shrinkage, laid on a marker to find the fabric each garment takes, and made into a garment you can turn in 3D. Change a figure and everything follows.</p>
+  <main class="gs" id="gs" data-theme="dark" data-view="both" data-left="1" data-right="1" data-bottom="1" aria-label="Garment studio">
+
+    <!-- the menu bar -->
+    <div class="gs-menubar" id="gs-menubar">
+      <button type="button" class="gs-ib gs-burger" id="gs-burger" aria-label="Menu" aria-expanded="false"><i data-ic="menu"></i></button>
+      <nav class="gs-menus" id="gs-menus" role="menubar" aria-label="Studio menu">
+        <div class="gs-menu" data-menu="file"><button type="button" class="gs-mb" role="menuitem" aria-haspopup="true">File</button><div class="gs-mp" role="menu">
+          <button type="button" role="menuitem" data-do="upload"><i data-ic="upload"></i>Upload a spec sheet…<kbd>O</kbd></button>
+          <button type="button" role="menuitem" data-do="paste"><i data-ic="paste"></i>Paste a table…</button>
+          <button type="button" role="menuitem" data-do="starter"><i data-ic="layers"></i>Start from the standard tee</button>
+          <button type="button" role="menuitem" data-do="library"><i data-ic="folder"></i>Open a preset…</button>
+          <button type="button" role="menuitem" data-do="presetsave"><i data-ic="save"></i>Save as preset…</button>
+          <hr>
+          <button type="button" role="menuitem" data-do="dlpat"><i data-ic="download"></i>Download the patterns (SVG, 1:1)</button>
+          <button type="button" role="menuitem" data-do="dlmk"><i data-ic="download"></i>Download the marker (SVG)</button>
+          <button type="button" role="menuitem" data-do="snap"><i data-ic="camera"></i>Save a picture of the garment</button>
+        </div></div>
+        <div class="gs-menu" data-menu="edit"><button type="button" class="gs-mb" role="menuitem" aria-haspopup="true">Edit</button><div class="gs-mp" role="menu">
+          <button type="button" role="menuitem" data-do="undo"><i data-ic="undo"></i>Undo<kbd>Ctrl Z</kbd></button>
+          <button type="button" role="menuitem" data-do="redo"><i data-ic="redo"></i>Redo<kbd>Ctrl Shift Z</kbd></button>
+          <hr>
+          <button type="button" role="menuitem" data-do="resetpiece"><i data-ic="reset"></i>Reset this piece to the chart</button>
+          <button type="button" role="menuitem" data-do="resetsize"><i data-ic="reset"></i>Reset every edit of this size</button>
+          <button type="button" role="menuitem" data-do="copyall"><i data-ic="copy"></i>Copy this piece's edit to all sizes</button>
+        </div></div>
+        <div class="gs-menu" data-menu="3d"><button type="button" class="gs-mb" role="menuitem" aria-haspopup="true">3D Garment</button><div class="gs-mp" role="menu">
+          <button type="button" role="menuitem" data-do="refresh3d"><i data-ic="cube"></i>Make / refresh the garment</button>
+          <button type="button" role="menuitem" data-do="spin"><i data-ic="rotate"></i>Turntable</button>
+          <hr>
+          <button type="button" role="menuitem" data-do="v-front"><i data-ic="user"></i>Front view</button>
+          <button type="button" role="menuitem" data-do="v-back"><i data-ic="user"></i>Back view</button>
+          <button type="button" role="menuitem" data-do="v-side"><i data-ic="user"></i>Side view</button>
+          <button type="button" role="menuitem" data-do="v-quarter"><i data-ic="user"></i>Three-quarter view</button>
+        </div></div>
+        <div class="gs-menu" data-menu="2d"><button type="button" class="gs-mb" role="menuitem" aria-haspopup="true">2D Pattern</button><div class="gs-mp" role="menu">
+          <button type="button" role="menuitem" data-do="mode-pieces"><i data-ic="pattern"></i>All pieces, as cut</button>
+          <button type="button" role="menuitem" data-do="mode-edit"><i data-ic="node"></i>Edit the points of a piece<kbd>E</kbd></button>
+          <hr>
+          <button type="button" role="menuitem" data-do="fit2d"><i data-ic="fit"></i>Fit the piece to the window</button>
+        </div></div>
+        <div class="gs-menu" data-menu="sewing"><button type="button" class="gs-mb" role="menuitem" aria-haspopup="true">Sewing</button><div class="gs-mp" role="menu">
+          <button type="button" role="menuitem" data-do="bt-sewing"><i data-ic="seam"></i>Seams, stitches and thread</button>
+          <button type="button" role="menuitem" data-do="sel-zipper"><i data-ic="zip"></i>Zipper</button>
+          <button type="button" role="menuitem" data-do="bt-marker"><i data-ic="layers"></i>Marker and fabric per garment</button>
+        </div></div>
+        <div class="gs-menu" data-menu="materials"><button type="button" class="gs-mb" role="menuitem" aria-haspopup="true">Materials</button><div class="gs-mp" role="menu">
+          <button type="button" role="menuitem" data-do="sel-fabric"><i data-ic="fabric"></i>Fabric, shrinkage and colour</button>
+          <button type="button" role="menuitem" data-do="sel-cut"><i data-ic="scissors"></i>Cutting and allowances</button>
+          <button type="button" role="menuitem" data-do="fromstudio"><i data-ic="cube"></i>Use the fabric from my Fabric Studio design</button>
+        </div></div>
+        <div class="gs-menu" data-menu="spec"><button type="button" class="gs-mb" role="menuitem" aria-haspopup="true">Spec</button><div class="gs-mp" role="menu">
+          <button type="button" role="menuitem" data-do="bt-chart"><i data-ic="ruler"></i>Measurement chart</button>
+          <button type="button" role="menuitem" data-do="bt-spec"><i data-ic="check"></i>Spec check (pattern against the sheet)</button>
+          <button type="button" role="menuitem" data-do="reviewspec"><i data-ic="paste"></i>Review the last spec sheet</button>
+          <button type="button" role="menuitem" data-do="bt-checks"><i data-ic="check"></i>Checks</button>
+        </div></div>
+        <div class="gs-menu" data-menu="view"><button type="button" class="gs-mb" role="menuitem" aria-haspopup="true">View</button><div class="gs-mp" role="menu">
+          <button type="button" role="menuitem" data-do="view-both"><i data-ic="split"></i>3D and 2D side by side<kbd>3</kbd></button>
+          <button type="button" role="menuitem" data-do="view-3d"><i data-ic="cube"></i>3D window only<kbd>1</kbd></button>
+          <button type="button" role="menuitem" data-do="view-2d"><i data-ic="pattern"></i>2D window only<kbd>2</kbd></button>
+          <hr>
+          <button type="button" role="menuitem" data-do="toggle-left"><i data-ic="panel-l"></i>Library<kbd>[</kbd></button>
+          <button type="button" role="menuitem" data-do="toggle-right"><i data-ic="panel-r"></i>Object browser and properties<kbd>]</kbd></button>
+          <button type="button" role="menuitem" data-do="toggle-bottom"><i data-ic="panel-b"></i>Measurements and sewing<kbd>\</kbd></button>
+          <button type="button" role="menuitem" data-do="fullscreen"><i data-ic="full"></i>Hide the site header<kbd>Shift F</kbd></button>
+          <hr>
+          <button type="button" role="menuitem" data-do="scale-up"><i data-ic="plus"></i>Larger text and buttons</button>
+          <button type="button" role="menuitem" data-do="scale-down"><i data-ic="minus"></i>Smaller text and buttons</button>
+          <button type="button" role="menuitem" data-do="theme"><i data-ic="theme"></i>Dark / light</button>
+          <button type="button" role="menuitem" data-do="resetlayout"><i data-ic="reset"></i>Reset the layout</button>
+        </div></div>
+        <div class="gs-menu" data-menu="help"><button type="button" class="gs-mb" role="menuitem" aria-haspopup="true">Help</button><div class="gs-mp" role="menu">
+          <button type="button" role="menuitem" data-do="help"><i data-ic="help"></i>Shortcuts and how it works</button>
+        </div></div>
+      </nav>
+      <div class="gs-mright">
+        <div class="gs-sizes" id="gs-sizes" aria-label="Size"></div>
+        <div class="gs-viewbtns" role="group" aria-label="Windows">
+          <button type="button" class="gs-ib" data-do="view-3d" data-v="3d" title="3D window only (1)" aria-label="3D window only"><i data-ic="cube"></i></button>
+          <button type="button" class="gs-ib" data-do="view-both" data-v="both" title="3D and 2D (3)" aria-label="3D and 2D side by side"><i data-ic="split"></i></button>
+          <button type="button" class="gs-ib" data-do="view-2d" data-v="2d" title="2D window only (2)" aria-label="2D window only"><i data-ic="pattern"></i></button>
+        </div>
+      </div>
     </div>
 
-    <div class="gm-layout">
-      <section class="gm-spec" aria-label="Specification">
-        <div class="gm-card gm-start" id="gm-speccard">
-          <div class="gm-step">Start from a spec sheet</div>
-          <div class="gm-drop" id="gm-drop" tabindex="0" role="button" aria-label="Upload a spec sheet">
-            <div class="gm-drop-t"><b>Drop the buyer's spec sheet here</b><span>Excel, PDF, a photo of the sheet, or a CSV. You can also paste a screenshot.</span></div>
-            <button type="button" class="gm-btn primary" id="gm-pick">Choose a file</button>
-            <input type="file" id="gm-file" accept=".xlsx,.csv,.tsv,.txt,.pdf,.jpg,.jpeg,.png,.webp,image/*" hidden>
-          </div>
-          <p class="gm-hint" id="gm-specnote">The measurements, tolerances, grading, fabric, stitching, zipper and trims are read from it; you check them before anything is used.</p>
-          <div class="gm-row gm-presetrow">
-            <div class="gm-f"><label for="gm-preset">Start from a preset</label><select id="gm-preset"><option value="">Choose…</option></select></div>
-            <div class="gm-f gm-presetbtns"><button type="button" class="gm-btn" id="gm-presetsave">Save as preset…</button><button type="button" class="gm-btn" id="gm-presetdel" hidden>Delete</button></div>
-          </div>
-          <div class="gm-presetname" id="gm-presetname" hidden><input id="gm-presetinput" type="text" maxlength="60" placeholder="Name, e.g. ACME crew tee SS27" aria-label="Preset name"><button type="button" class="gm-btn primary" id="gm-presetgo">Save</button><button type="button" class="gm-btn" id="gm-presetcancel">Cancel</button></div>
-          <p class="gm-hint" id="gm-presetnote"></p>
-        </div>
-
-        <div class="gm-card" id="gm-fabric">
-          <div class="gm-step"><b>1</b> Fabric</div>
-          <div class="gm-tools"><button type="button" class="gm-btn" id="gm-fromstudio" hidden>Use the fabric from my Studio design</button><span class="gm-hint" id="gm-fromnote" style="margin:0"></span></div>
-          <div class="gm-row">
-            <div class="gm-f"><label for="gm-fname">Name</label><input id="gm-fname" type="text" maxlength="80" placeholder="e.g. 30s single jersey"></div>
-            <div class="gm-f"><label for="gm-gsm">GSM (as cut)</label><input id="gm-gsm" type="number" min="40" max="800" step="1"></div>
-            <div class="gm-f"><label for="gm-width">Cutting width</label><div style="display:flex;gap:4px"><input id="gm-width" type="number" min="20" max="400" step="0.5" style="min-width:0"><select id="gm-wunit" style="width:62px"><option value="cm">cm</option><option value="in">in</option></select></div></div>
-          </div>
-          <div class="gm-row">
-            <div class="gm-f"><label for="gm-shl">Shrinkage along (length) %</label><input id="gm-shl" type="number" min="-15" max="30" step="0.1"></div>
-            <div class="gm-f"><label for="gm-shw">Shrinkage across (width) %</label><input id="gm-shw" type="number" min="-15" max="30" step="0.1"></div>
-            <div class="gm-f"><label for="gm-rib">Neck band stretch %</label><input id="gm-rib" type="number" min="0" max="80" step="1"></div>
-          </div>
-          <div class="gm-row">
-            <div class="gm-f"><label for="gm-colour">Colour</label><input id="gm-colour" type="color" value="#3d5a80"></div>
-            <div class="gm-f"><label for="gm-wpc">Wales / cm (optional)</label><input id="gm-wpc" type="number" min="3" max="40" step="0.1"></div>
-            <div class="gm-f"><label for="gm-cpc">Courses / cm (optional)</label><input id="gm-cpc" type="number" min="3" max="50" step="0.1"></div>
-          </div>
-          <p class="gm-hint">The chart is the <b>finished</b>, flat, <b>after-wash</b> garment. The shrinkage is how much this cloth shrinks in the wash: the pieces are cut that much larger. The wales and courses only draw the knit on the 3D garment.</p>
-        </div>
-
-        <div class="gm-card" id="gm-chartcard">
-          <div class="gm-step"><b>2</b> Measurement chart <span style="margin-left:auto;display:flex;gap:6px;align-items:center"><span class="gm-seg" id="gm-unit"><button type="button" data-u="cm" class="on">cm</button><button type="button" data-u="in">inch</button></span></span></div>
-          <div class="gm-tools">
-            <button type="button" class="gm-btn" id="gm-addsize">+ Size</button>
-            <button type="button" class="gm-btn" id="gm-tpl">Start from a standard tee</button>
-            <span class="gm-status" id="gm-status"></span>
-          </div>
-          <div class="gm-chartwrap"><table class="gm-chart" id="gm-chart"></table></div>
-          <p class="gm-hint">Flat widths, as a spec sheet gives them. <span class="req">*</span> The chest and the length are needed; anything else left empty is taken from the chest, and the chart says so. The marker ratio is how many garments of each size are cut together.</p>
-          <details class="gm-paste">
-            <summary>Paste a spec sheet from Excel or a PDF table</summary>
-            <textarea id="gm-paste" placeholder="Point of measure&#9;S&#9;M&#9;L&#9;XL&#10;1/2 Chest&#9;20 1/2&#9;21 1/2&#9;22 1/2&#9;23 1/2&#10;Body Length (HPS)&#9;27&#9;28&#9;29&#9;30"></textarea>
-            <div class="gm-tools" style="margin-top:6px"><button type="button" class="gm-btn primary" id="gm-readchart">Read this chart</button></div>
-            <p class="gm-pnote" id="gm-pnote"></p>
-          </details>
-        </div>
-
-        <div class="gm-card" id="gm-optcard">
-          <div class="gm-step"><b>3</b> Sewing and cutting</div>
-          <div class="gm-row">
-            <div class="gm-f"><label for="gm-seam">Seam allowance, all (cm)</label><input id="gm-seam" type="number" min="0" max="3" step="0.1"></div>
-            <div class="gm-f"><label for="gm-neckal">Neck allowance, all (cm)</label><input id="gm-neckal" type="number" min="0" max="3" step="0.1"></div>
-            <div class="gm-f"><label for="gm-ease">Sleeve cap ease (cm)</label><input id="gm-ease" type="number" min="-2" max="4" step="0.1"></div>
-          </div>
-          <div class="gm-row">
-            <div class="gm-f"><label for="gm-orient">Cutting</label><select id="gm-orient"><option value="both">Pieces may be turned round (plain cloth)</option><option value="one_way">One way only (stripe, nap, print)</option></select></div>
-            <div class="gm-f"><label for="gm-gap">Gap between pieces (cm)</label><input id="gm-gap" type="number" min="0" max="5" step="0.5"></div>
-          </div>
-        </div>
-
-        <div class="gm-card" id="gm-zipcard">
-          <div class="gm-step"><b>4</b> Zipper</div>
-          <label class="gm-check"><input type="checkbox" id="gm-zon"> Put a zipper in the centre front</label>
-          <div id="gm-zbody" hidden>
-            <div class="gm-row">
-              <div class="gm-f"><label for="gm-zkind">Where</label><select id="gm-zkind"><option value="full">Front opening: the front is cut in two</option><option value="partial">Quarter zip: a slit and a placket</option></select></div>
-              <div class="gm-f"><label for="gm-ztype">Type</label><select id="gm-ztype"><option value="open_end">Open-end (separating)</option><option value="closed_end">Closed-end</option><option value="invisible">Invisible</option></select></div>
-              <div class="gm-f" id="gm-zlenf"><label for="gm-zlen">Opening from the neck (cm)</label><input id="gm-zlen" type="number" min="6" max="60" step="1"></div>
+    <div class="gs-work" id="gs-work">
+      <!-- the library -->
+      <aside class="gs-dock gs-left" id="gs-left" aria-label="Library">
+        <div class="gs-dh"><span class="gs-dt">Library</span><button type="button" class="gs-ib" data-do="toggle-left" title="Hide the library ([)" aria-label="Hide the library"><i data-ic="chev-l"></i></button></div>
+        <div class="gs-tabs" id="gs-ltabs" role="tablist"><button type="button" role="tab" data-lt="spec" class="on">Spec and presets</button><button type="button" role="tab" data-lt="paste">Paste</button><button type="button" role="tab" data-lt="garments">Garments</button></div>
+        <div class="gs-dbody">
+          <div class="gs-tp on" data-lp="spec">
+            <div class="gm-card gm-start" id="gm-speccard">
+              <div class="gm-step">Start from a spec sheet</div>
+              <div class="gm-drop" id="gm-drop" tabindex="0" role="button" aria-label="Upload a spec sheet">
+                <div class="gm-drop-t"><b>Drop the buyer's spec sheet here</b><span>Excel, PDF, a photo of the sheet, or a CSV. You can also paste a screenshot.</span></div>
+                <button type="button" class="gm-btn primary" id="gm-pick">Choose a file</button>
+                <input type="file" id="gm-file" accept=".xlsx,.csv,.tsv,.txt,.pdf,.jpg,.jpeg,.png,.webp,image/*" hidden>
+              </div>
+              <p class="gm-hint" id="gm-specnote">The measurements, tolerances, grading, fabric, stitching, zipper and trims are read from it; you check them before anything is used.</p>
+              <div class="gm-row gm-presetrow">
+                <div class="gm-f"><label for="gm-preset">Start from a preset</label><select id="gm-preset"><option value="">Choose…</option></select></div>
+                <div class="gm-f gm-presetbtns"><button type="button" class="gm-btn" id="gm-presetsave">Save as preset…</button><button type="button" class="gm-btn" id="gm-presetdel" hidden>Delete</button></div>
+              </div>
+              <div class="gm-presetname" id="gm-presetname" hidden><input id="gm-presetinput" type="text" maxlength="60" placeholder="Name, e.g. ACME crew tee SS27" aria-label="Preset name"><button type="button" class="gm-btn primary" id="gm-presetgo">Save</button><button type="button" class="gm-btn" id="gm-presetcancel">Cancel</button></div>
+              <p class="gm-hint" id="gm-presetnote"></p>
             </div>
-            <div class="gm-row">
-              <div class="gm-f"><label for="gm-zteeth">Teeth</label><select id="gm-zteeth"><option value="coil">Coil (nylon)</option><option value="plastic">Plastic (moulded)</option><option value="metal">Metal</option></select></div>
-              <div class="gm-f"><label for="gm-zsize">Size (#)</label><input id="gm-zsize" type="number" min="3" max="10" step="1"></div>
-              <div class="gm-f"><label for="gm-ztape">Tape width (cm)</label><input id="gm-ztape" type="number" min="1" max="6" step="0.1"></div>
-            </div>
-            <div class="gm-row">
-              <div class="gm-f"><label for="gm-zallow">Centre-front allowance (cm)</label><input id="gm-zallow" type="number" min="0.5" max="3" step="0.1"></div>
-              <div class="gm-f"><label for="gm-zface">Facing width (cm)</label><input id="gm-zface" type="number" min="3" max="10" step="0.1"></div>
-            </div>
-            <p class="gm-hint" id="gm-zinfo"></p>
+            <div class="gm-fromstudio"><button type="button" class="gm-btn" id="gm-fromstudio" hidden>Use the fabric from my Studio design</button><span class="gm-hint" id="gm-fromnote" style="margin:0"></span></div>
           </div>
-          <p class="gm-hint">A front opening cuts the front in two halves with an allowance and a facing; a quarter zip leaves the front whole and adds a placket over a slit. The length is bought in the steps a catalogue sells.</p>
+          <div class="gs-tp" data-lp="paste">
+            <details class="gm-paste" open>
+              <summary>Paste a spec sheet from Excel or a PDF table</summary>
+              <textarea id="gm-paste" placeholder="Point of measure&#9;S&#9;M&#9;L&#9;XL&#10;1/2 Chest&#9;20 1/2&#9;21 1/2&#9;22 1/2&#9;23 1/2&#10;Body Length (HPS)&#9;27&#9;28&#9;29&#9;30"></textarea>
+              <div class="gm-tools" style="margin-top:6px"><button type="button" class="gm-btn primary" id="gm-readchart">Read this table</button></div>
+              <p class="gm-pnote" id="gm-pnote"></p>
+            </details>
+          </div>
+          <div class="gs-tp" data-lp="garments">
+            <div class="gs-garments" id="gs-garments">
+              <button type="button" class="gs-gitem on" data-g="tee"><i data-ic="shirt"></i><span><b>T-shirt, crew neck</b><small>Drawn: front, back, sleeve, neck band, zipper</small></span></button>
+              <div class="gs-gitem off"><i data-ic="shirt"></i><span><b>Polo shirt</b><small>Named and kept from a spec sheet; collar and placket are not drawn yet</small></span></div>
+              <div class="gs-gitem off"><i data-ic="shirt"></i><span><b>Hoodie, sweatshirt</b><small>Named and kept; the hood is not drawn yet</small></span></div>
+              <div class="gs-gitem off"><i data-ic="shirt"></i><span><b>Trousers, shorts</b><small>Their measures are kept and checked; the pieces are not drawn yet</small></span></div>
+            </div>
+          </div>
+        </div>
+      </aside>
+      <div class="gs-split" data-split="left" role="separator" aria-orientation="vertical" aria-label="Resize the library" tabindex="0"></div>
+
+      <!-- the 3D and 2D windows -->
+      <section class="gs-centre" id="gs-centre" aria-label="Windows">
+        <div class="gs-views" id="gs-views">
+          <section class="gs-win gs-w3d" id="gs-w3d" aria-label="3D window">
+            <div class="gs-wh"><span class="gs-wt">3D</span><span class="gs-wi" id="gm-3dnote"></span></div>
+            <div class="gs-wb">
+              <div class="gm-3d" id="gm-3d"><div class="gm-empty" id="gm-3dwait">Making the garment from the pattern pieces…</div></div>
+              <div class="gs-rail" id="gs-rail" aria-label="3D tools">
+                <button type="button" class="gs-ib" id="gm-make" title="Make / refresh the garment" aria-label="Make the garment"><i data-ic="cube"></i></button>
+                <button type="button" class="gs-ib" id="gm-spin" title="Turntable" aria-label="Turntable"><i data-ic="rotate"></i></button>
+                <button type="button" class="gs-ib" id="gm-snap" title="Save a picture" aria-label="Save a picture"><i data-ic="camera"></i></button>
+                <span class="gs-rsep"></span>
+                <button type="button" class="gs-ib gs-vb" data-do="v-front" title="Front" aria-label="Front view">F</button>
+                <button type="button" class="gs-ib gs-vb" data-do="v-back" title="Back" aria-label="Back view">B</button>
+                <button type="button" class="gs-ib gs-vb" data-do="v-side" title="Side" aria-label="Side view">S</button>
+                <button type="button" class="gs-ib gs-vb" data-do="v-quarter" title="Three-quarter" aria-label="Three-quarter view">¾</button>
+              </div>
+              <div class="gs-hint3d" id="gs-hint3d">Click the garment to select a piece · drag to turn · scroll or pinch to zoom</div>
+            </div>
+          </section>
+          <div class="gs-split gs-vs" data-split="views" role="separator" aria-orientation="vertical" aria-label="Resize the windows" tabindex="0"></div>
+          <section class="gs-win gs-w2d" id="gs-w2d" aria-label="2D pattern window">
+            <div class="gs-wh">
+              <span class="gs-wt">2D pattern</span>
+              <div class="gs-seg" id="gs-2dmode" role="group" aria-label="2D view"><button type="button" data-m="pieces" class="on">Pieces</button><button type="button" data-m="edit">Edit</button></div>
+              <span class="gs-wi" id="gs-2dinfo"></span>
+            </div>
+            <div class="gs-wb gs-2dbody">
+              <div class="gs-2dpieces on" id="gs-2dpieces">
+                <div class="gm-view" id="gm-patterns"><div class="gm-empty">Building the patterns…</div></div>
+                <div class="gm-legend" id="gm-plegend"></div>
+              </div>
+              <div class="gs-2dedit" id="gs-2dedit">
+                <div id="gm-pane-edit-body">
+                  <div class="gm-edbar"><div class="gm-sizes" id="gm-edpieces"></div></div>
+                  <div class="gm-edtools" id="gm-edtools"></div>
+                  <div class="gm-edwrap">
+                    <div class="gm-edcanvas">
+                      <div id="gm-ed" class="gm-ed"></div>
+                      <div class="gm-edlive" id="gm-edlive"></div>
+                      <label class="gm-edsnap"><input type="checkbox" id="gm-edsnap" checked> snap to 0.1 cm</label>
+                    </div>
+                    <aside class="gs-2dside" aria-label="Selection">
+                      <div class="gs-tabs gs-tabs-s" id="gs-sidetabs"><button type="button" data-sd="insp" class="on">Selection</button><button type="button" data-sd="meas">Measurements</button></div>
+                      <div class="gm-insp" id="gm-insp"></div>
+                      <div class="gm-edmeas" id="gm-edmeas" hidden></div>
+                    </aside>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
         </div>
       </section>
+      <div class="gs-split" data-split="right" role="separator" aria-orientation="vertical" aria-label="Resize the properties" tabindex="0"></div>
 
-      <section class="gm-out" aria-label="Result">
-        <div class="gm-summary" id="gm-summary"></div>
-        <div class="gm-bar">
-          <div class="gm-tabs" role="tablist" id="gm-tabs">
-            <button type="button" data-tab="patterns" class="on">Patterns</button>
-            <button type="button" data-tab="edit">Edit</button>
-            <button type="button" data-tab="sewing">Sewing</button>
-            <button type="button" data-tab="spec">Spec check <span class="gm-n" id="gm-nspec" hidden></span></button>
-            <button type="button" data-tab="marker">Marker</button>
-            <button type="button" data-tab="garment">Garment</button>
-            <button type="button" data-tab="checks">Checks <span class="gm-n" id="gm-nchecks" hidden></span></button>
+      <!-- the object browser and the property editor -->
+      <aside class="gs-dock gs-right" id="gs-right" aria-label="Objects and properties">
+        <div class="gs-ob" id="gs-ob">
+          <div class="gs-dh"><span class="gs-dt">Object browser</span><button type="button" class="gs-ib" data-do="toggle-right" title="Hide ( ] )" aria-label="Hide the object browser"><i data-ic="chev-r"></i></button></div>
+          <div class="gs-tabs" id="gs-otabs" role="tablist">
+            <button type="button" role="tab" data-ot="pieces" class="on" title="Pattern pieces"><i data-ic="pattern"></i><span>Pieces</span></button>
+            <button type="button" role="tab" data-ot="fabric" title="Fabric and cutting"><i data-ic="fabric"></i><span>Fabric</span></button>
+            <button type="button" role="tab" data-ot="seams" title="Seams and stitches"><i data-ic="seam"></i><span>Seams</span></button>
+            <button type="button" role="tab" data-ot="measures" title="Measurements"><i data-ic="ruler"></i><span>Measures</span></button>
+            <button type="button" role="tab" data-ot="trims" title="Zipper and trims"><i data-ic="zip"></i><span>Trims</span></button>
           </div>
-          <button type="button" class="gm-btn primary big" id="gm-make">Make garment</button>
+          <div class="gs-oblist" id="gs-oblist" role="listbox" aria-label="Objects"></div>
         </div>
-
-        <div class="gm-pane on" id="pane-patterns">
-          <div class="gm-sizes" id="gm-psizes"></div>
-          <div class="gm-view" id="gm-patterns"><div class="gm-empty">Building the patterns…</div></div>
-          <div class="gm-legend" id="gm-plegend"></div>
-          <table class="gm-table" id="gm-ptable"></table>
-          <div class="gm-tools" style="margin-top:10px"><button type="button" class="gm-btn" id="gm-dlpat">Download the patterns (SVG, 1:1 scale)</button></div>
-        </div>
-
-        <div class="gm-pane" id="pane-edit">
-          <div id="gm-pane-edit-body">
-            <div class="gm-edbar"><div class="gm-sizes" id="gm-edsizes"></div><div class="gm-sizes" id="gm-edpieces"></div></div>
-            <div class="gm-edtools" id="gm-edtools"></div>
-            <div class="gm-edwrap">
-              <div class="gm-edcanvas">
-                <div id="gm-ed" class="gm-ed"></div>
-                <div class="gm-edlive" id="gm-edlive"></div>
-                <label class="gm-edsnap"><input type="checkbox" id="gm-edsnap" checked> snap to 0.1 cm</label>
+        <div class="gs-split gs-hs" data-split="pe" role="separator" aria-orientation="horizontal" aria-label="Resize the property editor" tabindex="0"></div>
+        <div class="gs-pe" id="gs-pe">
+          <div class="gs-dh"><span class="gs-dt">Property editor</span><span class="gs-petitle" id="gs-petitle">Garment</span></div>
+          <div class="gs-pebody" id="gs-pebody">
+            <div class="gs-pb on" data-pb="garment" id="pe-garment"></div>
+            <div class="gs-pb" data-pb="piece" id="pe-piece"></div>
+            <div class="gs-pb" data-pb="fabric">
+              <div class="gm-card" id="gm-fabric">
+                <div class="gm-step"><b>1</b> Fabric</div>
+                <div class="gm-row">
+                  <div class="gm-f"><label for="gm-fname">Name</label><input id="gm-fname" type="text" maxlength="80" placeholder="e.g. 30s single jersey"></div>
+                  <div class="gm-f"><label for="gm-gsm">GSM (as cut)</label><input id="gm-gsm" type="number" min="40" max="800" step="1"></div>
+                  <div class="gm-f"><label for="gm-width">Cutting width</label><div style="display:flex;gap:4px"><input id="gm-width" type="number" min="20" max="400" step="0.5" style="min-width:0"><select id="gm-wunit" style="width:62px"><option value="cm">cm</option><option value="in">in</option></select></div></div>
+                </div>
+                <div class="gm-row">
+                  <div class="gm-f"><label for="gm-shl">Shrinkage along (length) %</label><input id="gm-shl" type="number" min="-15" max="30" step="0.1"></div>
+                  <div class="gm-f"><label for="gm-shw">Shrinkage across (width) %</label><input id="gm-shw" type="number" min="-15" max="30" step="0.1"></div>
+                  <div class="gm-f"><label for="gm-rib">Neck band stretch %</label><input id="gm-rib" type="number" min="0" max="80" step="1"></div>
+                </div>
+                <div class="gm-row">
+                  <div class="gm-f"><label for="gm-colour">Colour</label><input id="gm-colour" type="color" value="#3d5a80"></div>
+                  <div class="gm-f"><label for="gm-wpc">Wales / cm (optional)</label><input id="gm-wpc" type="number" min="3" max="40" step="0.1"></div>
+                  <div class="gm-f"><label for="gm-cpc">Courses / cm (optional)</label><input id="gm-cpc" type="number" min="3" max="50" step="0.1"></div>
+                </div>
+                <p class="gm-hint">The chart is the <b>finished</b>, flat, <b>after-wash</b> garment. The shrinkage is how much this cloth shrinks in the wash: the pieces are cut that much larger. The wales and courses only draw the knit on the 3D garment.</p>
               </div>
-              <aside class="gm-insp" id="gm-insp" aria-label="Inspector"></aside>
             </div>
-            <div class="gm-edmeas" id="gm-edmeas"></div>
+            <div class="gs-pb" data-pb="cut">
+              <div class="gm-card" id="gm-optcard">
+                <div class="gm-step"><b>3</b> Sewing and cutting</div>
+                <div class="gm-row">
+                  <div class="gm-f"><label for="gm-seam">Seam allowance, all (cm)</label><input id="gm-seam" type="number" min="0" max="3" step="0.1"></div>
+                  <div class="gm-f"><label for="gm-neckal">Neck allowance, all (cm)</label><input id="gm-neckal" type="number" min="0" max="3" step="0.1"></div>
+                  <div class="gm-f"><label for="gm-ease">Sleeve cap ease (cm)</label><input id="gm-ease" type="number" min="-2" max="4" step="0.1"></div>
+                </div>
+                <div class="gm-row">
+                  <div class="gm-f"><label for="gm-orient">Cutting</label><select id="gm-orient"><option value="both">Pieces may be turned round (plain cloth)</option><option value="one_way">One way only (stripe, nap, print)</option></select></div>
+                  <div class="gm-f"><label for="gm-gap">Gap between pieces (cm)</label><input id="gm-gap" type="number" min="0" max="5" step="0.5"></div>
+                </div>
+              </div>
+            </div>
+            <div class="gs-pb" data-pb="zipper">
+              <div class="gm-card" id="gm-zipcard">
+                <div class="gm-step"><b>4</b> Zipper</div>
+                <label class="gm-check"><input type="checkbox" id="gm-zon"> Put a zipper in the centre front</label>
+                <div id="gm-zbody" hidden>
+                  <div class="gm-row">
+                    <div class="gm-f"><label for="gm-zkind">Where</label><select id="gm-zkind"><option value="full">Front opening: the front is cut in two</option><option value="partial">Quarter zip: a slit and a placket</option></select></div>
+                    <div class="gm-f"><label for="gm-ztype">Type</label><select id="gm-ztype"><option value="open_end">Open-end (separating)</option><option value="closed_end">Closed-end</option><option value="invisible">Invisible</option></select></div>
+                    <div class="gm-f" id="gm-zlenf"><label for="gm-zlen">Opening from the neck (cm)</label><input id="gm-zlen" type="number" min="6" max="60" step="1"></div>
+                  </div>
+                  <div class="gm-row">
+                    <div class="gm-f"><label for="gm-zteeth">Teeth</label><select id="gm-zteeth"><option value="coil">Coil (nylon)</option><option value="plastic">Plastic (moulded)</option><option value="metal">Metal</option></select></div>
+                    <div class="gm-f"><label for="gm-zsize">Size (#)</label><input id="gm-zsize" type="number" min="3" max="10" step="1"></div>
+                    <div class="gm-f"><label for="gm-ztape">Tape width (cm)</label><input id="gm-ztape" type="number" min="1" max="6" step="0.1"></div>
+                  </div>
+                  <div class="gm-row">
+                    <div class="gm-f"><label for="gm-zallow">Centre-front allowance (cm)</label><input id="gm-zallow" type="number" min="0.5" max="3" step="0.1"></div>
+                    <div class="gm-f"><label for="gm-zface">Facing width (cm)</label><input id="gm-zface" type="number" min="3" max="10" step="0.1"></div>
+                  </div>
+                  <p class="gm-hint" id="gm-zinfo"></p>
+                </div>
+                <p class="gm-hint">A front opening cuts the front in two halves with an allowance and a facing; a quarter zip leaves the front whole and adds a placket over a slit. The length is bought in the steps a catalogue sells.</p>
+              </div>
+            </div>
+            <div class="gs-pb" data-pb="seam" id="pe-seam"></div>
+            <div class="gs-pb" data-pb="measure" id="pe-measure"></div>
+            <div class="gs-pb" data-pb="trim" id="pe-trim"></div>
           </div>
         </div>
+      </aside>
+    </div>
 
+    <div class="gs-split gs-hs gs-bs" data-split="bottom" role="separator" aria-orientation="horizontal" aria-label="Resize the lower panel" tabindex="0"></div>
+
+    <!-- measurements, spec check, sewing, marker, checks -->
+    <section class="gs-bottom" id="gs-bottom" aria-label="Measurements and sewing">
+      <div class="gs-tabs gs-btabs" id="gs-btabs" role="tablist">
+        <button type="button" role="tab" data-bt="chart" class="on"><i data-ic="ruler"></i><span>Measurements</span></button>
+        <button type="button" role="tab" data-bt="spec"><i data-ic="check"></i><span>Spec check</span> <span class="gm-n" id="gm-nspec" hidden></span></button>
+        <button type="button" role="tab" data-bt="pieces"><i data-ic="pattern"></i><span>Pieces</span></button>
+        <button type="button" role="tab" data-bt="sewing"><i data-ic="seam"></i><span>Sewing</span></button>
+        <button type="button" role="tab" data-bt="marker"><i data-ic="layers"></i><span>Marker</span></button>
+        <button type="button" role="tab" data-bt="checks"><i data-ic="check"></i><span>Checks</span> <span class="gm-n" id="gm-nchecks" hidden></span></button>
+        <span class="gs-sp"></span>
+        <button type="button" class="gs-ib" data-do="toggle-bottom" title="Hide the lower panel (\)" aria-label="Hide the lower panel"><i data-ic="chev-d"></i></button>
+      </div>
+      <div class="gs-bbody" id="gs-bbody">
+        <div class="gm-pane on" id="pane-chart">
+          <div class="gm-card" id="gm-chartcard">
+            <div class="gm-step"><b>2</b> Measurement chart <span style="margin-left:auto;display:flex;gap:6px;align-items:center"><span class="gm-seg" id="gm-unit"><button type="button" data-u="cm" class="on">cm</button><button type="button" data-u="in">inch</button></span></span></div>
+            <div class="gm-tools">
+              <button type="button" class="gm-btn" id="gm-addsize">+ Size</button>
+              <button type="button" class="gm-btn" id="gm-tpl">Start from a standard tee</button>
+              <span class="gm-status" id="gm-status"></span>
+            </div>
+            <div class="gm-chartwrap"><table class="gm-chart" id="gm-chart"></table></div>
+            <p class="gm-hint">Flat widths, as a spec sheet gives them. <span class="req">*</span> The chest and the length are needed; anything else left empty is taken from the chest, and the chart says so. The marker ratio is how many garments of each size are cut together.</p>
+          </div>
+        </div>
+        <div class="gm-pane" id="pane-spec">
+          <div id="gm-speccheck"><div class="gm-empty">Upload a spec sheet and the pattern is checked against every measurement in it, with its own tolerances.</div></div>
+        </div>
+        <div class="gm-pane" id="pane-pieces">
+          <table class="gm-table" id="gm-ptable"></table>
+        </div>
         <div class="gm-pane" id="pane-sewing">
-          <div class="gm-sizes" id="gm-ssizes"></div>
           <div class="gm-summary" id="gm-sewsum"></div>
           <div class="gm-card"><div class="gm-step">Seams, stitches and thread</div><div class="gm-chartwrap"><table class="gm-table gm-seams" id="gm-seams"></table></div>
             <p class="gm-hint">The stitch type decides the machine and how much thread a seam takes (rules of thumb: thread length per length of seam); the allowance of a seam is what is added to its edges when the piece is cut. A hem has no allowance: its depth is in the drawing.</p></div>
           <div class="gm-card"><div class="gm-step">Sewing order</div><ol class="gm-ops" id="gm-ops"></ol><p class="gm-hint" id="gm-sam"></p></div>
           <div class="gm-card"><div class="gm-step">Bill of materials, one garment</div><table class="gm-table" id="gm-bom"></table></div>
         </div>
-
-        <div class="gm-pane" id="pane-spec">
-          <div id="gm-speccheck"><div class="gm-empty">Upload a spec sheet and the pattern is checked against every measurement in it, with its own tolerances.</div></div>
-        </div>
-
         <div class="gm-pane" id="pane-marker">
           <div class="gm-view" id="gm-marker"><div class="gm-empty">Building the marker…</div></div>
           <div class="gm-legend" id="gm-mlegend"></div>
           <div class="gm-tools" style="margin-top:10px"><button type="button" class="gm-btn" id="gm-dlmk">Download the marker (SVG)</button></div>
         </div>
-
-        <div class="gm-pane" id="pane-garment">
-          <div class="gm-sizes" id="gm-gsizes"></div>
-          <div class="gm-3d" id="gm-3d"><div class="gm-empty" id="gm-3dwait">Press <b>Make garment</b>: the garment is built from the pattern pieces.</div><div class="gm-3dnote" id="gm-3dnote"></div></div>
-          <div class="gm-tools" style="margin-top:10px">
-            <button type="button" class="gm-btn" id="gm-spin">Turntable</button>
-            <button type="button" class="gm-btn" id="gm-snap">Save picture</button>
-            <span class="gm-hint" style="margin:0">The garment's form is built from the finished pattern pieces (fit, not drape): drag to turn it, scroll or pinch to zoom.</span>
-          </div>
-        </div>
-
         <div class="gm-pane" id="pane-checks">
           <ul class="gm-checks" id="gm-checks"></ul>
           <ul class="gm-basis" id="gm-basis"></ul>
         </div>
-      </section>
-    </div>
+      </div>
+    </section>
+
+    <footer class="gs-status" id="gs-status">
+      <span class="gs-stmsg" id="gs-stmsg">Ready</span>
+      <div class="gm-summary gs-summary" id="gm-summary"></div>
+      <button type="button" class="gs-ib gs-help" data-do="help" title="Shortcuts" aria-label="Shortcuts"><i data-ic="help"></i></button>
+    </footer>
+
+    <!-- a phone: one window at a time, the panels as sheets -->
+    <nav class="gs-nav" id="gs-nav" aria-label="Panels">
+      <button type="button" data-nav="lib"><i data-ic="folder"></i><span>Library</span></button>
+      <button type="button" data-nav="3d"><i data-ic="cube"></i><span>3D</span></button>
+      <button type="button" data-nav="2d"><i data-ic="pattern"></i><span>2D</span></button>
+      <button type="button" data-nav="obj"><i data-ic="layers"></i><span>Objects</span></button>
+      <button type="button" data-nav="data"><i data-ic="ruler"></i><span>Data</span></button>
+    </nav>
+    <div class="gs-scrim" id="gs-scrim"></div>
+    <div class="gs-toast" id="gs-toast" role="status" aria-live="polite"></div>
   </main>
 </div>
+
 <div class="gm-modal" id="gm-specmodal" hidden role="dialog" aria-modal="true" aria-labelledby="gm-spectitle">
   <div class="gm-mbox">
     <div class="gm-mhd"><div><h2 id="gm-spectitle">Spec sheet</h2><p id="gm-specsrc"></p></div><button type="button" class="gm-btn" id="gm-specclose" aria-label="Close">Close</button></div>
@@ -218,10 +386,23 @@
     </div>
   </div>
 </div>
-<div class="gm-dock" id="gm-dock"><span id="gm-docksum">Fill in the chart</span><button type="button" class="gm-btn primary big" id="gm-make2">Make garment</button></div>
+<div class="gm-modal" id="gs-help" hidden role="dialog" aria-modal="true" aria-labelledby="gs-helptitle">
+  <div class="gm-mbox gs-helpbox">
+    <div class="gm-mhd"><div><h2 id="gs-helptitle">How this studio works</h2><p>Every window is linked: click a piece anywhere and it is selected everywhere.</p></div><button type="button" class="gm-btn" id="gs-helpclose" aria-label="Close">Close</button></div>
+    <div class="gm-mbody" id="gs-helpbody"></div>
+  </div>
+</div>
+
+<div hidden id="gs-legacy">
+  <div id="gm-psizes"></div><div id="gm-gsizes"></div><div id="gm-ssizes"></div><div id="gm-edsizes"></div>
+  <div id="gm-dock"><span id="gm-docksum"></span><button type="button" id="gm-make2">Make garment</button></div>
+  <button type="button" id="gm-dlpat">Download the patterns</button>
+  <table id="gm-mtab-legacy"></table>
+</div>
 <script src="assets/js/api.js"></script>
-<script src="assets/js/garment-edit.js?v=20261201a"></script>
-<script src="assets/js/garment.js?v=20261201a"></script>
-<script src="assets/js/garment-spec.js?v=20261201b"></script>
+<script src="assets/js/garment-edit.js?v=20261202b"></script>
+<script src="assets/js/garment.js?v=20261202b"></script>
+<script src="assets/js/garment-spec.js?v=20261202b"></script>
+<script src="assets/js/garment-studio.js?v=20261202b"></script>
 </body>
 </html>

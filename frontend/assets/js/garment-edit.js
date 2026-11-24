@@ -369,7 +369,7 @@
   }
 
   function onKey(ev) {
-    var pane = $('pane-edit'); if (!pane || !pane.classList.contains('on')) return;
+    var pane = $('gs-2dedit') || $('pane-edit'); if (!pane || !pane.classList.contains('on')) return;
     var t = ev.target; if (t && /^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName)) { if (ev.key === 'Enter') t.blur(); return; }
     var k = ev.key.toLowerCase();
     if ((ev.ctrlKey || ev.metaKey) && k === 'z') { ev.shiftKey ? redo() : undo(); ev.preventDefault(); return; }
@@ -396,7 +396,7 @@
       else if (t.id === 'gm-edsnap') { E.snap = t.checked; }
     });
     var sn = $('gm-edsnap'); if (sn) sn.checked = E.snap;
-    window.addEventListener('resize', function () { if ($('pane-edit').classList.contains('on')) { E.fitFor = ''; render(); } });
+    window.addEventListener('resize', function () { var p = $('gs-2dedit') || $('pane-edit'); if (p && p.classList.contains('on')) { E.fitFor = ''; render(); } });
   }
   window.KAGarmentEdit = { init: init, render: render, fit: function () { E.fitFor = ''; render(); }, state: function () { return E; } };
 })();

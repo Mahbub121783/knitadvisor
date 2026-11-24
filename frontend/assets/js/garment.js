@@ -183,7 +183,7 @@
 
   // ── what the answer says ──
   function sizeOf(name) { return R && R.success && R.by_size.filter(function (o) { return o.size === name; })[0]; }
-  function renderAll() { renderSummary(); renderSizes(); renderPatterns(); renderSewing(); renderZipperInfo(); renderMarker(); renderChecks(); render3D(); markBad(); if (window.KAGarmentEdit) window.KAGarmentEdit.render(); if (window.KAGarmentSpec) window.KAGarmentSpec.renderCheck(); }
+  function renderAll() { renderSummary(); renderSizes(); renderPatterns(); renderSewing(); renderZipperInfo(); renderMarker(); renderChecks(); render3D(); markBad(); if (window.KAGarmentEdit) window.KAGarmentEdit.render(); if (window.KAGarmentSpec) window.KAGarmentSpec.renderCheck(); if (window.KAGarmentStudio) window.KAGarmentStudio.render(); }
 
   function kpi(l, v, s, cls) { return '<div class="gm-kpi ' + (cls || '') + '"><div class="l">' + esc(l) + '</div><div class="v">' + v + '</div>' + (s ? '<div class="s">' + s + '</div>' : '') + '</div>'; }
   function renderSummary() {
@@ -198,7 +198,7 @@
   }
   function renderSizes() {
     var html = (R && R.success ? R.by_size : []).map(function (o) { return '<button type="button" class="gm-chipb' + (o.size === S.size ? ' on' : '') + '" data-size="' + esc(o.size) + '">' + esc(o.size) + '</button>'; }).join('');
-    ['gm-psizes', 'gm-gsizes', 'gm-edsizes', 'gm-ssizes'].forEach(function (id) { if ($(id)) $(id).innerHTML = html; });
+    ['gm-psizes', 'gm-gsizes', 'gm-edsizes', 'gm-ssizes', 'gs-sizes'].forEach(function (id) { if ($(id)) $(id).innerHTML = html; });
   }
   function markBad() {
     Array.prototype.forEach.call(document.querySelectorAll('#gm-chart input[data-pom]'), function (i) { i.classList.remove('bad', 'assumed'); });
@@ -241,7 +241,7 @@
     var H = y + rh + pad, g = '';
     parts.forEach(function (q) {
       var p = q.p, tf = 'translate(' + q.ox + ' ' + q.oy + ')', cx = (q.b.x0 + q.b.x1) / 2, cy = (q.b.y0 + q.b.y1) / 2, horiz = p.grain === 'x';
-      g += '<g transform="' + tf + '">';
+      g += '<g class="gs-pp" data-piece="' + p.id + '" transform="' + tf + '">';
       g += '<path d="' + pathOf(p.cut) + 'Z" fill="rgba(24,87,196,.06)" stroke="none"/>';
       runs(p.cut, p.labels).forEach(function (r) { g += '<path d="' + pathOf(r.pts) + '" fill="none" stroke="' + (EDGE[r.l] || '#0e7490') + '" stroke-width="0.35" stroke-linejoin="round" stroke-linecap="round"/>'; });
       g += '<path d="' + pathOf(p.nominal) + 'Z" fill="none" stroke="#111" stroke-opacity=".55" stroke-width="0.18" stroke-dasharray="1 0.8"/>';
@@ -360,26 +360,28 @@
   // ── the garment ──
   function ensure3D() {
     if (mod3d) return Promise.resolve(mod3d);
-    return import('/assets/js/garment-3d.js?v=20261130a').then(function (m) { mod3d = m; return m; });
+    return import('/assets/js/garment-3d.js?v=20261202b').then(function (m) { mod3d = m; return m; });
   }
   function render3D() {
     if (!view3d || !R || !R.success) return;
     var o = sizeOf(S.size) || R.by_size[0];
     try { view3d.setGarment(o, R.fabric); $('gm-3dnote').textContent = 'Size ' + o.size + ' · chest ' + o.m.chest + ' · length ' + o.m.length + ' · sleeve ' + o.m.sleeve_l + ' cm (flat, finished)'; } catch (e) { if (window.console) console.error(e); $('gm-3dnote').textContent = 'The garment could not be drawn from this chart.'; }
   }
-  function makeGarment() {
-    tab('garment');
+  function makeGarment(o) {
+    o = o && o.quiet !== undefined ? o : {};
+    if (!o.quiet) tab('garment');
     if (!R || !R.success) { $('gm-3dwait').textContent = (R && R.error) || 'Fill in the chart first.'; return; }
     $('gm-3dwait').textContent = 'Making the garment…';
     ensure3D().then(function (m) {
       if (!view3d) { $('gm-3dwait').hidden = true; view3d = new m.GarmentView($('gm-3d')); view3d.setColour(S.fabric.colour); view3d.onSpin = function (on) { $('gm-spin').classList.toggle('primary', on); }; }
-      render3D(); view3d.setSpin(true); $('gm-spin').classList.add('primary');
+      render3D(); if (o.spin !== false) { view3d.setSpin(true); $('gm-spin').classList.add('primary'); }
     }).catch(function (e) { if (window.console) console.error(e); $('gm-3dwait').textContent = 'The 3D view needs WebGL, which this browser does not have.'; });
   }
 
   // ── tabs, downloads ──
   function tab(t) {
     S.tab = t; save();
+    if (window.KAGarmentStudio) { window.KAGarmentStudio.show(t); return; }
     Array.prototype.forEach.call(document.querySelectorAll('#gm-tabs button'), function (b) { b.classList.toggle('on', b.getAttribute('data-tab') === t); });
     Array.prototype.forEach.call(document.querySelectorAll('.gm-pane'), function (p) { p.classList.toggle('on', p.id === 'pane-' + t); });
     if (t === 'garment' && view3d) setTimeout(function () { view3d.resize(); }, 30);
@@ -413,7 +415,7 @@
       POMS.forEach(function (p) { if (!S.chart[p.key]) S.chart[p.key] = {}; });
       renderFabric(); renderChart(); bindFabric(); bindChart(); bindZipper(); bindSewing(); fromStudio();
       if (window.KAGarmentEdit) window.KAGarmentEdit.init({ state: function () { return S; }, result: function () { return R; }, size: function () { return S.size; }, change: schedule, save: save });
-      $('gm-tabs').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) tab(b.getAttribute('data-tab')); });
+      if ($('gm-tabs')) $('gm-tabs').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) tab(b.getAttribute('data-tab')); });
       document.addEventListener('click', function (e) { var b = e.target.closest('.gm-chipb[data-size]'); if (b) { S.size = b.getAttribute('data-size'); renderSizes(); renderPatterns(); renderSewing(); renderZipperInfo(); render3D(); if (window.KAGarmentEdit) window.KAGarmentEdit.render(); save(); } });
       $('gm-make').addEventListener('click', makeGarment);
       $('gm-make2').addEventListener('click', makeGarment);
@@ -422,9 +424,10 @@
       $('gm-dlpat').addEventListener('click', function () { var o = R && R.success && (sizeOf(S.size) || R.by_size[0]); if (o) download('patterns-' + slug() + '-' + o.size + '.svg', patternsSvg(o, true)); });
       $('gm-dlmk').addEventListener('click', function () { if (R && R.success) download('marker-' + slug() + '.svg', markerSvg(true)); });
       var top = document.querySelector('.hdr'); if (top) document.documentElement.style.setProperty('--gm-top', top.offsetHeight + 'px');
-      tab(S.tab || 'patterns'); build();
+      if (!window.KAGarmentStudio) tab(S.tab || 'patterns');
+      build();
     }).catch(function (e) { $('gm-patterns').innerHTML = '<div class="gm-empty">' + esc((e && e.message) || 'The garment engine could not be reached.') + '</div>'; });
   }
-  window.KAGarment = { state: function () { return S; }, result: function () { return R; }, make: makeGarment, tab: tab, view: function () { return view3d; }, applySpec: applySpec, loadState: loadState, save: save, poms: function () { return POMS; } };
+  window.KAGarment = { state: function () { return S; }, result: function () { return R; }, make: makeGarment, tab: tab, view: function () { return view3d; }, applySpec: applySpec, loadState: loadState, save: save, poms: function () { return POMS; }, schedule: schedule, seamOf: SEAM_OF, edgeColours: EDGE, sizeOf: sizeOf, patternsSvg: patternsSvg, markerSvg: markerSvg, download: download, slug: slug, renderChart: renderChart, renderFabric: renderFabric, renderZipper: renderZipper };
   init();
 })();

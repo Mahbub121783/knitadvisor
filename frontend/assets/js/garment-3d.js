@@ -92,6 +92,7 @@ export class GarmentView {
   setSpin(on) { this.spin = !!on; }
 
   clear() {
+    if (this._hiMats) this._hiMats.clear();
     while (this.group.children.length) { const o = this.group.children[0]; this.group.remove(o); o.traverse((n) => { if (n.geometry) n.geometry.dispose(); }); }
     this.mats.forEach((m) => { if (m.map) m.map.dispose(); m.dispose(); }); this.mats = [];
   }
@@ -139,7 +140,8 @@ export class GarmentView {
     };
     const fin = (id) => (size.shape && size.shape[id]) || (P[id] && P[id].finished);       // the whole front, even when a zipper cuts it in two
     const front = fin('front'), back = fin('back');
-    this.group.add(new THREE.Mesh(panel(front, true), mat), new THREE.Mesh(panel(back, false), mat));
+    const tagged = (mesh, piece, material) => { mesh.userData.piece = piece; mesh.userData.base = material; return mesh; };
+    this.group.add(tagged(new THREE.Mesh(panel(front, true), mat), 'front', mat), tagged(new THREE.Mesh(panel(back, false), mat), 'back', mat));
 
     // the sleeve, rolled into a tube along the arm, its cap on the shoulder
     const sl = fin('sleeve'), SL = m.sleeve_l, slope = m.slope;
@@ -160,7 +162,7 @@ export class GarmentView {
       return g;
     })();
     const right = new THREE.Mesh(sleeveGeo, mat), left = new THREE.Mesh(sleeveGeo.clone(), mat); left.scale.x = -1;
-    this.group.add(right, left);
+    this.group.add(tagged(right, 'sleeve', mat), tagged(left, 'sleeve', mat));
 
     // the neck band: a tube along the neck seam, front then back (the curve is the engine's: a Bézier level at the centre)
     const nw2 = m.neck_w / 2, mapF = at(front, true), mapB = at(back, false);
@@ -173,7 +175,7 @@ export class GarmentView {
     const fN = neckPts(mapF, m.neck_df), bN = neckPts(mapB, m.neck_db).reverse();
     const curve = new THREE.CatmullRomCurve3(fN.concat(bN), true, 'centripetal', 0.5);
     const rr = Math.max(0.5, (m.rib_w || 2) * 0.32);
-    this.group.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 200, rr, 10, true), rib));
+    this.group.add(tagged(new THREE.Mesh(new THREE.TubeGeometry(curve, 200, rr, 10, true), rib), 'band', rib));
 
     // the hems: a line of stitching round the body and round each sleeve
     const ring = (pts, r, material) => this.group.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, true, 'centripetal', 0.5), 160, r, 6, true), material));
@@ -194,7 +196,7 @@ export class GarmentView {
       for (let i = 0; i <= 28; i++) { const v = mapF(0, y0 + ((y1 - y0) * i) / 28); v.z += 0.22; pts.push(v); }
       const zip = new THREE.MeshStandardMaterial({ color: z.teeth === 'metal' ? 0xb8bcc4 : 0x2b2f36, metalness: z.teeth === 'metal' ? 0.85 : 0.1, roughness: z.teeth === 'metal' ? 0.35 : 0.6 });
       this.mats.push(zip);
-      this.group.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 60, Math.max(0.3, z.tape_w * 0.14), 6, false), zip));
+      this.group.add(tagged(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 60, Math.max(0.3, z.tape_w * 0.14), 6, false), zip), 'zipper', zip));
       const slider = new THREE.Mesh(new THREE.BoxGeometry(1.1, 2.0, 0.7), new THREE.MeshStandardMaterial({ color: 0xc9ced6, metalness: 0.9, roughness: 0.25 }));
       slider.position.copy(pts[1]).add(new THREE.Vector3(0, -0.6, 0.35)); this.group.add(slider); this.mats.push(slider.material);
     }
@@ -206,11 +208,48 @@ export class GarmentView {
     this.mats.push(shadow.material);
 
     // sit it upright, fit the view
-    this.group.rotation.y = 0;
     this.centre = new THREE.Vector3(0, L * 0.5, 0);
-    const dist = ((L * 1.25) / 2 / Math.tan((this.camera.fov * Math.PI) / 360)) * 1.12;
-    this.camera.position.set(0, L * 0.55, dist); this.controls.target.copy(this.centre); this.controls.minDistance = L * 0.4; this.controls.maxDistance = L * 6; this.controls.update();
+    this._L = L; this._wNeed = (m.chest + 2 * m.sleeve_l * 0.95) * 1.0; const dist = this._fit();
+    if (!this._placed || Math.abs(L - this._placedL) / this._placedL > 0.35) {                // the first build, or a very different garment: frame it; an edit keeps the view
+      this.group.rotation.y = 0; this.camera.position.set(0, L * 0.55, dist); this.controls.target.copy(this.centre); this._placed = true; this._placedL = L;
+    }
+    this.controls.minDistance = L * 0.4; this.controls.maxDistance = L * 6; this.controls.update();
+    this._applyHi();
     this.info = { sleeve_axis_deg: 28, form: 'from the finished pattern pieces' };
+  }
+
+  // how far the camera stands so the garment fits the window in height AND in width (a phone is narrow)
+  _fit() {
+    const t = Math.tan((this.camera.fov * Math.PI) / 360), asp = this.camera.aspect || 1;
+    const dH = ((this._L * 1.25) / 2 / t) * 1.12, dW = (this._wNeed / 2 / (t * asp)) * 0.95;
+    return this._dist = Math.max(dH, dW);
+  }
+  // the camera to a named view: front, back, side, three-quarter
+  setView(name) {
+    if (!this._L) return;
+    const d = this._fit(), y = this._L * 0.55, a = { front: 0, back: Math.PI, side: Math.PI / 2, quarter: Math.PI / 5 }[name];
+    if (a == null) return;
+    this.group.rotation.y = 0; this.spin = false; if (this.onSpin) this.onSpin(false);
+    this.camera.position.set(Math.sin(a) * d, y, Math.cos(a) * d); this.controls.target.copy(this.centre); this.controls.update();
+  }
+  // the pattern piece under a point of the canvas (client coordinates), or null
+  pick(cx, cy) {
+    const r = this.renderer.domElement.getBoundingClientRect(); if (!r.width) return null;
+    const rc = new THREE.Raycaster(); rc.setFromCamera(new THREE.Vector2(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1), this.camera);
+    const hit = rc.intersectObjects(this.group.children, false).find((h) => h.object.userData && h.object.userData.piece);
+    return hit ? hit.object.userData.piece : null;
+  }
+  // a piece shown in the selection colour
+  highlight(id) { this._hi = id || null; this._applyHi(); }
+  _applyHi() {
+    this._hiMats = this._hiMats || new Map();
+    this.group.children.forEach((o) => {
+      const base = o.userData && o.userData.base; if (!base) return;
+      if (o.userData.piece === this._hi) {
+        let h = this._hiMats.get(base); if (!h) { h = base.clone(); h.emissive = new THREE.Color(0x1857c4); h.emissiveIntensity = 0.42; this._hiMats.set(base, h); this.mats.push(h); }
+        o.material = h;
+      } else o.material = base;
+    });
   }
 
   snapshot() { this.renderer.render(this.scene, this.camera); return this.renderer.domElement.toDataURL('image/png'); }

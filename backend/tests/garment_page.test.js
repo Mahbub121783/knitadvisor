@@ -13,7 +13,7 @@ const ids = new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]));
 
 {
   const used = [...new Set([...js.matchAll(/\$\('([\w-]+)'\)/g)].map((m) => m[1]))];
-  const missing = used.filter((i) => !ids.has(i));
+  const missing = used.filter((i) => !ids.has(i) && i !== 'gm-tabs');            // the old tab bar: the studio's own tabs replace it and the script guards for it
   assert.deepStrictEqual(missing, [], `ids the script reads that the page does not have: ${missing.join(', ')}`);
   console.log(`✓ the ${used.length} ids garment.js reads are all in garment.html`);
 }
@@ -55,7 +55,7 @@ const ids = new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]));
 {
   // the editor: every id it reads is in the page (or made by it), every anchor role it moves exists in the engine's pieces, every seam label has a colour and a seam
   const edit = read('assets', 'js', 'garment-edit.js');
-  const dynamic = new Set(['gm-edsvg', 'gm-ax', 'gm-ay', 'gm-sly', 'gm-slby', 'gm-slboth']);
+  const dynamic = new Set(['pane-edit', 'gm-edsvg', 'gm-ax', 'gm-ay', 'gm-sly', 'gm-slby', 'gm-slboth']);
   const used = [...new Set([...edit.matchAll(/\$\('([\w-]+)'\)/g)].map((m) => m[1]))].filter((i) => !dynamic.has(i));
   assert.deepStrictEqual(used.filter((i) => !ids.has(i)), [], 'ids the editor reads that the page does not have');
   assert(/garment-edit\.js/.test(html) && html.indexOf('garment-edit.js') < html.indexOf('assets/js/garment.js'), 'the editor loads before the page script that starts it');
@@ -74,7 +74,7 @@ const ids = new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]));
   labels.forEach((l) => { assert(colours(page).has(l), `the page colours the edge ${l}`); assert(colours(edit).has(l) || l === 'faceend' || l === 'faceedge' || l === 'cf', `the editor colours the edge ${l}`); assert(G.SEAM_LABELS[l], `the engine knows the seam of ${l}`); assert(seamOf(page)[l] === G.SEAM_LABELS[l], `the page and the engine agree on the seam of ${l}`); });
   Object.keys(G.SEAM_DEFAULTS).forEach((k) => assert(plain.seams[k] && plain.seams[k].type, `seam ${k} is configured`));
   ['gm-zon', 'gm-zkind', 'gm-seams', 'gm-ops', 'gm-bom', 'gm-sewsum', 'gm-edtools', 'gm-edpieces', 'gm-insp', 'gm-edmeas', 'gm-pane-edit-body'].forEach((i) => assert(ids.has(i), `#${i} is in the page`));
-  assert(/pane-edit/.test(html) && /pane-sewing/.test(html) && /data-tab="edit"/.test(html) && /data-tab="sewing"/.test(html), 'the Edit and Sewing tabs are there');
+  assert(/gs-2dedit/.test(html) && /pane-sewing/.test(html) && /data-m="edit"/.test(html) && /data-bt="sewing"/.test(html), 'the 2D edit view and the Sewing tab are there');
   console.log(`✓ the editor: its ids are in the page, its ${rules.length} correction rules all name an anchor the engine draws, every edge label has a colour and the same seam in the page and the engine`);
 }
 
@@ -90,7 +90,7 @@ const ids = new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]));
   for (const u of ['/garment/spec/read', '/garment/spec/extract', '/garment/spec/apply', '/garment/spec/catalogue', '/garment/presets', '/garment/presets/:id']) assert(api.includes(`'${u}'`), `${u} is mounted`);
   for (const m of spec.matchAll(/'(\/api\/garment\/[\w/:-]+)/g)) { const route = m[1].replace('/api', '').replace(/\/\d+$/, ''); assert(api.includes(`'${route}`), `${m[1]} is called by the page and exists`); }
   assert(fs.existsSync(path.join(__dirname, '..', 'db', 'migrations', '048_garment_presets.sql')), 'the presets table has its migration');
-  assert(/data-tab="spec"/.test(html) && /id="pane-spec"/.test(html) && /id="gm-specmodal"/.test(html), 'the Spec check tab and the review window are in the page');
+  assert(/data-bt="spec"/.test(html) && /id="pane-spec"/.test(html) && /id="gm-specmodal"/.test(html), 'the Spec check tab and the review window are in the page');
   assert(/window\.KAGarmentSpec/.test(spec) && /KAGarmentSpec\.renderCheck/.test(js) && /applySpec/.test(js), 'the page script and the spec script are wired both ways');
   // the page's payload carries what the spec check needs
   for (const k of ['trims:', 'tolerances:', 'spec: compactSpec']) assert(js.includes(k), `the build request carries ${k}`);
