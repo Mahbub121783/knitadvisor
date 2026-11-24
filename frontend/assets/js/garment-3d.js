@@ -128,6 +128,7 @@ export class GarmentView {
 
   // size: one entry of result.by_size; fabric: result.fabric
   setGarment(size, fabric) {
+    this._gsm = fabric && +fabric.gsm || 0;
     this.clear(); this._mkThread();
     const m = size.m, d = size.derived, P = {}; size.pieces.forEach((p) => { P[p.id] = p; });
     const L = m.length, step = 0.6;
@@ -301,6 +302,7 @@ export class GarmentView {
 
   // shorts: two legs, each a tube whose rings are as long round as the front leg piece plus the back leg piece are wide at that height; a waistband ring; a drawcord
   setShorts(size, fabric) {
+    this._gsm = fabric && +fabric.gsm || 0;
     this.clear(); this._mkThread();
     const m = size.m, fr = size.shape.front, bk = size.shape.back, F = m.waistband_h, Ll = m.outseam - F, top = m.outseam;
     const tex = knitTexture(fabric.wpc, fabric.cpc);
@@ -383,7 +385,7 @@ export class GarmentView {
   }
 
   // ── cloth simulation: the garment draped on a mannequin of its own measures ──
-  setDrape(name) { this._drape = window.KASim && window.KASim.DRAPE[name] ? name : 'medium'; if (this.simMode) this.startSim(); }
+  setDrape(name) { this._drape = window.KASim && window.KASim.DRAPE[name] ? name : 'medium'; this._drapeSet = true; if (this.simMode) this.startSim(); }
   stopSim() {
     this.simMode = false; this._simBusy = false;
     if (this._simGroup) { this.group.remove(this._simGroup); this._simGroup.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); this._simGroup = null; }
@@ -398,7 +400,8 @@ export class GarmentView {
     const area = S.inst.reduce((a, it) => { let s = 0; for (let i = 0; i < it.poly.length; i++) { const p = it.poly[i], q = it.poly[(i + 1) % it.poly.length]; s += p[0] * q[1] - q[0] * p[1]; } return a + Math.abs(s) / 2; }, 0);
     const h = Math.max(1.5, Math.min(3.2, Math.sqrt(area / (3200 * 0.866)))), body = S.kind === 'legs' ? K.bodyLegs(S.size, {}) : K.bodyTee(S.size, {});
     const insts = S.inst.map((it) => { const mesh = K.meshPiece(it.poly, it.labels, h); return { id: it.id, pid: it.pid, mesh, map: it.map, rest: it.rest, mat: it.mat, grp: it.grp, pinAll: it.id === 'band' }; });
-    const dr = K.DRAPE[this._drape || 'medium'];
+    /* the stiffness follows the fabric's weight (GSM) unless a cloth setting was chosen by hand: bending stiffness of a sheet grows with its mass and thickness */
+    const g = this._gsm || 0, dr = this._drapeSet || !g ? K.DRAPE[this._drape || 'medium'] : { bend: Math.max(0.01, Math.min(0.4, 0.02 * Math.pow(g / 140, 2.2))), stretch: g > 300 ? 0.97 : 0.955 };
     this._cloth = new K.Cloth(insts, body, Object.assign({}, dr, { h, seamTol: Math.max(1.6, h * 0.85), gravity: S.kind === 'legs' ? 700 : 980, seamOf: (window.KAGarment && window.KAGarment.seamOf) || null, pinSeams: S.kind === 'legs' ? ['waistband'] : ['neck'], proxSeams: S.kind === 'legs' ? null : ['neck', 'hem', 'sleeve_hem', 'band_end', 'cuff_end', 'hemband_end'], sewing: S.kind === 'legs' ? null : this._teeSewing(insts), groupSeams: S.kind === 'legs' ? ['inseam', 'side'] : null, selfSeams: ['underarm', 'band_end', 'cuff_end', 'hemband_end'] }));
     this._simGroup = new THREE.Group(); this._simMeshes = [];
     insts.forEach((it) => {
