@@ -399,7 +399,7 @@ export class GarmentView {
     const h = Math.max(1.5, Math.min(3.2, Math.sqrt(area / (3200 * 0.866)))), body = S.kind === 'legs' ? K.bodyLegs(S.size, {}) : K.bodyTee(S.size, {});
     const insts = S.inst.map((it) => { const mesh = K.meshPiece(it.poly, it.labels, h); return { id: it.id, pid: it.pid, mesh, map: it.map, rest: it.rest, mat: it.mat, grp: it.grp, pinAll: it.id === 'band' }; });
     const dr = K.DRAPE[this._drape || 'medium'];
-    this._cloth = new K.Cloth(insts, body, Object.assign({}, dr, { h, seamTol: Math.max(1.6, h * 0.85), gravity: S.kind === 'legs' ? 700 : 980, seamOf: (window.KAGarment && window.KAGarment.seamOf) || null, pinSeams: S.kind === 'legs' ? ['waistband'] : ['neck', 'shoulder', 'armhole'], groupSeams: S.kind === 'legs' ? ['inseam', 'side'] : null, selfSeams: ['underarm', 'band_end', 'cuff_end', 'hemband_end'] }));
+    this._cloth = new K.Cloth(insts, body, Object.assign({}, dr, { h, seamTol: Math.max(1.6, h * 0.85), gravity: S.kind === 'legs' ? 700 : 980, seamOf: (window.KAGarment && window.KAGarment.seamOf) || null, pinSeams: S.kind === 'legs' ? ['waistband'] : ['neck'], proxSeams: S.kind === 'legs' ? null : ['neck', 'hem', 'sleeve_hem', 'band_end', 'cuff_end', 'hemband_end'], sewing: S.kind === 'legs' ? null : this._teeSewing(insts), groupSeams: S.kind === 'legs' ? ['inseam', 'side'] : null, selfSeams: ['underarm', 'band_end', 'cuff_end', 'hemband_end'] }));
     this._simGroup = new THREE.Group(); this._simMeshes = [];
     insts.forEach((it) => {
       const g = new THREE.BufferGeometry(), N = it.mesh.pts.length, uv = new Float32Array(2 * N), idx = [];
@@ -413,6 +413,22 @@ export class GarmentView {
     this._simSteps = 0; this._simTarget = 300; this._simBusy = true; this._simUpload(); this._applyHi();
     if (this.onSim) this.onSim({ state: 'running', step: 0, total: this._simTarget });
     return true;
+  }
+  // the seams of a top, written down: which run of which piece's outline is sewn to which (shoulder, side, armhole to the sleeve cap, underarm)
+  _teeSewing(insts) {
+    const by = (id) => insts.find((t) => t.id === id); const out = [];
+    const run = (id, labels, side, order) => { const t = by(id); if (!t) return []; const m = t.mesh, r = []; for (let i = 0; i < m.nb; i++) { if (labels.indexOf(m.blabels[i]) < 0) continue; const x = m.pts[i][0]; if (side > 0 ? x < -0.01 : side < 0 ? x > 0.01 : false) continue; r.push([id, i, m.pts[i][1]]); } r.sort((a, b) => (order === 'up' ? a[2] - b[2] : b[2] - a[2])); return r.map((q) => [q[0], q[1]]); };
+    const fid = by('front') ? 'front' : null, fr = (s) => (fid ? run('front', ['shoulder'], s, 'up') : run(s > 0 ? 'front_r' : 'front_l', ['shoulder'], 0, 'up'));
+    [1, -1].forEach((s) => {
+      const F = fid ? fid : (s > 0 ? 'front_r' : 'front_l'), sl = s > 0 ? 'sleeveR' : 'sleeveL';
+      out.push([run(F, ['shoulder'], fid ? s : 0, 'up'), run('back', ['shoulder'], -s, 'up')]);
+      out.push([run(F, ['side', 'sidehem'], fid ? s : 0, 'down'), run('back', ['side', 'sidehem'], -s, 'down')]);
+      const A = run(F, ['armhole'], fid ? s : 0, 'up').concat(run('back', ['armhole'], -s, 'down'));
+      const C = run(sl, ['cap'], 1, 'up').concat(run(sl, ['cap'], -1, 'down'));
+      out.push([A, C]);
+    });
+    ['sleeveR', 'sleeveL'].forEach((id) => out.push([run(id, ['underarm', 'underarmhem'], 1, 'up'), run(id, ['underarm', 'underarmhem'], -1, 'up')]));
+    return out;
   }
   _simUpload() {
     const c = this._cloth; if (!c) return;

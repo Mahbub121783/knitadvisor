@@ -182,9 +182,20 @@
         return best;
       };
       const pairs = new Map(), nn = new Map();
-      B.forEach((b) => { const c = near(b); if (c) nn.set(b.g, c.g); });
+      const prox = this.opt.proxSeams && this.opt.seamOf ? (b) => this.opt.proxSeams.indexOf(this.opt.seamOf[this.inst[b.ii].mesh.blabels[b.i]]) >= 0 : () => true;
+      B.forEach((b) => { if (!prox(b)) return; const c = near(b); if (c && prox(c)) nn.set(b.g, c.g); });
       nn.forEach((g2, g1) => { const mutual = nn.get(g2) === g1, o1 = 3 * g1, o2 = 3 * g2, d = Math.hypot(this.X[o1] - this.X[o2], this.X[o1 + 1] - this.X[o2 + 1], this.X[o1 + 2] - this.X[o2 + 2]); if (mutual || d < tol * 0.5) { const a = Math.min(g1, g2), c = Math.max(g1, g2); pairs.set(a * 1048576 + c, [a, c]); } });
+      (this.opt.sewing || []).forEach(([ra, rb]) => this._sewRuns(ra, rb, pairs));
       this.ss = Int32Array.from([].concat(...[...pairs.values()]));
+    }
+    // two runs of outline points, each an ordered list of [instance id, outline index], are sewn by their share of the way along: the point that is a third along one meets the one a third along the other
+    _sewRuns(ra, rb, pairs) {
+      const get = (run) => run.map(([id, i]) => { const ii = this.inst.findIndex((t) => t.id === id); return ii < 0 ? null : { g: this.inst[ii].off + i, p: this.inst[ii].mesh.pts[i] }; }).filter(Boolean);
+      const A = get(ra), B = get(rb); if (A.length < 2 || B.length < 2) return;
+      const cum = (R) => { const c = [0]; for (let k = 1; k < R.length; k++) c.push(c[k - 1] + Math.hypot(R[k].p[0] - R[k - 1].p[0], R[k].p[1] - R[k - 1].p[1])); return c; };
+      const ca = cum(A), cb = cum(B), ta = ca[ca.length - 1] || 1, tb = cb[cb.length - 1] || 1;
+      const pair = (X, cx, tx, Y, cy, ty) => X.forEach((q, k) => { const f = cx[k] / tx; let best = 0, bd = 1e9; for (let j = 0; j < Y.length; j++) { const d = Math.abs(cy[j] / ty - f); if (d < bd) { bd = d; best = j; } } const a = Math.min(q.g, Y[best].g), c = Math.max(q.g, Y[best].g); if (a !== c) pairs.set(a * 1048576 + c, [a, c]); });
+      pair(A, ca, ta, B, cb, tb); pair(B, cb, tb, A, ca, ta);
     }
     step(dt) {
       dt = dt || 1 / 100; const o = this.opt, X = this.X, Q = this.Q, N = this.N, g = o.gravity * Math.min(1, 0.15 + this.t / 40), dd = o.damp;
