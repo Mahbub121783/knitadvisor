@@ -52,4 +52,25 @@ const ids = new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]));
   assert(/data-fullwindow/.test(fw) && /Escape/.test(fw), 'the page does not scroll behind the window and Esc leaves');
   console.log('✓ leaving restores the cards, the step, the scroll and the focus');
 }
+{
+  // the links: what the window calls in the page, the page offers; what the page announces, the window listens for; the cloth view can be picked and ringed
+  const studio = fs.readFileSync(path.join(FRONT, 'assets', 'js', 'studio.js'), 'utf8');
+  const loops = fs.readFileSync(path.join(FRONT, 'assets', 'js', 'studio-loops.js'), 'utf8');
+  const used = [...new Set([...fw.matchAll(/D\.(\w+)\(/g)].map((m) => m[1]))];
+  assert(used.length >= 6, `the window calls ${used.length} engine functions`);
+  const api = studio.slice(studio.indexOf('window.KAStudioDesign = {'), studio.indexOf('var painting = false;'));
+  used.forEach((f) => assert(api.includes(` ${f}: function`), `KAStudioDesign.${f} exists in studio.js`));
+  ['ka-design-edit', 'ka-brush', 'ka-3d-pick', 'ka-3d-hover'].forEach((ev) => {
+    assert(studio.includes(`'${ev}'`), `studio.js announces ${ev}`);
+    assert(fw.includes(`'${ev}'`), `the window listens for ${ev}`);
+  });
+  assert(/markCell\(/.test(loops) && /onPick/.test(loops) && /_stitchAt\(/.test(loops), 'the loop view can be picked and can ring a needle');
+  assert(/loopView = new mod\.LoopView\(host, showTip, /.test(studio), 'the page gives the loop view its pick handler');
+  assert(/data-op="redo"/.test(html) && /name === 'redo'/.test(studio), 'redo exists');
+  // the root of the window must not carry an attribute a click handler looks for (it once swallowed every rail click)
+  const rootAttrs = [...fw.matchAll(/fw\.setAttribute\('(data-[\w-]+)'/g)].map((m) => m[1]);
+  const looked = [...fw.matchAll(/closest\('(?:[^']*?)\[(data-[\w-]+)\]'\)/g)].map((m) => m[1]);
+  assert.deepStrictEqual(rootAttrs.filter((a) => looked.includes(a)), [], 'no attribute of the window root is also a click target');
+  console.log(`✓ ${used.length} engine functions, 4 announcements, the pick and the ring, redo, and no click-swallowing root attribute`);
+}
 console.log('Studio full-window tests passed');

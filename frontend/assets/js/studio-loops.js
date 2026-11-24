@@ -64,10 +64,11 @@ export function feedColour(spec, f) {
 }
 
 export class LoopView {
-  constructor(host, onHover) {
+  constructor(host, onHover, onPick) {
     this.host = host;
     window.__loopView = this;      // for the performance checks in the headless tests
     this.onHover = onHover || (() => {});
+    this.onPick = onPick || (() => {});
     const w = host.clientWidth || 600, hh = host.clientHeight || 420;
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
     this.renderer.setPixelRatio(Math.min(1.5, window.devicePixelRatio || 1));
@@ -92,6 +93,11 @@ export class LoopView {
     this.mouse = new THREE.Vector2();
     this._move = (e) => this._hover(e);
     this._leave = () => this.onHover(null);
+    // a press and release that did not drag is a pick: the stitch under it (or nothing)
+    this._down = (e) => { this._pd = { x: e.clientX, y: e.clientY, t: performance.now() }; };
+    this._up = (e) => { const d = this._pd; this._pd = null; if (d && Math.hypot(e.clientX - d.x, e.clientY - d.y) < 6 && performance.now() - d.t < 700) this.onPick(this._stitchAt(e)); };
+    this.renderer.domElement.addEventListener('pointerdown', this._down);
+    this.renderer.domElement.addEventListener('pointerup', this._up);
     this.renderer.domElement.addEventListener('pointermove', this._move);
     this.renderer.domElement.addEventListener('pointerleave', this._leave);
     this._ro = new ResizeObserver(() => this._resize()); this._ro.observe(host);
@@ -249,7 +255,7 @@ export class LoopView {
     if (!this._viewed) this.view(spec.real ? 'face' : 'angle');
     else if (dims !== this._dims) this.view(this._lastView || 'angle');
     this._dims = dims;
-    this.redraw();
+    this._drawMarks();
     return geo;
   }
 
@@ -259,6 +265,7 @@ export class LoopView {
   // path, so the twist, the migration and the hairs follow every bend of the loop. In millimetres.
   closeUp(on) {
     this._close = !!on;
+    if (this._markGroup) this._markGroup.visible = !on;
     if (!this.spec) return;
     if (!on) { this.draw(this.spec); return; }
     const spec = this.spec, geo = this._geometry(spec, true);
@@ -388,14 +395,17 @@ export class LoopView {
     this.redraw();
   }
 
-  _hover(e) {
-    if (!this.geo) return;
+  _hover(e) { this.onHover(this._stitchAt(e)); }
+
+  _stitchAt(e) {
+    if (!this.geo) return null;
     const r = this.renderer.domElement.getBoundingClientRect();
     this.mouse.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
     this.ray.setFromCamera(this.mouse, this.camera);
     const hits = this.ray.intersectObjects(this.meshes.filter((m) => m.visible && !m.userData.fuzz && !m.userData.lead && m.material.opacity > 0.5), false);
-    if (!hits.length) return this.onHover(null);
+    if (!hits.length) return null;
     const hit = hits[0], co = this.geo.courses[hit.object.userData.course];
+    if (!co || !co.stitches) return null;
     const px = hit.point.x + this.centre.x, pz = hit.point.z;
     let best = null, bd = 1e9;
     co.stitches.forEach((s) => {
@@ -403,7 +413,37 @@ export class LoopView {
       const dd = Math.abs(s.x - px) + (this.geo.zc ? Math.abs(bedZ - pz) * 0.6 : 0);
       if (dd < bd) { bd = dd; best = s; }
     });
-    this.onHover(best ? { ...best, elastane: !!hit.object.userData.elastane, clientX: e.clientX - r.left, clientY: e.clientY - r.top } : null);
+    return best ? { ...best, elastane: !!hit.object.userData.elastane, clientX: e.clientX - r.left, clientY: e.clientY - r.top } : null;
+  }
+
+  // a ring round every loop of one needle of the programme (it shows on each repeat), drawn over the cloth; null clears it
+  markCell(bed, feed, needle, mod) {
+    this._mark = bed == null ? null : { bed, feed, needle, mod };
+    this._drawMarks();
+  }
+
+  _drawMarks() {
+    if (this._markGroup) {
+      this.group.remove(this._markGroup);
+      this._markGroup.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+      this._markGroup = null;
+    }
+    const m = this._mark, geo = this.geo;
+    if (m && geo && this.centre && !this._close && !geo.courses.some((c) => !c.stitches)) {
+      const g = new THREE.Group(), cx = this.centre.x, cy = this.centre.y;
+      const mat = new THREE.MeshBasicMaterial({ color: 0xff6a00, depthTest: false, transparent: true, opacity: 0.95 });
+      const ring = new THREE.TorusGeometry(0.34, 0.032, 8, 28);
+      geo.courses.forEach((co) => co.stitches.forEach((s) => {
+        if (s.bed !== m.bed || (s.feed % (m.mod || geo.F)) !== m.feed || s.needle !== m.needle) return;
+        const z = (s.bed === 'C' ? 1 : -1) * (geo.zc + 0.3);
+        const mesh = new THREE.Mesh(ring, mat);
+        mesh.position.set(s.x - cx, ((s.y0 + (s.top == null ? s.y0 : s.top)) / 2) - cy, z);
+        mesh.renderOrder = 999;
+        g.add(mesh);
+      }));
+      this.group.add(g); this._markGroup = g;
+    }
+    this.redraw();
   }
 
   _resize() {
@@ -426,6 +466,8 @@ export class LoopView {
     this._ro.disconnect();
     this.renderer.domElement.removeEventListener('pointermove', this._move);
     this.renderer.domElement.removeEventListener('pointerleave', this._leave);
+    this.renderer.domElement.removeEventListener('pointerdown', this._down);
+    this.renderer.domElement.removeEventListener('pointerup', this._up);
     if (this._worker) { this._worker.terminate(); this._worker = null; }
     this._clear(); this.controls.dispose(); this.renderer.dispose();
     if (this.renderer.domElement.parentNode) this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);

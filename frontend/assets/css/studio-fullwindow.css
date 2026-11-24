@@ -1,5 +1,6 @@
 /* Fabric Studio — the design studio: the Design step in a full window (assets/js/studio-fullwindow.js).
-   The cards are MOVED in, not rebuilt: the drawing on the left, the cloth in the middle, the colours and the picture on the right. */
+   The cards are MOVED in, not rebuilt: the drawing and the feeders on the left, the cloth in the middle with its tools and views floating on it, the
+   inspector, colours, picture and checks on the right. A phone: the cloth on top, a sheet under it, a bar of panels at the bottom. */
 
 .fw-enter { margin: 0 0 10px; }
 .fw-enter .st-btn { width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 14px; font-size: 13px; }
@@ -8,26 +9,32 @@
 
 html[data-fullwindow="1"], html[data-fullwindow="1"] body { overflow: hidden !important; }
 
-.fw { position: fixed; inset: 0; z-index: 2000; display: flex; flex-direction: column; background: var(--bg2, #f1f3f6); color: var(--t1); }
+.fw { --sy-k: #1857C4; --sy-t: #E8A33A; --sy-m: #C9CDD3; --sy-e: #0e7490; --sy-r: #7a4fc2; --fw-sel: #ff6a00;
+  position: fixed; inset: 0; z-index: 2000; display: flex; flex-direction: column; background: var(--bg2, #f1f3f6); color: var(--t1); }
 .fw[hidden] { display: none !important; }
 
-/* the top bar */
-.fw-top { flex: none; display: flex; align-items: center; gap: 12px; padding: 8px 12px; min-height: 54px; background: var(--bg); border-bottom: 1px solid var(--line); }
+/* symbols: one colour for each, everywhere */
+.m-K { --c: var(--sy-k); } .m-T { --c: var(--sy-t); } .m-M { --c: var(--sy-m); } .m-E { --c: var(--sy-e); } .m-R { --c: var(--sy-r); } .m-x { --c: #eceef1; }
+
+/* ── the top bar ── */
+.fw-top { flex: none; display: flex; align-items: center; gap: 10px; padding: 8px 12px; min-height: 54px; background: var(--bg); border-bottom: 1px solid var(--line); }
 .fw-x { flex: none; }
 .fw-title { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
 .fw-title b { font: 700 14px var(--head); }
-.fw-title span { font-size: 11px; color: var(--t3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 30vw; }
+.fw-title span { font-size: 11px; color: var(--t3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 26vw; }
 .fw-verdict { flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: nowrap; align-items: center; gap: 4px 14px; padding: 5px 12px; border-radius: 10px; background: var(--bg2, #f4f6f9); border: 1px solid var(--line); cursor: pointer; font-size: 12px; color: var(--t2); overflow: hidden; }
 .fw-verdict .ws-more { margin-left: auto; white-space: nowrap; }
-.fw-verdict .ws-k { white-space: nowrap; }
+.fw-verdict .ws-k, .fw-verdict .ws-badge { white-space: nowrap; }
 .fw-verdict.ok { border-color: rgba(30,122,84,.35); }
 .fw-verdict.warn { border-color: rgba(154,91,0,.4); }
 .fw-verdict.bad { border-color: rgba(178,59,59,.45); }
 .fw-actions { flex: none; display: flex; gap: 6px; }
 .fw-actions .st-btn { padding: 7px 12px; }
 .fw-actions .st-btn.on { background: var(--accent-soft, rgba(24,87,196,.1)); border-color: var(--accent); color: var(--accent); }
+.fw-ic { display: inline-flex; align-items: center; justify-content: center; min-width: 36px; padding: 7px 8px !important; }
+.fw-actions .fw-ic:disabled, .fw-rail button:disabled { opacity: .35; cursor: default; }
 
-/* the three columns */
+/* ── the three columns ── */
 .fw-body { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: var(--fw-l, 400px) 6px minmax(0, 1fr) 6px var(--fw-r, 360px); }
 .fw.no-left .fw-body { grid-template-columns: 0 0 minmax(0, 1fr) 6px var(--fw-r, 360px); }
 .fw.no-right .fw-body { grid-template-columns: var(--fw-l, 400px) 6px minmax(0, 1fr) 0 0; }
@@ -38,6 +45,7 @@ html[data-fullwindow="1"], html[data-fullwindow="1"] body { overflow: hidden !im
 .fw-grip { cursor: col-resize; background: transparent; position: relative; touch-action: none; }
 .fw-grip::after { content: ""; position: absolute; top: 0; bottom: 0; left: 2px; width: 2px; background: var(--line); transition: background .12s; }
 .fw-grip:hover::after, .fw-grip.drag::after { background: var(--accent); }
+.fw-handle { display: none; }
 
 .fw-side { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--bg); overflow: hidden; }
 .fw-left { border-right: 1px solid var(--line); } .fw-right { border-left: 1px solid var(--line); }
@@ -53,8 +61,13 @@ html[data-fullwindow="1"], html[data-fullwindow="1"] body { overflow: hidden !im
 .fw-pane #st-edtools { position: sticky; top: -10px; z-index: 3; background: var(--bg); padding: 8px 0 6px; margin-top: -4px; border-bottom: 1px solid var(--line); }
 .fw-pane #jq-grid { max-height: 52vh !important; }
 
-/* the cloth */
-.fw-centre { display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: 10px 10px 6px; }
+/* the selected cell, and its feeder, in the drawing */
+.fw #st-editor td.c.fw-sel { outline: 3px solid var(--fw-sel); outline-offset: -3px; position: relative; z-index: 1; }
+.fw #st-editor tr.fw-selrow > th { color: var(--fw-sel); font-weight: 700; }
+.fw #st-editor tr.fw-selrow > td.c { box-shadow: inset 0 -2px 0 rgba(255,106,0,.55); }
+
+/* ── the cloth ── */
+.fw-centre { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: 10px 10px 6px; }
 .fw-centre > .st-view { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; margin: 0 !important; padding: 10px; overflow: hidden; border-radius: 12px; position: static; }
 .fw-centre .st-view > * { flex: none; }
 .fw-centre .st-view > .st-pane { display: none; }
@@ -73,34 +86,127 @@ html[data-fullwindow="1"], html[data-fullwindow="1"] body { overflow: hidden !im
 .fw-centre .st-seg { margin-bottom: 6px; }
 .fw-centre .st-3dbar { margin-bottom: 6px; }
 .fw-centre .ws-tools { margin-bottom: 6px; }
+/* the views and the 3D mode are on the cloth itself (the gizmo): not twice */
+.fw-centre #st-3dmode, .fw-centre #st-loopbar > [data-view], .fw-centre #st-loopbar > span:first-child { display: none; }
 
-.fw-foot { flex: none; display: flex; gap: 16px; align-items: center; padding: 5px 14px; font-size: 11px; color: var(--t3); background: var(--bg); border-top: 1px solid var(--line); white-space: nowrap; overflow: hidden; }
-.fw-foot kbd, .fw-help kbd { font: 600 10px var(--mono, monospace); padding: 1px 5px; border: 1px solid var(--line2, var(--line)); border-bottom-width: 2px; border-radius: 4px; background: var(--bg2, #f4f6f9); color: var(--t2); }
+/* the tools, over the cloth */
+.fw-rail, .fw-gizmo { position: absolute; z-index: 6; display: flex; align-items: center; gap: 2px; padding: 4px; border-radius: 12px; background: rgba(255,255,255,.92); border: 1px solid var(--line); box-shadow: 0 6px 22px rgba(0,0,0,.14); backdrop-filter: blur(6px); }
+.fw-rail { flex-direction: column; left: calc(var(--cv-l, 12px) + 10px); top: calc(var(--cv-t, 80px) + 10px); }
+.fw-gizmo { left: calc(var(--cv-l, 12px) + var(--cv-w, 400px) / 2); top: calc(var(--cv-t, 80px) + var(--cv-h, 400px) - 50px); transform: translateX(-50%); max-width: calc(var(--cv-w, 400px) - 90px); overflow-x: auto; scrollbar-width: none; flex-wrap: nowrap; }
+.fw.no-canvas .fw-rail, .fw.no-canvas .fw-gizmo { display: none; }
+.fw:not(.on-loops) .fw-rail { display: none; }
+.fw:not(.on-loops) [data-gv] { display: none; }
+.fw-rail button, .fw-gizmo button { border: 0; background: transparent; color: var(--t2); font: 700 12px var(--head); min-width: 32px; height: 32px; padding: 0 9px; border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; white-space: nowrap; }
+.fw-rail button:hover:not(:disabled), .fw-gizmo button:hover { background: var(--bg2, #eef1f6); color: var(--t1); }
+.fw-rail button.on, .fw-gizmo button.on { background: var(--accent); color: var(--on-accent, #fff); }
+.fw-rail .fw-br { padding: 0; box-shadow: inset 0 -3px 0 var(--c, transparent); }
+.fw-rail .fw-br.on { background: var(--bg); color: var(--t1); box-shadow: inset 0 0 0 2px var(--c, var(--accent)); }
+.fw-sep { width: 1px; height: 18px; background: var(--line); margin: 0 4px; flex: none; }
+.fw-rail .fw-sep { width: 18px; height: 1px; margin: 4px 0; }
+.fw[data-active="paint"] .fw-centre #st-loops { cursor: crosshair; }
+.fw[data-active="select"] .fw-centre #st-loops { cursor: pointer; }
 
-.fw-help { position: absolute; right: 14px; top: 58px; width: min(380px, calc(100vw - 28px)); z-index: 5; padding: 14px 16px; border-radius: 12px; background: var(--bg); border: 1px solid var(--line); box-shadow: 0 12px 40px rgba(0,0,0,.18); font-size: 12px; line-height: 1.7; color: var(--t2); }
+/* ── the strip at the bottom ── */
+.fw-status { flex: none; display: flex; gap: 14px; align-items: center; padding: 5px 14px; font-size: 11.5px; color: var(--t2); background: var(--bg); border-top: 1px solid var(--line); white-space: nowrap; overflow: hidden; }
+.fw-sp { flex: 1 1 auto; }
+.fw-hint { overflow: hidden; text-overflow: ellipsis; }
+.fw-info { color: var(--t3); overflow: hidden; text-overflow: ellipsis; }
+.fw-keys { color: var(--t3); flex: none; }
+.fw kbd { font: 600 10px var(--mono, monospace); padding: 1px 5px; border: 1px solid var(--line2, var(--line)); border-bottom-width: 2px; border-radius: 4px; background: var(--bg2, #f4f6f9); color: var(--t2); }
+.fw-help { position: absolute; right: 14px; top: 58px; width: min(420px, calc(100vw - 28px)); z-index: 9; padding: 14px 16px; border-radius: 12px; background: var(--bg); border: 1px solid var(--line); box-shadow: 0 12px 40px rgba(0,0,0,.18); font-size: 12px; line-height: 1.7; color: var(--t2); }
 .fw-help[hidden] { display: none; }
 .fw-help b { color: var(--t1); font-size: 13px; }
 .fw-help div { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px dotted var(--line); }
 .fw-help div:last-child { border-bottom: 0; }
 
+/* ── the feeders ── */
+.fw-fhead { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; margin: 0 0 8px; }
+.fw-fhead b { font: 700 14px var(--head); }
+.fw-fhead span { font-size: 11.5px; color: var(--t3); }
+.fw-fbtn { margin-left: auto; display: flex; gap: 6px; }
+.fw-fbtn .st-btn { padding: 5px 10px; font-size: 12px; }
+.fw-flist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.fw-fd { width: 100%; display: grid; grid-template-columns: 14px auto 1fr auto; grid-template-areas: "dot name role n" "dot mini yarn yarn"; align-items: center; column-gap: 8px; row-gap: 3px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); text-align: left; cursor: pointer; color: var(--t1); font-family: var(--head); }
+.fw-fd:hover { border-color: var(--accent); }
+.fw-fd.on { border-color: var(--fw-sel); box-shadow: 0 0 0 2px rgba(255,106,0,.25); background: rgba(255,106,0,.05); }
+.fw-fd.near { border-color: rgba(255,106,0,.55); }
+.fw-dot { grid-area: dot; width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(0,0,0,.2); }
+.fw-fd b { grid-area: name; font-size: 13px; }
+.fw-role { grid-area: role; font-size: 12px; color: var(--t2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fw-yarn { grid-area: yarn; font-size: 11px; color: var(--t3); text-align: right; white-space: nowrap; }
+.fw-n { grid-area: n; font: 600 11px var(--mono, monospace); color: var(--t3); }
+.fw-mini { grid-area: mini; display: flex; gap: 1px; height: 8px; min-width: 40px; }
+.fw-mini i { flex: 1 1 0; max-width: 9px; background: var(--c, #ddd); border-radius: 1px; }
+.fw-mini i.m-x { background: repeating-linear-gradient(45deg, #fff, #fff 2px, #e4e6e9 2px, #e4e6e9 4px); }
+
+/* ── the inspector ── */
+.fw-sec { padding: 12px; margin: 0 0 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
+.fw-k { font: 700 10.5px var(--head); letter-spacing: .6px; text-transform: uppercase; color: var(--t3); margin: 10px 0 6px; }
+.fw-sec > .fw-k:first-child { margin-top: 0; }
+.fw-big { font: 700 15px var(--head); color: var(--t1); }
+.fw-sub { font-size: 12px; color: var(--t3); margin-top: 1px; }
+.fw-empty p { font-size: 12.5px; color: var(--t2); line-height: 1.55; margin: 6px 0 0; }
+.fw-cellhead { display: flex; align-items: center; gap: 12px; }
+.fw-sym { width: 44px; height: 44px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; font: 700 20px var(--head); background: var(--c, #ddd); color: #fff; flex: none; }
+.fw-sym.m-M, .fw-sym.m-T, .fw-sym.m-x { color: #222; }
+.fw-expl { font-size: 12px; line-height: 1.55; color: var(--t2); margin: 8px 0 0; }
+.fw-setrow { display: flex; gap: 6px; flex-wrap: wrap; }
+.fw-set { width: 40px; height: 36px; border-radius: 8px; border: 2px solid transparent; background: var(--c, #ddd); color: #fff; font: 700 14px var(--head); cursor: pointer; }
+.fw-set.m-M, .fw-set.m-T, .fw-set.m-x { color: #222; }
+.fw-set.on { border-color: var(--t1); }
+.fw-set:hover { filter: brightness(1.06); }
+.fw-scope { display: flex; gap: 6px; }
+.fw-scope button { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 7px 4px; border: 1px solid var(--line2, var(--line)); border-radius: 8px; background: var(--bg); color: var(--t2); font: 600 11px var(--head); cursor: pointer; }
+.fw-scope button.on { border-color: var(--accent); background: var(--accent-soft, rgba(24,87,196,.08)); color: var(--accent); }
+.fw-arrows { display: flex; align-items: center; gap: 4px; margin-top: 10px; }
+.fw-arrows button { width: 34px; height: 30px; border: 1px solid var(--line2, var(--line)); border-radius: 6px; background: var(--bg); color: var(--t2); cursor: pointer; font-size: 14px; }
+.fw-arrows span { font-size: 11px; color: var(--t3); margin-left: 6px; }
+.fw-row { display: grid; grid-template-columns: 1.1fr 1fr .8fr; gap: 8px; }
+.fw-row label, .fw-check { font-size: 11px; color: var(--t3); display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.fw-row select, .fw-row input { width: 100%; min-width: 0; padding: 7px 8px; border: 1px solid var(--line2, var(--line)); border-radius: 8px; background: var(--bg); color: var(--t1); font: 500 13px var(--head); }
+.fw-check { flex-direction: row; align-items: center; gap: 8px; margin: 8px 0 0; font-size: 12px; color: var(--t2); }
+.fw-chips { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+.fw-chip { width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--line2, #ccc); font: 700 12px var(--head); cursor: pointer; background: var(--bg); color: var(--t2); }
+.fw-chip.on { border-color: var(--t1); box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--fw-sel); }
+.fw-pick { width: 38px; height: 34px; padding: 0; border: 1px solid var(--line2, #ccc); border-radius: 8px; background: none; cursor: pointer; margin-left: 4px; }
+
 .fw-mtabs { display: none; }
 
-/* a phone or a narrow window: one column at a time */
+/* ── a narrow window or a phone: the cloth on top, a sheet under it, a bar of panels at the bottom ── */
 @media (max-width: 900px) {
   .fw-top { flex-wrap: wrap; gap: 6px 8px; padding: 6px 10px; }
   .fw-title span { max-width: 55vw; }
-  .fw-verdict { order: 5; flex: 1 1 100%; overflow-x: auto; scrollbar-width: none; }
-  .fw-verdict .ws-badge { white-space: nowrap; }
-  .fw-actions [data-fw="left"], .fw-actions [data-fw="right"] { display: none; }
-  .fw-mtabs { display: flex; flex: none; background: var(--bg); border-bottom: 1px solid var(--line); }
-  .fw-mtabs button { flex: 1; padding: 9px 4px; border: 0; background: none; font: 600 13px var(--head); color: var(--t2); border-bottom: 2px solid transparent; cursor: pointer; }
-  .fw-mtabs button.on { color: var(--accent); border-bottom-color: var(--accent); }
+  .fw-verdict { order: 5; flex: 1 1 100%; overflow-x: auto; scrollbar-width: none; padding: 4px 10px; }
+  .fw-hide-s { display: none !important; }
+  .fw-actions { margin-left: auto; }
   .fw-body, .fw.no-left .fw-body, .fw.no-right .fw-body, .fw.no-left.no-right .fw-body { display: flex; flex-direction: column; }
   .fw-grip { display: none !important; }
-  .fw .fw-left, .fw .fw-right, .fw .fw-centre { display: none; flex: 1 1 0; width: auto; border: 0; }
-  .fw[data-m="centre"] .fw-centre, .fw[data-m="left"] .fw-left, .fw[data-m="right"] .fw-right { display: flex; }
-  .fw.no-left[data-m="left"] .fw-left, .fw.no-right[data-m="right"] .fw-right { display: flex; }
-  .fw-foot { display: none; }
+  .fw .fw-centre { display: flex; flex: 1 1 0; min-height: 190px; padding: 6px 6px 0; }
+  .fw .fw-left, .fw .fw-right { display: none; flex: none; height: var(--fw-sh, 44vh); width: auto; border: 0; border-top: 1px solid var(--line); box-shadow: 0 -8px 24px rgba(0,0,0,.12); }
+  .fw[data-sheet="left"] .fw-left, .fw[data-sheet="right"] .fw-right { display: flex; }
+  .fw.no-left[data-sheet="left"] .fw-left, .fw.no-right[data-sheet="right"] .fw-right { display: flex; }
+  .fw-handle { display: flex; justify-content: center; align-items: center; height: 18px; flex: none; cursor: ns-resize; touch-action: none; background: var(--bg); }
+  .fw-handle i { width: 44px; height: 4px; border-radius: 2px; background: var(--line2, #c8ccd2); }
+  .fw-mtabs { display: flex; flex: none; background: var(--bg); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom, 0); }
+  .fw-mtabs button { flex: 1; padding: 11px 2px; border: 0; background: none; font: 600 12px var(--head); color: var(--t2); border-top: 2px solid transparent; cursor: pointer; }
+  .fw-mtabs button.on { color: var(--accent); border-top-color: var(--accent); }
+  .fw-status { display: none; }
+  .fw-rail { flex-direction: row; top: calc(var(--cv-t, 60px) + 6px); left: calc(var(--cv-l, 6px) + 6px); max-width: calc(var(--cv-w, 300px) - 12px); overflow-x: auto; scrollbar-width: none; }
+  .fw-rail .fw-sep { width: 1px; height: 18px; margin: 0 4px; }
+  .fw-gizmo { top: calc(var(--cv-t, 60px) + var(--cv-h, 300px) - 46px); max-width: calc(var(--cv-w, 300px) - 12px); }
+  .fw-centre .st-view { padding: 8px; }
+  .fw-centre .st-view #pane-3d > #st-loops, .fw-centre .st-view #pane-3d > #st-cloth, .fw-centre .st-view #pane-3d > #st-yarn, .fw-centre .st-view #pane-3d > #st-twin { min-height: 120px !important; }
+  .fw-centre #st-statenote { display: none; }
+  /* with a sheet open the cloth gets every pixel: its own controls wait behind the sheet */
+  .fw:is([data-sheet="left"], [data-sheet="right"]) .fw-centre :is(#st-state, .st-tabs, .ws-tools, #st-loopbar, #st-feedkey, .st-build) { display: none !important; }
+  .fw-panes { padding: 8px; }
+  .fw-help { top: 96px; }
+}
+@media (pointer: coarse) {
+  .fw-rail button, .fw-gizmo button { min-width: 40px; height: 40px; }
+  .fw-tab { padding: 11px 14px; }
+  .fw-set { width: 46px; height: 42px; }
+  .fw-chip { width: 40px; height: 40px; }
 }
 
 @media print { .fw, .fw-enter, .fw-open { display: none !important; } }

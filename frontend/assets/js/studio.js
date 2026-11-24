@@ -33,15 +33,17 @@
     brush: 'K',
     templateId: 'single_jersey',
   };
-  var undo = [];
+  var undo = [], redo = [];
   var rolls = [];            // trial rolls for the drawn design
   var templates = [];
   var last = null;            // last engine answer
   var clothState = 'finished'; // the state the cloth is shown and worked in: dry (as knitted), wet, finished, full (after washing)
   var reqSeq = 0;
 
+  function nowJson() { return JSON.stringify({ bed: S.bed, C: S.C, D: S.D, feeds: S.feeds }); }
   function snapshot() {
-    undo.push(JSON.stringify({ bed: S.bed, C: S.C, D: S.D, feeds: S.feeds }));
+    undo.push(nowJson());
+    redo.length = 0;
     if (undo.length > 60) undo.shift();
   }
   function restore(json) {
@@ -285,6 +287,32 @@
     return out;
   }
 
+  // what the design studio (studio-fullwindow.js) may do: read the drawing, paint cells in one undo step, set a feeder's field, move through the history
+  window.KAStudioDesign = {
+    state: function () { return { bed: S.bed, C: S.C, D: S.D, feeds: S.feeds, brush: S.brush }; },
+    size: function () { return { F: nFeeds(), W: nNeedles(), bed: S.bed }; },
+    explain: function (s) { return explainStitch(s); },
+    setBrush: function (s) { setBrush(s); },
+    paint: function (cells, sym) {
+      var plan = (cells || []).filter(function (c) { var g = c.bed === 'C' ? S.C : S.D; return g && g[c.i] && g[c.i][c.j] !== undefined && g[c.i][c.j] !== sym; });
+      if (!plan.length) return 0;
+      snapshot();
+      plan.forEach(function (c) { (c.bed === 'C' ? S.C : S.D)[c.i][c.j] = sym; });
+      if (S.templateId) markCustom();
+      renderEditor(); renderNotation(); schedule();
+      return plan.length;
+    },
+    feed: function (i, k, v) {
+      if (!S.feeds[i]) return false;
+      snapshot(); S.feeds[i][k] = v;
+      if (k === 'plate') showYarnRows();
+      renderEditor(); schedule();
+      return true;
+    },
+    op: function (n) { op(n); },
+    history: function () { return { undo: undo.length, redo: redo.length }; },
+  };
+
   var painting = false;
   function paintAt(td) {
     if (!td || !td.classList.contains('c')) return;
@@ -321,8 +349,7 @@
     });
     $('st-pal').addEventListener('click', function (e) {
       var b = e.target.closest('button'); if (!b) return;
-      S.brush = b.getAttribute('data-s');
-      Array.prototype.forEach.call(this.children, function (x) { x.classList.toggle('on', x === b); });
+      setBrush(b.getAttribute('data-s'));
     });
     $('st-edtools').addEventListener('click', function (e) {
       var b = e.target.closest('[data-op]'); if (!b) return;
@@ -330,8 +357,15 @@
     });
   }
 
+  function setBrush(s) {
+    S.brush = s;
+    Array.prototype.forEach.call($('st-pal').children, function (x) { x.classList.toggle('on', x.getAttribute('data-s') === s); });
+    document.dispatchEvent(new CustomEvent('ka-brush', { detail: s }));
+  }
+
   function op(name) {
-    if (name === 'undo') { if (undo.length) { restore(undo.pop()); renderAll(); } return; }
+    if (name === 'undo') { if (undo.length) { redo.push(nowJson()); restore(undo.pop()); renderAll(); } return; }
+    if (name === 'redo') { if (redo.length) { undo.push(nowJson()); restore(redo.pop()); renderAll(); } return; }
     snapshot();
     var all = beds().map(function (b) { return b[1]; });
     var F = nFeeds(), W = nNeedles();
@@ -652,6 +686,7 @@
   var timer = null, timer3d = null;
   var lastSig = null;
   function schedule() {
+    document.dispatchEvent(new CustomEvent('ka-design-edit'));
     // a loop-yarn feeder that knits on a single bed is a plush pile
     $('st-plush-box').hidden = !(!S.D && S.feeds.some(function (f, i) { return f && f.role === 'loop' && S.C[i] && S.C[i].indexOf('K') > -1; }));
     var sg = signature();
@@ -1672,8 +1707,8 @@
   function renderLoops() {
     var host = $('st-loops');
     if (!loopPromise) {
-      loopPromise = import('/assets/js/studio-loops.js?v=20261125b').then(function (mod) {
-        loopView = new mod.LoopView(host, showTip);
+      loopPromise = import('/assets/js/studio-loops.js?v=20261128a').then(function (mod) {
+        loopView = new mod.LoopView(host, showTip, function (s) { document.dispatchEvent(new CustomEvent('ka-3d-pick', { detail: s || null })); });
         loopView.feedColour = mod.feedColour;
         return loopView;
       });
@@ -1699,16 +1734,20 @@
   }
 
   var ACT = { K: 'knit', T: 'tuck', M: 'miss', E: 'transfer', R: 'transfer to the other bed', '-': 'no needle' };
-  function showTip(s) {
-    var tip = $('st-tip');
-    if (!s) { tip.hidden = true; return; }
-    var bed = s.bed === 'C' ? 'cylinder' : 'dial';
-    var what = s.act === 'K' ? 'Knit loop' + (s.held ? ', held ' + s.held + ' course' + (s.held > 1 ? 's' : '') + ' (the needle tucks or misses above it)' : '') + (s.tucks ? '; drawn through ' + s.tucks + ' tuck' + (s.tucks > 1 ? 's' : '') + ' as well as the old loop' : '')
+  function explainStitch(s) {
+    return s.act === 'K' ? 'Knit loop' + (s.held ? ', held ' + s.held + ' course' + (s.held > 1 ? 's' : '') + ' (the needle tucks or misses above it)' : '') + (s.tucks ? '; drawn through ' + s.tucks + ' tuck' + (s.tucks > 1 ? 's' : '') + ' as well as the old loop' : '')
       : s.act === 'T' ? 'Tuck: the needle took the yarn but did not clear, so it is not knocked over. It is cleared with the held loop ' + (s.held + 1) + ' course' + (s.held ? 's' : '') + ' later'
         : s.act === 'M' ? 'Miss: the needle stayed down; the yarn floats behind the held loop'
         : s.act === 'R' ? 'Transfer to the other bed: the loop was handed to the needle opposite, so this needle is empty and the wale goes on on the other bed'
         : s.act === 'E' ? 'Transfer: the loop was handed to the next needle, so this needle is empty — the yarn passes and the eyelet opens; it starts a new loop at the next feed'
           : 'No needle in this slot: the yarn passes straight across';
+  }
+  function showTip(s) {
+    var tip = $('st-tip');
+    document.dispatchEvent(new CustomEvent('ka-3d-hover', { detail: s || null }));
+    if (!s) { tip.hidden = true; return; }
+    var bed = s.bed === 'C' ? 'cylinder' : 'dial';
+    var what = explainStitch(s);
     tip.innerHTML = '<b>F' + (s.feed + 1) + ' · ' + bed + ' needle ' + s.needle + ' · ' + ACT[s.act] + '</b>' + (s.elastane ? ' (elastane)' : '') + '<br>' + what + '.';
     tip.hidden = false;
     var host = $('st-loops'), x = Math.min(s.clientX + 14, host.clientWidth - 270), yy = Math.min(s.clientY + 14, host.clientHeight - 80);
