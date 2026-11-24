@@ -26,7 +26,7 @@
       chart: JSON.parse(JSON.stringify(tpl.chart)), ratio: tpl.sizes.reduce(function (o, s) { o[s] = 1; return o; }, {}),
       fabric: { name: '', gsm: 180, width: 170, wunit: 'cm', shrink_len_pct: 6, shrink_wid_pct: 6, rib_stretch_pct: 25, colour: '#3d5a80', wpc: '', cpc: '' },
       opt: { seam: 1, neck: 0.7, ease: 0.5, orient: 'both', gap: 1 }, tab: 'patterns',
-      edits: {}, seams: {}, cornerFlags: {}, zipper: { on: false, kind: 'full', type: 'open_end', teeth: 'coil', size: 5, tape_w: 2.5, length_cm: 18, allow: 1.5, facing_w: 5.5 }
+      edits: {}, seams: {}, cornerFlags: {}, trims: [], tol: {}, spec: null, zipper: { on: false, kind: 'full', type: 'open_end', teeth: 'coil', size: 5, tape_w: 2.5, length_cm: 18, allow: 1.5, facing_w: 5.5 }
     };
   }
   function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (_) { /* private window */ } }
@@ -37,10 +37,46 @@
     Object.keys(S.chart).forEach(function (k) { var row = {}; S.sizes.forEach(function (s) { var v = S.chart[k] && S.chart[k][s]; if (v !== '' && v != null) row[s] = v; }); if (Object.keys(row).length) chart[k] = row; });
     return {
       style: 'tee', unit: S.unit, sizes: S.sizes, base: S.base, chart: chart, ratio: S.ratio, ease_cm: +S.opt.ease, orient: S.opt.orient, gap_cm: +S.opt.gap,
-      allowance: { seam: +S.opt.seam, neck: +S.opt.neck }, edits: S.edits || {}, seams: S.seams || {},
+      allowance: { seam: +S.opt.seam, neck: +S.opt.neck }, edits: S.edits || {}, seams: S.seams || {}, trims: (S.trims || []).filter(function (t) { return t.use !== false; }), tolerances: S.tol || {}, spec: compactSpec(S.spec),
       zipper: S.zipper && S.zipper.on ? { on: true, kind: S.zipper.kind, type: S.zipper.type, teeth: S.zipper.teeth, size: +S.zipper.size, tape_w: +S.zipper.tape_w, length_cm: +S.zipper.length_cm, allow: +S.zipper.allow, facing_w: +S.zipper.facing_w } : { on: false },
       fabric: { name: f.name, gsm: +f.gsm, width_cm: f.wunit === 'in' ? +f.width * INCH : +f.width, shrink_len_pct: +f.shrink_len_pct, shrink_wid_pct: +f.shrink_wid_pct, rib_stretch_pct: +f.rib_stretch_pct, colour: f.colour, wpc: +f.wpc || 0, cpc: +f.cpc || 0 }
     };
+  }
+
+  // what the engine needs of a spec sheet to check the pattern against it
+  function compactSpec(sp) {
+    if (!sp || !sp.poms) return undefined;
+    return { unit: sp.unit, poms: sp.poms.filter(function (p) { return p.include !== false && p.key; }).map(function (p) { return { id: p.id, code: p.code, label: p.label, key: p.key, basis: p.basis, values: p.values, tol: p.tol ? { plus: p.tol.plus, minus: p.tol.minus, given: !!p.tol.given } : null, depth: p.depth || null }; }) };
+  }
+  // a spec sheet's chart, fabric, stitches, zipper, trims and tolerances put into the page (the answer of /api/garment/spec/apply)
+  function applySpec(b, spec) {
+    S.unit = b.unit === 'in' ? 'in' : 'cm'; S.sizes = b.sizes.slice(0, 8);
+    S.chart = {}; POMS.forEach(function (p) { S.chart[p.key] = {}; });
+    Object.keys(b.chart).forEach(function (k) { S.chart[k] = {}; Object.keys(b.chart[k]).forEach(function (s) { S.chart[k][s] = String(b.chart[k][s]); }); });
+    S.ratio = S.sizes.reduce(function (o, s) { o[s] = 1; return o; }, {});
+    S.base = b.base && S.sizes.indexOf(b.base) >= 0 ? b.base : S.sizes[Math.floor((S.sizes.length - 1) / 2)]; S.size = S.base;
+    var F = S.fabric, bf = b.fabric || {};
+    if (bf.name) F.name = bf.name; if (bf.gsm) F.gsm = bf.gsm; if (bf.width_cm) F.width = r1(F.wunit === 'in' ? bf.width_cm / INCH : bf.width_cm);
+    if (bf.shrink_len_pct != null) F.shrink_len_pct = bf.shrink_len_pct; if (bf.shrink_wid_pct != null) F.shrink_wid_pct = bf.shrink_wid_pct;
+    Object.keys(b.seams || {}).forEach(function (id) { S.seams[id] = Object.assign({}, S.seams[id] || {}, { type: b.seams[id].type }); });
+    S.zipper = b.zipper && b.zipper.on ? Object.assign({}, S.zipper, b.zipper, { on: true }) : Object.assign({}, S.zipper, { on: false });
+    S.trims = (b.trims || []).map(function (t) { return { item: t.item, qty: t.qty, unit: t.unit, note: t.note }; }); S.tol = b.tolerances || {}; S.spec = spec || null;
+    S.edits = {}; S.cornerFlags = {};
+    renderFabric(); renderChart(); renderZipper(); if (view3d) view3d.setColour(F.colour); schedule();
+  }
+  // a kept preset put into the page
+  function loadState(p) {
+    if (!p || !p.sizes || !p.chart) return;
+    S.unit = p.unit === 'in' ? 'in' : 'cm'; S.sizes = p.sizes.slice(0, 8);
+    S.chart = {}; POMS.forEach(function (q) { S.chart[q.key] = {}; });
+    Object.keys(p.chart).forEach(function (k) { S.chart[k] = {}; Object.keys(p.chart[k]).forEach(function (s) { S.chart[k][s] = String(p.chart[k][s]); }); });
+    S.ratio = p.ratio || S.sizes.reduce(function (o, s) { o[s] = 1; return o; }, {});
+    S.base = p.base && S.sizes.indexOf(p.base) >= 0 ? p.base : S.sizes[Math.floor((S.sizes.length - 1) / 2)]; S.size = S.base;
+    if (p.fabric) S.fabric = Object.assign({}, S.fabric, p.fabric);
+    if (p.opt) S.opt = Object.assign({}, S.opt, p.opt);
+    S.seams = p.seams || {}; S.zipper = p.zipper ? Object.assign({}, S.zipper, p.zipper) : Object.assign({}, S.zipper, { on: false });
+    S.trims = p.trims || []; S.tol = p.tol || {}; S.spec = p.spec || null; S.edits = p.edits || {}; S.cornerFlags = p.cornerFlags || {};
+    renderFabric(); renderChart(); renderZipper(); if (view3d) view3d.setColour(S.fabric.colour); schedule();
   }
 
   // ── the fabric card ──
@@ -106,6 +142,7 @@
       var b = e.target.closest('button'); if (!b) return; var u = b.getAttribute('data-u'); if (u === S.unit) return;
       var k = u === 'in' ? 1 / INCH : INCH;
       Object.keys(S.chart).forEach(function (key) { Object.keys(S.chart[key]).forEach(function (s) { var raw = S.chart[key][s], n = parseFloat(String(raw).replace(',', '.')); if (isFinite(n) && String(raw).indexOf('/') < 0) S.chart[key][s] = String(r2(n * k)); }); });
+      Object.keys(S.tol || {}).forEach(function (key) { var t = S.tol[key]; if (t) { t.plus = r2(t.plus * k); t.minus = r2(t.minus * k); } });
       S.unit = u; renderChart(); schedule();
     });
     $('gm-addsize').addEventListener('click', function () {
@@ -119,6 +156,7 @@
     });
     $('gm-readchart').addEventListener('click', function () {
       var note = $('gm-pnote'); note.textContent = 'Reading…';
+      if (window.KAGarmentSpec) { window.KAGarmentSpec.fromText($('gm-paste').value, note); return; }
       api('/api/garment/parse', { method: 'POST', body: { text: $('gm-paste').value } }).then(function (q) {
         S.unit = q.unit; S.sizes = q.sizes.slice(0, 8); S.chart = {}; POMS.forEach(function (p) { S.chart[p.key] = {}; });
         Object.keys(q.chart).forEach(function (k) { S.chart[k] = {}; Object.keys(q.chart[k]).forEach(function (s) { S.chart[k][s] = String(q.chart[k][s]); }); });
@@ -145,7 +183,7 @@
 
   // ── what the answer says ──
   function sizeOf(name) { return R && R.success && R.by_size.filter(function (o) { return o.size === name; })[0]; }
-  function renderAll() { renderSummary(); renderSizes(); renderPatterns(); renderSewing(); renderZipperInfo(); renderMarker(); renderChecks(); render3D(); markBad(); if (window.KAGarmentEdit) window.KAGarmentEdit.render(); }
+  function renderAll() { renderSummary(); renderSizes(); renderPatterns(); renderSewing(); renderZipperInfo(); renderMarker(); renderChecks(); render3D(); markBad(); if (window.KAGarmentEdit) window.KAGarmentEdit.render(); if (window.KAGarmentSpec) window.KAGarmentSpec.renderCheck(); }
 
   function kpi(l, v, s, cls) { return '<div class="gm-kpi ' + (cls || '') + '"><div class="l">' + esc(l) + '</div><div class="v">' + v + '</div>' + (s ? '<div class="s">' + s + '</div>' : '') + '</div>'; }
   function renderSummary() {
@@ -371,7 +409,7 @@
     api('/api/garment/template?sizes=S,M,L,XL&unit=cm').then(function (t) {
       POMS = t.poms; POMS.forEach(function (p) { poms[p.key] = p; });
       S = load() || defaults(t);
-      var D0 = defaults(t); ['edits', 'seams', 'cornerFlags', 'zipper'].forEach(function (k) { if (!S[k]) S[k] = D0[k]; });
+      var D0 = defaults(t); ['edits', 'seams', 'cornerFlags', 'zipper', 'trims', 'tol'].forEach(function (k) { if (!S[k]) S[k] = D0[k]; });
       POMS.forEach(function (p) { if (!S.chart[p.key]) S.chart[p.key] = {}; });
       renderFabric(); renderChart(); bindFabric(); bindChart(); bindZipper(); bindSewing(); fromStudio();
       if (window.KAGarmentEdit) window.KAGarmentEdit.init({ state: function () { return S; }, result: function () { return R; }, size: function () { return S.size; }, change: schedule, save: save });
@@ -387,6 +425,6 @@
       tab(S.tab || 'patterns'); build();
     }).catch(function (e) { $('gm-patterns').innerHTML = '<div class="gm-empty">' + esc((e && e.message) || 'The garment engine could not be reached.') + '</div>'; });
   }
-  window.KAGarment = { state: function () { return S; }, result: function () { return R; }, make: makeGarment, tab: tab, view: function () { return view3d; } };
+  window.KAGarment = { state: function () { return S; }, result: function () { return R; }, make: makeGarment, tab: tab, view: function () { return view3d; }, applySpec: applySpec, loadState: loadState, save: save, poms: function () { return POMS; } };
   init();
 })();

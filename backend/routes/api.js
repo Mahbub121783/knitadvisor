@@ -1734,12 +1734,99 @@ router.post('/garment/parse', requireUser, garmentLimiter, (req, res) => {
 });
 router.post('/garment/build', requireUser, garmentLimiter, (req, res) => {
   try {
-    const out = garmentPattern.build(req.body || {});
+    const body = req.body || {};
+    const out = garmentPattern.build(body);
+    if (out.success && body.spec && Array.isArray(body.spec.poms)) { try { out.spec_check = require('../engine/domain/garment-spec').compliance(body.spec, out); } catch (e) { console.error('[garment] spec check failed:', e); } }
     res.status(out.success ? 200 : 400).json(out);
   } catch (err) {
     console.error('[garment] build failed:', err);
     res.status(500).json({ success: false, error: 'The garment could not be built from this chart.' });
   }
+});
+
+// A buyer's spec sheet: an Excel / CSV / PDF / picture in (read from memory, never stored), the points of measure, tolerances, grading, fabric, stitching,
+// trims and notes out (engine/domain/garment-spec.js, services/spec-reader.js). A preset is a spec the user keeps (migration 048).
+const garmentSpec = require('../engine/domain/garment-spec');
+const specReader = require('../services/spec-reader');
+const garmentPresetRepo = require('../db/repositories/garment-preset-repo');
+const specLimiter = createRateLimiter({ name: 'garment_spec', max: 20, windowMs: 60 * 1000, message: 'Too many spec sheets - wait a minute.' });
+const compactRows = (rows) => rows.slice(0, specReader.MAX_ROWS).map((r) => r.slice(0, 60).map((c) => [c.t, Math.round(c.x0 * 10) / 10, Math.round(c.x1 * 10) / 10, c.c == null ? 1 : Math.round(c.c * 100) / 100]));
+const expandRows = (rows) => (Array.isArray(rows) ? rows.slice(0, specReader.MAX_ROWS).map((r) => (Array.isArray(r) ? r.slice(0, 60).map((c) => (Array.isArray(c) ? { t: String(c[0] == null ? '' : c[0]).slice(0, 300), x0: +c[1] || 0, x1: Number.isFinite(+c[2]) ? +c[2] : (+c[1] || 0) + 10, c: c[3] == null ? 1 : +c[3] } : null)).filter(Boolean) : [])) : []);
+router.get('/garment/spec/catalogue', requireUser, (req, res) => {
+  res.json({
+    success: true, points: garmentSpec.CATALOGUE.map((c) => ({ key: c.key, name: c.name, group: c.group, engine: !!c.engine, halves: !!c.halves, tol_cm: c.tol, note: c.note || '' })),
+    styles: garmentSpec.STYLES.map((s) => ({ id: s.id, name: s.name, drawn: s.id === 'tee' })), parts: garmentSpec.PARTS.map((p) => ({ id: p.id, name: p.name, drawn: p.drawn })),
+    stitches: Object.fromEntries(Object.entries(garmentPattern.STITCH).map(([k, v]) => [k, v.name])), seams: Object.fromEntries(Object.entries(garmentPattern.SEAM_DEFAULTS).map(([k, v]) => [k, v.name])),
+    starters: garmentSpec.starters(),
+  });
+});
+router.post('/garment/spec/read', requireUser, specLimiter, require('express').raw({ type: () => true, limit: '8mb' }), async (req, res) => {
+  try {
+    const buf = Buffer.isBuffer(req.body) ? req.body : null;
+    if (!buf || !buf.length) return res.status(400).json({ success: false, error: 'No file was sent.' });
+    let name = 'spec'; try { name = decodeURIComponent(String(req.get('x-file-name') || 'spec')).slice(0, 120); } catch (_) { /* a name that is not valid UTF-8 */ }
+    const file = await specReader.readFile(buf, name);
+    const want = Number.isInteger(+req.query.sheet) ? +req.query.sheet : -1;
+    const unit = req.query.unit === 'in' || req.query.unit === 'cm' ? req.query.unit : undefined;
+    // a workbook with several sheets: the one the user picked, else the one with the most measurements
+    let pick = want >= 0 && file.sheets[want] ? want : 0, spec = null, best = -1;
+    file.sheets.forEach((s, i) => { if (want >= 0 && i !== want) return; s.rows = garmentSpec.normRows(s.rows); const x = garmentSpec.extract(s.rows, { unit }); const n = x.success ? x.poms.filter((p) => p.key).length : 0; if (n > best) { best = n; pick = i; spec = x; } });
+    const sh = file.sheets[pick]; sh.rows = garmentSpec.normRows(sh.rows);
+    res.json({
+      success: true, source: { kind: file.kind, name, method: file.method, confidence: file.confidence, pages: file.pages, ms: file.ms, sheet: pick, sheets: file.sheets.map((s) => s.name) },
+      rows: compactRows(sh.rows), spec,
+    });
+  } catch (err) {
+    if (err instanceof specReader.SpecReadError) return res.status(err.code === 'OCR_OFF' ? 503 : 400).json({ success: false, code: err.code, error: err.message });
+    if (err && err.type === 'entity.too.large') return res.status(413).json({ success: false, error: 'The file is larger than 8 MB.' });
+    console.error('[garment] spec read failed:', err);
+    res.status(500).json({ success: false, error: 'This file could not be read.' });
+  }
+});
+router.post('/garment/spec/extract', requireUser, specLimiter, (req, res) => {
+  try {
+    const b = req.body || {};
+    let rows;
+    if (Array.isArray(b.rows)) rows = expandRows(b.rows);
+    else if (Array.isArray(b.grid)) rows = garmentSpec.dense(b.grid.slice(0, specReader.MAX_ROWS).map((r) => (Array.isArray(r) ? r.slice(0, 60) : [])));
+    else rows = garmentSpec.dense(specReader.parseDelimited(String(b.text || '').slice(0, 60000)));
+    rows = garmentSpec.normRows(rows);
+    if (b.transpose) rows = garmentSpec.dense(garmentSpec.transposeGrid(rows.map((r) => { const o = []; r.forEach((c) => { o[Math.round(c.x0 / 100)] = c.t; }); return Array.from(o, (x) => x || ''); })));
+    const spec = garmentSpec.extract(rows, { unit: b.unit === 'in' || b.unit === 'cm' ? b.unit : undefined, header_row: Number.isInteger(b.header_row) ? b.header_row : undefined });
+    res.status(spec.success ? 200 : 400).json({ success: spec.success, error: spec.error, spec: spec.success ? spec : undefined, rows: compactRows(rows) });
+  } catch (err) { console.error('[garment] spec extract failed:', err); res.status(500).json({ success: false, error: 'The sheet could not be read.' }); }
+});
+router.post('/garment/spec/apply', requireUser, specLimiter, (req, res) => {
+  try {
+    const b = req.body || {};
+    let spec = b.spec; if (!spec || !Array.isArray(spec.poms)) return res.status(400).json({ success: false, error: 'No spec was sent.' });
+    let sizes = Array.isArray(b.sizes) && b.sizes.length ? b.sizes.map((x) => String(x).trim().toUpperCase()).filter(Boolean).slice(0, 8) : null;
+    if (sizes && (spec.single || b.grade)) { const g = garmentSpec.grade(spec, sizes, String(b.base || sizes[0]).toUpperCase()); if (!g.success) return res.status(400).json(g); spec = g.spec; }
+    res.json({ success: true, spec, build: garmentSpec.toBuild(spec, { sizes: sizes || undefined, base: b.base ? String(b.base).toUpperCase() : undefined }) });
+  } catch (err) { console.error('[garment] spec apply failed:', err); res.status(500).json({ success: false, error: 'The spec could not be applied.' }); }
+});
+const presetFail = (res, err, what) => { console.error(`[garment] ${what} failed:`, err); res.status(500).json({ success: false, error: `Could not ${what}.` }); };
+router.get('/garment/presets', requireUser, async (req, res) => {
+  try { res.json({ success: true, presets: (await garmentPresetRepo.list(req.user.id)).map((r) => ({ id: r.id, name: r.name, style: r.style, note: r.note, updated: r.updated_at, sizes: r.sizes })) }); } catch (err) { presetFail(res, err, 'load your presets'); }
+});
+router.get('/garment/presets/:id', requireUser, async (req, res) => {
+  const id = idOf(req.params.id); if (!id) return res.status(400).json({ success: false, error: 'Invalid id.' });
+  try { const r = await garmentPresetRepo.get(req.user.id, id); if (!r) return res.status(404).json({ success: false, error: 'Preset not found.' }); res.json({ success: true, id: r.id, name: r.name, note: r.note, preset: r.preset }); } catch (err) { presetFail(res, err, 'load the preset'); }
+});
+router.post('/garment/presets', requireUser, specLimiter, async (req, res) => {
+  try {
+    const b = req.body || {}, name = String(b.name || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+    if (!name) return res.status(400).json({ success: false, error: 'Give the preset a name.' });
+    const p = b.preset; if (!p || typeof p !== 'object' || !Array.isArray(p.sizes) || !p.chart) return res.status(400).json({ success: false, error: 'There is nothing to keep: the preset has no sizes or chart.' });
+    const keep = {}; ['unit', 'sizes', 'base', 'chart', 'ratio', 'fabric', 'opt', 'seams', 'zipper', 'trims', 'tol', 'spec', 'edits', 'cornerFlags'].forEach((k) => { if (p[k] !== undefined) keep[k] = p[k]; });
+    const json = JSON.stringify(keep); if (json.length > 300000) return res.status(400).json({ success: false, error: 'This preset is too large to keep.' });
+    const row = await garmentPresetRepo.save(req.user.id, { name, style: 'tee', note: String(b.note || '').slice(0, 200) || null, preset: keep });
+    res.json({ success: true, id: row.id });
+  } catch (err) { if (err && err.code === 'PRESET_LIMIT') return res.status(400).json({ success: false, error: err.message }); presetFail(res, err, 'keep the preset'); }
+});
+router.delete('/garment/presets/:id', requireUser, async (req, res) => {
+  const id = idOf(req.params.id); if (!id) return res.status(400).json({ success: false, error: 'Invalid id.' });
+  try { if (!(await garmentPresetRepo.remove(req.user.id, id))) return res.status(404).json({ success: false, error: 'Preset not found.' }); res.json({ success: true }); } catch (err) { presetFail(res, err, 'delete the preset'); }
 });
 
 // Virtual lab: air permeability, thermal resistance and a hundred rolls of a drawn cloth (engine/domain/virtual-lab-engine.js).

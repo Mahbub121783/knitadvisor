@@ -47,7 +47,7 @@ const ids = new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]));
 {
   const shell = read('assets', 'js', 'app-shell.js');
   assert(/href: '\/garment\.html'/.test(shell), 'the menu lists the Garment studio');
-  const stale = fs.readdirSync(FRONT).filter((f) => f.endsWith('.html')).filter((f) => { const t = read(f); return /app-shell\.js\?v=/.test(t) && !/app-shell\.js\?v=20261129a/.test(t); });
+  const stale = fs.readdirSync(FRONT).filter((f) => f.endsWith('.html')).filter((f) => { const t = read(f); return /app-shell\.js\?v=/.test(t) && !/app-shell\.js\?v=20261201a/.test(t); });
   assert.deepStrictEqual(stale, [], `pages still on an old app-shell (the menu would not show the new page): ${stale.join(', ')}`);
   assert(/export class GarmentView/.test(js3d) && /setGarment/.test(js3d) && /finished/.test(js3d), 'the 3D view builds the garment from the finished pieces');
   console.log('✓ the menu lists the page on every page of the site; the 3D view is built from the finished pieces');
@@ -76,6 +76,25 @@ const ids = new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]));
   ['gm-zon', 'gm-zkind', 'gm-seams', 'gm-ops', 'gm-bom', 'gm-sewsum', 'gm-edtools', 'gm-edpieces', 'gm-insp', 'gm-edmeas', 'gm-pane-edit-body'].forEach((i) => assert(ids.has(i), `#${i} is in the page`));
   assert(/pane-edit/.test(html) && /pane-sewing/.test(html) && /data-tab="edit"/.test(html) && /data-tab="sewing"/.test(html), 'the Edit and Sewing tabs are there');
   console.log(`✓ the editor: its ids are in the page, its ${rules.length} correction rules all name an anchor the engine draws, every edge label has a colour and the same seam in the page and the engine`);
+}
+
+{
+  // the spec sheet page: every id garment-spec.js reads is in garment.html (or made by it), the routes it calls are mounted, the files exist
+  const spec = read('assets', 'js', 'garment-spec.js');
+  const used = [...new Set([...spec.matchAll(/\$\('([\w-]+)'\)/g)].map((m) => m[1]))];
+  const dynamic = new Set(['gm-gsz', 'gm-gbase', 'gm-specpname']);
+  const missing = used.filter((i) => !ids.has(i) && !dynamic.has(i) && !new RegExp(`id="${i}"`).test(spec));
+  assert.deepStrictEqual(missing, [], `ids the spec script reads that the page does not have: ${missing.join(', ')}`);
+  assert(/garment-spec\.js/.test(html) && html.indexOf('garment.js?') < html.indexOf('garment-spec.js'), 'the spec script loads after the page script it calls');
+  const api = fs.readFileSync(path.join(__dirname, '..', 'routes', 'api.js'), 'utf8');
+  for (const u of ['/garment/spec/read', '/garment/spec/extract', '/garment/spec/apply', '/garment/spec/catalogue', '/garment/presets', '/garment/presets/:id']) assert(api.includes(`'${u}'`), `${u} is mounted`);
+  for (const m of spec.matchAll(/'(\/api\/garment\/[\w/:-]+)/g)) { const route = m[1].replace('/api', '').replace(/\/\d+$/, ''); assert(api.includes(`'${route}`), `${m[1]} is called by the page and exists`); }
+  assert(fs.existsSync(path.join(__dirname, '..', 'db', 'migrations', '048_garment_presets.sql')), 'the presets table has its migration');
+  assert(/data-tab="spec"/.test(html) && /id="pane-spec"/.test(html) && /id="gm-specmodal"/.test(html), 'the Spec check tab and the review window are in the page');
+  assert(/window\.KAGarmentSpec/.test(spec) && /KAGarmentSpec\.renderCheck/.test(js) && /applySpec/.test(js), 'the page script and the spec script are wired both ways');
+  // the page's payload carries what the spec check needs
+  for (const k of ['trims:', 'tolerances:', 'spec: compactSpec']) assert(js.includes(k), `the build request carries ${k}`);
+  console.log(`✓ the spec sheet page: its ${used.length} ids are in the page, its ${[...spec.matchAll(/'(\/api\/garment\/[\w/:-]+)/g)].length} routes are mounted, the migration, the tab and the window are there, the two scripts are wired`);
 }
 console.log('Garment page tests passed');
 

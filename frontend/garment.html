@@ -15,7 +15,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/css/style.css?v=20260603c">
   <link rel="stylesheet" href="assets/css/theme-v2.css?v=20261112c">
-  <link rel="stylesheet" href="assets/css/garment.css?v=20261130a">
+  <link rel="stylesheet" href="assets/css/garment.css?v=20261201a">
   <script type="importmap">
   {
     "imports": {
@@ -24,7 +24,7 @@
     }
   }
   </script>
-  <script src="assets/js/app-shell.js?v=20261129a" defer></script>
+  <script src="assets/js/app-shell.js?v=20261201a" defer></script>
 </head>
 <body>
 <div class="page-wrap">
@@ -38,6 +38,22 @@
 
     <div class="gm-layout">
       <section class="gm-spec" aria-label="Specification">
+        <div class="gm-card gm-start" id="gm-speccard">
+          <div class="gm-step">Start from a spec sheet</div>
+          <div class="gm-drop" id="gm-drop" tabindex="0" role="button" aria-label="Upload a spec sheet">
+            <div class="gm-drop-t"><b>Drop the buyer's spec sheet here</b><span>Excel, PDF, a photo of the sheet, or a CSV. You can also paste a screenshot.</span></div>
+            <button type="button" class="gm-btn primary" id="gm-pick">Choose a file</button>
+            <input type="file" id="gm-file" accept=".xlsx,.csv,.tsv,.txt,.pdf,.jpg,.jpeg,.png,.webp,image/*" hidden>
+          </div>
+          <p class="gm-hint" id="gm-specnote">The measurements, tolerances, grading, fabric, stitching, zipper and trims are read from it; you check them before anything is used.</p>
+          <div class="gm-row gm-presetrow">
+            <div class="gm-f"><label for="gm-preset">Start from a preset</label><select id="gm-preset"><option value="">Choose…</option></select></div>
+            <div class="gm-f gm-presetbtns"><button type="button" class="gm-btn" id="gm-presetsave">Save as preset…</button><button type="button" class="gm-btn" id="gm-presetdel" hidden>Delete</button></div>
+          </div>
+          <div class="gm-presetname" id="gm-presetname" hidden><input id="gm-presetinput" type="text" maxlength="60" placeholder="Name, e.g. ACME crew tee SS27" aria-label="Preset name"><button type="button" class="gm-btn primary" id="gm-presetgo">Save</button><button type="button" class="gm-btn" id="gm-presetcancel">Cancel</button></div>
+          <p class="gm-hint" id="gm-presetnote"></p>
+        </div>
+
         <div class="gm-card" id="gm-fabric">
           <div class="gm-step"><b>1</b> Fabric</div>
           <div class="gm-tools"><button type="button" class="gm-btn" id="gm-fromstudio" hidden>Use the fabric from my Studio design</button><span class="gm-hint" id="gm-fromnote" style="margin:0"></span></div>
@@ -120,6 +136,7 @@
             <button type="button" data-tab="patterns" class="on">Patterns</button>
             <button type="button" data-tab="edit">Edit</button>
             <button type="button" data-tab="sewing">Sewing</button>
+            <button type="button" data-tab="spec">Spec check <span class="gm-n" id="gm-nspec" hidden></span></button>
             <button type="button" data-tab="marker">Marker</button>
             <button type="button" data-tab="garment">Garment</button>
             <button type="button" data-tab="checks">Checks <span class="gm-n" id="gm-nchecks" hidden></span></button>
@@ -160,6 +177,10 @@
           <div class="gm-card"><div class="gm-step">Bill of materials, one garment</div><table class="gm-table" id="gm-bom"></table></div>
         </div>
 
+        <div class="gm-pane" id="pane-spec">
+          <div id="gm-speccheck"><div class="gm-empty">Upload a spec sheet and the pattern is checked against every measurement in it, with its own tolerances.</div></div>
+        </div>
+
         <div class="gm-pane" id="pane-marker">
           <div class="gm-view" id="gm-marker"><div class="gm-empty">Building the marker…</div></div>
           <div class="gm-legend" id="gm-mlegend"></div>
@@ -184,9 +205,23 @@
     </div>
   </main>
 </div>
+<div class="gm-modal" id="gm-specmodal" hidden role="dialog" aria-modal="true" aria-labelledby="gm-spectitle">
+  <div class="gm-mbox">
+    <div class="gm-mhd"><div><h2 id="gm-spectitle">Spec sheet</h2><p id="gm-specsrc"></p></div><button type="button" class="gm-btn" id="gm-specclose" aria-label="Close">Close</button></div>
+    <div class="gm-mtabs" id="gm-spectabs"><button type="button" data-st="poms" class="on">Measurements</button><button type="button" data-st="details">Details</button><button type="button" data-st="sheet">Sheet</button></div>
+    <div class="gm-mbody" id="gm-specbody"></div>
+    <div class="gm-mft">
+      <span class="gm-msum" id="gm-specsum"></span>
+      <span class="gm-mpn" id="gm-specpn" hidden><input id="gm-specpname" type="text" maxlength="60" placeholder="Preset name" aria-label="Preset name"><button type="button" class="gm-btn" id="gm-specpgo">Apply and save</button></span>
+      <button type="button" class="gm-btn" id="gm-specpreset">Apply and save as preset…</button>
+      <button type="button" class="gm-btn primary big" id="gm-specapply">Apply to my garment</button>
+    </div>
+  </div>
+</div>
 <div class="gm-dock" id="gm-dock"><span id="gm-docksum">Fill in the chart</span><button type="button" class="gm-btn primary big" id="gm-make2">Make garment</button></div>
 <script src="assets/js/api.js"></script>
-<script src="assets/js/garment-edit.js?v=20261130a"></script>
-<script src="assets/js/garment.js?v=20261130a"></script>
+<script src="assets/js/garment-edit.js?v=20261201a"></script>
+<script src="assets/js/garment.js?v=20261201a"></script>
+<script src="assets/js/garment-spec.js?v=20261201a"></script>
 </body>
 </html>

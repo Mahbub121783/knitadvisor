@@ -66,11 +66,13 @@ const ALIASES = [
 ];
 
 // ── numbers ──
+const UFRAC = { '½': ' 1/2', '¼': ' 1/4', '¾': ' 3/4', '⅛': ' 1/8', '⅜': ' 3/8', '⅝': ' 5/8', '⅞': ' 7/8', '⅓': ' 1/3', '⅔': ' 2/3', '⅙': ' 1/6', '⅚': ' 5/6' };
 function num(v) {
   if (v == null || v === '') return NaN;
   if (typeof v === 'number') return v;
-  let s = String(v).trim().replace(/,/g, '.').replace(/[^\d./\s-]/g, '').trim();
+  let s = String(v).trim().replace(/[½¼¾⅛⅜⅝⅞⅓⅔⅙⅚]/g, (c) => UFRAC[c]).replace(/,/g, '.').replace(/[^\d./\s-]/g, '').trim();
   if (!s) return NaN;
+  s = s.replace(/^(\d+)-(\d+\/\d+)$/, '$1 $2');                         // 20-1/2 is twenty and a half, not twenty minus a half
   const mix = /^(-?\d+)\s+(\d+)\/(\d+)$/.exec(s);                  // 20 1/2
   if (mix) return Math.sign(+mix[1] || 1) * (Math.abs(+mix[1]) + +mix[2] / +mix[3]);
   const fr = /^(\d+)\/(\d+)$/.exec(s);                              // 1/2
@@ -585,6 +587,7 @@ function build(input) {
   const seamCfg = seamConfig(inp.seams, allow);
   const zip = zipperOf(inp.zipper);
   const tol = Number.isFinite(+inp.tolerance_cm) ? Math.max(0.05, +inp.tolerance_cm) : 0.5;
+  const tols = inp.tolerances && typeof inp.tolerances === 'object' ? inp.tolerances : {};      // a spec sheet's own tolerance per measure, in the chart's unit
   const allowOf = (l) => { if (l === 'cf') return zip.on ? zip.allow : seamCfg.cf.allowance; const s = SEAM_LABELS[l]; return s && seamCfg[s] ? seamCfg[s].allowance : allow.seam; };
   const NOTCH = {
     front: [{ label: 'shoulder', at: [0.5] }, { label: 'side', at: [0.5] }, { label: 'armhole', at: [0.4], from: 'bottom' }],
@@ -673,11 +676,12 @@ function build(input) {
     POMS.forEach((p) => {
       const pv = measured[p.key], cv = m[p.key];
       if (pv == null || !(cv >= 0)) return;
-      const diff = r2(pv - cv);
-      md.push({ key: p.key, label: p.label, chart: r2(cv), pattern: pv, diff, ok: Math.abs(diff) <= tol });
+      const diff = r2(pv - cv), tl = tols[p.key], kk = unit === 'in' ? INCH : 1;
+      const tp = tl && +tl.plus > 0 ? +tl.plus * kk : tol, tm = tl && +tl.minus > 0 ? +tl.minus * kk : tol;
+      md.push({ key: p.key, label: p.label, chart: r2(cv), pattern: pv, diff, tol_plus: r2(tp), tol_minus: r2(tm), ok: diff <= tp + 1e-9 && diff >= -tm - 1e-9 });
     });
     const off = md.filter((x) => !x.ok);
-    if (off.length) add('warn', `Size ${size}: the drawing is off the chart by more than ${tol} cm on ${off.map((x) => `${x.label.split(',')[0].toLowerCase()} (${x.diff > 0 ? '+' : ''}${x.diff})`).join(', ')}. Set the chart from the pattern, or reset the piece.`, size);
+    if (off.length) add('warn', `Size ${size}: the drawing is off the chart, outside the tolerance (${tol} cm unless the spec sheet gives another), on ${off.map((x) => `${x.label.split(',')[0].toLowerCase()} (${x.diff > 0 ? '+' : ''}${x.diff})`).join(', ')}. Set the chart from the pattern, or reset the piece.`, size);
 
     // the seams, the thread and the sewing order
     const sew = sewingOf(fp, zinfo, seamCfg, opt, size, add);
@@ -735,6 +739,12 @@ function build(input) {
     { item: 'Sewing thread', qty: r1(bs.sewing.thread_m), unit: 'm', note: `${r1(bs.sewing.thread_m * 12)} m a dozen; a rule of thumb for the stitch types chosen: confirm with the thread supplier` },
   ];
   if (bs.zipper.on) bom.push({ item: `Zipper ${bs.zipper.standard_cm} cm`, qty: 1, unit: 'pc', note: `${bs.zipper.type_name.split(':')[0]}, ${bs.zipper.teeth} teeth #${bs.zipper.size}, tape ${bs.zipper.tape_w} cm; ${bs.zipper.opening_cm} cm of opening${bs.zipper.trim_cm > 0.4 ? `, trim ${bs.zipper.trim_cm} cm` : ''}` });
+
+  (Array.isArray(inp.trims) ? inp.trims : []).slice(0, 40).forEach((t) => {
+    const item = String((t && t.item) || '').replace(/\s+/g, ' ').trim().slice(0, 80); if (!item) return;
+    const q = Number.isFinite(+t.qty) && +t.qty > 0 ? +t.qty : 1;
+    bom.push({ item, qty: q, unit: String(t.unit || 'pc').slice(0, 8), note: String(t.note || 'from the spec sheet').replace(/\s+/g, ' ').slice(0, 160), spec: true });
+  });
 
   return {
     success: true, style: STYLE, unit_in: unit, sizes: sizes, base, ratio, fabric, allowance: allow, ease_cm: opt.ease_cm, tolerance_cm: tol,
@@ -799,4 +809,4 @@ function sewingOf(fp, zinfo, cfg, opt, size, add) {
   return { seams, operations: ops, thread_m: r2(thread), thread_per_dozen_m: r1(thread * 12), sam };
 }
 
-module.exports = { STYLE, POMS, POM_KEYS, STITCH, ZIP_STANDARD, ZIP_TYPES, SEAM_DEFAULTS, SEAM_LABELS, build, parseChart, template, num, seamConfig, zipperOf, offsetPoly, selfCrossing, removeLoops, bez, plen, area, bbox, maskOf, lay, finishedPieces, measuredOf, sampleChain, polyOf, applyEdit, underarmY, armholeCurve, armholeCtl, capHalf, INCH };
+module.exports = { ALIASES, STYLE, POMS, POM_KEYS, STITCH, ZIP_STANDARD, ZIP_TYPES, SEAM_DEFAULTS, SEAM_LABELS, build, parseChart, template, num, seamConfig, zipperOf, offsetPoly, selfCrossing, removeLoops, bez, plen, area, bbox, maskOf, lay, finishedPieces, measuredOf, sampleChain, polyOf, applyEdit, underarmY, armholeCurve, armholeCtl, capHalf, INCH };
