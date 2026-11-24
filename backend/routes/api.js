@@ -1714,6 +1714,34 @@ router.post('/studio/analyse', requireUser, async (req, res) => {
   }
 });
 
+// Garment patterns: a measurement chart in, the pattern pieces, the cut with the fabric's shrinkage, the marker and the fabric per garment out
+// (engine/domain/garment-pattern.js). Pure arithmetic, no data store; a build takes about a tenth of a second.
+const garmentPattern = require('../engine/domain/garment-pattern');
+const garmentLimiter = createRateLimiter({ name: 'garment_build', max: 240, windowMs: 60 * 1000, message: 'Too many garment builds - wait a minute.' });
+router.get('/garment/template', requireUser, (req, res) => {
+  const sizes = String(req.query.sizes || '').split(',').map((x) => x.trim()).filter(Boolean).slice(0, 8);
+  res.json({ success: true, style: garmentPattern.STYLE, poms: garmentPattern.POMS.map((p) => ({ key: p.key, label: p.label, required: !!p.req })), ...garmentPattern.template(sizes.length ? sizes : undefined, req.query.unit === 'in' ? 'in' : 'cm') });
+});
+router.post('/garment/parse', requireUser, garmentLimiter, (req, res) => {
+  try {
+    const b = req.body || {};
+    const out = garmentPattern.parseChart(String(b.text || '').slice(0, 20000), b.unit);
+    res.status(out.success ? 200 : 400).json(out);
+  } catch (err) {
+    console.error('[garment] parse failed:', err);
+    res.status(500).json({ success: false, error: 'The chart could not be read.' });
+  }
+});
+router.post('/garment/build', requireUser, garmentLimiter, (req, res) => {
+  try {
+    const out = garmentPattern.build(req.body || {});
+    res.status(out.success ? 200 : 400).json(out);
+  } catch (err) {
+    console.error('[garment] build failed:', err);
+    res.status(500).json({ success: false, error: 'The garment could not be built from this chart.' });
+  }
+});
+
 // Virtual lab: air permeability, thermal resistance and a hundred rolls of a drawn cloth (engine/domain/virtual-lab-engine.js).
 // The Studio also runs it inside /studio/analyse (the `lab` input, with the collar and cuff matcher `trim`).
 const virtualLab = require('../engine/domain/virtual-lab-engine');

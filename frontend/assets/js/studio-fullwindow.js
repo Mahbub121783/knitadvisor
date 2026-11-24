@@ -517,7 +517,13 @@
     var weft = $('st-weft'); if (!weft) return;
     var btn = function (cls) { var b = mk('button', 'st-btn primary ' + cls, '<span aria-hidden="true">&#x26F6;</span> Open the design studio &mdash; full window'); b.type = 'button'; b.title = 'Draw, colour and look at the cloth in the whole window'; b.addEventListener('click', openIt); return b; };
     var right = weft.querySelector('.ws-right'), verdict = right && right.querySelector('.ws-verdict');
-    if (right && verdict) { var row = mk('div', 'fw-enter'); row.appendChild(btn('')); right.insertBefore(row, verdict); }
+    if (right && verdict) {
+      var row = mk('div', 'fw-enter'); row.appendChild(btn(''));
+      // the cloth on the screen, taken to the Garment studio: its weight, width, shrinkage and colour
+      var gb = mk('button', 'st-btn fw-garment', 'Make a garment from this fabric &rarr;'); gb.type = 'button'; gb.title = 'Open the Garment studio with this cloth: patterns, marker and a 3D garment';
+      gb.addEventListener('click', function () { var h = window.KAStudioHost && window.KAStudioHost.fabric && window.KAStudioHost.fabric(); if (!h) { gb.textContent = 'Draw a structure first'; setTimeout(function () { gb.innerHTML = 'Make a garment from this fabric &rarr;'; }, 2200); return; } try { localStorage.setItem('ka_garment_fabric', JSON.stringify(h)); } catch (_) { /* private window */ } location.href = '/garment.html?fabric=studio'; });
+      row.appendChild(gb); right.insertBefore(row, verdict);
+    }
     ['ws-weft-yarn', 'ws-weft-design'].forEach(function (id) { var h = $(id) && $(id).querySelector('.ws-stagehead'); if (h) h.appendChild(btn('fw-open')); });
   }
 

@@ -63,6 +63,7 @@
       { href: '/scan.html',       t: 'Fabric scan',       d: 'Phone camera: loops counted, stitch length, count, gauge and GSM worked out', i: 'scan', badge: 'New', k: 'camera photo swatch analyse reverse engineer wales courses' },
       { href: '/scan-board.html', t: 'Scan board',        d: 'Pair a phone by QR code; every scan shows live on this screen', i: 'scan', k: 'expo big screen live qr' },
       { href: '/studio.html',     t: 'Fabric studio',     d: 'Design a structure needle by needle: checks, cam set-out, live 3D', i: 'grid', k: 'knit tuck miss cam 3d structure needle lacoste pointelle' },
+      { href: '/garment.html',    t: 'Garment studio',    d: 'A measurement chart in: patterns, marker, fabric per garment and a 3D garment out', i: 'sheet', badge: 'New', k: 'garment pattern tee t-shirt marker consumption size chart measurement spec cutting grading seam allowance' },
       { href: '/patterns.html',   t: 'Pattern catalogue', d: 'Knit, tuck and miss programmes, feeder by feeder', i: 'loop' },
       { href: '/dyeing.html',     t: 'Dyeing lab',        d: 'Recipes, process flow, costing and dyeing faults', i: 'drop', k: 'reactive disperse shade recipe' }
     ] },

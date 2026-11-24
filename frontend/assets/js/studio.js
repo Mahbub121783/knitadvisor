@@ -61,7 +61,14 @@
   // the technology comes first: weft (circular) or warp (tricot / raschel)
   var techNow = 'weft';
   // what the material package (studio-pbr.js) needs of the page
-  window.KAStudioHost = { load: function (o) { return loadDesign(o); }, schedule: function () { schedule(); }, density: function () { var f = last && last.fabric; return f && f.wpc > 0 && f.cpc > 0 ? { wpc: f.wpc, cpc: f.cpc } : null; }, cloth: function () { return cloth; }, design: function () { return payload(); }, fetch: function (u, o) { return apiFetch(u, o); }, colour: function () { var c = $('st-col'); return (c && /^#[0-9a-f]{6}$/i.test(c.value)) ? c.value : '#808080'; }, name: function () { return ($('st-name') && $('st-name').value) || 'fabric'; } };
+  window.KAStudioHost = { load: function (o) { return loadDesign(o); }, schedule: function () { schedule(); }, density: function () { var f = last && last.fabric; return f && f.wpc > 0 && f.cpc > 0 ? { wpc: f.wpc, cpc: f.cpc } : null; }, cloth: function () { return cloth; }, design: function () { return payload(); }, fetch: function (u, o) { return apiFetch(u, o); }, colour: function () { var c = $('st-col'); return (c && /^#[0-9a-f]{6}$/i.test(c.value)) ? c.value : '#808080'; }, name: function () { return ($('st-name') && $('st-name').value) || 'fabric'; },
+    // what the Garment studio takes from the cloth on the screen: weight, usable width, the shrinkage of a wash (the median residual), the loops per cm, the colour
+    fabric: function () {
+      var f = last && last.fabric; if (!f || !(f.gsm > 0)) return null;
+      var rel = f.relaxation && f.relaxation.residual, c = $('st-col');
+      return { name: ($('st-name') && $('st-name').value) || (last.structure && last.structure.family_label) || 'Studio fabric', gsm: Math.round(f.gsm), width_cm: f.width_open_in > 0 ? Math.round((f.width_open_in * 2.54 - 3) * 10) / 10 : null,
+        shrink_len_pct: rel && rel.length_pct ? rel.length_pct[1] : null, shrink_wid_pct: rel && rel.width_pct ? rel.width_pct[1] : null, wpc: f.wpc || null, cpc: f.cpc || null, colour: c && /^#[0-9a-f]{6}$/i.test(c.value) ? c.value : '#3d5a80' };
+    } };
   function setTech(t) {
     Array.prototype.forEach.call($('st-tech').children, function (b) { b.classList.toggle('on', b.getAttribute('data-tech') === t); });
     $('st-weft').hidden = t !== 'weft' && t !== 'vbed'; $('st-warp').hidden = t !== 'warp';

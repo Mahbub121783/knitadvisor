@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <script src="assets/js/auth-guard.js?v=20261112a"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Garment Studio — KnitAdvisor</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <meta name="description" content="Give a measurement chart: the pattern pieces are drawn with your fabric's shrinkage, laid on a marker for the fabric per garment, and made into a 3D garment.">
+  <meta name="theme-color" content="#FFFFFF">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css?v=20260603c">
+  <link rel="stylesheet" href="assets/css/theme-v2.css?v=20261112c">
+  <link rel="stylesheet" href="assets/css/garment.css?v=20261129a">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "/assets/js/vendor/three.module.js",
+      "three/addons/controls/OrbitControls.js": "/assets/js/vendor/OrbitControls.js"
+    }
+  }
+  </script>
+  <script src="assets/js/app-shell.js?v=20261129a" defer></script>
+</head>
+<body>
+<div class="page-wrap">
+  <header class="hdr"></header>
+
+  <main class="container gm-main">
+    <div class="gm-head">
+      <h1>Garment Studio</h1>
+      <p>Give the measurement chart. The pattern pieces are drawn from it, cut larger by your fabric's own shrinkage, laid on a marker to find the fabric each garment takes, and made into a garment you can turn in 3D. Change a figure and everything follows.</p>
+    </div>
+
+    <div class="gm-layout">
+      <section class="gm-spec" aria-label="Specification">
+        <div class="gm-card" id="gm-fabric">
+          <div class="gm-step"><b>1</b> Fabric</div>
+          <div class="gm-tools"><button type="button" class="gm-btn" id="gm-fromstudio" hidden>Use the fabric from my Studio design</button><span class="gm-hint" id="gm-fromnote" style="margin:0"></span></div>
+          <div class="gm-row">
+            <div class="gm-f"><label for="gm-fname">Name</label><input id="gm-fname" type="text" maxlength="80" placeholder="e.g. 30s single jersey"></div>
+            <div class="gm-f"><label for="gm-gsm">GSM (as cut)</label><input id="gm-gsm" type="number" min="40" max="800" step="1"></div>
+            <div class="gm-f"><label for="gm-width">Cutting width</label><div style="display:flex;gap:4px"><input id="gm-width" type="number" min="20" max="400" step="0.5" style="min-width:0"><select id="gm-wunit" style="width:62px"><option value="cm">cm</option><option value="in">in</option></select></div></div>
+          </div>
+          <div class="gm-row">
+            <div class="gm-f"><label for="gm-shl">Shrinkage along (length) %</label><input id="gm-shl" type="number" min="-15" max="30" step="0.1"></div>
+            <div class="gm-f"><label for="gm-shw">Shrinkage across (width) %</label><input id="gm-shw" type="number" min="-15" max="30" step="0.1"></div>
+            <div class="gm-f"><label for="gm-rib">Neck band stretch %</label><input id="gm-rib" type="number" min="0" max="80" step="1"></div>
+          </div>
+          <div class="gm-row">
+            <div class="gm-f"><label for="gm-colour">Colour</label><input id="gm-colour" type="color" value="#3d5a80"></div>
+            <div class="gm-f"><label for="gm-wpc">Wales / cm (optional)</label><input id="gm-wpc" type="number" min="3" max="40" step="0.1"></div>
+            <div class="gm-f"><label for="gm-cpc">Courses / cm (optional)</label><input id="gm-cpc" type="number" min="3" max="50" step="0.1"></div>
+          </div>
+          <p class="gm-hint">The chart is the <b>finished</b>, flat, <b>after-wash</b> garment. The shrinkage is how much this cloth shrinks in the wash: the pieces are cut that much larger. The wales and courses only draw the knit on the 3D garment.</p>
+        </div>
+
+        <div class="gm-card" id="gm-chartcard">
+          <div class="gm-step"><b>2</b> Measurement chart <span style="margin-left:auto;display:flex;gap:6px;align-items:center"><span class="gm-seg" id="gm-unit"><button type="button" data-u="cm" class="on">cm</button><button type="button" data-u="in">inch</button></span></span></div>
+          <div class="gm-tools">
+            <button type="button" class="gm-btn" id="gm-addsize">+ Size</button>
+            <button type="button" class="gm-btn" id="gm-tpl">Start from a standard tee</button>
+            <span class="gm-status" id="gm-status"></span>
+          </div>
+          <div class="gm-chartwrap"><table class="gm-chart" id="gm-chart"></table></div>
+          <p class="gm-hint">Flat widths, as a spec sheet gives them. <span class="req">*</span> The chest and the length are needed; anything else left empty is taken from the chest, and the chart says so. The marker ratio is how many garments of each size are cut together.</p>
+          <details class="gm-paste">
+            <summary>Paste a spec sheet from Excel or a PDF table</summary>
+            <textarea id="gm-paste" placeholder="Point of measure&#9;S&#9;M&#9;L&#9;XL&#10;1/2 Chest&#9;20 1/2&#9;21 1/2&#9;22 1/2&#9;23 1/2&#10;Body Length (HPS)&#9;27&#9;28&#9;29&#9;30"></textarea>
+            <div class="gm-tools" style="margin-top:6px"><button type="button" class="gm-btn primary" id="gm-readchart">Read this chart</button></div>
+            <p class="gm-pnote" id="gm-pnote"></p>
+          </details>
+        </div>
+
+        <div class="gm-card" id="gm-optcard">
+          <div class="gm-step"><b>3</b> Sewing and cutting</div>
+          <div class="gm-row">
+            <div class="gm-f"><label for="gm-seam">Seam allowance (cm)</label><input id="gm-seam" type="number" min="0" max="3" step="0.1"></div>
+            <div class="gm-f"><label for="gm-neckal">Neck allowance (cm)</label><input id="gm-neckal" type="number" min="0" max="3" step="0.1"></div>
+            <div class="gm-f"><label for="gm-ease">Sleeve cap ease (cm)</label><input id="gm-ease" type="number" min="-2" max="4" step="0.1"></div>
+          </div>
+          <div class="gm-row">
+            <div class="gm-f"><label for="gm-orient">Cutting</label><select id="gm-orient"><option value="both">Pieces may be turned round (plain cloth)</option><option value="one_way">One way only (stripe, nap, print)</option></select></div>
+            <div class="gm-f"><label for="gm-gap">Gap between pieces (cm)</label><input id="gm-gap" type="number" min="0" max="5" step="0.5"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="gm-out" aria-label="Result">
+        <div class="gm-summary" id="gm-summary"></div>
+        <div class="gm-bar">
+          <div class="gm-tabs" role="tablist" id="gm-tabs">
+            <button type="button" data-tab="patterns" class="on">Patterns</button>
+            <button type="button" data-tab="marker">Marker</button>
+            <button type="button" data-tab="garment">Garment</button>
+            <button type="button" data-tab="checks">Checks <span class="gm-n" id="gm-nchecks" hidden></span></button>
+          </div>
+          <button type="button" class="gm-btn primary big" id="gm-make">Make garment</button>
+        </div>
+
+        <div class="gm-pane on" id="pane-patterns">
+          <div class="gm-sizes" id="gm-psizes"></div>
+          <div class="gm-view" id="gm-patterns"><div class="gm-empty">Building the patterns…</div></div>
+          <div class="gm-legend" id="gm-plegend"></div>
+          <table class="gm-table" id="gm-ptable"></table>
+          <div class="gm-tools" style="margin-top:10px"><button type="button" class="gm-btn" id="gm-dlpat">Download the patterns (SVG, 1:1 scale)</button></div>
+        </div>
+
+        <div class="gm-pane" id="pane-marker">
+          <div class="gm-view" id="gm-marker"><div class="gm-empty">Building the marker…</div></div>
+          <div class="gm-legend" id="gm-mlegend"></div>
+          <div class="gm-tools" style="margin-top:10px"><button type="button" class="gm-btn" id="gm-dlmk">Download the marker (SVG)</button></div>
+        </div>
+
+        <div class="gm-pane" id="pane-garment">
+          <div class="gm-sizes" id="gm-gsizes"></div>
+          <div class="gm-3d" id="gm-3d"><div class="gm-empty" id="gm-3dwait">Press <b>Make garment</b>: the garment is built from the pattern pieces.</div><div class="gm-3dnote" id="gm-3dnote"></div></div>
+          <div class="gm-tools" style="margin-top:10px">
+            <button type="button" class="gm-btn" id="gm-spin">Turntable</button>
+            <button type="button" class="gm-btn" id="gm-snap">Save picture</button>
+            <span class="gm-hint" style="margin:0">The garment's form is built from the finished pattern pieces (fit, not drape): drag to turn it, scroll or pinch to zoom.</span>
+          </div>
+        </div>
+
+        <div class="gm-pane" id="pane-checks">
+          <ul class="gm-checks" id="gm-checks"></ul>
+          <ul class="gm-basis" id="gm-basis"></ul>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+<div class="gm-dock" id="gm-dock"><span id="gm-docksum">Fill in the chart</span><button type="button" class="gm-btn primary big" id="gm-make2">Make garment</button></div>
+<script src="assets/js/api.js"></script>
+<script src="assets/js/garment.js?v=20261129a"></script>
+</body>
+</html>
