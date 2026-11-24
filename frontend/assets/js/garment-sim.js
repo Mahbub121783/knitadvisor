@@ -91,6 +91,18 @@
     return Math.hypot(x - px, y - py, z - pz) - (ra + (rb - ra) * t);
   };
   const ellK = (k) => Math.PI * (3 * (1 + k) - Math.sqrt((3 + k) * (1 + 3 * k)));       // the perimeter of an ellipse of long semi-axis 1 and short k
+  // the mannequin as data: a stack of ellipses (the torso, from a height up or everywhere), tapered capsules (limbs), spheres (a head). Any body is a list of these.
+  //   desc = { top, loft: { keys: [[y, a, b], ...] descending in y, from: y | null }, caps: [{ A, B, ra, rb }], spheres: [{ c, r }] }
+  function avatar(desc) {
+    const keys = desc.loft && desc.loft.keys, from = desc.loft ? desc.loft.from : null, caps = desc.caps || [], sph = desc.spheres || [];
+    return { desc, top: desc.top, sdf(x, y, z) {
+      let best = 1e9;
+      if (keys && (from == null || y >= from)) best = torsoDist(keys, x, y, z);
+      for (const c of caps) best = Math.min(best, capsule(x, y, z, c.A, c.B, c.ra, c.rb));
+      for (const s of sph) best = Math.min(best, Math.hypot(x - s.c[0], y - s.c[1], z - s.c[2]) - s.r);
+      return best;
+    } };
+  }
   // a top: a torso that is the garment's chest less its ease, shoulders, a neck and a head, arms along the sleeve axis
   function bodyTee(size, opt) {
     opt = opt || {};
@@ -100,15 +112,8 @@
     const gam = 28 * Math.PI / 180, armL = (m.sleeve_l || 20) + (m.cuff_h || 0) + 16, r0 = Math.max(3, (2 * m.bicep - 4) / TAU), r1 = r0 * 0.66;
     const arms = [1, -1].map((s) => { const A = [s * (sw - 2.2), L - (m.slope || 2.5) - 3.2, 0]; return [A, [A[0] + s * Math.sin(gam) * armL, A[1] - Math.cos(gam) * armL, 0]]; });
     const head = [0, L + 14, 1.2], hr = 9.6;
-    return {
-      kind: 'tee', top: L + 24, parts: { loft: { keys, y0: -4, y1: L + 9 }, caps: arms.map(([A, B]) => ({ A, B, ra: r0, rb: r1 })), spheres: [{ c: head, r: hr }] }, sdf(x, y, z) {
-        let best = 1e9;
-        best = Math.min(best, torsoDist(keys, x, y, z));
-        for (const [A, B] of arms) best = Math.min(best, capsule(x, y, z, A, B, r0, r1));
-        best = Math.min(best, Math.hypot(x - head[0], y - head[1], z - head[2]) - hr);
-        return best;
-      },
-    };
+    const caps = arms.map(([A, B]) => ({ A, B, ra: r0, rb: r1 })), desc = { top: L + 24, loft: { keys, from: null }, caps, spheres: [{ c: head, r: hr }] };
+    return Object.assign(avatar(desc), { kind: 'tee', parts: { loft: { keys, y0: -4, y1: L + 9 }, caps, spheres: desc.spheres } });
   }
   // a bottom: a waist and a seat that are the garment's less their ease, two legs tapering to the leg opening
   function bodyLegs(size, opt) {
@@ -117,14 +122,8 @@
     const aw = (2 * m.waist_stretched - ease) / ellK(k), as = (2 * m.seat_w - ease) / ellK(k), ys = top - F - (m.seat_pos - F);
     const rt = Math.max(3, (2 * m.thigh - ease) / TAU), ra = Math.max(2.5, (2 * m.leg_opening - 4) / TAU), cxl = rt + 0.4, bottom = 0 - 12;
     const keys = [[top + 14, aw * 0.96, aw * k * 0.92], [top - F * 0.5, aw, aw * k], [ys, as, as * k], [yc + 0.5, as * 0.98, as * k * 0.98]];
-    return {
-      kind: 'legs', geo: { top, F, yc, keys, cxl, rt, ra }, top: top + 20, parts: { loft: { keys, y0: yc + 0.5, y1: top + 14 }, caps: [1, -1].map((s) => ({ A: [s * cxl, yc + 6, 0], B: [s * cxl * 0.96, 0, 0], ra: rt, rb: ra })).concat([1, -1].map((s) => ({ A: [s * cxl * 0.96, 0, 0], B: [s * cxl * 0.94, bottom, 0], ra, rb: ra * 0.8 }))), spheres: [] }, sdf(x, y, z) {
-        let best = 1e9;
-        if (y >= yc) best = torsoDist(keys, x, y, z);
-        for (const s of [1, -1]) best = Math.min(best, capsule(x, y, z, [s * cxl, yc + 6, 0], [s * cxl * 0.96, 0, 0], rt, ra), capsule(x, y, z, [s * cxl * 0.96, 0, 0], [s * cxl * 0.94, bottom, 0], ra, ra * 0.8));
-        return best;
-      },
-    };
+    const caps = [1, -1].map((s) => ({ A: [s * cxl, yc + 6, 0], B: [s * cxl * 0.96, 0, 0], ra: rt, rb: ra })).concat([1, -1].map((s) => ({ A: [s * cxl * 0.96, 0, 0], B: [s * cxl * 0.94, bottom, 0], ra, rb: ra * 0.8 }))), desc = { top: top + 20, loft: { keys, from: yc }, caps, spheres: [] };
+    return Object.assign(avatar(desc), { kind: 'legs', geo: { top, F, yc, keys, cxl, rt, ra }, parts: { loft: { keys, y0: yc + 0.5, y1: top + 14 }, caps, spheres: [] } });
   }
 
   // ── the cloth ──
@@ -183,7 +182,8 @@
       };
       const pairs = new Map(), nn = new Map();
       const prox = this.opt.proxSeams && this.opt.seamOf ? (b) => this.opt.proxSeams.indexOf(this.opt.seamOf[this.inst[b.ii].mesh.blabels[b.i]]) >= 0 : () => true;
-      B.forEach((b) => { if (!prox(b)) return; const c = near(b); if (c && prox(c)) nn.set(b.g, c.g); });
+      if (!this.opt.fixedPairs) B.forEach((b) => { if (!prox(b)) return; const c = near(b); if (c && prox(c)) nn.set(b.g, c.g); });
+      (this.opt.fixedPairs || []).forEach(([p, q]) => { const a = Math.min(p, q), c = Math.max(p, q); if (a !== c) pairs.set(a * 1048576 + c, [a, c]); });
       nn.forEach((g2, g1) => { const mutual = nn.get(g2) === g1, o1 = 3 * g1, o2 = 3 * g2, d = Math.hypot(this.X[o1] - this.X[o2], this.X[o1 + 1] - this.X[o2 + 1], this.X[o1 + 2] - this.X[o2 + 2]); if (mutual || d < tol * 0.5) { const a = Math.min(g1, g2), c = Math.max(g1, g2); pairs.set(a * 1048576 + c, [a, c]); } });
       (this.opt.sewing || []).forEach(([ra, rb, mode]) => this._sewRuns(ra, rb, pairs, mode));
       this.ss = Int32Array.from([].concat(...[...pairs.values()]));
@@ -265,6 +265,40 @@
   // the three settings of how the cloth bends
   const DRAPE = { soft: { bend: 0.02, stretch: 0.95 }, medium: { bend: 0.08, stretch: 0.96 }, stiff: { bend: 0.3, stretch: 0.97 } };
 
-  const KASim = { delaunay, meshPiece, meshArea, bodyTee, bodyLegs, lerpKeys, Cloth, DRAPE, ellK };
+  // ── the garment document: pieces, where each starts in space, what is sewn to what, what is held, the body, the fabric. All data; this is the only way in. ──
+  //   piece      { id, pid, name, poly: [[x, y]...] cm, labels: [per vertex], material: 'main'|'rib', placement: { x0, y0, dx, dy, nx, ny, xyz: [x, y, z ...] }, pinAll?: true }
+  //   stitches   [{ a: [piece, s], b: [piece, s] }]    point to point; s is the share (0..1) of the way round the piece's outline
+  //   seams      [{ a: [seg...], b: [seg...], mode: 'share' | 'end' }]  seg = { piece, s0, s1, rev? }: a run of an outline, sewn to another by share (or from the last point)
+  //   pins       [{ piece, s0, s1 }]    outline held where it starts (a neckline, a waistband)
+  //   avatar     a desc for avatar();   sim { gravity, seamTol, thick ... }
+  const gridMap = (pl) => {
+    const nx = pl.nx, ny = pl.ny, v = pl.xyz, cl = (t, n) => Math.max(0, Math.min(n - 1, t));
+    return (x, y) => {
+      const fx = cl((x - pl.x0) / pl.dx, nx), fy = cl((y - pl.y0) / pl.dy, ny), i = Math.min(Math.floor(fx), Math.max(0, nx - 2)), j = Math.min(Math.floor(fy), Math.max(0, ny - 2)), tx = nx > 1 ? fx - i : 0, ty = ny > 1 ? fy - j : 0;
+      const at = (a, b, c) => v[3 * (Math.min(ny - 1, b) * nx + Math.min(nx - 1, a)) + c];
+      return [0, 1, 2].map((c) => at(i, j, c) * (1 - tx) * (1 - ty) + at(i + 1, j, c) * tx * (1 - ty) + at(i, j + 1, c) * (1 - tx) * ty + at(i + 1, j + 1, c) * tx * ty);
+    };
+  };
+  const outlineS = (mesh) => {                                                   // the share of the way round the outline of each boundary point
+    const n = mesh.nb, c = [0]; for (let i = 1; i <= n; i++) { const p = mesh.pts[i % n], q = mesh.pts[i - 1]; c.push(c[i - 1] + Math.hypot(p[0] - q[0], p[1] - q[1])); }
+    const t = c[n] || 1; return c.slice(0, n).map((v) => v / t);
+  };
+  function fromDoc(doc, hOverride) {
+    const area = doc.pieces.reduce((a, it) => { let s = 0; for (let i = 0; i < it.poly.length; i++) { const p = it.poly[i], q = it.poly[(i + 1) % it.poly.length]; s += p[0] * q[1] - q[0] * p[1]; } return a + Math.abs(s) / 2; }, 0);
+    const h = hOverride || Math.max(1.5, Math.min(3.2, Math.sqrt(area / (3200 * 0.866))));
+    const insts = doc.pieces.map((p) => { const mesh = meshPiece(p.poly, p.labels, h); return { id: p.id, pid: p.pid || p.id, mesh, s: outlineS(mesh), map: gridMap(p.placement), rest: p.rest || 'flat', mat: p.material || 'main', grp: p.grp, pinAll: !!p.pinAll }; });
+    const by = (id) => insts.find((t) => t.id === id), off = []; let N = 0; insts.forEach((it) => { off.push(N); N += it.mesh.pts.length; });
+    const near = (it, s) => { let best = 0, bd = 9; it.s.forEach((v, i) => { const d = Math.min(Math.abs(v - s), 1 - Math.abs(v - s)); if (d < bd) { bd = d; best = i; } }); return best; };
+    const fixed = []; (doc.stitches || []).forEach((st) => { const A = by(st.a[0]), B = by(st.b[0]); if (!A || !B) return; fixed.push([off[insts.indexOf(A)] + near(A, st.a[1]), off[insts.indexOf(B)] + near(B, st.b[1])]); });
+    // a segment is a stretch of the outline from s0 to s1 (s1 over 1 goes on round past the start of the outline); the key puts its points in order along it
+    const key = (s, g) => { if (s >= g.s0 - 1e-6 && s <= g.s1 + 1e-6) return s; if (g.s1 > 1 && s + 1 >= g.s0 - 1e-6 && s + 1 <= g.s1 + 1e-6) return s + 1; return null; };
+    const runs = (segs) => [].concat(...segs.map((g) => { const it = by(g.piece); if (!it) return []; const r = []; for (let i = 0; i < it.mesh.nb; i++) { const k = key(it.s[i], g); if (k != null) r.push([it.id, i, k]); } r.sort((a, b) => (g.rev ? b[2] - a[2] : a[2] - b[2])); return r.map((q) => [q[0], q[1]]); }));
+    const sewing = (doc.seams || []).map((sm) => [runs(sm.a), runs(sm.b), sm.mode]);
+    const pinSet = new Map(); (doc.pins || []).forEach((p) => { const it = by(p.piece); if (!it) return; const set = pinSet.get(it.id) || new Set(); for (let i = 0; i < it.mesh.nb; i++) if (key(it.s[i], p) != null) set.add(i); pinSet.set(it.id, set); });
+    insts.forEach((it) => { const set = pinSet.get(it.id); if (set) it.pin = (i) => set.has(i); });
+    return { insts, body: avatar(doc.avatar), h, opt: Object.assign({ h, seamTol: Math.max(1.6, h * 0.85), fixedPairs: fixed, sewing }, doc.sim || {}) };
+  }
+
+  const KASim = { delaunay, meshPiece, meshArea, bodyTee, bodyLegs, avatar, lerpKeys, Cloth, DRAPE, ellK, fromDoc, gridMap, outlineS };
   root.KASim = KASim; if (typeof module !== 'undefined' && module.exports) module.exports = KASim;
 })(typeof window !== 'undefined' ? window : globalThis);

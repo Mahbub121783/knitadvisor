@@ -277,6 +277,11 @@
   }
   function bind3D() {
     if (bound3d || !K().view()) return; bound3d = true;
+    var dfile = $('gs-docfile'); if (dfile) dfile.addEventListener('change', function () {
+      var f = dfile.files && dfile.files[0]; if (!f) return; var rd = new FileReader();
+      rd.onload = function () { try { var d = window.KADoc.fromJSON(String(rd.result)), vw = K().view(), bad = vw.showDoc(d); if (bad.length) throw new Error(bad[0]); if (lay.view === '2d') setView('both'); toast('Opened ' + (d.name || 'the garment') + ': ' + d.pieces.length + ' pieces, ' + (d.stitches || []).length + ' stitches.'); } catch (err) { toast('That file cannot be opened: ' + err.message); } };
+      rd.readAsText(f);
+    });
     var v0 = K().view(); if (v0) v0.onSim = function (e) {
       var t = $('gs-3dsim'), b = $('gm-drape'); if (!t) return;
       if (e.state === 'running') t.textContent = 'Draping… ' + Math.round((e.step / e.total) * 100) + ' %';
@@ -336,6 +341,8 @@
       case 'drape': { var vw = k.view(); if (!vw) { toast('The garment is not made yet.'); break; } if (lay.view === '2d') setView('both'); if (vw.simMode) vw.stopSim(); else { vw.startSim(); } break; }
       case 'drape-soft': case 'drape-medium': case 'drape-stiff': { var vw2 = k.view(); if (!vw2) break; vw2.setDrape(a.slice(6)); if (!vw2.simMode) vw2.startSim(); toast('Cloth: ' + a.slice(6)); break; }
       case 'mannequin': { var vw3 = k.view(); if (!vw3) break; if (!vw3.simMode) { toast('Drape the garment first: the mannequin is what it hangs on.'); break; } vw3.showMannequin(!vw3._showBody); break; }
+      case 'docsave': { var vd = k.view(), dd = vd && vd.doc(); if (!dd) { toast('The garment is not made yet.'); break; } var blob = new Blob([window.KADoc.toJSON(dd)], { type: 'application/json' }), ua = document.createElement('a'); ua.href = URL.createObjectURL(blob); ua.download = (dd.name || 'garment') + '.ka-garment.json'; document.body.appendChild(ua); ua.click(); setTimeout(function () { URL.revokeObjectURL(ua.href); ua.remove(); }, 500); toast('Saved the garment document.'); break; }
+      case 'docopen': { var fi = $('gs-docfile'); if (fi) { fi.value = ''; fi.click(); } break; }
       case 'refresh3d': k.make({ quiet: true, spin: false }); break;
       case 'spin': if (!k.view()) { k.make({ quiet: true, spin: true }); } else $('gm-spin').click(); break;
       case 'v-front': case 'v-back': case 'v-side': case 'v-quarter': if (!k.view()) { toast('The garment is not made yet.'); break; } if (lay.view === '2d') setView('both'); k.view().setView(a.slice(2)); break;

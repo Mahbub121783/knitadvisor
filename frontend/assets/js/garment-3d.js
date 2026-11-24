@@ -120,7 +120,7 @@ export class GarmentView {
   setSpin(on) { this.spin = !!on; }
 
   clear() {
-    this._cloth = null; this._simBusy = false; this._simGroup = null; this._hemRing = null; this._cuffParam = null; this._mannequin = null;
+    this._cloth = null; this._simBusy = false; this._simGroup = null; this._docOverride = null; this._hemRing = null; this._cuffParam = null; this._mannequin = null;
     if (this._hiMats) this._hiMats.clear();
     while (this.group.children.length) { const o = this.group.children[0]; this.group.remove(o); o.traverse((n) => { if (n.geometry) n.geometry.dispose(); }); }
     this.mats.forEach((m) => { if (m.map) m.map.dispose(); m.dispose(); }); this.mats = [];
@@ -409,53 +409,44 @@ export class GarmentView {
     this._cloth = null; this.group.traverse((o) => { if (o.userData && (o.userData.piece || o.userData.seam || o.userData.seamVis)) o.visible = true; });
     if (this.onSim) this.onSim({ state: 'off' });
   }
+  // the garment of the form on screen, as a document (made once per drafted size, then kept)
+  doc() {
+    const K = window.KASim, D = window.KADoc; if (this._docOverride) return this._docOverride;
+    const S = this._sim; if (!S || !K || !D) return null;
+    if (!S.doc) S.doc = D.fromRaw(S, { K, seamOf: (window.KAGarment && window.KAGarment.seamOf) || null });
+    return S.doc;
+  }
+  // a document from outside (a file, the pattern editor): shown as cloth on its own body, with nothing else drawn
+  showDoc(doc) {
+    const bad = window.KADoc ? window.KADoc.validate(doc) : ['the document module is not loaded']; if (bad.length) return bad;
+    this.clear(); this._sim = null; this._docOverride = doc; this._mkThread();
+    const mat = new THREE.MeshStandardMaterial({ color: this.colour, roughness: 0.94, metalness: 0, side: THREE.DoubleSide }), rib = new THREE.MeshStandardMaterial({ color: new THREE.Color(this.colour).multiplyScalar(0.86), roughness: 0.95, metalness: 0, side: THREE.DoubleSide });
+    this.mats = [mat, rib]; this._docMats = { mat, rib }; this._gsm = doc.fabric && +doc.fabric.gsm || 0;
+    const top = (doc.avatar && doc.avatar.top) || 100; this._shadowAndFrame(top - 20, 90);
+    this.startSim(); return [];
+  }
   startSim() {
-    const S = this._sim, K = window.KASim; if (!S || !K) { if (this.onSim) this.onSim({ state: 'unavailable' }); return false; }
+    const K = window.KASim, doc = this.doc(); if (!doc || !K) { if (this.onSim) this.onSim({ state: 'unavailable' }); return false; }
+    const S = this._sim, mats = S ? { mat: S.mat, rib: S.rib } : this._docMats, hide = S ? S.hide : [];
     this.simMode = true;
     if (this._simGroup) { this.group.remove(this._simGroup); this._simGroup.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); }
-    const area = S.inst.reduce((a, it) => { let s = 0; for (let i = 0; i < it.poly.length; i++) { const p = it.poly[i], q = it.poly[(i + 1) % it.poly.length]; s += p[0] * q[1] - q[0] * p[1]; } return a + Math.abs(s) / 2; }, 0);
-    const h = Math.max(1.5, Math.min(3.2, Math.sqrt(area / (3200 * 0.866)))), body = S.kind === 'legs' ? K.bodyLegs(S.size, {}) : K.bodyTee(S.size, {});
-    const insts = S.inst.map((it) => { const mesh = K.meshPiece(it.poly, it.labels, h); return { id: it.id, pid: it.pid, mesh, map: it.map, rest: it.rest, mat: it.mat, grp: it.grp, pinAll: it.id === 'band' }; });
+    const built = K.fromDoc(doc), insts = built.insts, h = built.h;
     /* the stiffness follows the fabric's weight (GSM) unless a cloth setting was chosen by hand: bending stiffness of a sheet grows with its mass and thickness */
     const g = this._gsm || 0, dr = this._drapeSet || !g ? K.DRAPE[this._drape || 'medium'] : { bend: Math.max(0.01, Math.min(0.4, 0.02 * Math.pow(g / 140, 2.2))), stretch: g > 300 ? 0.97 : 0.955 };
-    this._cloth = new K.Cloth(insts, body, Object.assign({}, dr, { h, seamTol: Math.max(1.6, h * 0.85), gravity: S.kind === 'legs' ? 700 : 980, seamOf: (window.KAGarment && window.KAGarment.seamOf) || null, pinSeams: S.kind === 'legs' ? ['waistband'] : ['neck'], proxSeams: S.kind === 'legs' ? [] : ['neck', 'hem', 'sleeve_hem', 'band_end', 'cuff_end', 'hemband_end'], sewing: S.kind === 'legs' ? this._legSewing(insts) : this._teeSewing(insts), groupSeams: S.kind === 'legs' ? ['inseam', 'side'] : null, selfSeams: S.kind === 'legs' ? ['band_end'] : ['underarm', 'band_end', 'cuff_end', 'hemband_end'] }));
+    this._cloth = new K.Cloth(insts, built.body, Object.assign({}, dr, built.opt));
     this._simGroup = new THREE.Group(); this._simMeshes = [];
     insts.forEach((it) => {
-      const g = new THREE.BufferGeometry(), N = it.mesh.pts.length, uv = new Float32Array(2 * N), idx = [];
+      const g2 = new THREE.BufferGeometry(), N = it.mesh.pts.length, uv = new Float32Array(2 * N), idx = [];
       it.mesh.pts.forEach((p, i) => { uv[2 * i] = p[0]; uv[2 * i + 1] = p[1]; }); it.mesh.tris.forEach((t) => idx.push(t[0], t[1], t[2]));
-      g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(3 * N), 3).setUsage(THREE.DynamicDrawUsage)); g.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); g.setIndex(idx);
-      const material = it.mat === 'rib' ? S.rib : S.mat, mesh = new THREE.Mesh(g, material); mesh.userData.piece = it.pid; mesh.userData.base = material; mesh.frustumCulled = false;
-      this._simGroup.add(mesh); this._simMeshes.push({ mesh, off: it.off || this._cloth.inst.find((q) => q.id === it.id).off, N });
+      g2.setAttribute('position', new THREE.BufferAttribute(new Float32Array(3 * N), 3).setUsage(THREE.DynamicDrawUsage)); g2.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); g2.setIndex(idx);
+      const material = it.mat === 'rib' ? mats.rib : mats.mat, mesh = new THREE.Mesh(g2, material); mesh.userData.piece = it.pid; mesh.userData.base = material; mesh.frustumCulled = false;
+      this._simGroup.add(mesh); this._simMeshes.push({ mesh, off: it.off, N });
     });
     this.group.add(this._simGroup);
-    this.group.traverse((o) => { if (o.userData && ((o.userData.piece && S.hide.indexOf(o.userData.piece) >= 0 && !this._simGroup.children.includes(o)) || o.userData.seam || o.userData.seamVis)) { if (!(this._simGroup && this._simGroup.getObjectById(o.id))) o.visible = false; } });
+    this.group.traverse((o) => { if (o.userData && ((o.userData.piece && hide.indexOf(o.userData.piece) >= 0 && !this._simGroup.children.includes(o)) || o.userData.seam || o.userData.seamVis)) { if (!(this._simGroup && this._simGroup.getObjectById(o.id))) o.visible = false; } });
     this._simSteps = 0; this._simTarget = 300; this._simBusy = true; this._simUpload(); this._applyHi();
     if (this.onSim) this.onSim({ state: 'running', step: 0, total: this._simTarget });
     return true;
-  }
-  // the seams of a top, written down: which run of which piece's outline is sewn to which (shoulder, side, armhole to the sleeve cap, underarm)
-  // the seams of a pair of legs: each leg's side and inseam join its front to its back, its crotch curve too; the two fronts meet at the centre front, the two backs at the centre back
-  _legSewing(insts) {
-    const by = (id) => insts.find((t) => t.id === id), out = [];
-    const run = (id, labels) => { const t = by(id); if (!t) return []; const m = t.mesh, r = []; for (let i = 0; i < m.nb; i++) if (labels.indexOf(m.blabels[i]) >= 0) r.push([id, i, m.pts[i][1]]); r.sort((a, b) => a[2] - b[2]); return r.map((q) => [q[0], q[1]]); };
-    ['R', 'L'].forEach((g) => { out.push([run('front' + g, ['side', 'sidehem']), run('back' + g, ['side', 'sidehem']), 'end']); out.push([run('front' + g, ['inseam', 'inseamhem']), run('back' + g, ['inseam', 'inseamhem']), 'end']); });
-    ['front', 'back'].forEach((p) => out.push([run(p + 'R', ['centre', 'crotch']), run(p + 'L', ['centre', 'crotch'])]));     // the rise: the right half to the left half, in front and behind
-    return out;
-  }
-  _teeSewing(insts) {
-    const by = (id) => insts.find((t) => t.id === id); const out = [];
-    const run = (id, labels, side, order) => { const t = by(id); if (!t) return []; const m = t.mesh, r = []; for (let i = 0; i < m.nb; i++) { if (labels.indexOf(m.blabels[i]) < 0) continue; const x = m.pts[i][0]; if (side > 0 ? x < -0.01 : side < 0 ? x > 0.01 : false) continue; r.push([id, i, m.pts[i][1]]); } r.sort((a, b) => (order === 'up' ? a[2] - b[2] : b[2] - a[2])); return r.map((q) => [q[0], q[1]]); };
-    const fid = by('front') ? 'front' : null, fr = (s) => (fid ? run('front', ['shoulder'], s, 'up') : run(s > 0 ? 'front_r' : 'front_l', ['shoulder'], 0, 'up'));
-    [1, -1].forEach((s) => {
-      const F = fid ? fid : (s > 0 ? 'front_r' : 'front_l'), sl = s > 0 ? 'sleeveR' : 'sleeveL';
-      out.push([run(F, ['shoulder'], fid ? s : 0, 'up'), run('back', ['shoulder'], -s, 'up')]);
-      out.push([run(F, ['side', 'sidehem'], fid ? s : 0, 'down'), run('back', ['side', 'sidehem'], -s, 'down')]);
-      const A = run(F, ['armhole'], fid ? s : 0, 'up').concat(run('back', ['armhole'], -s, 'down'));
-      const C = run(sl, ['cap'], 1, 'up').concat(run(sl, ['cap'], -1, 'down'));
-      out.push([A, C]);
-    });
-    ['sleeveR', 'sleeveL'].forEach((id) => out.push([run(id, ['underarm', 'underarmhem'], 1, 'up'), run(id, ['underarm', 'underarmhem'], -1, 'up')]));
-    return out;
   }
   _simUpload() {
     const c = this._cloth; if (!c) return;
@@ -472,9 +463,9 @@ export class GarmentView {
   showMannequin(on) {
     if (this._mannequin) { this.group.remove(this._mannequin); this._mannequin.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); this._mannequin = null; }
     this._showBody = !!on; if (!on || !this._cloth) return;
-    const parts = this._cloth.body.parts; if (!parts) return;
+    const d = this._cloth.body.desc, parts = this._cloth.body.parts || (d && { loft: d.loft && { keys: d.loft.keys, y0: d.loft.from == null ? Math.max(-4, d.loft.keys[d.loft.keys.length - 1][0]) : d.loft.from + 0.5, y1: d.loft.keys[0][0] - 1 }, caps: d.caps || [], spheres: d.spheres || [] }); if (!parts) return;
     const g = new THREE.Group(), mat = new THREE.MeshStandardMaterial({ color: 0xcfc8c0, roughness: 0.9, transparent: true, opacity: 0.55 }), ring = (a, b, y, n = 36) => Array.from({ length: n }, (_, i) => new THREE.Vector3(a * Math.cos((i / n) * TAU), y, b * Math.sin((i / n) * TAU)));
-    { const L = parts.loft, rows = [], N = 36, steps = 24; for (let j = 0; j <= steps; j++) { const y = L.y1 - ((L.y1 - L.y0) * j) / steps, k = L.keys; let a = k[k.length - 1][1], b = k[k.length - 1][2]; for (let q = 1; q < k.length; q++) if (y >= k[q][0]) { const t = (k[q - 1][0] - y) / (k[q - 1][0] - k[q][0] || 1); a = k[q - 1][1] + (k[q][1] - k[q - 1][1]) * t; b = k[q - 1][2] + (k[q][2] - k[q - 1][2]) * t; break; } if (y >= k[0][0]) { a = k[0][1]; b = k[0][2]; } rows.push(ring(a, b, y, N)); }
+    if (parts.loft) { const L = parts.loft, rows = [], N = 36, steps = 24; for (let j = 0; j <= steps; j++) { const y = L.y1 - ((L.y1 - L.y0) * j) / steps, k = L.keys; let a = k[k.length - 1][1], b = k[k.length - 1][2]; for (let q = 1; q < k.length; q++) if (y >= k[q][0]) { const t = (k[q - 1][0] - y) / (k[q - 1][0] - k[q][0] || 1); a = k[q - 1][1] + (k[q][1] - k[q - 1][1]) * t; b = k[q - 1][2] + (k[q][2] - k[q - 1][2]) * t; break; } if (y >= k[0][0]) { a = k[0][1]; b = k[0][2]; } rows.push(ring(a, b, y, N)); }
       const pos = [], idx = []; rows.forEach((r) => r.forEach((v) => pos.push(v.x, v.y, v.z))); for (let j = 0; j < steps; j++) for (let i = 0; i < N; i++) { const a = j * N + i, b = j * N + ((i + 1) % N), c = a + N, d = b + N; idx.push(a, c, b, b, c, d); }
       const bg = new THREE.BufferGeometry(); bg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); bg.setIndex(idx); bg.computeVertexNormals(); g.add(new THREE.Mesh(bg, mat)); }
     parts.caps.forEach((c) => { const A = new THREE.Vector3(...c.A), B = new THREE.Vector3(...c.B), len = A.distanceTo(B), cyl = new THREE.Mesh(new THREE.CylinderGeometry(c.rb, c.ra, len, 20, 1, true), mat); cyl.position.copy(A).add(B).multiplyScalar(0.5); cyl.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), B.clone().sub(A).normalize()); g.add(cyl); [[A, c.ra], [B, c.rb]].forEach(([p, r]) => { const s = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 10), mat); s.position.copy(p); g.add(s); }); });

@@ -15,8 +15,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/css/style.css?v=20260603c">
   <link rel="stylesheet" href="assets/css/theme-v2.css?v=20261112c">
-  <link rel="stylesheet" href="assets/css/garment.css?v=20261205e">
-  <link rel="stylesheet" href="assets/css/garment-studio.css?v=20261205e">
+  <link rel="stylesheet" href="assets/css/garment.css?v=20261205f">
+  <link rel="stylesheet" href="assets/css/garment-studio.css?v=20261205f">
   <script type="importmap">
   {
     "imports": {
@@ -47,6 +47,9 @@
           <button type="button" role="menuitem" data-do="dlpat"><i data-ic="download"></i>Download the patterns (SVG, 1:1)</button>
           <button type="button" role="menuitem" data-do="dlmk"><i data-ic="download"></i>Download the marker (SVG)</button>
           <button type="button" role="menuitem" data-do="snap"><i data-ic="camera"></i>Save a picture of the garment</button>
+          <button type="button" role="menuitem" data-do="docsave"><i data-ic="download"></i>Save the garment document (.json)</button>
+          <button type="button" role="menuitem" data-do="docopen"><i data-ic="upload"></i>Open a garment document…</button>
+          <input type="file" id="gs-docfile" accept=".json,application/json" hidden>
         </div></div>
         <div class="gs-menu" data-menu="edit"><button type="button" class="gs-mb" role="menuitem" aria-haspopup="true">Edit</button><div class="gs-mp" role="menu">
           <button type="button" role="menuitem" data-do="undo"><i data-ic="undo"></i>Undo<kbd>Ctrl Z</kbd></button>
@@ -412,10 +415,11 @@
   <table id="gm-mtab-legacy"></table>
 </div>
 <script src="assets/js/api.js"></script>
-<script src="assets/js/garment-sim.js?v=20261205e"></script>
-<script src="assets/js/garment-edit.js?v=20261205e"></script>
-<script src="assets/js/garment.js?v=20261205e"></script>
-<script src="assets/js/garment-spec.js?v=20261205e"></script>
-<script src="assets/js/garment-studio.js?v=20261205e"></script>
+<script src="assets/js/garment-sim.js?v=20261205f"></script>
+<script src="assets/js/garment-doc.js?v=20261205f"></script>
+<script src="assets/js/garment-edit.js?v=20261205f"></script>
+<script src="assets/js/garment.js?v=20261205f"></script>
+<script src="assets/js/garment-spec.js?v=20261205f"></script>
+<script src="assets/js/garment-studio.js?v=20261205f"></script>
 </body>
 </html>
