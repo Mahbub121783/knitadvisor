@@ -63,7 +63,7 @@
       if (blob.size > 8 * 1024 * 1024) throw new Error('That file is larger than 8 MB.');
       return fetch(API + '/api/garment/spec/read' + (opts.sheet != null ? '?sheet=' + opts.sheet : ''), { method: 'POST', headers: { 'Content-Type': 'application/octet-stream', 'Accept': 'application/json', 'X-File-Name': encodeURIComponent(file.name || 'spec') }, body: blob, signal: abort ? abort.signal : undefined });
     }).then(function (res) { return res.json().then(function (d) { if (res.status === 401 && window.kaSignInRedirect) window.kaSignInRedirect(); if (!res.ok || !d.success) throw new Error(d.error || ('HTTP ' + res.status)); return d; }); })
-      .then(function (d) { $('gm-drop').classList.remove('busy'); say('Read ' + (file.name || 'the sheet') + ' in ' + Math.round((Date.now() - t0) / 100) / 10 + ' s: check it, then apply it.'); return catalogue().then(function () { open(d.spec, d.rows, d.source, d.spec ? null : 'No table of measurements was found in this file.'); }); })
+      .then(function (d) { $('gm-drop').classList.remove('busy'); say('Read ' + (file.name || 'the sheet') + ' in ' + Math.round((Date.now() - t0) / 100) / 10 + ' s: check it, then apply it.'); return catalogue().then(function () { open(d.spec, d.rows, d.source, d.spec ? null : (d.extract_error || 'No table of measurements was found in this file.')); }); })
       .catch(function (e) { $('gm-drop').classList.remove('busy'); if (e && e.name === 'AbortError') return; say((e && e.message) || 'This file could not be read.', true); });
   }
   function fromText(text, note) {

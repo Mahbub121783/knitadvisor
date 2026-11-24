@@ -1769,12 +1769,12 @@ router.post('/garment/spec/read', requireUser, specLimiter, require('express').r
     const want = Number.isInteger(+req.query.sheet) ? +req.query.sheet : -1;
     const unit = req.query.unit === 'in' || req.query.unit === 'cm' ? req.query.unit : undefined;
     // a workbook with several sheets: the one the user picked, else the one with the most measurements
-    let pick = want >= 0 && file.sheets[want] ? want : 0, spec = null, best = -1;
-    file.sheets.forEach((s, i) => { if (want >= 0 && i !== want) return; s.rows = garmentSpec.normRows(s.rows); const x = garmentSpec.extract(s.rows, { unit }); const n = x.success ? x.poms.filter((p) => p.key).length : 0; if (n > best) { best = n; pick = i; spec = x; } });
+    let pick = want >= 0 && file.sheets[want] ? want : 0, spec = null, best = -1, lastErr = null;
+    file.sheets.forEach((s, i) => { if (want >= 0 && i !== want) return; s.rows = garmentSpec.normRows(s.rows); const x = garmentSpec.extract(s.rows, { unit }); const n = x.success ? x.poms.filter((p) => p.key).length : 0; if (!x.success) lastErr = x.error; if (n > best) { best = n; pick = i; spec = x.success ? x : null; } });
     const sh = file.sheets[pick]; sh.rows = garmentSpec.normRows(sh.rows);
     res.json({
       success: true, source: { kind: file.kind, name, method: file.method, confidence: file.confidence, pages: file.pages, ms: file.ms, sheet: pick, sheets: file.sheets.map((s) => s.name) },
-      rows: compactRows(sh.rows), spec,
+      rows: compactRows(sh.rows), spec, extract_error: spec ? undefined : lastErr,
     });
   } catch (err) {
     if (err instanceof specReader.SpecReadError) return res.status(err.code === 'OCR_OFF' ? 503 : 400).json({ success: false, code: err.code, error: err.message });
