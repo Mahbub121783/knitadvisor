@@ -814,9 +814,22 @@
       var bed = td.closest('table').getAttribute('data-bed');
       td.classList.toggle('bad', !!bad[bed + td.getAttribute('data-i') + '_' + td.getAttribute('data-j')]);
     });
-    renderSetup(); renderResults(); renderMachine(); renderNotation(); showYarnEq(); exportState();
+    renderSetup(); renderResults(); renderMachine(); renderNotation(); showYarnEq(); exportState(); showRepeat(r);
     clearTimeout(timer3d); timer3d = setTimeout(render3D, 350);
     race.reset(); cycle.refresh();
+  }
+
+  // the drawing is one repeat; the machine's feeders knit it round and round — say so, and show what "auto" resolved to
+  function showRepeat(r) {
+    var m = r.machine || {}, n = $('st-repeatnote'), F = r.structure.feeds || S.feeds.length;
+    [['st-gauge', m.gauge], ['st-dia', m.dia], ['st-feeders', m.feeders], ['st-rpm', m.rpm]].forEach(function (p) {
+      var el = $(p[0]); if (el && p[1]) el.placeholder = 'auto: ' + p[1];
+    });
+    if (!n) return;
+    var rib = r.structure.bed === 'double' && r.structure.gating === 'rib';
+    n.textContent = 'This drawing is a repeat of ' + F + ' feeder' + (F > 1 ? 's' : '') + '.' +
+      (m.feeders ? ' The machine\'s ' + m.feeders + ' feeders knit it ' + (m.repeats_round || Math.floor(m.feeders / F)) + ' time' + ((m.repeats_round || Math.floor(m.feeders / F)) === 1 ? '' : 's') + ' round, so every turn of the cylinder makes ' + Math.round(m.feeders * (r.structure.courses_per_feed || 1)) + ' courses.' : '') +
+      (rib && F === 1 ? ' On rib gating one feeder feeds the cylinder and the dial needles together: one feeder, one course, on both beds.' : '');
   }
 
   function kpi(label, value, sub, k) {
