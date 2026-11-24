@@ -52,4 +52,30 @@ const ids = new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]));
   assert(/export class GarmentView/.test(js3d) && /setGarment/.test(js3d) && /finished/.test(js3d), 'the 3D view builds the garment from the finished pieces');
   console.log('✓ the menu lists the page on every page of the site; the 3D view is built from the finished pieces');
 }
+{
+  // the editor: every id it reads is in the page (or made by it), every anchor role it moves exists in the engine's pieces, every seam label has a colour and a seam
+  const edit = read('assets', 'js', 'garment-edit.js');
+  const dynamic = new Set(['gm-edsvg', 'gm-ax', 'gm-ay', 'gm-sly', 'gm-slby', 'gm-slboth']);
+  const used = [...new Set([...edit.matchAll(/\$\('([\w-]+)'\)/g)].map((m) => m[1]))].filter((i) => !dynamic.has(i));
+  assert.deepStrictEqual(used.filter((i) => !ids.has(i)), [], 'ids the editor reads that the page does not have');
+  assert(/garment-edit\.js/.test(html) && html.indexOf('garment-edit.js') < html.indexOf('assets/js/garment.js'), 'the editor loads before the page script that starts it');
+  const G = require('../engine/domain/garment-pattern');
+  const T = G.template(['M'], 'cm'), fab = { gsm: 180, width_cm: 170 };
+  const plain = G.build({ sizes: ['M'], chart: T.chart, fabric: fab }), zipped = G.build({ sizes: ['M'], chart: T.chart, fabric: fab, zipper: { on: true, kind: 'full' } }), slit = G.build({ sizes: ['M'], chart: T.chart, fabric: fab, zipper: { on: true, kind: 'partial' } });
+  const roles = {}; ['front', 'back', 'sleeve', 'band'].forEach((id) => { roles[id] = new Set(plain.by_size[0].edit[id].anchors.map((a) => a.role).filter(Boolean)); });
+  const rules = [...edit.matchAll(/\['(front|back|sleeve)', '(\w+)', '([xy])', ([\d.]+)\]/g)];
+  assert(rules.length >= 20, `${rules.length} correction rules`);
+  rules.forEach((m) => assert(roles[m[1]].has(m[2]), `the editor moves ${m[1]}.${m[2]}, which the engine has no anchor for`));
+  const keys = [...edit.matchAll(/^\s+(\w+): \[(?:\[|\])/gm)].map((m) => m[1]).filter((k) => G.POM_KEYS.includes(k));
+  assert(keys.length >= 10, 'the correctable measurements are the chart\'s keys');
+  const labels = new Set(); [plain, zipped, slit].forEach((r) => r.by_size[0].pieces.forEach((p) => p.finished_labels.forEach((l) => labels.add(l))));
+  const page = read('assets', 'js', 'garment.js'), colours = (src) => new Set([...(/var EDGE = \{([^}]*)\}/.exec(src) || [, ''])[1].matchAll(/(\w+):/g)].map((m) => m[1]));
+  const seamOf = (src) => Object.fromEntries([...(/var SEAM_OF = \{([^}]*)\}/.exec(src) || [, ''])[1].matchAll(/(\w+): '(\w+)'/g)].map((m) => [m[1], m[2]]));
+  labels.forEach((l) => { assert(colours(page).has(l), `the page colours the edge ${l}`); assert(colours(edit).has(l) || l === 'faceend' || l === 'faceedge' || l === 'cf', `the editor colours the edge ${l}`); assert(G.SEAM_LABELS[l], `the engine knows the seam of ${l}`); assert(seamOf(page)[l] === G.SEAM_LABELS[l], `the page and the engine agree on the seam of ${l}`); });
+  Object.keys(G.SEAM_DEFAULTS).forEach((k) => assert(plain.seams[k] && plain.seams[k].type, `seam ${k} is configured`));
+  ['gm-zon', 'gm-zkind', 'gm-seams', 'gm-ops', 'gm-bom', 'gm-sewsum', 'gm-edtools', 'gm-edpieces', 'gm-insp', 'gm-edmeas', 'gm-pane-edit-body'].forEach((i) => assert(ids.has(i), `#${i} is in the page`));
+  assert(/pane-edit/.test(html) && /pane-sewing/.test(html) && /data-tab="edit"/.test(html) && /data-tab="sewing"/.test(html), 'the Edit and Sewing tabs are there');
+  console.log(`✓ the editor: its ids are in the page, its ${rules.length} correction rules all name an anchor the engine draws, every edge label has a colour and the same seam in the page and the engine`);
+}
 console.log('Garment page tests passed');
+

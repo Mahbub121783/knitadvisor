@@ -137,7 +137,7 @@ export class GarmentView {
       const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
       return g;
     };
-    const fin = (id) => P[id].finished;
+    const fin = (id) => (size.shape && size.shape[id]) || (P[id] && P[id].finished);       // the whole front, even when a zipper cuts it in two
     const front = fin('front'), back = fin('back');
     this.group.add(new THREE.Mesh(panel(front, true), mat), new THREE.Mesh(panel(back, false), mat));
 
@@ -186,6 +186,17 @@ export class GarmentView {
       for (let i = 0; i < 36; i++) { const phi = -Math.PI + (i / 36) * TAU; sp.push(C.clone().addScaledVector(nrm, r * Math.cos(phi)).addScaledVector(zz, r * Math.sin(phi))); }
       ring(sp, 0.14, rib);
       const sp2 = sp.map((v) => new THREE.Vector3(-v.x, v.y, v.z)); ring(sp2, 0.14, rib);
+    }
+
+    // a zipper down the centre front, from the neck seam, with its slider
+    if (size.zipper && size.zipper.on) {
+      const z = size.zipper, pts = [], y0 = m.neck_df + 0.3, y1 = m.neck_df + z.opening_cm;
+      for (let i = 0; i <= 28; i++) { const v = mapF(0, y0 + ((y1 - y0) * i) / 28); v.z += 0.22; pts.push(v); }
+      const zip = new THREE.MeshStandardMaterial({ color: z.teeth === 'metal' ? 0xb8bcc4 : 0x2b2f36, metalness: z.teeth === 'metal' ? 0.85 : 0.1, roughness: z.teeth === 'metal' ? 0.35 : 0.6 });
+      this.mats.push(zip);
+      this.group.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 60, Math.max(0.3, z.tape_w * 0.14), 6, false), zip));
+      const slider = new THREE.Mesh(new THREE.BoxGeometry(1.1, 2.0, 0.7), new THREE.MeshStandardMaterial({ color: 0xc9ced6, metalness: 0.9, roughness: 0.25 }));
+      slider.position.copy(pts[1]).add(new THREE.Vector3(0, -0.6, 0.35)); this.group.add(slider); this.mats.push(slider.material);
     }
 
     // a soft floor shadow

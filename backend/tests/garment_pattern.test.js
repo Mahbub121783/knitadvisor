@@ -162,4 +162,98 @@ const inside = (poly, x, y) => { let c = false; for (let i = 0, j = poly.length 
   assert(built > 150, `${built} charts built`);
   console.log(`✓ 400 random charts: ${built} built, ${refused} refused in words, none threw; every outline simple, every figure finite, no marker overlap`);
 }
+{
+  // the drawing measures what the chart says, in every size
+  for (const o of R.by_size) { assert(o.measured.length >= 12, 'the pattern is measured'); o.measured.forEach((x) => assert(x.ok && Math.abs(x.diff) <= 0.02, `size ${o.size}: ${x.key} drawn ${x.pattern}, chart ${x.chart}`)); }
+  // an edit: the shoulder tip 1 cm out and the underarm 0.5 cm in, on the front of M: the drawing says so, the cap follows the armhole, the other sizes do not move
+  const ed = { M: { front: { move: { 2: [1, 0], 3: [-0.5, 0] } } } };
+  const E = G.build({ sizes: T.sizes, chart: T.chart, unit: 'cm', fabric: fab, edits: ed });
+  const eM = E.by_size.find((o) => o.size === 'M'), bM = R.by_size.find((o) => o.size === 'M');
+  const ms = (o, k) => o.measured.find((x) => x.key === k);
+  near(ms(eM, 'shoulder').pattern - ms(bM, 'shoulder').pattern, 2, 0.02, 'the shoulder is 2 cm wider across');
+  near(ms(eM, 'chest').pattern - ms(bM, 'chest').pattern, -1, 0.02, 'the chest is 1 cm narrower');
+  assert(!ms(eM, 'shoulder').ok && !ms(eM, 'chest').ok, 'and the chart says it is off');
+  assert(E.checks.some((c) => c.size === 'M' && /off the chart/.test(c.text)), 'in words');
+  assert(Math.abs(eM.derived.armhole_front - bM.derived.armhole_front) > 0.1, 'the armhole changed');
+  near(eM.derived.cap_len, (eM.derived.armhole_front + eM.derived.armhole_back) / 2 + 0.5, 0.02, 'the cap is solved against the edited armhole');
+  ['S', 'L', 'XL'].forEach((z) => assert.deepStrictEqual(E.by_size.find((o) => o.size === z).pieces.map((p) => p.cut), R.by_size.find((o) => o.size === z).pieces.map((p) => p.cut), `size ${z} did not move`));
+  // an edit survives a change of the chart: the chart's chest +2 moves the base, the edit stays on top of it
+  const t2 = JSON.parse(JSON.stringify(T.chart)); t2.chest.M += 2;
+  const E2 = G.build({ sizes: T.sizes, chart: t2, unit: 'cm', fabric: fab, edits: ed }).by_size.find((o) => o.size === 'M');
+  near(ms(E2, 'chest').pattern - ms(E2, 'chest').chart, -1, 0.02, 'after the chart changed the edit is still -1 cm on the chest');
+  // a point on the centre line stays on it; a handle edit changes the neckline and the band follows
+  const ax = G.build({ sizes: ['M'], chart: T.chart, unit: 'cm', fabric: fab, edits: { M: { front: { move: { 0: [3, 0] } } } } }).by_size[0].edit.front.anchors[0];
+  assert.strictEqual(ax.x, 0, 'an anchor on the centre line stays on it');
+  const hn = G.build({ sizes: ['M'], chart: T.chart, unit: 'cm', fabric: fab, edits: { M: { front: { hout: { 0: [3, 0] } } } } }).by_size[0], h0 = G.build({ sizes: ['M'], chart: T.chart, unit: 'cm', fabric: fab }).by_size[0];
+  assert(hn.derived.neck_front !== h0.derived.neck_front && Math.abs(hn.derived.band_len - hn.derived.neck_len / 1.25) < 0.02, 'a handle edit changes the neckline and the band is cut to it');
+  console.log('✓ edits: an anchor move shows in the measurements and the checks, the cap follows the armhole, other sizes stay, the edit survives a chart change, the centre line holds, the band follows the neckline');
+}
+{
+  // a manual piece: an anchor deleted takes the piece off the chart
+  const base = R.by_size.find((o) => o.size === 'M'), man = JSON.parse(JSON.stringify(base.edit.front.anchors)); man.splice(4, 1);
+  const Mn = G.build({ sizes: ['M'], chart: T.chart, unit: 'cm', fabric: fab, edits: { M: { front: { manual: { anchors: man, sym: true } } } } }).by_size[0];
+  assert(Mn.edit.front.manual && Mn.pieces.find((p) => p.id === 'front').simple, 'the front is manual and still a piece');
+  const t3 = JSON.parse(JSON.stringify(T.chart)); t3.chest.M += 4;
+  const Mn2 = G.build({ sizes: ['M'], chart: t3, unit: 'cm', fabric: fab, edits: { M: { front: { manual: { anchors: man, sym: true } } } } }).by_size[0];
+  assert.deepStrictEqual(Mn2.pieces.find((p) => p.id === 'front').finished, Mn.pieces.find((p) => p.id === 'front').finished, 'a chart change does not move a manual piece');
+  console.log('✓ a manual piece stays a piece and no longer follows the chart');
+}
+{
+  // a zipper: full = the front in two halves with a facing; partial = a slit and a placket
+  const full = G.build({ sizes: T.sizes, chart: T.chart, unit: 'cm', fabric: fab, zipper: { on: true, kind: 'full' } }), fM = full.by_size.find((o) => o.size === 'M');
+  const ids = fM.pieces.map((p) => p.id).sort();
+  assert.deepStrictEqual(ids, ['back', 'band', 'facing', 'front_l', 'front_r', 'sleeve'], 'a full zipper cuts the front in halves and adds a facing');
+  const fr = fM.pieces.find((p) => p.id === 'front_r'), fl = fM.pieces.find((p) => p.id === 'front_l');
+  near(fr.cut_area_cm2, fl.cut_area_cm2, 0.2, 'the halves are mirrors');
+  assert(fM.pieces.find((p) => p.id === 'facing').qty === 2, 'two facings');
+  assert(fr.labels.includes('cf'), 'the centre front is a seam');
+  const base = R.by_size.find((o) => o.size === 'M').pieces.find((p) => p.id === 'front');
+  assert(fr.cut_area_cm2 * 2 > base.cut_area_cm2 && fr.cut_area_cm2 * 2 < base.cut_area_cm2 * 1.1, 'two halves with centre-front allowance are a little more than the whole front');
+  const z = fM.zipper;
+  assert(z.on && z.standard_cm >= z.opening_cm && G.ZIP_STANDARD.includes(z.standard_cm) && z.trim_cm >= 0, 'a catalogue length at least as long as the opening');
+  near(z.opening_cm, fM.m.length - fM.m.neck_df, 0.06, 'the opening runs from the neck seam to the hem fold');
+  assert(full.bom.some((b) => /Zipper/.test(b.item)) && fM.sewing.operations.some((o) => o.seam === 'cf'), 'the zipper is in the bill of materials and the sewing order');
+  assert(fM.sewing.sam.minutes > R.by_size.find((o) => o.size === 'M').sewing.sam.minutes, 'and in the sewing time');
+  assert(fM.shape.front.length > 50 && fM.shape.front.some(([x]) => x < 0) && fM.shape.front.some(([x]) => x > 0), 'the whole front is kept for the 3D garment');
+  const part = G.build({ sizes: ['M'], chart: T.chart, unit: 'cm', fabric: fab, zipper: { on: true, kind: 'partial', length_cm: 20 } }).by_size[0];
+  assert(part.pieces.some((p) => p.id === 'placket') && part.pieces.find((p) => p.id === 'front').marks.length === 1 && part.zipper.opening_cm === 20 && part.zipper.standard_cm === 20, 'a quarter zip: the front is slit, a placket is added, a 20 cm zipper');
+  assert(!G.build({ sizes: ['M'], chart: T.chart, unit: 'cm', fabric: fab }).by_size[0].zipper.on, 'no zipper unless asked for');
+  console.log('✓ zipper: a full one halves the front and adds a facing; a quarter-zip slits it and adds a placket; a catalogue length, the bill of materials, the sewing order and time follow');
+}
+{
+  // seams: the type decides the thread and the allowance decides the cut; a hem takes no allowance
+  const def = R.by_size.find((o) => o.size === 'M'), sw = def.sewing;
+  assert(sw.thread_m > 40 && sw.thread_m < 110, `a tee takes ${sw.thread_m} m of thread`);
+  assert(sw.seams.every((s) => s.thread_m >= 0 && s.sewn_cm >= 0) && sw.operations.length === 8, 'every seam has a length and thread; eight operations');
+  const alt = G.build({ sizes: ['M'], chart: T.chart, unit: 'cm', fabric: fab, seams: { side: { type: '301', allowance: 0.6 }, hem: { type: '602', allowance: 5 } } }), a = alt.by_size[0];
+  assert(a.sewing.thread_m < sw.thread_m, 'a lockstitch side seam takes less thread than a 4-thread overlock');
+  assert.strictEqual(alt.seams.hem.allowance, 0, 'a hem takes no allowance (its depth is in the drawing)');
+  near(def.pieces[0].cut_w - a.pieces[0].cut_w, 0.8, 0.06, 'a 0.6 cm side allowance cuts the front 0.8 cm narrower than 1.0 cm');
+  assert(G.build({ sizes: ['M'], chart: T.chart, unit: 'cm', fabric: fab, seams: { side: { type: 'nonsense' } } }).seams.side.type === '514', 'an unknown stitch type is ignored');
+  // the notches: the front has six, the sleeve's cap is marked for the front (one) and the back (two)
+  assert(def.pieces[0].notches.length === 6 && def.pieces[2].notches.filter((n) => n.label === 'cap').length === 3, 'notches on the seams');
+  // the armhole joins edges that differ by the ease
+  const ar = sw.seams.find((s) => s.id === 'armhole'); near(ar.diff_cm, 4 * 0.5, 0.1, 'the sleeve set is 0.5 cm of ease on each of four edges');
+  console.log(`✓ seams: ${sw.thread_m} m of thread on a tee from the stitch types, the allowance cuts the piece, a hem has none, notches on the seams, the sleeve set carries its ease`);
+}
+{
+  // 300 random edits: nothing throws, a refusal has words, a success is finite, and an outline that crosses itself is always reported
+  let seed = 99; const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  const anchors = R.by_size.find((o) => o.size === 'M').edit, ids = ['front', 'back', 'sleeve', 'band'];
+  let ok = 0, refused = 0;
+  for (let k = 0; k < 300; k++) {
+    const e = {};
+    ids.forEach((id) => { if (rnd() < 0.6) { const n = anchors[id].anchors.length, mv = {}, hi = {}, ho = {}; for (let j = 0; j < 1 + Math.floor(rnd() * 3); j++) { const i = Math.floor(rnd() * n); mv[i] = [(rnd() - 0.5) * 6, (rnd() - 0.5) * 6]; if (rnd() < 0.4) ho[i] = [(rnd() - 0.5) * 6, (rnd() - 0.5) * 6]; if (rnd() < 0.3) hi[i] = [(rnd() - 0.5) * 6, (rnd() - 0.5) * 6]; } e[id] = { move: mv, hin: hi, hout: ho }; } });
+    const r = G.build({ sizes: ['M'], chart: T.chart, unit: 'cm', fabric: fab, edits: { M: e }, zipper: rnd() < 0.3 ? { on: true, kind: rnd() < 0.5 ? 'full' : 'partial' } : undefined, seams: rnd() < 0.3 ? { side: { type: '602', allowance: rnd() * 2 } } : undefined });
+    if (!r.success) { refused++; assert(r.error && r.error.length > 10); continue; }
+    ok++;
+    assert(!/NaN|Infinity/.test(JSON.stringify(r)), `edit ${k}: a number is not a number`);
+    r.by_size[0].pieces.forEach((p) => assert(p.cut_area_cm2 > 0));
+    if (r.checks.some((c) => c.level === 'error')) continue;
+    r.by_size[0].pieces.forEach((p) => assert(p.simple, `edit ${k}: ${p.id} not simple but not reported`));
+  }
+  assert(ok > 100, `${ok} edited builds`);
+  console.log(`✓ 300 random edits (anchors, handles, zipper, seams): ${ok} built, ${refused} refused in words, none threw, no NaN, a crossing outline is always reported`);
+}
 console.log('Garment pattern tests passed');
+

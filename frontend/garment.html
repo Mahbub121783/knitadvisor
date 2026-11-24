@@ -15,7 +15,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/css/style.css?v=20260603c">
   <link rel="stylesheet" href="assets/css/theme-v2.css?v=20261112c">
-  <link rel="stylesheet" href="assets/css/garment.css?v=20261129a">
+  <link rel="stylesheet" href="assets/css/garment.css?v=20261130a">
   <script type="importmap">
   {
     "imports": {
@@ -79,14 +79,37 @@
         <div class="gm-card" id="gm-optcard">
           <div class="gm-step"><b>3</b> Sewing and cutting</div>
           <div class="gm-row">
-            <div class="gm-f"><label for="gm-seam">Seam allowance (cm)</label><input id="gm-seam" type="number" min="0" max="3" step="0.1"></div>
-            <div class="gm-f"><label for="gm-neckal">Neck allowance (cm)</label><input id="gm-neckal" type="number" min="0" max="3" step="0.1"></div>
+            <div class="gm-f"><label for="gm-seam">Seam allowance, all (cm)</label><input id="gm-seam" type="number" min="0" max="3" step="0.1"></div>
+            <div class="gm-f"><label for="gm-neckal">Neck allowance, all (cm)</label><input id="gm-neckal" type="number" min="0" max="3" step="0.1"></div>
             <div class="gm-f"><label for="gm-ease">Sleeve cap ease (cm)</label><input id="gm-ease" type="number" min="-2" max="4" step="0.1"></div>
           </div>
           <div class="gm-row">
             <div class="gm-f"><label for="gm-orient">Cutting</label><select id="gm-orient"><option value="both">Pieces may be turned round (plain cloth)</option><option value="one_way">One way only (stripe, nap, print)</option></select></div>
             <div class="gm-f"><label for="gm-gap">Gap between pieces (cm)</label><input id="gm-gap" type="number" min="0" max="5" step="0.5"></div>
           </div>
+        </div>
+
+        <div class="gm-card" id="gm-zipcard">
+          <div class="gm-step"><b>4</b> Zipper</div>
+          <label class="gm-check"><input type="checkbox" id="gm-zon"> Put a zipper in the centre front</label>
+          <div id="gm-zbody" hidden>
+            <div class="gm-row">
+              <div class="gm-f"><label for="gm-zkind">Where</label><select id="gm-zkind"><option value="full">Front opening: the front is cut in two</option><option value="partial">Quarter zip: a slit and a placket</option></select></div>
+              <div class="gm-f"><label for="gm-ztype">Type</label><select id="gm-ztype"><option value="open_end">Open-end (separating)</option><option value="closed_end">Closed-end</option><option value="invisible">Invisible</option></select></div>
+              <div class="gm-f" id="gm-zlenf"><label for="gm-zlen">Opening from the neck (cm)</label><input id="gm-zlen" type="number" min="6" max="60" step="1"></div>
+            </div>
+            <div class="gm-row">
+              <div class="gm-f"><label for="gm-zteeth">Teeth</label><select id="gm-zteeth"><option value="coil">Coil (nylon)</option><option value="plastic">Plastic (moulded)</option><option value="metal">Metal</option></select></div>
+              <div class="gm-f"><label for="gm-zsize">Size (#)</label><input id="gm-zsize" type="number" min="3" max="10" step="1"></div>
+              <div class="gm-f"><label for="gm-ztape">Tape width (cm)</label><input id="gm-ztape" type="number" min="1" max="6" step="0.1"></div>
+            </div>
+            <div class="gm-row">
+              <div class="gm-f"><label for="gm-zallow">Centre-front allowance (cm)</label><input id="gm-zallow" type="number" min="0.5" max="3" step="0.1"></div>
+              <div class="gm-f"><label for="gm-zface">Facing width (cm)</label><input id="gm-zface" type="number" min="3" max="10" step="0.1"></div>
+            </div>
+            <p class="gm-hint" id="gm-zinfo"></p>
+          </div>
+          <p class="gm-hint">A front opening cuts the front in two halves with an allowance and a facing; a quarter zip leaves the front whole and adds a placket over a slit. The length is bought in the steps a catalogue sells.</p>
         </div>
       </section>
 
@@ -95,6 +118,8 @@
         <div class="gm-bar">
           <div class="gm-tabs" role="tablist" id="gm-tabs">
             <button type="button" data-tab="patterns" class="on">Patterns</button>
+            <button type="button" data-tab="edit">Edit</button>
+            <button type="button" data-tab="sewing">Sewing</button>
             <button type="button" data-tab="marker">Marker</button>
             <button type="button" data-tab="garment">Garment</button>
             <button type="button" data-tab="checks">Checks <span class="gm-n" id="gm-nchecks" hidden></span></button>
@@ -108,6 +133,31 @@
           <div class="gm-legend" id="gm-plegend"></div>
           <table class="gm-table" id="gm-ptable"></table>
           <div class="gm-tools" style="margin-top:10px"><button type="button" class="gm-btn" id="gm-dlpat">Download the patterns (SVG, 1:1 scale)</button></div>
+        </div>
+
+        <div class="gm-pane" id="pane-edit">
+          <div id="gm-pane-edit-body">
+            <div class="gm-edbar"><div class="gm-sizes" id="gm-edsizes"></div><div class="gm-sizes" id="gm-edpieces"></div></div>
+            <div class="gm-edtools" id="gm-edtools"></div>
+            <div class="gm-edwrap">
+              <div class="gm-edcanvas">
+                <div id="gm-ed" class="gm-ed"></div>
+                <div class="gm-edlive" id="gm-edlive"></div>
+                <label class="gm-edsnap"><input type="checkbox" id="gm-edsnap" checked> snap to 0.1 cm</label>
+              </div>
+              <aside class="gm-insp" id="gm-insp" aria-label="Inspector"></aside>
+            </div>
+            <div class="gm-edmeas" id="gm-edmeas"></div>
+          </div>
+        </div>
+
+        <div class="gm-pane" id="pane-sewing">
+          <div class="gm-sizes" id="gm-ssizes"></div>
+          <div class="gm-summary" id="gm-sewsum"></div>
+          <div class="gm-card"><div class="gm-step">Seams, stitches and thread</div><div class="gm-chartwrap"><table class="gm-table gm-seams" id="gm-seams"></table></div>
+            <p class="gm-hint">The stitch type decides the machine and how much thread a seam takes (rules of thumb: thread length per length of seam); the allowance of a seam is what is added to its edges when the piece is cut. A hem has no allowance: its depth is in the drawing.</p></div>
+          <div class="gm-card"><div class="gm-step">Sewing order</div><ol class="gm-ops" id="gm-ops"></ol><p class="gm-hint" id="gm-sam"></p></div>
+          <div class="gm-card"><div class="gm-step">Bill of materials, one garment</div><table class="gm-table" id="gm-bom"></table></div>
         </div>
 
         <div class="gm-pane" id="pane-marker">
@@ -136,6 +186,7 @@
 </div>
 <div class="gm-dock" id="gm-dock"><span id="gm-docksum">Fill in the chart</span><button type="button" class="gm-btn primary big" id="gm-make2">Make garment</button></div>
 <script src="assets/js/api.js"></script>
-<script src="assets/js/garment.js?v=20261129a"></script>
+<script src="assets/js/garment-edit.js?v=20261130a"></script>
+<script src="assets/js/garment.js?v=20261130a"></script>
 </body>
 </html>

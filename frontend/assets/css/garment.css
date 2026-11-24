@@ -104,4 +104,49 @@
   .gm-dock .gm-btn.big { padding: 9px 16px; font-size: 13px; flex: none; }
   .gm-main { padding-bottom: 84px; }
 }
+
+/* the pattern editor, the sewing tab, the zipper */
+.gm-check { display: flex; gap: 8px; align-items: center; font-size: 13px; margin: 0 0 8px; }
+.gm-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #ff6a00; margin-left: 4px; vertical-align: middle; }
+.gm-edbar { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; margin: 0 0 8px; }
+.gm-edtools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0 0 8px; }
+.gm-tool { padding: 6px 12px; border: 1px solid var(--line2); border-radius: var(--radius-sm); background: var(--bg); font: 600 12px var(--head); color: var(--t2); cursor: pointer; }
+.gm-tool:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.gm-tool.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.gm-tool:disabled { opacity: .4; cursor: default; }
+.gm-sp { flex: 1 1 auto; }
+.gm-edwrap { display: grid; grid-template-columns: minmax(0, 1fr) 272px; gap: 10px; align-items: start; }
+@media (max-width: 800px) { .gm-edwrap { grid-template-columns: minmax(0, 1fr); } }
+.gm-edcanvas { position: relative; background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.gm-ed { height: clamp(360px, 62vh, 660px); touch-action: none; user-select: none; -webkit-user-select: none; }
+.gm-ed svg { width: 100%; height: 100%; display: block; background: #fff; }
+.gm-edlive { position: absolute; left: 10px; bottom: 8px; font: 600 11px var(--mono, monospace); color: var(--t2); background: rgba(255,255,255,.92); padding: 2px 6px; border-radius: 6px; pointer-events: none; }
+.gm-edlive:empty { display: none; }
+.gm-edsnap { position: absolute; right: 10px; bottom: 8px; font-size: 11px; color: var(--t2); background: rgba(255,255,255,.92); padding: 2px 8px; border-radius: 6px; display: flex; gap: 5px; align-items: center; }
+.gm-insp { background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px; max-height: clamp(360px, 62vh, 660px); overflow: auto; }
+.gm-isec { padding: 10px; margin: 0 0 8px; border: 1px solid var(--line); border-radius: 8px; }
+.gm-ik { font: 700 10.5px var(--head); text-transform: uppercase; letter-spacing: .5px; color: var(--t3); margin: 0 0 6px; }
+.gm-ibig { font: 700 14px var(--head); color: var(--t1); }
+.gm-isub { font-size: 11.5px; color: var(--t3); margin: 2px 0 8px; line-height: 1.45; }
+.gm-flag { display: inline-block; padding: 1px 7px; border-radius: 99px; font-size: 10.5px; margin-right: 5px; }
+.gm-flag.man { background: rgba(122,79,194,.14); color: #5b3a9a; } .gm-flag.ed { background: rgba(255,106,0,.14); color: #b34700; }
+.gm-irow { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.gm-irow2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 6px 0; }
+.gm-irow2 label { font-size: 11px; color: var(--t3); display: flex; flex-direction: column; gap: 3px; }
+.gm-icheck { font-size: 12px; color: var(--t2); display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.gm-irow2 input { padding: 6px 8px; border: 1px solid var(--line2); border-radius: 6px; font: 13px var(--head); width: 100%; box-sizing: border-box; background: var(--bg); color: var(--t1); }
+.gm-ihint { font-size: 11px; color: var(--t3); margin: 6px 0 0; line-height: 1.5; }
+.gm-empty2 p { font-size: 12px; color: var(--t2); line-height: 1.55; margin: 6px 0 0; }
+.gm-mlist { list-style: none; padding: 0; margin: 0; font-size: 12px; color: var(--t2); } .gm-mlist li { padding: 3px 0; border-bottom: 1px dotted var(--line); }
+.gm-edmeas { margin-top: 10px; background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; }
+.gm-mhead { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin-bottom: 6px; }
+.gm-mtab td input { width: 76px; padding: 4px 6px; border: 1px solid var(--line2); border-radius: 6px; text-align: right; font: 13px var(--head); background: var(--bg); color: var(--t1); }
+.gm-mtab tr.off td { background: rgba(178,59,59,.06); } .gm-mtab td.d { font-weight: 700; }
+.gm-seams th, .gm-seams td { text-align: left; vertical-align: top; } .gm-seams td:nth-child(n+4), .gm-seams th:nth-child(n+4) { text-align: right; }
+.gm-seams select { max-width: 200px; padding: 5px 6px; border: 1px solid var(--line2); border-radius: 6px; font: 12px var(--head); background: var(--bg); color: var(--t1); }
+.gm-seams input { width: 64px; padding: 4px 6px; border: 1px solid var(--line2); border-radius: 6px; text-align: right; background: var(--bg); color: var(--t1); }
+.gm-seams tr.off td { background: rgba(154,91,0,.06); } .gm-seams tfoot td { font-weight: 700; border-top: 2px solid var(--line2); }
+.gm-badge { display: inline-block; padding: 1px 7px; border-radius: 99px; font-size: 10.5px; font-weight: 700; } .gm-badge.ok { background: rgba(30,122,84,.1); color: var(--good); } .gm-badge.bad { background: rgba(154,91,0,.12); color: var(--warn); }
+.gm-ops { margin: 0; padding-left: 20px; font-size: 13px; } .gm-ops li { padding: 6px 0; border-bottom: 1px solid var(--line); } .gm-ops li span { display: block; font-size: 11.5px; color: var(--t3); margin-top: 1px; }
+
 @media print { .hdr, .gm-spec, .gm-tabs, .gm-bar button { display: none !important; } .gm-pane { display: block !important; } }

@@ -16,7 +16,8 @@
   var POMS = [], poms = {};
   var S = null, R = null, view3d = null, mod3d = null, reqSeq = 0, timer = 0;
   var SIZE_COL = ['#1857C4', '#c2410c', '#0e7490', '#7a4fc2', '#b48a35', '#a5486f', '#3f8a6e', '#4a5568'];
-  var EDGE = { neck: '#d97706', shoulder: '#7a4fc2', armhole: '#1857C4', cap: '#1857C4', side: '#0e7490', underarm: '#0e7490', hemedge: '#0e7490', seam: '#0e7490', hem: '#6b7280', band: '#6b7280' };
+  var EDGE = { neck: '#d97706', bandneck: '#d97706', shoulder: '#7a4fc2', armhole: '#1857C4', cap: '#1857C4', side: '#0e7490', sidehem: '#0e7490', underarm: '#0e7490', underarmhem: '#0e7490', bandend: '#0e7490', hem: '#6b7280', shem: '#6b7280', cf: '#c2410c', faceend: '#6b7280', faceedge: '#6b7280' };
+  var SEAM_OF = { neck: 'neck', bandneck: 'neck', shoulder: 'shoulder', armhole: 'armhole', cap: 'armhole', side: 'side', sidehem: 'side', underarm: 'underarm', underarmhem: 'underarm', hem: 'hem', shem: 'sleeve_hem', bandend: 'band_end', cf: 'cf', faceend: 'facing_end', faceedge: 'facing_edge' };
 
   // ── the specification ──
   function defaults(tpl) {
@@ -24,7 +25,8 @@
       unit: tpl.unit || 'cm', sizes: tpl.sizes.slice(), base: tpl.sizes.indexOf('M') >= 0 ? 'M' : tpl.sizes[0], size: tpl.sizes.indexOf('M') >= 0 ? 'M' : tpl.sizes[0],
       chart: JSON.parse(JSON.stringify(tpl.chart)), ratio: tpl.sizes.reduce(function (o, s) { o[s] = 1; return o; }, {}),
       fabric: { name: '', gsm: 180, width: 170, wunit: 'cm', shrink_len_pct: 6, shrink_wid_pct: 6, rib_stretch_pct: 25, colour: '#3d5a80', wpc: '', cpc: '' },
-      opt: { seam: 1, neck: 0.7, ease: 0.5, orient: 'both', gap: 1 }, tab: 'patterns'
+      opt: { seam: 1, neck: 0.7, ease: 0.5, orient: 'both', gap: 1 }, tab: 'patterns',
+      edits: {}, seams: {}, cornerFlags: {}, zipper: { on: false, kind: 'full', type: 'open_end', teeth: 'coil', size: 5, tape_w: 2.5, length_cm: 18, allow: 1.5, facing_w: 5.5 }
     };
   }
   function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (_) { /* private window */ } }
@@ -35,7 +37,8 @@
     Object.keys(S.chart).forEach(function (k) { var row = {}; S.sizes.forEach(function (s) { var v = S.chart[k] && S.chart[k][s]; if (v !== '' && v != null) row[s] = v; }); if (Object.keys(row).length) chart[k] = row; });
     return {
       style: 'tee', unit: S.unit, sizes: S.sizes, base: S.base, chart: chart, ratio: S.ratio, ease_cm: +S.opt.ease, orient: S.opt.orient, gap_cm: +S.opt.gap,
-      allowance: { seam: +S.opt.seam, neck: +S.opt.neck },
+      allowance: { seam: +S.opt.seam, neck: +S.opt.neck }, edits: S.edits || {}, seams: S.seams || {},
+      zipper: S.zipper && S.zipper.on ? { on: true, kind: S.zipper.kind, type: S.zipper.type, teeth: S.zipper.teeth, size: +S.zipper.size, tape_w: +S.zipper.tape_w, length_cm: +S.zipper.length_cm, allow: +S.zipper.allow, facing_w: +S.zipper.facing_w } : { on: false },
       fabric: { name: f.name, gsm: +f.gsm, width_cm: f.wunit === 'in' ? +f.width * INCH : +f.width, shrink_len_pct: +f.shrink_len_pct, shrink_wid_pct: +f.shrink_wid_pct, rib_stretch_pct: +f.rib_stretch_pct, colour: f.colour, wpc: +f.wpc || 0, cpc: +f.cpc || 0 }
     };
   }
@@ -142,7 +145,7 @@
 
   // ── what the answer says ──
   function sizeOf(name) { return R && R.success && R.by_size.filter(function (o) { return o.size === name; })[0]; }
-  function renderAll() { renderSummary(); renderSizes(); renderPatterns(); renderMarker(); renderChecks(); render3D(); markBad(); }
+  function renderAll() { renderSummary(); renderSizes(); renderPatterns(); renderSewing(); renderZipperInfo(); renderMarker(); renderChecks(); render3D(); markBad(); if (window.KAGarmentEdit) window.KAGarmentEdit.render(); }
 
   function kpi(l, v, s, cls) { return '<div class="gm-kpi ' + (cls || '') + '"><div class="l">' + esc(l) + '</div><div class="v">' + v + '</div>' + (s ? '<div class="s">' + s + '</div>' : '') + '</div>'; }
   function renderSummary() {
@@ -157,7 +160,7 @@
   }
   function renderSizes() {
     var html = (R && R.success ? R.by_size : []).map(function (o) { return '<button type="button" class="gm-chipb' + (o.size === S.size ? ' on' : '') + '" data-size="' + esc(o.size) + '">' + esc(o.size) + '</button>'; }).join('');
-    $('gm-psizes').innerHTML = html; $('gm-gsizes').innerHTML = html;
+    ['gm-psizes', 'gm-gsizes', 'gm-edsizes', 'gm-ssizes'].forEach(function (id) { if ($(id)) $(id).innerHTML = html; });
   }
   function markBad() {
     Array.prototype.forEach.call(document.querySelectorAll('#gm-chart input[data-pom]'), function (i) { i.classList.remove('bad', 'assumed'); });
@@ -187,30 +190,31 @@
   }
   function pathOf(pts) { return 'M' + pts.map(function (p) { return p[0] + ' ' + p[1]; }).join('L'); }
   function patternsSvg(o, oneToOne) {
-    var P = {}; o.pieces.forEach(function (p) { P[p.id] = p; });
-    var order = [['front', 'back'], ['sleeve', 'band']], gap = 9, pad = 5, y = pad, W = 0, parts = [];
-    order.forEach(function (row) {
-      var x = pad, rh = 0;
-      row.forEach(function (id) {
-        var p = P[id]; if (!p) return;
-        var b = bboxOf(p.cut), ox = x - b.x0, oy = y - b.y0;
-        parts.push({ p: p, ox: ox, oy: oy, b: b });
-        x += b.w + gap; rh = Math.max(rh, b.h + (p.grain === 'x' ? 9 : 0));
-      });
-      W = Math.max(W, x - gap + pad); y += rh + gap + 4;
+    // every piece that is cut, in the order it is read, flowed into rows
+    var order = ['front', 'front_r', 'front_l', 'back', 'sleeve', 'band', 'facing', 'placket'], gap = 9, pad = 5, maxW = 150;
+    var list = order.map(function (id) { return o.pieces.filter(function (p) { return p.id === id; })[0]; }).filter(Boolean);
+    var x = pad, y = pad, rh = 0, W = 0, parts = [], sx = R.cut_factor.across, sy = R.cut_factor.along;
+    list.forEach(function (p) {
+      var b = bboxOf(p.cut), extra = p.grain === 'x' ? 9 : 0;
+      if (x > pad && x + b.w > maxW) { y += rh + gap + 4; x = pad; rh = 0; }
+      parts.push({ p: p, ox: x - b.x0, oy: y - b.y0, b: b });
+      x += b.w + gap; rh = Math.max(rh, b.h + extra); W = Math.max(W, x - gap + pad);
     });
-    var H = y - gap - 4 + pad, g = '';
+    var H = y + rh + pad, g = '';
     parts.forEach(function (q) {
       var p = q.p, tf = 'translate(' + q.ox + ' ' + q.oy + ')', cx = (q.b.x0 + q.b.x1) / 2, cy = (q.b.y0 + q.b.y1) / 2, horiz = p.grain === 'x';
       g += '<g transform="' + tf + '">';
       g += '<path d="' + pathOf(p.cut) + 'Z" fill="rgba(24,87,196,.06)" stroke="none"/>';
       runs(p.cut, p.labels).forEach(function (r) { g += '<path d="' + pathOf(r.pts) + '" fill="none" stroke="' + (EDGE[r.l] || '#0e7490') + '" stroke-width="0.35" stroke-linejoin="round" stroke-linecap="round"/>'; });
       g += '<path d="' + pathOf(p.nominal) + 'Z" fill="none" stroke="#111" stroke-opacity=".55" stroke-width="0.18" stroke-dasharray="1 0.8"/>';
+      (p.notches || []).forEach(function (nt) { g += '<line x1="' + (nt.x - nt.nx * 0.9) + '" y1="' + (nt.y - nt.ny * 0.9) + '" x2="' + (nt.x + nt.nx * 0.9) + '" y2="' + (nt.y + nt.ny * 0.9) + '" stroke="#111" stroke-width="0.32"/>'; });
+      (p.marks || []).forEach(function (m) { g += '<line x1="' + (m.x1 * sx) + '" y1="' + (m.y1 * sy) + '" x2="' + (m.x2 * sx) + '" y2="' + (m.y2 * sy) + '" stroke="#c2410c" stroke-width="0.5" stroke-dasharray="1.4 0.8"/><text x="' + (m.x1 * sx + 1.6) + '" y="' + (m.y2 * sy) + '" font-size="1.9" fill="#c2410c">' + esc(m.label || 'slit') + '</text>'; });
       var ha = Math.min(9, q.b.h * 0.2), hl = Math.min(8, q.b.w * 0.2);
       var gl = horiz ? '<line x1="' + (cx - hl) + '" y1="' + cy + '" x2="' + (cx + hl) + '" y2="' + cy + '"/><path d="M' + (cx - hl) + ' ' + cy + 'l1.6 -.9v1.8zM' + (cx + hl) + ' ' + cy + 'l-1.6 -.9v1.8z" fill="#111"/>'
         : '<line x1="' + cx + '" y1="' + (cy - ha) + '" x2="' + cx + '" y2="' + (cy + ha) + '"/><path d="M' + cx + ' ' + (cy - ha) + 'l-.9 1.6h1.8zM' + cx + ' ' + (cy + ha) + 'l-.9 -1.6h1.8z" fill="#111"/>';
       g += '<g stroke="#111" stroke-width="0.2" opacity=".6">' + gl + '</g>';
-      var ty = horiz ? q.b.y1 + 4.4 : cy - ha - 2.6, dy2 = horiz ? q.b.y1 + 7.4 : cy + ha + 4.6;
+      var low = !horiz && q.b.h < 40;                                           // a short piece (the sleeve): the name goes under the arrow, clear of the curve
+      var ty = horiz ? q.b.y1 + 4.4 : low ? cy + ha + 3.2 : cy - ha - 2.6, dy2 = horiz ? q.b.y1 + 7.4 : low ? cy + ha + 6 : cy + ha + 4.6;
       g += '<text x="' + cx + '" y="' + ty + '" text-anchor="middle" font-size="2.7" font-weight="700" fill="#111">' + esc(p.name) + (p.qty > 1 ? ' × ' + p.qty : '') + '</text>';
       g += '<text x="' + cx + '" y="' + dy2 + '" text-anchor="middle" font-size="2.1" fill="#555">cut ' + p.cut_w + ' × ' + p.cut_h + ' cm</text>';
       g += '</g>';
@@ -223,10 +227,59 @@
     if (!o) { el.innerHTML = '<div class="gm-empty">' + (R && !R.success ? esc(R.error) : 'Building the patterns…') + '</div>'; $('gm-ptable').innerHTML = ''; $('gm-plegend').innerHTML = ''; return; }
     S.size = o.size;
     el.innerHTML = patternsSvg(o, false);
-    $('gm-plegend').innerHTML = '<span><i style="border-color:' + EDGE.armhole + '"></i>armhole / cap</span><span><i style="border-color:' + EDGE.neck + '"></i>neckline</span><span><i style="border-color:' + EDGE.shoulder + '"></i>shoulder</span><span><i style="border-color:' + EDGE.side + '"></i>side / underarm seam</span><span><i style="border-color:' + EDGE.hem + '"></i>hem edge</span><span><i class="dash" style="border-color:#555"></i>sewing line</span>';
+    $('gm-plegend').innerHTML = '<span><i style="border-color:' + EDGE.armhole + '"></i>armhole / cap</span><span><i style="border-color:' + EDGE.neck + '"></i>neckline</span><span><i style="border-color:' + EDGE.shoulder + '"></i>shoulder</span><span><i style="border-color:' + EDGE.side + '"></i>side / underarm seam</span><span><i style="border-color:' + EDGE.hem + '"></i>hem edge</span>' + (o.zipper && o.zipper.on ? '<span><i style="border-color:' + EDGE.cf + '"></i>centre front (zipper)</span>' : '') + '<span><i class="dash" style="border-color:#555"></i>sewing line</span><span>ticks = notches</span>';
     $('gm-ptable').innerHTML = '<thead><tr><th>Piece</th><th>Cut</th><th>Finished</th><th>Area</th><th>Seams</th></tr></thead><tbody>' + o.pieces.map(function (p) {
-      return '<tr><td>' + esc(p.name) + (p.qty > 1 ? ' × ' + p.qty : '') + (p.rib ? ' <span class="gm-hint">(rib)</span>' : '') + '</td><td>' + p.cut_w + ' × ' + p.cut_h + ' cm</td><td>' + p.finished_w + ' × ' + p.finished_h + ' cm</td><td>' + p.cut_area_cm2 + ' cm²</td><td>' + (p.id === 'front' || p.id === 'back' ? 'shoulder, armhole, side' : p.id === 'sleeve' ? 'cap, underarm' : 'ends, neck') + '</td></tr>';
+      var seams = {}; (p.finished_labels || []).forEach(function (l) { var id = SEAM_OF[l]; if (id && R.seams[id]) seams[R.seams[id].name] = 1; });
+      return '<tr><td>' + esc(p.name) + (p.qty > 1 ? ' × ' + p.qty : '') + (p.rib ? ' <span class="gm-hint">(rib)</span>' : '') + '</td><td>' + p.cut_w + ' × ' + p.cut_h + ' cm</td><td>' + p.finished_w + ' × ' + p.finished_h + ' cm</td><td>' + p.cut_area_cm2 + ' cm²</td><td>' + esc(Object.keys(seams).join(', ')) + '</td></tr>';
     }).join('') + '</tbody>';
+  }
+
+  // ── sewing: the seams, the stitch of each, the thread, the order, the bill of materials ──
+  function renderSewing() {
+    var o = R && R.success ? sizeOf(S.size) || R.by_size[0] : null, tb = $('gm-seams');
+    if (!o) { tb.innerHTML = ''; $('gm-sewsum').innerHTML = ''; $('gm-ops').innerHTML = ''; $('gm-bom').innerHTML = ''; $('gm-sam').textContent = ''; return; }
+    var sw = o.sewing, cat = R.catalogue.stitch, sam = sw.sam;
+    $('gm-sewsum').innerHTML = kpi('Thread a garment', r1(sw.thread_m) + ' m', r1(sw.thread_per_dozen_m) + ' m a dozen') + kpi('Sewing time', sam ? r1(sam.minutes) + ' min' : '—', sam ? 'a basic tee is ' + sam.benchmark_minutes + ' min' + (sam.addons.length ? ' + a zipper (estimate)' : '') : '') + kpi('Operations', sw.operations.length, 'in sewing order') + kpi('Seams', sw.seams.length, sw.seams.filter(function (s) { return !s.match; }).length ? sw.seams.filter(function (s) { return !s.match; }).length + ' do not match' : 'all match', sw.seams.some(function (s) { return !s.match; }) ? 'warn' : '');
+    tb.innerHTML = '<thead><tr><th>Seam</th><th>Stitch</th><th>Allowance</th><th>Joins (cm)</th><th>Sewn</th><th>Thread</th></tr></thead><tbody>' + sw.seams.map(function (s) {
+      var hem = s.id === 'hem' || s.id === 'sleeve_hem';
+      return '<tr class="' + (s.match ? '' : 'off') + '"><td>' + esc(s.name) + '</td><td><select data-seam="' + s.id + '" data-k="type" aria-label="Stitch of the ' + esc(s.name) + '">' + Object.keys(cat).map(function (k) { return '<option value="' + k + '"' + (k === s.type ? ' selected' : '') + '>' + esc(cat[k].name) + '</option>'; }).join('') + '</select><div class="gm-hint">' + esc(s.machine) + '</div></td>' +
+        '<td>' + (hem ? '<span class="gm-hint">in the drawing</span>' : '<input type="number" min="0" max="5" step="0.1" data-seam="' + s.id + '" data-k="allowance" value="' + s.allowance + '" aria-label="Allowance of the ' + esc(s.name) + '">') + '</td>' +
+        '<td>' + s.a_len + ' / ' + s.b_len + (hem ? '' : ' <span class="gm-badge ' + (s.match ? 'ok' : 'bad') + '">' + (s.diff_cm > 0 ? '+' : '') + s.diff_cm + (s.expected_diff_cm ? ' (' + (s.expected_diff_cm > 0 ? '+' : '') + s.expected_diff_cm + ' intended)' : '') + '</span>') + '</td><td>' + s.sewn_cm + ' cm</td><td>' + s.thread_m + ' m</td></tr>';
+    }).join('') + '</tbody><tfoot><tr><td colspan="5">Thread, all seams</td><td>' + r1(sw.thread_m) + ' m</td></tr></tfoot>';
+    $('gm-ops').innerHTML = sw.operations.map(function (p) { return '<li><b>' + esc(p.name) + '</b><span>' + esc(p.machine) + ' (' + p.type + ') · ' + p.length_cm + ' cm · ' + p.thread_m + ' m of thread</span></li>'; }).join('');
+    $('gm-sam').textContent = sam ? sam.note + (sam.addons.length ? ' Estimated add-on: ' + sam.addons.map(function (a) { return a.name + ' ' + a.basic_min + ' min'; }).join(', ') + '.' : '') : '';
+    $('gm-bom').innerHTML = '<thead><tr><th>Item</th><th>Quantity</th><th>Note</th></tr></thead><tbody>' + R.bom.map(function (b) { return '<tr><td>' + esc(b.item) + '</td><td>' + b.qty + ' ' + esc(b.unit) + '</td><td style="text-align:left">' + esc(b.note) + '</td></tr>'; }).join('') + '</tbody>';
+  }
+  function bindSewing() {
+    $('gm-seams').addEventListener('change', function (e) {
+      var t = e.target, id = t.getAttribute('data-seam'), k = t.getAttribute('data-k'); if (!id) return;
+      S.seams = S.seams || {}; (S.seams[id] = S.seams[id] || {})[k] = k === 'allowance' ? (t.value === '' ? '' : +t.value) : t.value; schedule();
+    });
+  }
+
+  // ── the zipper ──
+  function renderZipper() {
+    var z = S.zipper;
+    $('gm-zon').checked = !!z.on; $('gm-zbody').hidden = !z.on;
+    $('gm-zkind').value = z.kind; $('gm-ztype').value = z.type; $('gm-zlen').value = z.length_cm; $('gm-zteeth').value = z.teeth; $('gm-zsize').value = z.size; $('gm-ztape').value = z.tape_w; $('gm-zallow').value = z.allow; $('gm-zface').value = z.facing_w;
+    $('gm-zlenf').hidden = z.kind !== 'partial';
+  }
+  function bindZipper() {
+    renderZipper();
+    var map = { 'gm-zkind': 'kind', 'gm-ztype': 'type', 'gm-zlen': 'length_cm', 'gm-zteeth': 'teeth', 'gm-zsize': 'size', 'gm-ztape': 'tape_w', 'gm-zallow': 'allow', 'gm-zface': 'facing_w' };
+    $('gm-zon').addEventListener('change', function () { S.zipper.on = this.checked; if (S.zipper.on && S.zipper.kind === 'partial' && S.zipper.type === 'open_end') S.zipper.type = 'closed_end'; renderZipper(); schedule(); });
+    Object.keys(map).forEach(function (id) {
+      $(id).addEventListener(id === 'gm-zkind' || id === 'gm-ztype' || id === 'gm-zteeth' ? 'change' : 'input', function () {
+        S.zipper[map[id]] = this.value;
+        if (id === 'gm-zkind') { S.zipper.type = this.value === 'partial' ? 'closed_end' : 'open_end'; renderZipper(); }
+        schedule();
+      });
+    });
+  }
+  function renderZipperInfo() {
+    var o = R && R.success ? sizeOf(S.size) || R.by_size[0] : null, z = o && o.zipper, box = $('gm-zinfo');
+    if (!box) return;
+    box.textContent = z && z.on ? 'Size ' + o.size + ': ' + z.opening_cm + ' cm of opening from the neck seam → buy a ' + z.standard_cm + ' cm zipper' + (z.trim_cm > 0.4 ? ' and trim ' + z.trim_cm + ' cm' : '') + '. ' + (z.kind === 'full' ? 'The front is cut in two halves, each with ' + z.allow + ' cm at the centre front, and two ' + z.facing_w + ' cm facings.' : 'The front keeps its width; a ' + r1(z.facing_w * 2) + ' cm placket goes over the slit.') : (S.zipper.on ? 'The zipper is left out of this size (see the Checks).' : '');
   }
 
   // ── marker ──
@@ -269,7 +322,7 @@
   // ── the garment ──
   function ensure3D() {
     if (mod3d) return Promise.resolve(mod3d);
-    return import('/assets/js/garment-3d.js?v=20261129a').then(function (m) { mod3d = m; return m; });
+    return import('/assets/js/garment-3d.js?v=20261130a').then(function (m) { mod3d = m; return m; });
   }
   function render3D() {
     if (!view3d || !R || !R.success) return;
@@ -292,6 +345,7 @@
     Array.prototype.forEach.call(document.querySelectorAll('#gm-tabs button'), function (b) { b.classList.toggle('on', b.getAttribute('data-tab') === t); });
     Array.prototype.forEach.call(document.querySelectorAll('.gm-pane'), function (p) { p.classList.toggle('on', p.id === 'pane-' + t); });
     if (t === 'garment' && view3d) setTimeout(function () { view3d.resize(); }, 30);
+    if (t === 'edit' && window.KAGarmentEdit) setTimeout(function () { window.KAGarmentEdit.fit(); }, 30);
   }
   function download(name, text, type) {
     var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: type || 'image/svg+xml' })); a.download = name;
@@ -317,10 +371,12 @@
     api('/api/garment/template?sizes=S,M,L,XL&unit=cm').then(function (t) {
       POMS = t.poms; POMS.forEach(function (p) { poms[p.key] = p; });
       S = load() || defaults(t);
+      var D0 = defaults(t); ['edits', 'seams', 'cornerFlags', 'zipper'].forEach(function (k) { if (!S[k]) S[k] = D0[k]; });
       POMS.forEach(function (p) { if (!S.chart[p.key]) S.chart[p.key] = {}; });
-      renderFabric(); renderChart(); bindFabric(); bindChart(); fromStudio();
+      renderFabric(); renderChart(); bindFabric(); bindChart(); bindZipper(); bindSewing(); fromStudio();
+      if (window.KAGarmentEdit) window.KAGarmentEdit.init({ state: function () { return S; }, result: function () { return R; }, size: function () { return S.size; }, change: schedule, save: save });
       $('gm-tabs').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) tab(b.getAttribute('data-tab')); });
-      document.addEventListener('click', function (e) { var b = e.target.closest('.gm-chipb'); if (b) { S.size = b.getAttribute('data-size'); renderSizes(); renderPatterns(); render3D(); save(); } });
+      document.addEventListener('click', function (e) { var b = e.target.closest('.gm-chipb[data-size]'); if (b) { S.size = b.getAttribute('data-size'); renderSizes(); renderPatterns(); renderSewing(); renderZipperInfo(); render3D(); if (window.KAGarmentEdit) window.KAGarmentEdit.render(); save(); } });
       $('gm-make').addEventListener('click', makeGarment);
       $('gm-make2').addEventListener('click', makeGarment);
       $('gm-spin').addEventListener('click', function () { if (!view3d) return; var on = !view3d.spin; view3d.setSpin(on); this.classList.toggle('primary', on); });
