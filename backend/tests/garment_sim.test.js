@@ -52,6 +52,7 @@ const polyArea = (p) => { let a = 0; for (let i = 0; i < p.length; i++) { const 
   // the legs' mannequin: a waist, a seat, two legs
   const SH = require('../engine/domain/garment-shorts'), T = SH.template(['M'], 'cm'), r = SH.build({ sizes: ['M'], chart: T.chart, fabric: { gsm: 240 } }), o = r.by_size[0], b = Sim.bodyLegs(o, {});
   const top = o.m.outseam; assert(b.sdf(0, top - 10, 0) < 0, 'the pelvis is solid'); assert(b.sdf(o.m.thigh * 0.5, 15, 0) < 0 || b.sdf(o.m.thigh * 0.4, 15, 0) < 0, 'a leg is solid'); assert(b.sdf(0, 5, 0) > 0, 'between the legs is empty'); assert(b.sdf(60, top / 2, 0) > 0, 'outside is outside');
+  assert(b.geo && b.geo.yc > 0 && b.geo.keys.length >= 3 && b.geo.rt > b.geo.ra * 0.5, 'the mannequin gives the start of the drape its measures'); const lk = Sim.lerpKeys(b.geo.keys, b.geo.top - b.geo.F * 0.5); assert(lk[0] > 5 && lk[1] < lk[0], 'the pelvis is wider than deep');
   console.log('✓ the mannequin of a bottom: a pelvis, two legs, empty between them');
 }
 console.log('Garment simulation tests passed');

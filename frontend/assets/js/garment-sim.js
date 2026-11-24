@@ -118,7 +118,7 @@
     const rt = Math.max(3, (2 * m.thigh - ease) / TAU), ra = Math.max(2.5, (2 * m.leg_opening - 4) / TAU), cxl = rt + 0.4, bottom = 0 - 12;
     const keys = [[top + 14, aw * 0.96, aw * k * 0.92], [top - F * 0.5, aw, aw * k], [ys, as, as * k], [yc + 0.5, as * 0.98, as * k * 0.98]];
     return {
-      kind: 'legs', top: top + 20, parts: { loft: { keys, y0: yc + 0.5, y1: top + 14 }, caps: [1, -1].map((s) => ({ A: [s * cxl, yc + 6, 0], B: [s * cxl * 0.96, 0, 0], ra: rt, rb: ra })).concat([1, -1].map((s) => ({ A: [s * cxl * 0.96, 0, 0], B: [s * cxl * 0.94, bottom, 0], ra, rb: ra * 0.8 }))), spheres: [] }, sdf(x, y, z) {
+      kind: 'legs', geo: { top, F, yc, keys, cxl, rt, ra }, top: top + 20, parts: { loft: { keys, y0: yc + 0.5, y1: top + 14 }, caps: [1, -1].map((s) => ({ A: [s * cxl, yc + 6, 0], B: [s * cxl * 0.96, 0, 0], ra: rt, rb: ra })).concat([1, -1].map((s) => ({ A: [s * cxl * 0.96, 0, 0], B: [s * cxl * 0.94, bottom, 0], ra, rb: ra * 0.8 }))), spheres: [] }, sdf(x, y, z) {
         let best = 1e9;
         if (y >= yc) best = torsoDist(keys, x, y, z);
         for (const s of [1, -1]) best = Math.min(best, capsule(x, y, z, [s * cxl, yc + 6, 0], [s * cxl * 0.96, 0, 0], rt, ra), capsule(x, y, z, [s * cxl * 0.96, 0, 0], [s * cxl * 0.94, bottom, 0], ra, ra * 0.8));
@@ -185,16 +185,20 @@
       const prox = this.opt.proxSeams && this.opt.seamOf ? (b) => this.opt.proxSeams.indexOf(this.opt.seamOf[this.inst[b.ii].mesh.blabels[b.i]]) >= 0 : () => true;
       B.forEach((b) => { if (!prox(b)) return; const c = near(b); if (c && prox(c)) nn.set(b.g, c.g); });
       nn.forEach((g2, g1) => { const mutual = nn.get(g2) === g1, o1 = 3 * g1, o2 = 3 * g2, d = Math.hypot(this.X[o1] - this.X[o2], this.X[o1 + 1] - this.X[o2 + 1], this.X[o1 + 2] - this.X[o2 + 2]); if (mutual || d < tol * 0.5) { const a = Math.min(g1, g2), c = Math.max(g1, g2); pairs.set(a * 1048576 + c, [a, c]); } });
-      (this.opt.sewing || []).forEach(([ra, rb]) => this._sewRuns(ra, rb, pairs));
+      (this.opt.sewing || []).forEach(([ra, rb, mode]) => this._sewRuns(ra, rb, pairs, mode));
       this.ss = Int32Array.from([].concat(...[...pairs.values()]));
     }
     // two runs of outline points, each an ordered list of [instance id, outline index], are sewn by their share of the way along: the point that is a third along one meets the one a third along the other
-    _sewRuns(ra, rb, pairs) {
+    _sewRuns(ra, rb, pairs, mode) {
       const get = (run) => run.map(([id, i]) => { const ii = this.inst.findIndex((t) => t.id === id); return ii < 0 ? null : { g: this.inst[ii].off + i, p: this.inst[ii].mesh.pts[i] }; }).filter(Boolean);
       const A = get(ra), B = get(rb); if (A.length < 2 || B.length < 2) return;
       const cum = (R) => { const c = [0]; for (let k = 1; k < R.length; k++) c.push(c[k - 1] + Math.hypot(R[k].p[0] - R[k - 1].p[0], R[k].p[1] - R[k - 1].p[1])); return c; };
       const ca = cum(A), cb = cum(B), ta = ca[ca.length - 1] || 1, tb = cb[cb.length - 1] || 1;
       const pair = (X, cx, tx, Y, cy, ty) => X.forEach((q, k) => { const f = cx[k] / tx; let best = 0, bd = 1e9; for (let j = 0; j < Y.length; j++) { const d = Math.abs(cy[j] / ty - f); if (d < bd) { bd = d; best = j; } } const a = Math.min(q.g, Y[best].g), c = Math.max(q.g, Y[best].g); if (a !== c) pairs.set(a * 1048576 + c, [a, c]); });
+      if (mode === 'end') {                                                                                // sewn from the last point (the hem, the crotch point): the same distance from it, as far as the shorter run goes
+        const lim = 1.2 * (this.opt.h || 2), pe = (X, cx, tx, Y, cy, ty) => X.forEach((q, k) => { const s = tx - cx[k]; let best = -1, bd = lim; for (let j = 0; j < Y.length; j++) { const d = Math.abs(ty - cy[j] - s); if (d < bd) { bd = d; best = j; } } if (best < 0) return; const a = Math.min(q.g, Y[best].g), c = Math.max(q.g, Y[best].g); if (a !== c) pairs.set(a * 1048576 + c, [a, c]); });
+        pe(A, ca, ta, B, cb, tb); pe(B, cb, tb, A, ca, ta); return;
+      }
       pair(A, ca, ta, B, cb, tb); pair(B, cb, tb, A, ca, ta);
     }
     step(dt) {
@@ -261,6 +265,6 @@
   // the three settings of how the cloth bends
   const DRAPE = { soft: { bend: 0.02, stretch: 0.95 }, medium: { bend: 0.08, stretch: 0.96 }, stiff: { bend: 0.3, stretch: 0.97 } };
 
-  const KASim = { delaunay, meshPiece, meshArea, bodyTee, bodyLegs, Cloth, DRAPE, ellK };
+  const KASim = { delaunay, meshPiece, meshArea, bodyTee, bodyLegs, lerpKeys, Cloth, DRAPE, ellK };
   root.KASim = KASim; if (typeof module !== 'undefined' && module.exports) module.exports = KASim;
 })(typeof window !== 'undefined' ? window : globalThis);

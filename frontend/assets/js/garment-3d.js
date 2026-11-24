@@ -356,21 +356,38 @@ export class GarmentView {
     this.mats.push(cord);
     [-1, 1].forEach((sg) => {
       const x0 = sg * ex, pts = [new THREE.Vector3(x0, top - F * 0.5, B), new THREE.Vector3(x0 * 1.1, top - F * 0.5 - vis * 0.35, B + 0.5), new THREE.Vector3(x0 * 1.5, top - F * 0.5 - vis * 0.7, B + 0.3), new THREE.Vector3(x0 * 1.8, top - F * 0.5 - vis, B)];
-      this.group.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 24, 0.22, 6, false), cord));
-      const knot = new THREE.Mesh(new THREE.SphereGeometry(0.42, 10, 8), cord); knot.position.copy(pts[3]); this.group.add(knot);
-      const eye = new THREE.Mesh(new THREE.TorusGeometry(0.32, 0.1, 6, 12), new THREE.MeshStandardMaterial({ color: 0xb8bcc4, metalness: 0.85, roughness: 0.35 })); eye.position.set(x0, top - F * 0.5, B + 0.02); this.group.add(eye);
+      this.group.add(tagged(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 24, 0.22, 6, false), cord), 'waistband', cord));
+      const knot = new THREE.Mesh(new THREE.SphereGeometry(0.42, 10, 8), cord); knot.position.copy(pts[3]); this.group.add(tagged(knot, 'waistband', cord));
+      const eye = new THREE.Mesh(new THREE.TorusGeometry(0.32, 0.1, 6, 12), new THREE.MeshStandardMaterial({ color: 0xb8bcc4, metalness: 0.85, roughness: 0.35 })); eye.position.set(x0, top - F * 0.5, B + 0.02); this.group.add(tagged(eye, 'waistband', cord));
     });
     // the slanted front pockets, and the back pockets, drawn as stitching on the cloth
     const onLeg = (sg, front, xp, yp) => { const r = rows[Math.max(0, Math.min(nRow, Math.round(yp / (Ll / nRow))))], w = front ? r.wf : r.wb, t = front ? Math.PI * Math.min(1, xp / w) : TAU - Math.PI * Math.min(1, xp / w); /* the side seam (x 0) is the outer edge of the leg, front and back */ return new THREE.Vector3(sg * (cx(r) + r.a * Math.cos(t)), top - F - yp, r.b * Math.sin(t) * 1.012); };
     if (m.fpocket_l > 0 && m.fpocket_w > 0) [1, -1].forEach((sg) => { const pts = []; for (let i = 0; i <= 10; i++) { const f = i / 10; pts.push(onLeg(sg, true, m.fpocket_w * (1 - f), Math.max(0.05, m.fpocket_l * f))); } this.group.add(tagged(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 30, 0.12, 5, false), dark), 'front', mat)); });
     if (m.bpocket_w > 0 && m.bpocket_l > 0) [1, -1].forEach((sg) => {
       const x0 = rows[0].wb * 0.5 - m.bpocket_w / 2, x1 = x0 + m.bpocket_w, y0 = m.bpocket_pos, y1 = y0 + m.bpocket_l, loop = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]].map(([xp, yp]) => onLeg(sg, false, xp, yp));
-      this.group.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(loop, true, 'catmullrom', 0.02), 60, 0.1, 5, true), dark));
+      this.group.add(tagged(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(loop, true, 'catmullrom', 0.02), 60, 0.1, 5, true), dark), 'back', dark));
     });
     {
       const vec = (v) => [v.x, v.y, v.z], inst = [], sp = (id) => size.pieces.find((q) => q.id === id);
       [['front', true], ['back', false]].forEach(([pid, front]) => { const q = sp(pid); if (!q) return; [1, -1].forEach((sg) => inst.push({ id: pid + (sg > 0 ? 'R' : 'L'), grp: sg > 0 ? 'R' : 'L', pid, poly: q.finished, labels: q.finished_labels, rest: 'flat', mat: 'main', map: (x, y) => vec(onLeg(sg, front, x, y)), pinLabel: 'waist' })); });
-      this._sim = { kind: 'legs', size, fabric, mat, rib, inst, hide: ['front', 'back'] };
+      // the start of the drape: each piece laid round the mannequin made from the same measures — above the crotch round the pelvis (a quarter of its ring, side to centre), below it round its own leg (half of the leg's ring, side to inseam), blended through the crotch
+      const KS = window.KASim, geo = KS ? KS.bodyLegs(size, {}).geo : null;
+      if (geo) {
+        const sm = (t) => { t = Math.max(0, Math.min(1, t)); return t * t * (3 - 2 * t); }, cl = (v, a, b) => Math.max(a, Math.min(b, v));
+        const place = (sg, front, poly) => {
+          const ys = poly.map((p) => p[1]), y0 = Math.min.apply(null, ys), y1 = Math.max.apply(null, ys), x0 = Math.min.apply(null, poly.map((p) => p[0])), zs = front ? 1 : -1;
+          return (x, y) => {
+            const sp = spans(poly, cl(y, y0 + 0.01, y1 - 0.01)); let hi = -Infinity; sp.forEach(([a, b]) => { if (b > hi) hi = b; }); const lo = x0; if (!(hi > lo)) hi = lo + 1;
+            const u = cl((x - lo) / (hi - lo), 0, 1), Y = geo.top - geo.F - y, ab = KS.lerpKeys(geo.keys, Y), A = ab[0] + 0.7, Bz = ab[1] + 0.7, th = u * Math.PI / 2;
+            const tl = cl((geo.yc + 6 - Y) / (geo.yc + 6), 0, 1), r = geo.rt + (geo.ra - geo.rt) * tl + 0.7, c = sg * geo.cxl * (1 - 0.04 * tl), an = Math.PI * u, w = sm((Y - (geo.yc - 2)) / 8);
+            return [(sg * A * Math.cos(th)) * w + (c + sg * r * Math.cos(an)) * (1 - w), Y, (zs * Bz * Math.sin(th)) * w + (zs * r * Math.sin(an)) * (1 - w)];
+          };
+        };
+        inst.forEach((it) => { const q = sp(it.pid); it.map = place(it.grp === 'R' ? 1 : -1, it.pid === 'front', q.finished); });
+        const wb = sp('waistband');
+        if (wb) { const len = Math.max(1, wb.finished_w || 2 * m.waist), Yb = top - F * 0.5, ab = KS.lerpKeys(geo.keys, Yb); inst.push({ id: 'band', grp: 'B', pid: 'waistband', poly: wb.finished, labels: wb.finished_labels, rest: 'init', mat: 'rib', map: (x, y) => { const s = (x / len) * Math.PI * 2 + Math.PI / 2; return [(ab[0] + 0.9) * Math.cos(s), top - y * 0.5, (ab[1] + 0.9) * Math.sin(s)]; } }); }
+      }
+      this._sim = { kind: 'legs', size, fabric, mat, rib, inst, hide: ['front', 'back', 'waistband'] };
     }
     this._shadowAndFrame(top, 2 * (cx(rows[0]) + a0) * 1.15 + 6);
   }
@@ -394,7 +411,6 @@ export class GarmentView {
   }
   startSim() {
     const S = this._sim, K = window.KASim; if (!S || !K) { if (this.onSim) this.onSim({ state: 'unavailable' }); return false; }
-    if (S.kind === 'legs') { this.simMode = false; if (this.onSim) this.onSim({ state: 'unsupported', why: 'The drape works on tops (a tee, a long sleeve, a sweatshirt) so far; shorts and trousers are not draped yet.' }); return false; }
     this.simMode = true;
     if (this._simGroup) { this.group.remove(this._simGroup); this._simGroup.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); }
     const area = S.inst.reduce((a, it) => { let s = 0; for (let i = 0; i < it.poly.length; i++) { const p = it.poly[i], q = it.poly[(i + 1) % it.poly.length]; s += p[0] * q[1] - q[0] * p[1]; } return a + Math.abs(s) / 2; }, 0);
@@ -402,7 +418,7 @@ export class GarmentView {
     const insts = S.inst.map((it) => { const mesh = K.meshPiece(it.poly, it.labels, h); return { id: it.id, pid: it.pid, mesh, map: it.map, rest: it.rest, mat: it.mat, grp: it.grp, pinAll: it.id === 'band' }; });
     /* the stiffness follows the fabric's weight (GSM) unless a cloth setting was chosen by hand: bending stiffness of a sheet grows with its mass and thickness */
     const g = this._gsm || 0, dr = this._drapeSet || !g ? K.DRAPE[this._drape || 'medium'] : { bend: Math.max(0.01, Math.min(0.4, 0.02 * Math.pow(g / 140, 2.2))), stretch: g > 300 ? 0.97 : 0.955 };
-    this._cloth = new K.Cloth(insts, body, Object.assign({}, dr, { h, seamTol: Math.max(1.6, h * 0.85), gravity: S.kind === 'legs' ? 700 : 980, seamOf: (window.KAGarment && window.KAGarment.seamOf) || null, pinSeams: S.kind === 'legs' ? ['waistband'] : ['neck'], proxSeams: S.kind === 'legs' ? null : ['neck', 'hem', 'sleeve_hem', 'band_end', 'cuff_end', 'hemband_end'], sewing: S.kind === 'legs' ? null : this._teeSewing(insts), groupSeams: S.kind === 'legs' ? ['inseam', 'side'] : null, selfSeams: ['underarm', 'band_end', 'cuff_end', 'hemband_end'] }));
+    this._cloth = new K.Cloth(insts, body, Object.assign({}, dr, { h, seamTol: Math.max(1.6, h * 0.85), gravity: S.kind === 'legs' ? 700 : 980, seamOf: (window.KAGarment && window.KAGarment.seamOf) || null, pinSeams: S.kind === 'legs' ? ['waistband'] : ['neck'], proxSeams: S.kind === 'legs' ? [] : ['neck', 'hem', 'sleeve_hem', 'band_end', 'cuff_end', 'hemband_end'], sewing: S.kind === 'legs' ? this._legSewing(insts) : this._teeSewing(insts), groupSeams: S.kind === 'legs' ? ['inseam', 'side'] : null, selfSeams: S.kind === 'legs' ? ['band_end'] : ['underarm', 'band_end', 'cuff_end', 'hemband_end'] }));
     this._simGroup = new THREE.Group(); this._simMeshes = [];
     insts.forEach((it) => {
       const g = new THREE.BufferGeometry(), N = it.mesh.pts.length, uv = new Float32Array(2 * N), idx = [];
@@ -418,6 +434,14 @@ export class GarmentView {
     return true;
   }
   // the seams of a top, written down: which run of which piece's outline is sewn to which (shoulder, side, armhole to the sleeve cap, underarm)
+  // the seams of a pair of legs: each leg's side and inseam join its front to its back, its crotch curve too; the two fronts meet at the centre front, the two backs at the centre back
+  _legSewing(insts) {
+    const by = (id) => insts.find((t) => t.id === id), out = [];
+    const run = (id, labels) => { const t = by(id); if (!t) return []; const m = t.mesh, r = []; for (let i = 0; i < m.nb; i++) if (labels.indexOf(m.blabels[i]) >= 0) r.push([id, i, m.pts[i][1]]); r.sort((a, b) => a[2] - b[2]); return r.map((q) => [q[0], q[1]]); };
+    ['R', 'L'].forEach((g) => { out.push([run('front' + g, ['side', 'sidehem']), run('back' + g, ['side', 'sidehem']), 'end']); out.push([run('front' + g, ['inseam', 'inseamhem']), run('back' + g, ['inseam', 'inseamhem']), 'end']); });
+    ['front', 'back'].forEach((p) => out.push([run(p + 'R', ['centre', 'crotch']), run(p + 'L', ['centre', 'crotch'])]));     // the rise: the right half to the left half, in front and behind
+    return out;
+  }
   _teeSewing(insts) {
     const by = (id) => insts.find((t) => t.id === id); const out = [];
     const run = (id, labels, side, order) => { const t = by(id); if (!t) return []; const m = t.mesh, r = []; for (let i = 0; i < m.nb; i++) { if (labels.indexOf(m.blabels[i]) < 0) continue; const x = m.pts[i][0]; if (side > 0 ? x < -0.01 : side < 0 ? x > 0.01 : false) continue; r.push([id, i, m.pts[i][1]]); } r.sort((a, b) => (order === 'up' ? a[2] - b[2] : b[2] - a[2])); return r.map((q) => [q[0], q[1]]); };
