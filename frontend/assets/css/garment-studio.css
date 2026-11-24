@@ -104,7 +104,8 @@ body.gs-dragging { user-select: none; cursor: col-resize; } body.gs-dragging.gs-
 .gs .gm-3d .gm-empty { color: #aab2bd; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
 .gs .gm-3dnote { display: none; }
 .gs-rail { position: absolute; left: 8px; top: 8px; display: flex; flex-direction: column; gap: 3px; padding: 4px; background: rgba(20, 22, 26, .72); backdrop-filter: blur(6px); border: 1px solid var(--line2); border-radius: 10px; z-index: 3; }
-.gs-rail .gs-ib { width: 32px; height: 30px; color: #d6dce4; } .gs-rail .gs-ib.primary, .gs-rail .gs-ib.on { background: var(--accent); color: var(--on-accent); }
+.gs-rail .gs-ib { width: 32px; height: 30px; color: #d6dce4; } .gs-sim { font-size: 11.5px; color: var(--accent); margin-left: 4px; white-space: nowrap; }
+.gs-rail .gs-ib.primary, .gs-rail .gs-ib.on { background: var(--accent); color: var(--on-accent); }
 .gs-rsep { height: 1px; background: var(--line2); margin: 2px 4px; } .gs-vb { font-size: 12px; }
 .gs-hint3d { position: absolute; left: 0; right: 0; bottom: 6px; text-align: center; font-size: 11px; color: #a9b1bc; pointer-events: none; text-shadow: 0 1px 2px rgba(0, 0, 0, .6); }
 .gs-2dbody { background: #d9dde2; color: #111; }

@@ -81,7 +81,7 @@ export class GarmentView {
     this._ro = new ResizeObserver(() => this.resize()); this._ro.observe(host);
     this.controls.addEventListener('start', () => { this.spin = false; if (this.onSpin) this.onSpin(false); });
     this.resize();
-    this._loop = (t) => { this._raf = requestAnimationFrame(this._loop); const dt = Math.min(0.05, (t - this._last) / 1000 || 0); this._last = t; if (this.spin) this.group.rotation.y += dt * 0.6; this.controls.update(); this.renderer.render(this.scene, this.camera); };
+    this._loop = (t) => { this._raf = requestAnimationFrame(this._loop); const dt = Math.min(0.05, (t - this._last) / 1000 || 0); this._last = t; if (this.spin) this.group.rotation.y += dt * 0.6; this._simTick(); this.controls.update(); this.renderer.render(this.scene, this.camera); };
     this._raf = requestAnimationFrame(this._loop);
   }
 
@@ -120,6 +120,7 @@ export class GarmentView {
   setSpin(on) { this.spin = !!on; }
 
   clear() {
+    this._cloth = null; this._simBusy = false; this._simGroup = null; this._hemRing = null; this._cuffParam = null; this._mannequin = null;
     if (this._hiMats) this._hiMats.clear();
     while (this.group.children.length) { const o = this.group.children[0]; this.group.remove(o); o.traverse((n) => { if (n.geometry) n.geometry.dispose(); }); }
     this.mats.forEach((m) => { if (m.map) m.map.dispose(); m.dispose(); }); this.mats = [];
@@ -136,7 +137,7 @@ export class GarmentView {
     this.mats = [mat, rib];
 
     // the body: depth/width ratio grows from flat shoulders to a round chest
-    const dRatio = (y) => 0.6 * smooth(0, 11, y);
+    const dRatio = (y) => 0.2 + 0.4 * smooth(0, 11, y);                 // the shoulders have a depth of their own: a body is not a flat sheet there
     const tabs = new Map(); const tab = (d0) => { const k = Math.round(d0 * 200); if (!tabs.has(k)) tabs.set(k, arcTable(k / 200)); return tabs.get(k); };
     // the tube's own width: the armhole bows in and steps out at the underarm, but a body does not: from the shoulder to the underarm it widens smoothly
     const cw2 = m.chest / 2, sw2 = m.shoulder / 2, yu = d.underarm_y || (m.slope + m.armhole);
@@ -214,7 +215,7 @@ export class GarmentView {
       for (let i = 35; i >= 1; i--) pts.push(mapB(-wB + (2 * wB * i) / 36, yh));
       ring(pts, 0.16, rib, 'hem');
       if (size.pieces.some((q) => q.id === 'hemband') && m.hemband_h > 0) {                    // a rib band round the hem, drawn in to its relaxed width
-        const ratio = Math.min(1, m.hemband_w / Math.max(1, m.hem)), R = 8, n = pts.length, y0 = pts[0].y, pos = [], idx = [];
+        const ratio = Math.min(1, m.hemband_w / Math.max(1, m.hem)), R = 8, n = pts.length, y0 = pts[0].y, pos = [], idx = []; this._hemRing = { pts: pts.slice(), ratio, y0 };
         for (let j = 0; j <= R; j++) { const t = j / R, sc = 1 + (ratio - 1) * smooth(0, 0.3, t); pts.forEach((v) => pos.push(v.x * sc, y0 - t * m.hemband_h, v.z * sc)); }
         for (let j = 0; j < R; j++) for (let k = 0; k < n; k++) { const a = j * n + k, b = j * n + ((k + 1) % n), c = a + n, d = b + n; idx.push(a, c, b, b, c, d); }
         const hg = new THREE.BufferGeometry(); hg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); hg.setIndex(idx); hg.computeVertexNormals();
@@ -227,7 +228,7 @@ export class GarmentView {
     }
     // the rib cuffs, when the garment has them: a ring at the end of each sleeve, drawn in from the sleeve opening to its relaxed width
     if (size.pieces.some((q) => q.id === 'cuff') && m.cuff_h > 0) {
-      const r0 = Math.max(halfWidth(sl, SL - 0.05), 0.1) / Math.PI, rc = Math.min(r0, m.cuff_w / Math.PI), rowsN = 8, nC = 28, pos = [], idx = [];
+      const r0 = Math.max(halfWidth(sl, SL - 0.05), 0.1) / Math.PI, rc = Math.min(r0, m.cuff_w / Math.PI), rowsN = 8, nC = 28, pos = [], idx = []; this._cuffParam = { r0, rc };
       for (let j = 0; j <= rowsN; j++) { const t = j / rowsN, yy = SL + t * m.cuff_h, r = r0 + (rc - r0) * smooth(0, 0.35, t), tp = shoulder.clone().addScaledVector(dir, yy), C = tp.clone().addScaledVector(nrm, -r);
         for (let k = 0; k <= nC; k++) { const phi = (k / nC) * TAU, v = C.clone().addScaledVector(nrm, r * Math.cos(phi)).addScaledVector(zz, r * Math.sin(phi)); pos.push(v.x, v.y, v.z); } }
       for (let j = 0; j < rowsN; j++) for (let k = 0; k < nC; k++) { const a = j * (nC + 1) + k, b = a + 1, c = a + nC + 1, d = c + 1; idx.push(a, c, b, b, c, d); }
@@ -254,6 +255,22 @@ export class GarmentView {
       if (up.length > 2) { this._seam('underarm', up, 0.13, false); this._seam('underarm', up.map((v) => new THREE.Vector3(-v.x, v.y, v.z)), 0.13, false); }
     }
 
+    // where each piece's flat points sit on the form: the cloth simulation starts from here (the seams are where the pieces start together)
+    {
+      const sp = (id) => size.pieces.find((q) => q.id === id), vec = (v) => [v.x, v.y, v.z], inst = [];
+      const add = (pid, id, map, rest, mat, extra) => { const q = sp(pid); if (q) inst.push(Object.assign({ id, pid, poly: q.finished, labels: q.finished_labels, map, rest: rest || 'flat', mat: mat || 'main' }, extra || {})); };
+      // below the hem edge the folded strip has no width of its own on the form: it hangs straight down from the hem
+      const below = (map) => (x, y) => { const v = map(x, Math.min(y, L - 0.05)); v.y = L - y; return vec(v); };
+      ['front', 'front_r', 'front_l'].forEach((pid) => add(pid, pid, below(mapF)));
+      add('back', 'back', below(mapB));
+      const sleeveMap = (sg) => (x, y) => { const w = Math.max(halfWidth(sl, Math.min(Math.max(y, 0.05), SL - 0.05)), 0.02), r = w / Math.PI, tp = shoulder.clone().addScaledVector(dir, y), C = tp.clone().addScaledVector(nrm, -r), ph = x / r, v = C.addScaledVector(nrm, r * Math.cos(ph)).addScaledVector(zz, r * Math.sin(ph)); return [sg * v.x, v.y, v.z]; };
+      add('sleeve', 'sleeveR', sleeveMap(1)); add('sleeve', 'sleeveL', sleeveMap(-1));
+      const bp = sp('band'); if (bp) { const len = Math.max(1, bp.finished_w); add('band', 'band', (x, y) => { const P = curve.getPointAt(Math.min(0.9999, Math.max(0, x / len))); return [P.x, P.y + y * 0.5 + 0.2, P.z + (P.z >= 0 ? 0.3 : -0.3)]; }, 'init', 'rib'); }
+      if (this._cuffParam && sp('cuff')) { const cp = this._cuffParam, cm = (sg) => (x, y) => { const t = Math.min(1, Math.max(0, y / (2 * m.cuff_h))), yy = SL + t * m.cuff_h, r = cp.r0 + (cp.rc - cp.r0) * smooth(0, 0.35, t), tp = shoulder.clone().addScaledVector(dir, yy), C = tp.clone().addScaledVector(nrm, -r), phi = (x / (2 * m.cuff_w)) * TAU, v = C.addScaledVector(nrm, r * Math.cos(phi)).addScaledVector(zz, r * Math.sin(phi)); return [sg * v.x, v.y, v.z]; }; add('cuff', 'cuffR', cm(1), 'init', 'rib'); add('cuff', 'cuffL', cm(-1), 'init', 'rib'); }
+      if (this._hemRing && sp('hemband')) { const hr = this._hemRing, n = hr.pts.length; add('hemband', 'hemband', (x, y) => { const u = (((x / (2 * m.hemband_w)) % 1) + 1) % 1, f = u * n, i = Math.floor(f) % n, j = (i + 1) % n, t = f - Math.floor(f), a = hr.pts[i], b = hr.pts[j], tt = Math.min(1, Math.max(0, y / (2 * m.hemband_h))), sc = 1 + (hr.ratio - 1) * smooth(0, 0.3, tt); return [(a.x + (b.x - a.x) * t) * sc, hr.y0 - tt * m.hemband_h, (a.z + (b.z - a.z) * t) * sc]; }, 'init', 'rib'); }
+      this._sim = { kind: 'tee', size, fabric, mat, rib, inst, hide: ['front', 'back', 'sleeve', 'band', 'cuff', 'hemband'] };
+    }
+
     // a zipper down the centre front, from the neck seam, with its slider
     if (size.zipper && size.zipper.on) {
       const z = size.zipper, pts = [], y0 = m.neck_df + 0.3, y1 = m.neck_df + z.opening_cm;
@@ -278,7 +295,7 @@ export class GarmentView {
       this.group.rotation.y = 0; this.camera.position.set(0, L * 0.55, dist); this.controls.target.copy(this.centre); this._placed = true; this._placedL = L;
     }
     this.controls.minDistance = L * 0.4; this.controls.maxDistance = L * 6; this.controls.update();
-    this._applyHi();
+    this._applyHi(); if (this.simMode) this.startSim();
     this.info = { sleeve_axis_deg: 28, form: 'from the finished pattern pieces' };
   }
 
@@ -342,12 +359,17 @@ export class GarmentView {
       const eye = new THREE.Mesh(new THREE.TorusGeometry(0.32, 0.1, 6, 12), new THREE.MeshStandardMaterial({ color: 0xb8bcc4, metalness: 0.85, roughness: 0.35 })); eye.position.set(x0, top - F * 0.5, B + 0.02); this.group.add(eye);
     });
     // the slanted front pockets, and the back pockets, drawn as stitching on the cloth
-    const onLeg = (sg, front, xp, yp) => { const r = rows[Math.max(0, Math.min(nRow, Math.round(yp / (Ll / nRow))))], w = front ? r.wf : r.wb, t = (front ? 0 : Math.PI) + Math.PI * Math.min(1, xp / w); return new THREE.Vector3(sg * (cx(r) + r.a * Math.cos(t)), top - F - yp, r.b * Math.sin(t) * 1.012); };
+    const onLeg = (sg, front, xp, yp) => { const r = rows[Math.max(0, Math.min(nRow, Math.round(yp / (Ll / nRow))))], w = front ? r.wf : r.wb, t = front ? Math.PI * Math.min(1, xp / w) : TAU - Math.PI * Math.min(1, xp / w); /* the side seam (x 0) is the outer edge of the leg, front and back */ return new THREE.Vector3(sg * (cx(r) + r.a * Math.cos(t)), top - F - yp, r.b * Math.sin(t) * 1.012); };
     if (m.fpocket_l > 0 && m.fpocket_w > 0) [1, -1].forEach((sg) => { const pts = []; for (let i = 0; i <= 10; i++) { const f = i / 10; pts.push(onLeg(sg, true, m.fpocket_w * (1 - f), Math.max(0.05, m.fpocket_l * f))); } this.group.add(tagged(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 30, 0.12, 5, false), dark), 'front', mat)); });
     if (m.bpocket_w > 0 && m.bpocket_l > 0) [1, -1].forEach((sg) => {
       const x0 = rows[0].wb * 0.5 - m.bpocket_w / 2, x1 = x0 + m.bpocket_w, y0 = m.bpocket_pos, y1 = y0 + m.bpocket_l, loop = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]].map(([xp, yp]) => onLeg(sg, false, xp, yp));
       this.group.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(loop, true, 'catmullrom', 0.02), 60, 0.1, 5, true), dark));
     });
+    {
+      const vec = (v) => [v.x, v.y, v.z], inst = [], sp = (id) => size.pieces.find((q) => q.id === id);
+      [['front', true], ['back', false]].forEach(([pid, front]) => { const q = sp(pid); if (!q) return; [1, -1].forEach((sg) => inst.push({ id: pid + (sg > 0 ? 'R' : 'L'), grp: sg > 0 ? 'R' : 'L', pid, poly: q.finished, labels: q.finished_labels, rest: 'flat', mat: 'main', map: (x, y) => vec(onLeg(sg, front, x, y)), pinLabel: 'waist' })); });
+      this._sim = { kind: 'legs', size, fabric, mat, rib, inst, hide: ['front', 'back'] };
+    }
     this._shadowAndFrame(top, 2 * (cx(rows[0]) + a0) * 1.15 + 6);
   }
   // the floor shadow, then the camera for a garment of this height and width
@@ -357,7 +379,64 @@ export class GarmentView {
     shadow.rotation.x = -Math.PI / 2; shadow.position.y = -1; this.group.add(shadow); this.mats.push(shadow.material);
     this.centre = new THREE.Vector3(0, L * 0.5, 0); this._L = L; this._wNeed = wNeed; const dist = this._fit();
     if (!this._placed || Math.abs(L - this._placedL) / this._placedL > 0.35) { this.group.rotation.y = 0; this.camera.position.set(0, L * 0.55, dist); this.controls.target.copy(this.centre); this._placed = true; this._placedL = L; }
-    this.controls.minDistance = L * 0.4; this.controls.maxDistance = L * 6; this.controls.update(); this._applyHi();
+    this.controls.minDistance = L * 0.4; this.controls.maxDistance = L * 6; this.controls.update(); this._applyHi(); if (this.simMode) this.startSim();
+  }
+
+  // ── cloth simulation: the garment draped on a mannequin of its own measures ──
+  setDrape(name) { this._drape = window.KASim && window.KASim.DRAPE[name] ? name : 'medium'; if (this.simMode) this.startSim(); }
+  stopSim() {
+    this.simMode = false; this._simBusy = false;
+    if (this._simGroup) { this.group.remove(this._simGroup); this._simGroup.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); this._simGroup = null; }
+    this._cloth = null; this.group.traverse((o) => { if (o.userData && (o.userData.piece || o.userData.seam || o.userData.seamVis)) o.visible = true; });
+    if (this.onSim) this.onSim({ state: 'off' });
+  }
+  startSim() {
+    const S = this._sim, K = window.KASim; if (!S || !K) { if (this.onSim) this.onSim({ state: 'unavailable' }); return false; }
+    if (S.kind === 'legs') { this.simMode = false; if (this.onSim) this.onSim({ state: 'unsupported', why: 'The drape works on tops (a tee, a long sleeve, a sweatshirt) so far; shorts and trousers are not draped yet.' }); return false; }
+    this.simMode = true;
+    if (this._simGroup) { this.group.remove(this._simGroup); this._simGroup.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); }
+    const area = S.inst.reduce((a, it) => { let s = 0; for (let i = 0; i < it.poly.length; i++) { const p = it.poly[i], q = it.poly[(i + 1) % it.poly.length]; s += p[0] * q[1] - q[0] * p[1]; } return a + Math.abs(s) / 2; }, 0);
+    const h = Math.max(1.5, Math.min(3.2, Math.sqrt(area / (3200 * 0.866)))), body = S.kind === 'legs' ? K.bodyLegs(S.size, {}) : K.bodyTee(S.size, {});
+    const insts = S.inst.map((it) => { const mesh = K.meshPiece(it.poly, it.labels, h); return { id: it.id, pid: it.pid, mesh, map: it.map, rest: it.rest, mat: it.mat, grp: it.grp, pinAll: it.id === 'band' }; });
+    const dr = K.DRAPE[this._drape || 'medium'];
+    this._cloth = new K.Cloth(insts, body, Object.assign({}, dr, { h, seamTol: Math.max(1.6, h * 0.85), gravity: S.kind === 'legs' ? 700 : 980, seamOf: (window.KAGarment && window.KAGarment.seamOf) || null, pinSeams: S.kind === 'legs' ? ['waistband'] : ['neck', 'shoulder', 'armhole'], groupSeams: S.kind === 'legs' ? ['inseam', 'side'] : null, selfSeams: ['underarm', 'band_end', 'cuff_end', 'hemband_end'] }));
+    this._simGroup = new THREE.Group(); this._simMeshes = [];
+    insts.forEach((it) => {
+      const g = new THREE.BufferGeometry(), N = it.mesh.pts.length, uv = new Float32Array(2 * N), idx = [];
+      it.mesh.pts.forEach((p, i) => { uv[2 * i] = p[0]; uv[2 * i + 1] = p[1]; }); it.mesh.tris.forEach((t) => idx.push(t[0], t[1], t[2]));
+      g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(3 * N), 3).setUsage(THREE.DynamicDrawUsage)); g.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); g.setIndex(idx);
+      const material = it.mat === 'rib' ? S.rib : S.mat, mesh = new THREE.Mesh(g, material); mesh.userData.piece = it.pid; mesh.userData.base = material; mesh.frustumCulled = false;
+      this._simGroup.add(mesh); this._simMeshes.push({ mesh, off: it.off || this._cloth.inst.find((q) => q.id === it.id).off, N });
+    });
+    this.group.add(this._simGroup);
+    this.group.traverse((o) => { if (o.userData && ((o.userData.piece && S.hide.indexOf(o.userData.piece) >= 0 && !this._simGroup.children.includes(o)) || o.userData.seam || o.userData.seamVis)) { if (!(this._simGroup && this._simGroup.getObjectById(o.id))) o.visible = false; } });
+    this._simSteps = 0; this._simTarget = 300; this._simBusy = true; this._simUpload(); this._applyHi();
+    if (this.onSim) this.onSim({ state: 'running', step: 0, total: this._simTarget });
+    return true;
+  }
+  _simUpload() {
+    const c = this._cloth; if (!c) return;
+    this._simMeshes.forEach(({ mesh, off, N }) => { const a = mesh.geometry.attributes.position; a.array.set(c.X.subarray(3 * off, 3 * (off + N))); a.needsUpdate = true; mesh.geometry.computeVertexNormals(); });
+  }
+  _simTick() {
+    if (!this._simBusy || !this._cloth) return;
+    const t0 = performance.now(); while (performance.now() - t0 < 9 && this._simSteps < this._simTarget) { this._cloth.step(); this._simSteps++; }
+    this._simUpload();
+    if (this._simSteps >= this._simTarget) { this._simBusy = false; if (this.onSim) this.onSim({ state: 'done', stats: this._cloth.stats() }); }
+    else if (this.onSim && this._simSteps % 12 === 0) this.onSim({ state: 'running', step: this._simSteps, total: this._simTarget });
+  }
+  // the mannequin the cloth hangs on, shown or hidden
+  showMannequin(on) {
+    if (this._mannequin) { this.group.remove(this._mannequin); this._mannequin.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); this._mannequin = null; }
+    this._showBody = !!on; if (!on || !this._cloth) return;
+    const parts = this._cloth.body.parts; if (!parts) return;
+    const g = new THREE.Group(), mat = new THREE.MeshStandardMaterial({ color: 0xcfc8c0, roughness: 0.9, transparent: true, opacity: 0.55 }), ring = (a, b, y, n = 36) => Array.from({ length: n }, (_, i) => new THREE.Vector3(a * Math.cos((i / n) * TAU), y, b * Math.sin((i / n) * TAU)));
+    { const L = parts.loft, rows = [], N = 36, steps = 24; for (let j = 0; j <= steps; j++) { const y = L.y1 - ((L.y1 - L.y0) * j) / steps, k = L.keys; let a = k[k.length - 1][1], b = k[k.length - 1][2]; for (let q = 1; q < k.length; q++) if (y >= k[q][0]) { const t = (k[q - 1][0] - y) / (k[q - 1][0] - k[q][0] || 1); a = k[q - 1][1] + (k[q][1] - k[q - 1][1]) * t; b = k[q - 1][2] + (k[q][2] - k[q - 1][2]) * t; break; } if (y >= k[0][0]) { a = k[0][1]; b = k[0][2]; } rows.push(ring(a, b, y, N)); }
+      const pos = [], idx = []; rows.forEach((r) => r.forEach((v) => pos.push(v.x, v.y, v.z))); for (let j = 0; j < steps; j++) for (let i = 0; i < N; i++) { const a = j * N + i, b = j * N + ((i + 1) % N), c = a + N, d = b + N; idx.push(a, c, b, b, c, d); }
+      const bg = new THREE.BufferGeometry(); bg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); bg.setIndex(idx); bg.computeVertexNormals(); g.add(new THREE.Mesh(bg, mat)); }
+    parts.caps.forEach((c) => { const A = new THREE.Vector3(...c.A), B = new THREE.Vector3(...c.B), len = A.distanceTo(B), cyl = new THREE.Mesh(new THREE.CylinderGeometry(c.rb, c.ra, len, 20, 1, true), mat); cyl.position.copy(A).add(B).multiplyScalar(0.5); cyl.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), B.clone().sub(A).normalize()); g.add(cyl); [[A, c.ra], [B, c.rb]].forEach(([p, r]) => { const s = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 10), mat); s.position.copy(p); g.add(s); }); });
+    parts.spheres.forEach((s) => { const m2 = new THREE.Mesh(new THREE.SphereGeometry(s.r, 20, 14), mat); m2.position.set(...s.c); g.add(m2); });
+    this._mannequin = g; this.group.add(g);
   }
 
   // how far the camera stands so the garment fits the window in height AND in width (a phone is narrow)
@@ -378,14 +457,15 @@ export class GarmentView {
   pick(cx, cy) {
     const r = this.renderer.domElement.getBoundingClientRect(); if (!r.width) return null;
     const rc = new THREE.Raycaster(); rc.setFromCamera(new THREE.Vector2(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1), this.camera);
-    const hit = rc.intersectObjects(this.group.children, false).find((h) => h.object.userData && (h.object.userData.seam || h.object.userData.piece));
+    const hit = rc.intersectObjects(this.group.children, true).find((h) => h.object.visible !== false && h.object.userData && (h.object.userData.seam || h.object.userData.piece));
     return hit ? (hit.object.userData.seam ? 'seam:' + hit.object.userData.seam : hit.object.userData.piece) : null;
   }
   // a piece shown in the selection colour
   highlight(id) { this._hi = id || null; this._applyHi(); }
   _applyHi() {
     this._hiMats = this._hiMats || new Map();
-    this.group.children.forEach((o) => {
+    const all = []; this.group.traverse((o) => { if (o !== this.group) all.push(o); });
+    all.forEach((o) => {
       if (o.userData && o.userData.seamVis) { o.material = this._hi === 'seam:' + o.userData.seamVis ? this._seamHiMat : o.userData.seamBase; o.scale.setScalar(1); return; }
       const base = o.userData && o.userData.base; if (!base) return;
       if (o.userData.piece === this._hi) {

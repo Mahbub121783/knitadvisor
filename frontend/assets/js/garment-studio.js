@@ -35,7 +35,7 @@
     'fabric': 'M4 4h16v16H4zM4 9h16M4 14h16M9 4v16M14 4v16', 'ruler': 'M3 15L15 3l6 6L9 21zM7 11l2 2M10 8l2 2M13 5l2 2', 'check': 'M5 13l4 4L19 7', 'split': 'M4 5h16v14H4zM12 5v14',
     'panel-l': 'M4 5h16v14H4zM9 5v14', 'panel-r': 'M4 5h16v14H4zM15 5v14', 'panel-b': 'M4 5h16v14H4zM4 14h16', 'full': 'M4 9V4h5M20 15v5h-5M20 9V4h-5M4 15v5h5', 'plus': 'M12 5v14M5 12h14', 'minus': 'M5 12h14',
     'theme': 'M12 3a9 9 0 1 0 0 18z', 'help': 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7M12 17h0',
-    'shirt': 'M8 4L3 8l3 3 2-1v10h8V10l2 1 3-3-5-4a4 4 0 0 1-8 0z', 'chev-l': 'M15 6l-6 6 6 6', 'chev-r': 'M9 6l6 6-6 6', 'chev-d': 'M6 9l6 6 6-6', 'chev-u': 'M6 15l6-6 6 6', 'trash': 'M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13', 'hand': 'M8 13V6a1.5 1.5 0 0 1 3 0v5M11 11V4.5a1.5 1.5 0 0 1 3 0V11M14 11V6a1.5 1.5 0 0 1 3 0v7a6 6 0 0 1-6 6h-1a5 5 0 0 1-4-2l-2-3a1.5 1.5 0 0 1 2-2l2 2', 'zin': 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4M11 8v6M8 11h6', 'zout': 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4M8 11h6',
+    'shirt': 'M8 4L3 8l3 3 2-1v10h8V10l2 1 3-3-5-4a4 4 0 0 1-8 0z', 'chev-l': 'M15 6l-6 6 6 6', 'chev-r': 'M9 6l6 6-6 6', 'chev-d': 'M6 9l6 6 6-6', 'chev-u': 'M6 15l6-6 6 6', 'trash': 'M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13', 'cloth': 'M4 5c3 2 6 2 8 0s5-2 8 0v4c-1 3-1 6 0 10c-3-2-6-2-8 0s-5 2-8 0c1-4 1-7 0-10z', 'body': 'M12 5a2.5 2.5 0 1 0 0-.01M7 21v-7l-3-3 1-3h14l1 3-3 3v7M10 21v-5M14 21v-5', 'hand': 'M8 13V6a1.5 1.5 0 0 1 3 0v5M11 11V4.5a1.5 1.5 0 0 1 3 0V11M14 11V6a1.5 1.5 0 0 1 3 0v7a6 6 0 0 1-6 6h-1a5 5 0 0 1-4-2l-2-3a1.5 1.5 0 0 1 2-2l2 2', 'zin': 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4M11 8v6M8 11h6', 'zout': 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4M8 11h6',
   };
   function icon(n) { return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="' + (P[n] || '') + '"/></svg>'; }
   function fillIcons(root) { qa('[data-ic]', root).forEach(function (e) { if (!e.firstChild) e.innerHTML = icon(e.getAttribute('data-ic')); }); }
@@ -277,6 +277,13 @@
   }
   function bind3D() {
     if (bound3d || !K().view()) return; bound3d = true;
+    var v0 = K().view(); if (v0) v0.onSim = function (e) {
+      var t = $('gs-3dsim'), b = $('gm-drape'); if (!t) return;
+      if (e.state === 'running') t.textContent = 'Draping… ' + Math.round((e.step / e.total) * 100) + ' %';
+      else if (e.state === 'done') t.textContent = 'Draped · ' + e.stats.seams + ' seams · ' + e.stats.points + ' points';
+      else if (e.state === 'off') t.textContent = ''; else if (e.state === 'unavailable') t.textContent = 'The simulation is not available here.'; else if (e.state === 'unsupported') { t.textContent = ''; toast(e.why); }
+      if (b) b.classList.toggle('on', e.state === 'running' || e.state === 'done');
+    };
     var host = $('gm-3d'), down = null;
     host.addEventListener('pointerdown', function (e) { down = { x: e.clientX, y: e.clientY, t: Date.now() }; });
     host.addEventListener('pointerup', function (e) {
@@ -326,6 +333,9 @@
       case 'snap': if (!k.view()) { toast('The garment is not made yet.'); break; } $('gm-snap').click(); break;
       case 'undo': if (lay.mode !== 'edit') setMode('edit'); key('z', { ctrlKey: true }); break; case 'redo': if (lay.mode !== 'edit') setMode('edit'); key('z', { ctrlKey: true, shiftKey: true }); break;
       case 'resetpiece': clickAct('reset'); break; case 'resetsize': clickAct('resetsize'); break; case 'copyall': clickAct('copyall'); break;
+      case 'drape': { var vw = k.view(); if (!vw) { toast('The garment is not made yet.'); break; } if (lay.view === '2d') setView('both'); if (vw.simMode) vw.stopSim(); else { vw.startSim(); } break; }
+      case 'drape-soft': case 'drape-medium': case 'drape-stiff': { var vw2 = k.view(); if (!vw2) break; vw2.setDrape(a.slice(6)); if (!vw2.simMode) vw2.startSim(); toast('Cloth: ' + a.slice(6)); break; }
+      case 'mannequin': { var vw3 = k.view(); if (!vw3) break; if (!vw3.simMode) { toast('Drape the garment first: the mannequin is what it hangs on.'); break; } vw3.showMannequin(!vw3._showBody); break; }
       case 'refresh3d': k.make({ quiet: true, spin: false }); break;
       case 'spin': if (!k.view()) { k.make({ quiet: true, spin: true }); } else $('gm-spin').click(); break;
       case 'v-front': case 'v-back': case 'v-side': case 'v-quarter': if (!k.view()) { toast('The garment is not made yet.'); break; } if (lay.view === '2d') setView('both'); k.view().setView(a.slice(2)); break;
@@ -402,7 +412,7 @@
       if (typing(e) || e.ctrlKey || e.metaKey || e.altKey || !$('gm-specmodal').hidden || !$('gs-help').hidden) return;
       var k = e.key;
       if (k === '1') setView('3d'); else if (k === '2') setView('2d'); else if (k === '3') setView('both'); else if (k === '[') doAction('toggle-left'); else if (k === ']') doAction('toggle-right'); else if (k === '\\') doAction('toggle-bottom');
-      else if (k === 'E' && e.shiftKey) { /* shift E is nothing */ } else if (k === 'e') setMode(lay.mode === 'edit' ? 'pieces' : 'edit'); else if (k === 'o') doAction('upload'); else if (k === 'F') doAction('fullscreen'); else if (k === '?') openHelp();
+      else if (k === 'd') doAction('drape'); else if (k === 'E' && e.shiftKey) { /* shift E is nothing */ } else if (k === 'e') setMode(lay.mode === 'edit' ? 'pieces' : 'edit'); else if (k === 'o') doAction('upload'); else if (k === 'F') doAction('fullscreen'); else if (k === '?') openHelp();
     });
     window.addEventListener('resize', function () { topOffset(); notifySize(); });
     phoneMQ.addEventListener && phoneMQ.addEventListener('change', function () { gs.removeAttribute('data-sheet'); applyLay(); render(); });

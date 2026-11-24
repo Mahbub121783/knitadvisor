@@ -15,8 +15,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/css/style.css?v=20260603c">
   <link rel="stylesheet" href="assets/css/theme-v2.css?v=20261112c">
-  <link rel="stylesheet" href="assets/css/garment.css?v=20261204a">
-  <link rel="stylesheet" href="assets/css/garment-studio.css?v=20261204a">
+  <link rel="stylesheet" href="assets/css/garment.css?v=20261205b">
+  <link rel="stylesheet" href="assets/css/garment-studio.css?v=20261205b">
   <script type="importmap">
   {
     "imports": {
@@ -59,6 +59,12 @@
         <div class="gs-menu" data-menu="3d"><button type="button" class="gs-mb" role="menuitem" aria-haspopup="true">3D Garment</button><div class="gs-mp" role="menu">
           <button type="button" role="menuitem" data-do="refresh3d"><i data-ic="cube"></i>Make / refresh the garment</button>
           <button type="button" role="menuitem" data-do="spin"><i data-ic="rotate"></i>Turntable</button>
+          <hr>
+          <button type="button" role="menuitem" data-do="drape"><i data-ic="cloth"></i>Drape on a mannequin (cloth simulation)<kbd>D</kbd></button>
+          <button type="button" role="menuitem" data-do="drape-soft"><i data-ic="cloth"></i>Cloth: soft (a light jersey)</button>
+          <button type="button" role="menuitem" data-do="drape-medium"><i data-ic="cloth"></i>Cloth: medium</button>
+          <button type="button" role="menuitem" data-do="drape-stiff"><i data-ic="cloth"></i>Cloth: stiff (a heavy fleece)</button>
+          <button type="button" role="menuitem" data-do="mannequin"><i data-ic="body"></i>Show the mannequin</button>
           <hr>
           <button type="button" role="menuitem" data-do="v-front"><i data-ic="user"></i>Front view</button>
           <button type="button" role="menuitem" data-do="v-back"><i data-ic="user"></i>Back view</button>
@@ -168,13 +174,15 @@
       <section class="gs-centre" id="gs-centre" aria-label="Windows">
         <div class="gs-views" id="gs-views">
           <section class="gs-win gs-w3d" id="gs-w3d" aria-label="3D window">
-            <div class="gs-wh"><span class="gs-wt">3D</span><span class="gs-wi" id="gm-3dnote"></span></div>
+            <div class="gs-wh"><span class="gs-wt">3D</span><span class="gs-sim" id="gs-3dsim"></span><span class="gs-wi" id="gm-3dnote"></span></div>
             <div class="gs-wb">
               <div class="gm-3d" id="gm-3d"><div class="gm-empty" id="gm-3dwait">Making the garment from the pattern pieces…</div></div>
               <div class="gs-rail" id="gs-rail" aria-label="3D tools">
                 <button type="button" class="gs-ib" id="gm-make" title="Make / refresh the garment" aria-label="Make the garment"><i data-ic="cube"></i></button>
                 <button type="button" class="gs-ib" id="gm-spin" title="Turntable" aria-label="Turntable"><i data-ic="rotate"></i></button>
                 <button type="button" class="gs-ib" id="gm-snap" title="Save a picture" aria-label="Save a picture"><i data-ic="camera"></i></button>
+                <button type="button" class="gs-ib" id="gm-drape" data-do="drape" title="Drape the garment on a mannequin (cloth simulation)" aria-label="Drape the garment"><i data-ic="cloth"></i></button>
+                <button type="button" class="gs-ib" id="gm-body" data-do="mannequin" title="Show the mannequin" aria-label="Show the mannequin"><i data-ic="body"></i></button>
                 <span class="gs-rsep"></span>
                 <button type="button" class="gs-ib gs-vb" data-do="v-front" title="Front" aria-label="Front view">F</button>
                 <button type="button" class="gs-ib gs-vb" data-do="v-back" title="Back" aria-label="Back view">B</button>
@@ -404,9 +412,10 @@
   <table id="gm-mtab-legacy"></table>
 </div>
 <script src="assets/js/api.js"></script>
-<script src="assets/js/garment-edit.js?v=20261204a"></script>
-<script src="assets/js/garment.js?v=20261204a"></script>
-<script src="assets/js/garment-spec.js?v=20261204a"></script>
-<script src="assets/js/garment-studio.js?v=20261204a"></script>
+<script src="assets/js/garment-sim.js?v=20261205b"></script>
+<script src="assets/js/garment-edit.js?v=20261205b"></script>
+<script src="assets/js/garment.js?v=20261205b"></script>
+<script src="assets/js/garment-spec.js?v=20261205b"></script>
+<script src="assets/js/garment-studio.js?v=20261205b"></script>
 </body>
 </html>
