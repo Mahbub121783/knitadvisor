@@ -163,6 +163,11 @@ body.gs-dragging { user-select: none; cursor: col-resize; } body.gs-dragging.gs-
 .gs-gitem i { width: 26px; height: 26px; flex: 0 0 26px; color: var(--accent); } .gs-gitem b { display: block; font: 600 12.5px var(--head); } .gs-gitem small { display: block; font-size: 11px; color: var(--t3); line-height: 1.4; }
 .gm-fromstudio { margin: 8px 0; display: flex; flex-direction: column; gap: 6px; }
 
+/* the tool rail of the 2D editor, and the quick actions of the property editor */
+.gs-tools { position: absolute; left: 8px; top: 8px; display: flex; flex-direction: column; gap: 2px; padding: 4px; background: rgba(28, 31, 36, .88); backdrop-filter: blur(6px); border: 1px solid var(--line2); border-radius: 10px; z-index: 4; }
+.gs-tools .gs-ib { width: 32px; height: 30px; color: #d6dce4; } .gs-tools .gs-ib.on { background: var(--accent); color: var(--on-accent); }
+.gs-qa { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; } .gs-ik { font: 700 10.5px var(--head); text-transform: uppercase; letter-spacing: .5px; color: var(--t3); margin: 10px 0 4px; }
+.gs-segw { display: flex; width: 100%; } .gs-segw button { flex: 1 1 0; }
 /* ── the lower panel ── */
 .gs-bottom { display: flex; flex-direction: column; min-height: 0; background: var(--gs-dock); border-top: 1px solid var(--line); overflow: hidden; }
 .gs[data-bottom="0"] .gs-bottom { display: none; }

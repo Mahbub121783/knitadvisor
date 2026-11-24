@@ -19,6 +19,9 @@
   var API = (location.hostname === '127.0.0.1' || location.hostname === 'localhost') ? location.protocol + '//' + location.hostname + ':3001' : '';
   var CAT = null, M = null, presets = [], abort = null, lastFocus = null;
   var G = function () { return window.KAGarment; };
+  var engineOf = function (sp) { return sp && sp.style && sp.style.engine === 'shorts' ? 'shorts' : 'tee'; };
+  var drawnFor = function (key, sp) { var e = CAT && CAT.by[key]; return !!(e && e.engines && e.engines.indexOf(engineOf(sp)) >= 0); };
+  var NEED = { tee: [['chest', 'chest'], ['length', 'length']], shorts: [['outseam', 'outside leg'], ['front_rise', 'front rise'], ['seat_w', 'seat width'], ['thigh', 'thigh'], ['leg_opening', 'leg opening']] };
   var api = function (url, o) { return window.apiFetch(url, o || {}); };
 
   // a number as a person types it: 21 1/2, 21-1/2, 21.5, 21,5
@@ -97,22 +100,25 @@
   function summary() {
     var sp = M.spec, el = $('gm-specsum'), ap = $('gm-specapply'), pr = $('gm-specpreset');
     if (!sp) { el.textContent = 'Nothing read yet.'; ap.disabled = true; pr.disabled = true; return; }
-    var on = sp.poms.filter(function (p) { return p.include && p.key; }), drawn = on.filter(function (p) { return CAT.by[p.key] && CAT.by[p.key].engine; }).length;
-    var chest = sp.poms.some(function (p) { return p.include && p.key === 'chest'; }), len = sp.poms.some(function (p) { return p.include && (p.key === 'length' || p.key === 'cb_length' || p.key === 'front_length' || p.key === 'back_length'); });
-    el.innerHTML = '<b>' + on.length + '</b> measurements used · <b>' + drawn + '</b> drawn in the pattern · <b>' + (on.length - drawn) + '</b> kept for the spec check' + (chest && len ? '' : ' · <span class="bad">the chest and the length are needed</span>');
-    ap.disabled = !(chest && len); pr.disabled = ap.disabled;
+    var on = sp.poms.filter(function (p) { return p.include && p.key; }), drawn = on.filter(function (p) { return drawnFor(p.key, sp); }).length;
+    var has = function (k) { return sp.poms.some(function (p) { return p.include && p.key === k || (k === 'length' && p.include && (p.key === 'cb_length' || p.key === 'front_length' || p.key === 'back_length')); }); };
+    var need = NEED[engineOf(sp)], lacking = need.filter(function (n) { return !has(n[0]); }).map(function (n) { return n[1]; });
+    if (engineOf(sp) === 'shorts' && !has('waist') && !has('waist_stretched')) lacking.push('waist');
+    el.innerHTML = '<b>' + on.length + '</b> measurements used · <b>' + drawn + '</b> drawn in the pattern · <b>' + (on.length - drawn) + '</b> kept for the spec check · <b>' + esc(sp.style.name) + '</b>' + (lacking.length ? ' · <span class="bad">needed: ' + esc(lacking.join(', ')) + '</span>' : '');
+    ap.disabled = lacking.length > 0; pr.disabled = ap.disabled;
   }
 
   function pointOptions(sel) {
     var groups = {}, order = [];
     CAT.points.forEach(function (p) { if (!groups[p.group]) { groups[p.group] = []; order.push(p.group); } groups[p.group].push(p); });
-    return '<option value="">— not a point of measure —</option>' + order.map(function (g) { return '<optgroup label="' + esc(g) + '">' + groups[g].map(function (p) { return '<option value="' + p.key + '"' + (p.key === sel ? ' selected' : '') + '>' + esc(p.name) + (p.engine ? '' : ' (kept, not drawn)') + '</option>'; }).join('') + '</optgroup>'; }).join('');
+    return '<option value="">— not a point of measure —</option>' + order.map(function (g) { return '<optgroup label="' + esc(g) + '">' + groups[g].map(function (p) { return '<option value="' + p.key + '"' + (p.key === sel ? ' selected' : '') + '>' + esc(p.name) + (drawnFor(p.key, M.spec) ? '' : ' (kept, not drawn)') + '</option>'; }).join('') + '</optgroup>'; }).join('');
   }
   function pomsHtml() {
     var sp = M.spec, sizes = sp.sizes, h = '';
     h += '<div class="gm-mtool"><span class="gm-seg" id="gm-sunit"><button type="button" data-u="cm"' + (sp.unit === 'cm' ? ' class="on"' : '') + '>cm</button><button type="button" data-u="in"' + (sp.unit === 'in' ? ' class="on"' : '') + '>inch</button></span>' +
       (M.rowsKind === 'xlsx' || M.rowsKind === 'csv' || M.rowsKind === 'text' ? '<button type="button" class="gm-btn" id="gm-stranspose">Sizes run down the page</button>' : '') +
       '<label class="gm-sbase">Base size <select id="gm-sbase">' + sizes.map(function (z) { return '<option' + (z === (sp.base || '') ? ' selected' : '') + '>' + esc(z) + '</option>'; }).join('') + '</select></label></div>';
+    if (!sp.single && sizes.length > 1) h += '<div class="gm-mtool gm-usesizes"><span class="gm-hint" style="margin:0">Build these sizes (up to 8 at once):</span>' + sizes.map(function (z) { var on = (sp.use_sizes || sizes).indexOf(z) >= 0; return '<button type="button" class="gm-chipu' + (on ? ' on' : '') + '" data-usz="' + esc(z) + '" aria-pressed="' + on + '">' + esc(z) + '</button>'; }).join('') + '</div>';
     if (sp.single) h += '<div class="gm-mgrade"><b>One column of measurements</b>: the sheet gives no sizes. Grade them to <input id="gm-gsz" value="' + esc(M.grade.sizes) + '" aria-label="Sizes"> from the base size <input id="gm-gbase" value="' + esc(M.grade.base) + '" size="4" aria-label="Base size">' + (sp.poms.some(function (p) { return p.grade && p.grade.step != null; }) ? ' using the sheet\'s grade column.' : '. The sheet has no grade column, so only the base size can be made.') + '</div>';
     (sp.notes || []).forEach(function (n) { h += '<p class="gm-mnote">' + esc(n) + '</p>'; });
     h += '<div class="gm-stwrap"><table class="gm-stab"><thead><tr><th>Use</th><th>Code</th><th>Name in the sheet</th><th>Point of measure</th><th>Taken as</th><th>Tol +</th><th>Tol −</th>' +
@@ -180,7 +186,7 @@
     if (!M || !M.spec) return;
     var t = e.target, sp = M.spec, tr = t.closest('tr[data-i]'), p = tr ? sp.poms[+tr.getAttribute('data-i')] : null, ev = e.type;
     if (t.classList.contains('gm-suse') && p) { p.include = t.checked && !!p.key; if (ev === 'change') { tr.className = !p.key ? 'un' : !p.include ? 'off' : ''; summary(); } return; }
-    if (t.classList.contains('gm-skey') && p && ev === 'change') { p.key = t.value || null; p.include = !!p.key; p.drawn = !!(p.key && CAT.by[p.key].engine); if (p.key && !CAT.by[p.key].halves) p.basis = 'flat'; p.basis_auto = false; render(); return; }
+    if (t.classList.contains('gm-skey') && p && ev === 'change') { p.key = t.value || null; p.include = !!p.key; p.drawn = !!(p.key && drawnFor(p.key, M.spec)); if (p.key && !CAT.by[p.key].halves) p.basis = 'flat'; p.basis_auto = false; render(); return; }
     if (t.classList.contains('gm-sbasis') && p && ev === 'change') { p.basis = t.value; p.basis_auto = false; render(); return; }
     if (t.classList.contains('gm-stol') && p && ev === 'change') { var v = num(t.value); if (!p.tol) p.tol = { plus: null, minus: null, given: true }; p.tol[t.getAttribute('data-k')] = isFinite(v) ? Math.abs(v) : null; p.tol.given = true; if (p.tol.minus == null) p.tol.minus = p.tol.plus; if (p.tol.plus == null) p.tol.plus = p.tol.minus; t.classList.remove('gm-assumed'); return; }
     if (t.classList.contains('gm-sval') && p && ev === 'change') { var z = t.getAttribute('data-size'), n = num(t.value); if (t.value.trim() === '') delete p.values[z]; else if (isFinite(n)) p.values[z] = n; t.classList.toggle('bad', t.value.trim() !== '' && !isFinite(n)); return; }
@@ -198,6 +204,7 @@
   }
   function onClick(e) {
     if (!M) return; var t = e.target;
+    var uz = t.closest('.gm-chipu'); if (uz && M.spec) { var z0 = uz.getAttribute('data-usz'), us = (M.spec.use_sizes || M.spec.sizes).slice(), ix = us.indexOf(z0); if (ix >= 0) { if (us.length > 1) us.splice(ix, 1); } else if (us.length < 8) us.push(z0); else { say('Up to 8 sizes at once: untick one first.', true); } M.spec.use_sizes = M.spec.sizes.filter(function (q) { return us.indexOf(q) >= 0; }); render(); return; }
     var u = t.closest('#gm-sunit button'); if (u && M.spec && u.getAttribute('data-u') !== M.spec.unit) { reextract({ unit: u.getAttribute('data-u') }); return; }
     if (t.closest('#gm-stranspose')) { reextract({ transpose: true }); return; }
     var rb = t.closest('.gm-rowbtn'); if (rb) { reextract({ header_row: +rb.getAttribute('data-row') }); return; }
@@ -209,7 +216,7 @@
     if (!M || !M.spec) return;
     var sp = M.spec, body = { spec: sp }, btn = $('gm-specapply');
     if (sp.single) { var sizes = String(M.grade.sizes).split(/[,\s]+/).map(function (x) { return x.trim().toUpperCase(); }).filter(Boolean).slice(0, 8), base = M.grade.base; if (sizes.indexOf(base) < 0) sizes.unshift(base); body.sizes = sizes; body.base = base; body.grade = true; }
-    else if (sp.base) body.base = sp.base;
+    else { if (sp.use_sizes && sp.use_sizes.length) body.sizes = sp.use_sizes; if (sp.base && (!body.sizes || body.sizes.indexOf(sp.base) >= 0)) body.base = sp.base; }
     btn.disabled = true; btn.textContent = 'Applying…';
     api('/api/garment/spec/apply', { method: 'POST', body: body }).then(function (r) {
       G().applySpec(r.build, r.spec);
@@ -234,12 +241,12 @@
     if (sp.style && sp.style.drawn === false) h += '<p class="gm-mnote">This sheet is for a ' + esc(sp.style.name.toLowerCase()) + '. The engine draws a crew-neck tee, so only the measurements a tee has are checked.</p>';
     h += '<div class="gm-stwrap"><table class="gm-stab gm-ctab"><thead><tr><th>Code</th><th>Measurement</th><th>Tol</th>' + sizes.map(function (z) { return '<th>' + esc(z) + '</th>'; }).join('') + '</tr></thead><tbody>';
     c.rows.forEach(function (r) {
-      var any = sizes.map(function (z) { return r.sizes[z]; }).filter(Boolean)[0], tolTxt = any && any.tol_plus != null ? (any.tol_plus === any.tol_minus ? '±' + d(any.tol_plus) : '+' + d(any.tol_plus) + ' / −' + d(any.tol_minus)) : '';
+      var any = sizes.map(function (z) { return r.sizes[z]; }).filter(Boolean)[0], tolTxt = any && any.limit ? (any.limit === 'min' ? 'at least' : 'at most') : any && any.tol_plus != null ? (any.tol_plus === any.tol_minus ? '±' + d(any.tol_plus) : '+' + d(any.tol_plus) + ' / −' + d(any.tol_minus)) : '';
       h += '<tr><td>' + esc(r.code) + '</td><td class="gm-sname" title="' + esc(r.note || '') + '">' + esc(r.label) + '<span class="gm-how ' + (r.how === 'recorded' ? 'rec' : '') + '">' + esc(r.how) + '</span>' + (r.tol_given ? '' : ' <span class="gm-dim" title="The sheet gives no tolerance: the usual one is used">(usual tol)</span>') + '</td><td class="gm-dim">' + tolTxt + '</td>' +
         sizes.map(function (z) {
           var x = r.sizes[z]; if (!x) return '<td class="gm-dim">—</td>';
           if (x.status === 'recorded') return '<td class="rec" title="Kept: the engine neither draws nor measures this">' + d(x.spec_cm) + '</td>';
-          return '<td class="' + x.status + '" title="spec ' + d(x.spec_cm) + ' ' + ul + ', pattern ' + d(x.pattern_cm) + ' ' + ul + ', tolerance +' + d(x.tol_plus) + ' / −' + d(x.tol_minus) + (x.assumed ? '. ' + x.assumed : '') + '"><b>' + (d(x.diff) > 0 ? '+' : '') + d(x.diff) + '</b><small>' + d(x.spec_cm) + '</small></td>';
+          return '<td class="' + x.status + '" title="spec ' + d(x.spec_cm) + ' ' + ul + ', pattern ' + d(x.pattern_cm) + ' ' + ul + ', ' + (x.limit ? (x.limit === 'min' ? 'a minimum' : 'a maximum') : 'tolerance +' + d(x.tol_plus) + ' / −' + d(x.tol_minus)) + (x.assumed ? '. ' + x.assumed : '') + '"><b>' + (d(x.diff) > 0 ? '+' : '') + d(x.diff) + '</b><small>' + d(x.spec_cm) + '</small></td>';
         }).join('') + '</tr>';
     });
     h += '</tbody></table></div><p class="gm-hint">Each cell is the pattern minus the sheet (' + ul + '); the small figure is what the sheet asks. Red is outside the sheet\'s own tolerance. The sheet\'s figures are kept as they were read, so a change you made in the chart shows here. Cells in grey are kept with the spec and not measured on the pattern.</p>';
@@ -251,7 +258,7 @@
   function kpi(l, v, s, cls) { return '<div class="gm-kpi ' + (cls || '') + '"><div class="l">' + esc(l) + '</div><div class="v">' + v + '</div>' + (s ? '<div class="s">' + esc(s) + '</div>' : '') + '</div>'; }
 
   // ── presets ──
-  function pick(S) { var o = {}; ['unit', 'sizes', 'base', 'chart', 'ratio', 'fabric', 'opt', 'seams', 'zipper', 'trims', 'tol', 'spec', 'edits', 'cornerFlags'].forEach(function (k) { if (S[k] !== undefined) o[k] = JSON.parse(JSON.stringify(S[k])); }); return o; }
+  function pick(S) { var o = {}; ['style', 'unit', 'sizes', 'base', 'chart', 'ratio', 'fabric', 'opt', 'seams', 'zipper', 'trims', 'tol', 'spec', 'edits', 'cornerFlags'].forEach(function (k) { if (S[k] !== undefined) o[k] = JSON.parse(JSON.stringify(S[k])); }); return o; }
   function loadPresets(keep) {
     return Promise.all([catalogue(), api('/api/garment/presets').catch(function () { return { presets: [] }; })]).then(function (r) {
       presets = r[1].presets || []; var sel = $('gm-preset'), cur = keep || sel.value;

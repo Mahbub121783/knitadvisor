@@ -16,7 +16,18 @@
   var NS = 'http://www.w3.org/2000/svg';
   var EDGE = { neck: '#d97706', bandneck: '#d97706', shoulder: '#7a4fc2', armhole: '#1857C4', cap: '#1857C4', side: '#0e7490', sidehem: '#0e7490', underarm: '#0e7490', underarmhem: '#0e7490', hem: '#6b7280', shem: '#6b7280', bandend: '#0e7490', cf: '#c2410c', faceend: '#6b7280', faceedge: '#6b7280' };
   var SEAM_OF = { neck: 'neck', bandneck: 'neck', shoulder: 'shoulder', armhole: 'armhole', cap: 'armhole', side: 'side', sidehem: 'side', underarm: 'underarm', underarmhem: 'underarm', hem: 'hem', shem: 'sleeve_hem', bandend: 'band_end' };
-  var PIECES = [['front', 'Front'], ['back', 'Back'], ['sleeve', 'Sleeve'], ['band', 'Neck band']];
+  var PIECES = [['front', 'Front'], ['back', 'Back'], ['sleeve', 'Sleeve'], ['band', 'Neck band']], PIECES_SH = [['front', 'Front leg'], ['back', 'Back leg'], ['waistband', 'Waistband'], ['pbag', 'Pocket bag'], ['bpocket', 'Back pocket']];
+  var FIXSH = {
+    outseam: [['front', 'hem_inner', 'y', 1], ['front', 'hem_inner_b', 'y', 1], ['front', 'hem_outer', 'y', 1], ['front', 'hem_outer_b', 'y', 1], ['back', 'hem_inner', 'y', 1], ['back', 'hem_inner_b', 'y', 1], ['back', 'hem_outer', 'y', 1], ['back', 'hem_outer_b', 'y', 1]],
+    front_rise: [['front', 'crotch', 'y', 1], ['front', 'crotch_start', 'y', 1]], back_rise: [['back', 'cf_top', 'y', -1]],
+    waist_stretched: [['front', 'cf_top', 'x', 0.5], ['back', 'cf_top', 'x', 0.5]], seat_w: [['front', 'seat', 'x', 0.5], ['front', 'crotch_start', 'x', 0.5], ['back', 'seat', 'x', 0.5], ['back', 'crotch_start', 'x', 0.5]],
+    seat_pos: [['front', 'seat', 'y', 1], ['back', 'seat', 'y', 1]], thigh: [['front', 'crotch', 'x', 1], ['back', 'crotch', 'x', 1]],
+    leg_opening: [['front', 'hem_inner', 'x', 1], ['front', 'hem_inner_b', 'x', 1], ['back', 'hem_inner', 'x', 1], ['back', 'hem_inner_b', 'x', 1]],
+    hem_h: [['front', 'hem_inner_b', 'y', 1], ['front', 'hem_outer_b', 'y', 1], ['back', 'hem_inner_b', 'y', 1], ['back', 'hem_outer_b', 'y', 1]],
+    fpocket_l: [['front', 'pocket_side', 'y', 1]], fpocket_w: [['front', 'pocket_top', 'x', 1]]
+  };
+  function isSh() { var S = H && H.state(); return !!(S && S.style === 'shorts'); }
+  function fixFor(key) { return (isSh() ? FIXSH : FIX)[key]; }
   // a correctable measurement: the anchors that move (piece, role, which way, how much of the change each takes)
   var FIX = {
     chest: [['front', 'underarm', 'x', 0.5], ['back', 'underarm', 'x', 0.5]],
@@ -103,7 +114,7 @@
     var ed = se[pid] = se[pid] || { move: {}, hin: {}, hout: {} }; ed.move = ed.move || {}; var d = ed.move[idx] || [0, 0]; ed.move[idx] = [r4(d[0] + dx), r4(d[1] + dy)];
   }
   function correct(key, target) {
-    var o = cur(), m = (o.measured || []).filter(function (x) { return x.key === key; })[0], rules = FIX[key];
+    var o = cur(), m = (o.measured || []).filter(function (x) { return x.key === key; })[0], rules = fixFor(key);
     if (!m || !rules || !rules.length || !isFinite(target)) return;
     var d = target - m.pattern; if (Math.abs(d) < 1e-6) return;
     pushUndo();
@@ -161,7 +172,7 @@
     var cutP = null, sx = R.cut_factor.across, sy = R.cut_factor.along;
     o.pieces.forEach(function (p) { if (p.id === E.pid || p.source === E.pid && o.pieces.filter(function (q) { return q.source === E.pid; }).length === 1) cutP = p; });
     if (cutP && !E.work) {
-      var rib = pe.id === 'band', ax = rib ? 1 : sx, ay = rib ? 1 : sy;
+      var rib = pe.id === 'band' || pe.id === 'waistband', ax = rib ? 1 : sx, ay = rib ? 1 : sy;
       el('path', { d: 'M' + cutP.cut.map(function (q) { return r4(q[0] / ax) + ' ' + r4(q[1] / ay); }).join('L') + 'Z', fill: 'rgba(24,87,196,.045)', stroke: '#1857C4', 'stroke-opacity': .45, 'stroke-width': 1.1 * k, 'stroke-dasharray': (5 * k) + ' ' + (3 * k) }, g);
       (cutP.notches || []).forEach(function (nt) { var x = nt.x / ax, y = nt.y / ay, L = 6 * k; el('line', { x1: x - nt.nx * L, y1: y - nt.ny * L, x2: x + nt.nx * L, y2: y + nt.ny * L, stroke: '#111', 'stroke-width': 1.6 * k }, g); });
     }
@@ -208,9 +219,9 @@
 
   // ── the panels ──
   function chips() {
-    var o = cur(); $('gm-edpieces').innerHTML = PIECES.map(function (p) { var pe = o && o.edit && o.edit[p[0]]; return '<button type="button" class="gm-chipb' + (E.pid === p[0] ? ' on' : '') + '" data-pid="' + p[0] + '">' + p[1] + (pe && (pe.manual || pe.edited) ? ' <span class="gm-dot" title="' + (pe.manual ? 'manual' : 'edited') + '"></span>' : '') + '</button>'; }).join('');
+    var o = cur(); $('gm-edpieces').innerHTML = (isSh() ? PIECES_SH : PIECES).filter(function (p) { return !o || !o.edit || o.edit[p[0]]; }).map(function (p) { var pe = o && o.edit && o.edit[p[0]]; return '<button type="button" class="gm-chipb' + (E.pid === p[0] ? ' on' : '') + '" data-pid="' + p[0] + '">' + p[1] + (pe && (pe.manual || pe.edited) ? ' <span class="gm-dot" title="' + (pe.manual ? 'manual' : 'edited') + '"></span>' : '') + '</button>'; }).join('');
     var h = E.undo.length, f = E.redo.length;
-    $('gm-edtools').innerHTML = [['select', 'Select', 'V'], ['add', 'Add node', 'A'], ['measure', 'Measure', 'M']].map(function (t) { return '<button type="button" class="gm-tool' + (E.tool === t[0] ? ' on' : '') + '" data-tool="' + t[0] + '" title="' + t[1] + ' (' + t[2] + ')">' + t[1] + '</button>'; }).join('') +
+    $('gm-edtools').innerHTML = [['select', 'Select', 'V'], ['add', 'Add node', 'A'], ['measure', 'Measure', 'M'], ['hand', 'Hand', 'H']].map(function (t) { return '<button type="button" class="gm-tool' + (E.tool === t[0] ? ' on' : '') + '" data-tool="' + t[0] + '" title="' + t[1] + ' (' + t[2] + ')">' + t[1] + '</button>'; }).join('') +
       '<span class="gm-sp"></span><button type="button" class="gm-tool" data-act="undo"' + (h ? '' : ' disabled') + ' title="Undo (Ctrl+Z)">Undo</button><button type="button" class="gm-tool" data-act="redo"' + (f ? '' : ' disabled') + ' title="Redo (Ctrl+Shift+Z)">Redo</button><button type="button" class="gm-tool" data-act="fit" title="Fit (F)">Fit</button>';
   }
   function inspector() {
@@ -234,7 +245,7 @@
     // corrections at a line
     var body = E.pid === 'front' || E.pid === 'back';
     h += '<section class="gm-isec"><div class="gm-ik">Correct the pattern</div>' +
-      '<div class="gm-irow2"><label>At y (cm)<input type="number" step="0.5" id="gm-sly" value="' + (E.sly != null ? E.sly : r1((o.derived.underarm_y || 20) + 5)) + '"></label><label>By (cm)<input type="number" step="0.1" id="gm-slby" value="' + (E.slb != null ? E.slb : 1) + '"></label></div>' +
+      '<div class="gm-irow2"><label>At y (cm)<input type="number" step="0.5" id="gm-sly" value="' + (E.sly != null ? E.sly : r1((o.derived.underarm_y || o.derived.crotch_y || 20) + 5)) + '"></label><label>By (cm)<input type="number" step="0.1" id="gm-slby" value="' + (E.slb != null ? E.slb : 1) + '"></label></div>' +
       '<div class="gm-irow"><button type="button" class="gm-btn" data-act="lengthen" title="Everything below the line moves down by this much">Lengthen / shorten</button><button type="button" class="gm-btn" data-act="widen" title="Everything below the line is wider by this much">Widen / narrow</button></div>' +
       (body ? '<label class="gm-icheck"><input type="checkbox" id="gm-slboth"' + (E.slboth === false ? '' : ' checked') + '> front and back together</label>' : '') + '</section>';
     // what has been measured
@@ -248,12 +259,12 @@
     box.innerHTML = '<div class="gm-mhead"><b>The pattern against the chart</b><span class="gm-status">' + (off ? off + ' off by more than ' + tol + ' cm' : 'on the chart') + '</span><span class="gm-sp"></span>' +
       '<button type="button" class="gm-btn" data-act="bake"' + (off || sizeHasEdits(o.size) ? '' : ' disabled') + ' title="Write what the pattern measures into the chart, and drop the edits">Set the chart from the pattern</button><button type="button" class="gm-btn" data-act="resetsize"' + (sizeHasEdits(o.size) ? '' : ' disabled') + '>Reset all edits of size ' + esc(o.size) + '</button></div>' +
       '<table class="gm-table gm-mtab"><thead><tr><th>Measure</th><th>Chart</th><th>Pattern</th><th>Difference</th></tr></thead><tbody>' + o.measured.map(function (x) {
-        var fix = FIX[x.key] && FIX[x.key].length;
+        var fix = fixFor(x.key) && fixFor(x.key).length;
         return '<tr class="' + (x.ok ? '' : 'off') + '"><td>' + esc(x.label) + '</td><td>' + x.chart + '</td><td>' + (fix ? '<input type="number" step="0.1" data-fix="' + x.key + '" value="' + x.pattern + '" aria-label="' + esc(x.label) + ' of the pattern">' : x.pattern) + '</td><td class="d">' + (x.diff > 0 ? '+' : '') + x.diff + '</td></tr>';
       }).join('') + '</tbody></table><p class="gm-hint">Type a new figure in the Pattern column: the anchors that make that measurement move. Armhole is measured, not set (it follows the shoulder and the underarm).</p>';
   }
   function sizeHasEdits(size) { var e = H.state().edits; return !!(e && e[size] && Object.keys(e[size]).length); }
-  function render() { if (!H) return; chips(); draw(); inspector(); measureTable(); }
+  function render() { if (!H) return; var o0 = cur(); if (o0 && o0.edit && !o0.edit[E.pid]) { E.pid = o0.edit.front ? 'front' : Object.keys(o0.edit)[0]; E.sel = null; E.fitFor = ''; } chips(); draw(); inspector(); measureTable(); }
 
   // ── what the hand does ──
   var ptrs = {}, pinch = null;
@@ -262,6 +273,7 @@
     ptrs[ev.pointerId] = { x: ev.clientX, y: ev.clientY };
     if (Object.keys(ptrs).length === 2 && E.vb) { var ps = Object.keys(ptrs).map(function (k) { return ptrs[k]; }); E.drag = null; E.work = null; pinch = { d0: Math.hypot(ps[0].x - ps[1].x, ps[0].y - ps[1].y) || 1, vb: E.vb.slice(), mx: (ps[0].x + ps[1].x) / 2, my: (ps[0].y + ps[1].y) / 2 }; return; }
     var pe = pieceInfo(o), an = E.work || clone(pe.anchors), sym = pe.sym;
+    if (E.tool === 'hand' && E.vb) { E.sel = null; E.drag = { type: 'pan', x: ev.clientX, y: ev.clientY, vb: E.vb.slice() }; $('gm-edsvg').setPointerCapture(ev.pointerId); ev.preventDefault(); return; }
     if (t.hasAttribute('data-h')) {                                            // a handle
       var p = t.getAttribute('data-h').split(':'); E.work = an; E.drag = { type: 'handle', i: +p[0], which: p[1] }; $('gm-edsvg').setPointerCapture(ev.pointerId); ev.preventDefault(); return;
     }
@@ -375,7 +387,7 @@
     if ((ev.ctrlKey || ev.metaKey) && k === 'z') { ev.shiftKey ? redo() : undo(); ev.preventDefault(); return; }
     if ((ev.ctrlKey || ev.metaKey) && k === 'y') { redo(); ev.preventDefault(); return; }
     if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
-    if (k === 'v') { E.tool = 'select'; chips(); } else if (k === 'a') { E.tool = 'add'; chips(); } else if (k === 'm') { E.tool = 'measure'; chips(); }
+    if (k === 'h') { E.tool = 'hand'; chips(); } else if (k === 'v') { E.tool = 'select'; chips(); } else if (k === 'a') { E.tool = 'add'; chips(); } else if (k === 'm') { E.tool = 'measure'; chips(); }
     else if (k === 'f') { fit(); draw(); } else if (k === 'escape') { E.sel = null; E.pend = null; inspector(); draw(); }
     else if (k === 'delete' || k === 'backspace') { act('delnode'); ev.preventDefault(); }
     else if (/^arrow/.test(k)) { var s = ev.shiftKey ? 1 : 0.1; nudge(k === 'arrowleft' ? -s : k === 'arrowright' ? s : 0, k === 'arrowup' ? -s : k === 'arrowdown' ? s : 0); ev.preventDefault(); }
@@ -398,5 +410,6 @@
     var sn = $('gm-edsnap'); if (sn) sn.checked = E.snap;
     window.addEventListener('resize', function () { var p = $('gs-2dedit') || $('pane-edit'); if (p && p.classList.contains('on')) { E.fitFor = ''; render(); } });
   }
-  window.KAGarmentEdit = { init: init, render: render, fit: function () { E.fitFor = ''; render(); }, state: function () { return E; } };
+  function zoomBy(f) { if (!E.vb) return; var cx = E.vb[0] + E.vb[2] / 2, cy = E.vb[1] + E.vb[3] / 2, w = E.vb[2] * f, h = E.vb[3] * f; E.vb = [cx - w / 2, cy - h / 2, w, h]; applyView(); }
+  window.KAGarmentEdit = { zoomBy: zoomBy, init: init, render: render, fit: function () { E.fitFor = ''; render(); }, state: function () { return E; } };
 })();

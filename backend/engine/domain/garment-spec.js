@@ -16,6 +16,10 @@
  */
 
 const G = require('./garment-pattern');
+const SH = require('./garment-shorts');
+// what each pattern engine draws: a spec for shorts is read against the shorts' points of measure, a tee's against the tee's
+const ENGINE_KEYS = { tee: new Set(G.POM_KEYS), shorts: new Set(SH.POM_KEYS) };
+const isDrawn = (key, engine) => !!(key && ENGINE_KEYS[engine || 'tee'] && ENGINE_KEYS[engine || 'tee'].has(key));
 
 const INCH = 2.54;
 const r1 = (v) => Math.round(v * 10) / 10;
@@ -34,7 +38,9 @@ function val(raw) {
   return G.num(s);
 }
 const NUMBER = '(\\d+\\s+\\d+\\/\\d+|\\d+\\/\\d+|\\d+(?:\\.\\d+)?)';
-function tolOf(raw) {                                                        // ±0.5, +/- 1/2, +1/-1/2, 0.5, -0.5
+function tolOf(raw) {                                                        // ±0.5, +/- 1/2, +1/-1/2, 0.5, -0.5, MIN, MAX
+  if (/^(min|minimum)\.?$/i.test(clean(raw))) return { plus: null, minus: null, limit: 'min' };
+  if (/^(max|maximum)\.?$/i.test(clean(raw))) return { plus: null, minus: null, limit: 'max' };
   let s = clean(raw).replace(/±/g, '+/-').replace(/[−–—]/g, '-').replace(/\s+/g, ' ');
   if (!s) return null;
   let m = new RegExp('^\\+\\s*/\\s*-\\s*' + NUMBER + '$').exec(s);
@@ -71,6 +77,30 @@ function headKind(t) {
 // ── what a point of measure is called (specific names first) ──
 const E = (key, name, group, re, tol, o) => Object.assign({ key, name, group, re, tol, engine: G.POM_KEYS.includes(key) }, o || {});
 const EXTRA = [
+  E('eyelet_dist', 'Distance between drawcord eyelets', 'Waistband', /(eyelet|draw\s*cord).*(distance|between|apart|centre\s*to\s*centre|center\s*to\s*center)|distance.*(eyelet|draw\s*cord)/, 0.3),
+  E('drawcord_len', 'Visible drawcord length (waistband extended)', 'Waistband', /draw\s*cord|draw\s*string/, 1.0, { note: 'a limit, not a size: kept and used for the drawcord in the bill of materials' }),
+  E('pbag_w', 'Pocket bag width', 'Pockets', /pocket\s*bag.*(width|wid)/, 0.5),
+  E('pbag_l', 'Pocket bag length', 'Pockets', /pocket\s*bag.*(length|len|depth)/, 0.5),
+  E('bwelt_w', 'Back pocket welt width', 'Pockets', /back\s*pocket\s*welt|welt.*back/, 0.5),
+  E('fwelt_w', 'Front pocket welt width', 'Pockets', /(slant\w*|front|side)\s*(pocket\s*)?welt/, 0.5),
+  E('bpocket_l', 'Back pocket length', 'Pockets', /back\s*pocket.*(length|len|depth|height)/, 0.5),
+  E('bpocket_w', 'Back pocket width', 'Pockets', /back\s*pocket.*(width|wid)/, 0.5),
+  E('bpocket_pos', 'Back pocket position (below the waistband)', 'Pockets', /back\s*pocket.*(position|from|under|below)/, 0.5),
+  E('fpocket_l', 'Front pocket opening, length at the side seam', 'Pockets', /(slant\w*|front|side)\s*pocket.*(length|len|depth|at\s*side)/, 0.5),
+  E('fpocket_w', 'Front pocket opening, width across the waistband', 'Pockets', /(slant\w*|front|side)\s*pocket.*(width|wid|across)/, 0.5),
+  E('fly_depth', 'Fly depth', 'Fly', /\bfly.*(depth|length|len)/, 0.3),
+  E('fly_width', 'Fly width', 'Fly', /\bfly.*(width|wid)/, 0.3),
+  E('outseam', 'Outside leg length (top of the waistband to the hem)', 'Bottoms', /outside\s*leg|out\s*seam|outer\s*leg|trouser\s*length|pant\s*length|short\s*length|leg\s*length/, 1.0),
+  E('inseam', 'Inside leg length', 'Bottoms', /in\s*seam|inside\s*leg|inner\s*leg/, 1.0),
+  E('back_rise', 'Back rise (including the waistband)', 'Bottoms', /back\s*rise|rise.*back/, 0.5),
+  E('front_rise', 'Front rise (including the waistband)', 'Bottoms', /front\s*rise|rise.*front|\brise\b/, 0.5),
+  E('waist_stretched', 'Waist, stretched (flat)', 'Waistband', /waist.*(stretch|extend|max)|stretched.*waist/, 1.0, { halves: true }),
+  E('waist', 'Waist, relaxed (flat)', 'Waistband', /\bwaist(?!\s*band)/, 0.5, { halves: true }),
+  E('waistband_h', 'Waistband depth', 'Waistband', /^\s*waist\s*band|waist\s*band\s*(height|ht|depth|wid)/, 0.3),
+  E('seat_pos', 'Seat position (down from the top of the waistband)', 'Bottoms', /(seat|hip).*(position|down|depth|from)/, 0.5),
+  E('seat_w', 'Seat / hip width (flat)', 'Bottoms', /\b(seat|hips?)\b/, 0.5, { halves: true }),
+  E('thigh', 'Thigh width, from the crotch seam (flat)', 'Bottoms', /thigh/, 0.5, { halves: true }),
+  E('leg_opening', 'Leg opening / hem width (flat)', 'Bottoms', /leg\s*(opening|hem|bottom)/, 0.5, { halves: true }),
   E('sleeve_cb', 'Sleeve length from centre back', 'Sleeve', /sleeve.*(c\.?\s*b\b|cent(re|er)\s*back|back\s*neck)|(c\.?\s*b\b|cent(re|er)\s*back).*sleeve/, 1.0, { note: 'turned into the sleeve length from the shoulder point: the centre back to the shoulder point is half the shoulder' }),
   E('cb_length', 'Centre-back length (back neck to hem)', 'Body', /(c\.?\s*b\b|cent(re|er)\s*back|back\s*neck\s*point).*(length|hem)|c\.?\s*b\.?\s*length/, 1.0, { note: 'turned into the body length from the shoulder: the back neck sits below it' }),
   E('front_length', 'Front length (high point shoulder to hem)', 'Body', /(front|fr\b)\s*(body\s*)?length|length.*\(?\s*front/, 1.0),
@@ -91,16 +121,7 @@ const EXTRA = [
   E('pocket_pos', 'Pocket position', 'Pockets', /pocket.*(place|position|from|below|apart|distance|pos)/, 0.5),
   E('hood_h', 'Hood height', 'Hood', /hood.*(height|ht|depth)/, 0.7),
   E('hood_w', 'Hood width', 'Hood', /hood.*(width|wid|w\b)/, 0.7),
-  E('waist', 'Waist', 'Body', /\bwaist(?!\s*band)/, 1.0, { halves: true }),
-  E('hip', 'Hip', 'Body', /\bhips?\b/, 1.0, { halves: true }),
-  E('waistband_h', 'Waistband height', 'Bottoms', /waist\s*band.*(height|ht|depth|wid)/, 0.3),
-  E('thigh', 'Thigh', 'Bottoms', /thigh/, 0.7, { halves: true }),
   E('knee', 'Knee', 'Bottoms', /knee/, 0.5, { halves: true }),
-  E('leg_opening', 'Leg opening', 'Bottoms', /leg\s*(opening|hem|bottom)/, 0.5, { halves: true }),
-  E('inseam', 'Inseam', 'Bottoms', /in\s*seam/, 1.0),
-  E('outseam', 'Outseam', 'Bottoms', /out\s*seam|trouser\s*length|pant\s*length|side\s*length/, 1.0),
-  E('front_rise', 'Front rise', 'Bottoms', /front\s*rise|rise.*front|\brise\b/, 0.7),
-  E('back_rise', 'Back rise', 'Bottoms', /back\s*rise|rise.*back/, 0.7),
 ];
 // the engine's own points of measure, in the order the engine's aliases name them
 const ENGINE = Object.fromEntries(G.POMS.map((p) => [p.key, p]));
@@ -168,7 +189,7 @@ function columnsOf(rows, h) {
   });
   // a heading written on the line above (Tol / Grade over the numbers)
   for (let up = 1; up <= 2 && h.i - up >= 0; up++) rows[h.i - up].forEach((c) => {
-    const k = headKind(c.t); if (!k || k === 'size') return;
+    const k = headKind(c.t); if (!k || !(k.startsWith('tol') || k === 'grade')) return;        // only a tolerance or grade heading may sit on the line above
     const near = cols.find((q) => Math.abs(q.x - cx(c)) < Math.max(14, (q.x1 - q.x0) * 0.6));
     if (near) { if (!near.kind || near.kind === 'spec' || near.kind === 'label') { if (k.startsWith('tol') || k === 'grade') near.kind = k; } return; }
     cols.push({ kind: k, text: c.t, name: null, x: cx(c), x0: c.x0, x1: c.x1, base: false });
@@ -186,7 +207,7 @@ function parseTable(rows, h, end, ctx) {
   if (!data.length) return [];
   const sizeCols = data.filter((c) => c.kind === 'size');
   const firstX = Math.min.apply(null, data.map((c) => c.x0));
-  const out = []; let group = '', prev = null;
+  const out = []; let group = '', prev = null, pend = null;
   for (let i = h.i + 1; i < end; i++) {
     const r = rows[i]; if (!r.length) continue;
     const left = r.filter((c) => cx(c) < firstX - 1 || (c.x1 <= firstX + 1 && !data.some((d) => Math.abs(d.x - cx(c)) <= d.lim)));
@@ -198,6 +219,9 @@ function parseTable(rows, h, end, ctx) {
     });
     let code = '', label = '';
     const lt = left.slice().sort((a, b) => a.x0 - b.x0);
+    if (pend && Object.keys(cell).length && lt.length) { const first = lt.filter((c) => !CODE_RE.test(c.t) || lt.length === 1); if (first.length && /^[a-z(]/.test(first[0].t)) { lt.splice(lt.indexOf(first[0]), 0, { t: pend, x0: first[0].x0 - 0.5, x1: first[0].x0 - 0.1 }); } }
+    pend = null;
+    if (!Object.keys(cell).length && lt.length === 1 && rows[i + 1] && /^[a-z(]/.test(((rows[i + 1].filter((c) => cx(c) < firstX - 1 && !CODE_RE.test(c.t))[0]) || { t: '' }).t) && Object.keys(rows[i + 1]).length) { pend = lt[0].t; continue; }
     if (lt.length >= 2 && CODE_RE.test(lt[0].t) && /[a-z]{2}/i.test(lt.slice(1).map((c) => c.t).join(' '))) { code = lt[0].t.replace(/\.$/, ''); label = lt.slice(1).map((c) => c.t).join(' '); }
     else { label = lt.map((c) => c.t).join(' '); const m = /^([A-Z]{1,2}\d?|\d{1,3})[.)]\s+(\S.*)$/.exec(label); if (m && /[a-z]{3}/i.test(m[2])) { code = m[1]; label = m[2]; } }
     const values = {}, conf = {}; let tolP = null, tolM = null, tolB = null, grade = null, remark = '', any = false, low = false;
@@ -210,8 +234,9 @@ function parseTable(rows, h, end, ctx) {
       else if (d.kind === 'grade') { const v = val(t); if (Number.isFinite(v)) grade = v; }
       else if (d.kind === 'remark' && t) remark += (remark ? '; ' : '') + t;
     });
+    if (/please specify|^additional details\b|^styling detail/i.test(label)) { group = clean(label); prev = null; continue; }
     if (label && any) {
-      const tol = tolP != null || tolM != null ? { plus: tolP != null ? tolP : tolM, minus: tolM != null ? tolM : tolP, given: true } : tolB ? { plus: tolB.plus != null ? tolB.plus : tolB.minus, minus: tolB.minus != null ? tolB.minus : tolB.plus, given: true } : null;
+      const tol = tolP != null || tolM != null ? { plus: tolP != null ? tolP : tolM, minus: tolM != null ? tolM : tolP, given: true } : tolB && tolB.limit ? { plus: null, minus: null, limit: tolB.limit, given: true } : tolB ? { plus: tolB.plus != null ? tolB.plus : tolB.minus, minus: tolB.minus != null ? tolB.minus : tolB.plus, given: true } : null;
       out.push({ row: i, code, label: clean(label), group, values, tol, grade, remark: clean(remark), check: low });
       prev = out[out.length - 1];
     } else if (label && !any && !Object.keys(cell).length && lt.length <= 2 && label.length < 40 && !/[:;]/.test(label) && !/\d/.test(label)) { group = label; prev = null; }
@@ -225,6 +250,7 @@ function parseTable(rows, h, end, ctx) {
 // ── the details around the table ──
 const FIBRES = 'cotton|polyester|viscose|rayon|elastane|spandex|lycra|modal|tencel|lyocell|nylon|polyamide|acrylic|wool|merino|linen|silk|bamboo|hemp|cashmere|polypropylene|cupro|acetate|pima|supima';
 const SEAM_WORDS = [
+  ['waistband', /waist\s*band/], ['inseam', /in\s*seam|inside\s*leg/], ['rise', /\brise\b|crotch/], ['pocket', /pocket/],
   ['band_end', /band\s*(end|clos|join)|neck\s*(band\s*)?clos/], ['sleeve_hem', /sleeve\s*(hem|bottom|opening|end|cuff)|cuff/], ['underarm', /under\s*arm|sleeve\s*seam|sleeve\s*(underarm|inseam)/],
   ['armhole', /arm\s*hole|sleeve\s*(set|attach|join)|set[- ]?in|\bAH\b/i], ['shoulder', /shoulder/], ['side', /side\s*seam|\bside\b/], ['neck', /neck|collar|binding|rib\s*(attach|join)/], ['hem', /(body|bottom)\s*hem|\bhem\b|bottom\s*(opening|hem)|\bbottom\b/],
 ];
@@ -235,7 +261,7 @@ const STITCH_WORDS = [
 ];
 const STYLES = [
   { id: 'hoodie', name: 'Hoodie / sweatshirt with a hood', re: /\bhood(y|ie|ed)?\b/ }, { id: 'jacket', name: 'Jacket / cardigan', re: /\b(jacket|bomber|cardigan|blazer|coat|windbreaker|zip[- ]?through)\b/ },
-  { id: 'trouser', name: 'Trousers / shorts / joggers', re: /\b(trousers?|pants?|joggers?|shorts|leggings?|jeans|inseam|outseam|waistband)\b/ }, { id: 'polo', name: 'Polo shirt', re: /\b(polo|placket)\b/ },
+  { id: 'trouser', name: 'Shorts / trousers / joggers', re: /\b(trousers?|pants?|joggers?|shorts?(?!\s*sleeve)|leggings?|jeans|inseam|outseam|waistband|outside\s*leg)\b/ }, { id: 'polo', name: 'Polo shirt', re: /\b(polo|placket)\b/ },
   { id: 'henley', name: 'Henley', re: /\bhenley\b/ }, { id: 'tank', name: 'Tank / sleeveless', re: /\b(tank|singlet|sleeveless|vest)\b/ }, { id: 'sweatshirt', name: 'Sweatshirt', re: /\b(sweat\s*shirt|pullover|crew\s*sweat|fleece\s*top)\b/ },
   { id: 'dress', name: 'Dress / skirt', re: /\b(dress|skirt|gown)\b/ }, { id: 'tee', name: 'T-shirt (crew / round neck)', re: /\b(t[- ]?shirt|tee|crew\s*neck|round\s*neck|jersey\s*top)\b/ },
 ];
@@ -291,7 +317,8 @@ function conceptsOf(lines, poms) {
     const fibres = [...L.matchAll(new RegExp('(\\d{1,3}(?:\\.\\d+)?)\\s*%\\s*((?:organic\\s+|recycled\\s+|combed\\s+|pima\\s+|supima\\s+)?(?:' + FIBRES + ')(?:\\s+(?:cotton|polyester|nylon|yarn))?)', 'gi'))];
     if (fibres.length) { const sum = fibres.reduce((a, m) => a + +m[1], 0); if (sum >= 95 && sum <= 105) set('fabric', 'composition', fibres.map((m) => `${m[1]}% ${m[2].toLowerCase()}`).join(', '), L, 0.9); }
     const gsm = /(\d{2,3})\s*(?:g\s*\.?\s*\/?\s*m\s*[²2]?|gsm)\b/i.exec(L); if (gsm && +gsm[1] >= 60 && +gsm[1] <= 800) set('fabric', 'gsm', +gsm[1], L, 0.9);
-    const cons = /\b(single\s*jersey|interlock|1\s*x\s*1\s*rib|2\s*x\s*2\s*rib|rib|french\s*terry|fleece|pique|piqué|lacoste|waffle|jacquard|slub|melange|heather|burnout|poplin)\b/i.exec(L); if (cons) set('fabric', 'construction', cons[1].toLowerCase(), L, 0.7);
+    const fabricy = /fabric|material|quality|composition|content|jersey|knit|yarn|gsm|%/i.test(L) && !/refer to|manual|product requirement/i.test(L);   // a line that points at a manual is not the fabric
+    const cons = !fabricy ? null : /\b(single\s*jersey|interlock|1\s*x\s*1\s*rib|2\s*x\s*2\s*rib|rib|french\s*terry|fleece|pique|piqué|lacoste|waffle|jacquard|slub|melange|heather|burnout|poplin)\b/i.exec(L); if (cons) set('fabric', 'construction', cons[1].toLowerCase(), L, 0.7);
     const yarn = /\b(\d{1,2}(?:\/\d)?)\s*s\b\s*(combed|carded|ring|compact|open\s*end|oe|cvc|slub)?/i.exec(L) || /\bNe\s*(\d{1,2})/i.exec(L); if (yarn && /yarn|count|cotton|fabric|jersey|ne\b|combed|carded/i.test(L)) set('fabric', 'yarn_count', yarn[0], L, 0.5);
     const wid = /(\d{2,3}(?:\.\d)?)\s*(cm|in|inch|inches|")\s*(?:cuttable|useable|usable|width|wide)/i.exec(L) || /(?:cuttable|useable|usable|fabric)\s*width\W{0,6}(\d{2,3}(?:\.\d)?)\s*(cm|in|inch|inches|")?/i.exec(L);
     if (wid) { const v = +wid[1], u = (wid[2] || (v > 90 ? 'cm' : 'in')).toLowerCase(); set('fabric', 'width_cm', r1(u === 'cm' ? v : v * INCH), L, 0.7); }
@@ -345,9 +372,27 @@ const dedupe = (a) => { const s = new Set(); return a.filter((t) => { const k = 
  * @param rows  [[{t, x0, x1, c?}]]  the cells of each line, left to right (dense(grid) makes them from a grid of strings)
  * @param opt   {unit: 'cm'|'in'|undefined, header_row: number|undefined}  a header row the user picked
  */
-function normRows(rows) {
+function normRows0(rows) {
   return (rows || []).map((r) => (r || []).filter((c) => c && clean(c.t) !== '').map((c) => ({ t: clean(c.t), x0: +c.x0 || 0, x1: Number.isFinite(+c.x1) ? +c.x1 : (+c.x0 || 0) + 10, c: c.c })).sort((a, b) => a.x0 - b.x0)).filter((r) => r.length);
 }
+function mergeStacked(rows) {
+  const out = [], unitRe = /^(yrs?|yr\.?|y|years?|mths?|months?|mos?|m|t)$/i, tolRe = /^\(?\+\/-\)?$|^±$/;
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i], nx = rows[i + 1];
+    if (nx && r.filter((c) => /^\d{1,2}$/.test(c.t)).length >= 3 && nx.filter((c) => unitRe.test(c.t)).length >= 3) {
+      const used = new Set();
+      const merged = r.map((c) => {
+        const near = nx.map((q) => ({ q, d: Math.abs(cx(q) - cx(c)) })).sort((a, b) => a.d - b.d)[0];
+        if (near && near.d <= Math.max(14, (c.x1 - c.x0) * 1.2) && (unitRe.test(near.q.t) || tolRe.test(near.q.t))) { used.add(near.q); return Object.assign({}, c, { t: c.t + ' ' + near.q.t, x1: Math.max(c.x1, near.q.x1) }); }
+        return c;
+      });
+      if (nx.every((q) => used.has(q) || tolRe.test(q.t))) { out.push(merged); i++; continue; }
+    }
+    out.push(r);
+  }
+  return out;
+}
+const normRows = (rows) => mergeStacked(normRows0(rows));
 function extract(rows, opt) {
   opt = opt || {};
   rows = normRows(rows);
@@ -409,7 +454,7 @@ function extract(rows, opt) {
     if (key === 'neck_w' && fc && p.values[first] / fc > 0.75) { key = 'neck_circ'; auto = true; }
     if (!basis) basis = 'flat';
     const e = key ? BY_KEY[key] : null;
-    const tol = p.tol ? { plus: p.tol.plus, minus: p.tol.minus, given: true } : e ? { plus: r2(e.tol / (unit === 'in' ? INCH : 1)), minus: r2(e.tol / (unit === 'in' ? INCH : 1)), given: false } : null;
+    const tol = p.tol ? (p.tol.limit ? { plus: null, minus: null, limit: p.tol.limit, given: true } : { plus: p.tol.plus, minus: p.tol.minus, given: true }) : e ? { plus: r2(e.tol / (unit === 'in' ? INCH : 1)), minus: r2(e.tol / (unit === 'in' ? INCH : 1)), given: false } : null;
     return {
       id: `p${idx}`, row: p.row, code: p.code, label: p.label, group: p.group || (e && e.group) || '', key, basis, basis_auto: auto, include: !!key, values: p.values, tol, grade: gradeOf(p.values, sizes, p.grade),
       depth: c.depth, remark: p.remark, check: p.check, drawn: !!(e && e.engine), conf: key ? (auto ? 0.7 : 0.9) : 0.2,
@@ -423,24 +468,38 @@ function extract(rows, opt) {
   const alltext = lines.join(' ').toLowerCase() + ' ' + mapped.map((m) => m.label.toLowerCase()).join(' ') + ' ' + ((det.meta.name && det.meta.name.value) || '').toLowerCase();
   const nameText = ((det.meta.name && det.meta.name.value) || '').toLowerCase();
   const style = STYLES.find((s) => s.re.test(nameText)) || STYLES.find((s) => s.re.test(alltext)) || null;
+  if (style && style.id === 'trouser') {                                           // a bottom: a "hem width" is the leg opening, and the points are the bottoms'
+    mapped.forEach((m) => { if (m.key === 'hem') { m.key = 'leg_opening'; m.drawn = true; } });
+    const seenK = new Set(); mapped.forEach((m) => { if (m.include && m.key) { if (seenK.has(m.key)) { m.dup = true; m.include = false; } else seenK.add(m.key); } });
+  }
+  const engineId = style && style.id === 'trouser' ? 'shorts' : 'tee';
+  mapped.forEach((m) => { m.drawn = isDrawn(m.key, engineId); });
   const parts = PARTS.filter((p) => p.re.test(alltext)).map((p) => ({ id: p.id, name: p.name, drawn: p.drawn }));
-  const styleOut = style ? { id: style.id, name: style.name, drawn: style.id === 'tee' || style.id === 'tank' ? true : false } : { id: 'tee', name: 'T-shirt (assumed: the sheet does not name the style)', drawn: true, assumed: true };
+  const isShort = style && style.id === 'trouser' && /\bshorts?\b(?!\s*sleeve)/.test(nameText + ' ' + alltext.slice(0, 600));
+  const styleOut = style ? { id: style.id === 'trouser' ? (isShort ? 'shorts' : 'trousers') : style.id, name: style.id === 'trouser' ? (isShort ? 'Shorts' : 'Trousers / joggers') : style.name, drawn: style.id === 'tee' || style.id === 'tank' || style.id === 'trouser' ? true : false, engine: style.id === 'trouser' ? 'shorts' : 'tee' } : { id: 'tee', name: 'T-shirt (assumed: the sheet does not name the style)', drawn: true, assumed: true };
 
   const unmatched = mapped.filter((m) => !m.key).map((m) => m.label);
   const out = {
     success: true, schema: 'ka-garment-spec/1', unit, unit_how: unitHow, sizes, base: base && sizes.includes(base) ? base : null, single,
     meta: Object.fromEntries(Object.entries(det.meta).map(([k, v]) => [k, v.value])), meta_src: Object.fromEntries(Object.entries(det.meta).map(([k, v]) => [k, v.src])),
     fabric: det.fabric, seams: det.seams, zipper: det.zipper, trims: det.trims, packing: det.packing, care: det.care, construction: det.construction,
-    poms: mapped, unmatched, style: styleOut, parts, tables: ctx.tables,
+    poms: mapped, unmatched, style: styleOut, parts, tables: ctx.tables, use_sizes: pickSizes(sizes),
     notes: [],
   };
   if (single) out.notes.push(`The sheet gives one column of measurements (no sizes): they are read as size ${sizes[0]}. ${mapped.some((m) => m.grade && m.grade.step != null) ? 'Its grade column can spread them over the other sizes.' : 'It has no grade column, so the other sizes cannot be made from it.'}`);
+  if (styleOut.engine === 'shorts') out.notes.push('This is a bottom (shorts or trousers): the rises, waist, seat, thigh, leg opening and pockets are drawn by the shorts engine; the fly, the yoke and cargo details are kept with the spec.');
   if (!styleOut.drawn) out.notes.push(`This looks like a ${styleOut.name.toLowerCase()}: the pattern engine draws a crew-neck T-shirt, so only the measurements a tee has are drawn; the rest is recorded in the spec and its check.`);
   mapped.filter((m) => m.basis_auto && m.include).forEach((m) => out.notes.push(`"${m.label}" is taken as ${m.basis === 'full' ? 'a circumference (halved for the flat chart)' : 'a flat width'} because its size says so: change it in the table if that is wrong.`));
   if (unmatched.length) out.notes.push(`Not recognised as a point of measure: ${unmatched.slice(0, 8).join('; ')}${unmatched.length > 8 ? ' …' : ''}.`);
   return out;
 }
 
+// the engine builds up to 8 sizes at once: a sheet with 14 (3 to 16 yr) is thinned, evenly, from the smallest to the largest
+function pickSizes(sizes) {
+  if (sizes.length <= 8) return sizes.slice();
+  const out = []; for (let i = 0; i < 8; i++) { const v = sizes[Math.round((i * (sizes.length - 1)) / 7)]; if (!out.includes(v)) out.push(v); }
+  return out;
+}
 // the step from size to size, and whether it is even
 function gradeOf(values, sizes, given) {
   const vs = sizes.map((s) => values[s]); const steps = [];
@@ -463,24 +522,26 @@ function grade(spec, sizes, base) {
 // ── the garment the engine can draw from a spec ──
 function toBuild(spec, opt) {
   opt = opt || {};
-  const unit = spec.unit === 'in' ? 'in' : 'cm', k = unit === 'in' ? INCH : 1, sizes = (opt.sizes || spec.sizes).slice(0, 8), conv = [];
-  const rows = (spec.poms || []).filter((p) => p.include !== false && p.key);
+  const unit = spec.unit === 'in' ? 'in' : 'cm', k = unit === 'in' ? INCH : 1, sizes = (opt.sizes || spec.use_sizes || spec.sizes).slice(0, 8), conv = [];
+  const rows = (spec.poms || []).filter((p) => p.include !== false && p.key), eng = spec.style && spec.style.engine === 'shorts' ? 'shorts' : 'tee';
   const chart = {}, tol = {};
   const flat = (p, s) => { const v = p.values[s]; if (!Number.isFinite(+v)) return NaN; return p.basis === 'full' && BY_KEY[p.key] && BY_KEY[p.key].halves ? +v / 2 : +v; };
   const put = (key, s, v) => { if (!Number.isFinite(v)) return; if (!chart[key]) chart[key] = {}; chart[key][s] = String(r2(v)); };
-  rows.filter((p) => BY_KEY[p.key] && BY_KEY[p.key].engine).forEach((p) => {
+  rows.filter((p) => isDrawn(p.key, eng)).forEach((p) => {
     sizes.forEach((s) => put(p.key, s, flat(p, s)));
     if (p.basis === 'full' && BY_KEY[p.key].halves) conv.push(`${p.label}: a circumference, halved for the flat chart`);
-    if (p.tol && p.tol.given) tol[p.key] = { plus: p.tol.plus, minus: p.tol.minus };
+    if (p.tol && p.tol.given && !p.tol.limit) tol[p.key] = { plus: p.tol.plus, minus: p.tol.minus };
   });
   const sub = (key, from, f, text) => { if (chart[key]) return; const p = rows.filter((q) => q.key === from)[0]; if (!p) return; let did = false; sizes.forEach((s) => { const v = f(p, s); if (Number.isFinite(v)) { put(key, s, v); did = true; } }); if (did) conv.push(text); };
   const chartNum = (key, s) => (chart[key] && Number.isFinite(+chart[key][s]) ? +chart[key][s] : NaN);
   const flatChest = (s) => chartNum('chest', s);
   // the length, from the front, the back or the centre back
+  if (eng === 'tee') {
   sub('length', 'front_length', (p, s) => flat(p, s), 'Body length: the front length of the sheet');
   sub('length', 'back_length', (p, s) => flat(p, s), 'Body length: the back length of the sheet');
   sub('length', 'cb_length', (p, s) => { const nd = chartNum('neck_db', s); return flat(p, s) + (Number.isFinite(nd) ? nd : 2 / k); }, 'Body length: the centre-back length plus the back neck drop (the back neck sits below the high point of the shoulder)');
   sub('sleeve_l', 'sleeve_cb', (p, s) => { const sh = chartNum('shoulder', s), c = flatChest(s); return flat(p, s) - (Number.isFinite(sh) ? sh : 0.865 * c) / 2; }, 'Sleeve length: the length from the centre back less half the shoulder (an estimate: the sheet does not say how the sleeve sits)');
+  }
   const fb = {};
   const f = spec.fabric || {}, fv = (k2) => (f[k2] && f[k2].use !== false && f[k2].value != null && f[k2].value !== '' ? f[k2].value : null);
   if (fv('gsm')) fb.gsm = fv('gsm'); if (fv('width_cm')) fb.width_cm = fv('width_cm');
@@ -489,16 +550,16 @@ function toBuild(spec, opt) {
   if (fabricName) fb.name = String(fabricName).slice(0, 80);
   const seams = {}; Object.keys(spec.seams || {}).forEach((id) => { if (spec.seams[id] && spec.seams[id].use !== false && spec.seams[id].type) seams[id] = { type: spec.seams[id].type }; });
   let zipper = { on: false };
-  if (spec.zipper && spec.zipper.use !== false && (spec.zipper.kind || spec.zipper.length_cm || spec.zipper.type)) {
+  if (eng === 'tee' && spec.zipper && spec.zipper.use !== false && (spec.zipper.kind || spec.zipper.length_cm || spec.zipper.type)) {
     const z = spec.zipper, kind = z.kind || 'full';
     zipper = { on: true, kind, type: z.type || (kind === 'partial' ? 'closed_end' : 'open_end'), teeth: z.teeth || 'coil', size: z.size || 5, length_cm: z.length_cm || (kind === 'partial' ? 14 : 22) };
   }
   const trims = (spec.trims || []).concat(spec.packing || []).filter((t) => t.use !== false).map((t) => ({ item: t.item, qty: t.qty || 1, unit: 'pc', note: 'from the spec sheet' }));
-  const have = sizes.filter((s) => chart.chest && chart.chest[s]);
-  if (have.length && have.length < sizes.length) { conv.push(`Sizes with no chest in the sheet were left out: ${sizes.filter((s) => !have.includes(s)).join(', ')}`); sizes.splice(0, sizes.length, ...have); }
-  const drawn = rows.filter((p) => BY_KEY[p.key] && BY_KEY[p.key].engine).map((p) => p.key);
-  const missing = ['chest', 'length'].filter((q) => !chart[q]);
-  return { unit, sizes, base: opt.base || spec.base || sizes[Math.floor((sizes.length - 1) / 2)], chart, tolerances: tol, fabric: fb, seams, zipper, trims, conversions: conv, drawn, missing, recorded: rows.filter((p) => !(BY_KEY[p.key] && BY_KEY[p.key].engine)).map((p) => p.label) };
+  const lead = eng === 'shorts' ? 'seat_w' : 'chest', have = sizes.filter((s) => chart[lead] && chart[lead][s]);
+  if (have.length && have.length < sizes.length) { conv.push(`Sizes with no ${eng === 'shorts' ? 'seat width' : 'chest'} in the sheet were left out: ${sizes.filter((s) => !have.includes(s)).join(', ')}`); sizes.splice(0, sizes.length, ...have); }
+  const drawn = rows.filter((p) => isDrawn(p.key, eng)).map((p) => p.key);
+  const missing = (eng === 'shorts' ? ['outseam', 'front_rise', 'seat_w', 'thigh', 'leg_opening'] : ['chest', 'length']).filter((q) => !chart[q]).concat(eng === 'shorts' && !chart.waist && !chart.waist_stretched ? ['waist'] : []);
+  return { unit, sizes, base: opt.base || spec.base || sizes[Math.floor((sizes.length - 1) / 2)], chart, tolerances: tol, fabric: fb, seams, zipper, trims, conversions: conv, drawn, missing, style: eng, recorded: rows.filter((p) => !isDrawn(p.key, eng)).map((p) => p.label) };
 }
 
 // ── a spec against the pattern ──
@@ -512,13 +573,14 @@ function widthAt(poly, y) {
 }
 const DERIVE = {
   armhole_curve: (o) => o.derived.armhole_front, armhole_drop: (o) => o.derived.underarm_y, neck_circ: (o) => o.derived.neck_len, cb_length: (o) => o.m.length - o.m.neck_db,
-  front_length: (o) => o.m.length, back_length: (o) => o.m.length, sleeve_cb: (o) => o.m.shoulder / 2 + o.m.sleeve_l, side_length: (o) => o.m.length - o.derived.underarm_y,
+  inseam: (o) => (o.derived && o.derived.inseam != null ? o.derived.inseam : null), front_length: (o) => o.m.length, back_length: (o) => o.m.length, sleeve_cb: (o) => o.m.shoulder / 2 + o.m.sleeve_l, side_length: (o) => o.m.length - o.derived.underarm_y,
   across_chest: (o, i) => widthAt(o.shape.front, i.depth), across_back: (o, i) => widthAt(o.shape.back, i.depth),
 };
 function compliance(spec, result) {
   if (!spec || !Array.isArray(spec.poms) || !result || !result.success) return null;
   const unit = spec.unit === 'in' ? 'in' : 'cm', k = unit === 'in' ? INCH : 1, rows = [];
   let ok = 0, off = 0, recorded = 0;
+  const eng = result.style === 'shorts' ? 'shorts' : 'tee';
   spec.poms.filter((p) => p.include !== false && p.key).slice(0, 80).forEach((p) => {
     const ent = BY_KEY[p.key]; if (!ent) return;
     const per = {}; let how = 'recorded';
@@ -526,16 +588,16 @@ function compliance(spec, result) {
       const sv = +p.values[o.size]; if (!Number.isFinite(sv)) return;
       let spec_cm = sv * k; if (p.basis === 'full' && ent.halves) spec_cm /= 2;
       let pat = null, assumed = null;
-      const tp = p.tol && p.tol.plus != null ? p.tol.plus * k : ent.tol, tm = p.tol && p.tol.minus != null ? p.tol.minus * k : ent.tol;
-      if (ent.engine) { const m = (o.measured || []).find((x) => x.key === p.key); if (m) { pat = m.pattern; how = 'drawn'; } }
+      const lim = p.tol && p.tol.limit, tp = lim ? 0 : p.tol && p.tol.plus != null ? p.tol.plus * k : ent.tol, tm = lim ? 0 : p.tol && p.tol.minus != null ? p.tol.minus * k : ent.tol;
+      if (isDrawn(p.key, eng)) { const m = (o.measured || []).find((x) => x.key === p.key); if (m) { pat = m.pattern; how = 'drawn'; } }
       else if (DERIVE[p.key]) {
         let depth = null;
         if (ent.depth) { if (p.depth && Number.isFinite(p.depth.v)) { depth = p.depth.v * (p.depth.unit === 'in' ? INCH : p.depth.unit === 'cm' ? 1 : k); if (/arm/.test(p.depth.from || '')) depth += o.derived.underarm_y; } else { depth = 15; assumed = 'taken 15 cm below the high point of the shoulder: the sheet does not say'; } }
         const v = DERIVE[p.key](o, { depth }); if (Number.isFinite(v)) { pat = r2(v); how = 'measured on the pattern'; }
       }
       if (pat == null) { per[o.size] = { spec_cm: r2(spec_cm), status: 'recorded' }; return; }
-      const diff = r2(pat - spec_cm), pass = diff <= tp + 1e-9 && diff >= -tm - 1e-9;
-      per[o.size] = { spec_cm: r2(spec_cm), pattern_cm: r2(pat), diff, tol_plus: r2(tp), tol_minus: r2(tm), status: pass ? 'ok' : 'off', assumed };
+      const diff = r2(pat - spec_cm), pass = lim === 'min' ? diff >= -0.05 : lim === 'max' ? diff <= 0.05 : diff <= tp + 1e-9 && diff >= -tm - 1e-9;
+      per[o.size] = { spec_cm: r2(spec_cm), pattern_cm: r2(pat), diff, tol_plus: r2(tp), tol_minus: r2(tm), limit: lim || null, status: pass ? 'ok' : 'off', assumed };
       if (pass) ok++; else off++;
     });
     if (!Object.keys(per).length) return;
@@ -553,4 +615,4 @@ function starters() {
   return [{ id: 'starter-tee', name: 'Starter: crew-neck T-shirt, S-XL (cm)', note: 'A graded men\'s tee, a size step of 2 cm on the chest: a place to start, not a buyer\'s spec.', state: { unit: 'cm', sizes: T.sizes, base: 'M', chart: T.chart } }];
 }
 
-module.exports = { normRows, val, tolOf, isSizeTok, sizeName, headKind, classify, dense, transposeGrid, extract, gradeOf, grade, toBuild, compliance, starters, widthAt, CATALOGUE, BY_KEY, STYLES, PARTS, STITCH_WORDS, SEAM_WORDS, TRIM_WORDS, conceptsOf };
+module.exports = { isDrawn, ENGINE_KEYS, pickSizes, normRows, val, tolOf, isSizeTok, sizeName, headKind, classify, dense, transposeGrid, extract, gradeOf, grade, toBuild, compliance, starters, widthAt, CATALOGUE, BY_KEY, STYLES, PARTS, STITCH_WORDS, SEAM_WORDS, TRIM_WORDS, conceptsOf };

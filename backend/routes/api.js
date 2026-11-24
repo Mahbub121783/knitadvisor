@@ -1717,10 +1717,13 @@ router.post('/studio/analyse', requireUser, async (req, res) => {
 // Garment patterns: a measurement chart in, the pattern pieces, the cut with the fabric's shrinkage, the marker and the fabric per garment out
 // (engine/domain/garment-pattern.js). Pure arithmetic, no data store; a build takes about a tenth of a second.
 const garmentPattern = require('../engine/domain/garment-pattern');
+const garmentShorts = require('../engine/domain/garment-shorts');
+const garmentEngine = (style) => (style === 'shorts' ? garmentShorts : garmentPattern);
 const garmentLimiter = createRateLimiter({ name: 'garment_build', max: 240, windowMs: 60 * 1000, message: 'Too many garment builds - wait a minute.' });
 router.get('/garment/template', requireUser, (req, res) => {
   const sizes = String(req.query.sizes || '').split(',').map((x) => x.trim()).filter(Boolean).slice(0, 8);
-  res.json({ success: true, style: garmentPattern.STYLE, poms: garmentPattern.POMS.map((p) => ({ key: p.key, label: p.label, required: !!p.req })), ...garmentPattern.template(sizes.length ? sizes : undefined, req.query.unit === 'in' ? 'in' : 'cm') });
+  const eng = garmentEngine(req.query.style);
+  res.json({ success: true, style: eng.STYLE, poms: eng.POMS.map((p) => ({ key: p.key, label: p.label, required: !!p.req })), ...eng.template(sizes.length ? sizes : undefined, req.query.unit === 'in' ? 'in' : 'cm') });
 });
 router.post('/garment/parse', requireUser, garmentLimiter, (req, res) => {
   try {
@@ -1735,7 +1738,7 @@ router.post('/garment/parse', requireUser, garmentLimiter, (req, res) => {
 router.post('/garment/build', requireUser, garmentLimiter, (req, res) => {
   try {
     const body = req.body || {};
-    const out = garmentPattern.build(body);
+    const out = garmentEngine(body.style).build(body);
     if (out.success && body.spec && Array.isArray(body.spec.poms)) { try { out.spec_check = require('../engine/domain/garment-spec').compliance(body.spec, out); } catch (e) { console.error('[garment] spec check failed:', e); } }
     res.status(out.success ? 200 : 400).json(out);
   } catch (err) {
@@ -1754,8 +1757,8 @@ const compactRows = (rows) => rows.slice(0, specReader.MAX_ROWS).map((r) => r.sl
 const expandRows = (rows) => (Array.isArray(rows) ? rows.slice(0, specReader.MAX_ROWS).map((r) => (Array.isArray(r) ? r.slice(0, 60).map((c) => (Array.isArray(c) ? { t: String(c[0] == null ? '' : c[0]).slice(0, 300), x0: +c[1] || 0, x1: Number.isFinite(+c[2]) ? +c[2] : (+c[1] || 0) + 10, c: c[3] == null ? 1 : +c[3] } : null)).filter(Boolean) : [])) : []);
 router.get('/garment/spec/catalogue', requireUser, (req, res) => {
   res.json({
-    success: true, points: garmentSpec.CATALOGUE.map((c) => ({ key: c.key, name: c.name, group: c.group, engine: !!c.engine, halves: !!c.halves, tol_cm: c.tol, note: c.note || '' })),
-    styles: garmentSpec.STYLES.map((s) => ({ id: s.id, name: s.name, drawn: s.id === 'tee' })), parts: garmentSpec.PARTS.map((p) => ({ id: p.id, name: p.name, drawn: p.drawn })),
+    success: true, points: garmentSpec.CATALOGUE.map((c) => ({ key: c.key, name: c.name, group: c.group, engine: !!c.engine, engines: ['tee', 'shorts'].filter((e) => garmentSpec.isDrawn(c.key, e)), halves: !!c.halves, tol_cm: c.tol, note: c.note || '' })),
+    styles: garmentSpec.STYLES.map((s) => ({ id: s.id, name: s.name, drawn: s.id === 'tee' || s.id === 'trouser' })), parts: garmentSpec.PARTS.map((p) => ({ id: p.id, name: p.name, drawn: p.drawn })),
     stitches: Object.fromEntries(Object.entries(garmentPattern.STITCH).map(([k, v]) => [k, v.name])), seams: Object.fromEntries(Object.entries(garmentPattern.SEAM_DEFAULTS).map(([k, v]) => [k, v.name])),
     starters: garmentSpec.starters(),
   });
@@ -1818,7 +1821,7 @@ router.post('/garment/presets', requireUser, specLimiter, async (req, res) => {
     const b = req.body || {}, name = String(b.name || '').replace(/\s+/g, ' ').trim().slice(0, 60);
     if (!name) return res.status(400).json({ success: false, error: 'Give the preset a name.' });
     const p = b.preset; if (!p || typeof p !== 'object' || !Array.isArray(p.sizes) || !p.chart) return res.status(400).json({ success: false, error: 'There is nothing to keep: the preset has no sizes or chart.' });
-    const keep = {}; ['unit', 'sizes', 'base', 'chart', 'ratio', 'fabric', 'opt', 'seams', 'zipper', 'trims', 'tol', 'spec', 'edits', 'cornerFlags'].forEach((k) => { if (p[k] !== undefined) keep[k] = p[k]; });
+    const keep = {}; ['style', 'unit', 'sizes', 'base', 'chart', 'ratio', 'fabric', 'opt', 'seams', 'zipper', 'trims', 'tol', 'spec', 'edits', 'cornerFlags'].forEach((k) => { if (p[k] !== undefined) keep[k] = p[k]; });
     const json = JSON.stringify(keep); if (json.length > 300000) return res.status(400).json({ success: false, error: 'This preset is too large to keep.' });
     const row = await garmentPresetRepo.save(req.user.id, { name, style: 'tee', note: String(b.note || '').slice(0, 200) || null, preset: keep });
     res.json({ success: true, id: row.id });

@@ -809,4 +809,4 @@ function sewingOf(fp, zinfo, cfg, opt, size, add) {
   return { seams, operations: ops, thread_m: r2(thread), thread_per_dozen_m: r1(thread * 12), sam };
 }
 
-module.exports = { ALIASES, STYLE, POMS, POM_KEYS, STITCH, ZIP_STANDARD, ZIP_TYPES, SEAM_DEFAULTS, SEAM_LABELS, build, parseChart, template, num, seamConfig, zipperOf, offsetPoly, selfCrossing, removeLoops, bez, plen, area, bbox, maskOf, lay, finishedPieces, measuredOf, sampleChain, polyOf, applyEdit, underarmY, armholeCurve, armholeCtl, capHalf, INCH };
+module.exports = { anchor, cloneAnchors, cutOutline, notchesOf, edgeLen, dedupe2, bisect, labelLen, roleOf, r1, r2, ALIASES, STYLE, POMS, POM_KEYS, STITCH, ZIP_STANDARD, ZIP_TYPES, SEAM_DEFAULTS, SEAM_LABELS, build, parseChart, template, num, seamConfig, zipperOf, offsetPoly, selfCrossing, removeLoops, bez, plen, area, bbox, maskOf, lay, finishedPieces, measuredOf, sampleChain, polyOf, applyEdit, underarmY, armholeCurve, armholeCtl, capHalf, INCH };

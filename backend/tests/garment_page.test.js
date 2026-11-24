@@ -63,7 +63,8 @@ const ids = new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]));
   const T = G.template(['M'], 'cm'), fab = { gsm: 180, width_cm: 170 };
   const plain = G.build({ sizes: ['M'], chart: T.chart, fabric: fab }), zipped = G.build({ sizes: ['M'], chart: T.chart, fabric: fab, zipper: { on: true, kind: 'full' } }), slit = G.build({ sizes: ['M'], chart: T.chart, fabric: fab, zipper: { on: true, kind: 'partial' } });
   const roles = {}; ['front', 'back', 'sleeve', 'band'].forEach((id) => { roles[id] = new Set(plain.by_size[0].edit[id].anchors.map((a) => a.role).filter(Boolean)); });
-  const rules = [...edit.matchAll(/\['(front|back|sleeve)', '(\w+)', '([xy])', ([\d.]+)\]/g)];
+  const teeFix = edit.slice(edit.indexOf('var FIX = {'), edit.indexOf('var E = {'));
+  const rules = [...teeFix.matchAll(/\['(front|back|sleeve)', '(\w+)', '([xy])', ([\d.]+)\]/g)];
   assert(rules.length >= 20, `${rules.length} correction rules`);
   rules.forEach((m) => assert(roles[m[1]].has(m[2]), `the editor moves ${m[1]}.${m[2]}, which the engine has no anchor for`));
   const keys = [...edit.matchAll(/^\s+(\w+): \[(?:\[|\])/gm)].map((m) => m[1]).filter((k) => G.POM_KEYS.includes(k));
@@ -95,6 +96,19 @@ const ids = new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]));
   // the page's payload carries what the spec check needs
   for (const k of ['trims:', 'tolerances:', 'spec: compactSpec']) assert(js.includes(k), `the build request carries ${k}`);
   console.log(`✓ the spec sheet page: its ${used.length} ids are in the page, its ${[...spec.matchAll(/'(\/api\/garment\/[\w/:-]+)/g)].length} routes are mounted, the migration, the tab and the window are there, the two scripts are wired`);
+}
+
+{
+  // the shorts: every edge label its engine draws has a colour and the same seam in the page and in the engine
+  const SH = require('../engine/domain/garment-shorts'), page = read('assets', 'js', 'garment.js');
+  const colours = new Set([...(/var EDGE = \{([^}]*)\}/.exec(page) || [, ''])[1].matchAll(/(\w+):/g)].map((m) => m[1]));
+  const seamOf = Object.fromEntries([...(/var SEAM_OF = \{([^}]*)\}/.exec(page) || [, ''])[1].matchAll(/(\w+): '(\w+)'/g)].map((m) => [m[1], m[2]]));
+  const T = SH.template(['M'], 'cm'), r = SH.build({ sizes: ['M'], chart: T.chart, fabric: { gsm: 240 } }), labels = new Set();
+  r.by_size[0].pieces.forEach((p) => p.finished_labels.forEach((l) => labels.add(l)));
+  labels.forEach((l) => { assert(colours.has(l), `the page colours the shorts edge ${l}`); assert.strictEqual(seamOf[l], SH.SEAM_OF[l], `the page and the engine agree on the seam of ${l}`); });
+  Object.keys(SH.SEAM_DEFAULTS).forEach((k) => assert(r.seams[k] && r.seams[k].type, `shorts seam ${k} is configured`));
+  assert(/switchStyle/.test(page) && /data-g="shorts"/.test(html), 'the garment type can be switched');
+  console.log(`✓ the shorts: its ${labels.size} edge labels have a colour and the same seam in the page and the engine; the garment type can be switched`);
 }
 console.log('Garment page tests passed');
 

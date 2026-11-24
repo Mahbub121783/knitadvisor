@@ -218,6 +218,78 @@ export class GarmentView {
     this.info = { sleeve_axis_deg: 28, form: 'from the finished pattern pieces' };
   }
 
+  // shorts: two legs, each a tube whose rings are as long round as the front leg piece plus the back leg piece are wide at that height; a waistband ring; a drawcord
+  setShorts(size, fabric) {
+    this.clear();
+    const m = size.m, fr = size.shape.front, bk = size.shape.back, F = m.waistband_h, Ll = m.outseam - F, top = m.outseam;
+    const tex = knitTexture(fabric.wpc, fabric.cpc);
+    const mat = new THREE.MeshStandardMaterial({ color: this.colour, map: tex, bumpMap: tex, bumpScale: 0.9, roughness: 0.94, metalness: 0, side: THREE.DoubleSide });
+    const rib = new THREE.MeshStandardMaterial({ color: new THREE.Color(this.colour).multiplyScalar(0.86), roughness: 0.95, metalness: 0, side: THREE.DoubleSide });
+    const dark = new THREE.MeshStandardMaterial({ color: new THREE.Color(this.colour).multiplyScalar(0.55), roughness: 0.9 });
+    this.mats = [mat, rib, dark];
+    const tagged = (mesh, piece, material) => { mesh.userData.piece = piece; mesh.userData.base = material; return mesh; };
+    const widthAt = (poly, y) => { const sp = spans(poly, y); if (!sp.length) return 0; let lo = Infinity, hi = -Infinity; sp.forEach(([a, b]) => { if (a < lo) lo = a; if (b > hi) hi = b; }); return hi - lo; };
+    const K = 0.8, ell = (P) => P / (Math.PI * (3 * (1 + K) - Math.sqrt((3 + K) * (1 + 3 * K))));        // the long semi-axis of an ellipse of perimeter P, short axis K times it
+    const step = 0.5, nRow = Math.max(8, Math.round(Ll / step)), nCol = 48, rows = [];
+    for (let j = 0; j <= nRow; j++) {
+      const y = Math.min(Ll - 0.01, (j / nRow) * Ll) + 0.01, wf = Math.max(1, widthAt(fr, y)), wb = Math.max(1, widthAt(bk, y)), a = ell(wf + wb);
+      rows.push({ y, wf, wb, a, b: K * a });
+    }
+    const gap = 0.5, a0 = rows[0].a, cx = (r) => r.a + gap;
+    const legMesh = (sign, front) => {
+      const pos = [], uv = [], idx = [];
+      rows.forEach((r) => {
+        for (let k = 0; k <= nCol; k++) {
+          const t = front ? (Math.PI * k) / nCol : Math.PI + (Math.PI * k) / nCol, x = sign * (cx(r) + r.a * Math.cos(t)), z = r.b * Math.sin(t);
+          pos.push(x, top - F - r.y, z); uv.push((front ? 1 : -1) * ((t % Math.PI) / Math.PI) * (front ? r.wf : r.wb) * (sign), r.y);
+        }
+      });
+      for (let j = 0; j < nRow; j++) for (let k = 0; k < nCol; k++) { const A = j * (nCol + 1) + k, B = A + 1, C = A + nCol + 1, D = C + 1; idx.push(A, C, B, B, C, D); }
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
+      return tagged(new THREE.Mesh(g, mat), front ? 'front' : 'back', mat);
+    };
+    [1, -1].forEach((sg) => { this.group.add(legMesh(sg, true), legMesh(sg, false)); });
+    // the hem of each leg: a ring of stitching
+    const last = rows[rows.length - 1];
+    [1, -1].forEach((sg) => {
+      const pts = []; for (let k = 0; k < 40; k++) { const t = (k / 40) * Math.PI * 2; pts.push(new THREE.Vector3(sg * (cx(last) + last.a * Math.cos(t)), top - F - Ll + m.hem_h * 0.9, last.b * Math.sin(t))); }
+      this.group.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, true), 120, 0.14, 5, true), dark));
+    });
+    // the waistband: a ring round both legs
+    const A = cx(rows[0]) + a0 + 0.25, B = rows[0].b + 0.3, bandPos = [], bandUv = [], bandIdx = [], nB = 72;
+    for (let j = 0; j <= 1; j++) for (let k = 0; k <= nB; k++) { const t = (k / nB) * Math.PI * 2; bandPos.push(A * Math.cos(t), top - F + j * F, B * Math.sin(t)); bandUv.push((k / nB) * 2 * m.waist, j * F); }
+    for (let k = 0; k < nB; k++) { const a = k, b = k + 1, c = k + nB + 1, d = c + 1; bandIdx.push(a, c, b, b, c, d); }
+    const bg = new THREE.BufferGeometry(); bg.setAttribute('position', new THREE.Float32BufferAttribute(bandPos, 3)); bg.setAttribute('uv', new THREE.Float32BufferAttribute(bandUv, 2)); bg.setIndex(bandIdx); bg.computeVertexNormals();
+    this.group.add(tagged(new THREE.Mesh(bg, rib), 'waistband', rib));
+    for (const yy of [top, top - F]) { const pts = []; for (let k = 0; k < 72; k++) { const t = (k / 72) * Math.PI * 2; pts.push(new THREE.Vector3(A * Math.cos(t), yy, B * Math.sin(t))); } this.group.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, true), 140, 0.12, 5, true), dark)); }
+    // the drawcord: two ends hanging from the eyelets at the front
+    const vis = m.drawcord_len || 10, ex = (m.eyelet_dist || 4) / 2 + 0.3, cord = new THREE.MeshStandardMaterial({ color: 0xe9e6dd, roughness: 0.8 });
+    this.mats.push(cord);
+    [-1, 1].forEach((sg) => {
+      const x0 = sg * ex, pts = [new THREE.Vector3(x0, top - F * 0.5, B), new THREE.Vector3(x0 * 1.1, top - F * 0.5 - vis * 0.35, B + 0.5), new THREE.Vector3(x0 * 1.5, top - F * 0.5 - vis * 0.7, B + 0.3), new THREE.Vector3(x0 * 1.8, top - F * 0.5 - vis, B)];
+      this.group.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 24, 0.22, 6, false), cord));
+      const knot = new THREE.Mesh(new THREE.SphereGeometry(0.42, 10, 8), cord); knot.position.copy(pts[3]); this.group.add(knot);
+      const eye = new THREE.Mesh(new THREE.TorusGeometry(0.32, 0.1, 6, 12), new THREE.MeshStandardMaterial({ color: 0xb8bcc4, metalness: 0.85, roughness: 0.35 })); eye.position.set(x0, top - F * 0.5, B + 0.02); this.group.add(eye);
+    });
+    // the slanted front pockets, and the back pockets, drawn as stitching on the cloth
+    const onLeg = (sg, front, xp, yp) => { const r = rows[Math.max(0, Math.min(nRow, Math.round(yp / (Ll / nRow))))], w = front ? r.wf : r.wb, t = (front ? 0 : Math.PI) + Math.PI * Math.min(1, xp / w); return new THREE.Vector3(sg * (cx(r) + r.a * Math.cos(t)), top - F - yp, r.b * Math.sin(t) * 1.012); };
+    if (m.fpocket_l > 0 && m.fpocket_w > 0) [1, -1].forEach((sg) => { const pts = []; for (let i = 0; i <= 10; i++) { const f = i / 10; pts.push(onLeg(sg, true, m.fpocket_w * (1 - f), Math.max(0.05, m.fpocket_l * f))); } this.group.add(tagged(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 30, 0.12, 5, false), dark), 'front', mat)); });
+    if (m.bpocket_w > 0 && m.bpocket_l > 0) [1, -1].forEach((sg) => {
+      const x0 = rows[0].wb * 0.5 - m.bpocket_w / 2, x1 = x0 + m.bpocket_w, y0 = m.bpocket_pos, y1 = y0 + m.bpocket_l, loop = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]].map(([xp, yp]) => onLeg(sg, false, xp, yp));
+      this.group.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(loop, true, 'catmullrom', 0.02), 60, 0.1, 5, true), dark));
+    });
+    this._shadowAndFrame(top, 2 * (cx(rows[0]) + a0) * 1.15 + 6);
+  }
+  // the floor shadow, then the camera for a garment of this height and width
+  _shadowAndFrame(L, wNeed) {
+    const fc = document.createElement('canvas'); fc.width = fc.height = 128; const fg = fc.getContext('2d'); const gr = fg.createRadialGradient(64, 64, 0, 64, 64, 64); gr.addColorStop(0, 'rgba(0,0,0,.28)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); fg.fillStyle = gr; fg.fillRect(0, 0, 128, 128);
+    const shadow = new THREE.Mesh(new THREE.PlaneGeometry(L * 1.3, L * 1.3), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(fc), transparent: true, depthWrite: false }));
+    shadow.rotation.x = -Math.PI / 2; shadow.position.y = -1; this.group.add(shadow); this.mats.push(shadow.material);
+    this.centre = new THREE.Vector3(0, L * 0.5, 0); this._L = L; this._wNeed = wNeed; const dist = this._fit();
+    if (!this._placed || Math.abs(L - this._placedL) / this._placedL > 0.35) { this.group.rotation.y = 0; this.camera.position.set(0, L * 0.55, dist); this.controls.target.copy(this.centre); this._placed = true; this._placedL = L; }
+    this.controls.minDistance = L * 0.4; this.controls.maxDistance = L * 6; this.controls.update(); this._applyHi();
+  }
+
   // how far the camera stands so the garment fits the window in height AND in width (a phone is narrow)
   _fit() {
     const t = Math.tan((this.camera.fov * Math.PI) / 360), asp = this.camera.aspect || 1;
