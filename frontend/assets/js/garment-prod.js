@@ -29,6 +29,7 @@
       const rule = ruleOf(P, p), bb = K.bbox(K.flatten(p).poly), cx = bb.x0 + bb.w / 2, sx = 1 + (k * rule.w) / (bb.w || 1), sy = 1 + (k * rule.h) / (bb.h || 1);
       const mv = (x, y) => [x + ((k * rule.w) / 2) * ((x - cx) / ((bb.w || 1) / 2)), y + k * rule.h * ((y - bb.y0) / (bb.h || 1))];
       p.nodes.forEach((N) => { const q = mv(N.x, N.y), gx = N.g ? k * N.g[0] : 0, gy = N.g ? k * N.g[1] : 0; N.x = r2(q[0] + gx); N.y = r2(q[1] + gy); if (N.o) N.o = [N.o[0] * sx, N.o[1] * sy]; if (N.i) N.i = [N.i[0] * sx, N.i[1] * sy]; });
+      (p.pleats || []).forEach((q) => { q.x = r2(mv(q.x, bb.y0)[0]); });
       (p.lines || []).forEach((l) => { l.a = mv(l.a[0], l.a[1]); l.b = mv(l.b[0], l.b[1]); }); (p.folds || []).forEach((f) => { f.a = mv(f.a[0], f.a[1]); f.b = mv(f.b[0], f.b[1]); });
       (p.buttons || []).forEach((b) => { const q = mv(b.x, b.y); b.x = r2(q[0]); b.y = r2(q[1]); });
       if (p.arr) { const hs = (g.body.height * k) / 168; p.arr.top = r2((p.arr.top || 0) * (1 + hs)); if (p.arr.along) p.arr.along = r2(p.arr.along * (1 + hs)); if (p.arr.x) p.arr.x = r2(p.arr.x * sx); if (p.arr.y) p.arr.y = r2(p.arr.y * sy); }

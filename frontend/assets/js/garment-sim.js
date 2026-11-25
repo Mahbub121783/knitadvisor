@@ -132,7 +132,8 @@
     jersey: { x: 0.35, y: 0.15, bias: 0.1, bend: 1 }, rib: { x: 0.8, y: 0.15, bias: 0.1, bend: 0.8 }, interlock: { x: 0.25, y: 0.12, bias: 0.08, bend: 1.2 }, fleece: { x: 0.2, y: 0.1, bias: 0.08, bend: 1.6 },
     woven: { x: 0.03, y: 0.02, bias: 0.2, bend: 1.4 }, stretch_woven: { x: 0.12, y: 0.04, bias: 0.2, bend: 1.3 }, denim: { x: 0.02, y: 0.015, bias: 0.15, bend: 2.2 }, elastic: { x: 1.0, y: 0.1, bias: 0.05, bend: 0.6 }, lycra: { x: 0.9, y: 0.5, bias: 0.1, bend: 0.5 },
   };
-  const fabricParams = (fab, family) => { const f = FAMILIES[family || (fab && fab.family)]; if (!f) return null; const u = fab && fab.stretch; return { x: u && u.x > 0 ? u.x : f.x, y: u && u.y > 0 ? u.y : f.y, bias: f.bias, bend: f.bend }; };
+  // the numbers measured on the cloth (fab.stretch, fab.bend_len) win over the family's typical ones; a cloth with only its own stretch measured is a jersey-like one for everything else
+  const fabricParams = (fab, family) => { const u = fab && fab.stretch, f = FAMILIES[family || (fab && fab.family)] || (u && u.x > 0 ? { x: u.x, y: u.y > 0 ? u.y : u.x * 0.5, bias: 0.1, bend: 1 } : null); if (!f) return null; return { x: u && u.x > 0 ? u.x : f.x, y: u && u.y > 0 ? u.y : f.y, bias: f.bias, bend: fab && fab.bend_len > 0 ? 1 : f.bend }; };
   // what the weight of a cloth does to how it hangs: a heavier cloth is stiffer and a little thicker
   const physics = (fab) => { const g = (fab && +fab.gsm) || 0; if (!g) return null; return { bend: Math.max(0.01, Math.min(0.4, 0.02 * Math.pow(g / 140, 2.2))), stretch: g > 300 ? 0.97 : 0.955, thick: Math.max(0.3, Math.min(0.9, 0.25 + g / 600)), friction: (fab && fab.friction) || 0.12 }; };
   const fabEdge = (fab, dx, dy, base) => {                                  // the stiffness scale and the limit of one spring, from its direction in the flat piece
@@ -142,12 +143,36 @@
   };
   const segX = (p, q, a, b) => { const d = (q[0] - p[0]) * (b[1] - a[1]) - (q[1] - p[1]) * (b[0] - a[0]); if (Math.abs(d) < 1e-9) return false; const t = ((a[0] - p[0]) * (b[1] - a[1]) - (a[1] - p[1]) * (b[0] - a[0])) / d, u = ((a[0] - p[0]) * (q[1] - p[1]) - (a[1] - p[1]) * (q[0] - p[0])) / d; return t >= 0 && t <= 1 && u >= 0 && u <= 1; };
 
+  // the body as a grid of distances, made once for the region the cloth is in: the cloth asks it thousands of times a step, and a lookup is an order of magnitude cheaper than the body's own formula
+  const GRIDS = new Map();
+  class SdfGrid {
+    constructor(body, box, h) {
+      this.h = h; this.x0 = box[0]; this.y0 = box[1]; this.z0 = box[2]; this.nx = Math.ceil((box[3] - box[0]) / h) + 2; this.ny = Math.ceil((box[4] - box[1]) / h) + 2; this.nz = Math.ceil((box[5] - box[2]) / h) + 2;
+      const d = (this.d = new Float32Array(this.nx * this.ny * this.nz)); let k = 0;
+      for (let c = 0; c < this.nz; c++) for (let b = 0; b < this.ny; b++) for (let a = 0; a < this.nx; a++) d[k++] = body.sdf(this.x0 + a * h, this.y0 + b * h, this.z0 + c * h);
+    }
+    inside(x, y, z) { return x > this.x0 && y > this.y0 && z > this.z0 && x < this.x0 + (this.nx - 2) * this.h && y < this.y0 + (this.ny - 2) * this.h && z < this.z0 + (this.nz - 2) * this.h; }
+    at(x, y, z) {
+      const h = this.h, fx = (x - this.x0) / h, fy = (y - this.y0) / h, fz = (z - this.z0) / h, i = Math.floor(fx), j = Math.floor(fy), k = Math.floor(fz), tx = fx - i, ty = fy - j, tz = fz - k, nx = this.nx, ny = this.ny, d = this.d, o = (k * ny + j) * nx + i;
+      const c00 = d[o] * (1 - tx) + d[o + 1] * tx, c10 = d[o + nx] * (1 - tx) + d[o + nx + 1] * tx, c01 = d[o + nx * ny] * (1 - tx) + d[o + nx * ny + 1] * tx, c11 = d[o + nx * ny + nx] * (1 - tx) + d[o + nx * ny + nx + 1] * tx;
+      return (c00 * (1 - ty) + c10 * ty) * (1 - tz) + (c01 * (1 - ty) + c11 * ty) * tz;
+    }
+  }
+  // a distance function for the body over the region the cloth starts in (and a margin round it); the body's own formula outside it
+  function bodySdf(body, X, N, margin, h) {
+    if (!body.desc) return (x, y, z) => body.sdf(x, y, z);
+    let x0 = 1e9, y0 = 1e9, z0 = 1e9, x1 = -1e9, y1 = -1e9, z1 = -1e9; for (let i = 0; i < N; i++) { const a = 3 * i; x0 = Math.min(x0, X[a]); x1 = Math.max(x1, X[a]); y0 = Math.min(y0, X[a + 1]); y1 = Math.max(y1, X[a + 1]); z0 = Math.min(z0, X[a + 2]); z1 = Math.max(z1, X[a + 2]); }
+    const m = margin || 6, box = [x0 - m, y0 - m - 14, z0 - m, x1 + m, y1 + m, z1 + m], key = JSON.stringify([body.desc, box.map((v) => Math.round(v)), h]);
+    let g = GRIDS.get(key); if (!g) { g = new SdfGrid(body, box, h); if (GRIDS.size > 6) GRIDS.delete(GRIDS.keys().next().value); GRIDS.set(key, g); }
+    return (x, y, z) => (g.inside(x, y, z) ? g.at(x, y, z) : body.sdf(x, y, z));
+  }
+
   // ── the cloth ──
   // instances: [{id, mesh, map(x, y) -> [X, Y, Z], rest: 'flat' | 'init', pin: (i) => bool, label: string}]
   class Cloth {
     constructor(instances, body, opt) {
       opt = opt || {};
-      this.body = body; this.inst = instances; this.opt = Object.assign({ bend: 0.08, stretch: 0.96, gravity: 980, damp: 0.985, thick: 0.45, friction: 0.12, iters: 14, seamTol: 1.5, maxStrain: 0.02, limitPasses: 8 }, opt);
+      this.body = body; this.inst = instances; this.opt = Object.assign({ bend: 0.08, stretch: 0.96, gravity: 980, damp: 0.985, thick: 0.45, friction: 0.12, iters: 14, seamTol: 1.5, maxStrain: 0.02, limitPasses: 24 }, opt);
       let N = 0; instances.forEach((it) => { it.off = N; N += it.mesh.pts.length; });
       this.N = N; this.X = new Float32Array(3 * N); this.Q = new Float32Array(3 * N); this.pin = new Uint8Array(N); this.P0 = new Float32Array(3 * N);
       const es = [], er = [], ek = [], em = [], bs = [], br = [], bk = [], flatRest = (it, a, b) => Math.hypot(it.mesh.pts[a][0] - it.mesh.pts[b][0], it.mesh.pts[a][1] - it.mesh.pts[b][1]);
@@ -172,7 +197,7 @@
       this._seams();
       if (this.opt.pinSeams && this.opt.seamOf) instances.forEach((it) => { for (let i = 0; i < it.mesh.nb; i++) if (this.opt.pinSeams.indexOf(this.opt.seamOf[it.mesh.blabels[i]]) >= 0) this.pin[it.off + i] = 1; });
       instances.forEach((it) => { if (it.pinAll) for (let i = 0; i < it.mesh.pts.length; i++) this.pin[it.off + i] = 1; });
-      this._surface(); this.t = 0; this.energy = 0;
+      this._surface(); this.t = 0; this.energy = 0; this._sdf = this.opt.gridSdf === false ? null : bodySdf(this.body, this.X, this.N, 8, this.opt.gridH || 1.25);
     }
     // a form that starts partly inside the mannequin (a neckline is the usual place): take it out to the surface, once, before anything moves
     _surface() {
@@ -238,8 +263,8 @@
         if (it % 3 === 0) this._collide();
         if (o.selfCollide && it % 4 === 0) this._selfCollide();
       }
-      this._limit(this.es, this.er, o.maxStrain);          // cloth does not stretch like rubber: whatever is over the limit is pulled back at once
-      this._collide();
+      this._limit(this.es, this.er, o.maxStrain);          // cloth does not stretch like rubber: whatever is over the limit is pulled back at once (many passes: the pull travels one edge a pass)
+      this._collide(); this._limit(this.es, this.er, o.maxStrain, 4); this._collide();       // and back out of the body, the limit once more, and out again
       this.t++;
     }
     _pull(S, R, K) {
@@ -250,9 +275,9 @@
         X[A] += dx * c * wa; X[A + 1] += dy * c * wa; X[A + 2] += dz * c * wa; X[B] -= dx * c * wb; X[B + 1] -= dy * c * wb; X[B + 2] -= dz * c * wb;
       }
     }
-    _limit(S, R, max) {
+    _limit(S, R, max, passes) {
       const X = this.X, pin = this.pin; if (!this._lim) this._lim = Float32Array.from(R, (r, e) => r * (1 + this.em[e])); const L = this._lim;
-      for (let pass = 0; pass < (this.opt.limitPasses || 8); pass++) for (let e = 0, n = R.length; e < n; e++) {
+      for (let pass = 0; pass < (passes || this.opt.limitPasses || 8); pass++) for (let e = 0, n = R.length; e < n; e++) {
         const a = S[2 * e], b = S[2 * e + 1], A = 3 * a, B = 3 * b, dx = X[B] - X[A], dy = X[B + 1] - X[A + 1], dz = X[B + 2] - X[A + 2], l = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1e-9, lim = L[e];
         if (l <= lim) continue; const wa = pin[a] ? 0 : 1, wb = pin[b] ? 0 : 1, w = wa + wb; if (!w) continue; const c = (l - lim) / (l * w);
         X[A] += dx * c * wa; X[A + 1] += dy * c * wa; X[A + 2] += dz * c * wa; X[B] -= dx * c * wb; X[B + 1] -= dy * c * wb; X[B + 2] -= dz * c * wb;
@@ -267,7 +292,7 @@
       }
     }
     _collide() {
-      const X = this.X, Q = this.Q, body = this.body, th = this.opt.thick, fr = this.opt.friction, eps = 0.25;
+      const X = this.X, Q = this.Q, body = this._sdf ? { sdf: this._sdf } : this.body, th = this.opt.thick, fr = this.opt.friction, eps = 0.25;
       if (!this._dc) { this._dc = new Float32Array(this.N); this._dp = new Float32Array(3 * this.N); this._dc.fill(-1e9); }
       const dc = this._dc, dp = this._dp;
       for (let i = 0; i < this.N; i++) {
@@ -316,13 +341,20 @@
       return { tight_pct: (100 * tight) / this.N, crowded_pct: (100 * loose) / this.N, worst, at: [this.X[3 * wi], this.X[3 * wi + 1], this.X[3 * wi + 2]], piece: this.inst[this.vi[wi]].id };
     }
     run(n) { for (let i = 0; i < n; i++) this.step(); }
+    // run until the cloth is still (its mean movement a step below tol for two looks in a row, after at least `min` steps) or `max` steps; returns the steps taken
+    runUntilSettled(max, min, tol) {
+      let calm = 0, n = 0; tol = tol || 0.004; min = min || 60;
+      while (n < max) { this.step(); n++; if (n >= min && n % 10 === 0) { let mv = 0; const X = this.X, Q = this.Q; for (let i = 0; i < this.N; i++) mv += Math.abs(X[3 * i] - Q[3 * i]) + Math.abs(X[3 * i + 1] - Q[3 * i + 1]) + Math.abs(X[3 * i + 2] - Q[3 * i + 2]); calm = mv / this.N < tol ? calm + 1 : 0; if (calm >= 2) break; } }
+      return n;
+    }
     // how far the cloth is still moving (cm per step, the mean), the worst seam gap, the deepest point inside the body, the worst stretch
     stats() {
       const X = this.X, Q = this.Q; let mv = 0; for (let i = 0; i < this.N; i++) mv += Math.hypot(X[3 * i] - Q[3 * i], X[3 * i + 1] - Q[3 * i + 1], X[3 * i + 2] - Q[3 * i + 2]);
       let gap = 0; for (let e = 0; e < this.ss.length; e += 2) { const A = 3 * this.ss[e], B = 3 * this.ss[e + 1]; gap = Math.max(gap, Math.hypot(X[A] - X[B], X[A + 1] - X[B + 1], X[A + 2] - X[B + 2])); }
       let deep = 0; for (let i = 0; i < this.N; i++) deep = Math.min(deep, this.body.sdf(X[3 * i], X[3 * i + 1], X[3 * i + 2]));
-      let strain = 0; for (let e = 0; e < this.er.length; e++) { const A = 3 * this.es[2 * e], B = 3 * this.es[2 * e + 1]; strain = Math.max(strain, Math.abs(Math.hypot(X[A] - X[B], X[A + 1] - X[B + 1], X[A + 2] - X[B + 2]) / (this.er[e] || 1) - 1)); }
-      return { moving: mv / this.N, seam_gap: gap, inside_body: deep, max_strain: strain, seams: this.ss.length / 2, points: this.N };
+      let strain = 0, over = 0; const all = new Float32Array(this.er.length); for (let e = 0; e < this.er.length; e++) { const A = 3 * this.es[2 * e], B = 3 * this.es[2 * e + 1], sg = Math.hypot(X[A] - X[B], X[A + 1] - X[B + 1], X[A + 2] - X[B + 2]) / (this.er[e] || 1) - 1, v = Math.abs(sg); all[e] = Math.max(0, sg); strain = Math.max(strain, v); if (sg > (this.em ? this.em[e] : this.opt.maxStrain) * 1.5) over++; }
+      all.sort();      // the worst single edge is usually a point where several seams meet (an underarm), and an edge squeezed shorter is only a wrinkle: the 95th percentile of the STRETCH and the share of edges stretched well past their limit say how the cloth as a whole is
+      return { moving: mv / this.N, seam_gap: gap, inside_body: deep, max_strain: strain, strain_p95: all.length ? all[Math.floor(all.length * 0.95)] : 0, over_limit_pct: all.length ? (100 * over) / all.length : 0, seams: this.ss.length / 2, points: this.N };
     }
   }
   // the three settings of how the cloth bends
@@ -364,10 +396,15 @@
     (doc.topstitch || []).forEach((t) => { const it = by(t.piece); if (!it) return; it.stiffV = it.stiffV || new Set(); for (let i = 0; i < it.mesh.nb; i++) if (it.s[i] >= t.s0 - 1e-6 && it.s[i] <= t.s1 + 1e-6) it.stiffV.add(i); });
     const trims = (doc.trims || []).map((t) => { const it = by(t.piece); if (!it) return null; return Object.assign({}, t, { v: off[insts.indexOf(it)] + nearXY(it, t.x, t.y) }); }).filter(Boolean);
     const zips = (doc.seams || []).filter((sm) => sm.zip).map((sm) => runs(sm.a).map(([id, i]) => off[insts.indexOf(by(id))] + i));
-    const ph = doc.fabric && doc.fabric.family ? physics(doc.fabric) : null;
-    return { insts, body: avatar(doc.avatar), h, trims, zips, opt: Object.assign({ h, seamTol: Math.max(1.6, h * 0.85), fixedPairs: fixed, sewing }, ph ? { thick: ph.thick, friction: ph.friction } : {}, doc.sim || {}) };
+    const fb = doc.fabric || {}, ph = fb.family || (fb.stretch && fb.stretch.x > 0) || fb.bend_len > 0 ? physics(fb) : null, meas = {};
+    // measured on the cloth: the bending length (a cantilever test; stiffness goes as weight x length cubed, 140 gsm at 2.5 cm being the typical jersey), the friction, the thickness
+    if (fb.bend_len > 0 && fb.gsm > 0) meas.bend = Math.max(0.005, Math.min(0.5, 0.02 * (fb.gsm * Math.pow(fb.bend_len, 3)) / 2187));
+    if (fb.friction > 0) meas.friction = Math.min(0.5, fb.friction); if (fb.thick_mm > 0) meas.thick = Math.max(0.3, Math.min(0.9, 0.25 + fb.thick_mm / 5));
+    // the stiffness the weight gives is the cloth's own unless a bending length was measured
+    if (meas.bend == null && ph && ph.bend && !(doc.sim && doc.sim.bend != null)) meas.bend = ph.bend;
+    return { insts, body: avatar(doc.avatar), h, trims, zips, opt: Object.assign({ h, seamTol: Math.max(1.6, h * 0.85), fixedPairs: fixed, sewing }, ph ? { thick: ph.thick, friction: ph.friction } : {}, meas, doc.sim || {}) };
   }
 
-  const KASim = { delaunay, meshPiece, meshArea, bodyTee, bodyLegs, avatar, lerpKeys, Cloth, DRAPE, ellK, fromDoc, gridMap, outlineS, FAMILIES, fabricParams, physics };
+  const KASim = { delaunay, meshPiece, meshArea, bodyTee, bodyLegs, avatar, lerpKeys, Cloth, DRAPE, ellK, fromDoc, gridMap, outlineS, FAMILIES, fabricParams, physics, bodySdf };
   root.KASim = KASim; if (typeof module !== 'undefined' && module.exports) module.exports = KASim;
 })(typeof window !== 'undefined' ? window : globalThis);

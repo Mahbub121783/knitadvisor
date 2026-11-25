@@ -23,7 +23,7 @@ function sanitize(raw) {
   if (!pieces.length) throw new Error('no pieces');
   const seams = (Array.isArray(raw.seams) ? raw.seams : []).slice(0, MAX_SEAMS).map((s) => ({ a: str(s.a, 60), b: str(s.b, 60), lenA: num(s.lenA), lenB: num(s.lenB), pct: num(s.pct), zip: !!s.zip }));
   const grade = (Array.isArray(raw.grade) ? raw.grade : []).slice(0, MAX_PIECES).map((g) => ({ name: str(g.name, 40), sizes: Object.fromEntries(sizes.map((s) => [s, { w: num(g.sizes && g.sizes[s] && g.sizes[s].w), h: num(g.sizes && g.sizes[s] && g.sizes[s].h) }])) }));
-  const fit = (Array.isArray(raw.fit) ? raw.fit : []).slice(0, MAX_SIZES).map((f) => ({ size: str(f.size, 12), tight_pct: num(f.tight_pct), crowded_pct: num(f.crowded_pct), seam_gap: num(f.seam_gap) }));
+  const fit = (Array.isArray(raw.fit) ? raw.fit : []).slice(0, MAX_SIZES).map((f) => ({ size: str(f.size, 12), tight_pct: num(f.tight_pct), crowded_pct: num(f.crowded_pct), seam_gap: num(f.seam_gap), mean_gap: num(f.mean_gap, -1), p95_gap: num(f.p95_gap, -1) }));
   const b = raw.body || {};
   return { name: str(raw.name, 60) || 'Garment', date: str(raw.date, 12), fabric: { family: str(raw.fabric && raw.fabric.family, 20), gsm: num(raw.fabric && raw.fabric.gsm) }, body: { preset: str(b.preset, 10), height: num(b.height), chest: num(b.chest), waist: num(b.waist), hip: num(b.hip), shoulder: num(b.shoulder) }, sizes, base: str(raw.base, 12), pieces, seams, grade, fit };
 }
@@ -43,7 +43,7 @@ function renderGarmentPack(raw) {
     pack.grade.forEach((g) => { if (y > 740) { doc.addPage(); y = 50; } doc.text(g.name, c0, y, { width: 126 }); pack.sizes.forEach((s, i) => doc.text(g.sizes[s].w.toFixed(1) + ' × ' + g.sizes[s].h.toFixed(1), c0 + 130 + i * cw, y, { width: cw })); y += 13; });
     doc.y = y + 8; doc.x = 36;
   }
-  if (pack.fit.length) { doc.moveDown(0.5); head('Fit by size (a cloth simulation on a body of that size)'); pack.fit.forEach((f) => line(f.size + ': ' + f.tight_pct.toFixed(0) + ' % of the cloth near its limit, ' + f.crowded_pct.toFixed(0) + ' % crowded, worst seam gap ' + f.seam_gap.toFixed(1) + ' cm')); }
+  if (pack.fit.length) { doc.moveDown(0.5); head('Fit by size (a cloth simulation on a body of that size)'); pack.fit.forEach((f) => line(f.size + ': ' + f.tight_pct.toFixed(0) + ' % of the cloth near its limit, ' + f.crowded_pct.toFixed(0) + ' % crowded, seams closed to within ' + (f.mean_gap >= 0 ? f.mean_gap.toFixed(1) + ' cm on average (95 % within ' + f.p95_gap.toFixed(1) + ' cm)' : f.seam_gap.toFixed(1) + ' cm at the worst'))); }
   if (pack.seams.length) {
     doc.addPage(); head('Seams'); pack.seams.forEach((s) => { if (doc.y > 760) doc.addPage(); line((s.zip ? '[zip] ' : '') + s.a + '  ↔  ' + s.b + '   ' + s.lenA.toFixed(1) + ' / ' + s.lenB.toFixed(1) + ' cm' + (Math.abs(s.pct) > 0.5 ? '   ease ' + Math.abs(s.pct).toFixed(1) + ' %' : '')); });
   }

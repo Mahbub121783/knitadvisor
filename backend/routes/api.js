@@ -1748,7 +1748,9 @@ router.post('/garment/build', requireUser, garmentLimiter, (req, res) => {
 });
 
 // The garment tech pack as a PDF: the pattern window sends the pack (KAProd.pack), the numbers are its own, this only draws them.
-router.post('/garment/pack-pdf', requireUser, garmentLimiter, (req, res) => {
+// the one thing here that costs the server anything (a PDF drawn in memory, a few ms): kept small on a shared host. The cloth simulation itself runs in the visitor's browser.
+const packLimiter = createRateLimiter({ name: 'garment_pack', max: 10, windowMs: 60 * 1000, message: 'Too many tech packs - wait a minute.' });
+router.post('/garment/pack-pdf', requireUser, packLimiter, (req, res) => {
   try {
     const { renderGarmentPack } = require('../engine/domain/garment-pack-pdf');
     const doc = renderGarmentPack((req.body || {}).pack);

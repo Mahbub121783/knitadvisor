@@ -62,11 +62,18 @@
   var techNow = 'weft';
   // what the material package (studio-pbr.js) needs of the page
   window.KAStudioHost = { load: function (o) { return loadDesign(o); }, schedule: function () { schedule(); }, density: function () { var f = last && last.fabric; return f && f.wpc > 0 && f.cpc > 0 ? { wpc: f.wpc, cpc: f.cpc } : null; }, cloth: function () { return cloth; }, design: function () { return payload(); }, fetch: function (u, o) { return apiFetch(u, o); }, colour: function () { var c = $('st-col'); return (c && /^#[0-9a-f]{6}$/i.test(c.value)) ? c.value : '#808080'; }, name: function () { return ($('st-name') && $('st-name').value) || 'fabric'; },
+    // the tester-style numbers of the cloth (when the Fabric hand card is on): how far it stretches across and along at its read load, its bending length, thickness, friction
+    _hand: function () {
+      var r = window.KAStudioHand && window.KAStudioHand.result && window.KAStudioHand.result(); if (!r || r.success === false || !r.tensile || !r.bending) return null;
+      var v = function (o) { return o && o.value != null ? +o.value : null; };
+      return { stretch_across_pct: v(r.tensile.width.EMT), stretch_along_pct: v(r.tensile.length.EMT), load_gf_cm: v(r.tensile.width.load_gf_cm), bending_length_cm: v(r.bending.bending_length), thickness_mm: r.compression ? v(r.compression.T0) : null, friction: r.surface ? v(r.surface.MIU) : null, basis: 'the Studio estimate for the cloth you drew' };
+    },
     // what the Garment studio takes from the cloth on the screen: weight, usable width, the shrinkage of a wash (the median residual), the loops per cm, the colour
     fabric: function () {
       var f = last && last.fabric; if (!f || !(f.gsm > 0)) return null;
       var rel = f.relaxation && f.relaxation.residual, c = $('st-col');
       return { name: ($('st-name') && $('st-name').value) || (last.structure && last.structure.family_label) || 'Studio fabric', gsm: Math.round(f.gsm), width_cm: f.width_open_in > 0 ? Math.round((f.width_open_in * 2.54 - 3) * 10) / 10 : null,
+        family_label: (last.structure && last.structure.family_label) || '', hand: window.KAStudioHost._hand(),
         shrink_len_pct: rel && rel.length_pct ? rel.length_pct[1] : null, shrink_wid_pct: rel && rel.width_pct ? rel.width_pct[1] : null, wpc: f.wpc || null, cpc: f.cpc || null, colour: c && /^#[0-9a-f]{6}$/i.test(c.value) ? c.value : '#3d5a80' };
     } };
   function setTech(t) {

@@ -116,6 +116,6 @@
   function setCatalogue(c) { CAT = c || null; buildCard(); }
   function studioResult(r) { last = r && r.hand ? r.hand : null; summary(); render(last); }
 
-  window.KAStudioHand = { payload: payload, state: state, setState: setState, setCatalogue: setCatalogue, studioResult: studioResult };
+  window.KAStudioHand = { payload: payload, state: state, setState: setState, setCatalogue: setCatalogue, studioResult: studioResult, result: function () { return last; } };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { buildCard(); bind(); render(null); }); else { buildCard(); bind(); render(null); }
 })();

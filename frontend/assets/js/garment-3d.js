@@ -120,7 +120,7 @@ export class GarmentView {
   setSpin(on) { this.spin = !!on; }
 
   clear() {
-    this._cloth = null; this._simBusy = false; this._simGroup = null; this._docOverride = null; this._arr = null; this._hemRing = null; this._cuffParam = null; this._mannequin = null;
+    this._stopWorker(true); this._cloth = null; this._simBusy = false; this._simGroup = null; this._docOverride = null; this._arr = null; this._hemRing = null; this._cuffParam = null; this._mannequin = null;
     if (this._hiMats) this._hiMats.clear();
     while (this.group.children.length) { const o = this.group.children[0]; this.group.remove(o); o.traverse((n) => { if (n.geometry) n.geometry.dispose(); }); }
     this.mats.forEach((m) => { if (m.map) m.map.dispose(); m.dispose(); }); this.mats = [];
@@ -404,7 +404,7 @@ export class GarmentView {
   // ── cloth simulation: the garment draped on a mannequin of its own measures ──
   setDrape(name) { this._drape = window.KASim && window.KASim.DRAPE[name] ? name : 'medium'; this._drapeSet = true; if (this.simMode) this.startSim(); }
   stopSim() {
-    this.simMode = false; this._simBusy = false;
+    this.simMode = false; this._simBusy = false; this._stopWorker(true);
     if (this._trimGroup) { this.group.remove(this._trimGroup); this._trimGroup = null; }
     if (this._simGroup) { this.group.remove(this._simGroup); this._simGroup.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); this._simGroup = null; }
     this._cloth = null; this.group.traverse((o) => { if (o.userData && (o.userData.piece || o.userData.seam || o.userData.seamVis)) o.visible = true; });
@@ -432,10 +432,12 @@ export class GarmentView {
     this.simMode = true;
     if (this._simGroup) { this.group.remove(this._simGroup); this._simGroup.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); }
     if (this._trimGroup) { this.group.remove(this._trimGroup); this._trimGroup.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); this._trimGroup = null; }
-    const built = K.fromDoc(doc), insts = built.insts, h = built.h;
     /* the stiffness follows the fabric's weight (GSM) unless a cloth setting was chosen by hand: bending stiffness of a sheet grows with its mass and thickness */
     const g = this._gsm || 0, dr = this._drapeSet || !g ? K.DRAPE[this._drape || 'medium'] : { bend: Math.max(0.01, Math.min(0.4, 0.02 * Math.pow(g / 140, 2.2))), stretch: g > 300 ? 0.97 : 0.955 };
-    this._cloth = new K.Cloth(insts, built.body, Object.assign({}, dr, built.opt));
+    // a cloth setting chosen by hand is the document's own setting for this run
+    const docRun = this._drapeSet ? Object.assign({}, doc, { sim: Object.assign({}, doc.sim, { bend: dr.bend, stretch: dr.stretch }) }) : doc, built = K.fromDoc(docRun), insts = built.insts, h = built.h;
+    const useWorker = typeof Worker !== 'undefined' && !this._workerFailed;
+    this._cloth = new K.Cloth(insts, built.body, Object.assign({}, dr, built.opt, useWorker ? { gridSdf: false } : {}));      // with a worker this copy only holds the shape (the worker steps it)
     this._simGroup = new THREE.Group(); this._simMeshes = [];
     insts.forEach((it) => {
       const g2 = new THREE.BufferGeometry(), N = it.mesh.pts.length, uv = new Float32Array(2 * N), idx = [];
@@ -446,7 +448,7 @@ export class GarmentView {
     });
     this.group.add(this._simGroup); this._built = built; this._mkTrims(built);
     this.group.traverse((o) => { if (o.userData && ((o.userData.piece && hide.indexOf(o.userData.piece) >= 0 && !this._simGroup.children.includes(o)) || o.userData.seam || o.userData.seamVis)) { if (!(this._simGroup && this._simGroup.getObjectById(o.id))) o.visible = false; } });
-    this._simSteps = 0; this._simTarget = 300; this._simBusy = true; this._simUpload(); this._applyHi();
+    this._simSteps = 0; this._simTarget = 300; this._simBusy = true; this._simUpload(); this._applyHi(); if (useWorker) this._startWorker(docRun, dr);
     if (this.onSim) this.onSim({ state: 'running', step: 0, total: this._simTarget });
     return true;
   }
@@ -532,7 +534,30 @@ export class GarmentView {
     const c = this._cloth; if (!c || !c.stress) return; const s = c.stress(), ramp = (v) => { if (v < 0) { const t = Math.min(1, -v); return [0.55 - 0.35 * t, 0.75 - 0.3 * t, 0.9]; } const t = Math.min(1, v); return t < 0.5 ? [0.3 + 1.2 * t, 0.8, 0.35 - 0.3 * t] : [0.9, 0.8 - 1.4 * (t - 0.5), 0.15]; };
     this._simMeshes.forEach(({ mesh, off, N }) => { let a = mesh.geometry.attributes.color; if (!a) { a = new THREE.BufferAttribute(new Float32Array(3 * N), 3); mesh.geometry.setAttribute('color', a); } for (let i = 0; i < N; i++) { const q = ramp(s[off + i]); a.array[3 * i] = q[0]; a.array[3 * i + 1] = q[1]; a.array[3 * i + 2] = q[2]; } a.needsUpdate = true; });
   }
+  // the cloth is stepped on a thread of its own (garment-sim-worker.js); this page only draws what it sends. If a worker cannot be made, the steps are done here, as before.
+  _startWorker(doc, dr) {
+    if (this._workerIdle) { clearTimeout(this._workerIdle); this._workerIdle = 0; }
+    try {
+      if (!this._worker) {
+        const w = new Worker(new URL('garment-sim-worker.js?v=20261209b', import.meta.url)); this._worker = w;
+        w.onmessage = (e) => {
+          const m = e.data || {}; if (m.token !== this._wtoken) return;
+          if ((m.type === 'x' || m.type === 'done') && this._cloth && m.X && m.X.length === this._cloth.X.length) { this._cloth.X.set(m.X); this._simSteps = m.step; this._simDirty = true; }
+          if (m.type === 'done') { this._simBusy = false; this._simDirty = false; this._simUpload(); if (this.onSim) this.onSim({ state: 'done', stats: m.stats, fit: m.fit }); this._workerIdle = setTimeout(() => this._stopWorker(true), 60000); }
+          else if (m.type === 'x') { if (this.onSim) this.onSim({ state: 'running', step: m.step, total: m.total }); }
+          else if (m.type === 'error') { this._workerFailed = true; this._stopWorker(true); if (this._cloth) this._cloth._sdf = window.KASim.bodySdf(this._cloth.body, this._cloth.X, this._cloth.N, 8, 1.25); }
+        };
+        w.onerror = () => { this._workerFailed = true; this._stopWorker(true); if (this._cloth && window.KASim) this._cloth._sdf = window.KASim.bodySdf(this._cloth.body, this._cloth.X, this._cloth.N, 8, 1.25); };
+      }
+      this._wtoken = (this._wtoken || 0) + 1; this._worker.postMessage({ type: 'run', token: this._wtoken, doc, drape: dr, target: this._simTarget }); return true;
+    } catch (err) { this._workerFailed = true; this._worker = null; if (this._cloth && window.KASim) this._cloth._sdf = window.KASim.bodySdf(this._cloth.body, this._cloth.X, this._cloth.N, 8, 1.25); return false; }
+  }
+  _stopWorker(kill) {
+    if (!this._worker) return; try { this._worker.postMessage({ type: 'stop' }); } catch (e) { /* gone */ } this._wtoken = (this._wtoken || 0) + 1;
+    if (kill) { try { this._worker.terminate(); } catch (e) { /* gone */ } this._worker = null; if (this._workerIdle) { clearTimeout(this._workerIdle); this._workerIdle = 0; } }
+  }
   _simTick() {
+    if (this._worker && this._simBusy) { if (this._simDirty) { this._simDirty = false; this._simUpload(); } return; }
     if (!this._simBusy || !this._cloth) return;
     const t0 = performance.now(); while (performance.now() - t0 < 9 && this._simSteps < this._simTarget) { this._cloth.step(); this._simSteps++; }
     this._simUpload();
@@ -592,6 +617,7 @@ export class GarmentView {
   snapshot() { this.renderer.render(this.scene, this.camera); return this.renderer.domElement.toDataURL('image/png'); }
 
   dispose() {
+    this._stopWorker(true);
     cancelAnimationFrame(this._raf); this._ro.disconnect(); this.controls.dispose(); this.clear(); this.renderer.dispose();
     if (this.renderer.domElement.parentNode) this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);
   }
