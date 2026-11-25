@@ -28,7 +28,7 @@
   function build() {
     root.innerHTML = '<div class="gf-bar" id="gf-bar" role="toolbar" aria-label="Pattern tools">' + TOOLS.map(function (t) { return '<button type="button" class="gf-b" data-tool="' + t[0] + '" title="' + esc(t[2]) + '">' + t[1] + '</button>'; }).join('') +
       '<span class="gf-sep"></span><button type="button" class="gf-b" data-act="undo" title="Undo (Ctrl Z)">Undo</button><button type="button" class="gf-b" data-act="redo" title="Redo (Ctrl Shift Z)">Redo</button>' +
-      '<span class="gf-sep"></span><button type="button" class="gf-b gf-go" data-act="drape" title="Hang the drawn pieces on the body in the 3D window and drape them">Drape in 3D</button></div>' +
+      '<span class="gf-sep"></span><button type="button" class="gf-b" data-act="arrange3d" id="gf-arr" title="Show the pieces on the body in the 3D window and drag them where they hang">Arrange on body</button><button type="button" class="gf-b gf-go" data-act="drape" title="Hang the drawn pieces on the body in the 3D window and drape them">Drape in 3D</button></div>' +
       '<div class="gf-main"><div class="gf-cv" id="gf-cv"><svg id="gf-svg" tabindex="0" aria-label="Pattern drawing area"></svg><div class="gf-hint" id="gf-hint"></div></div><aside class="gf-side" id="gf-side" aria-label="Piece properties"></aside></div>';
     svg = root.querySelector('#gf-svg'); hint = root.querySelector('#gf-hint'); side = root.querySelector('#gf-side');
     bind(); resize(); setTool('select'); panel();
@@ -105,6 +105,7 @@
     var T = window.KATpl, Pr = window.KAProd, KG = window.KAGarment, sp = KG && KG.state && KG.state(), hasSheet = !!(sp && sp.chart && sp.sizes && sp.sizes.length && Object.keys(sp.chart).some(function (k) { return Object.keys(sp.chart[k] || {}).some(function (z) { return sp.chart[k][z] !== '' && sp.chart[k][z] != null; }); }));
     if (T) h.push('<div class="gf-card"><b>Start from a garment</b><label>Garment <select id="gf-lib">' + T.LIST.map(function (t) { return '<option value="' + t.id + '"' + (S.lib === t.id ? ' selected' : '') + '>' + esc(t.name) + '</option>'; }).join('') + '</select></label><div class="gf-meta">' + esc((T.LIST.find(function (t) { return t.id === (S.lib || T.LIST[0].id); }) || {}).note || '') + '</div>' +
       (hasSheet ? '<label class="gf-chk"><input type="checkbox" id="gf-libspec"' + (S.libSpec !== false ? ' checked' : '') + '> use the measurements of the spec sheet (' + sp.sizes.join(', ') + ')</label>' : '<div class="gf-meta">No spec sheet is loaded: standard measures are used.</div>') + '<button type="button" class="gf-b" data-act="tpl">Draft it</button></div>');
+    if (P.pieces.length) { var rep = Pat.arrangeReport(P), bad = rep.filter(function (r) { return r.status !== 'ok'; }).length; h.push('<div class="gf-card"><b>Arrangement</b> <span class="gf-meta">' + (bad ? bad + ' to look at' : 'every piece fits where it hangs') + '</span>' + rep.map(function (r) { var col = r.status === 'ok' ? '#16a34a' : r.status === 'wide' ? '#ca8a04' : '#dc2626'; return '<div class="gf-seam"><i style="background:' + col + '"></i><span><b>' + esc(r.piece) + '</b> · ' + esc(r.mode) + '<small>' + esc(r.note) + '</small></span>' + (r.status === 'narrow' ? '<button type="button" class="gf-b" data-fitbody="' + r.id + '" title="Make this piece as wide as the way round the body there">Fit</button>' : '') + '</div>'; }).join('') + '<div class="gf-row"><button type="button" class="gf-b" data-act="solve" title="Try every way each piece can hang and keep the one where its seams meet">Solve the arrangement</button></div></div>'); }
     h.push('<div class="gf-card"><b>New piece</b><div class="gf-row"><label>Width ' + num('gf-w', S.size.w, 0.5, 1, 400) + '</label><label>Height ' + num('gf-h', S.size.h, 0.5, 1, 400) + '</label></div><div class="gf-row"><button type="button" class="gf-b" data-act="addrect">Add a rectangle</button><button type="button" class="gf-b" data-act="addell">Add an ellipse</button></div>' +
       '<div class="gf-row"><label>Start from <select id="gf-tpl"><option value="">…</option><option value="skirt">A skirt</option><option value="tube">A front and a back</option></select></label></div></div>');
     if (p) {
@@ -134,7 +135,7 @@
       (S.table ? S.table : '') + '<div class="gf-row"><button type="button" class="gf-b" data-act="dxf" title="The pattern at the size shown, true size, as a DXF">DXF (this size)</button><button type="button" class="gf-b" data-act="dxfnest" title="Every size on top of the other">DXF grade nest</button><button type="button" class="gf-b" data-act="pack" title="A PDF: the pieces, the seams, the sizes, the fit">Tech pack (PDF)</button></div></div>'); }
     var B = bodyM(); h.push('<div class="gf-card"><b>Body</b><label>Shape <select id="gf-bpre"><option value=""' + (P.body ? '' : ' selected') + '>standard</option>' + ['female', 'male', 'child'].map(function (k) { return '<option value="' + k + '"' + (P.body && P.body.preset === k ? ' selected' : '') + '>' + k + '</option>'; }).join('') + '</select></label>' +
       (P.body ? '<div class="gf-row"><label>Height ' + num('gf-bh', B.height, 1, 80, 210) + '</label><label>Chest ' + num('gf-bc', B.chest, 1, 40, 160) + '</label></div><div class="gf-row"><label>Waist ' + num('gf-bw', B.waist, 1, 35, 160) + '</label><label>Hip ' + num('gf-bhp', B.hip, 1, 40, 170) + '</label><label>Shoulder ' + num('gf-bs', B.shoulder, 1, 20, 60) + '</label></div>' : '') +
-      '<button type="button" class="gf-b" data-act="auto" title="A first guess of where each piece hangs, from its shape and its seams">Arrange the pieces on the body</button></div>');
+      '<button type="button" class="gf-b" data-act="solve" title="Try every way each piece can hang and keep the one where its seams meet">Solve the arrangement</button></div>');
     h.push('<div class="gf-card"><b>Dart size</b><div class="gf-row"><label>Width ' + num('gf-dw', S.dart.w, 0.5, 0.5, 20) + '</label><label>Depth ' + num('gf-dd', S.dart.d, 0.5, 1, 40) + '</label></div><label>Seam allowance (cm) ' + num('gf-allow', S.allow, 0.5, 0, 5) + '</label></div>');
     var info = Pat.seamInfo(P), pn = function (id) { var q = Pat.byId(P, id); return q ? q.name : '?'; }, en = function (g) { var q = Pat.byId(P, g.piece), e = q ? q.edges.findIndex(function (x) { return x.id === g.eid; }) : -1; return pn(g.piece) + ' ' + (e + 1); };
     h.push('<div class="gf-card"><b>Seams</b>' + (info.length ? info.map(function (s, i) { return '<div class="gf-seam"><i style="background:' + SEAMC[i % SEAMC.length] + '"></i><span>' + esc(s.a.map(en).join('+')) + ' ↔ ' + esc(s.b.map(en).join('+')) + '<small>' + s.lenA.toFixed(1) + ' / ' + s.lenB.toFixed(1) + ' cm' + (Math.abs(s.diff) > 0.05 ? ' · ' + (s.diff > 0 ? 'first ' : 'second ') + Math.abs(s.diff).toFixed(1) + ' cm longer (eased in)' : ' · equal') + '</small></span><button type="button" class="gf-x" data-zip="' + s.id + '" title="A zip: teeth are drawn along this seam" aria-label="Zip" style="' + (s.zip ? 'color:#2563eb;font-weight:700' : '') + '">zip</button><button type="button" class="gf-x" data-flip="' + s.id + '" title="Turn this seam the other way round" aria-label="Turn this seam the other way round">⇄</button><button type="button" class="gf-x" data-unsew="' + s.id + '" aria-label="Remove this seam">×</button></div>'; }).join('') : '<div class="gf-meta">None yet. Use the Sew tool: click an edge, then the edge it goes to.</div>') + ((P.stitches || []).length ? '<b>Stitches</b>' + P.stitches.map(function (t) { return '<div class="gf-seam"><i style="background:#ca8a04"></i><span>' + esc(pn(t.a.piece)) + ' ↔ ' + esc(pn(t.b.piece)) + '<small>point to point</small></span><button type="button" class="gf-x" data-unstitch="' + t.id + '" aria-label="Remove this stitch">×</button></div>'; }).join('') : '') + '</div>');
@@ -144,10 +145,58 @@
   }
 
   // ── doing things ──
-  function select(piece, node, edge) { S.sel = { piece: piece, node: node == null ? null : node, edge: edge == null ? null : edge }; draw(); panel(); }
+  function select(piece, node, edge) { S.sel = { piece: piece, node: node == null ? null : node, edge: edge == null ? null : edge }; if (S.arrOn && S.arrView) S.arrView.arrSelect(piece); draw(); panel(); }
   // the pattern at the size chosen in the Sizes card (the base size is the pattern as drawn)
   function sized() { var Pr = window.KAProd; return Pr && S.sizeSel && S.sizeSel !== Pr.grading(P).base ? Pr.atSize(P, S.sizeSel) : P; }
+  // ── arranging in 3D: drag a piece over the body; where it is dropped says where it hangs ──
+  var ANGLE = function (a) { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
+  function arrDesc() { return Pat.bodyDesc(P); }
+  function describe(p) {
+    var a = p.arr, M = { wrap: 'all round the body', front: 'on the front', back: 'on the back', armL: 'round the left arm', armR: 'round the right arm', legL: 'round the left leg', legR: 'round the right leg', patch: 'sewn on another piece' }[a.mode] || a.mode;
+    var d = arrDesc(), place = ''; if (a.mode !== 'patch' && !/^(arm|leg)/.test(a.mode)) { var best = null; Object.keys(d.anchors || {}).forEach(function (k) { var dd = Math.abs(d.anchors[k] - (a.top || 0)); if (!best || dd < best.d) best = { k: k, d: dd }; }); place = ', top at ' + Math.round(a.top || 0) + ' cm' + (best && best.d < 3 ? ' (' + best.k + ')' : ''); } else if (/^(arm|leg)/.test(a.mode)) place = a.auto ? ', starting where it is clear of the body' : ', ' + Math.round(a.along || 0) + ' cm down';
+    return p.name + ' ' + M + place;
+  }
+  function arrSay(t) { var h = document.getElementById('gs-hint3d'); if (h) h.textContent = t; }
+  function refreshArr(v) {
+    v = v || S.arrView; if (!v || !S.arrOn) return; S.arrView = v;
+    var doc; try { doc = Pat.toDoc(P); } catch (e) { toast('The pattern cannot be shown: ' + e.message); return; }
+    v.showArrange(doc, { selected: S.sel.piece, onPick: function (id) { if (S.sel.piece !== id) select(id, null, null); }, onDown: arrDown, onMove: arrMove, onUp: arrUp });
+    arrSay('Drag a piece over the body: up and down moves it, sideways turns it; drop it on an arm or a leg to wrap it there. Shift keeps a wrapped piece wrapped, Alt keeps it off the limbs.');
+  }
+  function arrDown(id, i0) { var p = Pat.byId(P, id); if (!p) return; push(); S.ad = { id: id, i0: i0, arr0: JSON.parse(JSON.stringify(p.arr)), moved: false, snap: null }; }
+  function arrMove(id, i) {
+    var d = S.ad, p = Pat.byId(P, id); if (!d || !p) return; var a = d.arr0, arr = JSON.parse(JSON.stringify(a)), dy = i.y - d.i0.y, dphi = ANGLE(i.phi - d.i0.phi), desc = arrDesc(), snap = null, ra = 15;
+    if (Math.abs(dy) + Math.abs(dphi) * 10 < 0.4 && !d.moved) return; d.moved = true;
+    if (a.mode === 'patch') { var par = Pat.byId(P, a.on); arr.y = Math.round(((a.y || 0) - dy) * 2) / 2; arr.x = Math.round(((a.x || 0) + dphi * ra * (par && par.arr.mode === 'back' ? 1 : 1)) * 2) / 2; }
+    else {
+      var limbNow = /^(arm|leg)/.test(a.mode), overLimb = /^(arm|leg)/.test(i.part) && !i.alt;
+      if (overLimb) { arr.mode = i.part; if (!limbNow) { arr.auto = true; delete arr.along; arr.dx = 0; } else if (Math.abs(dy) > 0.3) { var a0 = a.auto ? Pat.autoAlong(desc, a, Pat.flatten(p).poly.map(function (q) { return [q[0] - Pat.bbox(Pat.flatten(p).poly).x0, q[1] - Pat.bbox(Pat.flatten(p).poly).y0]; }), 0) : (a.along || 0); arr.auto = false; arr.along = Math.round((a0 - dy) * 2) / 2; } }
+      else if (limbNow) { var bh = Pat.bbox(Pat.flatten(p).poly).h; arr.mode = Math.cos(i.phi) >= 0 ? 'front' : 'back'; delete arr.auto; delete arr.along; arr.dx = 0; arr.top = Math.round((i.y + bh / 2) * 2) / 2; }
+      else {
+        arr.top = (a.top || 0) + dy; if (!i.alt) Object.keys(desc.anchors || {}).forEach(function (k) { if (Math.abs(desc.anchors[k] - arr.top) < 2.5 && (!snap || Math.abs(desc.anchors[k] - arr.top) < Math.abs(desc.anchors[snap] - arr.top))) snap = k; }); if (snap) arr.top = desc.anchors[snap]; arr.top = Math.round(arr.top * 2) / 2;
+        if (a.mode === 'wrap') arr.dx = Math.round(((a.dx || 0) + dphi * ra) * 2) / 2;
+        else { var side = Math.abs(i.phi) <= Math.PI / 2 ? 'front' : 'back'; if (!i.shift && a.arc == null && side !== a.mode) { arr.mode = side; arr.dx = 0; } else arr.dx = Math.round(((a.dx || 0) + dphi * ra) * 2) / 2; }
+      }
+    }
+    p.arr = arr; d.snap = snap; try { S.arrView.setPiecePoints(id, Pat.mapFor(P, p, desc), snap); } catch (e) { /* the piece stays where it was drawn */ } arrSay(describe(p));
+  }
+  function arrUp(id) {
+    var d = S.ad; S.ad = null; if (!d) return; if (!d.moved) { S.hist.pop(); refreshArr(); return; }
+    changed(); refreshArr(); var p = Pat.byId(P, id); if (p) toast(describe(p)); var rp = Pat.arrangeReport(P).find(function (r) { return r.id === id; }); if (rp && rp.status !== 'ok') toast(rp.piece + ': ' + rp.note);
+  }
+  function arrToggle() {
+    if (S.arrOn) { S.arrOn = false; if (S.arrView) S.arrView.hideArrange(); arrBtn(); arrSay('Click the garment to select a piece · drag to turn · scroll or pinch to zoom'); return; }
+    if (!P.pieces.length) { toast('Draw a piece first.'); return; }
+    var go = window.KAGarmentStudio && window.KAGarmentStudio.withView; if (!go) return; go(function (v) { S.arrOn = true; arrBtn(); refreshArr(v); });
+  }
+  function arrBtn() { var b = document.getElementById('gf-arr'); if (b) { b.classList.toggle('on', !!S.arrOn); b.textContent = S.arrOn ? 'Arranging… (done)' : 'Arrange on body'; } }
+  function solveNow() {
+    if (!P.pieces.length) { toast('Draw a piece first.'); return; } push(); var r = Pat.arrange(P);
+    changed(); if (S.arrOn) refreshArr(); var bad = r.report.filter(function (x) { return x.status !== 'ok'; });
+    toast(r.changed.length ? 'Arranged: ' + r.changed.map(function (c) { return c.piece + ' → ' + c.to; }).join(', ') + (bad.length ? ' · ' + bad.length + ' need a look (see Arrangement).' : '') : 'The pieces are already where their seams want them.' + (bad.length ? ' ' + bad.length + ' need a look.' : ''));
+  }
   function drape() {
+    if (S.arrOn) { S.arrOn = false; if (S.arrView) S.arrView.hideArrange(); arrBtn(); }
     if (!P.pieces.length) { toast('Draw a piece first.'); return; }
     var doc; try { doc = Pat.toDoc(sized()); } catch (e) { toast('The pattern cannot be made: ' + e.message); return; }
     var bad = window.KADoc ? window.KADoc.validate(doc) : ['the document module is not loaded']; if (bad.length) { toast(bad[0]); return; }
@@ -167,6 +216,8 @@
     else if (a === 'auto') { push(); Pat.autoArrange(P); changed(); toast('Arranged: ' + P.pieces.map(function (q) { return q.name + ' → ' + q.arr.mode; }).join(', ')); }
     else if (a === 'pleat' && p) { push(); var pl = +(document.getElementById('gf-pl') || {}).value || 10, pw = +(document.getElementById('gf-pw') || {}).value || 6, bbp = Pat.bbox(Pat.flatten(p).poly); Pat.addPleat(p, bbp.x0 + pl, pw, S.foldAngle); changed(); toast('Two creases added, ' + pw + ' cm apart.'); }
     else if (a === 'tpl') buildTpl();
+    else if (a === 'arrange3d') arrToggle();
+    else if (a === 'solve') solveNow();
     else if (a === 'sizetable') { S.table = sizeTableHtml(); panel(); }
     else if (a === 'fitall') fitAll();
     else if (a === 'dxf') { if (!P.pieces.length) { toast('Nothing to export.'); return; } var sz = S.sizeSel || window.KAProd.grading(P).base; dl(window.KAProd.toDXF(P, { size: sz, allow: S.allow }), 'application/dxf', slug(P.name) + '-' + sz + '.dxf'); toast('DXF in mm, true size: layer 1 cut line' + (S.allow ? ' (with ' + S.allow + ' cm allowance)' : '') + ', 14 sewing line, 4 notches, 7 grain, 15 names.'); }
@@ -339,6 +390,7 @@
       var t = e.target.closest('[data-tool]'); if (t) { setTool(t.getAttribute('data-tool')); return; }
       var a = e.target.closest('[data-act]'); if (a) { act(a.getAttribute('data-act')); return; }
       var fl = e.target.closest('[data-flip]'); if (fl) { push(); Pat.flipSeam(P, fl.getAttribute('data-flip')); changed(); return; }
+      var fb = e.target.closest('[data-fitbody]'); if (fb) { push(); var rr = Pat.fitToBody(P, fb.getAttribute('data-fitbody'), 2); changed(); if (S.arrOn) refreshArr(); toast(rr ? 'Widened from ' + rr.from + ' to ' + rr.to + ' cm.' : 'That piece cannot be fitted.'); return; }
       var zp = e.target.closest('[data-zip]'); if (zp) { push(); var zs = P.seams.find(function (q) { return q.id === zp.getAttribute('data-zip'); }); Pat.setZip(P, zp.getAttribute('data-zip'), !(zs && zs.zip)); changed(); return; }
       var us = e.target.closest('[data-unstitch]'); if (us) { push(); Pat.unstitch(P, us.getAttribute('data-unstitch')); changed(); return; }
       var u = e.target.closest('[data-unsew]'); if (u) { push(); Pat.unsew(P, u.getAttribute('data-unsew')); changed(); }

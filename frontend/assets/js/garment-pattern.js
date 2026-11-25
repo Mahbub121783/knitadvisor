@@ -200,10 +200,10 @@
   function limbMap(desc, arr, poly, give) {
     const L = desc.limbs && desc.limbs[arr.mode]; if (!L) return null;
     const bb = bbox(poly), cl = [0]; for (let i = 1; i < L.length; i++) cl.push(cl[i - 1] + Math.hypot(L[i][0] - L[i - 1][0], L[i][1] - L[i - 1][1], L[i][2] - L[i - 1][2]));
-    const side = L[0][0] >= 0 ? 1 : -1, gap = arr.gap == null ? 1.2 : arr.gap, tot = cl[cl.length - 1];
+    const side = L[0][0] >= 0 ? 1 : -1, gap = arr.gap == null ? 1.2 : arr.gap, tot = cl[cl.length - 1], A0 = arr.auto ? autoAlong(desc, arr, poly, give) : null;
     const cross = (u, v) => [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
     return (x, y) => {
-      const d0 = Math.min(tot, (y - bb.y0) + (arr.along || 0)); let i = 0; while (i + 2 < L.length && cl[i + 1] < d0) i++;
+      const d0 = Math.min(tot, (y - bb.y0) + (A0 != null ? A0 : arr.along || 0)); let i = 0; while (i + 2 < L.length && cl[i + 1] < d0) i++;
       const t = Math.min(1, (d0 - cl[i]) / ((cl[i + 1] - cl[i]) || 1)), A = L[i], B = L[i + 1], ctr = [0, 1, 2].map((k) => A[k] + (B[k] - A[k]) * t), r = A[3] + (B[3] - A[3]) * Math.max(0, t) + gap;
       const dv = [B[0] - A[0], B[1] - A[1], B[2] - A[2]], dl = Math.hypot(...dv) || 1, d = dv.map((v) => v / dl), o = [side, 0, 0], od = o[0] * d[0] + o[1] * d[1] + o[2] * d[2], e1r = [o[0] - od * d[0], o[1] - od * d[1], o[2] - od * d[2]], el = Math.hypot(...e1r) || 1, e1 = e1r.map((v) => v / el), e2 = cross(d, e1);
       const f = (x - bb.x0) / Math.max(1e-3, bb.w), ring = 2 * Math.PI * r, span = 2 * Math.PI * Math.min(1, (bb.w * (1 + (give || 0))) / ring), phi = (f - 0.5) * span + (arr.dx || 0) / r;
@@ -216,18 +216,130 @@
     const d = desc || bodyFromMeasures(P.body || { preset: 'female' }), an = d.anchors || { waist: 108, chest: 125, shoulder: 145 }, H = d.top || 178, taken = {};
     const limbR = d.limbs ? 2 * Math.PI * (d.limbs.armL[0][3] + 1.2) : 30;
     P.pieces.forEach((p) => {
-      if (taken[p.id]) return;
+      if (taken[p.id] || p.arr.mode === 'patch') return;
       const bb = bbox(flatten(p).poly), mine = P.seams.filter((s) => s.a.concat(s.b).some((g) => g.piece === p.id));
       const self = mine.some((s) => s.a.some((g) => g.piece === p.id) && s.b.some((g) => g.piece === p.id));
       const other = {}; mine.forEach((s) => s.a.concat(s.b).forEach((g) => { if (g.piece !== p.id) other[g.piece] = (other[g.piece] || 0) + 1; }));
       const pair = Object.keys(other).find((id) => other[id] >= 2 && !taken[id]), held = p.edges.some((e) => e.hold);
-      p.arr.along = 0;
-      if (self && d.limbs && bb.w <= limbR * 2.2) { const arm = bb.h <= 0.4 * H; p.arr.mode = arm ? (taken.arm ? 'armR' : 'armL') : (taken.leg ? 'legR' : 'legL'); taken[arm ? 'arm' : 'leg'] = 1; taken[p.id] = 1; if (!P.body) P.body = { preset: 'female' }; return; }
-      if (pair) { taken[p.id] = 1; taken[pair] = 1; p.arr.mode = 'front'; const q = byId(P, pair); if (q) q.arr.mode = 'back'; } else p.arr.mode = 'wrap';
-      const long = bb.h > 0.3 * H; p.arr.top = r3(held && !long ? an.waist : long ? an.shoulder : (an.chest));
+      delete p.arr.along; delete p.arr.auto;
+      if (self && d.limbs && bb.w <= limbR * 2.2) { const arm = bb.h <= 0.4 * H; p.arr.mode = arm ? (taken.arm ? 'armR' : 'armL') : (taken.leg ? 'legR' : 'legL'); taken[arm ? 'arm' : 'leg'] = 1; taken[p.id] = 1; p.arr.auto = true; if (!P.body) P.body = { preset: 'female' }; return; }
+      if (pair) { taken[p.id] = 1; taken[pair] = 1; const q = byId(P, pair), swap = /(back|rear)/i.test(p.name) || (q && /front/i.test(q.name)); p.arr.mode = swap ? 'back' : 'front'; if (q) q.arr.mode = swap ? 'front' : 'back'; } else p.arr.mode = 'wrap';
+      const long = bb.h > 0.3 * H; p.arr.top = r3(held && !long ? an.waist : long ? an.neck : (an.chest));
       if (pair) { const q = byId(P, pair); if (q) q.arr.top = p.arr.top; }
     });
     return P;
+  }
+
+  const KS = () => root.KASim || (typeof require !== 'undefined' ? require('./garment-sim.js') : null);
+  // how far down the limb a piece must start to be clear of the rest of the body: the body without that limb, and the first rows of the piece must all be outside it
+  function autoAlong(desc, arr, poly, give) {
+    const L = desc.limbs && desc.limbs[arr.mode]; if (!L) return 0; const K = KS(); if (!K) return arr.along || 0;
+    const near = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) < 1e-3, onLimb = (c) => L.some((q) => near(c.A, q) || near(c.B, q));
+    const rest = K.avatar({ top: desc.top, loft: desc.loft, caps: (desc.caps || []).filter((c) => !onLimb(c)), spheres: desc.spheres || [] }), bb = bbox(poly), m = (d) => limbMap(desc, Object.assign({}, arr, { auto: false, along: d }), poly, give);
+    for (let d = -8; d <= 45; d += 1) {
+      const map = m(d); let ok = true;
+      for (const y of [bb.y0, bb.y0 + Math.min(3, bb.h * 0.2)]) for (let k = 0; k <= 12 && ok; k++) { const q = map(bb.x0 + (bb.w * k) / 12, y); if (rest.sdf(q[0], q[1], q[2]) < 0.4) ok = false; }
+      if (ok) return d;
+    }
+    return 45;
+  }
+  // ── is the arrangement good: for every piece, the way round the body where it hangs, the width it has, what it gives, whether it is inside the body ──
+  const perim = (a, b) => ringOf(a, b);
+  function pieceFacts(P, desc, p) {
+    const fl = flatten(p), bb = bbox(fl.poly), ar = Math.abs(area(fl.poly)), meanW = ar / (bb.h || 1), mode = p.arr.mode || 'wrap', gap = p.arr.gap == null ? (/^(arm|leg)/.test(mode) ? 1.2 : 1.5) : p.arr.gap;
+    let ring = 0;
+    if (/^(arm|leg)[LR]$/.test(mode) && desc.limbs && desc.limbs[mode]) { const L = desc.limbs[mode], dm = (p.arr.auto ? autoAlong(desc, p.arr, fl.poly.map(([x, y]) => [x - bb.x0, y - bb.y0]), 0) : p.arr.along || 0) + bb.h / 2; let acc = 0, r = L[L.length - 1][3]; for (let i = 1; i < L.length; i++) { const l = Math.hypot(L[i][0] - L[i - 1][0], L[i][1] - L[i - 1][1]); if (dm <= acc + l || i === L.length - 1) { const t = Math.max(0, Math.min(1, (dm - acc) / (l || 1))); r = L[i - 1][3] + (L[i][3] - L[i - 1][3]) * t; break; } acc += l; } ring = 2 * Math.PI * (r + gap); }
+    else { const wy = (p.arr.top || 0) - bb.h / 2, e = ellipseAt(desc, wy), q = p.arr.arc ? Math.max(0.05, p.arr.arc[1] - p.arr.arc[0]) : 1; ring = perim(e[0] + gap, e[1] + gap) * (mode === 'wrap' ? 1 : 0.5 * q); }
+    const KSm = KS(), fam = p.fab || (p.mat === 'rib' ? 'rib' : null) || (P.fabric && P.fabric.family), f = KSm && KSm.FAMILIES && KSm.FAMILIES[fam], give = f ? Math.min(0.5, f.x * 0.9) : 0;
+    return { fl, bb, meanW, ring, give, mode };
+  }
+  function arrangeReport(P, desc) {
+    const d = desc || (P.body ? bodyFromMeasures(P.body) : standardBody()), K = KS(), sdf = K ? K.avatar(d).sdf : () => 1, out = [];
+    P.pieces.forEach((p) => {
+      if (p.arr.mode === 'patch') { out.push({ piece: p.name, id: p.id, mode: 'patch', status: 'ok', note: 'sewn on ' + ((byId(P, p.arr.on) || {}).name || 'another piece') }); return; }
+      const f = pieceFacts(P, d, p), local = f.fl.poly.map(([x, y]) => [x - f.bb.x0, y - f.bb.y0]), map = arrangeMap(d, p.arr, local, f.give); let deep = 0;
+      for (let k = 0; k < local.length; k += 2) { const q = map(local[k][0], local[k][1]), v = sdf(q[0], q[1], q[2]); if (v < deep) deep = v; }
+      const need = f.ring - f.meanW * (1 + f.give), short = Math.max(0, need), loose = Math.max(0, f.meanW - f.ring * 1.25);
+      let status = 'ok', note = 'fits: ' + f.meanW.toFixed(1) + ' cm across, ' + f.ring.toFixed(1) + ' cm round the body here';
+      if (deep < -(/^(arm|leg)/.test(f.mode) ? 1.5 : 6)) { status = 'inside'; note = 'starts ' + (-deep).toFixed(1) + ' cm inside the body: ' + (/^(arm|leg)/.test(f.mode) ? 'start it lower on the limb' : 'move it, or hang it somewhere else'); }
+      else if (short > 0.5 + 0.03 * f.ring) { status = 'narrow'; note = 'too narrow by ' + short.toFixed(1) + ' cm (' + f.meanW.toFixed(1) + ' cm for ' + f.ring.toFixed(1) + ' cm' + (f.give ? ', it gives ' + Math.round(f.give * 100) + ' %' : ', it does not stretch') + '): widen the piece or use a cloth that gives'; }
+      else if (loose > 0) { status = 'wide'; note = 'wider than the body by ' + loose.toFixed(1) + ' cm: it will hang loose or gather'; }
+      out.push({ piece: p.name, id: p.id, mode: f.mode, status, ring: f.ring, width: f.meanW, short_cm: short, loose_cm: loose, inside_cm: -deep, note });
+    });
+    return out;
+  }
+  // scale a piece across so that it goes round the body where it hangs (plus ease, cm in all); a piece that gives is brought to its ring less what it gives
+  function fitToBody(P, pieceId, ease, desc) {
+    const p = byId(P, pieceId); if (!p || p.arr.mode === 'patch') return null; const d = desc || (P.body ? bodyFromMeasures(P.body) : standardBody()), f = pieceFacts(P, d, p);
+    const target = (f.ring + (ease == null ? 2 : ease)) / (1 + f.give * 0.5), k = target / (f.meanW || 1), cx = f.bb.x0 + f.bb.w / 2;
+    p.nodes.forEach((N) => { N.x = r3(cx + (N.x - cx) * k); if (N.o) N.o = [N.o[0] * k, N.o[1]]; if (N.i) N.i = [N.i[0] * k, N.i[1]]; });
+    (p.lines || []).forEach((l) => { l.a[0] = cx + (l.a[0] - cx) * k; l.b[0] = cx + (l.b[0] - cx) * k; }); (p.folds || []).forEach((q) => { q.a[0] = cx + (q.a[0] - cx) * k; q.b[0] = cx + (q.b[0] - cx) * k; }); (p.buttons || []).forEach((b) => { b.x = r3(cx + (b.x - cx) * k); });
+    return { from: r3(f.meanW), to: r3(f.meanW * k), scale: r3(k) };
+  }
+  // ── the arrangement solved: every piece tries every way of hanging (round the body, on the front, on the back, round an arm or a leg; at each place on the body), and keeps the one where its seams meet
+  // the pieces they are sewn to, it is outside the body, and it is as wide as the body is there. The pieces take turns, three rounds. ──
+  function solveArrangement(P, opt) {
+    const o = opt || {}, desc = o.desc || (P.body ? bodyFromMeasures(P.body) : standardBody()), K = KS(); if (!K) return { changed: [], note: 'the simulator is not loaded' };
+    const sdf = K.avatar(desc).sdf, pre = {}, pcs = P.pieces.filter((p) => p.arr.mode !== 'patch');
+    P.pieces.forEach((p) => { const fl = flatten(p), bb = bbox(fl.poly), sh = shares(p, fl); pre[p.id] = { fl, bb, sh, local: fl.poly.map(([x, y]) => [x - bb.x0, y - bb.y0]), give: pieceFacts(P, desc, p).give }; });
+    // a side of a seam as a path: u in 0..1 along its edges, as a place on a piece
+    const path = (side) => {
+      const segs = side.map((g) => { const p = byId(P, g.piece), e = p ? p.edges.findIndex((x) => x.id === g.eid) : -1; if (e < 0) return null; const I = pre[p.id], n = I.fl.poly.length, i0 = I.sh[e].i0, i1 = I.sh[e].i1, pts = []; for (let i = i0; ; i = (i + 1) % n) { pts.push(I.local[i]); if (i === i1) break; } return { id: p.id, pts }; }).filter(Boolean);
+      const lens = segs.map((sg) => { let t = 0; for (let i = 1; i < sg.pts.length; i++) t += Math.hypot(sg.pts[i][0] - sg.pts[i - 1][0], sg.pts[i][1] - sg.pts[i - 1][1]); return t; }), tot = lens.reduce((a, b) => a + b, 0) || 1;
+      return (u) => { let d = u * tot; for (let k = 0; k < segs.length; k++) { if (d <= lens[k] + 1e-9 || k === segs.length - 1) { const sg = segs[k]; let acc = 0; d = Math.min(d, lens[k]); for (let i = 1; i < sg.pts.length; i++) { const l = Math.hypot(sg.pts[i][0] - sg.pts[i - 1][0], sg.pts[i][1] - sg.pts[i - 1][1]); if (acc + l >= d - 1e-9 || i === sg.pts.length - 1) { const t = l ? Math.min(1, (d - acc) / l) : 0; return { id: sg.id, x: sg.pts[i - 1][0] + (sg.pts[i][0] - sg.pts[i - 1][0]) * t, y: sg.pts[i - 1][1] + (sg.pts[i][1] - sg.pts[i - 1][1]) * t }; } acc += l; } } d -= lens[k]; } return { id: segs[0].id, x: 0, y: 0 }; };
+    };
+    const seams = P.seams.map((sm) => ({ sm, pa: path(sm.a), pb: path(sm.b), pieces: new Set(sm.a.concat(sm.b).map((g) => g.piece)) })), U = [0, 1 / 6, 2 / 6, 3 / 6, 4 / 6, 5 / 6, 1];
+    const maps = {}; const mk = (p, arr) => arrangeMap(desc, arr, pre[p.id].local, pre[p.id].give);
+    pcs.forEach((p) => { maps[p.id] = mk(p, p.arr); }); P.pieces.filter((p) => p.arr.mode === 'patch').forEach(() => {});
+    const cost = (p, arr, map) => {
+      const I = pre[p.id]; let c = 0;
+      seams.forEach((S) => {
+        if (!S.pieces.has(p.id)) return; const at = (ps, u) => { const q = ps(u), m = q.id === p.id ? map : maps[q.id]; return m ? m(q.x, q.y) : null; };
+        let f = 0, r = 0, n = 0; U.forEach((u) => { const a = at(S.pa, u), bq = at(S.pb, u), br = at(S.pb, 1 - u); if (!a || !bq || !br) return; f += Math.hypot(a[0] - bq[0], a[1] - bq[1], a[2] - bq[2]); r += Math.hypot(a[0] - br[0], a[1] - br[1], a[2] - br[2]); n++; });
+        if (n) c += Math.min(f, r) / n;
+      });
+      let deep = 0, cnt = 0; for (let k = 0; k < I.local.length; k += 3) { const q = map(I.local[k][0], I.local[k][1]), v = sdf(q[0], q[1], q[2]); if (v < 0) { deep += -v; cnt++; } } c += (deep / Math.max(1, I.local.length / 3)) * 0.6;
+      // what the person called the piece says where it goes (front, back): a hint that breaks a tie between a drape and its mirror image, never a rule
+      if (/front/i.test(p.name)) c += arr.mode === 'front' ? 0 : arr.mode === 'back' ? 1.5 : 0.8; else if (/(back|rear)/i.test(p.name)) c += arr.mode === 'back' ? 0 : arr.mode === 'front' ? 1.5 : 0.8;
+      const facts = pieceFacts(P, desc, Object.assign({}, p, { arr })), need = facts.ring - facts.meanW * (1 + facts.give); if (need > 0.5) c += 0.35 * need; if (facts.meanW > facts.ring * 1.4) c += 0.05 * (facts.meanW - facts.ring * 1.4); if (/^(arm|leg)/.test(arr.mode) && facts.meanW > facts.ring * 1.15) c += 0.3 * (facts.meanW - facts.ring * 1.15);
+      { const hl = p.edges.reduce((t, e, k) => t + (e.hold ? I.sh[k].len : 0), 0); if (hl > 0.5 * I.bb.w && !/^(arm|leg)/.test(arr.mode)) { const e0 = ellipseAt(desc, arr.top || 0), q = arr.arc ? Math.max(0.05, arr.arc[1] - arr.arc[0]) : 1, rt = perim(e0[0] + 1.5, e0[1] + 1.5) * (arr.mode === 'wrap' ? 1 : 0.5 * q); c += 0.25 * Math.abs(hl * (1 + pre[p.id].give) - rt); } }
+      if (!/^(arm|leg)/.test(arr.mode) && p.edges.some((e) => e.hold)) { let nd = 1e9; Object.values(desc.anchors || {}).forEach((a) => { nd = Math.min(nd, Math.abs((arr.top || 0) - a)); }); c += 0.2 * nd; }
+      if (!/^(arm|leg)/.test(arr.mode)) { const bottom = (arr.top || 0) - I.bb.h; if (bottom < -1) c += 0.5 * (-bottom); } else { const L = desc.limbs[arr.mode]; let tot = 0; for (let i = 1; i < L.length; i++) tot += Math.hypot(L[i][0] - L[i - 1][0], L[i][1] - L[i - 1][1]); if (I.bb.h > tot + 8) c += 0.4 * (I.bb.h - tot - 8); }
+      return c;
+    };
+    const anchors = Object.values(desc.anchors || { waist: 108, chest: 125 }), tops = new Set(); anchors.forEach((a) => [-10, -5, 0, 5, 10].forEach((d) => { const t = Math.round((a + d) * 2) / 2; if (t > 20 && t < (desc.top || 180)) tops.add(t); }));
+    const before = {}; pcs.forEach((p) => { before[p.id] = p.arr.mode + '@' + Math.round(p.arr.top || 0); });
+    for (let pass = 0; pass < (o.rounds || 3); pass++) {
+      let moved = false;
+      pcs.forEach((p) => {
+        const cur = Object.assign({}, p.arr); let best = { c: cost(p, cur, maps[p.id]) - 0.0001, arr: cur, map: maps[p.id] };
+        const modes = cur.arc ? ['front', 'back'] : ['wrap', 'front', 'back'].concat(desc.limbs ? ['armL', 'armR', 'legL', 'legR'] : []);
+        modes.forEach((mode) => {
+          const tl = /^(arm|leg)/.test(mode) ? [cur.top || 0] : Array.from(tops);
+          tl.forEach((t) => {
+            const arr = Object.assign({}, cur, { mode, top: t }); if (/^(arm|leg)/.test(mode)) { arr.auto = true; delete arr.along; } else { delete arr.auto; arr.along = cur.along || 0; if (mode === 'wrap') delete arr.arc; }
+            const map = mk(p, arr), c = cost(p, arr, map) + 0.02 * Math.abs(t - (cur.top || 0)) * (/^(arm|leg)/.test(mode) ? 0 : 1);
+            if (c < best.c - 1e-6) best = { c, arr, map };
+          });
+        });
+        if (best.arr !== cur) { p.arr = best.arr; maps[p.id] = best.map; moved = true; }
+      });
+      if (!moved) break;
+    }
+    if (pcs.some((p) => /^(arm|leg)/.test(p.arr.mode)) && !P.body) P.body = { preset: 'female' };
+    return { changed: pcs.filter((p) => before[p.id] !== p.arr.mode + '@' + Math.round(p.arr.top || 0)).map((p) => ({ piece: p.name, from: before[p.id], to: p.arr.mode + '@' + Math.round(p.arr.top || 0) })), report: arrangeReport(P, desc) };
+  }
+  const bodyDesc = (P) => (P.body ? bodyFromMeasures(P.body) : standardBody());
+  // where each flat point of a piece starts in 3D, as the document will have it (a patch is placed on the piece it goes on)
+  function mapFor(P, p, desc) {
+    const d = desc || bodyDesc(P);
+    if (p.arr.mode === 'patch') { const par = byId(P, p.arr.on); if (par && par.arr.mode !== 'patch') { const pm = mapFor(P, par, d); return patchMap((x, y) => { const fl = flatten(par), bb = bbox(fl.poly); return pm(x, y); }, p.arr); } }
+    const f = pieceFacts(P, d, p), local = f.fl.poly.map(([x, y]) => [x - f.bb.x0, y - f.bb.y0]); return arrangeMap(d, p.arr.mode === 'patch' ? Object.assign({}, p.arr, { mode: 'wrap' }) : p.arr, local, f.give);
+  }
+  // the first guess, then the solver
+  function arrange(P, desc) {
+    const key = (p) => p.arr.mode + '@' + Math.round(p.arr.top || 0), before = {}; P.pieces.forEach((p) => { before[p.id] = key(p); });
+    autoArrange(P, desc); const r = solveArrangement(P, { desc }); r.changed = P.pieces.filter((p) => p.arr.mode !== 'patch' && before[p.id] !== key(p)).map((p) => ({ piece: p.name, from: before[p.id], to: key(p) })); return r;
   }
   // where the flat point (x, y) of a piece starts, in 3D. wrap: the width of the piece round the body once (row by row); front / back: the half of the body, side to side
   function arrangeMap(desc, arr, poly, give) {
@@ -333,6 +445,6 @@
     },
   };
 
-  const KAPat = { create, byId, addPiece, rect, ellipse, flatten, shares, edgeLen, area, bbox, inside, nearest, moveNode, moveHandle, toggleSmooth, translate, addNode, removeNode, removePiece, addDart, addNotch, addLine, mirrorCopy, mirrorFold, allowance, addFold, addPleat, addButton, setZip, tack, setFabric, patchMap, sew, unsew, addToSeam, flipSeam, stitch, unstitch, bodyFromMeasures, PRESETS, autoArrange, seamInfo, standardBody, arrangeMap, toDoc, toSVG, TEMPLATES, handles, seg, clone };
+  const KAPat = { create, byId, addPiece, rect, ellipse, flatten, shares, edgeLen, area, bbox, inside, nearest, moveNode, moveHandle, toggleSmooth, translate, addNode, removeNode, removePiece, addDart, addNotch, addLine, mirrorCopy, mirrorFold, allowance, addFold, addPleat, addButton, setZip, tack, setFabric, patchMap, sew, unsew, addToSeam, flipSeam, stitch, unstitch, bodyFromMeasures, PRESETS, autoArrange, arrange, solveArrangement, bodyDesc, mapFor, arrangeReport, fitToBody, autoAlong, seamInfo, standardBody, arrangeMap, toDoc, toSVG, TEMPLATES, handles, seg, clone };
   root.KAPat = KAPat; if (typeof module !== 'undefined' && module.exports) module.exports = KAPat;
 })(typeof window !== 'undefined' ? window : globalThis);

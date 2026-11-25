@@ -444,12 +444,18 @@
     select('garment', ''); render();
   }
   // a drawn pattern (the Draw window) shown as cloth in the 3D window
+  // the 3D window ready (made if it is not yet), then do something with it
+  function withView(cb) {
+    if (lay.view === '2d') setView('both');
+    if (K() && K().view()) { cb(K().view()); return; }
+    Promise.resolve(K().make({ quiet: true, spin: false })).then(function () { setTimeout(function () { bind3D(); var v = K().view(); if (v) cb(v); else toast('The 3D window is not ready: open the standard tee once from the File menu, then try again.'); }, 500); }, function () { toast('The 3D window could not start.'); });
+  }
   function freeDrape(doc) {
     function go() { var vw = K() && K().view(); if (!vw) { toast('The 3D window is not ready: open the standard tee once from the File menu, then try again.'); return; } var bad = vw.showDoc(doc); if (bad.length) { toast(bad[0]); return; } if (lay.view === '2d') setView('both'); toast('Draping ' + doc.pieces.length + ' drawn piece(s) on the standard body…'); }
     if (K() && K().view()) { go(); return; }
     if (lay.view === '2d') setView('both');
     Promise.resolve(K().make({ quiet: true, spin: false })).then(function () { setTimeout(function () { bind3D(); go(); }, 500); }, function () { toast('The 3D window could not start.'); });
   }
-  window.KAGarmentStudio = { freeDrape: freeDrape, styleChanged: styleChanged, render: render, show: show, select: select, state: function () { return { lay: lay, sel: sel }; }, doAction: doAction, setView: setView, setMode: setMode };
+  window.KAGarmentStudio = { withView: withView, freeDrape: freeDrape, styleChanged: styleChanged, render: render, show: show, select: select, state: function () { return { lay: lay, sel: sel }; }, doAction: doAction, setView: setView, setMode: setMode };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();

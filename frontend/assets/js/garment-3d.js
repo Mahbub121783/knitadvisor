@@ -120,7 +120,7 @@ export class GarmentView {
   setSpin(on) { this.spin = !!on; }
 
   clear() {
-    this._cloth = null; this._simBusy = false; this._simGroup = null; this._docOverride = null; this._hemRing = null; this._cuffParam = null; this._mannequin = null;
+    this._cloth = null; this._simBusy = false; this._simGroup = null; this._docOverride = null; this._arr = null; this._hemRing = null; this._cuffParam = null; this._mannequin = null;
     if (this._hiMats) this._hiMats.clear();
     while (this.group.children.length) { const o = this.group.children[0]; this.group.remove(o); o.traverse((n) => { if (n.geometry) n.geometry.dispose(); }); }
     this.mats.forEach((m) => { if (m.map) m.map.dispose(); m.dispose(); }); this.mats = [];
@@ -450,6 +450,57 @@ export class GarmentView {
     if (this.onSim) this.onSim({ state: 'running', step: 0, total: this._simTarget });
     return true;
   }
+  // ── arranging: the pieces shown where they start on the body (no cloth yet), to be picked and moved with the mouse ──
+  //   opt: { selected, onPick(id), onDown(id, info), onMove(id, info), onUp(id, info) }; info = { y, phi, part, shift, alt } where the pointer is on the body:
+  //   its height, its angle round the body (0 = the front), and the part it is over ('torso', 'armL', 'armR', 'legL', 'legR')
+  showArrange(doc, opt) {
+    const K = window.KASim; if (!K || !doc) return false; const keep = this._arr && this._arr.sel;
+    this.stopSim && this.simMode && (this.simMode = false); this.clear(); this._sim = null; this._mkThread(); this.simMode = false;
+    const built = K.fromDoc(doc), desc = doc.avatar, palette = [0x4f8fd8, 0xe0894d, 0x6cc08b, 0xc77ed6, 0xe4c35a, 0x58c4cf, 0xd96b7a, 0x9aa7b5], g = new THREE.Group(), meshes = {};
+    this._arrDesc = desc; this._arr = { desc, opt: opt || {}, sel: (opt && opt.selected) || keep || null, meshes, insts: built.insts, group: g, rings: [] };
+    built.insts.forEach((it, k) => {
+      const N = it.mesh.pts.length, geo = new THREE.BufferGeometry(), pos = new Float32Array(3 * N), idx = []; it.mesh.pts.forEach((q, i) => { const m = it.map(q[0], q[1]); pos[3 * i] = m[0]; pos[3 * i + 1] = m[1]; pos[3 * i + 2] = m[2]; });
+      it.mesh.tris.forEach((t) => idx.push(t[0], t[1], t[2])); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage)); geo.setIndex(idx); geo.computeVertexNormals();
+      const mat = new THREE.MeshStandardMaterial({ color: palette[k % palette.length], roughness: 0.85, metalness: 0, side: THREE.DoubleSide, transparent: true, opacity: 0.78 }), mesh = new THREE.Mesh(geo, mat); mesh.userData.piece = it.pid; mesh.frustumCulled = false; g.add(mesh); meshes[it.pid] = { mesh, it };
+    });
+    // the places on the body a piece can be hung from: a ring round the body at each
+    const ellipseAt = (y) => { const kk = desc.loft.keys; if (y >= kk[0][0]) return [kk[0][1], kk[0][2]]; if (y <= kk[kk.length - 1][0]) return [kk[kk.length - 1][1], kk[kk.length - 1][2]]; for (let i = 0; i + 1 < kk.length; i++) if (y <= kk[i][0] && y >= kk[i + 1][0]) { const t = (kk[i][0] - y) / (kk[i][0] - kk[i + 1][0] || 1); return [kk[i][1] + (kk[i + 1][1] - kk[i][1]) * t, kk[i][2] + (kk[i + 1][2] - kk[i][2]) * t]; } return [kk[0][1], kk[0][2]]; };
+    Object.keys(desc.anchors || {}).forEach((name) => {
+      const y = desc.anchors[name], e = ellipseAt(y), pts = Array.from({ length: 48 }, (_, i) => new THREE.Vector3((e[0] + 2.2) * Math.sin((i / 48) * 2 * Math.PI), y, (e[1] + 2.2) * Math.cos((i / 48) * 2 * Math.PI))), line = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35 }));
+      line.userData.anchor = name; g.add(line); this._arr.rings.push({ name, y, line });
+    });
+    this.group.add(g); this.showMannequin(true); this._shadowAndFrame((desc.top || 170) - 20, 90); this._arrPaint(); this._arrBind(true); return true;
+  }
+  hideArrange() { this._arrBind(false); this._arr = null; if (this.controls) this.controls.enabled = true; this._arrDesc = null; }
+  // pieces repainted: the chosen one brighter, an anchor ring lit while a piece is snapped to it
+  _arrPaint(snapName) {
+    const A = this._arr; if (!A) return; Object.keys(A.meshes).forEach((id) => { const m = A.meshes[id].mesh.material, on = id === A.sel; m.opacity = on ? 0.95 : 0.7; m.emissive = new THREE.Color(on ? 0x335577 : 0x000000); m.needsUpdate = true; });
+    A.rings.forEach((r) => { const on = r.name === snapName; r.line.material.opacity = on ? 1 : 0.35; r.line.material.color.set(on ? 0xffd34d : 0xffffff); });
+  }
+  arrSelect(id) { if (this._arr) { this._arr.sel = id || null; this._arrPaint(); } }
+  // the piece moved: where each of its points is now (fn: the flat point of the piece -> [x, y, z])
+  setPiecePoints(id, fn, snapName) {
+    const A = this._arr, m = A && A.meshes[id]; if (!m) return; const a = m.mesh.geometry.attributes.position; m.it.mesh.pts.forEach((q, i) => { const v = fn(q[0], q[1]); a.array[3 * i] = v[0]; a.array[3 * i + 1] = v[1]; a.array[3 * i + 2] = v[2]; }); a.needsUpdate = true; m.mesh.geometry.computeVertexNormals(); this._arrPaint(snapName);
+  }
+  _arrBind(on) {
+    const el = this.renderer.domElement;
+    if (!on) { if (this._arrH) { el.removeEventListener('pointerdown', this._arrH.d, true); window.removeEventListener('pointermove', this._arrH.m, true); window.removeEventListener('pointerup', this._arrH.u, true); this._arrH = null; } return; }
+    if (this._arrH) return;
+    const info = (e) => {                                    // the pointer on the body: a ray against the plane through the body's axis that faces the camera
+      const r = el.getBoundingClientRect(), rc = new THREE.Raycaster(); rc.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), this.camera);
+      const cam = this.camera.position.clone(); cam.y = 0; const n = cam.lengthSq() ? cam.normalize() : new THREE.Vector3(0, 0, 1), plane = new THREE.Plane(n, 0), pt = new THREE.Vector3(); if (!rc.ray.intersectPlane(plane, pt)) return null;
+      this.group.updateMatrixWorld(true); const h = this.group.worldToLocal(pt.clone()), d = this._arr.desc, L = d.limbs || {}; let part = 'torso', best = 4;
+      Object.keys(L).forEach((k) => { const P = L[k]; for (let i = 1; i < P.length; i++) { const A = new THREE.Vector3(P[i - 1][0], P[i - 1][1], P[i - 1][2]), B = new THREE.Vector3(P[i][0], P[i][1], P[i][2]), ab = B.clone().sub(A), t = Math.max(0, Math.min(1, h.clone().sub(A).dot(ab) / (ab.lengthSq() || 1))), dist = A.clone().add(ab.multiplyScalar(t)).distanceTo(h) - (P[i - 1][3] + (P[i][3] - P[i - 1][3]) * t); if (dist < best) { best = dist; part = k; } } });
+      return { y: h.y, x: h.x, phi: Math.atan2(h.x, h.z), part, shift: e.shiftKey, alt: e.altKey };
+    };
+    const down = (e) => {
+      if (e.button !== 0 || !this._arr) return; const id = this.pick(e.clientX, e.clientY), A = this._arr; if (!id || !A.meshes[id]) { return; }
+      e.stopPropagation(); e.preventDefault(); this.controls.enabled = false; this.spin = false; A.sel = id; this._arrPaint(); const i0 = info(e); A.drag = { id, i0 }; if (A.opt.onPick) A.opt.onPick(id); if (A.opt.onDown && i0) A.opt.onDown(id, i0);
+    };
+    const move = (e) => { const A = this._arr; if (!A || !A.drag) return; const i = info(e); if (i && A.opt.onMove) A.opt.onMove(A.drag.id, i); };
+    const up = (e) => { const A = this._arr; if (!A || !A.drag) return; const d = A.drag; A.drag = null; this.controls.enabled = true; const i = info(e); if (A.opt.onUp) A.opt.onUp(d.id, i || d.i0); };
+    el.addEventListener('pointerdown', down, true); window.addEventListener('pointermove', move, true); window.addEventListener('pointerup', up, true); this._arrH = { d: down, m: move, u: up };
+  }
   _simUpload() {
     const c = this._cloth; if (!c) return;
     this._simMeshes.forEach(({ mesh, off, N }) => { const a = mesh.geometry.attributes.position; a.array.set(c.X.subarray(3 * off, 3 * (off + N))); a.needsUpdate = true; mesh.geometry.computeVertexNormals(); });
@@ -491,8 +542,8 @@ export class GarmentView {
   // the mannequin the cloth hangs on, shown or hidden
   showMannequin(on) {
     if (this._mannequin) { this.group.remove(this._mannequin); this._mannequin.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); this._mannequin = null; }
-    this._showBody = !!on; if (!on || !this._cloth) return;
-    const d = this._cloth.body.desc, parts = this._cloth.body.parts || (d && { loft: d.loft && { keys: d.loft.keys, y0: d.loft.from == null ? Math.max(-4, d.loft.keys[d.loft.keys.length - 1][0]) : d.loft.from + 0.5, y1: d.loft.keys[0][0] - 1 }, caps: d.caps || [], spheres: d.spheres || [] }); if (!parts) return;
+    this._showBody = !!on; const bodyObj = this._cloth ? this._cloth.body : (this._arrDesc ? { desc: this._arrDesc } : null); if (!on || !bodyObj) return;
+    const d = bodyObj.desc, parts = bodyObj.parts || (d && { loft: d.loft && { keys: d.loft.keys, y0: d.loft.from == null ? Math.max(-4, d.loft.keys[d.loft.keys.length - 1][0]) : d.loft.from + 0.5, y1: d.loft.keys[0][0] - 1 }, caps: d.caps || [], spheres: d.spheres || [] }); if (!parts) return;
     const g = new THREE.Group(), mat = new THREE.MeshStandardMaterial({ color: 0xcfc8c0, roughness: 0.9, transparent: true, opacity: 0.55 }), ring = (a, b, y, n = 36) => Array.from({ length: n }, (_, i) => new THREE.Vector3(a * Math.cos((i / n) * TAU), y, b * Math.sin((i / n) * TAU)));
     if (parts.loft) { const L = parts.loft, rows = [], N = 36, steps = 24; for (let j = 0; j <= steps; j++) { const y = L.y1 - ((L.y1 - L.y0) * j) / steps, k = L.keys; let a = k[k.length - 1][1], b = k[k.length - 1][2]; for (let q = 1; q < k.length; q++) if (y >= k[q][0]) { const t = (k[q - 1][0] - y) / (k[q - 1][0] - k[q][0] || 1); a = k[q - 1][1] + (k[q][1] - k[q - 1][1]) * t; b = k[q - 1][2] + (k[q][2] - k[q - 1][2]) * t; break; } if (y >= k[0][0]) { a = k[0][1]; b = k[0][2]; } rows.push(ring(a, b, y, N)); }
       const pos = [], idx = []; rows.forEach((r) => r.forEach((v) => pos.push(v.x, v.y, v.z))); for (let j = 0; j < steps; j++) for (let i = 0; i < N; i++) { const a = j * N + i, b = j * N + ((i + 1) % N), c = a + N, d = b + N; idx.push(a, c, b, b, c, d); }
