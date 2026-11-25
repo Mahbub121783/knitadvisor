@@ -267,3 +267,4 @@ body.gs-dragging { user-select: none; cursor: col-resize; } body.gs-dragging.gs-
 .gf-name { font-size: 12px; fill: #374151; pointer-events: none; } .gf-ease { font-size: 10.5px; fill: #166534; pointer-events: none; } .gf-ease.warn { fill: #b91c1c; font-weight: 700; } .gf-thread { stroke-width: 1.2; stroke-dasharray: 3 4; opacity: .7; }
 @media (max-width: 760px) { .gf-main { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) 42%; } .gf-side { border-left: 0; border-top: 1px solid var(--line); } }
 .gf-stitch { stroke: #ca8a04; stroke-width: 1.4; stroke-dasharray: 2 3; } .gf-stp { fill: #fff; stroke: #ca8a04; stroke-width: 1.5; } .gf-stp.sel { fill: #ca8a04; }
+.gf-fold { stroke: #7c3aed; stroke-width: 1.5; stroke-dasharray: 8 3 2 3; } .gf-button { fill: #f1e9d8; stroke: #6b7280; stroke-width: 1.2; } .gf-edge.top { stroke-dasharray: 1 3; } .gf-edge.att { filter: drop-shadow(0 0 1px #ca8a04); }

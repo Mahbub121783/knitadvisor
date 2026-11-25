@@ -197,7 +197,7 @@
       anchors: { neck: Y(150), shoulder: Y(145), chest: Y(125), waist: Y(108), 'high hip': Y(98), hip: Y(90), crotch: Y(80), knee: Y(45), ankle: Y(6) }, measures: { height: m.height, chest: m.chest, waist: m.waist, hip: m.hip, shoulder: m.shoulder } };
   }
   // wrap a piece round a limb: its height runs down the limb, its width round it (the seam on the far side from the body's middle)
-  function limbMap(desc, arr, poly) {
+  function limbMap(desc, arr, poly, give) {
     const L = desc.limbs && desc.limbs[arr.mode]; if (!L) return null;
     const bb = bbox(poly), cl = [0]; for (let i = 1; i < L.length; i++) cl.push(cl[i - 1] + Math.hypot(L[i][0] - L[i - 1][0], L[i][1] - L[i - 1][1], L[i][2] - L[i - 1][2]));
     const side = L[0][0] >= 0 ? 1 : -1, gap = arr.gap == null ? 1.2 : arr.gap, tot = cl[cl.length - 1];
@@ -206,7 +206,7 @@
       const d0 = Math.max(0, Math.min(tot, (y - bb.y0) + (arr.along || 0))); let i = 0; while (i + 2 < L.length && cl[i + 1] < d0) i++;
       const t = Math.max(0, Math.min(1, (d0 - cl[i]) / ((cl[i + 1] - cl[i]) || 1))), A = L[i], B = L[i + 1], ctr = [0, 1, 2].map((k) => A[k] + (B[k] - A[k]) * t), r = A[3] + (B[3] - A[3]) * t + gap;
       const dv = [B[0] - A[0], B[1] - A[1], B[2] - A[2]], dl = Math.hypot(...dv) || 1, d = dv.map((v) => v / dl), o = [side, 0, 0], od = o[0] * d[0] + o[1] * d[1] + o[2] * d[2], e1r = [o[0] - od * d[0], o[1] - od * d[1], o[2] - od * d[2]], el = Math.hypot(...e1r) || 1, e1 = e1r.map((v) => v / el), e2 = cross(d, e1);
-      const f = (x - bb.x0) / Math.max(1e-3, bb.w), ring = 2 * Math.PI * r, span = 2 * Math.PI * Math.min(1, bb.w / ring), phi = (f - 0.5) * span + (arr.dx || 0) / r;
+      const f = (x - bb.x0) / Math.max(1e-3, bb.w), ring = 2 * Math.PI * r, span = 2 * Math.PI * Math.min(1, (bb.w * (1 + (give || 0))) / ring), phi = (f - 0.5) * span + (arr.dx || 0) / r;
       return [0, 1, 2].map((k) => ctr[k] + r * (Math.cos(phi) * e1[k] + Math.sin(phi) * e2[k]));
     };
   }
@@ -230,8 +230,8 @@
     return P;
   }
   // where the flat point (x, y) of a piece starts, in 3D. wrap: the width of the piece round the body once (row by row); front / back: the half of the body, side to side
-  function arrangeMap(desc, arr, poly) {
-    if (/^(arm|leg)[LR]$/.test(arr.mode || '')) { const lm = limbMap(desc, arr, poly); if (lm) return lm; }
+  function arrangeMap(desc, arr, poly, give) {
+    if (/^(arm|leg)[LR]$/.test(arr.mode || '')) { const lm = limbMap(desc, arr, poly, give); if (lm) return lm; }
     const bb = bbox(poly), mode = arr.mode || 'wrap', gap = arr.gap == null ? 1.5 : arr.gap;
     const span = (y) => {                                                        // the outer extent of the outline on this row
       const yy = Math.min(bb.y1 - 0.01, Math.max(bb.y0 + 0.01, y)), xs = []; for (let i = 0; i < poly.length; i++) { const a = poly[i], b = poly[(i + 1) % poly.length]; if ((a[1] > yy) !== (b[1] > yy)) xs.push(a[0] + ((yy - a[1]) / (b[1] - a[1])) * (b[0] - a[0])); }
@@ -243,7 +243,7 @@
       const [lo, hi] = span(y), wr = Math.max(1e-3, hi - lo), lo0 = mode === 'wrap' ? 0.3 : 0.55, q = Math.max(0, Math.min(1, (wr / Math.max(1e-3, bb.w) - lo0) / 0.25)), wt = q * q * (3 - 2 * q);
       const l0 = bb.x0 + (lo - bb.x0) * wt, w = Math.max(1e-3, bb.w + (wr - bb.w) * wt), f = (x - l0) / w;
       // a piece narrower than the way round the body keeps its own width (its seams then have a gap to pull shut); a wider one is gathered to fit
-      const ring = Math.PI * (3 * (a + b) - Math.sqrt((3 * a + b) * (a + 3 * b))) * (mode === 'wrap' ? 1 : 0.5), arcSpan = (mode === 'wrap' ? 2 : 1) * Math.PI * Math.min(1, w / Math.max(1e-3, ring));
+      const ring = Math.PI * (3 * (a + b) - Math.sqrt((3 * a + b) * (a + 3 * b))) * (mode === 'wrap' ? 1 : 0.5), arcSpan = (mode === 'wrap' ? 2 : 1) * Math.PI * Math.min(1, (w * (1 + (give || 0))) / Math.max(1e-3, ring));
       const phi = (f - 0.5) * arcSpan + (arr.dx || 0) / (a || 1) + (mode === 'back' ? Math.PI : 0);
       return [a * Math.sin(phi), wy, b * Math.cos(phi)];
     };
@@ -251,11 +251,30 @@
 
   // ── the project as a garment document ──
   function toDoc(P, opt) {
-    const D = KD(), o = opt || {}, desc = o.avatar || (P.body ? bodyFromMeasures(P.body) : standardBody()), pieces = [], info = {};
-    P.pieces.forEach((p) => {
+    const D = KD(), o = opt || {}, desc = o.avatar || (P.body ? bodyFromMeasures(P.body) : standardBody()), pieces = [], info = {}, trims = [], topstitch = [], extra = [];
+    const KS = root.KASim || (typeof require !== 'undefined' ? require('./garment-sim.js') : null), giveOf = (p) => { const fam = p.fab || (p.mat === 'rib' ? 'rib' : null) || (P.fabric && P.fabric.family), f = KS && KS.FAMILIES && KS.FAMILIES[fam]; return f ? Math.min(0.5, f.x * 0.9) : 0; };
+    const place = (p) => {
       const fl = flatten(p), bb = bbox(fl.poly), local = fl.poly.map(([x, y]) => [r3(x - bb.x0), r3(y - bb.y0)]), sh = shares(p, fl);
-      const map = arrangeMap(desc, p.arr, local); info[p.id] = { fl, sh, local, map };
-      pieces.push({ id: p.id, pid: p.id, name: p.name, poly: local, labels: fl.labels, material: p.mat || 'main', grp: null, pinAll: false, placement: D.samplePlacement(local, map, 1) });
+      let map;
+      if (p.arr.mode === 'patch' && info[p.arr.on]) map = patchMap(info[p.arr.on].map, p.arr);
+      else map = arrangeMap(desc, p.arr.mode === 'patch' ? Object.assign({}, p.arr, { mode: 'wrap' }) : p.arr, local, giveOf(p));
+      info[p.id] = { fl, sh, local, map, bb };
+    };
+    P.pieces.filter((p) => p.arr.mode !== 'patch').forEach(place); P.pieces.filter((p) => p.arr.mode === 'patch').forEach(place);
+    P.pieces.forEach((p) => {
+      const I = info[p.id], bx = I.bb.x0, by = I.bb.y0, fam = p.fab || null;
+      pieces.push(Object.assign({ id: p.id, pid: p.id, name: p.name, poly: I.local, labels: I.fl.labels, material: p.mat || 'main', grp: null, pinAll: false, placement: D.samplePlacement(I.local, I.map, 1) }, fam ? { fab: fam } : {},
+        (p.folds || []).length ? { folds: p.folds.map((f) => ({ a: [r3(f.a[0] - bx), r3(f.a[1] - by)], b: [r3(f.b[0] - bx), r3(f.b[1] - by)], angle: f.angle })) } : {}));
+      (p.buttons || []).forEach((b) => trims.push({ kind: 'button', piece: p.id, x: r3(b.x - bx), y: r3(b.y - by), r: b.r || 0.6 }));
+      p.edges.forEach((ed, e) => { const q = I.sh[e]; if (ed.topstitch) topstitch.push({ piece: p.id, s0: r3(q.s0), s1: r3(e === p.edges.length - 1 ? 1.0001 : q.s1) }); });
+    });
+    // a patch (a pocket, a label) sewn down along the edges marked so: its outline is stitched to the point of the piece below it where it lies
+    P.pieces.forEach((p) => {
+      if (p.arr.mode !== 'patch' || !info[p.arr.on]) return; const I = info[p.id], px = (p.arr.x || 0) - 0, py = (p.arr.y || 0), parent = info[p.arr.on];
+      p.edges.forEach((ed, e) => {
+        if (!ed.attach) return; const c = seg(p, e), L = I.sh[e].len, n = Math.max(1, Math.ceil(L / 2)), q = I.sh[e];
+        for (let k = 0; k <= n; k++) { const pt = bez(c, k / n), lx = pt[0] - I.bb.x0, ly = pt[1] - I.bb.y0; extra.push({ a: [p.id, r3((q.s0 + (q.s1 - q.s0) * (k / n)) % 1)], b: [p.arr.on, null, r3(lx + px), r3(ly + py)] }); }
+      });
     });
     const pins = []; P.pieces.forEach((p) => p.edges.forEach((ed, e) => { if (ed.hold) { const s = info[p.id].sh[e]; pins.push({ piece: p.id, s0: r3(s.s0), s1: r3(e === p.edges.length - 1 ? 1.0001 : s.s1) }); } }));
     const where = (g, end) => { const p = byId(P, g.piece), e = p.edges.findIndex((x) => x.id === g.eid), I = info[p.id], q = I.local[end ? I.sh[e].i1 : I.sh[e].i0]; return I.map(q[0], q[1]); };
@@ -265,11 +284,32 @@
       const ok = (g) => byId(P, g.piece) && byId(P, g.piece).edges.some((x) => x.id === g.eid); if (!s.a.every(ok) || !s.b.every(ok)) return;
       const A0 = where(s.a[0], false), A1 = where(s.a[s.a.length - 1], true), B0 = where(s.b[0], false), B1 = where(s.b[s.b.length - 1], true), auto = dist(A0, B0) + dist(A1, B1) > dist(A0, B1) + dist(A1, B0) + 1e-6, rev = auto !== !!s.flip;
       const mk = (g, r) => { const p = byId(P, g.piece), e = p.edges.findIndex((x) => x.id === g.eid), q = info[p.id].sh[e]; return { piece: g.piece, s0: r3(q.s0), s1: r3(e === p.edges.length - 1 ? 1.0001 : q.s1), rev: r || undefined }; };
-      seams.push({ a: s.a.map((g) => mk(g, false)), b: (rev ? s.b.slice().reverse() : s.b).map((g) => mk(g, rev)), mode: 'share' });
+      seams.push(Object.assign({ a: s.a.map((g) => mk(g, false)), b: (rev ? s.b.slice().reverse() : s.b).map((g) => mk(g, rev)), mode: 'share' }, s.zip ? { zip: true } : {}));
     });
     seams.forEach((s) => s.b.forEach((g) => { if (g.rev === undefined) delete g.rev; })); seams.forEach((s) => s.a.forEach((g) => { delete g.rev; }));
-    return { format: D.FORMAT, version: D.VERSION, unit: 'cm', name: P.name, block: null, fabric: { gsm: P.fabric && +P.fabric.gsm || 0 }, pieces, stitches: (P.stitches || []).filter((t) => info[t.a.piece] && info[t.b.piece]).map((t) => ({ a: [t.a.piece, t.a.s], b: [t.b.piece, t.b.s] })), seams, pins, avatar: desc, sim: { gravity: 980 } };
+    return { format: D.FORMAT, version: D.VERSION, unit: 'cm', name: P.name, block: null, fabric: Object.assign({ gsm: P.fabric && +P.fabric.gsm || 0 }, P.fabric && P.fabric.family ? { family: P.fabric.family } : {}, P.fabric && P.fabric.stretch ? { stretch: P.fabric.stretch } : {}), pieces, stitches: (P.stitches || []).filter((t) => info[t.a.piece] && info[t.b.piece]).map((t) => { const end = (e) => (e.s != null ? [e.piece, e.s] : [e.piece, null, r3(e.x - info[e.piece].bb.x0), r3(e.y - info[e.piece].bb.y0)]); return { a: end(t.a), b: end(t.b) }; }).concat(extra), seams, pins, trims, topstitch, avatar: desc, sim: Object.assign({ gravity: 980 }, P.pieces.some((p) => p.arr.mode === 'patch' || (p.folds || []).length) ? { selfCollide: true } : {}) };
   }
+
+  // ── details ──
+  // where a patch starts: on the piece below, at (x, y) of that piece, a hair off its surface (outward from the body)
+  function patchMap(parentMap, arr) {
+    const gap = arr.gap == null ? 1 : arr.gap, px = arr.x || 0, py = arr.y || 0, e = 0.5;
+    return (x, y) => {
+      const u = x + px, v = y + py, P0 = parentMap(u, v), A = parentMap(u + e, v), B = parentMap(u, v + e), t1 = [A[0] - P0[0], A[1] - P0[1], A[2] - P0[2]], t2 = [B[0] - P0[0], B[1] - P0[1], B[2] - P0[2]];
+      let n = [t1[1] * t2[2] - t1[2] * t2[1], t1[2] * t2[0] - t1[0] * t2[2], t1[0] * t2[1] - t1[1] * t2[0]]; const nl = Math.hypot(...n) || 1; n = n.map((c) => c / nl);
+      const out = n[0] * P0[0] + n[2] * P0[2] < 0 ? -1 : 1;                                   // outward = away from the body's upright axis
+      return [P0[0] + out * n[0] * gap, P0[1] + out * n[1] * gap, P0[2] + out * n[2] * gap];
+    };
+  }
+  // a crease: a line across a piece that its cloth is held folded along, to `angle` degrees (180 is flat)
+  const addFold = (p, a, b, angle) => { p.folds = p.folds || []; p.folds.push({ a: [r3(a[0]), r3(a[1])], b: [r3(b[0]), r3(b[1])], angle: angle == null ? 60 : angle }); return p.folds.length - 1; };
+  // a pleat: two creases across the piece, one folded the one way and one the other, `width` apart
+  function addPleat(p, x, width, angle) { const bb = bbox(flatten(p).poly); return [addFold(p, [x, bb.y0 - 1], [x, bb.y1 + 1], angle == null ? 40 : angle), addFold(p, [x + width, bb.y0 - 1], [x + width, bb.y1 + 1], angle == null ? 40 : angle)]; }
+  const addButton = (p, x, y, r) => { p.buttons = p.buttons || []; p.buttons.push({ x: r3(x), y: r3(y), r: r || 0.6 }); return p.buttons.length - 1; };
+  const setZip = (P, seamId, on) => { const s = P.seams.find((q) => q.id === seamId); if (s) s.zip = !!on; return !!s; };
+  // hold a point inside one piece to a point inside another (a button to its hole, a tack through two layers)
+  function tack(P, a, b) { if (!byId(P, a.piece) || !byId(P, b.piece)) return null; P.stitches = P.stitches || []; const t = { id: nid(P, 't'), a: { piece: a.piece, x: r3(a.x), y: r3(a.y) }, b: { piece: b.piece, x: r3(b.x), y: r3(b.y) } }; P.stitches.push(t); return t; }
+  const setFabric = (P, family, gsm) => { if (family != null) { if (family) P.fabric.family = family; else delete P.fabric.family; } if (gsm) P.fabric.gsm = gsm; };
 
   // ── a flat pattern as drawn, with its seam allowance, in true size (an SVG a plotter can print) ──
   function toSVG(P, allow) {
@@ -293,6 +333,6 @@
     },
   };
 
-  const KAPat = { create, byId, addPiece, rect, ellipse, flatten, shares, edgeLen, area, bbox, inside, nearest, moveNode, moveHandle, toggleSmooth, translate, addNode, removeNode, removePiece, addDart, addNotch, addLine, mirrorCopy, mirrorFold, allowance, sew, unsew, addToSeam, flipSeam, stitch, unstitch, bodyFromMeasures, PRESETS, autoArrange, seamInfo, standardBody, arrangeMap, toDoc, toSVG, TEMPLATES, handles, seg, clone };
+  const KAPat = { create, byId, addPiece, rect, ellipse, flatten, shares, edgeLen, area, bbox, inside, nearest, moveNode, moveHandle, toggleSmooth, translate, addNode, removeNode, removePiece, addDart, addNotch, addLine, mirrorCopy, mirrorFold, allowance, addFold, addPleat, addButton, setZip, tack, setFabric, patchMap, sew, unsew, addToSeam, flipSeam, stitch, unstitch, bodyFromMeasures, PRESETS, autoArrange, seamInfo, standardBody, arrangeMap, toDoc, toSVG, TEMPLATES, handles, seg, clone };
   root.KAPat = KAPat; if (typeof module !== 'undefined' && module.exports) module.exports = KAPat;
 })(typeof window !== 'undefined' ? window : globalThis);

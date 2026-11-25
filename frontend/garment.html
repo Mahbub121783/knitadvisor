@@ -16,7 +16,7 @@
   <link rel="stylesheet" href="assets/css/style.css?v=20260603c">
   <link rel="stylesheet" href="assets/css/theme-v2.css?v=20261112c">
   <link rel="stylesheet" href="assets/css/garment.css?v=20261205f">
-  <link rel="stylesheet" href="assets/css/garment-studio.css?v=20261206b">
+  <link rel="stylesheet" href="assets/css/garment-studio.css?v=20261206d">
   <script type="importmap">
   {
     "imports": {
@@ -68,6 +68,8 @@
           <button type="button" role="menuitem" data-do="drape-medium"><i data-ic="cloth"></i>Cloth: medium</button>
           <button type="button" role="menuitem" data-do="drape-stiff"><i data-ic="cloth"></i>Cloth: stiff (a heavy fleece)</button>
           <button type="button" role="menuitem" data-do="mannequin"><i data-ic="body"></i>Show the mannequin</button>
+          <button type="button" role="menuitem" data-do="fitmap"><i data-ic="check"></i>Fit map (how hard the cloth is pulled)</button>
+          <button type="button" role="menuitem" data-do="seamlines"><i data-ic="seam"></i>Show the sewing lines</button>
           <hr>
           <button type="button" role="menuitem" data-do="v-front"><i data-ic="user"></i>Front view</button>
           <button type="button" role="menuitem" data-do="v-back"><i data-ic="user"></i>Back view</button>
@@ -186,6 +188,8 @@
                 <button type="button" class="gs-ib" id="gm-spin" title="Turntable" aria-label="Turntable"><i data-ic="rotate"></i></button>
                 <button type="button" class="gs-ib" id="gm-snap" title="Save a picture" aria-label="Save a picture"><i data-ic="camera"></i></button>
                 <button type="button" class="gs-ib" id="gm-drape" data-do="drape" title="Drape the garment on a mannequin (cloth simulation)" aria-label="Drape the garment"><i data-ic="cloth"></i></button>
+                <button type="button" class="gs-ib" id="gm-fitmap" data-do="fitmap" title="Fit map: how hard the cloth is pulled" aria-label="Fit map"><i data-ic="check"></i></button>
+                <button type="button" class="gs-ib" id="gm-seamlines" data-do="seamlines" title="Show the sewing lines" aria-label="Sewing lines"><i data-ic="seam"></i></button>
                 <button type="button" class="gs-ib" id="gm-body" data-do="mannequin" title="Show the mannequin" aria-label="Show the mannequin"><i data-ic="body"></i></button>
                 <span class="gs-rsep"></span>
                 <button type="button" class="gs-ib gs-vb" data-do="v-front" title="Front" aria-label="Front view">F</button>
@@ -422,8 +426,8 @@
 <script src="assets/js/garment-edit.js?v=20261205f"></script>
 <script src="assets/js/garment.js?v=20261205f"></script>
 <script src="assets/js/garment-spec.js?v=20261205f"></script>
-<script src="assets/js/garment-pattern.js?v=20261206b"></script>
-<script src="assets/js/garment-draw.js?v=20261206b"></script>
-<script src="assets/js/garment-studio.js?v=20261206b"></script>
+<script src="assets/js/garment-pattern.js?v=20261206d"></script>
+<script src="assets/js/garment-draw.js?v=20261206d"></script>
+<script src="assets/js/garment-studio.js?v=20261206d"></script>
 </body>
 </html>

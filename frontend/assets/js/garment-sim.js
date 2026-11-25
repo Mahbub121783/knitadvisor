@@ -126,6 +126,22 @@
     return Object.assign(avatar(desc), { kind: 'legs', geo: { top, F, yc, keys, cxl, rt, ra }, parts: { loft: { keys, y0: yc + 0.5, y1: top + 14 }, caps, spheres: [] } });
   }
 
+  // ── fabrics: how far a cloth gives in each direction before it locks (a fraction of its length), and how stiff it bends. TYPICAL numbers by family, not measurements of a given fabric. ──
+  //   x = across the knit (the courses / the weft), y = along it (the wales / the warp), bias = how much more it gives on the diagonal
+  const FAMILIES = {
+    jersey: { x: 0.35, y: 0.15, bias: 0.1, bend: 1 }, rib: { x: 0.8, y: 0.15, bias: 0.1, bend: 0.8 }, interlock: { x: 0.25, y: 0.12, bias: 0.08, bend: 1.2 }, fleece: { x: 0.2, y: 0.1, bias: 0.08, bend: 1.6 },
+    woven: { x: 0.03, y: 0.02, bias: 0.2, bend: 1.4 }, stretch_woven: { x: 0.12, y: 0.04, bias: 0.2, bend: 1.3 }, denim: { x: 0.02, y: 0.015, bias: 0.15, bend: 2.2 }, elastic: { x: 1.0, y: 0.1, bias: 0.05, bend: 0.6 }, lycra: { x: 0.9, y: 0.5, bias: 0.1, bend: 0.5 },
+  };
+  const fabricParams = (fab, family) => { const f = FAMILIES[family || (fab && fab.family)]; if (!f) return null; const u = fab && fab.stretch; return { x: u && u.x > 0 ? u.x : f.x, y: u && u.y > 0 ? u.y : f.y, bias: f.bias, bend: f.bend }; };
+  // what the weight of a cloth does to how it hangs: a heavier cloth is stiffer and a little thicker
+  const physics = (fab) => { const g = (fab && +fab.gsm) || 0; if (!g) return null; return { bend: Math.max(0.01, Math.min(0.4, 0.02 * Math.pow(g / 140, 2.2))), stretch: g > 300 ? 0.97 : 0.955, thick: Math.max(0.3, Math.min(0.9, 0.25 + g / 600)), friction: (fab && fab.friction) || 0.12 }; };
+  const fabEdge = (fab, dx, dy, base) => {                                  // the stiffness scale and the limit of one spring, from its direction in the flat piece
+    if (!fab) return { k: 1, m: base };
+    const l = Math.hypot(dx, dy) || 1, c = Math.abs(dx) / l, sn = Math.abs(dy) / l; let lim = 1 / Math.sqrt((c / fab.x) * (c / fab.x) + (sn / fab.y) * (sn / fab.y)); lim *= 1 + fab.bias * 4 * c * c * sn * sn;
+    return { k: Math.max(0.1, Math.min(1, (base + 0.06) / (lim + 0.06))), m: Math.max(base, lim) };
+  };
+  const segX = (p, q, a, b) => { const d = (q[0] - p[0]) * (b[1] - a[1]) - (q[1] - p[1]) * (b[0] - a[0]); if (Math.abs(d) < 1e-9) return false; const t = ((a[0] - p[0]) * (b[1] - a[1]) - (a[1] - p[1]) * (b[0] - a[0])) / d, u = ((a[0] - p[0]) * (q[1] - p[1]) - (a[1] - p[1]) * (q[0] - p[0])) / d; return t >= 0 && t <= 1 && u >= 0 && u <= 1; };
+
   // ── the cloth ──
   // instances: [{id, mesh, map(x, y) -> [X, Y, Z], rest: 'flat' | 'init', pin: (i) => bool, label: string}]
   class Cloth {
@@ -134,7 +150,7 @@
       this.body = body; this.inst = instances; this.opt = Object.assign({ bend: 0.08, stretch: 0.96, gravity: 980, damp: 0.985, thick: 0.45, friction: 0.12, iters: 14, seamTol: 1.5, maxStrain: 0.02, limitPasses: 8 }, opt);
       let N = 0; instances.forEach((it) => { it.off = N; N += it.mesh.pts.length; });
       this.N = N; this.X = new Float32Array(3 * N); this.Q = new Float32Array(3 * N); this.pin = new Uint8Array(N); this.P0 = new Float32Array(3 * N);
-      const es = [], er = [], bs = [], br = [], flatRest = (it, a, b) => Math.hypot(it.mesh.pts[a][0] - it.mesh.pts[b][0], it.mesh.pts[a][1] - it.mesh.pts[b][1]);
+      const es = [], er = [], ek = [], em = [], bs = [], br = [], bk = [], flatRest = (it, a, b) => Math.hypot(it.mesh.pts[a][0] - it.mesh.pts[b][0], it.mesh.pts[a][1] - it.mesh.pts[b][1]);
       instances.forEach((it) => {
         it.mesh.pts.forEach((p, i) => { const q = it.map(p[0], p[1]), o = 3 * (it.off + i); this.X[o] = this.Q[o] = this.P0[o] = q[0]; this.X[o + 1] = this.Q[o + 1] = this.P0[o + 1] = q[1]; this.X[o + 2] = this.Q[o + 2] = this.P0[o + 2] = q[2]; if (it.pin && it.pin(i, p)) this.pin[it.off + i] = 1; });
         const ed = new Map(), tri = it.mesh.tris;
@@ -142,10 +158,17 @@
         tri.forEach((t, ti) => { [[t[0], t[1]], [t[1], t[2]], [t[2], t[0]]].forEach(([a, b], k) => { const key = a < b ? a * 65536 + b : b * 65536 + a, e = ed.get(key); const opp = t[(k + 2) % 3]; if (e) e.o2 = opp; else ed.set(key, { a, b, o1: opp, o2: -1 }); }); });
         ed.forEach((e) => {
           es.push(it.off + e.a, it.off + e.b); er.push(it.rest === 'init' ? dist3(e.a, e.b) : flatRest(it, e.a, e.b));
-          if (e.o2 >= 0) { bs.push(it.off + e.o1, it.off + e.o2); br.push(it.rest === 'init' ? dist3(e.o1, e.o2) : flatRest(it, e.o1, e.o2)); }
+          const pa = it.mesh.pts[e.a], pb = it.mesh.pts[e.b], fe = fabEdge(it.fab, pb[0] - pa[0], pb[1] - pa[1], this.opt.maxStrain); ek.push(fe.k); em.push(fe.m);
+          if (e.o2 >= 0) {
+            bs.push(it.off + e.o1, it.off + e.o2); let r = it.rest === 'init' ? dist3(e.o1, e.o2) : flatRest(it, e.o1, e.o2), kk = it.fab ? it.fab.bend : 1;
+            (it.folds || []).forEach((fl) => { if (segX(pa, pb, fl.a, fl.b)) { r *= fl.f; kk *= 3; } });                        // a crease: the two sides are held folded
+            if (it.stiffV && (it.stiffV.has(e.a) || it.stiffV.has(e.b))) kk *= 3;                                                // a topstitched edge is stiffer
+            br.push(r); bk.push(kk);
+          }
         });
       });
-      this.es = Int32Array.from(es); this.er = Float32Array.from(er); this.bs = Int32Array.from(bs); this.br = Float32Array.from(br);
+      this.es = Int32Array.from(es); this.er = Float32Array.from(er); this.bs = Int32Array.from(bs); this.br = Float32Array.from(br); this.ek = Float32Array.from(ek); this.em = Float32Array.from(em); this.bk = Float32Array.from(bk);
+      this.vi = new Int32Array(N); this.vl = new Int32Array(N); instances.forEach((it, ii) => { for (let i = 0; i < it.mesh.pts.length; i++) { this.vi[it.off + i] = ii; this.vl[it.off + i] = i; } });
       this._seams();
       if (this.opt.pinSeams && this.opt.seamOf) instances.forEach((it) => { for (let i = 0; i < it.mesh.nb; i++) if (this.opt.pinSeams.indexOf(this.opt.seamOf[it.mesh.blabels[i]]) >= 0) this.pin[it.off + i] = 1; });
       instances.forEach((it) => { if (it.pinAll) for (let i = 0; i < it.mesh.pts.length; i++) this.pin[it.off + i] = 1; });
@@ -208,27 +231,29 @@
         for (let c = 0; c < 3; c++) { const v = (X[a + c] - Q[a + c]) * dd; Q[a + c] = X[a + c]; X[a + c] += v + (c === 1 ? -g * dt * dt : 0); }
       }
       const ks = 1 - Math.pow(1 - o.stretch, 1 / o.iters), kb = 1 - Math.pow(1 - o.bend, 1 / o.iters);          // a stiffness that does not change with the number of passes
+      if (!this._ks || this._ks.ks !== ks || this._ks.kb !== kb) this._ks = { ks, kb, es: Float32Array.from(this.ek, (v) => Math.min(1, ks * v)), bs: Float32Array.from(this.bk, (v) => Math.min(1, kb * v)) };
       for (let it = 0; it < o.iters; it++) {
-        this._pull(this.es, this.er, ks); this._pull(this.bs, this.br, kb);
+        this._pull(this.es, this.er, this._ks.es); this._pull(this.bs, this.br, this._ks.bs);
         this._seamPull(0.5);
-        this._collide();
+        if (it % 3 === 0) this._collide();
+        if (o.selfCollide && it % 4 === 0) this._selfCollide();
       }
       this._limit(this.es, this.er, o.maxStrain);          // cloth does not stretch like rubber: whatever is over the limit is pulled back at once
       this._collide();
       this.t++;
     }
-    _pull(S, R, k) {
+    _pull(S, R, K) {
       const X = this.X, pin = this.pin;
       for (let e = 0, n = R.length; e < n; e++) {
         const a = S[2 * e], b = S[2 * e + 1], A = 3 * a, B = 3 * b, dx = X[B] - X[A], dy = X[B + 1] - X[A + 1], dz = X[B + 2] - X[A + 2], l = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1e-9;
-        const wa = pin[a] ? 0 : 1, wb = pin[b] ? 0 : 1, w = wa + wb; if (!w) continue; const c = (k * (l - R[e])) / (l * w);
+        const wa = pin[a] ? 0 : 1, wb = pin[b] ? 0 : 1, w = wa + wb; if (!w) continue; const c = (K[e] * (l - R[e])) / (l * w);
         X[A] += dx * c * wa; X[A + 1] += dy * c * wa; X[A + 2] += dz * c * wa; X[B] -= dx * c * wb; X[B + 1] -= dy * c * wb; X[B + 2] -= dz * c * wb;
       }
     }
     _limit(S, R, max) {
-      const X = this.X, pin = this.pin;
+      const X = this.X, pin = this.pin; if (!this._lim) this._lim = Float32Array.from(R, (r, e) => r * (1 + this.em[e])); const L = this._lim;
       for (let pass = 0; pass < (this.opt.limitPasses || 8); pass++) for (let e = 0, n = R.length; e < n; e++) {
-        const a = S[2 * e], b = S[2 * e + 1], A = 3 * a, B = 3 * b, dx = X[B] - X[A], dy = X[B + 1] - X[A + 1], dz = X[B + 2] - X[A + 2], l = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1e-9, lim = R[e] * (1 + max);
+        const a = S[2 * e], b = S[2 * e + 1], A = 3 * a, B = 3 * b, dx = X[B] - X[A], dy = X[B + 1] - X[A + 1], dz = X[B + 2] - X[A + 2], l = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1e-9, lim = L[e];
         if (l <= lim) continue; const wa = pin[a] ? 0 : 1, wb = pin[b] ? 0 : 1, w = wa + wb; if (!w) continue; const c = (l - lim) / (l * w);
         X[A] += dx * c * wa; X[A + 1] += dy * c * wa; X[A + 2] += dz * c * wa; X[B] -= dx * c * wb; X[B + 1] -= dy * c * wb; X[B + 2] -= dz * c * wb;
       }
@@ -243,14 +268,52 @@
     }
     _collide() {
       const X = this.X, Q = this.Q, body = this.body, th = this.opt.thick, fr = this.opt.friction, eps = 0.25;
+      if (!this._dc) { this._dc = new Float32Array(this.N); this._dp = new Float32Array(3 * this.N); this._dc.fill(-1e9); }
+      const dc = this._dc, dp = this._dp;
       for (let i = 0; i < this.N; i++) {
-        if (this.pin[i]) continue; const a = 3 * i, x = X[a], y = X[a + 1], z = X[a + 2], d = body.sdf(x, y, z) - th;
+        if (this.pin[i]) continue; const a = 3 * i, x = X[a], y = X[a + 1], z = X[a + 2];
+        if (dc[i] > 0) { const mv = Math.abs(x - dp[a]) + Math.abs(y - dp[a + 1]) + Math.abs(z - dp[a + 2]); if (dc[i] - th - 1.2 * mv > 0.3) continue; }
+        const sd = body.sdf(x, y, z), d = sd - th; dc[i] = sd; dp[a] = x; dp[a + 1] = y; dp[a + 2] = z;
         if (d >= 0) continue;
         let nx = body.sdf(x + eps, y, z) - body.sdf(x - eps, y, z), ny = body.sdf(x, y + eps, z) - body.sdf(x, y - eps, z), nz = body.sdf(x, y, z + eps) - body.sdf(x, y, z - eps); const nl = Math.hypot(nx, ny, nz) || 1; nx /= nl; ny /= nl; nz /= nl;
         X[a] -= nx * d; X[a + 1] -= ny * d; X[a + 2] -= nz * d;
         const vx = X[a] - Q[a], vy = X[a + 1] - Q[a + 1], vz = X[a + 2] - Q[a + 2], vn = vx * nx + vy * ny + vz * nz;           // friction: take away part of what slid along the body this step
         X[a] -= (vx - vn * nx) * fr; X[a + 1] -= (vy - vn * ny) * fr; X[a + 2] -= (vz - vn * nz) * fr;
       }
+    }
+    // cloth against cloth: two layers, or a fold lying on itself, keep a thickness apart (points of one piece that are near each other in the flat, and the sewn outlines of two pieces, are left alone)
+    _selfCollide() {
+      const X = this.X, N = this.N, d0 = this.opt.layer || Math.max(0.5, 2 * this.opt.thick), cell = d0 * 1.5, grid = new Map(), pin = this.pin, h = this.opt.h || 2, near = 3 * h;
+      const kx = (v) => Math.floor(v / cell) + 2048;
+      for (let i = 0; i < N; i++) { const k = (kx(X[3 * i]) * 4096 + kx(X[3 * i + 1])) * 4096 + kx(X[3 * i + 2]); const a = grid.get(k); if (a) a.push(i); else grid.set(k, [i]); }
+      for (let i = 0; i < N; i++) {
+        const a = 3 * i, cx = kx(X[a]), cy = kx(X[a + 1]), cz = kx(X[a + 2]), ii = this.vi[i], li = this.vl[i], bi = li < this.inst[ii].mesh.nb;
+        for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) {
+          const arr = grid.get(((cx + dx) * 4096 + cy + dy) * 4096 + cz + dz); if (!arr) continue;
+          for (let q = 0; q < arr.length; q++) {
+            const j = arr[q]; if (j <= i) continue; const wi = pin[i] ? 0 : 1, wj = pin[j] ? 0 : 1, w = wi + wj; if (!w) continue;
+            const jj = this.vi[j], lj = this.vl[j];
+            if (jj === ii) { const p = this.inst[ii].mesh.pts[li], r = this.inst[ii].mesh.pts[lj]; if (Math.hypot(p[0] - r[0], p[1] - r[1]) < near) continue; }
+            else if (bi && lj < this.inst[jj].mesh.nb) continue;
+            const b = 3 * j, ex = X[b] - X[a], ey = X[b + 1] - X[a + 1], ez = X[b + 2] - X[a + 2], d = Math.sqrt(ex * ex + ey * ey + ez * ez); if (d >= d0 || d < 1e-6) continue;
+            const c = (d0 - d) / (d * w); X[a] -= ex * c * wi; X[a + 1] -= ey * c * wi; X[a + 2] -= ez * c * wi; X[b] += ex * c * wj; X[b + 1] += ey * c * wj; X[b + 2] += ez * c * wj;
+          }
+        }
+      }
+    }
+    // how hard each point is pulled: + is stretched, as a fraction of what its cloth allows (1 = at the limit); - is crowded (squeezed together), as a fraction of a quarter of its length
+    stress() {
+      const X = this.X, out = new Float32Array(this.N);
+      for (let e = 0; e < this.er.length; e++) {
+        const a = this.es[2 * e], b = this.es[2 * e + 1], A = 3 * a, B = 3 * b, l = Math.hypot(X[A] - X[B], X[A + 1] - X[B + 1], X[A + 2] - X[B + 2]), st = l / (this.er[e] || 1) - 1, v = st >= 0 ? st / (this.em[e] || 0.02) : st / 0.25;
+        if (Math.abs(v) > Math.abs(out[a])) out[a] = v; if (Math.abs(v) > Math.abs(out[b])) out[b] = v;
+      }
+      return out;
+    }
+    // a short account of the fit: how much of the cloth is near its limit, and where it is most pulled
+    fitReport() {
+      const s = this.stress(); let tight = 0, loose = 0, worst = 0, wi = 0; for (let i = 0; i < this.N; i++) { if (s[i] > 0.8) tight++; if (s[i] < -0.5) loose++; if (s[i] > worst) { worst = s[i]; wi = i; } }
+      return { tight_pct: (100 * tight) / this.N, crowded_pct: (100 * loose) / this.N, worst, at: [this.X[3 * wi], this.X[3 * wi + 1], this.X[3 * wi + 2]], piece: this.inst[this.vi[wi]].id };
     }
     run(n) { for (let i = 0; i < n; i++) this.step(); }
     // how far the cloth is still moving (cm per step, the mean), the worst seam gap, the deepest point inside the body, the worst stretch
@@ -286,19 +349,25 @@
   function fromDoc(doc, hOverride) {
     const area = doc.pieces.reduce((a, it) => { let s = 0; for (let i = 0; i < it.poly.length; i++) { const p = it.poly[i], q = it.poly[(i + 1) % it.poly.length]; s += p[0] * q[1] - q[0] * p[1]; } return a + Math.abs(s) / 2; }, 0);
     const h = hOverride || Math.max(1.5, Math.min(3.2, Math.sqrt(area / (3200 * 0.866))));
-    const insts = doc.pieces.map((p) => { const mesh = meshPiece(p.poly, p.labels, h); return { id: p.id, pid: p.pid || p.id, mesh, s: outlineS(mesh), map: gridMap(p.placement), rest: p.rest || 'flat', mat: p.material || 'main', grp: p.grp, pinAll: !!p.pinAll }; });
+    const insts = doc.pieces.map((p) => { const mesh = meshPiece(p.poly, p.labels, h); return { id: p.id, pid: p.pid || p.id, mesh, s: outlineS(mesh), map: gridMap(p.placement), rest: p.rest || 'flat', mat: p.material || 'main', grp: p.grp, pinAll: !!p.pinAll, fab: fabricParams(doc.fabric, p.fab || (p.material === 'rib' ? 'rib' : null)), folds: (p.folds || []).map((f) => ({ a: f.a, b: f.b, f: Math.max(0.15, Math.sin((Math.max(5, Math.min(175, f.angle == null ? 60 : f.angle)) * Math.PI) / 360)) })) }; });
     const by = (id) => insts.find((t) => t.id === id), off = []; let N = 0; insts.forEach((it) => { off.push(N); N += it.mesh.pts.length; });
     const near = (it, s) => { let best = 0, bd = 9; it.s.forEach((v, i) => { const d = Math.min(Math.abs(v - s), 1 - Math.abs(v - s)); if (d < bd) { bd = d; best = i; } }); return best; };
-    const fixed = []; (doc.stitches || []).forEach((st) => { const A = by(st.a[0]), B = by(st.b[0]); if (!A || !B) return; fixed.push([off[insts.indexOf(A)] + near(A, st.a[1]), off[insts.indexOf(B)] + near(B, st.b[1])]); });
+    const nearXY = (it, x, y) => { let best = 0, bd = 1e18; it.mesh.pts.forEach((q, i) => { const d = (q[0] - x) * (q[0] - x) + (q[1] - y) * (q[1] - y); if (d < bd) { bd = d; best = i; } }); return best; };
+    const vtx = (A, e) => off[insts.indexOf(A)] + (e[1] == null ? nearXY(A, e[2], e[3]) : near(A, e[1]));                // a stitch end is a share of the way round the outline, or a point inside the piece [id, null, x, y]
+    const fixed = []; (doc.stitches || []).forEach((st) => { const A = by(st.a[0]), B = by(st.b[0]); if (!A || !B) return; fixed.push([vtx(A, st.a), vtx(B, st.b)]); });
     // a segment is a stretch of the outline from s0 to s1 (s1 over 1 goes on round past the start of the outline); the key puts its points in order along it
     const key = (s, g) => { if (s >= g.s0 - 1e-6 && s <= g.s1 + 1e-6) return s; if (g.s1 > 1 && s + 1 >= g.s0 - 1e-6 && s + 1 <= g.s1 + 1e-6) return s + 1; return null; };
     const runs = (segs) => [].concat(...segs.map((g) => { const it = by(g.piece); if (!it) return []; const r = []; for (let i = 0; i < it.mesh.nb; i++) { const k = key(it.s[i], g); if (k != null) r.push([it.id, i, k]); } r.sort((a, b) => (g.rev ? b[2] - a[2] : a[2] - b[2])); return r.map((q) => [q[0], q[1]]); }));
     const sewing = (doc.seams || []).map((sm) => [runs(sm.a), runs(sm.b), sm.mode]);
     const pinSet = new Map(); (doc.pins || []).forEach((p) => { const it = by(p.piece); if (!it) return; const set = pinSet.get(it.id) || new Set(); for (let i = 0; i < it.mesh.nb; i++) if (key(it.s[i], p) != null) set.add(i); pinSet.set(it.id, set); });
     insts.forEach((it) => { const set = pinSet.get(it.id); if (set) it.pin = (i) => set.has(i); });
-    return { insts, body: avatar(doc.avatar), h, opt: Object.assign({ h, seamTol: Math.max(1.6, h * 0.85), fixedPairs: fixed, sewing }, doc.sim || {}) };
+    (doc.topstitch || []).forEach((t) => { const it = by(t.piece); if (!it) return; it.stiffV = it.stiffV || new Set(); for (let i = 0; i < it.mesh.nb; i++) if (it.s[i] >= t.s0 - 1e-6 && it.s[i] <= t.s1 + 1e-6) it.stiffV.add(i); });
+    const trims = (doc.trims || []).map((t) => { const it = by(t.piece); if (!it) return null; return Object.assign({}, t, { v: off[insts.indexOf(it)] + nearXY(it, t.x, t.y) }); }).filter(Boolean);
+    const zips = (doc.seams || []).filter((sm) => sm.zip).map((sm) => runs(sm.a).map(([id, i]) => off[insts.indexOf(by(id))] + i));
+    const ph = doc.fabric && doc.fabric.family ? physics(doc.fabric) : null;
+    return { insts, body: avatar(doc.avatar), h, trims, zips, opt: Object.assign({ h, seamTol: Math.max(1.6, h * 0.85), fixedPairs: fixed, sewing }, ph ? { thick: ph.thick, friction: ph.friction } : {}, doc.sim || {}) };
   }
 
-  const KASim = { delaunay, meshPiece, meshArea, bodyTee, bodyLegs, avatar, lerpKeys, Cloth, DRAPE, ellK, fromDoc, gridMap, outlineS };
+  const KASim = { delaunay, meshPiece, meshArea, bodyTee, bodyLegs, avatar, lerpKeys, Cloth, DRAPE, ellK, fromDoc, gridMap, outlineS, FAMILIES, fabricParams, physics };
   root.KASim = KASim; if (typeof module !== 'undefined' && module.exports) module.exports = KASim;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -405,6 +405,7 @@ export class GarmentView {
   setDrape(name) { this._drape = window.KASim && window.KASim.DRAPE[name] ? name : 'medium'; this._drapeSet = true; if (this.simMode) this.startSim(); }
   stopSim() {
     this.simMode = false; this._simBusy = false;
+    if (this._trimGroup) { this.group.remove(this._trimGroup); this._trimGroup = null; }
     if (this._simGroup) { this.group.remove(this._simGroup); this._simGroup.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); this._simGroup = null; }
     this._cloth = null; this.group.traverse((o) => { if (o.userData && (o.userData.piece || o.userData.seam || o.userData.seamVis)) o.visible = true; });
     if (this.onSim) this.onSim({ state: 'off' });
@@ -430,6 +431,7 @@ export class GarmentView {
     const S = this._sim, mats = S ? { mat: S.mat, rib: S.rib } : this._docMats, hide = S ? S.hide : [];
     this.simMode = true;
     if (this._simGroup) { this.group.remove(this._simGroup); this._simGroup.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); }
+    if (this._trimGroup) { this.group.remove(this._trimGroup); this._trimGroup.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); this._trimGroup = null; }
     const built = K.fromDoc(doc), insts = built.insts, h = built.h;
     /* the stiffness follows the fabric's weight (GSM) unless a cloth setting was chosen by hand: bending stiffness of a sheet grows with its mass and thickness */
     const g = this._gsm || 0, dr = this._drapeSet || !g ? K.DRAPE[this._drape || 'medium'] : { bend: Math.max(0.01, Math.min(0.4, 0.02 * Math.pow(g / 140, 2.2))), stretch: g > 300 ? 0.97 : 0.955 };
@@ -442,7 +444,7 @@ export class GarmentView {
       const material = it.mat === 'rib' ? mats.rib : mats.mat, mesh = new THREE.Mesh(g2, material); mesh.userData.piece = it.pid; mesh.userData.base = material; mesh.frustumCulled = false;
       this._simGroup.add(mesh); this._simMeshes.push({ mesh, off: it.off, N });
     });
-    this.group.add(this._simGroup);
+    this.group.add(this._simGroup); this._built = built; this._mkTrims(built);
     this.group.traverse((o) => { if (o.userData && ((o.userData.piece && hide.indexOf(o.userData.piece) >= 0 && !this._simGroup.children.includes(o)) || o.userData.seam || o.userData.seamVis)) { if (!(this._simGroup && this._simGroup.getObjectById(o.id))) o.visible = false; } });
     this._simSteps = 0; this._simTarget = 300; this._simBusy = true; this._simUpload(); this._applyHi();
     if (this.onSim) this.onSim({ state: 'running', step: 0, total: this._simTarget });
@@ -451,12 +453,39 @@ export class GarmentView {
   _simUpload() {
     const c = this._cloth; if (!c) return;
     this._simMeshes.forEach(({ mesh, off, N }) => { const a = mesh.geometry.attributes.position; a.array.set(c.X.subarray(3 * off, 3 * (off + N))); a.needsUpdate = true; mesh.geometry.computeVertexNormals(); });
+    if (this._fitOn) this._paintFit(); this._moveTrims();
+  }
+  // ── what is sewn on, and how the cloth fits ──
+  // buttons sit on a point of the cloth; a zip is a line of teeth along its seam; the sewing lines are a dot on every stitched pair
+  _mkTrims(built) {
+    const g = new THREE.Group(), T = (built && built.trims) || [], Z = (built && built.zips) || []; this._trimV = []; this._zipV = Z; this._seamPts = null;
+    T.forEach((t) => { if (t.kind !== 'button') return; const m = new THREE.Mesh(new THREE.SphereGeometry(t.r || 0.6, 14, 10), new THREE.MeshStandardMaterial({ color: 0xf1e9d8, roughness: 0.4 })); m.userData.v = t.v; m.userData.trim = true; g.add(m); this._trimV.push(m); });
+    this._zipLines = Z.map((run) => { const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(3 * run.length), 3)); const l = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0x333333 })), p = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xb0b0b0, size: 2.2, sizeAttenuation: false })); g.add(l); g.add(p); l.frustumCulled = p.frustumCulled = false; return geo; });
+    const ss = this._cloth ? this._cloth.ss : null;
+    if (ss && ss.length) { const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(ss.length / 2 * 3), 3)); this._seamPts = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xff7a00, size: 4, sizeAttenuation: false })); this._seamPts.frustumCulled = false; this._seamPts.visible = !!this._seamsOn; g.add(this._seamPts); }
+    this._trimGroup = g; this.group.add(g); this._moveTrims();
+  }
+  _moveTrims() {
+    const c = this._cloth, X = c && c.X; if (!X || !this._trimGroup) return;
+    this._trimV.forEach((m) => { const v = m.userData.v; m.position.set(X[3 * v], X[3 * v + 1], X[3 * v + 2]); });
+    (this._zipLines || []).forEach((geo, k) => { const run = this._zipV[k], a = geo.attributes.position; run.forEach((v, i) => { a.array[3 * i] = X[3 * v]; a.array[3 * i + 1] = X[3 * v + 1]; a.array[3 * i + 2] = X[3 * v + 2]; }); a.needsUpdate = true; });
+    if (this._seamPts && this._seamsOn) { const ss = c.ss, a = this._seamPts.geometry.attributes.position; for (let e = 0, n = ss.length / 2; e < n; e++) { const p = 3 * ss[2 * e], q = 3 * ss[2 * e + 1]; a.array[3 * e] = (X[p] + X[q]) / 2; a.array[3 * e + 1] = (X[p + 1] + X[q + 1]) / 2; a.array[3 * e + 2] = (X[p + 2] + X[q + 2]) / 2; } a.needsUpdate = true; }
+  }
+  setSeamLines(on) { this._seamsOn = !!on; if (this._seamPts) this._seamPts.visible = !!on; this._moveTrims(); return this._seamsOn; }
+  // the fit map: each point coloured by how hard its cloth is pulled (green: easy, yellow: half way, red: at its limit; blue: crowded)
+  setFit(on) {
+    this._fitOn = !!on; if (!this._fitMat) this._fitMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0, side: THREE.DoubleSide });
+    (this._simMeshes || []).forEach(({ mesh }) => { mesh.material = this._fitOn ? this._fitMat : mesh.userData.base; }); if (this._fitOn) this._paintFit(); return this._fitOn;
+  }
+  _paintFit() {
+    const c = this._cloth; if (!c || !c.stress) return; const s = c.stress(), ramp = (v) => { if (v < 0) { const t = Math.min(1, -v); return [0.55 - 0.35 * t, 0.75 - 0.3 * t, 0.9]; } const t = Math.min(1, v); return t < 0.5 ? [0.3 + 1.2 * t, 0.8, 0.35 - 0.3 * t] : [0.9, 0.8 - 1.4 * (t - 0.5), 0.15]; };
+    this._simMeshes.forEach(({ mesh, off, N }) => { let a = mesh.geometry.attributes.color; if (!a) { a = new THREE.BufferAttribute(new Float32Array(3 * N), 3); mesh.geometry.setAttribute('color', a); } for (let i = 0; i < N; i++) { const q = ramp(s[off + i]); a.array[3 * i] = q[0]; a.array[3 * i + 1] = q[1]; a.array[3 * i + 2] = q[2]; } a.needsUpdate = true; });
   }
   _simTick() {
     if (!this._simBusy || !this._cloth) return;
     const t0 = performance.now(); while (performance.now() - t0 < 9 && this._simSteps < this._simTarget) { this._cloth.step(); this._simSteps++; }
     this._simUpload();
-    if (this._simSteps >= this._simTarget) { this._simBusy = false; if (this.onSim) this.onSim({ state: 'done', stats: this._cloth.stats() }); }
+    if (this._simSteps >= this._simTarget) { this._simBusy = false; if (this.onSim) this.onSim({ state: 'done', stats: this._cloth.stats(), fit: this._cloth.fitReport ? this._cloth.fitReport() : null }); }
     else if (this.onSim && this._simSteps % 12 === 0) this.onSim({ state: 'running', step: this._simSteps, total: this._simTarget });
   }
   // the mannequin the cloth hangs on, shown or hidden

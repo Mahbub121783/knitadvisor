@@ -285,7 +285,7 @@
     var v0 = K().view(); if (v0) v0.onSim = function (e) {
       var t = $('gs-3dsim'), b = $('gm-drape'); if (!t) return;
       if (e.state === 'running') t.textContent = 'Draping… ' + Math.round((e.step / e.total) * 100) + ' %';
-      else if (e.state === 'done') t.textContent = 'Draped · ' + e.stats.seams + ' seams · ' + e.stats.points + ' points';
+      else if (e.state === 'done') t.textContent = 'Draped · ' + e.stats.seams + ' seams · ' + e.stats.points + ' points' + (e.fit && K().view() && K().view()._fitOn ? ' · ' + Math.round(e.fit.tight_pct) + ' % of the cloth near its limit' : '');
       else if (e.state === 'off') t.textContent = ''; else if (e.state === 'unavailable') t.textContent = 'The simulation is not available here.'; else if (e.state === 'unsupported') { t.textContent = ''; toast(e.why); }
       if (b) b.classList.toggle('on', e.state === 'running' || e.state === 'done');
     };
@@ -340,6 +340,8 @@
       case 'resetpiece': clickAct('reset'); break; case 'resetsize': clickAct('resetsize'); break; case 'copyall': clickAct('copyall'); break;
       case 'drape': { var vw = k.view(); if (!vw) { toast('The garment is not made yet.'); break; } if (lay.view === '2d') setView('both'); if (vw.simMode) vw.stopSim(); else { vw.startSim(); } break; }
       case 'drape-soft': case 'drape-medium': case 'drape-stiff': { var vw2 = k.view(); if (!vw2) break; vw2.setDrape(a.slice(6)); if (!vw2.simMode) vw2.startSim(); toast('Cloth: ' + a.slice(6)); break; }
+      case 'fitmap': { var vf = k.view(); if (!vf || !vf.simMode) { toast('Drape the garment first: the fit map is how hard the cloth is pulled once it hangs.'); break; } var onf = vf.setFit(!vf._fitOn); toast(onf ? 'Fit map: green is easy, yellow half way, red at the limit of the cloth, blue crowded.' : 'Fit map off.'); var bf = $('gm-fitmap'); if (bf) bf.classList.toggle('on', onf); if (onf && vf._cloth) { var rp = vf._cloth.fitReport(); $('gs-3dsim').textContent = 'Fit · ' + Math.round(rp.tight_pct) + ' % of the cloth near its limit, ' + Math.round(rp.crowded_pct) + ' % crowded'; } break; }
+      case 'seamlines': { var vs = k.view(); if (!vs || !vs.simMode) { toast('Drape the garment first.'); break; } var ons = vs.setSeamLines(!vs._seamsOn); var bs2 = $('gm-seamlines'); if (bs2) bs2.classList.toggle('on', ons); toast(ons ? 'Sewing lines on: a dot on every stitched pair.' : 'Sewing lines off.'); break; }
       case 'mannequin': { var vw3 = k.view(); if (!vw3) break; if (!vw3.simMode) { toast('Drape the garment first: the mannequin is what it hangs on.'); break; } vw3.showMannequin(!vw3._showBody); break; }
       case 'docsave': { var vd = k.view(), dd = vd && vd.doc(); if (!dd) { toast('The garment is not made yet.'); break; } var blob = new Blob([window.KADoc.toJSON(dd)], { type: 'application/json' }), ua = document.createElement('a'); ua.href = URL.createObjectURL(blob); ua.download = (dd.name || 'garment') + '.ka-garment.json'; document.body.appendChild(ua); ua.click(); setTimeout(function () { URL.revokeObjectURL(ua.href); ua.remove(); }, 500); toast('Saved the garment document.'); break; }
       case 'docopen': { var fi = $('gs-docfile'); if (fi) { fi.value = ''; fi.click(); } break; }
