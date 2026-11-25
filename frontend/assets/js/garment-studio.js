@@ -303,11 +303,11 @@
 
   // ── windows, panels, tabs ──
   function setMode(m) {
-    lay.mode = m; $('gs-2dpieces').classList.toggle('on', m === 'pieces'); $('gs-2dedit').classList.toggle('on', m === 'edit');
+    lay.mode = m; $('gs-2dpieces').classList.toggle('on', m === 'pieces'); $('gs-2dedit').classList.toggle('on', m === 'edit'); $('gs-2dfree').classList.toggle('on', m === 'free');
     qa('#gs-2dmode button').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-m') === m); });
-    if (m === 'edit') { if (lay.view === '3d') lay.view = 'both'; if (phoneMQ.matches) lay.pv = '2d'; if (lay.views > 38 && !lay.viewsWas) { lay.viewsWas = lay.views; lay.views = 34; } }      // the editor gets the room
+    if (m === 'edit' || m === 'free') { if (lay.view === '3d') lay.view = 'both'; if (phoneMQ.matches) lay.pv = '2d'; if (lay.views > 38 && !lay.viewsWas) { lay.viewsWas = lay.views; lay.views = 34; } }      // the editor gets the room
     else if (lay.viewsWas) { lay.views = lay.viewsWas; lay.viewsWas = 0; }
-    applyLay(); render(); if (m === 'edit' && window.KAGarmentEdit) setTimeout(function () { window.KAGarmentEdit.fit(); }, 30);
+    applyLay(); render(); if (m === 'edit' && window.KAGarmentEdit) setTimeout(function () { window.KAGarmentEdit.fit(); }, 30); if (m === 'free' && window.KAFreeDraw) setTimeout(function () { window.KAFreeDraw.redraw(); window.KAFreeDraw.fit(); }, 30);
   }
   function setSide(n) { lay.side = n; qa('#gs-sidetabs button').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-sd') === n); }); $('gm-insp').hidden = n !== 'insp'; $('gm-edmeas').hidden = n !== 'meas'; saveLay(); }
   function setBottomTab(t) {
@@ -346,7 +346,7 @@
       case 'refresh3d': k.make({ quiet: true, spin: false }); break;
       case 'spin': if (!k.view()) { k.make({ quiet: true, spin: true }); } else $('gm-spin').click(); break;
       case 'v-front': case 'v-back': case 'v-side': case 'v-quarter': if (!k.view()) { toast('The garment is not made yet.'); break; } if (lay.view === '2d') setView('both'); k.view().setView(a.slice(2)); break;
-      case 'mode-pieces': setMode('pieces'); break; case 'mode-edit': setMode('edit'); break;
+      case 'mode-pieces': setMode('pieces'); break; case 'mode-edit': setMode('edit'); break; case 'mode-free': setMode('free'); break;
       case 'fit2d': if (lay.mode !== 'edit') setMode('edit'); else window.KAGarmentEdit.fit(); break;
       case 'bt-chart': case 'bt-spec': case 'bt-pieces': case 'bt-sewing': case 'bt-marker': case 'bt-checks': setBottomTab(a.slice(3)); if (phoneMQ.matches) sheet('data'); break;
       case 'sel-zipper': select('zipper', 'zip', { reveal: true }); if (phoneMQ.matches) sheet('obj'); break; case 'sel-fabric': select('fabric', 'main', { reveal: true }); if (phoneMQ.matches) sheet('obj'); break; case 'sel-cut': select('cut', 'cut', { reveal: true }); if (phoneMQ.matches) sheet('obj'); break;
@@ -441,6 +441,13 @@
     var v = K() && K().view && K().view(); if (v) { v._placed = false; }
     select('garment', ''); render();
   }
-  window.KAGarmentStudio = { styleChanged: styleChanged, render: render, show: show, select: select, state: function () { return { lay: lay, sel: sel }; }, doAction: doAction, setView: setView, setMode: setMode };
+  // a drawn pattern (the Draw window) shown as cloth in the 3D window
+  function freeDrape(doc) {
+    function go() { var vw = K() && K().view(); if (!vw) { toast('The 3D window is not ready: open the standard tee once from the File menu, then try again.'); return; } var bad = vw.showDoc(doc); if (bad.length) { toast(bad[0]); return; } if (lay.view === '2d') setView('both'); toast('Draping ' + doc.pieces.length + ' drawn piece(s) on the standard body…'); }
+    if (K() && K().view()) { go(); return; }
+    if (lay.view === '2d') setView('both');
+    Promise.resolve(K().make({ quiet: true, spin: false })).then(function () { setTimeout(function () { bind3D(); go(); }, 500); }, function () { toast('The 3D window could not start.'); });
+  }
+  window.KAGarmentStudio = { freeDrape: freeDrape, styleChanged: styleChanged, render: render, show: show, select: select, state: function () { return { lay: lay, sel: sel }; }, doAction: doAction, setView: setView, setMode: setMode };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();

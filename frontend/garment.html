@@ -16,7 +16,7 @@
   <link rel="stylesheet" href="assets/css/style.css?v=20260603c">
   <link rel="stylesheet" href="assets/css/theme-v2.css?v=20261112c">
   <link rel="stylesheet" href="assets/css/garment.css?v=20261205f">
-  <link rel="stylesheet" href="assets/css/garment-studio.css?v=20261205f">
+  <link rel="stylesheet" href="assets/css/garment-studio.css?v=20261206a">
   <script type="importmap">
   {
     "imports": {
@@ -77,6 +77,7 @@
         <div class="gs-menu" data-menu="2d"><button type="button" class="gs-mb" role="menuitem" aria-haspopup="true">2D Pattern</button><div class="gs-mp" role="menu">
           <button type="button" role="menuitem" data-do="mode-pieces"><i data-ic="pattern"></i>All pieces, as cut</button>
           <button type="button" role="menuitem" data-do="mode-edit"><i data-ic="node"></i>Edit the points of a piece<kbd>E</kbd></button>
+          <button type="button" role="menuitem" data-do="mode-free"><i data-ic="pattern"></i>Draw free pieces (pen, curves, darts, sew)</button>
           <hr>
           <button type="button" role="menuitem" data-do="fit2d"><i data-ic="fit"></i>Fit the piece to the window</button>
         </div></div>
@@ -199,7 +200,7 @@
           <section class="gs-win gs-w2d" id="gs-w2d" aria-label="2D pattern window">
             <div class="gs-wh">
               <span class="gs-wt">2D pattern</span>
-              <div class="gs-seg" id="gs-2dmode" role="group" aria-label="2D view"><button type="button" data-m="pieces" class="on">Pieces</button><button type="button" data-m="edit">Edit</button></div>
+              <div class="gs-seg" id="gs-2dmode" role="group" aria-label="2D view"><button type="button" data-m="pieces" class="on">Pieces</button><button type="button" data-m="edit">Edit</button><button type="button" data-m="free">Draw</button></div>
               <span class="gs-wi" id="gs-2dinfo"></span>
             </div>
             <div class="gs-wb gs-2dbody">
@@ -207,6 +208,7 @@
                 <div class="gm-view" id="gm-patterns"><div class="gm-empty">Building the patterns…</div></div>
                 <div class="gm-legend" id="gm-plegend"></div>
               </div>
+              <div class="gs-2dfree" id="gs-2dfree" aria-label="Free pattern drawing"></div>
               <div class="gs-2dedit" id="gs-2dedit">
                 <div id="gm-pane-edit-body">
                   <div class="gm-edbar"><div class="gm-sizes" id="gm-edpieces"></div></div>
@@ -420,6 +422,8 @@
 <script src="assets/js/garment-edit.js?v=20261205f"></script>
 <script src="assets/js/garment.js?v=20261205f"></script>
 <script src="assets/js/garment-spec.js?v=20261205f"></script>
-<script src="assets/js/garment-studio.js?v=20261205f"></script>
+<script src="assets/js/garment-pattern.js?v=20261206a"></script>
+<script src="assets/js/garment-draw.js?v=20261206a"></script>
+<script src="assets/js/garment-studio.js?v=20261206a"></script>
 </body>
 </html>
