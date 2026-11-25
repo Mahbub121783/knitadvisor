@@ -110,4 +110,19 @@ const F = (fabricId, gsm, comp = '100% Cotton', extra = {}) =>
   console.log('  Engine: dye → stenter → brush; terry unbrushed; polyester disperse; CVC two-bath; 20G; L/W shrinkage realistic');
 }
 
+{
+  // a light fleece / terry must close its own mass balance: no loop finer than 30 Ne, and the yarns it names knit to the GSM asked for
+  const { analyzeFleece } = require('../engine/domain/fleece-engine');
+  [['french_terry', 220], ['french_terry', 260], ['fleece_3_thread', 220], ['fleece_3_thread', 320], ['fleece_2_thread', 240]].forEach(([id, gsm]) => {
+    const r = analyzeFleece({ fabricId: id, gsm, gauge: 20, composition: { cotton_pct: 100 }, rawComposition: '100% Cotton', faceNe: 28, faceSlMm: null });
+    const loop = r.yarns.find((y) => y.role === 'loop');
+    assert(loop.ne <= 30, `${id} ${gsm}: the loop (${loop.ne} Ne) is one that can be spun`);
+    assert(Math.abs(r.mass_balance.deviation_pct) < 6, `${id} ${gsm}: the yarns named make ${r.mass_balance.gsm_at_chosen_counts} GSM, ${r.mass_balance.deviation_pct} % off the target`);
+  });
+  // the one-yarn stitch-length comparison does not judge a multi-yarn cloth
+  const f = calculate({ fabric: 'french_terry', gsm: 260, gauge: 20, dia: 30, composition: '100% Cotton', efficiency: 85 });
+  assert(!f.warnings.some((w) => /GSM model/.test(String(w.message || w))), 'no one-yarn stitch-length warning on a three-yarn terry');
+  console.log('  Light terry / fleece: loop never finer than 30 Ne, named yarns within 6 % of the target GSM, no one-yarn SL warning');
+}
+
 console.log('\nAll fleece tests passed.');

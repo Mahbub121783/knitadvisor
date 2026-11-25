@@ -831,8 +831,8 @@ function calculate(params) {
     try {
       planPattern = getEnginePattern(fabricDef.id, gsm, gauge, composition);
       if (planPattern && fleeceResult && fleeceResult.loop) planPattern = { ...planPattern, ...loopbackPattern(fleeceResult.loop.arrangement.key) };
-      const hint = terryResult && terryResult.machine ? { gauge: terryResult.machine.gauge, source: 'plush engine (ground + pile in one hook)' }
-        : fleeceResult && fleeceResult.gauge_check ? { gauge: fleeceResult.gauge_check.ok ? fleeceResult.gauge_check.gauge : (fleeceResult.gauge_check.suggested_gauge || fleeceResult.gauge_check.gauge), source: 'fleece engine (face, binder and loop yarn must all clear the hook)' }
+      const hint = terryResult && terryResult.machine ? { gauge: terryResult.machine.gauge, source: 'plush engine (ground + pile in one hook)', ok: true }
+        : fleeceResult && fleeceResult.gauge_check ? { gauge: fleeceResult.gauge_check.ok ? fleeceResult.gauge_check.gauge : (fleeceResult.gauge_check.suggested_gauge || fleeceResult.gauge_check.gauge), source: 'fleece engine (face, binder and loop yarn must all clear the hook)', ok: !!fleeceResult.gauge_check.ok && !fleeceResult.gauge_check.suggested_gauge }
           : null;
       knitPlan = buildKnitPlan({
         fabricDef, pattern: planPattern, countNe: countResult.count_ne,

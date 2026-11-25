@@ -287,10 +287,10 @@ function analyzeFleece(p) {
 
   // ---- mass balance: solve the loop yarn ----
   const kc = v.kind === 'terry' ? M.KC.terry : M.KC.fleece;
-  const cpc = kc * 10 / faceSl;
-  const faceTex = texOfNe(faceNe);
-  const faceMass = faceSl * faceTex;                // per needle-course, mm·tex
-  const binderMass = binder ? binder.sl * binder.tex : 0;
+  let cpc = kc * 10 / faceSl;
+  let faceTex = texOfNe(faceNe);
+  let faceMass = faceSl * faceTex;                // per needle-course, mm·tex
+  let binderMass = binder ? binder.sl * binder.tex : 0;
   // brushing loss is a share of the loop yarn, so solve iteratively
   const brushOpt = p.brushing || {};
   let loopTex = 30, b = null;
@@ -305,9 +305,32 @@ function analyzeFleece(p) {
   let loopNeExact = neOfTex(loopTex);
   let ply = 1;
   if (loopNeExact < 6) { ply = 2; }
-  const loopNe = ply === 1 ? snap(loopNeExact, STD_LOOP) : snap(loopNeExact * 2, STD_LOOP);
+  let loopNe = ply === 1 ? snap(loopNeExact, STD_LOOP) : snap(loopNeExact * 2, STD_LOOP);
   const loopTexChosen = texOfNe(loopNe) * ply;
-  if (needLighterFace(loopNeExact)) warnings.push(`At ${gsm} GSM the loop yarn the balance asks for (${r1(loopNeExact)} Ne) is finer than fleece loop yarns run — the face and binder already carry most of the weight. Use a finer face count or a lighter binder.`);
+  // if the loop the balance asks for is finer than fleece loop yarns actually run (30 Ne is the top of the shelf),
+  // step the face up to a finer count and solve again, rather than silently giving a fabric that comes out ~20 % heavier than asked
+  let liftedFace = false;
+  while (needLighterFace(loopNeExact) && faceNe < 40) {
+    liftedFace = true; faceNe = snap(faceNe + 4, STD_FACE);
+    faceSl = +p.faceSlMm > 0 ? +p.faceSlMm : (v.faceSl20 ? v.faceSl20 * 20 / G : (D.slFit.a + D.slFit.b * faceNe) * 20 / G);
+    if (binder) binder = Object.assign({}, binder, binder.filament ? {} : { label: `${faceNe}/1 ${cellKey} (same as face)`, tex: texOfNe(faceNe), ne: faceNe, sl: faceSl * 0.81 });
+    const fM = faceSl * texOfNe(faceNe), bM = binder ? binder.sl * binder.tex : 0;
+    for (let it = 0; it < 6; it++) {
+      const loopMass = loopSl * loopTex; const sum2 = fM + bM + loopMass;
+      b = brushing(v, shares, brushOpt);
+      const loss = b.loop_loss * loopMass / sum2;
+      const needed = gsm * (1 - elastane) * 100 / (D.wpcPerG * G * kc * 10 / faceSl * (1 - loss));
+      loopTex = Math.max(5, (needed - fM - bM) / loopSl);
+    }
+    loopNeExact = neOfTex(loopTex);
+    ply = loopNeExact < 6 ? 2 : 1;
+  }
+  // re-snap the loop count after any lift
+  const loopNe2 = ply === 1 ? snap(loopNeExact, STD_LOOP) : snap(loopNeExact * 2, STD_LOOP);
+  loopNe = loopNe2;
+  if (liftedFace) { faceTex = texOfNe(faceNe); faceMass = faceSl * faceTex; binderMass = binder ? binder.sl * binder.tex : 0; cpc = kc * 10 / faceSl; }
+  if (liftedFace) warnings.push(`At ${gsm} GSM a ${+p.faceNe > 0 ? p.faceNe : 'standard'} face would need a loop too fine to spin as a fleece loop (over 30 Ne); the face was stepped up to ${faceNe}/1 so the mass balance closes with a ${loopNe2}/1 loop (brought the calculated GSM to within a few percent of the target; for an exact match take a lighter base GSM or a lighter binder).`);
+  else if (needLighterFace(loopNeExact)) warnings.push(`At ${gsm} GSM the loop yarn the balance asks for (${r1(loopNeExact)} Ne) is finer than fleece loop yarns run — the face and binder already carry most of the weight. Use a finer face count or a lighter binder.`);
 
   // the sinker setting that hits the target exactly with the snapped count
   const sumFixed = faceMass + binderMass;

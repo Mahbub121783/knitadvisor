@@ -336,7 +336,9 @@ function buildKnitPlan(a) {
   const pitchRatio = pitch / yarnD;
   // the band the factory actually knits this family in (5th–95th percentile)
   const B = CAL.band[family] && CAL.band[family].n >= 20 ? CAL.band[family] : CAL.band.single_jersey;
-  const gaugeFit = pitchRatio < B.lo * 0.92 ? 'too fine for this count'
+  // a fleece / terry is knitted by its own engine, which checks every yarn (face, binder, loop) against the hook; its verdict stands, not the single-jersey band
+  const ownVerdict = a.gaugeHint && a.gaugeHint.ok === true && a.gauge > 0 && Math.abs(a.gauge - a.gaugeHint.gauge) < 0.01;
+  const gaugeFit = ownVerdict ? 'good' : pitchRatio < B.lo * 0.92 ? 'too fine for this count'
     : pitchRatio > B.hi * 1.08 ? 'coarse for this count' : 'good';
   if (a.gauge > 0 && gaugeFit !== 'good') notes.push(`${gauge} GG is ${gaugeFit} at ${a.countNe}s (pitch ${r2(pitch)} mm against a ${r2(yarnD)} mm yarn).`);
 
@@ -353,7 +355,10 @@ function buildKnitPlan(a) {
     model_range_mm: slPhys != null ? [r3((KS.q1 * tex) / a.gsm), r3((KS.q3 * tex) / a.gsm)] : null,
     ks: r1(KS.med), ks_basis: KS.basis,
   };
-  if (sl.engine_mm && sl.model_mm) {
+  // the GSM model is for ONE yarn; a face + binder + loop cloth (fleece, loopback terry) carries its weight in three, so the comparison does not apply
+  const multiYarn = !!(a.yarnTex && (a.yarnTex.loop > 0 || a.yarnTex.binder > 0));
+  if (multiYarn) sl.note = 'Face, binder and loop yarn share the weight: the one-yarn GSM model does not apply; the fleece engine mass balance sets the stitch lengths.';
+  if (sl.engine_mm && sl.model_mm && !multiYarn) {
     sl.agreement_pct = r1((sl.engine_mm / sl.model_mm - 1) * 100);
     if (Math.abs(sl.agreement_pct) > 8) notes.push(`Stitch length: the matched factory record (${sl.engine_mm} mm) and the GSM model (${sl.model_mm} mm) differ by ${sl.agreement_pct}% — confirm on a trial roll.`);
   }
