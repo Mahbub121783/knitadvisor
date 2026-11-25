@@ -394,7 +394,7 @@
   // ── the garment ──
   function ensure3D() {
     if (mod3d) return Promise.resolve(mod3d);
-    return import('/assets/js/garment-3d.js?v=20261206d').then(function (m) { mod3d = m; return m; });
+    return import('/assets/js/garment-3d.js?v=20261207a').then(function (m) { mod3d = m; return m; });
   }
   function render3D() {
     if (!view3d || !R || !R.success) return;

@@ -102,6 +102,9 @@
   function num(id, v, step, min, max) { return '<input type="number" id="' + id + '" value="' + (Math.round(v * 100) / 100) + '" step="' + (step || 0.1) + '"' + (min != null ? ' min="' + min + '"' : '') + (max != null ? ' max="' + max + '"' : '') + '>'; }
   function panel() {
     if (!side) return; var p = cur(), h = [];
+    var T = window.KATpl, Pr = window.KAProd, KG = window.KAGarment, sp = KG && KG.state && KG.state(), hasSheet = !!(sp && sp.chart && sp.sizes && sp.sizes.length && Object.keys(sp.chart).some(function (k) { return Object.keys(sp.chart[k] || {}).some(function (z) { return sp.chart[k][z] !== '' && sp.chart[k][z] != null; }); }));
+    if (T) h.push('<div class="gf-card"><b>Start from a garment</b><label>Garment <select id="gf-lib">' + T.LIST.map(function (t) { return '<option value="' + t.id + '"' + (S.lib === t.id ? ' selected' : '') + '>' + esc(t.name) + '</option>'; }).join('') + '</select></label><div class="gf-meta">' + esc((T.LIST.find(function (t) { return t.id === (S.lib || T.LIST[0].id); }) || {}).note || '') + '</div>' +
+      (hasSheet ? '<label class="gf-chk"><input type="checkbox" id="gf-libspec"' + (S.libSpec !== false ? ' checked' : '') + '> use the measurements of the spec sheet (' + sp.sizes.join(', ') + ')</label>' : '<div class="gf-meta">No spec sheet is loaded: standard measures are used.</div>') + '<button type="button" class="gf-b" data-act="tpl">Draft it</button></div>');
     h.push('<div class="gf-card"><b>New piece</b><div class="gf-row"><label>Width ' + num('gf-w', S.size.w, 0.5, 1, 400) + '</label><label>Height ' + num('gf-h', S.size.h, 0.5, 1, 400) + '</label></div><div class="gf-row"><button type="button" class="gf-b" data-act="addrect">Add a rectangle</button><button type="button" class="gf-b" data-act="addell">Add an ellipse</button></div>' +
       '<div class="gf-row"><label>Start from <select id="gf-tpl"><option value="">…</option><option value="skirt">A skirt</option><option value="tube">A front and a back</option></select></label></div></div>');
     if (p) {
@@ -121,6 +124,14 @@
         h.push('<div class="gf-card"><b>Point ' + (S.sel.node + 1) + '</b><div class="gf-row"><label>x ' + num('gf-nx', N.x, 0.1) + '</label><label>y ' + num('gf-ny', N.y, 0.1) + '</label></div><label class="gf-chk"><input type="checkbox" id="gf-nsm"' + (N.sm || N.o || N.i ? ' checked' : '') + '> smooth (a curve through it)</label><button type="button" class="gf-b gf-del" data-act="delnode">Delete the point</button></div>');
       }
     }
+    if (Pr) { var g = Pr.grading(P), cp = cur(), rule = cp ? Pr.ruleOf(P, cp) : null; h.push('<div class="gf-card"><b>Sizes and production</b><label>Show and drape size <select id="gf-sz">' + g.sizes.map(function (z) { return '<option value="' + esc(z) + '"' + ((S.sizeSel || g.base) === z ? ' selected' : '') + '>' + esc(z) + (z === g.base ? ' (as drawn)' : '') + '</option>'; }).join('') + '</select></label>' +
+      '<label>Sizes <input type="text" id="gf-gs" value="' + esc(g.sizes.join(', ')) + '"></label><label>Base size <select id="gf-gb">' + g.sizes.map(function (z) { return '<option' + (z === g.base ? ' selected' : '') + '>' + esc(z) + '</option>'; }).join('') + '</select></label>' +
+      '<div class="gf-meta">The body grows by (cm per size)</div><div class="gf-row"><label>Height ' + num('gf-gh', g.body.height, 0.5) + '</label><label>Chest ' + num('gf-gc', g.body.chest, 0.5) + '</label></div><div class="gf-row"><label>Waist ' + num('gf-gw', g.body.waist, 0.5) + '</label><label>Hip ' + num('gf-ghp', g.body.hip, 0.5) + '</label><label>Shoulder ' + num('gf-gsh', g.body.shoulder, 0.5) + '</label></div>' +
+      (cp ? '<div class="gf-meta">' + esc(cp.name) + ' grows by (cm per size)</div><div class="gf-row"><label>Across ' + num('gf-pgw', rule.w, 0.5) + '</label><label>Down ' + num('gf-pgh', rule.h, 0.5) + '</label></div>' : '<div class="gf-meta">Select a piece to see or change how it is graded.</div>') +
+      (P.tplMeasures ? '<div class="gf-meta">This garment is drafted again at each size from the measures of the spec sheet.</div>' : '') +
+      '<div class="gf-row"><button type="button" class="gf-b" data-act="sizetable">Size table</button><button type="button" class="gf-b" data-act="fitall" title="Drape the pattern on a body of each size and report how it fits">Fit in every size</button></div>' +
+      (S.fitMsg ? '<div class="gf-meta">' + esc(S.fitMsg) + '</div>' : '') + (S.fit ? '<table class="gf-tab"><tr><th>Size</th><th>Near limit</th><th>Crowded</th><th>Seam gap</th></tr>' + S.fit.map(function (f) { return '<tr><td>' + esc(f.size) + '</td><td>' + Math.round(f.tight_pct) + ' %</td><td>' + Math.round(f.crowded_pct) + ' %</td><td>' + f.seam_gap.toFixed(1) + ' cm</td></tr>'; }).join('') + '</table>' : '') +
+      (S.table ? S.table : '') + '<div class="gf-row"><button type="button" class="gf-b" data-act="dxf" title="The pattern at the size shown, true size, as a DXF">DXF (this size)</button><button type="button" class="gf-b" data-act="dxfnest" title="Every size on top of the other">DXF grade nest</button><button type="button" class="gf-b" data-act="pack" title="A PDF: the pieces, the seams, the sizes, the fit">Tech pack (PDF)</button></div></div>'); }
     var B = bodyM(); h.push('<div class="gf-card"><b>Body</b><label>Shape <select id="gf-bpre"><option value=""' + (P.body ? '' : ' selected') + '>standard</option>' + ['female', 'male', 'child'].map(function (k) { return '<option value="' + k + '"' + (P.body && P.body.preset === k ? ' selected' : '') + '>' + k + '</option>'; }).join('') + '</select></label>' +
       (P.body ? '<div class="gf-row"><label>Height ' + num('gf-bh', B.height, 1, 80, 210) + '</label><label>Chest ' + num('gf-bc', B.chest, 1, 40, 160) + '</label></div><div class="gf-row"><label>Waist ' + num('gf-bw', B.waist, 1, 35, 160) + '</label><label>Hip ' + num('gf-bhp', B.hip, 1, 40, 170) + '</label><label>Shoulder ' + num('gf-bs', B.shoulder, 1, 20, 60) + '</label></div>' : '') +
       '<button type="button" class="gf-b" data-act="auto" title="A first guess of where each piece hangs, from its shape and its seams">Arrange the pieces on the body</button></div>');
@@ -134,9 +145,11 @@
 
   // ── doing things ──
   function select(piece, node, edge) { S.sel = { piece: piece, node: node == null ? null : node, edge: edge == null ? null : edge }; draw(); panel(); }
+  // the pattern at the size chosen in the Sizes card (the base size is the pattern as drawn)
+  function sized() { var Pr = window.KAProd; return Pr && S.sizeSel && S.sizeSel !== Pr.grading(P).base ? Pr.atSize(P, S.sizeSel) : P; }
   function drape() {
     if (!P.pieces.length) { toast('Draw a piece first.'); return; }
-    var doc; try { doc = Pat.toDoc(P); } catch (e) { toast('The pattern cannot be made: ' + e.message); return; }
+    var doc; try { doc = Pat.toDoc(sized()); } catch (e) { toast('The pattern cannot be made: ' + e.message); return; }
     var bad = window.KADoc ? window.KADoc.validate(doc) : ['the document module is not loaded']; if (bad.length) { toast(bad[0]); return; }
     if (!P.seams.length) toast('No seams yet: the pieces will hang apart. Use the Sew tool to join edges.');
     if (window.KAGarmentStudio && window.KAGarmentStudio.freeDrape) window.KAGarmentStudio.freeDrape(doc);
@@ -153,9 +166,49 @@
     else if (a === 'delnode' && p && S.sel.node != null) { push(); if (!Pat.removeNode(P, p, S.sel.node)) toast('A piece needs at least 3 points.'); S.sel.node = null; S.sel.edge = null; changed(); }
     else if (a === 'auto') { push(); Pat.autoArrange(P); changed(); toast('Arranged: ' + P.pieces.map(function (q) { return q.name + ' → ' + q.arr.mode; }).join(', ')); }
     else if (a === 'pleat' && p) { push(); var pl = +(document.getElementById('gf-pl') || {}).value || 10, pw = +(document.getElementById('gf-pw') || {}).value || 6, bbp = Pat.bbox(Pat.flatten(p).poly); Pat.addPleat(p, bbp.x0 + pl, pw, S.foldAngle); changed(); toast('Two creases added, ' + pw + ' cm apart.'); }
+    else if (a === 'tpl') buildTpl();
+    else if (a === 'sizetable') { S.table = sizeTableHtml(); panel(); }
+    else if (a === 'fitall') fitAll();
+    else if (a === 'dxf') { if (!P.pieces.length) { toast('Nothing to export.'); return; } var sz = S.sizeSel || window.KAProd.grading(P).base; dl(window.KAProd.toDXF(P, { size: sz, allow: S.allow }), 'application/dxf', slug(P.name) + '-' + sz + '.dxf'); toast('DXF in mm, true size: layer 1 cut line' + (S.allow ? ' (with ' + S.allow + ' cm allowance)' : '') + ', 14 sewing line, 4 notches, 7 grain, 15 names.'); }
+    else if (a === 'dxfnest') { if (!P.pieces.length) { toast('Nothing to export.'); return; } dl(window.KAProd.toDXFNest(P, { allow: S.allow }), 'application/dxf', slug(P.name) + '-grade-nest.dxf'); }
+    else if (a === 'pack') makePack();
     else if (a === 'clear') { push(); P = Pat.create(); select(null); changed(); }
     else if (a === 'svg') { var t = Pat.toSVG(P, S.allow); if (!t) { toast('Nothing to download.'); return; } dl(t, 'image/svg+xml', 'free-pattern.svg'); }
     else if (a === 'docsave') { if (!P.pieces.length) { toast('Nothing to save.'); return; } dl(window.KADoc.toJSON(Pat.toDoc(P)), 'application/json', (P.name || 'garment') + '.ka-garment.json'); }
+  }
+  function slug(t) { return String(t || 'garment').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'garment'; }
+  // a template, drafted from the spec sheet's measures when there is one (and again at each size of the sheet), or from standard measures
+  function buildTpl() {
+    var T = window.KATpl, KG = window.KAGarment, sp = KG && KG.state && KG.state(), kind = S.lib || T.LIST[0].id, useSheet = S.libSpec !== false && sp && sp.chart && sp.sizes && sp.sizes.length;
+    var base = useSheet ? (sp.base && sp.sizes.indexOf(sp.base) >= 0 ? sp.base : sp.sizes[Math.floor(sp.sizes.length / 2)]) : null, m = useSheet ? T.fromChart(sp.chart, base, sp.unit) : {};
+    if (useSheet && !(m.chest > 0) && ['skirt', 'pant', 'bandeau'].indexOf(kind) < 0) { toast('The spec sheet has no chest measure: standard measures are used.'); m = {}; useSheet = false; }
+    if (['skirt', 'pant', 'bandeau'].indexOf(kind) >= 0) m = {};
+    push(); var Q; try { Q = T.build(kind, m, { size: base }); } catch (e) { S.hist.pop(); toast('That garment could not be drafted: ' + e.message); return; }
+    if (useSheet && m.chest > 0) { Q.tplMeasures = {}; sp.sizes.forEach(function (z) { var mz = T.fromChart(sp.chart, z, sp.unit); if (mz.chest > 0) Q.tplMeasures[z] = mz; }); Q.grading = window.KAProd.DEFAULT_GRADING(); Q.grading.sizes = sp.sizes.slice(); Q.grading.base = base; }
+    P = Q; S.sizeSel = Q.grading ? Q.grading.base : null; S.fit = null; S.table = ''; select(null); changed(); fit(); toast('Drafted ' + Q.name + (useSheet && m.chest > 0 ? ' at size ' + base + ' from the spec sheet.' : ' from standard measures.') + ' Every piece is yours to change.');
+  }
+  function sizeTableHtml() {
+    var t = window.KAProd.sizeTable(P); return '<table class="gf-tab"><tr><th>Piece</th>' + t.sizes.map(function (z) { return '<th>' + esc(z) + '</th>'; }).join('') + '</tr>' + t.pieces.map(function (r) { return '<tr><td>' + esc(r.name) + '</td>' + t.sizes.map(function (z) { var q = r.sizes[z]; return '<td>' + (q ? q.w.toFixed(1) + '×' + q.h.toFixed(1) : '') + '</td>'; }).join('') + '</tr>'; }).join('') + '</table>';
+  }
+  // the pattern draped on a body of each size, in small steps so the page stays alive; what is kept: how much of the cloth is near its limit, how much is crowded, the worst seam gap
+  function fitAll() {
+    var K = window.KASim, Pr = window.KAProd; if (!K || !Pr) { toast('The simulator is not loaded.'); return; } if (!P.pieces.length) { toast('Draw a piece first.'); return; }
+    var sizes = Pr.grading(P).sizes.slice(), out = [], idx = 0;
+    function next() {
+      if (idx >= sizes.length) { S.fit = out; S.fitMsg = 'Fit of ' + out.length + ' sizes (a cloth simulation; the family numbers are typical).'; S.fitRun = false; panel(); return; }
+      var z = sizes[idx], b, c; try { b = K.fromDoc(Pat.toDoc(Pr.atSize(P, z))); c = new K.Cloth(b.insts, b.body, Object.assign({}, K.DRAPE.medium, b.opt)); } catch (e) { out.push({ size: z, tight_pct: 0, crowded_pct: 0, seam_gap: 0 }); idx++; setTimeout(next, 0); return; }
+      var done = 0; S.fitMsg = 'Fitting size ' + z + '… (' + (idx + 1) + ' of ' + sizes.length + ')'; panel();
+      (function chunk() { var t0 = performance.now(); while (done < 110 && performance.now() - t0 < 30) { c.step(); done++; } if (done < 110) { setTimeout(chunk, 0); return; } var f = c.fitReport(), st = c.stats(); out.push({ size: z, tight_pct: f.tight_pct, crowded_pct: f.crowded_pct, seam_gap: st.seam_gap }); idx++; setTimeout(next, 0); })();
+    }
+    if (S.fitRun) return; S.fitRun = true; next();
+  }
+  // the tech pack: the pack is made here (every number in it), the server only draws it
+  function makePack() {
+    if (!P.pieces.length) { toast('Nothing to put in a tech pack.'); return; }
+    var pk = window.KAProd.pack(P, S.fit ? { fit: S.fit } : {}); toast('Making the tech pack…');
+    fetch('/api/garment/pack-pdf', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', Accept: 'application/pdf' }, body: JSON.stringify({ pack: pk }) }).then(function (r) {
+      if (r.status === 401 && window.kaSignInRedirect) window.kaSignInRedirect(); if (!r.ok) return r.json().then(function (j) { throw new Error(j.error || ('HTTP ' + r.status)); }); return r.blob();
+    }).then(function (b) { if (!b) return; var a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = slug(P.name) + '-techpack.pdf'; document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 800); toast('Tech pack downloaded.'); }).catch(function (e) { toast('The tech pack could not be made: ' + e.message); });
   }
   function dl(text, type, name) { var b = new Blob([text], { type: type }), a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = name; document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500); }
   function fit() {
@@ -257,6 +310,13 @@
     if (id === 'gf-w') S.size.w = Math.max(1, +v || 1); else if (id === 'gf-h') S.size.h = Math.max(1, +v || 1);
     else if (id === 'gf-dw') S.dart.w = Math.max(0.5, +v || 1); else if (id === 'gf-dd') S.dart.d = Math.max(1, +v || 1); else if (id === 'gf-allow') { S.allow = Math.max(0, Math.min(5, +v || 0)); draw(); }
     else if (id === 'gf-gsm') { push(); P.fabric.gsm = Math.max(40, Math.min(800, +v || 180)); changed(); }
+    else if (id === 'gf-lib') { S.lib = v; panel(); }
+    else if (id === 'gf-libspec') { S.libSpec = e.target.checked; }
+    else if (id === 'gf-sz') { S.sizeSel = v; S.table = ''; draw(); panel(); toast('Size ' + v + ' will be draped. The drawing shows the pattern as drawn (the base size).'); }
+    else if (id === 'gf-gs') { var zs = v.split(/[ ,]+/).map(function (x) { return x.trim(); }).filter(Boolean).slice(0, 12); if (zs.length) { push(); var gg = window.KAProd.grading(P); gg.sizes = zs; if (zs.indexOf(gg.base) < 0) gg.base = zs[0]; S.sizeSel = gg.base; changed(); } }
+    else if (id === 'gf-gb') { push(); window.KAProd.grading(P).base = v; S.sizeSel = v; changed(); }
+    else if (/^gf-g(h|c|w|hp|sh)$/.test(id)) { push(); var kk2 = { 'gf-gh': 'height', 'gf-gc': 'chest', 'gf-gw': 'waist', 'gf-ghp': 'hip', 'gf-gsh': 'shoulder' }[id]; window.KAProd.grading(P).body[kk2] = +v || 0; changed(); }
+    else if (id === 'gf-pgw' || id === 'gf-pgh') { var cp2 = cur(); if (cp2) { push(); cp2.grade = Object.assign({}, window.KAProd.ruleOf(P, cp2)); cp2.grade[id === 'gf-pgw' ? 'w' : 'h'] = +v || 0; changed(); } }
     else if (id === 'gf-fam') { push(); Pat.setFabric(P, v || ''); changed(); }
     else if (id === 'gf-fa') { S.foldAngle = Math.max(10, Math.min(175, +v || 60)); }
     else if (id === 'gf-bpre') { push(); if (!v) delete P.body; else P.body = { preset: v }; changed(); }

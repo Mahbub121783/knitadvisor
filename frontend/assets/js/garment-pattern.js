@@ -188,7 +188,7 @@
   function bodyFromMeasures(m0) {
     const m = Object.assign({}, PRESETS[m0 && m0.preset] || PRESETS.female, m0 || {}), s = m.height / 168, Y = (v) => r3(v * s), g = m.hip / 96, c = m.chest / 88, sh = m.shoulder / 2;
     const ch = ringK(1.6, m.chest), wa = ringK(1.4, m.waist), hi = ringK(1.5, m.hip), nr = 5.5 * s, lx = hi[0] * 0.52, ax = sh;
-    const keys = [[Y(152), nr, nr], [Y(147), 9 * s, 7 * s], [Y(143), sh * 0.9, ch[1] * 0.85], [Y(135), ch[0] * 1.02, ch[1] * 0.95], [Y(125), ch[0], ch[1]], [Y(108), wa[0], wa[1]], [Y(98), (wa[0] + hi[0]) / 2, (wa[1] + hi[1]) / 2], [Y(90), hi[0], hi[1]], [Y(80), hi[0] * 0.95, hi[1] * 0.92]].map((k) => k.map(r3));
+    const keys = [[Y(152), nr, nr], [Y(149.5), 8 * s, 7 * s], [Y(147), sh * 0.7, ch[1] * 0.78], [Y(143), sh * 0.92, ch[1] * 0.85], [Y(135), ch[0] * 1.02, ch[1] * 0.95], [Y(125), ch[0], ch[1]], [Y(108), wa[0], wa[1]], [Y(98), (wa[0] + hi[0]) / 2, (wa[1] + hi[1]) / 2], [Y(90), hi[0], hi[1]], [Y(80), hi[0] * 0.95, hi[1] * 0.92]].map((k) => k.map(r3));
     const rt = 8.5 * g, rk = 6.2 * g, ra = 4.2 * s, legs = (sg) => [[sg * lx, Y(82), 0, rt], [sg * lx, Y(45), 0, rk], [sg * lx, Y(6), 0, ra]], arms = (sg) => [[sg * ax, Y(143), 0, 4.8 * c], [sg * (ax + 8 * s), Y(112), 0, 3.6 * c], [sg * (ax + 11 * s), Y(86), 0, 2.8 * c]];
     const caps = []; [legs(1), legs(-1), arms(1), arms(-1)].forEach((L) => { for (let i = 0; i + 1 < L.length; i++) caps.push({ A: [r3(L[i][0]), L[i][1], 0], B: [r3(L[i + 1][0]), L[i + 1][1], 0], ra: r3(L[i][3]), rb: r3(L[i + 1][3]) }); });
     const limb = (L) => L.map((q) => q.map(r3));
@@ -203,8 +203,8 @@
     const side = L[0][0] >= 0 ? 1 : -1, gap = arr.gap == null ? 1.2 : arr.gap, tot = cl[cl.length - 1];
     const cross = (u, v) => [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
     return (x, y) => {
-      const d0 = Math.max(0, Math.min(tot, (y - bb.y0) + (arr.along || 0))); let i = 0; while (i + 2 < L.length && cl[i + 1] < d0) i++;
-      const t = Math.max(0, Math.min(1, (d0 - cl[i]) / ((cl[i + 1] - cl[i]) || 1))), A = L[i], B = L[i + 1], ctr = [0, 1, 2].map((k) => A[k] + (B[k] - A[k]) * t), r = A[3] + (B[3] - A[3]) * t + gap;
+      const d0 = Math.min(tot, (y - bb.y0) + (arr.along || 0)); let i = 0; while (i + 2 < L.length && cl[i + 1] < d0) i++;
+      const t = Math.min(1, (d0 - cl[i]) / ((cl[i + 1] - cl[i]) || 1)), A = L[i], B = L[i + 1], ctr = [0, 1, 2].map((k) => A[k] + (B[k] - A[k]) * t), r = A[3] + (B[3] - A[3]) * Math.max(0, t) + gap;
       const dv = [B[0] - A[0], B[1] - A[1], B[2] - A[2]], dl = Math.hypot(...dv) || 1, d = dv.map((v) => v / dl), o = [side, 0, 0], od = o[0] * d[0] + o[1] * d[1] + o[2] * d[2], e1r = [o[0] - od * d[0], o[1] - od * d[1], o[2] - od * d[2]], el = Math.hypot(...e1r) || 1, e1 = e1r.map((v) => v / el), e2 = cross(d, e1);
       const f = (x - bb.x0) / Math.max(1e-3, bb.w), ring = 2 * Math.PI * r, span = 2 * Math.PI * Math.min(1, (bb.w * (1 + (give || 0))) / ring), phi = (f - 0.5) * span + (arr.dx || 0) / r;
       return [0, 1, 2].map((k) => ctr[k] + r * (Math.cos(phi) * e1[k] + Math.sin(phi) * e2[k]));
@@ -243,8 +243,8 @@
       const [lo, hi] = span(y), wr = Math.max(1e-3, hi - lo), lo0 = mode === 'wrap' ? 0.3 : 0.55, q = Math.max(0, Math.min(1, (wr / Math.max(1e-3, bb.w) - lo0) / 0.25)), wt = q * q * (3 - 2 * q);
       const l0 = bb.x0 + (lo - bb.x0) * wt, w = Math.max(1e-3, bb.w + (wr - bb.w) * wt), f = (x - l0) / w;
       // a piece narrower than the way round the body keeps its own width (its seams then have a gap to pull shut); a wider one is gathered to fit
-      const ring = Math.PI * (3 * (a + b) - Math.sqrt((3 * a + b) * (a + 3 * b))) * (mode === 'wrap' ? 1 : 0.5), arcSpan = (mode === 'wrap' ? 2 : 1) * Math.PI * Math.min(1, (w * (1 + (give || 0))) / Math.max(1e-3, ring));
-      const phi = (f - 0.5) * arcSpan + (arr.dx || 0) / (a || 1) + (mode === 'back' ? Math.PI : 0);
+      const aq = arr.arc && mode !== 'wrap' ? Math.max(0.05, arr.arc[1] - arr.arc[0]) : 1, cen = arr.arc && mode !== 'wrap' ? (arr.arc[0] + arr.arc[1]) / 2 - 0.5 : 0, ring = Math.PI * (3 * (a + b) - Math.sqrt((3 * a + b) * (a + 3 * b))) * (mode === 'wrap' ? 1 : 0.5) * aq, arcSpan = (mode === 'wrap' ? 2 : 1) * Math.PI * aq * Math.min(1, (w * (1 + (give || 0))) / Math.max(1e-3, ring));
+      const phi = (f - 0.5) * arcSpan + cen * Math.PI + (arr.dx || 0) / (a || 1) + (mode === 'back' ? Math.PI : 0);
       return [a * Math.sin(phi), wy, b * Math.cos(phi)];
     };
   }

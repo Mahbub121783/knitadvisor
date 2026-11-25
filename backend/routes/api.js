@@ -1747,6 +1747,18 @@ router.post('/garment/build', requireUser, garmentLimiter, (req, res) => {
   }
 });
 
+// The garment tech pack as a PDF: the pattern window sends the pack (KAProd.pack), the numbers are its own, this only draws them.
+router.post('/garment/pack-pdf', requireUser, garmentLimiter, (req, res) => {
+  try {
+    const { renderGarmentPack } = require('../engine/domain/garment-pack-pdf');
+    const doc = renderGarmentPack((req.body || {}).pack);
+    res.setHeader('Content-Type', 'application/pdf'); res.setHeader('Content-Disposition', 'attachment; filename="KnitAdvisor-garment-techpack.pdf"');
+    doc.pipe(res); doc.end();
+  } catch (err) {
+    res.status(400).json({ success: false, error: 'The tech pack could not be made: ' + (err && err.message ? err.message : 'bad pack') });
+  }
+});
+
 // A buyer's spec sheet: an Excel / CSV / PDF / picture in (read from memory, never stored), the points of measure, tolerances, grading, fabric, stitching,
 // trims and notes out (engine/domain/garment-spec.js, services/spec-reader.js). A preset is a spec the user keeps (migration 048).
 const garmentSpec = require('../engine/domain/garment-spec');

@@ -265,6 +265,7 @@ app.use(cors({
 
 // a saved cost sheet carries one compressed style picture
 app.use(['/api/cost-sheet/sheets', '/api/cost-sheet/pdf'], express.json({ limit: '700kb' }));
+app.use('/api/garment/pack-pdf', express.json({ limit: '1500kb' }));          // a tech pack carries every piece outline
 app.use('/api/scan/analyse', express.json({ limit: '300kb' }));
 app.use('/api/scan/debug', express.json({ limit: '6mb' }));
 app.use(express.json({ limit: '256kb' }));
