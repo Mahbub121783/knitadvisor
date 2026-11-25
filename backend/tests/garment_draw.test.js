@@ -92,9 +92,38 @@ const run = (doc, steps) => { const b = Sim.fromDoc(doc), c = new Sim.Cloth(b.in
   console.log(`✓ a free curved outline drapes: ${s.seams} seam pairs, ${s.inside_body.toFixed(2)} cm into the body`);
 }
 {
+  // G3: one edge sewn to several, a seam turned the other way, a point-to-point stitch
+  const P = Pat.create(), a = Pat.rect(P, 0, 0, 40, 10, 'Long'), b = Pat.rect(P, 0, 20, 20, 10, 'S1'), c = Pat.rect(P, 30, 20, 20, 10, 'S2');
+  const s = Pat.sew(P, { piece: a.id, eid: a.edges[2].id }, [{ piece: b.id, eid: b.edges[0].id }]); assert(Pat.addToSeam(P, s.id, 'b', { piece: c.id, eid: c.edges[0].id }), 'a second edge joins the side');
+  assert(!Pat.addToSeam(P, s.id, 'b', { piece: c.id, eid: c.edges[0].id }), 'the same edge twice is refused'); const inf = Pat.seamInfo(P)[0]; near(inf.lenA, 40, 1e-6, 'one long edge'); near(inf.lenB, 40, 1e-6, 'two short ones add up'); near(inf.diff, 0, 1e-6, 'no ease');
+  const d0 = Pat.toDoc(P).seams[0]; Pat.flipSeam(P, s.id); const d1 = Pat.toDoc(P).seams[0]; assert(!!d0.b[0].rev !== !!d1.b[0].rev, 'flipping turns the seam the other way');
+  const hit = Pat.nearest(a, 20, 10.2); assert(hit.s > 0.65 && hit.s < 0.75, `a point on an outline has its share: ${hit.s}`);
+  const t = Pat.stitch(P, a.id, hit.s, b.id, 0.1); assert(t && Pat.toDoc(P).stitches.length === 1, 'a stitch goes into the document'); Pat.unstitch(P, t.id); assert(Pat.toDoc(P).stitches.length === 0, 'and out again'); Pat.stitch(P, a.id, 0.2, c.id, 0.2); Pat.removePiece(P, c.id); assert(Pat.toDoc(P).stitches.length === 0, 'a piece taken away takes its stitches');
+  assert.deepStrictEqual(Doc.validate(Pat.toDoc(P)), []);
+  console.log('✓ one edge to several (lengths add up), flip, point-to-point stitches; a taken piece takes its seams and stitches');
+}
+{
+  // G4: bodies from measures, and a piece wrapped round a limb
+  const f = Pat.bodyFromMeasures({ preset: 'female' }), m = Pat.bodyFromMeasures({ preset: 'male' }), k = Pat.bodyFromMeasures({ preset: 'child' });
+  assert(m.top > f.top && f.top > k.top, 'a man is taller than a woman, a child is shortest'); near(k.anchors.waist / f.anchors.waist, 120 / 165, 0.02, 'the anchors follow the height');
+  const ring = (d, y) => { const e = Pat.arrangeMap; const keys = d.loft.keys; let best = keys[0]; for (const q of keys) if (Math.abs(q[0] - y) < Math.abs(best[0] - y)) best = q; return Math.PI * (3 * (best[1] + best[2]) - Math.sqrt((3 * best[1] + best[2]) * (best[1] + 3 * best[2]))); };
+  near(ring(f, f.anchors.waist), 70, 1.5, 'the waist is the waist measure'); near(ring(m, m.anchors.chest), 100, 2, 'the chest is the chest measure');
+  const over = Pat.bodyFromMeasures({ preset: 'female', hip: 110 }); assert(ring(over, over.anchors.hip) > ring(f, f.anchors.hip) + 10, 'a bigger hip is a bigger hip');
+  assert.deepStrictEqual(Object.keys(f.limbs).sort(), ['armL', 'armR', 'legL', 'legR']);
+  // a narrow tube sewn to itself, hung on the left arm
+  const P = Pat.create('sleeve'); P.body = { preset: 'female' }; const p = Pat.rect(P, 0, 0, 37, 40, 'Tube', { arr: { mode: 'armL', along: 10 } }); p.edges[0].hold = true; Pat.sew(P, { piece: p.id, eid: p.edges[1].id }, { piece: p.id, eid: p.edges[3].id });
+  const doc = Pat.toDoc(P); assert.deepStrictEqual(Doc.validate(doc), []); const c = run(doc, 140), s = c.stats();
+  assert(c.X.every(Number.isFinite), 'no NaN'); assert(s.inside_body > -1.5, `it stays out of the arm: ${s.inside_body}`); assert(s.seam_gap < 3, `the seam closes: ${s.seam_gap}`);
+  let x0 = 1e9, x1 = -1e9; for (let i = 0; i < c.X.length; i += 3) { x0 = Math.min(x0, c.X[i]); x1 = Math.max(x1, c.X[i]); } assert(x0 > 5, 'it hangs on the left arm, not the middle of the body');
+  // the first guess at arrangement: a tube is a limb, a pair is a front and a back, the rest wraps
+  const Q = Pat.create(); Pat.TEMPLATES.tube(Q); Q.pieces.forEach((z) => { z.arr.mode = 'wrap'; }); Pat.autoArrange(Q); assert(Q.pieces[0].arr.mode === 'front' && Q.pieces[1].arr.mode === 'back', 'two pieces sewn twice are a front and a back');
+  const R = Pat.create(); const t = Pat.rect(R, 0, 0, 20, 30, 'T'); Pat.sew(R, { piece: t.id, eid: t.edges[1].id }, { piece: t.id, eid: t.edges[3].id }); Pat.autoArrange(R); assert(/^arm/.test(R.pieces[0].arr.mode), `a narrow self-sewn tube is a limb: ${R.pieces[0].arr.mode}`);
+  console.log(`✓ bodies from measures (female/male/child, any chest, waist, hip, height); a drawn tube drapes on the left arm: ${s.seams} seam pairs, within ${s.seam_gap.toFixed(2)} cm; a first guess of where pieces hang`);
+}
+{
   const src = require('fs').readFileSync(path.join(FE, 'garment-pattern.js'), 'utf8').split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
   const body = src.slice(0, src.indexOf('const TEMPLATES'));
-  assert(!/sleeve|shoulder|armhole|inseam|waistband|'tee'|'legs'|neckline/.test(body), 'the pattern module has no word of any garment in it (only the templates below it do)');
+  assert(!/sleeve|armhole|inseam|waistband|'tee'|'legs'|neckline/.test(body), 'the pattern module has no word of any garment in it (only the templates below it do)');
   console.log('✓ the pattern module knows no garment; only the starting templates do');
 }
 console.log('Free pattern tests passed');

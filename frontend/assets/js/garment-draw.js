@@ -24,7 +24,7 @@
   // ── the window ──
   var TOOLS = [['select', 'Select', 'Select and move pieces, points and handles (V)'], ['pen', 'Pen', 'Draw an outline point by point; drag to pull a curve; click the first point or press Enter to close (P)'], ['rect', 'Rectangle', 'Drag a rectangle (R)'], ['ellipse', 'Ellipse', 'Drag an ellipse (O)'],
     ['point', 'Add point', 'Click an edge to add a point (A)'], ['dart', 'Dart', 'Click an edge to cut a dart (D)'], ['notch', 'Notch', 'Click an edge to mark a notch (N)'], ['line', 'Inner line', 'Click two points inside a piece for a line (L)'],
-    ['sew', 'Sew', 'Click an edge, then the edge it is sewn to (S)'], ['hold', 'Hold', 'Click an edge to hold it on the body (a waist, a neck) (H)']];
+    ['sew', 'Sew', 'Click an edge, then the edge it is sewn to; Shift+click adds more edges to a side (S)'], ['stitch', 'Stitch', 'Click a point on one outline, then a point on another (T)'], ['hold', 'Hold', 'Click an edge to hold it on the body (a waist, a neck) (H)']];
   function build() {
     root.innerHTML = '<div class="gf-bar" id="gf-bar" role="toolbar" aria-label="Pattern tools">' + TOOLS.map(function (t) { return '<button type="button" class="gf-b" data-tool="' + t[0] + '" title="' + esc(t[2]) + '">' + t[1] + '</button>'; }).join('') +
       '<span class="gf-sep"></span><button type="button" class="gf-b" data-act="undo" title="Undo (Ctrl Z)">Undo</button><button type="button" class="gf-b" data-act="redo" title="Redo (Ctrl Shift Z)">Redo</button>' +
@@ -36,9 +36,14 @@
   }
   function resize() { var r = root.querySelector('#gf-cv').getBoundingClientRect(); W = Math.max(200, r.width); H = Math.max(160, r.height); svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H); svg.setAttribute('width', W); svg.setAttribute('height', H); draw(); }
   var HINTS = { select: 'Click a piece, an edge or a point · drag to move · double-click a point to round it · double-click an edge to add a point · Del removes', pen: 'Click to place points · drag after a click to pull a curve · click the first point, or Enter, to close · Esc cancels',
-    rect: 'Drag from one corner to the other', ellipse: 'Drag across the box of the ellipse', point: 'Click on an edge', dart: 'Click on an edge where the dart goes (size in the panel)', notch: 'Click on an edge', line: 'Click the two ends of the line', sew: 'Click the first edge, then the edge it is sewn to', hold: 'Click an edge to hold it, again to let it go' };
-  function setTool(t) { S.tool = t; S.pen = null; S.sewA = null; S.drag = null; root.querySelectorAll('[data-tool]').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-tool') === t); }); hint.textContent = HINTS[t] || ''; draw(); }
+    rect: 'Drag from one corner to the other', ellipse: 'Drag across the box of the ellipse', point: 'Click on an edge', dart: 'Click on an edge where the dart goes (size in the panel)', notch: 'Click on an edge', line: 'Click the two ends of the line', sew: 'Click the first edge (Shift+click adds more), then the edge it is sewn to (Shift+click adds more)', stitch: 'Click a point on an outline, then the point it is stitched to', hold: 'Click an edge to hold it, again to let it go' };
+  function setTool(t) { S.tool = t; S.pen = null; S.sewA = null; S.stA = null; S.drag = null; root.querySelectorAll('[data-tool]').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-tool') === t); }); hint.textContent = HINTS[t] || ''; draw(); }
 
+  // the point at a share (0..1) of the way round a piece's outline
+  function pointAt(p, sh) {
+    var poly = Pat.flatten(p, 1).poly, n = poly.length, c = [0], i; for (i = 0; i < n; i++) { var a = poly[i], b = poly[(i + 1) % n]; c.push(c[i] + Math.hypot(b[0] - a[0], b[1] - a[1])); }
+    var d = (((sh % 1) + 1) % 1) * c[n]; for (i = 0; i < n && c[i + 1] < d; i++); var a2 = poly[i], b2 = poly[(i + 1) % n], u = (d - c[i]) / ((c[i + 1] - c[i]) || 1); return [a2[0] + (b2[0] - a2[0]) * u, a2[1] + (b2[1] - a2[1]) * u];
+  }
   // ── drawing ──
   var sx = function (x) { return x * S.view.k + S.view.tx; }, sy = function (y) { return y * S.view.k + S.view.ty; };
   var wx = function (x) { return (x - S.view.tx) / S.view.k; }, wy = function (y) { return (y - S.view.ty) / S.view.k; };
@@ -57,7 +62,7 @@
       o.push('<path d="' + d + '" class="gf-fill' + (on ? ' on' : '') + '" data-piece="' + p.id + '"/>');
       p.lines.forEach(function (l) { o.push('<line x1="' + sx(l.a[0]) + '" y1="' + sy(l.a[1]) + '" x2="' + sx(l.b[0]) + '" y2="' + sy(l.b[1]) + '" class="gf-inner"/>'); });
       p.edges.forEach(function (ed, e) {
-        var cls = 'gf-edge' + (ed.hold ? ' hold' : '') + (ed.label === 'dart' ? ' dart' : '') + (on && S.sel.edge === e ? ' sel' : '') + (S.sewA && S.sewA.eid === ed.id ? ' sel' : ''), col = colourOf[ed.id];
+        var cls = 'gf-edge' + (ed.hold ? ' hold' : '') + (ed.label === 'dart' ? ' dart' : '') + (on && S.sel.edge === e ? ' sel' : '') + (S.sewA && S.sewA.some(function (q) { return q.eid === ed.id; }) ? ' sel' : ''), col = colourOf[ed.id];
         o.push('<path d="' + edgeD(p, e) + '" class="' + cls + '"' + (col ? ' style="stroke:' + col + '"' : '') + '/>');
       });
       p.notches.forEach(function (q) { var e = p.edges.findIndex(function (x) { return x.id === q.edge; }); if (e < 0) return; var c = Pat.seg(p, e), t = q.t, u = 1 - t, a = u * u * u, b = 3 * u * u * t, dd = 3 * u * t * t, f = t * t * t, X = a * c[0][0] + b * c[1][0] + dd * c[2][0] + f * c[3][0], Y = a * c[0][1] + b * c[1][1] + dd * c[2][1] + f * c[3][1]; o.push('<circle cx="' + sx(X) + '" cy="' + sy(Y) + '" r="3" class="gf-notch"/>'); });
@@ -76,6 +81,11 @@
       o.push('<text x="' + sx(a[0]) + '" y="' + (sy(a[1]) - 6) + '" class="gf-ease' + (Math.abs(s.pct) > 3 ? ' warn' : '') + '" text-anchor="middle">' + s.lenA.toFixed(1) + '</text>');
       o.push('<text x="' + sx(b[0]) + '" y="' + (sy(b[1]) - 6) + '" class="gf-ease' + (Math.abs(s.pct) > 3 ? ' warn' : '') + '" text-anchor="middle">' + s.lenB.toFixed(1) + '</text>');
     });
+    (P.stitches || []).forEach(function (t) {
+      var A = P.pieces.find(function (q) { return q.id === t.a.piece; }), B = P.pieces.find(function (q) { return q.id === t.b.piece; }); if (!A || !B) return;
+      var a = pointAt(A, t.a.s), b = pointAt(B, t.b.s); o.push('<line x1="' + sx(a[0]) + '" y1="' + sy(a[1]) + '" x2="' + sx(b[0]) + '" y2="' + sy(b[1]) + '" class="gf-stitch"/><circle cx="' + sx(a[0]) + '" cy="' + sy(a[1]) + '" r="3" class="gf-stp"/><circle cx="' + sx(b[0]) + '" cy="' + sy(b[1]) + '" r="3" class="gf-stp"/>');
+    });
+    if (S.stA) { var pa = P.pieces.find(function (q) { return q.id === S.stA.piece; }); if (pa) { var qa = pointAt(pa, S.stA.s); o.push('<circle cx="' + sx(qa[0]) + '" cy="' + sy(qa[1]) + '" r="5" class="gf-stp sel"/>'); } }
     if (S.pen) {   // the outline being drawn
       var pts = S.pen.nodes; if (pts.length) { var dd = 'M' + sx(pts[0].x) + ' ' + sy(pts[0].y); for (var i = 1; i < pts.length; i++) dd += 'L' + sx(pts[i].x) + ' ' + sy(pts[i].y); if (S.hover) dd += 'L' + sx(S.hover[0]) + ' ' + sy(S.hover[1]); o.push('<path d="' + dd + '" class="gf-pen"/>'); pts.forEach(function (q, i) { o.push('<circle cx="' + sx(q.x) + '" cy="' + sy(q.y) + '" r="' + (i === 0 ? 6 : 4) + '" class="gf-node sel"/>'); }); }
     }
@@ -84,6 +94,8 @@
   }
 
   // ── the side panel ──
+  function bodyM() { return Object.assign({}, Pat.PRESETS.female, P.body ? Pat.PRESETS[P.body.preset] : null, P.body || {}); }
+  function anchors() { return Pat.bodyFromMeasures(P.body || { preset: 'female' }).anchors; }
   function num(id, v, step, min, max) { return '<input type="number" id="' + id + '" value="' + (Math.round(v * 100) / 100) + '" step="' + (step || 0.1) + '"' + (min != null ? ' min="' + min + '"' : '') + (max != null ? ' max="' + max + '"' : '') + '>'; }
   function panel() {
     if (!side) return; var p = cur(), h = [];
@@ -92,8 +104,9 @@
     if (p) {
       var bb = Pat.bbox(Pat.flatten(p).poly);
       h.push('<div class="gf-card"><b>Piece</b><label>Name <input type="text" id="gf-name" value="' + esc(p.name) + '" maxlength="40"></label><div class="gf-meta">' + bb.w.toFixed(1) + ' × ' + bb.h.toFixed(1) + ' cm · ' + Math.abs(Pat.area(Pat.flatten(p).poly)).toFixed(0) + ' cm² · ' + p.nodes.length + ' points</div>' +
-        '<label>Hangs on the body <select id="gf-mode"><option value="wrap"' + (p.arr.mode === 'wrap' ? ' selected' : '') + '>wrapped all round</option><option value="front"' + (p.arr.mode === 'front' ? ' selected' : '') + '>on the front</option><option value="back"' + (p.arr.mode === 'back' ? ' selected' : '') + '>on the back</option></select></label>' +
-        '<div class="gf-row"><label>Top at height (cm) ' + num('gf-top', p.arr.top, 1, 0, 200) + '</label><label>Turn (cm) ' + num('gf-dx', p.arr.dx || 0, 0.5) + '</label></div>' +
+        '<label>Hangs on the body <select id="gf-mode"><option value="wrap"' + (p.arr.mode === 'wrap' ? ' selected' : '') + '>wrapped all round</option><option value="front"' + (p.arr.mode === 'front' ? ' selected' : '') + '>on the front</option><option value="back"' + (p.arr.mode === 'back' ? ' selected' : '') + '>on the back</option>' + ['armL', 'armR', 'legL', 'legR'].map(function (m) { return '<option value="' + m + '"' + (p.arr.mode === m ? ' selected' : '') + '>round the ' + { armL: 'left arm', armR: 'right arm', legL: 'left leg', legR: 'right leg' }[m] + '</option>'; }).join('') + '</select></label>' +
+        (/^(arm|leg)/.test(p.arr.mode) ? '<div class="gf-row"><label>Starts down the limb (cm) ' + num('gf-along', p.arr.along || 0, 1, 0, 120) + '</label><label>Turn (cm) ' + num('gf-dx', p.arr.dx || 0, 0.5) + '</label></div>' :
+          '<label>Top at <select id="gf-anchor"><option value="">(pick a place on the body)</option>' + Object.keys(anchors()).map(function (k) { return '<option value="' + k + '">' + k + ' · ' + anchors()[k] + ' cm</option>'; }).join('') + '</select></label><div class="gf-row"><label>Top at height (cm) ' + num('gf-top', p.arr.top, 1, 0, 200) + '</label><label>Turn (cm) ' + num('gf-dx', p.arr.dx || 0, 0.5) + '</label></div>') +
         '<label>Fabric <select id="gf-mat"><option value="main"' + (p.mat !== 'rib' ? ' selected' : '') + '>main</option><option value="rib"' + (p.mat === 'rib' ? ' selected' : '') + '>rib</option></select></label>' +
         '<div class="gf-row"><button type="button" class="gf-b" data-act="mcopy">Mirrored copy</button><button type="button" class="gf-b" data-act="mfold" title="Select an edge first: the piece is reflected across it and closed">Fold on the edge</button><button type="button" class="gf-b gf-del" data-act="delpiece">Delete</button></div></div>');
       if (S.sel.edge != null && p.edges[S.sel.edge]) {
@@ -105,9 +118,12 @@
         h.push('<div class="gf-card"><b>Point ' + (S.sel.node + 1) + '</b><div class="gf-row"><label>x ' + num('gf-nx', N.x, 0.1) + '</label><label>y ' + num('gf-ny', N.y, 0.1) + '</label></div><label class="gf-chk"><input type="checkbox" id="gf-nsm"' + (N.sm || N.o || N.i ? ' checked' : '') + '> smooth (a curve through it)</label><button type="button" class="gf-b gf-del" data-act="delnode">Delete the point</button></div>');
       }
     }
+    var B = bodyM(); h.push('<div class="gf-card"><b>Body</b><label>Shape <select id="gf-bpre"><option value=""' + (P.body ? '' : ' selected') + '>standard</option>' + ['female', 'male', 'child'].map(function (k) { return '<option value="' + k + '"' + (P.body && P.body.preset === k ? ' selected' : '') + '>' + k + '</option>'; }).join('') + '</select></label>' +
+      (P.body ? '<div class="gf-row"><label>Height ' + num('gf-bh', B.height, 1, 80, 210) + '</label><label>Chest ' + num('gf-bc', B.chest, 1, 40, 160) + '</label></div><div class="gf-row"><label>Waist ' + num('gf-bw', B.waist, 1, 35, 160) + '</label><label>Hip ' + num('gf-bhp', B.hip, 1, 40, 170) + '</label><label>Shoulder ' + num('gf-bs', B.shoulder, 1, 20, 60) + '</label></div>' : '') +
+      '<button type="button" class="gf-b" data-act="auto" title="A first guess of where each piece hangs, from its shape and its seams">Arrange the pieces on the body</button></div>');
     h.push('<div class="gf-card"><b>Dart size</b><div class="gf-row"><label>Width ' + num('gf-dw', S.dart.w, 0.5, 0.5, 20) + '</label><label>Depth ' + num('gf-dd', S.dart.d, 0.5, 1, 40) + '</label></div><label>Seam allowance (cm) ' + num('gf-allow', S.allow, 0.5, 0, 5) + '</label></div>');
     var info = Pat.seamInfo(P), pn = function (id) { var q = Pat.byId(P, id); return q ? q.name : '?'; }, en = function (g) { var q = Pat.byId(P, g.piece), e = q ? q.edges.findIndex(function (x) { return x.id === g.eid; }) : -1; return pn(g.piece) + ' ' + (e + 1); };
-    h.push('<div class="gf-card"><b>Seams</b>' + (info.length ? info.map(function (s, i) { return '<div class="gf-seam"><i style="background:' + SEAMC[i % SEAMC.length] + '"></i><span>' + esc(s.a.map(en).join('+')) + ' ↔ ' + esc(s.b.map(en).join('+')) + '<small>' + s.lenA.toFixed(1) + ' / ' + s.lenB.toFixed(1) + ' cm' + (Math.abs(s.diff) > 0.05 ? ' · ' + (s.diff > 0 ? 'first ' : 'second ') + Math.abs(s.diff).toFixed(1) + ' cm longer (eased in)' : ' · equal') + '</small></span><button type="button" class="gf-x" data-unsew="' + s.id + '" aria-label="Remove this seam">×</button></div>'; }).join('') : '<div class="gf-meta">None yet. Use the Sew tool: click an edge, then the edge it goes to.</div>') + '</div>');
+    h.push('<div class="gf-card"><b>Seams</b>' + (info.length ? info.map(function (s, i) { return '<div class="gf-seam"><i style="background:' + SEAMC[i % SEAMC.length] + '"></i><span>' + esc(s.a.map(en).join('+')) + ' ↔ ' + esc(s.b.map(en).join('+')) + '<small>' + s.lenA.toFixed(1) + ' / ' + s.lenB.toFixed(1) + ' cm' + (Math.abs(s.diff) > 0.05 ? ' · ' + (s.diff > 0 ? 'first ' : 'second ') + Math.abs(s.diff).toFixed(1) + ' cm longer (eased in)' : ' · equal') + '</small></span><button type="button" class="gf-x" data-flip="' + s.id + '" title="Turn this seam the other way round" aria-label="Turn this seam the other way round">⇄</button><button type="button" class="gf-x" data-unsew="' + s.id + '" aria-label="Remove this seam">×</button></div>'; }).join('') : '<div class="gf-meta">None yet. Use the Sew tool: click an edge, then the edge it goes to.</div>') + ((P.stitches || []).length ? '<b>Stitches</b>' + P.stitches.map(function (t) { return '<div class="gf-seam"><i style="background:#ca8a04"></i><span>' + esc(pn(t.a.piece)) + ' ↔ ' + esc(pn(t.b.piece)) + '<small>point to point</small></span><button type="button" class="gf-x" data-unstitch="' + t.id + '" aria-label="Remove this stitch">×</button></div>'; }).join('') : '') + '</div>');
     h.push('<div class="gf-card"><b>Fabric</b><label>GSM ' + num('gf-gsm', P.fabric.gsm, 5, 40, 800) + '</label><div class="gf-row"><button type="button" class="gf-b" data-act="svg">Download the patterns (SVG)</button><button type="button" class="gf-b" data-act="docsave">Save the document</button><button type="button" class="gf-b gf-del" data-act="clear">Clear all</button></div></div>');
     side.innerHTML = h.join('');
   }
@@ -131,6 +147,7 @@
     else if (a === 'mfold' && p) { if (S.sel.edge == null) { toast('Select the edge that is the fold first.'); return; } push(); if (Pat.mirrorFold(P, p, S.sel.edge)) { select(p.id, null, null); changed(); } else toast('That cannot be folded.'); }
     else if (a === 'delpiece' && p) { push(); Pat.removePiece(P, p.id); select(null); changed(); }
     else if (a === 'delnode' && p && S.sel.node != null) { push(); if (!Pat.removeNode(P, p, S.sel.node)) toast('A piece needs at least 3 points.'); S.sel.node = null; S.sel.edge = null; changed(); }
+    else if (a === 'auto') { push(); Pat.autoArrange(P); changed(); toast('Arranged: ' + P.pieces.map(function (q) { return q.name + ' → ' + q.arr.mode; }).join(', ')); }
     else if (a === 'clear') { push(); P = Pat.create(); select(null); changed(); }
     else if (a === 'svg') { var t = Pat.toSVG(P, S.allow); if (!t) { toast('Nothing to download.'); return; } dl(t, 'image/svg+xml', 'free-pattern.svg'); }
     else if (a === 'docsave') { if (!P.pieces.length) { toast('Nothing to save.'); return; } dl(window.KADoc.toJSON(Pat.toDoc(P)), 'application/json', (P.name || 'garment') + '.ka-garment.json'); }
@@ -176,8 +193,18 @@
     else if (t === 'hold' && he2) { push(); var ed = he2.p.edges[he2.n.e]; ed.hold = !ed.hold; select(he2.p.id, null, he2.n.e); changed(); }
     else if (t === 'sew' && he2) {
       var g = { piece: he2.p.id, eid: he2.p.edges[he2.n.e].id };
-      if (!S.sewA) { S.sewA = g; hint.textContent = 'Now click the edge it is sewn to (Esc cancels)'; draw(); }
-      else { push(); var s = Pat.sew(P, S.sewA, g); S.sewA = null; hint.textContent = HINTS.sew; if (s) { var inf = Pat.seamInfo(P).find(function (z) { return z.id === s.id; }); toast('Sewn: ' + inf.lenA.toFixed(1) + ' cm to ' + inf.lenB.toFixed(1) + ' cm' + (Math.abs(inf.diff) > 0.05 ? ' (' + Math.abs(inf.diff).toFixed(1) + ' cm eased in)' : '')); } else { S.hist.pop(); toast('Those two edges cannot be sewn.'); } changed(); }
+      if (S.sewA && e.shiftKey && S.sewPhase === 'A') { if (!S.sewA.some(function (q) { return q.eid === g.eid; })) S.sewA.push(g); draw(); }
+      else if (e.shiftKey && S.lastSeam && !S.sewA) { push(); if (Pat.addToSeam(P, S.lastSeam, 'b', g)) { changed(); toast('Added to the second side of the seam.'); } else { S.hist.pop(); toast('That edge is already in the seam.'); } }
+      else if (!S.sewA) { S.sewA = [g]; S.sewPhase = 'A'; S.lastSeam = null; hint.textContent = 'Now click the edge it is sewn to (Shift+click adds more to the first side; Esc cancels)'; draw(); }
+      else {
+        push(); var s = Pat.sew(P, S.sewA, g); S.sewA = null; S.sewPhase = ''; hint.textContent = HINTS.sew;
+        if (s) { S.lastSeam = s.id; var inf = Pat.seamInfo(P).find(function (z) { return z.id === s.id; }); toast('Sewn: ' + inf.lenA.toFixed(1) + ' cm to ' + inf.lenB.toFixed(1) + ' cm' + (Math.abs(inf.diff) > 0.05 ? ' (' + Math.abs(inf.diff).toFixed(1) + ' cm eased in)' : '') + ' · Shift+click another edge to add it to the second side'); } else { S.hist.pop(); toast('Those edges cannot be sewn.'); }
+        changed();
+      }
+    }
+    else if (t === 'stitch' && he2) {
+      if (!S.stA) { S.stA = { piece: he2.p.id, s: he2.n.s }; hint.textContent = 'Now click the point it is stitched to (Esc cancels)'; draw(); }
+      else { push(); Pat.stitch(P, S.stA.piece, S.stA.s, he2.p.id, he2.n.s); S.stA = null; hint.textContent = HINTS.stitch; changed(); }
     }
     else if (t === 'line') { var hp2 = hitPiece(x, y); if (!hp2) return; if (!S.lineA) { S.lineA = [snap(x, e), snap(y, e), hp2.id]; } else { push(); Pat.addLine(Pat.byId(P, S.lineA[2]) || hp2, [S.lineA[0], S.lineA[1]], [snap(x, e), snap(y, e)]); S.lineA = null; changed(); } }
   }
@@ -212,21 +239,24 @@
     var t = e.target; if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return; if (!root.classList.contains('on')) return;
     var k = e.key, c = e.ctrlKey || e.metaKey;
     if (c && (k === 'z' || k === 'Z')) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; } if (c && (k === 'y' || k === 'Y')) { e.preventDefault(); redo(); return; } if (c || e.altKey) return;
-    if (k === 'Escape') { S.pen = null; S.sewA = null; S.lineA = null; S.drag = null; hint.textContent = HINTS[S.tool] || ''; draw(); return; }
+    if (k === 'Escape') { S.pen = null; S.sewA = null; S.stA = null; S.lineA = null; S.drag = null; hint.textContent = HINTS[S.tool] || ''; draw(); return; }
     if (k === 'Enter' && S.pen) { closePen(); return; }
     if (k === 'Delete' || k === 'Backspace') { var p = cur(); if (!p) return; e.preventDefault(); act(S.sel.node != null ? 'delnode' : 'delpiece'); return; }
     if (k === ' ') { S.space = true; e.preventDefault(); return; }
-    var map = { v: 'select', p: 'pen', r: 'rect', o: 'ellipse', a: 'point', d: 'dart', n: 'notch', l: 'line', s: 'sew', h: 'hold' }; if (map[k.toLowerCase()] && !e.shiftKey) { setTool(map[k.toLowerCase()]); e.stopImmediatePropagation(); } else if (k === 'f') { fit(); e.stopImmediatePropagation(); }
+    var map = { t: 'stitch', v: 'select', p: 'pen', r: 'rect', o: 'ellipse', a: 'point', d: 'dart', n: 'notch', l: 'line', s: 'sew', h: 'hold' }; if (map[k.toLowerCase()] && !e.shiftKey) { setTool(map[k.toLowerCase()]); e.stopImmediatePropagation(); } else if (k === 'f') { fit(); e.stopImmediatePropagation(); }
   }
   function change(e) {
     var id = e.target.id, v = e.target.value, p = cur();
     if (id === 'gf-w') S.size.w = Math.max(1, +v || 1); else if (id === 'gf-h') S.size.h = Math.max(1, +v || 1);
     else if (id === 'gf-dw') S.dart.w = Math.max(0.5, +v || 1); else if (id === 'gf-dd') S.dart.d = Math.max(1, +v || 1); else if (id === 'gf-allow') { S.allow = Math.max(0, Math.min(5, +v || 0)); draw(); }
     else if (id === 'gf-gsm') { push(); P.fabric.gsm = Math.max(40, Math.min(800, +v || 180)); changed(); }
+    else if (id === 'gf-bpre') { push(); if (!v) delete P.body; else P.body = { preset: v }; changed(); }
+    else if (/^gf-b(h|c|w|hp|s)$/.test(id)) { push(); var kk = { 'gf-bh': 'height', 'gf-bc': 'chest', 'gf-bw': 'waist', 'gf-bhp': 'hip', 'gf-bs': 'shoulder' }[id]; P.body = Object.assign({}, P.body || { preset: 'female' }); P.body[kk] = +v || P.body[kk]; changed(); }
+    else if (id === 'gf-anchor') { if (v && cur()) { push(); cur().arr.top = anchors()[v]; changed(); } }
     else if (id === 'gf-tpl') { if (!v) return; push(); var made = Pat.TEMPLATES[v](P), first = [].concat(made)[0]; select(first.id, null, null); changed(); fit(); }
     else if (p) {
       push();
-      if (id === 'gf-name') p.name = v.slice(0, 40) || p.name; else if (id === 'gf-mode') p.arr.mode = v; else if (id === 'gf-top') p.arr.top = +v || 0; else if (id === 'gf-dx') p.arr.dx = +v || 0; else if (id === 'gf-mat') p.mat = v;
+      if (id === 'gf-name') p.name = v.slice(0, 40) || p.name; else if (id === 'gf-mode') p.arr.mode = v; else if (id === 'gf-top') p.arr.top = +v || 0; else if (id === 'gf-along') p.arr.along = +v || 0; else if (id === 'gf-dx') p.arr.dx = +v || 0; else if (id === 'gf-mat') p.mat = v;
       else if (id === 'gf-elabel' && S.sel.edge != null) p.edges[S.sel.edge].label = v.slice(0, 30); else if (id === 'gf-ehold' && S.sel.edge != null) p.edges[S.sel.edge].hold = e.target.checked;
       else if (S.sel.node != null && (id === 'gf-nx' || id === 'gf-ny')) { var N = p.nodes[S.sel.node]; Pat.moveNode(p, S.sel.node, id === 'gf-nx' ? +v : N.x, id === 'gf-ny' ? +v : N.y); }
       else if (id === 'gf-nsm' && S.sel.node != null) { var Nn = p.nodes[S.sel.node]; if (!!(Nn.sm || Nn.o || Nn.i) !== e.target.checked) Pat.toggleSmooth(p, S.sel.node); } else S.hist.pop();
@@ -239,6 +269,8 @@
     root.addEventListener('click', function (e) {
       var t = e.target.closest('[data-tool]'); if (t) { setTool(t.getAttribute('data-tool')); return; }
       var a = e.target.closest('[data-act]'); if (a) { act(a.getAttribute('data-act')); return; }
+      var fl = e.target.closest('[data-flip]'); if (fl) { push(); Pat.flipSeam(P, fl.getAttribute('data-flip')); changed(); return; }
+      var us = e.target.closest('[data-unstitch]'); if (us) { push(); Pat.unstitch(P, us.getAttribute('data-unstitch')); changed(); return; }
       var u = e.target.closest('[data-unsew]'); if (u) { push(); Pat.unsew(P, u.getAttribute('data-unsew')); changed(); }
     });
     root.addEventListener('change', change);
