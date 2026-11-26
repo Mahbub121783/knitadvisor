@@ -64,6 +64,7 @@ const FY = require('./fancy-yarn-engine');
 const STRAITS = require('./structure-traits');
 const { SPINNING_SYSTEMS } = require('./yarn-engine');
 const TE = require('./terry-engine');
+const TE_FIBRES = ['cotton', 'viscose', 'bamboo', 'modal', 'tencel', 'linen', 'polyester', 'nylon', 'acrylic', 'wool', 'elastane'];
 const { FABRIC_DERIVATIVES } = require('../catalog/fabric-derivatives');
 const { FACTORY_RECORDS } = require('../catalog/factory-dataset');
 
@@ -288,6 +289,11 @@ const UNITS = {
 };
 const FILAMENT_FIBRES = ['polyester_filament', 'nylon_filament'];
 const SPUN_TYPES = Object.keys(YC.SYSTEM_LOOK);
+// the ring spinning a mill buys at a count (Ne) for a fibre mix
+function autoSpin(ne, mix) {
+  if (ne < ((SPINNING_SYSTEMS.combed || {}).count_min || 0)) return 'carded';          // coarser than combing is bought
+  return ne <= 20 && !(mix && +mix.polyester >= 25) ? 'carded' : 'combed';
+}
 function readYarn(y, fallback) {
   const o = { ...(y || {}) };
   if (o.type === 'mono' && FILAMENT_FIBRES.includes(o.fibre)) o.filaments = 1;   // a monofilament is one filament
@@ -306,7 +312,8 @@ function readYarn(y, fallback) {
   const filament = FILAMENT_FIBRES.includes(fibre);
   const blendMix = !filament && o.blend && o.mix && typeof o.mix === 'object' ? o.mix : null;   // a blend of any ratio: its own density sets the diameter
   // type: a spinning system for spun yarn, flat / textured for filament
-  const type = filament ? (['fdy', 'dty', 'mono', 'aty'].includes(o.type) ? o.type : 'dty') : (SPUN_TYPES.includes(o.type) ? o.type : 'combed');
+  // 'auto': the spinning a mill buys at this count (carded for a coarse yarn, combed otherwise and for a blend rich in polyester, which pills carded)
+  const type = filament ? (['fdy', 'dty', 'mono', 'aty'].includes(o.type) ? o.type : 'dty') : (SPUN_TYPES.includes(o.type) ? o.type : o.type === 'auto' ? autoSpin(590.5 / single, blendMix || FIBRE_MIX[fibre]) : 'combed');
   // filament details: delustrant, cross-section, intermingling nodes, crimp contraction (DTY)
   const fil = filament ? {
     lustre: ['bright', 'semi_dull', 'full_dull'].includes(o.lustre) ? o.lustre : 'semi_dull',
@@ -779,7 +786,14 @@ function solve(ctx, ground) {
   const ksFam = family === 'rib' && ctx.posNorm > 1.01 ? 'rib2x2' : family;
   // a design that IS a structure the factory has measured: its own constants, no carrying over
   const ex = ctx.exactFam;
-  const KS0 = ex ? blend(KP.calFor('ks', ex, false), KP.calFor('ks', ex, true), phi) : blend(KP.calFor('ks', ksFam, false), KP.calFor('ks', ksFam, true), phi);
+  // the GSM constant of the weight asked for, from the records near it (a heavy jersey, fleece or rib is not knitted on the light ones' constant).
+  // With no weight asked (a stitch length alone) the family's whole constant answers: a weight is predicted from a loop better that way.
+  const wt = +((input.target || {}).gsm) || null, plyN = ground.ply || 1, kFam = ex || (ksFam === 'fleece' && ((input.finish || {}).brush || 'back') === 'none' ? 'terry' : ksFam);
+  const ksAt = (ly, w) => {
+    const pr = w ? KP.practiceAt(kFam, ly, w, plyN >= 2 ? 2 : 1) || (plyN >= 2 ? KP.practiceAt(kFam, ly, w, 1) : null) : null;
+    return pr && pr.n >= 8 ? { ...pr.ks, basis: `${pr.n} factory records near ${Math.round(w)} GSM (${kFam.replace('_', ' ')}${ly ? ', lycra' : ''})` } : KP.calFor('ks', ex || ksFam, ly);
+  };
+  const KS0 = blend(ksAt(false, wt), ksAt(true, wt), phi);
   const KW0 = ex ? blend(KP.calFor('kw', ex, false), KP.calFor('kw', ex, true), phi) : blend(KP.calFor('kw', family, false), KP.calFor('kw', family, true), phi);
   const pitch0 = 25.4 / (+mach.gauge > 0 ? +mach.gauge : 24);
   const pack = ctx.exactFam ? { ks: 1, kw: 1, basis: null, measured: true } : holdPacking(family, ctx.rate == null ? 1 : ctx.rate, pitch0, 3);
@@ -800,7 +814,8 @@ function solve(ctx, ground) {
   const loopYarn = (() => {
     const tex = ground.tex * ANCHOR_LOOP_TEX_RATIO;
     const ne = COUNTS.reduce((b, c) => (Math.abs(590.5 / c - tex) < Math.abs(590.5 / b - tex) ? c : b), COUNTS[0]);
-    return { tex: 590.5 / ne, ne, label: `${ne}s Ne (assumed)`, fibre: ground.fibre, fibre_label: ground.fibre_label, ...(ground.blend && ground.mix ? { mix: ground.mix, blend: true, blend_density: ground.blend_density } : {}) };   // an assumed loop yarn is spun of the ground's own blend
+    const type = autoSpin(ne, ground.mix || FIBRE_MIX[ground.fibre]), d0 = ground.d_mm ? ground.d_mm / Math.sqrt(ground.tex) : 1 / 28;
+    return { tex: 590.5 / ne, ne, label: `${ne}s Ne (assumed)`, type, type_label: type.replace('_', '-'), d_mm: d0 * Math.sqrt(590.5 / ne), fibre: ground.fibre, fibre_label: ground.fibre_label, ...(ground.blend && ground.mix ? { mix: ground.mix, blend: true, blend_density: ground.blend_density } : {}) };   // an assumed loop yarn is spun of the ground's own blend
   })();
   const yarns = feedRows.map((f) => {
     const y = f.yarn || (f.role === 'loop' ? loopYarn : ground);
@@ -945,12 +960,15 @@ function solve(ctx, ground) {
 
   // TF
   const groundIdx = feedRows.findIndex((f, i) => ['ground', 'face'].includes(f.role) && [st.beds.C, st.beds.D].filter(Boolean).some((g) => g[i].includes('K')));
-  const tfGround = Math.sqrt(ground.tex) / (slOf(groundIdx >= 0 ? groundIdx : 0) / 10);
+  // the yarn in one needle loop: the ground yarn with every end knitted with it (a plated back yarn too)
+  const loopTex = groundIdx >= 0 ? yarns[groundIdx].tex : ground.tex;
+  const tfGround = Math.sqrt(loopTex) / (slOf(groundIdx >= 0 ? groundIdx : 0) / 10);
 
   return {
     ground, gauge, recGauge, fg, coverGauge, pitch, lref, slSource, slRange, gsm, gsmRange, target,
     KS, KW, modelKS, modelKW, model, pack, fibre, phi, A: at.A, dia, diaSource, needles, width, widthRange: [widthAt(dia, KW.q3), widthAt(dia, KW.q1)], workFrac,
-    feeders, rpm, eff, feeds, composition, kgh, wpc, cpc, tfGround, M, tW,
+    feeders, rpm, eff, feeds, composition, kgh, wpc, cpc, tfGround, loopTex, M, tW,
+    gfitLoop: gaugeFit(family, gauge, loopTex, ground.fibre, ground.bulk || 1, ground.blend ? ground.blend_density : 0),
     gfit: gaugeFit(family, gauge, ground.tex, ground.fibre, ground.bulk || 1, ground.blend ? ground.blend_density : 0),
   };
 }
@@ -1057,18 +1075,40 @@ const compClassOf = (fibre, mix) => {
   if (m.modal >= 50) return 'modal'; if (m.viscose >= 50) return 'viscose';
   if (c > 0 && p > 0) return p > 50 ? 'pc' : 'cvc'; if (c >= 90) return 'cotton'; return null;
 };
+// the family whose records tell what the floor does with this design (a fleece unbrushed is a terry; a needle-out rib is its own)
+const practiceFamily = (ctx) => ctx.exactFam || (ctx.family === 'fleece' ? (((ctx.input.finish || {}).brush || 'back') === 'none' ? 'terry' : 'fleece') : ctx.family === 'rib' && ctx.posNorm > 1.01 ? 'rib2x2' : ctx.family);
+// the floor's practice as it is shown to a person: a commercial count, its spread, the gauge, the loop length, how many records
+function practiceNote(pr, goal) {
+  return pr ? { family: pr.family, lycra: pr.lycra, gsm: Math.round(goal), ends: pr.ends, n: pr.n, ne: COUNTS.reduce((b, c) => (Math.abs(Math.log(c / pr.ne)) < Math.abs(Math.log(b / pr.ne)) ? c : b), COUNTS[0]),
+    ne_range: [pr.ne_q1, pr.ne_q3], gauge: pr.g, sl_mm: r2(pr.sl), beyond: pr.extrapolated, seen_gsm: [pr.lo, pr.hi] } : null;
+}
+function floorPractice(ctx, gsm) {
+  const fam = practiceFamily(ctx), ends = +((ctx.input.yarn || {}).ply) >= 2 ? 2 : 1;
+  for (const [f, ly, e] of [[fam, ctx.lycra, ends], [fam, ctx.lycra, 1], [fam, false, ends], [fam === 'rib2x2' ? 'rib' : fam, ctx.lycra, 1]]) { const pr = KP.practiceAt(f, ly, gsm, e); if (pr && pr.n >= 6) return pr; }
+  return null;
+}
+// the factory's tightness window for this design at this weight; the family's whole window where there are too few records near it, or for a double knit
+// between rib and interlock
+function tfWindowAt(ctx, gsm) {
+  const pr = gsm ? floorPractice(ctx, gsm) : null;
+  const odd = (ctx.family === 'rib' || ctx.family === 'interlock') && Math.abs(ctx.rate - (ctx.family === 'rib' ? 1 : 0.5)) > 0.12;
+  return pr && pr.n >= 10 && !odd
+    ? { p5: r2(pr.tf.p5 * 0.95), q1: r2(pr.tf.q1), med: r2(pr.tf.med), q3: r2(pr.tf.q3), p95: r2(pr.tf.p95 * 1.05), n: pr.n, basis: `${pr.n} factory records near ${Math.round(gsm)} GSM (${pr.family.replace('_', ' ')}${pr.lycra ? ', lycra' : ''})` }
+    : tfWindow(ctx.family, ctx.lycra, ctx.rate);
+}
 function chooseSetup(ctx, fibre) {
   const { family, input, st } = ctx;
   const mach = input.machine || {};
-  const W = tfWindow(family, ctx.lycra, ctx.rate);
+  const goal = +((input.target || {}).gsm) || null, pr = goal ? floorPractice(ctx, goal) : null;
+  const W = tfWindowAt(ctx, goal);
   const M = KP.MACHINE[FAMILY[family].machine];
   const B = KP.CAL.band[family] && KP.CAL.band[family].n >= 20 ? KP.CAL.band[family] : KP.CAL.band.single_jersey;
   const fixedGauge = +mach.gauge > 0 ? +mach.gauge : null;
   const tried = [];
-  const bm0 = input.yarn && input.yarn.blend && input.yarn.mix && typeof input.yarn.mix === 'object' ? input.yarn.mix : null;
   const isFil = FILAMENT_FIBRES.includes(fibre);
   // the floor's records are staple yarns: their counts say nothing of a filament, which is bought in its own standard deniers
-  const fc = isFil ? null : factoryCount(family, ctx.lycra, compClassOf(fibre, bm0), +((input.target || {}).gsm));
+  const fc = isFil ? null : pr;
+  const plyUse = +((input.yarn || {}).ply) >= 2 ? Math.min(4, +input.yarn.ply) : 1;
   const LIST = isFil ? [30, 40, 50, 75, 100, 120, 150, 200, 250, 300].map((d) => 5314.5 / d) : COUNTS;
   for (const ne of LIST) {
     const bm = input.yarn && input.yarn.blend && input.yarn.mix && typeof input.yarn.mix === 'object' ? input.yarn : null;   // a blend of any ratio carries its mix and density
@@ -1076,13 +1116,16 @@ function chooseSetup(ctx, fibre) {
     let yarn = { tex: 590.5 / ne, ne, label: `${ne}s Ne`, fibre, fibre_label: bm ? BY.labelOfMix(bm.mix) : FIBRES[fibre].label, ...(bm ? { mix: bm.mix, blend: true, blend_density: bm.blend_density } : {}) };
     // the yarn the person described (spinning system, filament lustre, section, ply form) at the count being tried: the count is solved, the KIND of yarn is theirs
     try {
-      const own = readYarn({ ...(input.yarn || {}), fibre, count: ne, unit: 'ne', ply: 1 }, null);
-      if (own) yarn = { ...own, ne, label: FILAMENT_FIBRES.includes(fibre) ? `${Math.round(5314.5 / ne)} D` : `${ne}s Ne` };
+      const own = readYarn({ ...(input.yarn || {}), fibre, count: ne, unit: 'ne', ply: plyUse }, null);
+      if (own) yarn = { ...own, ne, label: (plyUse > 1 ? `${plyUse}/` : '') + (FILAMENT_FIBRES.includes(fibre) ? `${Math.round(5314.5 / ne)} D` : `${ne}s Ne`) };
     } catch (e) { if (!(e instanceof StudioError)) throw e; }
-    const yarnD = (Math.sqrt(yarn.tex) / 28) * dF;
+    // the needles carry the whole loop: a plated back yarn goes into the same hook
+    const gf0 = ctx.feedRows.find((f) => ['ground', 'face'].includes(f.role));
+    const loopEst = gf0 ? (gf0.yarn ? gf0.yarn.tex : yarn.tex) + (gf0.plate ? (gf0.plate === 'ground' ? yarn.tex : gf0.plate.tex) : 0) : yarn.tex;
+    const yarnD = (Math.sqrt(loopEst) / 28) * dF;
     const fits = M.gauges.filter((g) => { const r = 25.4 / g / yarnD; return r >= B.lo * 0.92 && r <= B.hi * 1.08; });
-    const fg = factoryGauge(family, ctx.lycra, ne);
-    const gauges = fixedGauge ? [fixedGauge] : [...new Set([...(fits.length ? fits : []), ...(fg ? [fg.gauge] : [])])];
+    const fg = factoryGauge(family, ctx.lycra, 590.5 / (loopEst / (fc ? fc.ends : 1)));
+    const gauges = fixedGauge ? [fixedGauge] : [...new Set([...(fits.length ? fits : []), ...(fg ? [fg.gauge] : []), ...(fc && fc.g && M.gauges.includes(fc.g) && Math.abs(Math.log(590.5 / (loopEst / fc.ends) / fc.ne)) < Math.log(1.35) ? [fc.g] : [])])];
     if (!gauges.length) gauges.push(M.gauges.reduce((b, g) => (Math.abs(25.4 / g / yarnD - (B.lo + B.hi) / 2) < Math.abs(25.4 / b / yarnD - (B.lo + B.hi) / 2) ? g : b), M.gauges[0]));
     for (const g of gauges) {
       let s;
@@ -1090,21 +1133,27 @@ function chooseSetup(ctx, fibre) {
       const broken = [];
       if (W && s.tfGround > W.p95) broken.push(`tightness factor ${r1(s.tfGround)} above the factory's ${W.p95}`);
       if (W && s.tfGround < W.p5) broken.push(`tightness factor ${r1(s.tfGround)} below the factory's ${W.p5}`);
-      if (s.gfit.fit !== 'good') broken.push(`${g} GG ${s.gfit.fit} for ${ne}s (pitch/yarn ${s.gfit.ratio}, factory ${s.gfit.band[0]}–${s.gfit.band[1]})`);
+      const gf = s.gfitLoop;
+      if (gf.fit !== 'good') broken.push(`${g} GG ${gf.fit} for ${ne}s (pitch/yarn ${gf.ratio}, factory ${gf.band[0]}–${gf.band[1]})`);
       const hl = hookLoad(st, s, ctx.transferDir === 'left' ? -1 : 1);
       if (hl.loops > 1 && hl.idx > 0.6) broken.push(`hook load ${r2(hl.idx)} (${hl.loops} loops) above 0.6`);
       if (s.lref < 1.8 || s.lref > 7) broken.push(`stitch length ${r2(s.lref)} mm outside 1.8–7`);
       const spread = W ? Math.max(0.3, W.q3 - W.q1) : 1;
       const mid = Math.sqrt(B.lo * B.hi);
+      // the count the floor would call this loop: two plated ends of 56s make the loop of one 28s
+      const neEff = fc ? 590.5 / (s.loopTex / fc.ends) : ne;
       // the factory's own gauge for this count weighs more than the middle of the fit band
-      const score = (W ? Math.abs(s.tfGround - (fc && fc.tf ? fc.tf : W.med)) / spread : 0)
-        + 0.5 * Math.abs(Math.log(s.gfit.ratio / mid)) / Math.log(B.hi / B.lo)
-        + (fg && fg.gauge !== g ? 0.8 : 0)
-        + (fc ? 0.9 * Math.abs(Math.log(ne / fc.ne)) / Math.log(1.25) : 0);      // a count a quarter away from the floor's own weighs as much as the factory gauge
-      tried.push({ s, g, ne, broken, score, practised: !!(fg && fg.gauge === g), tfIn: W ? s.tfGround >= W.q1 && s.tfGround <= W.q3 : null });
+      // what the floor does at this weight weighs most: its count (a count a quarter away costs about two of the other terms) and its gauge
+      const score = (W ? Math.abs(s.tfGround - W.med) / Math.max(0.6, spread) : 0) * (fc ? 0.6 : 1)
+        + 0.4 * Math.abs(Math.log(gf.ratio / mid)) / Math.log(B.hi / B.lo)
+        + (fc ? 1.8 * Math.abs(Math.log(neEff / fc.ne)) / Math.log(1.25) : 0)
+        + (fc && fc.g ? Math.min(1.6, 0.3 * Math.abs(g - fc.g)) : fg && fg.gauge !== g ? 0.8 : 0);
+      tried.push({ s, g, ne, broken, score, practised: !!(fc && fc.g ? g === fc.g && Math.abs(Math.log(neEff / fc.ne)) < Math.log(1.2) : fg && fg.gauge === g), tfIn: W ? s.tfGround >= W.q1 && s.tfGround <= W.q3 : null });
     }
   }
   if (!tried.length) throw new StudioError('No commercial count reaches this GSM on this structure.');
+  // above what one end a feeder can knit, the floor runs two
+  const two = goal && plyUse === 1 && (!pr || goal > pr.hi + 8) ? KP.practiceAt(practiceFamily(ctx), ctx.lycra, goal, 2) : null;
   const ok = tried.filter((t) => !t.broken.length).sort((a, b) => a.score - b.score);
   const rest = tried.filter((t) => t.broken.length).sort((a, b) => a.broken.length - b.broken.length || a.score - b.score);
   const ranked = ok.length ? ok : rest;
@@ -1126,14 +1175,17 @@ function chooseSetup(ctx, fibre) {
         ` Nearest: ${best.ne}s Ne on ${best.g} GG at ${r2(best.s.lref)} mm, which breaks: ${best.broken.join('; ')}.`.replace(/\s+/g, ' '),
     };
   }
+  if (two && two.n >= 6 && goal >= two.lo - 10) verdict.text += ` The floor knits ${Math.round(goal)} GSM ${two.family.replace('_', ' ')} with TWO ends a feeder (about ${Math.round(two.ne)}s × 2 on ${two.g} GG, ${two.n} records): set the ground yarn to 2-ply, or start from Heavy Jersey.`;
+  const practice = practiceNote(pr, goal);
   return {
     S: best.s, verdict,
     solver: {
+      practice,
       basis: `every commercial count (${COUNTS[0]}s–${COUNTS[COUNTS.length - 1]}s) tried on ${fixedGauge ? `your ${fixedGauge} GG` : 'each gauge that suits it'}; limits from the factory records${W ? ` (tightness factor ${W.p5}–${W.p95}, ${W.basis})` : ''}, ranked by nearness to the factory median`,
       verdict,
       tried: tried.length, feasible: ok.length,
       options: ranked.slice(0, 6).map((t) => ({
-        count: t.s.ground.label, sl_mm: r2(t.s.lref), tf: r1(t.s.tfGround), gauge: t.g, gauge_fit: t.s.gfit.fit,
+        ne: t.ne, ply: plyUse, count: t.s.ground.label, sl_mm: r2(t.s.lref), tf: r1(t.s.tfGround), gauge: t.g, gauge_fit: t.s.gfitLoop.fit,
         gsm: Math.round(t.s.gsm), width_in: r1(t.s.width), practised: t.practised, breaks: t.broken, score: r2(t.score),
       })),
     },
@@ -1203,8 +1255,9 @@ function checksFor(ctx, S, T) {
   }
   if (feedRows.some((f, i) => f.sl_mm || f.sl_ratio !== 1)) add('note', 'Per-feeder stitch lengths change the yarn each feeder lays; the width and density of the cloth follow the knitting feeders\' mean length.');
   if (S.feeders % st.feeds) add('error', `${S.feeders} feeders is not a whole number of ${st.feeds}-feed repeats: the pattern breaks where the feeders wrap round. Use ${Math.max(st.feeds, Math.round(S.feeders / st.feeds) * st.feeds)}.`);
-  if (S.gfit.fit !== 'good') add('warn', `${S.gauge} GG is ${S.gfit.fit} for ${S.ground.label}: needle pitch ${S.gfit.pitch_mm} mm against a ${S.gfit.yarn_d_mm} mm yarn (ratio ${S.gfit.ratio}; the factory knits this family between ${S.gfit.band[0]} and ${S.gfit.band[1]}).`);
-  const W = tfWindow(family, ctx.lycra, ctx.rate);
+  const gf = S.gfitLoop || S.gfit;
+  if (gf.fit !== 'good') add('warn', `${S.gauge} GG is ${gf.fit} for ${S.ground.label}: needle pitch ${gf.pitch_mm} mm against a ${gf.yarn_d_mm} mm yarn in the loop (ratio ${gf.ratio}; the factory knits this family between ${gf.band[0]} and ${gf.band[1]}).`);
+  const W = tfWindowAt(ctx, S.target || S.gsm);
   if (W) {
     const tf = S.tfGround;
     if (tf < W.p5 || tf > W.p95) add('warn', `Tightness factor ${r1(tf)} is outside what the factory finishes this family at (${W.p5}–${W.p95}, 5th–95th percentile): ${tf < W.p5 ? 'loose — expect high shrinkage, spirality and a sleazy hand' : 'tight — expect yarn breaks, needle wear and a boardy hand'}.`);
@@ -1416,7 +1469,10 @@ function analyse(input) {
         pl.arrangement = arr;
       }
       const fib = FIBRES[(input.yarn || {}).fibre] ? input.yarn.fibre : 'cotton';
-      const comp = fib === 'cvc' ? { cotton: 60, polyester: 40 } : /polyester/.test(fib) ? { polyester: 100 } : { [['viscose', 'modal'].includes(fib) ? fib : 'cotton']: 100 };
+      // the cloth the person asked for (composition target), the yarn's own blend, or the fibre of the yarn
+      const asked = input.plush_composition && typeof input.plush_composition === 'object' ? input.plush_composition : (input.yarn || {}).blend && (input.yarn || {}).mix;
+      const askedFib = asked ? Object.fromEntries(Object.entries(asked).filter(([k, v]) => TE_FIBRES.includes(k) && +v > 0).map(([k, v]) => [k, +v])) : null;
+      const comp = askedFib && Object.keys(askedFib).length ? askedFib : fib === 'cvc' ? { cotton: 60, polyester: 40 } : /polyester/.test(fib) ? { polyester: 100 } : { [['viscose', 'modal'].includes(fib) ? fib : 'cotton']: 100 };
       const py0 = feedRows[pileFeed].yarn;
       plush = TE.analyzePlushTerry({
         fabricId: pl.cut ? 'velour_plush' : 'terry_fabric', gsm: tgt, gauge: +((input.machine || {}).gauge) || 20,
@@ -1431,7 +1487,16 @@ function analyse(input) {
     let solver = null, S, finish = null;
     if (plush) {
       const fib = FIBRES[(input.yarn || {}).fibre] ? input.yarn.fibre : 'cotton';
-      const yOf = (y) => readYarn(y.denier ? { denier: y.denier, fibre: 'polyester_filament' } : { ne: y.ne, fibre: fib }, null);
+      // each plush yarn as the plush engine chose it: its count and its own blend (the ground may be spun or filament, the pile a blend)
+      const yOf = (y) => {
+        if (y.denier) return readYarn({ denier: y.denier, fibre: 'polyester_filament' }, null);
+        const keys = Object.keys(y.mix || {}).filter((k) => y.mix[k] > 0), type = (input.yarn || {}).type;
+        if (keys.length > 1) {
+          try { const sy = BY.toStudioYarn({ fibres: y.mix }); return readYarn({ ne: y.ne, fibre: sy.fibre, mix: sy.mix, blend: true, blend_density: sy.density, type }, null); } catch (e) { if (!(e instanceof BY.BlendError)) throw e; }
+        }
+        const one = keys[0] === 'polyester' ? 'polyester_spun' : keys[0];
+        return readYarn({ ne: y.ne, fibre: FIBRES[one] ? one : fib, type }, null);
+      };
       const gY = plush.yarns[0], pY = plush.yarns[1];
       const groundP = yOf(gY), pileY = yOf(pY);
       feedRows[pileFeed] = { ...feedRows[pileFeed], yarn: pileY, sl_mm: pY.sl_mm };
@@ -1452,7 +1517,7 @@ function analyse(input) {
       // the feed carries two yarns: show both
       const row = (role, y, sl, share, tf, tension) => {
         const courseM = (S.needles * sl) / 1000;
-        return { feed: pileFeed + 1, role, yarn: y.label, fibre: y.fibre_label, tex: r2(y.tex), sl_mm: r2(sl), sl_source: 'plush model', tf, share: 1,
+        return { feed: pileFeed + 1, role, yarn: y.label, fibre: y.fibre_label, fibre_mix: y.mix || FIBRE_MIX[y.fibre] || null, look: lookOfYarn(y), yarn_type: y.type_label || null, d_mm: y.d_mm ? r3(y.d_mm) : null, tex: r2(y.tex), sl_mm: r2(sl), sl_source: 'plush model', tf, share: 1,
           course_length_m: r3(courseM), yarn_speed_m_min: r1(courseM * S.rpm), mass_share_pct: share, tension_cN: tension.map((k) => r1(k * y.tex)) };
       };
       S.feeds = [
@@ -1679,7 +1744,7 @@ function analyse(input) {
 
     const W = plush
       ? (() => { const t = plush.calibration.tightness_factor * 10, d = plush.calibration.tightness_sd * 10; return { p5: r2(t - 2 * d), q1: r2(t - 0.67 * d), med: r2(t), q3: r2(t + 0.67 * d), p95: r2(t + 2 * d), n: plush.calibration.factory_rows, basis: `${plush.calibration.factory_rows} factory terry rows, ground + pile plated` }; })()
-      : tfWindow(family, lycra, ctx.rate);
+      : tfWindowAt(ctx, S.target || S.gsm);
     // how right this answer is likely to be: measured by cross-validation (plush has its own model and no records)
     const acc = accuracyFor({ matchId: match && match.id, family, lycra, level: plush ? 'estimate' : confidence.level });
     // what the melange yarns mean for THIS structure (composition of the cloth, grin-through, the wet route of the whole fabric)
@@ -1833,7 +1898,7 @@ function analyse(input) {
       },
       machine: {
         machine_label: profile.label, gauge: S.gauge, gauge_source: +((input.machine || {}).gauge) > 0 ? 'your machine' : S.fg ? `factory records (${S.fg.share_pct}% of ${S.fg.n} rows at this count)` : 'cover factor',
-        gauge_recommended: S.recGauge, gauge_fit: S.gfit,
+        gauge_recommended: S.recGauge, gauge_fit: S.gfitLoop || S.gfit,
         dia: S.dia, dia_source: S.diaSource, needles: S.needles, feeders: S.feeders, feeders_per_repeat: st.feeds,
         repeats_round: r2(S.feeders / st.feeds), rpm: S.rpm, efficiency_pct: Math.round(S.eff * 100),
         kg_per_hour: r2(S.kgh), kg_per_day: r1(S.kgh * 24),
@@ -1937,11 +2002,59 @@ function analyse(input) {
     out.lab = input.lab && input.lab.enabled ? labSummary(input, out, clothState, thickMm, S, plush, rd.values) : null;
     out.trim = input.trim && input.trim.enabled ? trimSummary(input, out) : null;
     RDG.apply(out, rd.values, { thickness_mm: thickModel });
+    out.yarn_plan = yarnPlan(out, input);
+    // your own count or gauge: the floor's practice at this weight still stands beside it
+    if (!out.yarn_plan.practice && !plush && S.target) out.yarn_plan.practice = practiceNote(floorPractice(ctx, S.target), S.target);
     return out;
   } catch (e) {
     if (e instanceof StudioError || e instanceof MEL.MelangeError || e instanceof BY.BlendError || e instanceof CSOLVE.CompositionError) return { success: false, error: e.message };
     throw e;
   }
+}
+
+// The yarns to buy for this cloth, one line each: role, count, spinning, fibres, share of the cloth's mass, the feeders that knit it and whether the
+// Studio settled it or the person did; the elastane as its own line; the factory practice at this weight beside it.
+function yarnPlan(out, input) {
+  const y = out.yarn || {}, rows = [], byKey = new Map();
+  const fibreText = (m) => {
+    const e = Object.entries(m || {}).filter(([k, v]) => v > 0.05 && k !== 'elastane').sort((a, b) => b[1] - a[1]);
+    return e.length ? e.map(([k, v]) => `${e.length > 1 ? `${Math.round(v)}% ` : ''}${k.replace(/_/g, ' ')}`).join(' / ') : null;
+  };
+  const typeName = (t) => (t && ((SPINNING_SYSTEMS[t] || {}).label || ((YC.POLY_FORM || {})[t] || {}).label)) || t || null;
+  const SRC = (role) => {
+    const base = role === 'ground' || role === 'face' ? (y.ground || {}).source : role === 'plate' ? ((input.yarns || {}).plate ? 'your input' : 'the ground yarn') : ((y.roles || {})[role] || {}).source;
+    if (out.structure.family === 'plush') return (role === 'ground' ? input.yarn && (+input.yarn.count > 0 || +input.yarn.ne > 0) : input.yarns && input.yarns[role]) ? 'yours' : 'solved';
+    return !base || base === 'solved' ? 'solved' : base === 'your input' ? 'yours' : /assumed/.test(base) ? 'assumed' : base === 'the ground yarn' ? 'same as ground' : base;
+  };
+  const add = (role, count, look, type, share, feed) => {
+    const fibres = fibreText(look && look.mix);
+    const key = JSON.stringify([role, count, fibres, type]);
+    let row = byKey.get(key);
+    if (!row) {
+      row = { role, count: String(count || '').replace(' (assumed)', ''), type: typeName((look && look.type) || type), fibres, filament: !!(look && look.filament), tex: look && look.tex ? look.tex : null, share_pct: 0, feeds: [], source: SRC(role) };
+      byKey.set(key, row); rows.push(row);
+    }
+    row.share_pct += share || 0;
+    if (feed && !row.feeds.includes(feed)) row.feeds.push(feed);
+  };
+  (y.feeds || []).forEach((f) => {
+    const role = String(f.role).replace(/ \(.*\)$/, '');
+    const share = +f.mass_share_pct || 0;
+    if (f.plated) {
+      const back = +f.plated.back_pct || 0, face = String(f.yarn).split(' + ')[0];
+      add(role, face, f.look, f.yarn_type, share * (1 - back / 100), f.feed);
+      add('plate', f.plated.back, f.look && f.look.back, null, (share * back) / 100, f.feed);
+    } else add(role === 'pile' ? 'pile' : role, f.yarn, f.look, f.yarn_type, share, f.feed);
+  });
+  const elast = (y.composition || []).filter((c) => /elastane|lycra|spandex/i.test(c.part || ''));
+  if (elast.length) {
+    const fed = (y.feeds || []).filter((f) => f.elastane), e = fed[0] && fed[0].elastane;
+    rows.push({ role: 'elastane', count: e ? `${e.denier} D` : 'bare', type: e ? `bare, plated at a draft of ${r2(e.draft)}` : 'bare, plated with the ground', fibres: 'elastane', filament: true, tex: e ? r2(e.denier / 9) : null,
+      share_pct: elast.reduce((t, c) => t + (+c.pct || 0), 0), feeds: fed.map((f) => f.feed), source: input.elastane ? 'yours' : 'solved' });
+  }
+  rows.forEach((r) => { r.share_pct = r1(r.share_pct); r.feeds.sort((x, y) => x - y); });
+  const cloth = Object.entries(FEAS.clothFibres(out)).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${v}% ${k.replace(/_/g, ' ')}`).join(' / ');
+  return { rows, cloth, practice: (out.solver && out.solver.practice) || null };
 }
 
 // What the melange yarns do to THIS fabric: each role's analysis, and the fibre composition of the whole cloth

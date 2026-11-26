@@ -103,6 +103,27 @@ function solve(input, analyse) {
   const run = (inp) => { const o = analyse(inp); if (!o || o.success === false) throw new CompositionError(o && o.error ? o.error : 'The Studio could not analyse the design.'); return o; };
   const solved = {};
 
+  // ── terry and velour ─────────────────────────────────────────────────────────────────────────────────────────
+  // a sinker-loop pile has its own mass balance: it chooses the ground (spun or filament), the pile blend and the elastane share for the composition
+  // (only a single bed whose loop-yarn feeder knits can be one: the Studio is not run twice for any other design)
+  const mayBePlush = !tIn.composition_roles && clean.grid && !clean.grid.D && (clean.feeds || []).some((f, i) => f && f.role === 'loop' && clean.grid.C && clean.grid.C[i] && clean.grid.C[i].includes('K'));
+  if (mayBePlush) {
+    const first = analyse({ ...clean, plush_composition: target });
+    if (first && first.success !== false && first.structure && first.structure.family === 'plush') {
+      const got0 = clothOf(first), m0 = missPts(target, got0), near = m0.pts <= SOLVED_PTS * 2, label0 = m0.pts <= TOL_PTS;
+      first.composition_solve = {
+        success: near || label0, target: Object.fromEntries(Object.entries(target).map(([k, v]) => [k, r1(v)])), achieved: got0, largest_miss_pts: m0.pts, largest_miss_fibre: m0.fibre,
+        held: near ? 'solved: inside half a point' : label0 ? `inside the ${TOL_PTS}-point label tolerance, not exact` : 'NOT reached',
+        solved: { plush: 'the ground yarn, the pile blend and the elastane share, from the plush mass balance' },
+        notes: near || label0 ? [] : [`With the plush yarns (a spun or filament ground, the pile blend to order in steps of five) the cloth lands ${r1(m0.pts)} points from the target on ${m0.fibre}.`],
+        basis: 'mass of yarn as fed to the machine; the plush model (factory terry records for the loop, the pile geometry derived)', inputs_written: {},
+      };
+      if (first.yarn_plan) first.yarn_plan.rows.forEach((r) => { r.fibres_from = 'your composition'; });
+      Object.defineProperty(first, '_design', { value: { ...clean, plush_composition: target }, enumerable: false });
+      return first;
+    }
+  }
+
   // ── staple fibres ─────────────────────────────────────────────────────────────────────────────────────────────
   let work = { ...clean, yarn: { ...(clean.yarn || {}) } };
   const rolesIn = tIn.composition_roles && typeof tIn.composition_roles === 'object' ? tIn.composition_roles : null;
@@ -120,6 +141,8 @@ function solve(input, analyse) {
     work.feeds = (work.feeds || []).map((f) => (f && f.yarn ? { ...f, yarn: put(f.yarn) } : f));
     solved.yarn = { fibres: Object.fromEntries(Object.entries(mix).map(([k, v]) => [k, r1(v)])), basis: 'every yarn carries the one blend' };
   } else {
+    // with elastane on top the cloth is knitted on the lycra cloth's loop length, so the counts are solved with it already plated (its draft after)
+    if (el > 0 && !work.elastane) work = { ...work, elastane: { denier: 40, draft: DRAFT_PREFERRED, every: 'all' } };
     roleSolve = solveRoles(work, rolesIn, mix, el, run, notes);
     work = roleSolve.input;
     solved.roles = roleSolve.report;
@@ -140,7 +163,8 @@ function solve(input, analyse) {
       const g = (rho0 * (d / d0) * g0 * (f / f0)) / rhoT;
       const inside = g >= DRAFT_MIN && g <= DRAFT_MAX;
       const gc = Math.min(DRAFT_MAX, Math.max(DRAFT_MIN, g));
-      cands.push({ d, e, g, gc, inside, score: Math.abs(gc - DRAFT_PREFERRED) + (inside ? 0 : 5 + Math.abs(g - gc)) + (e === 'alternate' ? 0.3 : 0) + 0.15 * Math.abs(Math.log(d / 40)) });
+      // mills plate 20-40 D: a heavier elastane only where the draft window leaves no finer answer
+      cands.push({ d, e, g, gc, inside, score: 0.5 * Math.abs(gc - DRAFT_PREFERRED) + (inside ? 0 : 5 + Math.abs(g - gc)) + (e === 'alternate' ? 0.35 : 0) + 0.15 * Math.abs(Math.log(d / 40)) + 0.9 * Math.max(0, Math.log(d / 40)) });
     }
     cands.sort((a, b) => a.score - b.score);
     const best = cands[0];
@@ -155,12 +179,14 @@ function solve(input, analyse) {
       draft = Math.min(DRAFT_MAX, Math.max(DRAFT_MIN, draft * (got / el)));
     }
     work = { ...work, elastane: { denier: best.d, draft: r2(draft), every: best.e } };
-    solved.elastane = { denier: best.d, draft: r2(draft), every: best.e, basis: 'the draft is solved for the share; the denier is the one that keeps the draft nearest 3.0 inside the knitting window' };
+    solved.elastane = { denier: best.d, draft: r2(draft), every: best.e, basis: 'the draft is solved for the share; the denier is the finest usual one (20–40 D) that holds a draft inside the knitting window, near 3.0' };
     if (el < 1) notes.push('Under 1 % elastane is a trace: it will not give the cloth any stretch recovery.');
   } else if (work.elastane) { work = { ...work }; delete work.elastane; notes.push('The target has no elastane, so the elastane card is not used.'); }
 
   // ── the answer, checked ───────────────────────────────────────────────────────────────────────────────────────
   const out = run(work);
+  // the plan: the fibres (and the elastane) came from the composition, not from the person's own yarn fields
+  if (out.yarn_plan) out.yarn_plan.rows.forEach((r) => { if (r.role === 'elastane' && el > 0) r.source = 'solved'; r.fibres_from = 'your composition'; });
   const got = clothOf(out), m = missPts(target, got);
   const inside = m.pts <= SOLVED_PTS * 2, label = m.pts <= TOL_PTS;
   out.composition_solve = {

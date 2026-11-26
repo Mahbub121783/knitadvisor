@@ -78,7 +78,6 @@ const feedingWord = (every) => (every === 'alternate' ? 'half feeder: elastane o
 function build(raw, analyse) {
   const { design, shade, brush } = designOf(raw);
   let out = analyse(clean(design));
-  if (out && out.success === false && /no elastane in the probe/.test(out.error || '')) throw new SheetError('This design (a sinker-loop plush / terry) does not carry elastane in the Studio: give the composition without elastane.');
   if (!out || out.success === false) throw new SheetError(out && out.error ? out.error : 'The Studio could not work this design out.');
   const conf = out.structure.confidence || {};
   const recordBacked = conf.level === 'verified' || conf.level === 'calibrated';
@@ -213,7 +212,10 @@ function build(raw, analyse) {
     design: { bed: out.structure.bed, gating: out.structure.gating, feeds: out.structure.feeds, repeat: `${out.structure.feeds} feeds × ${out.structure.needles_per_repeat} needles`, roles: out.structure.roles_drawn, counts: out.structure.identity.counts, longest_float: out.structure.identity.longest_float, family: out.structure.family_label, transfers: (out.structure.identity.counts || {}).E + (out.structure.identity.counts || {}).R > 0, notes: (out.checks || []).filter((c) => c.level === 'note').slice(0, 6).map((c) => c.text) },
     fabric: { title: out.structure.identity.title, detail: out.structure.identity.detail, family: out.structure.family_label, matches: out.structure.match ? out.structure.match.name : null, confidence: conf.level, confidence_why: conf.why },
     weight_basis: weightPath,
-    yarn: { feeds, composition: out.yarn.composition, composition_solved: out.composition_solve ? { target: out.composition_solve.target, achieved: out.composition_solve.achieved, held: out.composition_solve.held } : null, elastane: el ? { denier: el.denier, draft: el.draft, feeding: feedingWord(el.every), every: el.every } : null },
+    yarn: { feeds, composition: out.yarn.composition, composition_solved: out.composition_solve ? { target: out.composition_solve.target, achieved: out.composition_solve.achieved, held: out.composition_solve.held } : null,
+      // a plush sizes the elastane's share, not its denier: the trial roll fixes the denier and the draft
+      elastane: el ? { denier: el.denier, draft: el.draft, feeding: feedingWord(el.every), every: el.every }
+        : out.plush && out.composition_solve && out.composition_solve.achieved.elastane > 0 ? { denier: null, draft: null, every: 'all', share_pct: out.composition_solve.achieved.elastane, feeding: `${out.composition_solve.achieved.elastane} % of the cloth, bare, plated with the ground yarn (denier and draft from a trial roll)` } : null },
     machine: {
       type: ms.profile ? ms.profile.label : m.machine_label, gauge: m.gauge, dia: m.dia, needles: m.needles, feeders: m.feeders, rpm: m.rpm, efficiency_pct: m.efficiency_pct, kg_per_hour: m.kg_per_hour,
       stitch_length_mm: f.sl_mm, stitch_length_range_mm: f.sl_range_mm || null, tracks: out.setup ? out.setup.tracks : null, cam_chart: out.setup ? out.setup.cam_chart : null, vdq,

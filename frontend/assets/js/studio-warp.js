@@ -289,7 +289,7 @@
     var geo = { courses: g.paths.map(function (p) { return { course: p.guide, feed: p.bar, points: p.points, side: [], stitches: [] }; }), wales: g.needles, rows: g.courses, h: h, bed: L.beds === 2 ? 'double' : 'single', F: 1, W: 1 };
     var spec = { geo: geo, colours: r.bars.map(function (_, i) { return barCol(i); }), colourBy: 'feed', feeds: r.bars, plated: [], real: false,
       radius: r.bars.map(function (b) { return Math.max(0.04, Math.min(0.2, 0.5 * 1.3 * (b.d_mm || Math.sqrt(b.tex) / 28) / (10 / F.wpc))); }) };
-    if (!loopP) loopP = import('/assets/js/studio-loops.js?v=20261111b').then(function (mod) { loopView = new mod.LoopView($('wp-loops'), function () {}); return loopView; });
+    if (!loopP) loopP = import('/assets/js/studio-loops.js?v=20261211a').then(function (mod) { loopView = new mod.LoopView($('wp-loops'), function () {}); return loopView; });
     loopP.then(function (v) { v.draw(spec); v.view(lview); }).catch(function (e) { $('wp-loops').innerHTML = '<p class="st-p" style="padding:12px">3D could not draw: ' + esc(e.message || e) + '</p>'; });
   }
   // one colour, or each bar its own: the knit3d tint multiplies a grey base (in linear light)

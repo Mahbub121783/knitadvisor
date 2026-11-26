@@ -255,12 +255,32 @@ function analyzePlushTerry(p) {
   const share = { ground: mG / tot * (1 - E), pile: mP / tot * (1 - E), elastane: E };
   const shearLossFab = cut ? (2 * (h - g.c) / every * pileTex) / (mG + g.lpKnit * pileTex) : 0;
 
-  // ---- composition: the pile blend that lands the declared polyester ----
-  const groundPoly = ground.fibre === 'polyester' ? 1 : 0;
-  let pilePolyNeeded = share.pile > 0 ? (P - share.ground * groundPoly) / share.pile : 0;
-  pilePolyNeeded = Math.max(0, Math.min(1, pilePolyNeeded));
-  const pileBlend = pileFilament ? PILE_BLENDS[PILE_BLENDS.length - 1]
-    : PILE_BLENDS.reduce((b, x) => (Math.abs(x.p - pilePolyNeeded) < Math.abs(b.p - pilePolyNeeded) ? x : b), PILE_BLENDS[0]);
+  // ---- composition: the yarn blends that land the declared polyester ----
+  // a filament ground heavier than all the polyester declared cannot be the answer: knit the ground spun instead
+  if (ground.filament && !allPoly && !(+p.groundDenier > 0) && share.ground > P + 0.03) return analyzePlushTerry({ ...p, groundNe: snap(M.faceFit.a + M.faceFit.b * gsm + 4, STD_GROUND) });
+  let pileBlend, groundBlend = null;
+  if (pileFilament) pileBlend = PILE_BLENDS[PILE_BLENDS.length - 1];
+  else {
+    // the pile blend nearest the declared polyester; where the pile alone cannot, the spun ground carries a blend too (plain cotton preferred)
+    const gOpts = ground.filament ? [{ p: 1 }] : PILE_BLENDS.filter((x) => x.p <= 0.65);
+    let best = null;
+    for (const g0 of gOpts) for (const x of PILE_BLENDS) {
+      const miss = Math.abs(share.ground * g0.p + share.pile * x.p - P) + (ground.filament ? 0 : 0.02 * (g0.p > 0 ? 1 : 0));
+      if (!best || miss < best.miss - 1e-9) best = { miss, g: g0, x };
+    }
+    pileBlend = best.x; if (!ground.filament && best.g.p > 0) groundBlend = best.g;
+    // no stock blend lands it within two points: the pile blend to order, in steps of five
+    if (best.miss > 0.02 && p.composition) {
+      const gp = ground.filament ? 1 : best.g.p, q = Math.round(Math.max(0, Math.min(1, (P - share.ground * gp) / share.pile)) * 20) / 20;
+      if (Math.abs(share.ground * gp + share.pile * q - P) < Math.abs(share.ground * gp + share.pile * pileBlend.p - P) - 0.005) {
+        pileBlend = { p: q, label: q <= 0 ? 'cotton' : q >= 1 ? 'polyester' : `${q > 0.5 ? 'PC' : 'CVC'} ${Math.round(Math.max(q, 1 - q) * 100)}/${Math.round(Math.min(q, 1 - q) * 100)}` };
+        if (q > 0 && q < 1 && ![0.2, 0.4, 0.5, 0.65].includes(q)) warnings.push(`The pile blend ${pileBlend.label} is not a stock yarn: it is spun to order to hold the declared composition.`);
+      }
+    }
+  }
+  if (groundBlend) ground = { ...ground, label: `${ground.ne}/1 ${groundBlend.label}`, blend_p: groundBlend.p };
+  const groundPoly = ground.fibre === 'polyester' ? 1 : groundBlend ? groundBlend.p : 0;
+  const pilePolyNeeded = share.pile > 0 ? Math.max(0, Math.min(1, (P - share.ground * groundPoly) / share.pile)) : 0;
   const achievedPoly = share.ground * groundPoly + share.pile * pileBlend.p;
   const achieved = {};
   if (achievedPoly > 0.0005) achieved.polyester = achievedPoly;
@@ -337,10 +357,12 @@ function analyzePlushTerry(p) {
   else route.push('Stenter with overfeed (hydrophilic softener, no width stretch)', 'Tumble / relax dry (opens and stands the loops)');
 
   const yarns = [
-    { role: 'ground', label: ground.label, composition: ground.fibre === 'polyester' ? '100% Polyester' : `100% ${cap(cellKey)}`,
+    { role: 'ground', label: ground.label, composition: ground.fibre === 'polyester' ? '100% Polyester' : ground.blend_p ? `${Math.round((1 - ground.blend_p) * 100)}% ${cap(cellKey)} / ${Math.round(ground.blend_p * 100)}% Polyester` : `100% ${cap(cellKey)}`,
       ne: ground.ne || r1(neOfTex(ground.tex)), denier: ground.denier || null, tex: r2(ground.tex), sl_mm: r2(g.lg), share_pct: r1(share.ground * 100),
+      mix: ground.fibre === 'polyester' ? { polyester: 100 } : ground.blend_p ? { [cellKey]: Math.round((1 - ground.blend_p) * 100), polyester: Math.round(ground.blend_p * 100) } : { [cellKey]: 100 },
       basis: `plated-bundle tightness from ${M.rows} factory terry rows (TF ${r3(M.tf)})` },
     { role: 'pile', label: pileLabel, ne: pileNeEq, denier: pick.choice.den || null, tex: r2(pileTex),
+      mix: pick.choice.den || pileBlend.p >= 1 ? { polyester: 100 } : pileBlend.p > 0 ? { [cellKey]: Math.round((1 - pileBlend.p) * 100), polyester: Math.round(pileBlend.p * 100) } : { [cellKey]: 100 },
       sl_mm: r2(g.lpKnit), sl_finished_mm: cut ? r2(g.lpFin) : null, share_pct: r1(share.pile * 100), basis,
       exact_ne: pick.choice.den ? null : r1(neOfTex(pileTexExact)) },
   ];

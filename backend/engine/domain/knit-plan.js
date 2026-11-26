@@ -110,6 +110,74 @@ function calFor(table, family, lycra) {
   return { med: v, q1: v * 0.96, q3: v * 1.04, n: 0, basis: 'book value (too few factory records)' };
 }
 
+// ── what the floor does at THIS weight ────────────────────────────────────
+// A mill does not knit every weight with one constant: the count, the gauge, the stitch length, the GSM constant and the tightness it finishes
+// at all move with the weight. These are the records near a target GSM, each weighted by how near it is (a Gaussian in GSM). A rib knitted
+// 2-in-1-out is its own family (rib2x2). Rows knitted with two ends a feeder (a GSM constant about twice the family's; heavy jersey) are kept
+// apart, their constant put on the basis of the yarn in the loop (both ends), as the Studio weighs a 2-ply feeder.
+const PRACTICE_ROWS = (() => {
+  const by = {};
+  for (const r of FACTORY_RECORDS) {
+    if (!(r.fgsm > 0 && r.ne > 0 && r.sl > 0)) continue;
+    const openRib = r.fab === 'rib' && r.fdia > 0 && r.dia > 0 && r.fdia / r.dia < 1.6;
+    const fam = openRib ? 'rib2x2' : r.fab === 'heavy_jersey' ? 'single_jersey' : r.fab;
+    const key = `${fam}|${isLycraSpin(r.spin) ? 'L' : 'P'}`;
+    (by[key] = by[key] || []).push({ gsm: r.fgsm, ne: r.ne, sl: r.sl, g: r.g > 0 ? r.g : null, ks: (r.fgsm * r.sl) / (590.5 / r.ne), heavy: r.fab === 'heavy_jersey' });
+  }
+  Object.values(by).forEach((rows) => {
+    const m = quant(rows.map((r) => r.ks), 0.5);
+    rows.forEach((r) => { r.ends = r.heavy || r.ks > 1.55 * m ? 2 : 1; if (r.ends === 2) r.ks /= 2; });
+  });
+  return by;
+})();
+function wquant(rows, f, q) {
+  const a = rows.map((r) => [f(r), r.w]).sort((x, y) => x[0] - y[0]), tot = a.reduce((t, x) => t + x[1], 0);
+  let acc = 0;
+  for (const [v, w] of a) { acc += w; if (acc >= q * tot - 1e-12) return v; }
+  return a.length ? a[a.length - 1][0] : null;
+}
+const practiceMemo = new Map();
+function practiceAt(family, lycra, gsm, ends = 1) {
+  if (!(gsm > 0)) return null;
+  const key = `${family}|${lycra ? 'L' : 'P'}|${Math.round(gsm)}|${ends}`;
+  if (practiceMemo.has(key)) return practiceMemo.get(key);
+  const pool = (PRACTICE_ROWS[`${family}|${lycra ? 'L' : 'P'}`] || []).filter((r) => r.ends === ends);
+  let out = null;
+  if (pool.length >= 8) {
+    // the window is as narrow as the records allow: wide enough to hold the fourteen rows nearest this weight
+    const dist = pool.map((r) => Math.abs(r.gsm - gsm)).sort((x, y) => x - y);
+    const h = Math.max(7, dist[Math.min(13, dist.length - 1)] / 1.5);
+    const rows = pool.map((r) => ({ ...r, w: Math.exp(-0.5 * ((r.gsm - gsm) / h) ** 2) })).filter((r) => r.w > 0.08);
+    const S = rows.length;
+    if (dist[Math.min(2, dist.length - 1)] <= 45 && S >= 3) {
+      const lo = Math.min(...pool.map((r) => r.gsm)), hi = Math.max(...pool.map((r) => r.gsm));
+      const gw = {}; rows.forEach((r) => { if (r.g) gw[r.g] = (gw[r.g] || 0) + r.w; });
+      const g = Object.entries(gw).sort((x, y) => y[1] - x[1])[0];
+      const tfOf = (r) => Math.sqrt((ends * 590.5) / r.ne) / (r.sl / 10);
+      const q = (f, p) => wquant(rows, f, p);
+      // the value AT this weight, by a weighted straight line through the rows (a plain median leans to the side where the records are many), held
+      // inside the middle four fifths of what these rows ran
+      const at = (f) => {
+        let sw = 0, sx = 0, sy = 0, sxx = 0, sxy = 0;
+        for (const r of rows) { const x = r.gsm - gsm, y = f(r); sw += r.w; sx += r.w * x; sy += r.w * y; sxx += r.w * x * x; sxy += r.w * x * y; }
+        const det = sw * sxx - sx * sx, v = det > sw * sw * 4 ? (sxx * sy - sx * sxy) / det : sy / sw;
+        return Math.max(q(f, 0.1), Math.min(q(f, 0.9), v));
+      };
+      const ksNow = at((r) => r.ks), ksMed = q((r) => r.ks, 0.5), shift = ksNow - ksMed;
+      const neNow = Math.exp(at((r) => Math.log(r.ne)));
+      out = {
+        family, lycra: !!lycra, gsm: Math.round(gsm), ends, n: S, h: Math.round(h), lo: Math.round(lo), hi: Math.round(hi), extrapolated: gsm < lo - 12 || gsm > hi + 12,
+        ne: Math.round(neNow * 10) / 10, ne_q1: q((r) => r.ne, 0.2), ne_q3: q((r) => r.ne, 0.8), g: g ? +g[0] : null, sl: at((r) => r.sl),
+        ks: { med: ksNow, q1: q((r) => r.ks, 0.25) + shift, q3: q((r) => r.ks, 0.75) + shift, n: S },
+        tf: { p5: q(tfOf, 0.05), q1: q(tfOf, 0.25), med: q(tfOf, 0.5), q3: q(tfOf, 0.75), p95: q(tfOf, 0.95) },
+      };
+    }
+  }
+  if (practiceMemo.size > 4000) practiceMemo.clear();
+  practiceMemo.set(key, out);
+  return out;
+}
+
 // ── 2. MACHINE TYPES ────────────────────────────────────────────────────────
 // feeders per inch of diameter (modern machines) and the speed factor
 // (rpm × dia, inches) they run at
@@ -484,5 +552,5 @@ function buildKnitPlan(a) {
 module.exports = {
   buildKnitPlan, normaliseStructure, CAL, MACHINE, STANDARD_DIA,
   // shared with the fabric studio (fabric-studio.js)
-  calFor, LYCRA_RATIO, tracksOf, camChart, structureChecks, feedConsumption, feedConsumptionCells,
+  calFor, practiceAt, LYCRA_RATIO, tracksOf, camChart, structureChecks, feedConsumption, feedConsumptionCells,
 };

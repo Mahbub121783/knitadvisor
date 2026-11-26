@@ -27,7 +27,7 @@
       '<div class="st-hint" style="margin:6px 0 0"><b>How the weight was found:</b> ' + esc(s.weight_basis.path) + ' — ' + esc(s.weight_basis.why) + (s.weight_basis.laws ? ' (laws ' + s.weight_basis.laws.sl_mm + ' mm, family table ' + s.weight_basis.laws.family_table_sl_mm + ' mm)' : '') + '</div>' +
       '<div class="st-hint" style="margin:4px 0 0"><b>Accuracy:</b> ' + esc(s.accuracy.weight) + '. ' + esc(s.accuracy.rule) + '</div></div>';
     var yr = s.yarn.feeds.map(function (f) { return row('Feed ' + f.feed + ' · ' + f.role, esc(f.yarn + ' ' + f.fibre) + ' — ' + f.ne + 's Ne, ' + f.tex + ' tex, SL ' + f.sl_mm + ' mm, ' + f.course_length_m + ' m per revolution'); });
-    if (s.yarn.elastane) yr.push(row('Elastane', esc(s.yarn.elastane.denier + ' D at a draft of ' + s.yarn.elastane.draft) + ' — <b>' + esc(s.yarn.elastane.feeding) + '</b>'));
+    if (s.yarn.elastane) yr.push(row('Elastane', (s.yarn.elastane.denier ? esc(s.yarn.elastane.denier + ' D at a draft of ' + s.yarn.elastane.draft) + ' — ' : '') + '<b>' + esc(s.yarn.elastane.feeding) + '</b>'));
     if (s.yarn.composition_solved) yr.push(row('Composition', esc(Object.keys(s.yarn.composition_solved.achieved).map(function (k) { return s.yarn.composition_solved.achieved[k] + '% ' + k; }).join(' · ')), s.yarn.composition_solved.held));
     if (s.design) {
       var dz = s.design, ct = dz.counts || {};

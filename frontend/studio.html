@@ -74,7 +74,28 @@
     .st-yrow { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px 10px 2px; margin-bottom: 8px; }
     .st-yrow[hidden] { display: none; }
     .st-yhead { font-size: 12px; margin-bottom: 4px; display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
-    .st-yeq { font: 500 11px var(--mono); color: var(--t3); }
+    .st-yeq { font: 500 11px var(--mono); color: var(--t3); white-space: pre-line; flex-basis: 100%; line-height: 1.5; }
+    .st-yeq:empty { display: none; }
+    #st-plan:empty { display: none; }
+    #st-plan { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 10px; }
+    .st-plan-h { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; font-size: 13px; }
+    .st-plan-h span { font-size: 12px; color: var(--t2); }
+    .st-plan-t { width: 100%; border-collapse: collapse; margin: 6px 0; font-size: 12px; }
+    .st-plan-t td { padding: 5px 3px; border-top: 1px solid var(--line); vertical-align: top; }
+    .st-plan-t td.r { color: var(--t3); white-space: nowrap; width: 1%; padding-left: 0; }
+    .st-plan-t td.n { text-align: right; font: 600 12px var(--mono); white-space: nowrap; width: 1%; }
+    .st-plan-t td:last-child { text-align: right; width: 1%; padding-right: 0; white-space: nowrap; }
+    .st-plan-t small { display: block; color: var(--t3); font-size: 11px; }
+    .st-plan-m, .st-plan-f { font-size: 12px; margin: 6px 0 0; line-height: 1.5; }
+    .st-plan-f { background: var(--accent-tint); border-radius: var(--radius-sm); padding: 7px 9px; }
+    .st-plan-f[hidden] { display: none; }
+    .st-plan-f small { color: var(--t3); }
+    .st-plan-warn { font-size: 12px; color: #9a5b00; margin: 6px 0 0; line-height: 1.5; }
+    .st-plan-o { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin-top: 8px; font-size: 12px; }
+    .st-plan-o span { flex-basis: 100%; color: var(--t3); }
+    .st-plan-o button, .st-plan-auto { border: 1px solid var(--line); background: var(--bg); color: var(--t1); border-radius: 999px; padding: 4px 10px; font: 600 11px var(--mono); cursor: pointer; }
+    .st-plan-o button.on { border-color: var(--accent); background: var(--accent-tint); }
+    .st-plan-o button.warn { color: #9a5b00; }
     .st-yfil[hidden] { display: none; }
     .st-mcard { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px 12px; margin: 8px 0; background: var(--bg); }
     .st-mcard dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 6px 0 0; font-size: 12px; }
@@ -122,7 +143,8 @@
     td.c.E { background: #fff; color: #0e7490; border: 2px dashed #0e7490; }
     td.c.R { background: #fff; color: #7a4fc2; border: 2px dashed #7a4fc2; }
     .st-feedcol { width: 52px; }
-    .st-plate { font-size: 11px; color: var(--t2); white-space: nowrap; }
+    .st-plate { font-size: 11px; color: var(--t2); white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
+    .st-plate input { width: auto; min-width: 0; margin: 0; }
     .st-sw { display: inline-flex; align-items: center; gap: 3px; font: 600 11px var(--head); margin-right: 6px; }
     .st-sw input { width: 26px; height: 22px; padding: 0; border: 1px solid var(--line2); border-radius: 4px; }
     td.c.X { background: repeating-linear-gradient(45deg, #fff, #fff 4px, #E4E6E9 4px, #E4E6E9 8px); color: #868C94; border-color: var(--line2); }
@@ -417,6 +439,7 @@
 
         <div class="st-card" id="ws-c-yarn">
           <div class="st-step"><b>2</b> Yarn</div>
+          <p class="st-plan-f" id="st-ynote" style="margin:0 0 8px" hidden></p>
           <p class="st-hint" style="margin-top:0">Every yarn the design uses — set by the roles you give the feeders (face / ground, binder, loop or pile). Any count system: Ne, Nm, tex, dtex, denier, worsted; ply (2/40s) and filaments (75D/72F).</p>
             <div class="st-yrow" data-yrole="ground">
               <div class="st-yhead"><b>Face / ground yarn</b> <span class="st-yeq" id="st-yeq-ground"></span></div>
@@ -527,8 +550,9 @@
           </div>
           <div class="st-row">
             <div class="st-f" style="flex:1 1 100%"><label for="st-comp">Composition — what the cloth is made of</label><input id="st-comp" type="text" maxlength="120" placeholder="e.g. 95% CO 5% EL, or 60% cotton 40% polyester" title="Write what the cloth must be. The Studio then solves the yarn's fibres and the elastane's denier, draft and feeding so the cloth comes out at those shares. Leave empty to choose the yarn and the elastane yourself."></div>
-            <p class="st-hint" style="flex:1 1 100%;margin:4px 0 0">With the GSM and the composition the Studio picks the count of every yarn, the fibre blend and the elastane (denier, draft, feeders), and the loops, the yarn and the real fabric views draw those yarns. A filament instead of a spun yarn, a spinning system (compact, vortex…), a plated back yarn or your own count are set in step 2 and win over the solved ones.</p>
+            <p class="st-hint" style="flex:1 1 100%;margin:4px 0 0">From the weight and the composition the Studio picks every yarn below; the loop, yarn and real-fabric views draw exactly these.</p>
           </div>
+          <div id="st-plan" aria-live="polite"></div>
         </div>
         <div class="st-card" id="ws-c-readings">
           <div class="st-step"><b>3b</b> Mill readings (optional)</div>
@@ -1025,7 +1049,7 @@
 <script src="assets/js/api.js"></script>
 <script src="assets/js/studio-cloth-map.js?v=20261110d"></script>
 <script src="assets/js/studio-warp-geom.js?v=20261111a"></script>
-<script src="assets/js/studio-warp.js?v=20261127a"></script>
+<script src="assets/js/studio-warp.js?v=20261211a"></script>
 <script src="assets/js/studio-needle.js?v=20261110d"></script>
 <script src="assets/js/studio-melange.js?v=20261118c"></script>
 <script src="assets/js/studio-blend.js?v=20261118d"></script>
@@ -1040,7 +1064,7 @@
 <script src="assets/js/studio-drape.js?v=20261121c"></script>
 <script src="assets/js/pbr-package.js?v=20261122a"></script>
 <script src="assets/js/studio-pbr.js?v=20261122a"></script>
-<script src="assets/js/studio-sheet.js?v=20261126a"></script>
+<script src="assets/js/studio-sheet.js?v=20261211a"></script>
 <script src="assets/js/studio-shell.js?v=20261210a"></script>
 <script src="assets/js/studio-camsheet.js?v=20261125a"></script>
 <script src="assets/js/studio-colourway.js?v=20261126b"></script>
@@ -1048,7 +1072,7 @@
 <script src="assets/js/studio-vbed.js?v=20261121a"></script>
 <script src="assets/js/studio-capture.js?v=20261120b"></script>
 <script src="assets/js/studio-gates.js?v=20261121b"></script>
-<script src="assets/js/studio.js?v=20261210a"></script>
+<script src="assets/js/studio.js?v=20261211a"></script>
 <script src="assets/js/studio-fullwindow.js?v=20261129a"></script>
 </body>
 </html>

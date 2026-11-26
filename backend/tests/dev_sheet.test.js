@@ -34,9 +34,10 @@ const sheet = (id, extra) => DS.build({ design: design(id), composition: '95% CO
   assert(/laws|DISAGREE/.test(b.weight_basis.path) && b.weight_basis.laws && b.weight_basis.band_pct >= 14, b.weight_basis.path);
   assert(Math.abs(b.finished.gsm / 200 - 1) < 0.02, 'the headline weight is the target: ' + b.finished.gsm);
   if (/DISAGREE/.test(b.weight_basis.path)) assert(b.weight_basis.band_pct >= Math.round(Math.abs(b.weight_basis.laws.difference_pct)) && /tightness factor/.test(b.weight_basis.why));
-  // the Lacoste with elastane: the laws' stitch length would be far too loose; it is not used
+  // the Lacoste with elastane plated on every feeder is in the factory records (about 32s, 2.56 mm at 200 GSM): the records answer, not the laws,
+  // whose stitch length would be far too loose
   const l = sheet('lacoste_single');
-  assert(/DISAGREE/.test(l.weight_basis.path) && l.machine.stitch_length_mm < 3.5, l.weight_basis.path + ' ' + l.machine.stitch_length_mm);
+  assert(l.weight_basis.path === 'family records' && Math.abs(l.machine.stitch_length_mm / 2.56 - 1) < 0.08, l.weight_basis.path + ' ' + l.machine.stitch_length_mm);
   const a = sheet('accordion_tuck');
   assert(a.weight_basis.band_pct >= 14, 'no law covers the stitches: a wide band');
   console.log('✓ weight: family records where they exist (±5 %), the stitch-graph laws where they do not (±14 %, the laws\' own weight), a wider band where no law covers the stitches');
@@ -72,8 +73,9 @@ const sheet = (id, extra) => DS.build({ design: design(id), composition: '95% CO
   const d = sheet('fleece_3_thread');
   assert(d.design.bed === 'single' && d.design.roles.includes('loop') && d.design.roles.includes('binder'));
   assert(sheet('rib_1x1').design.bed === 'double');
-  // plush: refused for elastane in words, otherwise a sheet with its own weight
-  assert.throws(() => sheet('velour_plush'), /elastane/);
+  // plush: with elastane the share is held (denier from a trial roll), without it a sheet with its own weight
+  const pe = sheet('velour_plush', { brush: 'none' });
+  assert(pe.success && pe.yarn.elastane && pe.yarn.elastane.denier === null && /trial roll/.test(pe.yarn.elastane.feeding) && Math.abs(pe.yarn.composition_solved.achieved.elastane - 5) <= 0.5);
   const p = sheet('velour_plush', { composition: '100% CO', brush: 'none' });
   assert(p.greige.gsm > 0 && /plush|relaxed/.test(p.greige.note));
   console.log('✓ VDQ pulley readings from one or two reference settings; a finishing sequence with the water to evaporate; the route (viscose, wool) moves the shrinkage; the design (bed, loop / binder roles) is stated; plush is handled');

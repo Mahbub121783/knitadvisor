@@ -295,12 +295,14 @@ export class LoopView {
       new THREE.Plane(new THREE.Vector3(1, 0, 0), -(-0.62 - cx)),
       new THREE.Plane(new THREE.Vector3(-1, 0, 0), (geo.wales - 0.38 - cx)),
     ];
+    // the colour a course is drawn in: the cloth's own, the stripe's, or the feeder's
+    const courseColour = (co) => (spec.real ? (spec.colour || '#3d5a80') : spec.colourBy === 'stripe' && spec.stripeColour ? spec.stripeColour(co.course) : feedColour(spec, co.feed));
     const tube = (co, lead) => {
       const r = (spec.radius && spec.radius[co.feed]) || 0.13;
       const v = co.points.map((p) => new THREE.Vector3(p.x - cx, p.y - cy, p.z));
       const curve = new THREE.CatmullRomCurve3(v, false, 'centripetal', 0.5);
       const len = curve.getLength(), segs = Math.max(40, Math.min(420, Math.round(len / (r * 1.3))));
-      const colour = spec.real ? (spec.colour || '#3d5a80') : spec.colourBy === 'stripe' && spec.stripeColour ? spec.stripeColour(co.course) : feedColour(spec, co.feed);
+      const colour = courseColour(co);
       const look = spec.looks ? spec.looks[co.feed] : null;
       const mesh = new THREE.Mesh(new THREE.TubeGeometry(curve, segs, r, 8, false), this._yarnMaterial(colour, len, r, look, co.feed));
       mesh.userData = { course: co.course, feed: co.feed, lead: !!lead, base: 1 };
@@ -317,7 +319,9 @@ export class LoopView {
         const pv = co.pile.map((p) => new THREE.Vector3(p.x - cx, p.y - cy, p.z));
         const pc = new THREE.CatmullRomCurve3(pv, false, 'centripetal', 0.5);
         const pr = spec.pileRadius || r;
-        const pm = new THREE.Mesh(new THREE.TubeGeometry(pc, Math.max(48, Math.min(500, pv.length * 3)), pr, 8, false), this._yarnMaterial(spec.real ? (spec.colour || '#3d5a80') : (spec.pileColour || '#c2410c'), pc.getLength(), pr));
+        // in the yarn's own colour the pile shows its own fibres; in the feeder colours it keeps a colour of its own, to be told from the ground
+        const pcol = spec.real || spec.colourBy === 'yarn' ? (spec.colour || '#3d5a80') : (spec.pileColour || '#c2410c');
+        const pm = new THREE.Mesh(new THREE.TubeGeometry(pc, Math.max(48, Math.min(500, pv.length * 3)), pr, 8, false), this._yarnMaterial(pcol, pc.getLength(), pr, spec.pileLook, co.feed));
         pm.userData = { course: co.course, feed: co.feed, pile: true, base: 1 };
         this.group.add(pm); this.meshes.push(pm);
       }
@@ -336,7 +340,7 @@ export class LoopView {
         // a plated back yarn (a cotton face on a polyester back): its own fibre, its own lustre, held behind the face yarn
         const e = co.points.map((p, i) => new THREE.Vector3(p.x - cx, p.y - cy, p.z - (co.side[i] || 1) * (r + bk.r) * 0.92));
         const bc = new THREE.CatmullRomCurve3(e, false, 'centripetal', 0.5), bl = bc.getLength();
-        const bcol = spec.colourBy === 'yarn' || spec.real ? colour : new THREE.Color(colour).lerp(new THREE.Color(0xffffff), 0.35).getStyle();
+        const face = courseColour(co), bcol = spec.colourBy === 'yarn' || spec.real ? face : new THREE.Color(face).lerp(new THREE.Color(0xffffff), 0.35).getStyle();
         const bm = new THREE.Mesh(new THREE.TubeGeometry(bc, Math.max(48, Math.min(500, e.length * 2)), bk.r, 8, false), this._yarnMaterial(bcol, bl, bk.r, bk.look, co.feed));
         bm.userData = { course: co.course, feed: co.feed, back: true, base: 1 };
         this.group.add(bm); this.meshes.push(bm);
@@ -467,7 +471,8 @@ export class LoopView {
     const g = this.geo; if (!g) return;
     // fit the swatch to whichever of width and height binds at this aspect
     const t = 2 * Math.tan((this.camera.fov * Math.PI) / 360);
-    const d = 0.96 * Math.max(g.wales / (t * this.camera.aspect), (g.rows * (g.step || g.h) + g.h) / t);
+    // seen at an angle the near corner stands closer than the middle: a little further back, or it leaves the frame
+    const d = (name === 'angle' ? 1.14 : 0.96) * Math.max(g.wales / (t * this.camera.aspect), (g.rows * (g.step || g.h) + g.h) / t);
     // edge: from above, along the wales — the cross-section, where the two
     // beds, the tucks behind the held loops and the floats separate in depth
     const at = {
@@ -475,8 +480,10 @@ export class LoopView {
       edge: [0, d * 0.97, d * 0.24],
       angle: [-d * 0.38, d * 0.26, d * 0.89],
     }[name] || [0, 0, d];
-    this.camera.position.set(at[0], at[1], at[2]);
-    this.controls.target.set(0, 0, 0);
+    // at an angle the near side looks bigger and the swatch leans left: aim a little left of it, so it sits in the middle of the frame
+    const sx = name === 'angle' ? -0.07 * g.wales : 0;
+    this.camera.position.set(at[0] + sx, at[1], at[2]);
+    this.controls.target.set(sx, 0, 0);
     this.camera.up.set(0, 1, 0);
     this.controls.update();
   }

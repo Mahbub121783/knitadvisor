@@ -44,14 +44,15 @@ for (const t of T) {
   assert(e[e.length >> 1] < 6, `single jersey SL median error ${e[e.length >> 1]}%`);
 }
 
-// 4. the same answer as the calculator's knitting plan for a catalogue fabric
+// 4. a catalogue fabric comes out as the factory knits it at that weight (24s single lacoste at 210 GSM: 2.65 mm, about 82" open on 30" 24 GG)
 {
-  const f = FABRIC_DERIVATIVES.find((x) => x.id === 'lacoste_single');
-  const kp = buildKnitPlan({ fabricDef: f, countNe: 24, gsm: 210, gauge: 24, dia: 30 });
   const r = run('lacoste_single', { yarn: { ne: 24 }, target: { gsm: 210 }, machine: { gauge: 24, dia: 30 } });
   assert.strictEqual(r.structure.confidence.level, 'calibrated');
-  assert(Math.abs(r.fabric.sl_mm / kp.stitch_length.used_mm - 1) < 0.02, `SL ${r.fabric.sl_mm} vs ${kp.stitch_length.used_mm}`);
-  assert(Math.abs(r.fabric.width_open_in / kp.fabric.finished_width_in - 1) < 0.03, `width ${r.fabric.width_open_in} vs ${kp.fabric.finished_width_in}`);
+  const rows = FACTORY_RECORDS.filter((x) => x.fab === 'pique' && !/lycra/.test(x.spin || '') && x.ne === 24 && x.fgsm >= 200 && x.fgsm <= 220);
+  const med = (a) => a.slice().sort((p, q) => p - q)[a.length >> 1];
+  const sl = med(rows.map((x) => x.sl)), wid = med(rows.map((x) => (x.fdia * 30 * 24) / (x.dia * x.g)));
+  assert(rows.length >= 10 && Math.abs(r.fabric.sl_mm / sl - 1) < 0.02, `SL ${r.fabric.sl_mm} vs the floor's ${sl}`);
+  assert(Math.abs(r.fabric.width_open_in / wid - 1) < 0.04, `width ${r.fabric.width_open_in} vs the floor's ${wid.toFixed(1)}`);
   // two tracks; knit feeders take more yarn than knit-tuck feeders → two quality belts
   assert.strictEqual(r.setup.tracks.C.count, 2);
   assert.strictEqual(r.vdq.groups.length, 2);
@@ -163,8 +164,10 @@ assert.strictEqual(tpl('ponte_di_roma').gating, 'interlock');
   assert(Math.abs(c.fabric.width_open_in / (m.fabric.width_open_in * 0.97) - 1) < 0.01, 'width');
   assert(Math.abs(c.fabric.calibration.ks_vs_model_pct - 8) < 0.6, 'the model was 8% light');
   // the stitch length solved for a target now follows the mill's own cloth
-  const t = S.analyse({ ...base, machine: { gauge: 24, dia: 30 }, target: { gsm: 230 }, calibration: { rolls } });
+  // (the mill's rolls 8 % heavier than the model at the loop the model gives for 230 GSM)
   const u = S.analyse({ ...base, machine: { gauge: 24, dia: 30 }, target: { gsm: 230 } });
+  const heavy = [u.fabric.sl_mm, u.fabric.sl_mm + 0.15].map((sl) => ({ sl_mm: sl, gsm: (230 * 1.08 * u.fabric.sl_mm) / sl, width_in: (u.fabric.width_open_in * sl) / u.fabric.sl_mm, dia: 30, gauge: 24 }));
+  const t = S.analyse({ ...base, machine: { gauge: 24, dia: 30 }, target: { gsm: 230 }, calibration: { rolls: heavy } });
   assert(t.fabric.sl_mm > u.fabric.sl_mm, 'a mill whose cloth is heavier per loop reaches the same weight with a longer loop');
   // scatter widens the likely range; an outlier among three is flagged
   const noisy = S.analyse({ ...base, calibration: { rolls: [rolls[0], rolls[1], { ...rolls[0], gsm: rolls[0].gsm * 1.2 }] } });
