@@ -110,10 +110,14 @@ function solve(input, analyse) {
   let roleSolve = null;
   if (!rolesIn) {
     const y = yarnOfMix(mix);
-    work.yarn = { ...work.yarn, fibre: y.fibre, mix: y.mix, blend: y.blend, blend_density: y.blend_density };
+    // a single fibre the yarn already is stays the yarn it is: "100% polyester" on a 75 D textured filament keeps the filament (the composition
+    // names the fibre, not the spinning: a staple yarn of it was put in its place, and every look of the filament with it)
+    const base = (k) => ({ polyester_spun: 'polyester', polyester_filament: 'polyester', nylon_filament: 'nylon' })[k] || k;
+    const put = (yy) => (yy && !y.blend && yy.fibre && base(yy.fibre) === base(y.fibre) ? { ...yy, mix: null, blend: null } : { ...yy, fibre: y.fibre, mix: y.mix, blend: y.blend, blend_density: y.blend_density });
+    work.yarn = put(work.yarn);
     work.yarns = { ...(work.yarns || {}) };
-    ['binder', 'loop', 'plate'].forEach((r) => { if (work.yarns[r]) work.yarns[r] = { ...work.yarns[r], fibre: y.fibre, mix: y.mix, blend: y.blend, blend_density: y.blend_density }; });
-    work.feeds = (work.feeds || []).map((f) => (f && f.yarn ? { ...f, yarn: { ...f.yarn, fibre: y.fibre, mix: y.mix, blend: y.blend, blend_density: y.blend_density } } : f));
+    ['binder', 'loop', 'plate'].forEach((r) => { if (work.yarns[r]) work.yarns[r] = put(work.yarns[r]); });
+    work.feeds = (work.feeds || []).map((f) => (f && f.yarn ? { ...f, yarn: put(f.yarn) } : f));
     solved.yarn = { fibres: Object.fromEntries(Object.entries(mix).map(([k, v]) => [k, r1(v)])), basis: 'every yarn carries the one blend' };
   } else {
     roleSolve = solveRoles(work, rolesIn, mix, el, run, notes);

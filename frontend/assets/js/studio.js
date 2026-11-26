@@ -779,6 +779,7 @@
     seg.addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; setClothState(b.getAttribute('data-state')); schedule(); });
   }
 
+  var lastYarnKey = '';
   function analyse() {
     var my = ++reqSeq;
     $('st-status').innerHTML = '<span style="color:var(--t3)">Checking…</span>';
@@ -800,6 +801,9 @@
       if (window.KAStudioVbed) window.KAStudioVbed.studioResult(r);
       showClothState(r);
       pushTrans();
+      fibreKey();
+      var yk = JSON.stringify((engineFeeds() || []).map(function (f) { return [f.look, f.elastane]; }));
+      if (yk !== lastYarnKey) { lastYarnKey = yk; render3D(); }
       if (window.KAStudioLook) window.KAStudioLook.studioResult(r);
       document.dispatchEvent(new CustomEvent('ka-studio-result', { detail: r }));      // the development sheet follows the drawing; the workspace's verdict strip reads it
     }).catch(function (e) {
@@ -1422,11 +1426,67 @@
   var YROLE_LABEL = { ground: 'Ground / face yarn', binder: 'Binder yarn', loop: 'Loop / pile yarn', plate: 'Plated yarn', elastane: 'Elastane' };
   var CMP_SPUN = [['carded', 'Carded'], ['combed', 'Combed'], ['compact', 'Compact'], ['open_end', 'Rotor']];
   var CMP_FILA = [['mono', 'Monofilament'], ['fdy', 'Multifilament'], ['dty', 'Textured']];
+  // ── the yarn of every feeder as the ENGINE settled it (the composition solved: blend fibres, elastane denier and draft), for every 3D view ──
+  // The form's fields are only what was typed; once the Studio has answered, the views draw what it worked out.
+  var CELLU = ['cotton', 'modal', 'viscose', 'lyocell', 'linen'];
+  var GREIGE_TONE = { cotton: '#efe6d2', polyester: '#f2f1ec', modal: '#f1ede4', viscose: '#f2eee6', lyocell: '#f0ece3', wool: '#e8dcc0', linen: '#cfc1a0', acrylic: '#f3f1ea', silk: '#f3ecd8', nylon: '#f1f0ea', polypropylene: '#f0efe9' };
+  function engineFeeds() { return last && last.yarn && Array.isArray(last.yarn.feeds) && last.yarn.feeds.length && last.yarn.feeds[0].look ? last.yarn.feeds : null; }
+  function feedLook(i) {
+    var F = engineFeeds(); if (!F) return null;
+    var f = F[i % F.length]; if (!f || !f.look) return null;
+    var role = f.role === 'face' ? 'ground' : f.role;
+    var ch = (last.yarn.character || []).filter(function (c) { return c.role === role; })[0] || (last.yarn.character || [])[0];
+    var L = f.look;
+    return { role: f.role, mix: L.mix, fibre: L.fibre, filament: L.filament, type: L.type, form: L.form, ply: L.ply, lustre: L.lustre, section: L.section, tex: L.tex,
+      hairFactor: ch && ch.hair_factor, elastane: f.elastane, back: L.back ? Object.assign({}, L.back, { hairFactor: ch && ch.hair_factor }) : null, label: f.fibre, count: f.yarn };
+  }
+  // the dye: how each fibre of a blend comes out of it. Two-bath (each fibre dyed to the shade, the polyester a touch lighter and brighter, as it is
+  // in practice), cross-dyed (only the cellulose takes the reactive dye: the polyester stays white - a heather), or greige (nothing dyed).
+  function dyeRoute() { var e = $('st-dyeroute'); return e ? e.value : 'union'; }
+  function fibreTones(base, look, route) {
+    var out = {}, mix = (look && look.mix) || { cotton: 100 }, ks = Object.keys(mix);
+    var synth = ks.filter(function (k) { return ['polyester', 'nylon', 'acrylic', 'polypropylene'].indexOf(k) > -1; });
+    var anyCel = ks.some(function (k) { return CELLU.indexOf(k) > -1 || k === 'wool' || k === 'silk'; });
+    var hex = function (c) { return '#' + c.getHexString(); };
+    ks.forEach(function (k) {
+      if (route === 'greige') { out[k] = GREIGE_TONE[k] || '#efe9dc'; return; }
+      var c = new THREE_COLOR(base);
+      if (synth.indexOf(k) > -1 && anyCel) {
+        if (route === 'cross') { out[k] = GREIGE_TONE[k] || '#f2f1ec'; return; }
+        c = c.lerp(new THREE_COLOR('#ffffff'), k === 'polyester' ? 0.12 : 0.06);      // a disperse shade matched to a reactive one is rarely exact: a little lighter, cleaner
+      }
+      out[k] = hex(c);
+    });
+    return out;
+  }
+  // a tiny colour helper (the loop view brings three.js in itself; here only the lerp is needed)
+  function THREE_COLOR(h) {
+    var m = /^#?([0-9a-f]{6})$/i.exec(String(h || '').trim()) || ['', '808080'], n = parseInt(m[1], 16);
+    this.r = ((n >> 16) & 255) / 255; this.g = ((n >> 8) & 255) / 255; this.b = (n & 255) / 255;
+  }
+  THREE_COLOR.prototype.lerp = function (o, t) { this.r += (o.r - this.r) * t; this.g += (o.g - this.g) * t; this.b += (o.b - this.b) * t; return this; };
+  THREE_COLOR.prototype.getHexString = function () { var f = function (v) { var x = Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16); return x.length < 2 ? '0' + x : x; }; return f(this.r) + f(this.g) + f(this.b); };
+  function mixLabel(mix) { return Object.keys(mix || {}).sort(function (a, b) { return mix[b] - mix[a]; }).map(function (k) { return Math.round(mix[k]) + '% ' + k; }).join(' / '); }
+  function elastaneOfEngine() { var c = last && last.yarn && last.yarn.composition; if (!c) return 0; return c.filter(function (x) { return /elastane/i.test(x.part); }).reduce(function (t, x) { return t + (+x.pct || 0); }, 0); }
+  // what each feeder carries, in words, under the 3D view
+  function fibreKey() {
+    var el = $('st-fibrekey'); if (!el) return;
+    var F = engineFeeds(); if (!F) { el.innerHTML = 'The yarns are drawn as they are set in the Yarn card until the Studio answers; then as it works them out from your GSM and composition.'; return; }
+    var seen = {}, parts = [];
+    F.forEach(function (f, i) {
+      var L = f.look, k = f.role + '|' + JSON.stringify(L.mix) + '|' + (f.elastane ? f.elastane.denier : 0) + '|' + (L.back ? JSON.stringify(L.back.mix) : '');
+      if (seen[k]) return; seen[k] = 1;
+      parts.push('<b>' + esc(f.role) + '</b> ' + esc(f.yarn) + ' ' + esc(L.filament ? (L.lustre || 'semi_dull').replace('_', '-') + ' filament' : mixLabel(L.mix)) + (L.type && !L.filament ? ' ' + esc(L.type.replace('_', '-')) : '') +
+        (L.back ? ' + plated back ' + esc(L.back.filament ? 'filament' : mixLabel(L.back.mix)) : '') + (f.elastane ? ' + ' + f.elastane.denier + ' D elastane (draft ' + f.elastane.draft + ')' : ''));
+    });
+    var comp = last.composition_solve && last.composition_solve.success ? ' Solved from your composition (' + esc(Object.keys(last.composition_solve.achieved).map(function (k) { return last.composition_solve.achieved[k] + '% ' + k; }).join(' · ')) + ').' : '';
+    el.innerHTML = parts.join(' · ') + '.' + comp;
+  }
   function yarnRolesInUse() {
     var roles = ['ground'];
     S.feeds.forEach(function (f) { var r = f && f.role; if ((r === 'binder' || r === 'loop') && roles.indexOf(r) < 0) roles.push(r); });
     if (S.feeds.some(function (f) { return f && f.plate; })) roles.push('plate');
-    if ($('st-lycra').checked) roles.push('elastane');
+    if ($('st-lycra').checked || elastaneOfEngine() > 0) roles.push('elastane');
     return roles;
   }
   /** One yarn row as the yarn view reads it: fibre, spinning system, one end's tex, ply. */
@@ -1438,6 +1498,15 @@
     var blendMix = window.KAStudioBlend && KAStudioBlend.forYarnView ? KAStudioBlend.forYarnView(role) : null;
     var fancy = window.KAStudioFancy && KAStudioFancy.forYarnView ? KAStudioFancy.forYarnView(role) : null;
     var y = yarnOf(R), ply = y.ply || 1, tex = null, from = 'your count';
+    // the engine's yarn for this role: a solved blend (60/40 from the composition) is drawn as that blend, not as the form's single fibre
+    var eng = (engineFeeds() || []).filter(function (f) { return (f.role === 'face' ? 'ground' : f.role) === role; })[0];
+    if (eng && eng.look && !blendMix && !mel) {
+      var mk = Object.keys(eng.look.mix || {});
+      if (mk.length > 1) blendMix = { mix: eng.look.mix, label: mixLabel(eng.look.mix) + ' (solved)' };
+      else if (mk.length === 1 && !eng.look.filament) { var one = mk[0] === 'polyester' ? 'polyester_spun' : mk[0]; if (one !== y.fibre && !$(R.f).dataset.touched) y.fibre = one; }
+      if (eng.look.filament && !isFil(y.fibre)) { y.fibre = eng.look.fibre; y.lustre = eng.look.lustre || y.lustre; }
+      if (eng.look.type && !$(R.t).dataset.touched) y.type = eng.look.type;
+    }
     if (y.count) tex = TEX[y.unit || 'ne'](y.count);
     if (!tex && last && last.yarn) {
       var src = role === 'ground' ? last.yarn.ground : (last.yarn.roles || {})[role];
@@ -1466,7 +1535,8 @@
     var g = yarnForView('ground').yarn;
     var cv = { fibre: $('st-elcfib').value, denier: +$('st-elcd').value || 20, filaments: +$('st-elcf').value || 12 };
     if (+$('st-elct').value > 0) cv.tpm = +$('st-elct').value;
-    return { fibre: 'elastane', type: con, denier: +$('st-lyd').value || 40, draft: num('st-lydraft') || 2.6, state: $('st-elstate').value,
+    var engEl = (engineFeeds() || []).map(function (f) { return f.elastane; }).filter(Boolean)[0];
+    return { fibre: 'elastane', type: con, denier: engEl ? engEl.denier : (+$('st-lyd').value || 40), draft: engEl ? engEl.draft : (num('st-lydraft') || 2.6), state: $('st-elstate').value,
       sheath: { fibre: g.fibre, type: g.type, tex: g.tex * (g.ply || 1) }, cover: cv };
   }
   function elastaneNote(metas, cmp) {
@@ -1600,7 +1670,25 @@
     return { seq: seq.slice(0, 2000), colours: colours };
   }
   // the cloth view's options: the notation and the numbers, then the look engine's real lustre, hairs and finish put in
-  function clothOpts() { var o = clothOptsBase(); return window.KAStudioLook ? window.KAStudioLook.apply(o) : o; }
+  function clothOpts() {
+    var o = clothOptsBase(); o = window.KAStudioLook ? window.KAStudioLook.apply(o) : o;
+    var L = feedLook(0); if (!L) return o;
+    // the main fibre of the ground yarn, not the form's first choice; a filament is drawn as one
+    var mix = L.mix || { cotton: 100 }, ks = Object.keys(mix).sort(function (a, b) { return mix[b] - mix[a]; }), main = ks[0];
+    var F3 = { cotton: 'cotton', polyester: L.filament ? 'polyester' : 'polyester', nylon: 'nylon', viscose: 'viscose', modal: 'modal', lyocell: 'modal', wool: 'wool', acrylic: 'acrylic', silk: 'silk', linen: 'linen', polypropylene: 'polyester' };
+    o.fiberType = F3[main] || o.fiberType;
+    o.elastanePct = elastaneOfEngine() || o.elastanePct;
+    // a blend whose fibres take the dye differently shows as two tones in the cloth (the engine's melange shader, with this split)
+    if (ks.length > 1 && !(window.KAStudioMelange && window.KAStudioMelange.forYarnView && window.KAStudioMelange.forYarnView('ground'))) {
+      var tones = fibreTones(o.baseHex, L, dyeRoute()), second = ks[1];
+      if (tones[main] && tones[second] && tones[main].toLowerCase() !== tones[second].toLowerCase()) {
+        var tot = ks.reduce(function (t, k) { return t + mix[k]; }, 0) || 100;
+        o.melange = true; o.melangeSpec = { target: o.baseHex, dark: tones[main], light: tones[second], f: Math.max(0.05, Math.min(0.6, mix[second] / tot)) };
+      }
+    }
+    if (dyeRoute() === 'greige') { o.baseHex = GREIGE_TONE[main] || '#efe9dc'; o.dyed = hexRgb(o.baseHex); }
+    return o;
+  }
   function clothOptsBase() {
     // the notation → 3D mapping lives in studio-cloth-map.js (tested in node)
     var stripe = stripeOf();
@@ -1639,7 +1727,7 @@
   function renderCloth() {
     var host = $('st-cloth'), o = clothOpts();
     // rebuild only when the structure or its numbers changed; a colour change repaints
-    var key = JSON.stringify([o.yarnLook || null, o.physics || null, o.dyeMethod || null, o.fiberType, stripeOf(), o.construction, o.pattern.grid, o.pattern.dial, o.pattern.feedYarns, Math.round(o.density.wpc * 10), Math.round(o.density.cpc * 10), Math.round(o.countNe), o.gsm, o.fiberType, o.elastanePct]);
+    var key = JSON.stringify([o.melangeSpec || null, o.elastanePct || 0, o.yarnLook || null, o.physics || null, o.dyeMethod || null, o.fiberType, stripeOf(), o.construction, o.pattern.grid, o.pattern.dial, o.pattern.feedYarns, Math.round(o.density.wpc * 10), Math.round(o.density.cpc * 10), Math.round(o.countNe), o.gsm, o.fiberType, o.elastanePct]);
     // the same structure: repaint, or let the build already running finish (bumping the sequence here used to cancel
     // that build with nothing to replace it, and the view stayed on the old design under "Knitting the swatch…")
     if (key === clothKey) { if (cloth && !clothBusy) { cloth.setColor(o.baseHex); live3d(false); } return; }
@@ -1691,8 +1779,13 @@
       // relaxed loop; one wale = 10/wpc mm
       // a spun yarn lies about 1.3 × its packed diameter wide in the relaxed loop (fibre bulk)
       radius: feeds.map(function (fd) { var c = +fd.count > 0 ? +fd.count : +fd.ne; var ne = c > 0 ? (fd.count ? 590.5 / TEX[fd.unit || 'ne'](c) : c) : groundNe; return clamp(0.5 * 1.3 * (0.907 / Math.sqrt(ne)) * f.wpc / 10, 0.07, 0.24); }),
-      plated: feeds.map(function (fd, i) { return !!ly && fd.role !== 'loop' && (ly === 'all' || i % 2 === 0); }),
+      plated: feeds.map(function (fd, i) { var L = feedLook(i); if (L) return !!L.elastane; return !!ly && fd.role !== 'loop' && (ly === 'all' || i % 2 === 0); }),
       colourBy: real ? 'one' : $('st-colby').value, colour: $('st-col').value,
+      looks: feeds.map(function (_, i) { return feedLook(i); }),
+      tones: function (fi, base, look) { var cb = $('st-colby').value; return fibreTones(cb === 'yarn' || real ? $('st-col').value : base, look, cb === 'yarn' || real ? dyeRoute() : 'union'); },
+      // a drafted elastane: denier / draft is its tex in the loop, Ø = √tex / 28 mm (a filament's packing), as a radius in wales
+      elastaneR: feeds.map(function (_, i) { var L = feedLook(i); if (!L || !L.elastane) return null; var d = Math.sqrt(L.elastane.denier / 9 / L.elastane.draft) / 28 * 1.15; return clamp(0.5 * d * f.wpc / 10, 0.02, 0.1); }),
+      back: feeds.map(function (_, i) { var L = feedLook(i); if (!L || !L.back) return null; var d = Math.sqrt(L.back.tex || 10) / 28 * (L.back.filament ? 1.05 : 1.3); return { r: clamp(0.5 * d * f.wpc / 10, 0.05, 0.2), look: L.back }; }),
       colours: feeds.some(function (fd) { return fd && /^[A-F]$/.test(fd.colour || ''); }) ? feeds.map(function (fd, i) { var c = $('st-sc-' + ((fd && fd.colour) || '')); return c && /^#[0-9a-f]{6}$/i.test(c.value) ? c.value : null; }).map(function (v) { return v || '#808080'; }) : null,
       // the yarn's own character on its surface: hairs from the spinning system, a filament smooth
       filament: /filament/.test(($('st-fibre') || {}).value || ''),
@@ -1721,7 +1814,7 @@
   function renderLoops() {
     var host = $('st-loops');
     if (!loopPromise) {
-      loopPromise = import('/assets/js/studio-loops.js?v=20261128a').then(function (mod) {
+      loopPromise = import('/assets/js/studio-loops.js?v=20261210a').then(function (mod) {
         loopView = new mod.LoopView(host, showTip, function (s) { document.dispatchEvent(new CustomEvent('ka-3d-pick', { detail: s || null })); });
         loopView.feedColour = mod.feedColour;
         return loopView;
@@ -1792,7 +1885,7 @@
       var lp = loopsOn(), tw = mode3d === 'twin', cl = clothOn(), yr = mode3d === 'yarn';
       $('pane-3d').classList.toggle('both', mode3d === 'both');
       $('st-yarnbar').hidden = !yr; $('st-yarn').hidden = !yr; $('st-yarnnote').hidden = !yr;
-      $('st-loopbar').hidden = !lp; $('st-build').hidden = !lp; $('st-feedkey').hidden = !lp; $('st-loophint').hidden = !lp;
+      $('st-loopbar').hidden = !lp; $('st-build').hidden = !lp; $('st-fibrebar').hidden = !(lp || cl); $('st-feedkey').hidden = !lp; $('st-loophint').hidden = !lp;
       $('st-clothbar').hidden = !cl; $('st-clothhint').hidden = !cl;
       $('st-loops').hidden = !lp; $('st-cloth').hidden = !cl;
       $('st-twinbar').hidden = !tw; $('st-twin').hidden = !tw || !twinView; $('st-twinnote').hidden = !tw;
@@ -1825,6 +1918,11 @@
       var b = e.target.closest('[data-yview]'); if (b && yarnView) yarnView.view(b.getAttribute('data-yview'));
     });
     $('st-colby').addEventListener('change', render3D);
+    $('st-dyeroute').addEventListener('change', render3D);
+    // one shade for the loops and the real view: the second picker (in the fibre bar) writes the first
+    $('st-col2').value = $('st-col').value;
+    $('st-col2').addEventListener('change', function () { $('st-col').value = $('st-col2').value; $('st-col').dispatchEvent(new Event('change')); });
+    $('st-col').addEventListener('change', function () { $('st-col2').value = $('st-col').value; });
     $('st-feedkey').addEventListener('click', function (e) {
       var b = e.target.closest('[data-fk]'); if (!b || !loopView) return;
       var i = +b.getAttribute('data-fk'), on = loopView._hl === i;
@@ -1944,7 +2042,7 @@
     S.bed = o.bed || (o.D ? 'rib' : 'single'); S.C = o.C; S.D = o.D || null; S.feeds = o.feeds || o.C.map(function () { return { role: 'ground' }; });
     $('st-name').value = o.name || ''; delete $('st-name').dataset.auto;
     $('st-lycra').checked = !!o.lycra; $('st-lycra-box').hidden = !o.lycra; $('st-cut').checked = !!o.cut;
-    if (o.colour) $('st-col').value = o.colour;
+    if (o.colour) { $('st-col').value = o.colour; if ($('st-col2')) $('st-col2').value = o.colour; }
     Object.keys(o.fields || {}).forEach(function (id) { if ($(id)) $(id).value = o.fields[id]; });
     if (window.KAStudioMelange) window.KAStudioMelange.setState(o.melange || null);
     if (window.KAStudioBlend) window.KAStudioBlend.setState(o.blend || null);
@@ -2026,13 +2124,16 @@
     $('st-lycra').addEventListener('change', function () { $('st-lycra-box').hidden = !this.checked; schedule(); });
     $('st-brush').addEventListener('change', function () { $('st-brush-box').hidden = this.value === 'none'; });
     $('st-gsm').addEventListener('input', function () { this.dataset.touched = '1'; });
+    // a yarn field the person set by hand is theirs: the views keep it, not the engine's solved yarn
+    document.addEventListener('change', function (e) { var t = e.target; if (t && (t.classList.contains('st-yfibre') || t.classList.contains('st-ytype'))) t.dataset.touched = '1'; }, true);
     $('st-name').addEventListener('input', function () { delete this.dataset.auto; });
-    document.querySelectorAll('aside input, aside select').forEach(function (el) {
-      if (el.closest('#st-warp')) return;
-      if (el.id === 'st-template' || el.id === 'st-saved' || el.id === 'st-name' || el.id === 'st-import') return;
-      el.addEventListener('change', schedule);
-      if (el.type === 'number') el.addEventListener('input', schedule);
-    });
+    // every control of the design's cards re-asks the engine. The workspace (studio-shell.js) moves the cards out of the old <aside> into its
+    // step panes BEFORE this runs, so binding each element found under <aside> bound nothing: a new GSM, composition, count or elastane
+    // never reached the engine. One listener at the document catches them wherever the cards are now (and any card built later).
+    var SKIP = ['st-template', 'st-saved', 'st-name', 'st-import'];
+    var wired = function (el) { return !!el && /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName) && !!(el.closest('aside') || el.closest('.ws-left')) && !el.closest('#st-warp') && SKIP.indexOf(el.id) < 0; };
+    document.addEventListener('change', function (e) { if (wired(e.target)) schedule(); }, true);
+    document.addEventListener('input', function (e) { if (wired(e.target) && (e.target.type === 'number' || e.target.id === 'st-comp')) schedule(); }, true);
     // the melange card rebuilds its own rows, so it is listened to as a whole (its handlers run first and keep its state)
     var mlc = $('ml-card');
     if (mlc) {

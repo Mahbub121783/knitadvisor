@@ -341,6 +341,14 @@ const FIBRE_MIX = {
   viscose: { viscose: 100 }, modal: { modal: 100 }, polyester_filament: { polyester: 100 }, nylon_filament: { nylon: 100 },
   wool: { wool: 100 }, acrylic: { acrylic: 100 }, silk: { silk: 100 }, linen: { linen: 100 }, polypropylene: { polypropylene: 100 },
 };
+// a yarn as the 3D views need it: its fibres (by mass), whether it is a filament, its spinning system and form, its lustre, its ply
+function lookOfYarn(y, back) {
+  if (!y) return null;
+  const mix = y.mix || FIBRE_MIX[y.fibre] || { cotton: 100 };
+  const fibres = Object.fromEntries(Object.entries(mix).filter(([k, v]) => k !== 'elastane' && v > 0));
+  return { fibre: y.fibre, mix: fibres, filament: FILAMENT_FIBRES.includes(y.fibre), type: y.type || null, form: y.form || null, ply: y.ply || 1,
+    lustre: y.lustre || null, section: y.section || null, dpf: y.dpf || null, melange: !!y.melange, tex: r2(y.tex), d_mm: y.d_mm ? r3(y.d_mm) : null, ...(back ? { back } : {}) };
+}
 function characterOf(y) {
   if (!y) return null;
   const filament = FILAMENT_FIBRES.includes(y.fibre);
@@ -891,6 +899,9 @@ function solve(ctx, ground) {
       mass: s * l * yarns[i].tex, // relative, per needle position
       elastane_mass: elast ? s * (l / elast.draft) * (elast.denier / 9) : 0,
       tension_cN: loopy ? [r1(0.08 * yarns[i].tex), r1(0.10 * yarns[i].tex)] : [r1(0.12 * yarns[i].tex), r1(0.16 * yarns[i].tex)],
+      // what the 3D views draw: the yarn of this feeder as the engine settled it (the composition solved, the elastane plated), not the form's fields
+      elastane: elast ? { denier: elast.denier, draft: elast.draft } : null,
+      look: lookOfYarn(yarns[i].plated ? yarns[i].plated.face : yarns[i], yarns[i].plated ? lookOfYarn(yarns[i].plated.back) : null),
     };
   });
   const massTot = feeds.reduce((t, f) => t + f.mass, 0);
@@ -1023,6 +1034,29 @@ function hookLoad(st, S, dir = 1) {
 // by how near the middle of the factory's practice they sit; when none keeps
 // them all the nearest is returned with the limits it breaks, and the answer
 // says so instead of passing it off as a solution.
+// the count the factory actually knits this family at this weight (its own records): the median of the rows within a few GSM, of the same
+// fibre class and with or without elastane when there are enough of them. Without it the count picker chased the middle of the tightness
+// window alone and landed one or two counts coarse (180 GSM cotton jersey at 20s on a 3.2 mm loop, where the floor runs 24s at 2.85 mm).
+function factoryCount(family, lycra, compClass, gsm) {
+  if (!(gsm > 0)) return null;
+  const pool = FACTORY_RECORDS.filter((r) => r.fab === family && /lycra/.test(String(r.spin || '')) === !!lycra);
+  for (const w of [10, 18, 28]) {
+    const near = pool.filter((r) => Math.abs(r.gsm - gsm) <= w);
+    const same = compClass ? near.filter((r) => r.comp === compClass) : [];
+    const use = same.length >= 8 ? same : near.length >= 8 ? near : null;
+    if (use) {
+      const a = use.map((r) => r.ne).sort((x, y) => x - y), tf = use.map((r) => Math.sqrt(590.5 / r.ne) / (r.sl / 10)).sort((x, y) => x - y);
+      // and the tightness the floor knits THIS weight at (a heavy jersey runs tighter than the family's middle, which the light ones set)
+      return { ne: a[Math.floor(a.length / 2)], tf: tf[Math.floor(tf.length / 2)], n: use.length, window: w, comp: use === same ? compClass : 'any' };
+    }
+  }
+  return null;
+}
+const compClassOf = (fibre, mix) => {
+  const m = mix || FIBRE_MIX[fibre] || {}; const p = +m.polyester || 0, c = (+m.cotton || 0);
+  if (m.modal >= 50) return 'modal'; if (m.viscose >= 50) return 'viscose';
+  if (c > 0 && p > 0) return p > 50 ? 'pc' : 'cvc'; if (c >= 90) return 'cotton'; return null;
+};
 function chooseSetup(ctx, fibre) {
   const { family, input, st } = ctx;
   const mach = input.machine || {};
@@ -1031,10 +1065,20 @@ function chooseSetup(ctx, fibre) {
   const B = KP.CAL.band[family] && KP.CAL.band[family].n >= 20 ? KP.CAL.band[family] : KP.CAL.band.single_jersey;
   const fixedGauge = +mach.gauge > 0 ? +mach.gauge : null;
   const tried = [];
-  for (const ne of COUNTS) {
+  const bm0 = input.yarn && input.yarn.blend && input.yarn.mix && typeof input.yarn.mix === 'object' ? input.yarn.mix : null;
+  const isFil = FILAMENT_FIBRES.includes(fibre);
+  // the floor's records are staple yarns: their counts say nothing of a filament, which is bought in its own standard deniers
+  const fc = isFil ? null : factoryCount(family, ctx.lycra, compClassOf(fibre, bm0), +((input.target || {}).gsm));
+  const LIST = isFil ? [30, 40, 50, 75, 100, 120, 150, 200, 250, 300].map((d) => 5314.5 / d) : COUNTS;
+  for (const ne of LIST) {
     const bm = input.yarn && input.yarn.blend && input.yarn.mix && typeof input.yarn.mix === 'object' ? input.yarn : null;   // a blend of any ratio carries its mix and density
     const dF = bm && +bm.blend_density > 0 ? Math.sqrt(1.52 / +bm.blend_density) : FIBRES[fibre].dFactor;
-    const yarn = { tex: 590.5 / ne, ne, label: `${ne}s Ne`, fibre, fibre_label: bm ? BY.labelOfMix(bm.mix) : FIBRES[fibre].label, ...(bm ? { mix: bm.mix, blend: true, blend_density: bm.blend_density } : {}) };
+    let yarn = { tex: 590.5 / ne, ne, label: `${ne}s Ne`, fibre, fibre_label: bm ? BY.labelOfMix(bm.mix) : FIBRES[fibre].label, ...(bm ? { mix: bm.mix, blend: true, blend_density: bm.blend_density } : {}) };
+    // the yarn the person described (spinning system, filament lustre, section, ply form) at the count being tried: the count is solved, the KIND of yarn is theirs
+    try {
+      const own = readYarn({ ...(input.yarn || {}), fibre, count: ne, unit: 'ne', ply: 1 }, null);
+      if (own) yarn = { ...own, ne, label: FILAMENT_FIBRES.includes(fibre) ? `${Math.round(5314.5 / ne)} D` : `${ne}s Ne` };
+    } catch (e) { if (!(e instanceof StudioError)) throw e; }
     const yarnD = (Math.sqrt(yarn.tex) / 28) * dF;
     const fits = M.gauges.filter((g) => { const r = 25.4 / g / yarnD; return r >= B.lo * 0.92 && r <= B.hi * 1.08; });
     const fg = factoryGauge(family, ctx.lycra, ne);
@@ -1053,9 +1097,10 @@ function chooseSetup(ctx, fibre) {
       const spread = W ? Math.max(0.3, W.q3 - W.q1) : 1;
       const mid = Math.sqrt(B.lo * B.hi);
       // the factory's own gauge for this count weighs more than the middle of the fit band
-      const score = (W ? Math.abs(s.tfGround - W.med) / spread : 0)
+      const score = (W ? Math.abs(s.tfGround - (fc && fc.tf ? fc.tf : W.med)) / spread : 0)
         + 0.5 * Math.abs(Math.log(s.gfit.ratio / mid)) / Math.log(B.hi / B.lo)
-        + (fg && fg.gauge !== g ? 0.8 : 0);
+        + (fg && fg.gauge !== g ? 0.8 : 0)
+        + (fc ? 0.9 * Math.abs(Math.log(ne / fc.ne)) / Math.log(1.25) : 0);      // a count a quarter away from the floor's own weighs as much as the factory gauge
       tried.push({ s, g, ne, broken, score, practised: !!(fg && fg.gauge === g), tfIn: W ? s.tfGround >= W.q1 && s.tfGround <= W.q3 : null });
     }
   }

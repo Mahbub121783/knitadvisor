@@ -526,7 +526,8 @@
             <div class="st-f"><label for="st-shr">Max shrinkage (%)</label><input id="st-shr" type="number" min="1" max="15" step="0.5" value="5" title="Residual shrinkage allowed after home laundering (buyer standard)"></div>
           </div>
           <div class="st-row">
-            <div class="st-f" style="flex:1 1 100%"><label for="st-comp">Target composition (optional)</label><input id="st-comp" type="text" maxlength="120" placeholder="e.g. 95% CO 5% EL, or 60% cotton 40% polyester" title="Write what the cloth must be. The Studio then solves the yarn's fibres and the elastane's denier, draft and feeding so the cloth comes out at those shares. Leave empty to choose the yarn and the elastane yourself."></div>
+            <div class="st-f" style="flex:1 1 100%"><label for="st-comp">Composition — what the cloth is made of</label><input id="st-comp" type="text" maxlength="120" placeholder="e.g. 95% CO 5% EL, or 60% cotton 40% polyester" title="Write what the cloth must be. The Studio then solves the yarn's fibres and the elastane's denier, draft and feeding so the cloth comes out at those shares. Leave empty to choose the yarn and the elastane yourself."></div>
+            <p class="st-hint" style="flex:1 1 100%;margin:4px 0 0">With the GSM and the composition the Studio picks the count of every yarn, the fibre blend and the elastane (denier, draft, feeders), and the loops, the yarn and the real fabric views draw those yarns. A filament instead of a spun yarn, a spinning system (compact, vortex…), a plated back yarn or your own count are set in step 2 and win over the solved ones.</p>
           </div>
         </div>
         <div class="st-card" id="ws-c-readings">
@@ -837,7 +838,7 @@
               <button type="button" class="st-btn" data-view="edge">Edge</button>
               <button type="button" class="st-btn" data-view="angle">Angle</button>
               <button type="button" class="st-btn" id="st-fibrecu" title="A few loops in the middle, every fibre of the real yarn (count, fibre, spinning, twist) laid along the loops">Fibre close-up</button>
-              <label>Colour by <select id="st-colby" class="st-btn"><option value="feed">feeder</option><option value="role">yarn role</option><option value="one">one colour</option><option value="stripe">stripe yarns</option></select></label>
+              <label>Colour by <select id="st-colby" class="st-btn"><option value="yarn" selected>the yarn as it is (fibres, dye)</option><option value="feed">feeder</option><option value="role">yarn role</option><option value="one">one colour</option><option value="stripe">stripe yarns</option></select></label>
             </div>
             <div class="st-3dbar" id="st-clothbar" hidden>
               <label>Colour <input type="color" id="st-col" value="#3d5a80"></label>
@@ -846,6 +847,11 @@
               <label title="The light the cloth is seen under: daylight, a shop fluorescent (TL84, CWF) or tungsten">Light <select id="st-light"><option value="D65">Daylight D65</option><option value="TL84">Shop TL84</option><option value="CWF">Shop CWF</option><option value="A">Tungsten A</option></select></label>
               <label title="What is behind the cloth: a light (the cloth glows where it is thin), or skin, a dark or a white backing (what shows through)">Behind <select id="st-behind"><option value="off">Nothing</option><option value="back">A light</option><option value="skin">Skin</option><option value="white">White</option><option value="dark">Dark</option></select></label>
               <span id="st-3dnote"></span>
+            </div>
+            <div class="st-3dbar" id="st-fibrebar">
+              <label title="The cloth's shade: the loops and the real view take it">Shade <input type="color" id="st-col2" value="#3d5a80"></label>
+              <label title="How the fibres of a blend take the dye">Blend dyed <select id="st-dyeroute" class="st-btn"><option value="union">every fibre to the shade (two-bath)</option><option value="cross">only the cellulose (polyester stays white: heather)</option><option value="greige">not dyed (greige)</option></select></label>
+              <span class="st-hint" id="st-fibrekey" style="margin:0"></span>
             </div>
             <div id="st-loops"><div class="st-tip" id="st-tip" hidden></div></div>
             <div id="st-cloth" hidden><div class="st-cloth-wait" id="st-cloth-wait">Knitting the swatch…</div></div>
@@ -1035,14 +1041,14 @@
 <script src="assets/js/pbr-package.js?v=20261122a"></script>
 <script src="assets/js/studio-pbr.js?v=20261122a"></script>
 <script src="assets/js/studio-sheet.js?v=20261126a"></script>
-<script src="assets/js/studio-shell.js?v=20261127a"></script>
+<script src="assets/js/studio-shell.js?v=20261210a"></script>
 <script src="assets/js/studio-camsheet.js?v=20261125a"></script>
 <script src="assets/js/studio-colourway.js?v=20261126b"></script>
 <script src="assets/js/studio-jacquard.js?v=20261125e"></script>
 <script src="assets/js/studio-vbed.js?v=20261121a"></script>
 <script src="assets/js/studio-capture.js?v=20261120b"></script>
 <script src="assets/js/studio-gates.js?v=20261121b"></script>
-<script src="assets/js/studio.js?v=20261129a"></script>
+<script src="assets/js/studio.js?v=20261210a"></script>
 <script src="assets/js/studio-fullwindow.js?v=20261129a"></script>
 </body>
 </html>

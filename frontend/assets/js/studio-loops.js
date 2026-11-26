@@ -56,7 +56,73 @@ function studioEnvironment(renderer) {
   return env;
 }
 
+// ── each fibre's own surface: how rough (matt) it is, how many loose fibre ends stand off it, how much clear gloss it has ──
+// Spun fibres, relative to combed cotton. A blend takes them in its mass shares; the engine's hairiness factor of the spinning system scales the hairs.
+const FIBRE_SURF = {
+  cotton: { rough: 0.86, hair: 1.0, cc: 0.0 }, polyester: { rough: 0.66, hair: 0.62, cc: 0.12 }, modal: { rough: 0.6, hair: 0.5, cc: 0.18 },
+  viscose: { rough: 0.56, hair: 0.55, cc: 0.22 }, lyocell: { rough: 0.6, hair: 0.45, cc: 0.16 }, wool: { rough: 0.93, hair: 1.9, cc: 0.0 },
+  acrylic: { rough: 0.78, hair: 1.25, cc: 0.04 }, silk: { rough: 0.42, hair: 0.3, cc: 0.35 }, linen: { rough: 0.82, hair: 0.8, cc: 0.04 },
+  nylon: { rough: 0.6, hair: 0.6, cc: 0.15 }, polypropylene: { rough: 0.64, hair: 0.5, cc: 0.1 },
+};
+// a filament: one smooth bundle; the delustrant sets how glossy, a trilobal section sparkles, a textured (DTY) yarn is crimped and duller
+const FIL_SURF = { bright: { rough: 0.2, cc: 0.7 }, semi_dull: { rough: 0.34, cc: 0.35 }, full_dull: { rough: 0.55, cc: 0.1 } };
+export function surfaceOf(look) {
+  if (!look) return null;
+  if (look.filament) {
+    const f = Object.assign({}, FIL_SURF[look.lustre] || FIL_SURF.semi_dull, { hair: 0 });
+    if (look.section === 'trilobal') { f.rough *= 0.8; f.cc = Math.min(1, f.cc + 0.15); }
+    if (look.type === 'dty') { f.rough = Math.min(0.75, f.rough + 0.12); f.hair = 0.12; }
+    return f;
+  }
+  const mix = look.mix || { cotton: 100 }; let t = 0; const o = { rough: 0, hair: 0, cc: 0 };
+  Object.keys(mix).forEach((k) => { const w = +mix[k] || 0, S = FIBRE_SURF[k] || FIBRE_SURF.cotton; t += w; o.rough += w * S.rough; o.hair += w * S.hair; o.cc += w * S.cc; });
+  if (t > 0) { o.rough /= t; o.hair /= t; o.cc /= t; }
+  // the spinning system's own hairiness (compact and vortex are cleaner, carded and open-end fuller), as the engine works it out
+  if (look.hairFactor > 0) o.hair *= look.hairFactor;
+  if ((look.ply || 1) > 1) { o.hair *= 0.7; o.rough = Math.min(0.92, o.rough + 0.02); }
+  return o;
+}
+// the fibres of a yarn, drawn round it as they lie in it: each strand is one fibre, in the colour that fibre takes in the dye
+const BLEND_TEX = new Map();
+function blendTexture(mix, tones) {
+  const key = JSON.stringify([mix, tones]);
+  if (BLEND_TEX.has(key)) return BLEND_TEX.get(key);
+  const c = document.createElement('canvas'); c.width = 256; c.height = 128;
+  const g = c.getContext('2d');
+  const ks = Object.keys(mix || { cotton: 100 }).filter((k) => mix[k] > 0); const tot = ks.reduce((a, k) => a + (+mix[k]), 0) || 1;
+  const tone = (k) => new THREE.Color(tones && tones[k] ? tones[k] : '#d4d4d4');
+  const main = ks.slice().sort((a, b) => mix[b] - mix[a])[0] || 'cotton';
+  g.fillStyle = '#' + tone(main).clone().multiplyScalar(0.62).getHexString(); g.fillRect(0, 0, 256, 128);
+  let seed = 7; const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  const pick = () => { let u = rnd() * tot; for (const k of ks) { u -= +mix[k]; if (u <= 0) return k; } return main; };
+  for (let k = 0; k < 560; k++) {
+    const x = rnd() * 256, l = 0.55 + rnd() * 0.45, fib = pick(), lum = 0.78 + rnd() * 0.3, col = tone(fib).multiplyScalar(lum);
+    col.r = Math.min(1, col.r); col.g = Math.min(1, col.g); col.b = Math.min(1, col.b);
+    g.strokeStyle = '#' + col.getHexString();                     // the canvas is sRGB: the colour goes in as sRGB, not as three.js's linear values
+    g.lineWidth = (fib === 'polyester' || fib === 'nylon' || fib === 'modal' || fib === 'viscose' ? 0.6 : 0.8) + rnd() * 1.2;   // a man-made staple is finer and more even
+    for (const dx of [-256, 0, 256]) { g.beginPath(); g.moveTo(x + dx, 128); g.lineTo(x + dx + 256 * l * 0.9, 128 - 128 * l); g.stroke(); }
+  }
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  if (BLEND_TEX.size > 60) BLEND_TEX.delete(BLEND_TEX.keys().next().value);
+  BLEND_TEX.set(key, t); return t;
+}
+// a filament bundle: fine parallel filaments, a little twist; a textured yarn crimped
+const FIL_TEX = new Map();
+function filamentTexture(dty) {
+  const key = dty ? 'dty' : 'flat'; if (FIL_TEX.has(key)) return FIL_TEX.get(key);
+  const c = document.createElement('canvas'); c.width = 256; c.height = 64; const g = c.getContext('2d');
+  g.fillStyle = '#c8c8c8'; g.fillRect(0, 0, 256, 64);
+  let seed = 3; const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  for (let k = 0; k < 120; k++) {
+    const y0 = rnd() * 64, v = Math.round(190 + rnd() * 65); g.strokeStyle = 'rgb(' + v + ',' + v + ',' + v + ')'; g.lineWidth = 0.6 + rnd() * 0.8; g.beginPath();
+    for (let x = 0; x <= 256; x += 8) { const y = y0 + x * 0.06 + (dty ? Math.sin(x * 0.35 + k) * 2.2 : 0); if (x) g.lineTo(x, y % 64); else g.moveTo(x, y % 64); }
+    g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; FIL_TEX.set(key, t); return t;
+}
+
 export function feedColour(spec, f) {
+  if (spec.colourBy === 'yarn') return spec.colour || '#3d5a80';          // the yarn as it is: the cloth's shade, each fibre as the dye leaves it
   if (spec.colours && spec.colourBy !== 'one') return spec.colours[f % spec.colours.length];   // warp: one colour per guide bar
   if (spec.colourBy === 'role') return ROLE_COLOURS[(spec.feeds[f] || {}).role] || ROLE_COLOURS.ground;
   if (spec.colourBy === 'one') return spec.colour || '#3d5a80';
@@ -168,7 +234,24 @@ export class LoopView {
     }
   }
 
-  _yarnMaterial(colour, len, r) {
+  _yarnMaterial(colour, len, r, look, feed) {
+    // the engine's yarn for this feeder: its fibres in their own colours (a blend shows both), its own lustre and roughness
+    if (look) {
+      const surf = surfaceOf(look), tones = this.spec.tones ? this.spec.tones(feed, colour, look) : null;
+      const mainFib = Object.keys(look.mix || { cotton: 1 }).sort((a, b) => look.mix[b] - look.mix[a])[0];
+      const main = tones && tones[mainFib] ? tones[mainFib] : colour;
+      if (look.filament) {
+        const ft = filamentTexture(look.type === 'dty').clone(); ft.needsUpdate = true; ft.repeat.set(Math.max(1, len / (10 * r)), 1);
+        return new THREE.MeshPhysicalMaterial({ color: main, map: ft, bumpMap: ft, bumpScale: 0.4, roughness: surf.rough, metalness: 0, clearcoat: surf.cc, clearcoatRoughness: 0.25 + surf.rough * 0.4, sheen: 0.25, envMapIntensity: 0.9, side: THREE.DoubleSide, clippingPlanes: this._clip, transparent: true, opacity: 1 });
+      }
+      const bt = blendTexture(look.mix, tones).clone(); bt.needsUpdate = true;
+      bt.repeat.set(Math.max(1, len / (8 * r)), this.spec.twist === 'S' ? -1 : 1);
+      return new THREE.MeshPhysicalMaterial({
+        color: '#ffffff', map: bt, bumpMap: bt, bumpScale: 1.6 * (0.4 + surf.rough * 0.7), roughness: surf.rough, metalness: 0, clearcoat: surf.cc, clearcoatRoughness: 0.5,
+        sheen: 1, sheenRoughness: 0.35 + surf.rough * 0.25, sheenColor: new THREE.Color(main).lerp(new THREE.Color(0xffffff), 0.55),
+        envMapIntensity: 0.45 + (1 - surf.rough) * 0.6, side: THREE.DoubleSide, clippingPlanes: this._clip, transparent: true, opacity: 1,
+      });
+    }
     const tex = fibreTexture().clone(); tex.needsUpdate = true;
     // one tile = one twist pitch; an S-twisted yarn's fibres slant the other way
     tex.repeat.set(Math.max(1, len / (8 * r)), (this.spec && this.spec.twist === 'S') ? -1 : 1);
@@ -181,10 +264,14 @@ export class LoopView {
   }
 
   _fuzz(curve, segs, r, colour, len, course, feed) {
+    // the hairs are the hairiest fibre's (the cotton of a CVC, not its polyester)
+    const lk0 = this.spec && this.spec.looks && this.spec.looks[feed];
+    if (lk0 && this.spec.tones) { const tn = this.spec.tones(feed, colour, lk0), hairiest = Object.keys(lk0.mix).sort((a, b) => ((FIBRE_SURF[b] || FIBRE_SURF.cotton).hair * lk0.mix[b]) - ((FIBRE_SURF[a] || FIBRE_SURF.cotton).hair * lk0.mix[a]))[0]; colour = tn[hairiest] || colour; }
     const t = fuzzTexture().clone(); t.needsUpdate = true; t.repeat.set(Math.max(1, len / (3 * r)), 1);
     const m = new THREE.Mesh(new THREE.TubeGeometry(curve, segs, r * 1.28, 6, false),
       new THREE.MeshStandardMaterial({ color: new THREE.Color(colour).lerp(new THREE.Color(0xffffff), 0.25), alphaMap: t, transparent: true, opacity: 0.5, depthWrite: false, roughness: 1, clippingPlanes: this._clip }));
-    const hair = this.spec && this.spec.hair != null ? this.spec.hair : 1;
+    const lk = this.spec && this.spec.looks && this.spec.looks[feed], sf = surfaceOf(lk);
+    const hair = sf ? sf.hair : this.spec && this.spec.hair != null ? this.spec.hair : 1;
     m.material.opacity = Math.min(0.85, 0.42 * hair);
     m.userData = { course, feed, fuzz: true, base: m.material.opacity };
     return m;
@@ -214,11 +301,12 @@ export class LoopView {
       const curve = new THREE.CatmullRomCurve3(v, false, 'centripetal', 0.5);
       const len = curve.getLength(), segs = Math.max(40, Math.min(420, Math.round(len / (r * 1.3))));
       const colour = spec.real ? (spec.colour || '#3d5a80') : spec.colourBy === 'stripe' && spec.stripeColour ? spec.stripeColour(co.course) : feedColour(spec, co.feed);
-      const mesh = new THREE.Mesh(new THREE.TubeGeometry(curve, segs, r, 8, false), this._yarnMaterial(colour, len, r));
+      const look = spec.looks ? spec.looks[co.feed] : null;
+      const mesh = new THREE.Mesh(new THREE.TubeGeometry(curve, segs, r, 8, false), this._yarnMaterial(colour, len, r, look, co.feed));
       mesh.userData = { course: co.course, feed: co.feed, lead: !!lead, base: 1 };
       this.group.add(mesh); this.meshes.push(mesh);
       // the loose fibre ends round a spun yarn (not on the diagram of a warp)
-      if (!spec.geo && !spec.filament) { const f = this._fuzz(curve, Math.round(segs / 3), r, colour, len, co.course, co.feed); f.userData.lead = !!lead; this.group.add(f); this.meshes.push(f); }
+      if (!spec.geo && !(look ? look.filament : spec.filament)) { const f = this._fuzz(curve, Math.round(segs / 3), r, colour, len, co.course, co.feed); f.userData.lead = !!lead; this.group.add(f); this.meshes.push(f); }
       return r;
     };
     (geo.lead || []).forEach((co) => tube(co, true));
@@ -237,10 +325,21 @@ export class LoopView {
         // the elastane is plated: it follows the ground yarn's path, one yarn's width toward the technical back of its bed
         const e = co.points.map((p, i) => new THREE.Vector3(p.x - cx, p.y - cy, p.z - (co.side[i] || 1) * (r * 1.1)));
         const ec = new THREE.CatmullRomCurve3(e, false, 'centripetal', 0.5);
-        const em = new THREE.Mesh(new THREE.TubeGeometry(ec, Math.max(48, Math.min(500, e.length)), r * 0.42, 6, false),
-          new THREE.MeshPhysicalMaterial({ color: ELASTANE, roughness: 0.35, clearcoat: 0.4, metalness: 0, transparent: true, opacity: 1, clippingPlanes: this._clip, side: THREE.DoubleSide }));
+        const er = (spec.elastaneR && spec.elastaneR[co.feed]) || r * 0.42;      // drafted: a 20 D elastane at 2.6 x is far finer than the yarn it runs with
+        const em = new THREE.Mesh(new THREE.TubeGeometry(ec, Math.max(48, Math.min(500, e.length)), er, 6, false),
+          new THREE.MeshPhysicalMaterial({ color: ELASTANE, roughness: 0.22, clearcoat: 0.6, clearcoatRoughness: 0.2, metalness: 0, transparent: true, opacity: 1, clippingPlanes: this._clip, side: THREE.DoubleSide }));
         em.userData = { course: co.course, feed: co.feed, elastane: true, base: 1 };
         this.group.add(em); this.meshes.push(em);
+      }
+      const bk = spec.back && spec.back[co.feed];
+      if (bk) {
+        // a plated back yarn (a cotton face on a polyester back): its own fibre, its own lustre, held behind the face yarn
+        const e = co.points.map((p, i) => new THREE.Vector3(p.x - cx, p.y - cy, p.z - (co.side[i] || 1) * (r + bk.r) * 0.92));
+        const bc = new THREE.CatmullRomCurve3(e, false, 'centripetal', 0.5), bl = bc.getLength();
+        const bcol = spec.colourBy === 'yarn' || spec.real ? colour : new THREE.Color(colour).lerp(new THREE.Color(0xffffff), 0.35).getStyle();
+        const bm = new THREE.Mesh(new THREE.TubeGeometry(bc, Math.max(48, Math.min(500, e.length * 2)), bk.r, 8, false), this._yarnMaterial(bcol, bl, bk.r, bk.look, co.feed));
+        bm.userData = { course: co.course, feed: co.feed, back: true, base: 1 };
+        this.group.add(bm); this.meshes.push(bm);
       }
     });
     if (spec.real) {
@@ -332,7 +431,7 @@ export class LoopView {
         return Object.assign({}, fb, { p: out, rf: fb.rf * kr });
       });
       fibreCount += fibres.length;
-      const colour = spec.colourBy === 'one' || spec.real ? (spec.colour || '#f1ead9') : feedColour(spec, co.feed);
+      const colour = spec.colourBy === 'one' || spec.colourBy === 'yarn' || spec.real ? (spec.colour || '#f1ead9') : feedColour(spec, co.feed);
       const mat = materialFor(built.meta, colour);
       mat.clippingPlanes = this._clip; mat.side = THREE.DoubleSide;
       if (mat.sheenColor) mat.sheenColor = new THREE.Color(colour).lerp(new THREE.Color(0xffffff), 0.3).multiplyScalar(0.6);

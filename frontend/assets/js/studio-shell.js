@@ -20,8 +20,8 @@
     weft: {
       root: 'st-weft',
       steps: [
-        { id: 'brief', title: 'Brief', ask: 'What are you making?', lead: 'Choose the cloth family and how heavy it must be. Start from a known structure, or let the Studio design one from your goal.', gets: 'a starting structure and a target weight',
-          subs: [['Structure', ['#ws-c-fab']], ['Targets', ['#ws-c-target']], ['Design from a goal', ['#inv-card']]], viewer: ['3d'], primary: '3d' },
+        { id: 'brief', title: 'Brief', ask: 'What are you making?', lead: 'Start with what the cloth must be: its weight (GSM) and what it is made of (composition). From these the Studio picks every yarn: count, fibre blend, elastane. Then choose the structure, or let the Studio design one from your goal.', gets: 'the yarns for your weight and composition, and a starting structure',
+          subs: [['Weight & composition', ['#ws-c-target']], ['Structure', ['#ws-c-fab']], ['Design from a goal', ['#inv-card']]], viewer: ['3d'], primary: '3d' },
         { id: 'yarn', title: 'Yarn & colour', ask: 'What is it knitted from?', lead: 'Name the yarn of every feeder, then the colours. Blends, fancy yarns and melanges are under “Special yarns”.', gets: 'yarn counts, fibres and the colour plan',
           subs: [['Yarn', ['#ws-c-yarn']], ['Colours & stripes', ['#cw-card']], ['Special yarns', ['#bl-card', '#fy-card', '#ml-card', '#rc-card']]], viewer: ['3d', 'colours', 'blend', 'fancy', 'melange', 'recovery'], primary: '3d' },
         { id: 'design', title: 'Design', ask: 'How is it knitted?', lead: 'Draw the knit, tuck and miss programme needle by needle, or bring one in from the floor or from a picture.', gets: 'the needle programme and the notation',
