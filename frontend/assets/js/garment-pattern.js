@@ -223,7 +223,7 @@
       const pair = Object.keys(other).find((id) => other[id] >= 2 && !taken[id]), held = p.edges.some((e) => e.hold);
       delete p.arr.along; delete p.arr.auto;
       if (self && d.limbs && bb.w <= limbR * 2.2) { const arm = bb.h <= 0.4 * H; p.arr.mode = arm ? (taken.arm ? 'armR' : 'armL') : (taken.leg ? 'legR' : 'legL'); taken[arm ? 'arm' : 'leg'] = 1; taken[p.id] = 1; p.arr.auto = true; if (!P.body) P.body = { preset: 'female' }; return; }
-      if (pair) { taken[p.id] = 1; taken[pair] = 1; const q = byId(P, pair), swap = /(back|rear)/i.test(p.name) || (q && /front/i.test(q.name)); p.arr.mode = swap ? 'back' : 'front'; if (q) q.arr.mode = swap ? 'front' : 'back'; } else p.arr.mode = 'wrap';
+      if (pair) { taken[p.id] = 1; taken[pair] = 1; const q = byId(P, pair), swap = /\b(back|rear)\b/i.test(p.name) || (q && /front/i.test(q.name)); p.arr.mode = swap ? 'back' : 'front'; if (q) q.arr.mode = swap ? 'front' : 'back'; } else p.arr.mode = 'wrap';
       const long = bb.h > 0.3 * H; p.arr.top = r3(held && !long ? an.waist : long ? an.neck : (an.chest));
       if (pair) { const q = byId(P, pair); if (q) q.arr.top = p.arr.top; }
     });
@@ -305,7 +305,7 @@
       if (/^(arm|leg)/.test(arr.mode) && pcs.some((q) => q !== p && q.arr.mode === arr.mode)) c += 2;      // two pieces on one limb is the one thing the other limb is for
       let deep = 0, cnt = 0; for (let k = 0; k < I.local.length; k += 3) { const q = map(I.local[k][0], I.local[k][1]), v = sdf(q[0], q[1], q[2]); if (v < 0) { deep += -v; cnt++; } } c += (deep / Math.max(1, I.local.length / 3)) * 0.6;
       // what the person called the piece says where it goes (front, back): a hint that breaks a tie between a drape and its mirror image, never a rule
-      if (/front/i.test(p.name)) c += arr.mode === 'front' ? 0 : arr.mode === 'back' ? 1.5 : 0.8; else if (/(back|rear)/i.test(p.name)) c += arr.mode === 'back' ? 0 : arr.mode === 'front' ? 1.5 : 0.8;
+      if (/front/i.test(p.name)) c += arr.mode === 'front' ? 0 : arr.mode === 'back' ? 1.5 : 0.8; else if (/\b(back|rear)\b/i.test(p.name)) c += arr.mode === 'back' ? 0 : arr.mode === 'front' ? 1.5 : 0.8;
       const facts = pieceFacts(P, desc, Object.assign({}, p, { arr })), need = facts.ring - facts.meanW * (1 + facts.give); if (need > 0.5) c += 0.35 * need; if (facts.meanW > facts.ring * 1.4) c += 0.05 * (facts.meanW - facts.ring * 1.4); if (/^(arm|leg)/.test(arr.mode) && facts.meanW > facts.ring * 1.15) c += 0.3 * (facts.meanW - facts.ring * 1.15);
       { const hl = p.edges.reduce((t, e, k) => t + (e.hold ? I.sh[k].len : 0), 0); if (hl > 0.5 * I.bb.w && !/^(arm|leg)/.test(arr.mode)) { const e0 = ellipseAt(desc, arr.top || 0), q = arr.arc ? Math.max(0.05, arr.arc[1] - arr.arc[0]) : 1, rt = perim(e0[0] + 1.5, e0[1] + 1.5) * (arr.mode === 'wrap' ? 1 : 0.5 * q); c += 0.25 * Math.abs(hl * (1 + pre[p.id].give) - rt); } }
       if (!/^(arm|leg)/.test(arr.mode) && p.edges.some((e) => e.hold)) { let nd = 1e9; Object.values(desc.anchors || {}).forEach((a) => { nd = Math.min(nd, Math.abs((arr.top || 0) - a)); }); c += 0.2 * nd; }

@@ -119,7 +119,7 @@ function invent(input, opts = {}) {
       evals++;
       let a = null;
       try {
-        a = S.analyse({ bed: ind.D ? 'double' : 'single', gating: ind.gating || 'rib', grid: { C: ind.C, D: ind.D }, feeds: ind.C.map(() => ({ role: 'ground' })), yarn: goal.yarn, machine: goal.machine, ...(goal.floor ? { floor: goal.floor } : {}), target: { gsm: goal.gsm, ...(goal.width_in ? { width_in: goal.width_in } : {}) } });
+        a = S.analyse({ use_model: false, bed: ind.D ? 'double' : 'single', gating: ind.gating || 'rib', grid: { C: ind.C, D: ind.D }, feeds: ind.C.map(() => ({ role: 'ground' })), yarn: goal.yarn, machine: goal.machine, ...(goal.floor ? { floor: goal.floor } : {}), target: { gsm: goal.gsm, ...(goal.width_in ? { width_in: goal.width_in } : {}) } });
       } catch (_) { a = null; }
       if (a && a.success && a.ok_to_knit && Math.abs(a.fabric.gsm - goal.gsm) / goal.gsm <= 0.04) {
         knittable++;

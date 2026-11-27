@@ -270,7 +270,7 @@ function analyzeFleece(p) {
   // length per needle), the tuck sequence their layout (terry-loops.js)
   const loopSize = isTerry ? loopbackSize(p.loopSize, p.loopLengthMm, G) : null;
   const arrKey = isTerry && LOOPBACK_ARRANGEMENTS[p.loopArrangement] ? p.loopArrangement : 'standard';
-  const loopSl = isTerry ? loopSize.l : v.loopLen20 * 20 / G;
+  let loopSl = isTerry ? loopSize.l : v.loopLen20 * 20 / G;
 
   // ---- binder ----
   let binder = null;
@@ -282,6 +282,18 @@ function analyzeFleece(p) {
       binder = { role: 'binder', label: '75D polyester filament', tex: 75 / 9, ne: neOfTex(75 / 9), filament: true, fibre: { polyester: 1 }, sl: faceSl * 0.62, sl_basis: 'measured ratio, filament binder (0.62 × face)' };
     } else {
       binder = { role: 'binder', label: `${faceNe}/1 ${cellKey} (same as face)`, tex: texOfNe(faceNe), ne: faceNe, filament: false, fibre: { [cellKey]: 1 }, sl: faceSl * 0.81, sl_basis: 'measured ratio, spun binder (0.81 × face)' };
+    }
+  }
+
+  // ---- a recipe from the mill's work orders: its binder and loop yarns and stitch lengths ----
+  const rc = p.recipe && p.recipe.loop && p.recipe.loop.ne ? p.recipe : null;
+  const rcSl = rc ? rc.sl_loop_mm : [];
+  if (rc) {
+    if (v.yarns === 3 && rc.binder) {
+      const b0 = rc.binder;
+      binder = b0.denier
+        ? { role: 'binder', label: `${b0.denier}D ${b0.material || 'polyester'} filament`, tex: b0.denier / 9, ne: neOfTex(b0.denier / 9), filament: true, fibre: { polyester: 1 }, sl: rcSl.length === 3 ? rcSl[1] : faceSl * 0.62, sl_basis: 'the mill\'s work orders' }
+        : { role: 'binder', label: `${b0.ne}/1 ${b0.ne === faceNe ? `${cellKey} (same as face)` : cellKey}`, tex: texOfNe(b0.ne) * (b0.ply || 1), ne: b0.ne, filament: false, fibre: { [cellKey]: 1 }, sl: rcSl.length === 3 ? rcSl[1] : faceSl * 0.81, sl_basis: 'the mill\'s work orders' };
     }
   }
 
@@ -306,11 +318,11 @@ function analyzeFleece(p) {
   let ply = 1;
   if (loopNeExact < 6) { ply = 2; }
   let loopNe = ply === 1 ? snap(loopNeExact, STD_LOOP) : snap(loopNeExact * 2, STD_LOOP);
-  const loopTexChosen = texOfNe(loopNe) * ply;
+  let loopTexChosen = texOfNe(loopNe) * ply;
   // if the loop the balance asks for is finer than fleece loop yarns actually run (30 Ne is the top of the shelf),
   // step the face up to a finer count and solve again, rather than silently giving a fabric that comes out ~20 % heavier than asked
   let liftedFace = false;
-  while (needLighterFace(loopNeExact) && faceNe < 40) {
+  while (!rc && needLighterFace(loopNeExact) && faceNe < 40) {
     liftedFace = true; faceNe = snap(faceNe + 4, STD_FACE);
     faceSl = +p.faceSlMm > 0 ? +p.faceSlMm : (v.faceSl20 ? v.faceSl20 * 20 / G : (D.slFit.a + D.slFit.b * faceNe) * 20 / G);
     if (binder) binder = Object.assign({}, binder, binder.filament ? {} : { label: `${faceNe}/1 ${cellKey} (same as face)`, tex: texOfNe(faceNe), ne: faceNe, sl: faceSl * 0.81 });
@@ -331,6 +343,15 @@ function analyzeFleece(p) {
   if (liftedFace) { faceTex = texOfNe(faceNe); faceMass = faceSl * faceTex; binderMass = binder ? binder.sl * binder.tex : 0; cpc = kc * 10 / faceSl; }
   if (liftedFace) warnings.push(`At ${gsm} GSM a ${+p.faceNe > 0 ? p.faceNe : 'standard'} face would need a loop too fine to spin as a fleece loop (over 30 Ne); the face was stepped up to ${faceNe}/1 so the mass balance closes with a ${loopNe2}/1 loop (brought the calculated GSM to within a few percent of the target; for an exact match take a lighter base GSM or a lighter binder).`);
   else if (needLighterFace(loopNeExact)) warnings.push(`At ${gsm} GSM the loop yarn the balance asks for (${r1(loopNeExact)} Ne) is finer than fleece loop yarns run — the face and binder already carry most of the weight. Use a finer face count or a lighter binder.`);
+
+  if (rc) {
+    // the loop the work orders knit; the courses are then what weigh the target (the orders reach this weight with these yarns)
+    loopNe = rc.loop.ne; ply = rc.loop.ply || 1; loopNeExact = loopNe;
+    loopTexChosen = texOfNe(loopNe) * ply; if (rcSl.length > 1) loopSl = rcSl[rcSl.length - 1];
+    faceTex = texOfNe(faceNe); faceMass = faceSl * faceTex; binderMass = binder ? binder.sl * binder.tex : 0;
+    const lm = loopSl * loopTexChosen, loss = b.loop_loss * lm / (faceMass + binderMass + lm);
+    cpc = gsm * (1 - elastane) * 100 / (wpc * (faceMass + binderMass + lm) * (1 - loss));
+  }
 
   // the sinker setting that hits the target exactly with the snapped count
   const sumFixed = faceMass + binderMass;

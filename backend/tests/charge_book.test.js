@@ -63,7 +63,8 @@ console.log('--- Running Charge Book Tests ---');
 }
 // 5. the costing is built on the sheet
 {
-  const c = calculate({ fabric: 'rib_2x2', gsm: 260, composition: '95% Cotton 5% Elastane', color_shade: 'dark_navy', efficiency: 85, feeder_type: 'ff' }).costing;
+  // (the engines' own count, a coarse one: the loop model's finer count sits in the sheet's dearer knitting tier)
+  const c = calculate({ fabric: 'rib_2x2', gsm: 260, composition: '95% Cotton 5% Elastane', color_shade: 'dark_navy', efficiency: 85, feeder_type: 'ff', use_model: false }).costing;
   assert.strictEqual(c.knitting_per_kg_usd, 0.45);
   assert.strictEqual(c.dyeing_per_kg_usd, 1.75);
   assert.strictEqual(c.dyeing_detail.source, 'charge_sheet');

@@ -8,13 +8,13 @@ const KP = require('../engine/domain/knit-plan');
 
 console.log('--- Running Studio Yarn-Plan Tests ---');
 const T = FS.listTemplates();
-function run(id, gsm, comp, yarn) {
+function run(id, gsm, comp, yarn, more) {
   const t = T.find((x) => x.id === id);
   const C = t.grid.C.map((r) => r.slice()), D = t.grid.D ? t.grid.D.map((r) => r.slice()) : null;
   const w = Math.max(C[0].length, D ? D[0].length : 0), fit = (g) => g.map((r) => Array.from({ length: w }, (_, j) => r[j % r.length]));
   return FS.analyse({ bed: D ? 'double' : 'single', gating: t.gating === 'interlock' ? 'interlock' : 'rib', grid: { C: fit(C).map((r) => r.join('')), D: D ? fit(D).map((r) => r.join('')) : null },
     feeds: t.roles.map((r) => ({ role: r, plate: !!t.plated })), yarn: { fibre: 'cotton', type: 'auto', ply: t.ends || 1, ...(yarn || {}) }, yarns: {}, elastane: null,
-    finish: { brush: /fleece/.test(t.id) ? 'back' : 'none' }, plush: { cut: t.id === 'velour_plush', arrangement: 'full' }, pile: 'auto', target: { gsm, composition: comp, shrinkage_pct: 5 }, machine: {} });
+    finish: { brush: /fleece/.test(t.id) ? 'back' : 'none' }, plush: { cut: t.id === 'velour_plush', arrangement: 'full' }, pile: 'auto', target: { gsm, composition: comp, shrinkage_pct: 5 }, machine: {}, ...(more || {}) });
 }
 
 {
@@ -29,7 +29,7 @@ function run(id, gsm, comp, yarn) {
   // the solved count stays near the floor's own count on the structures that were furthest from it
   const out = [];
   for (const [id, gsm, comp] of [['single_jersey', 250, '95% cotton 5% elastane'], ['pique_single', 260], ['french_terry', 340], ['fleece_2_thread', 310], ['rib_1x1', 225], ['interlock', 225], ['heavy_jersey', 260]]) {
-    const r = run(id, gsm, comp), p = r.yarn_plan.practice;
+    const r = run(id, gsm, comp, null, { use_model: false }), p = r.yarn_plan.practice;
     assert(r.success !== false && p, `${id} ${gsm}: answered with the floor practice`);
     const ne = r.solver.options[0].ne;
     assert(Math.abs(Math.log(ne / p.ne)) < Math.log(1.2), `${id} ${gsm}: ${ne}s against the floor's ${p.ne}s`);
@@ -37,6 +37,17 @@ function run(id, gsm, comp, yarn) {
     out.push(`${id} ${ne}s/${r.machine.gauge}GG`);
   }
   console.log('✓ solved counts and gauges keep to the floor: ' + out.join(', '));
+}
+if (require('../engine/domain/universal-model').model().ok) {
+  // the loop model, where it answers: a heavier elastane jersey keeps a fine yarn on 24 GG (it draws in), counts fall with weight,
+  // and the counts either side are offered beside its choice
+  const at = (gsm) => run('single_jersey', gsm, '95% cotton 5% elastane');
+  const [a, b, c] = [180, 215, 250].map(at);
+  const ne = (r) => parseFloat(r.yarn.ground.count);
+  assert([a, b, c].every((r) => r.recipe && r.recipe.model), 'the model answers');
+  assert(ne(a) >= ne(b) && ne(b) >= ne(c) && ne(c) >= 24 && ne(c) <= 30 && c.machine.gauge === 24, `${ne(a)} ${ne(b)} ${ne(c)} on ${c.machine.gauge} GG`);
+  assert(c.solver.options.length >= 3 && c.solver.options[0].ne === ne(c) && c.solver.options.every((o) => o.sl_mm > 0 && Math.abs(o.gsm - 250) <= 3), JSON.stringify(c.solver.options.map((o) => [o.ne, o.sl_mm, o.gsm])));
+  console.log(`✓ loop model elastane jersey: ${ne(a)}s at 180, ${ne(b)}s at 215, ${ne(c)}s on ${c.machine.gauge} GG at 250; ${c.solver.options.length} counts offered`);
 }
 {
   // two plated yarns share one loop, so each is about twice as fine as the one-yarn count; a two-end design keeps its two ends

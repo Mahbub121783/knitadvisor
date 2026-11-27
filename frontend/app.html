@@ -923,6 +923,21 @@
                   </select>
                 </div>
                 <div class="form-group">
+                  <label class="form-label" for="elastane-feed-input">Elastane feeding <span class="text-dim">(work orders)</span></label>
+                  <select id="elastane-feed-input" class="form-select">
+                    <option value="">Every feeder (full)</option>
+                    <option value="half">Every other feeder (half)</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="order-variant-input">Order type <span class="text-dim">(work orders)</span></label>
+                  <select id="order-variant-input" class="form-select">
+                    <option value="">Solid</option>
+                    <option value="yarn_dyed">Yarn dyed</option>
+                    <option value="stripe">Stripe</option>
+                  </select>
+                </div>
+                <div class="form-group">
                   <label class="form-label" for="twist-input">Twist Multiplier (αe) <span class="text-dim">opt.</span></label>
                   <input type="number" id="twist-input" class="form-input" placeholder="auto 3.75" min="2.5" max="5.5" step="0.05">
                 </div>
@@ -1211,6 +1226,8 @@ const PREFILL_FIELD_MAP = {
   charge_vendor: 'charge-vendor-input',
   stripe_type: 'stripe-type-input',
   surface_finish: 'surface-finish-input',
+  elastane_feed: 'elastane-feed-input',
+  order_variant: 'order-variant-input',
   twist_multiplier: 'twist-input',
   yarn_price_type: 'yarn-price-type',
   denier: 'denier-input',
@@ -1233,7 +1250,7 @@ const PREFILL_CHECKBOX_MAP = {
 const PREFILL_OPENS_OPTIONAL = [
   'dia', 'gauge', 'rpm', 'stitch_length', 'feeders', 'target_width',
   'fiber_grade', 'spinning_system', 'yarn_form', 'finishing_route',
-  'dyeing_method', 'surface_finish', 'twist_multiplier', 'yarn_price_type', 'charge_vendor', 'stripe_type',
+  'dyeing_method', 'surface_finish', 'elastane_feed', 'order_variant', 'twist_multiplier', 'yarn_price_type', 'charge_vendor', 'stripe_type',
 ];
 
 function applyPrefill(params) {
@@ -2215,6 +2232,8 @@ async function doCalculate() {
     charge_vendor: document.getElementById('charge-vendor-input').value || undefined,
     stripe_type: document.getElementById('stripe-type-input').value || undefined,
     surface_finish: document.getElementById('surface-finish-input').value || undefined,
+    elastane_feed: document.getElementById('elastane-feed-input').value || undefined,
+    order_variant: document.getElementById('order-variant-input').value || undefined,
     twist_multiplier: parseFloat(document.getElementById('twist-input').value) || undefined,
     yarn_price_type: document.getElementById('yarn-price-type').value || undefined,
     yarn_white: document.getElementById('yarn-white').checked || undefined,

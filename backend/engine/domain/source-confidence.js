@@ -61,6 +61,14 @@ const TIERS = {
     rank: 5, label: 'Verified — published reference', badge: 'verified',
     note: 'Matches a formula published for this exact structure in a cited industry reference (see source below).',
   },
+  factory_recipe: {
+    rank: 5, label: 'Factory work orders', badge: 'verified',
+    note: 'The yarns, stitch length, gauge and diameter factory R&D work orders knit for this cloth and composition at this weight (or carried from the weights around it).',
+  },
+  loop_model: {
+    rank: 4, label: 'Loop model (any construction)', badge: 'derived',
+    note: 'Designed from the needle diagram by the loop model: yarn counts, stitch lengths and gauge for this construction, composition and weight. Typical difference from knitted cloth is a few percent in stitch length; confirm with a trial roll.',
+  },
   factory_exact: {
     rank: 5, label: 'Factory data (exact match)', badge: 'verified',
     note: 'A real factory production record matches this fabric and GSM directly.',
@@ -101,6 +109,8 @@ function classifySource(rawSource, opts = {}) {
   else if (s === 'ESTIMATED') key = 'estimated';
   else if (s === 'LOOKUP_DERIVED') key = 'lookup_derived';
   else if (s.startsWith('PDF_VERIFIED')) key = 'pdf_verified';
+  else if (s === 'FACTORY_RECIPE') key = 'factory_recipe';
+  else if (s === 'UNIVERSAL_MODEL') key = 'loop_model';
   else if (s === 'FACTORY_EXACT') key = 'factory_exact';
   else if (s === 'FACTORY_INTERPOLATED') key = 'factory_interpolated';
   else if (s === 'FACTORY_EXTRAPOLATED') key = 'factory_extrapolated';

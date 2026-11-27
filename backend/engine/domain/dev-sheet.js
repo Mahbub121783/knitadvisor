@@ -80,13 +80,16 @@ function build(raw, analyse) {
   let out = analyse(clean(design));
   if (!out || out.success === false) throw new SheetError(out && out.error ? out.error : 'The Studio could not work this design out.');
   const conf = out.structure.confidence || {};
-  const recordBacked = conf.level === 'verified' || conf.level === 'calibrated';
+  const modelled = !!(out.recipe && out.recipe.model);
+  const recordBacked = !modelled && (conf.level === 'verified' || conf.level === 'calibrated');
   const family = out.structure.family;
   const familySl = out.fabric.sl_mm;
   // ── physics first for a structure the records do not cover ───────────────────────────────────────────────
   let weightPath = { path: 'family records', why: recordBacked ? `the structure is in the factory records (${conf.level})` : 'physics-first was not possible', laws: null, band_pct: recordBacked ? 5 : null };
   let designUsed = clean(design);
-  if (!recordBacked && !out.plush && family !== 'plush') {
+  // the loop model, fitted on knitted orders, answered: the band is about twice its typical (median) weight difference
+  if (modelled) weightPath = { path: 'loop model', why: out.recipe.note, laws: null, band_pct: Math.round(2 * ((out.recipe.typical_error || {}).gsm_pct || 10)) };
+  if (!modelled && !recordBacked && !out.plush && family !== 'plush') {
     const s = lawsSolve(clean(design), analyse, familySl, { gauge: out.machine.gauge, dia: out.machine.dia, ne: out.yarn.ground && out.yarn.ground.equivalents ? out.yarn.ground.equivalents.ne : null });
     // the laws are trusted only where their answer is a cloth the factory could knit: the tightness factor must sit inside the factory window of the family
     const tfw = out.fabric.tf_window, gTex = out.yarn.feeds && out.yarn.feeds[0] ? out.yarn.feeds[0].tex : null;
@@ -231,7 +234,7 @@ function build(raw, analyse) {
     accuracy: {
       weight: band ? `about ±${band} % until a trial roll is measured (${weightPath.path})` : `about ±${f.accuracy && f.accuracy.gsm ? r1(f.accuracy.gsm.typical_error_pct || 5) : 5} % (cross-validated on factory records)`,
       rule: 'No sheet is exact. Knit one roll, enter its stitch length, GSM and width (Trial rolls step): the Studio re-calibrates this structure to your machine and the band narrows.',
-      measured_vs_modelled: 'Weight and width: measured on factory records, or physics-first. Shrinkage, dyeing amounts, finishing temperature / speed / overfeed, hand: modelled (typical). A roll confirms them.',
+      measured_vs_modelled: 'Weight and width: measured on factory records, the loop model fitted on knitted orders, or physics-first. Shrinkage, dyeing amounts, finishing temperature / speed / overfeed, hand: modelled (typical). A roll confirms them.',
     },
     first_roll: ['Knit the sheet\'s stitch length; take 3 m of cloth off the machine.', 'Condition flat 24 h; weigh a 100 cm² cut and measure the width: this is the greige weight.', 'Enter the stitch length, GSM and width as a trial roll. Repeat after finishing for the finished state.'],
     design_used: designUsed,

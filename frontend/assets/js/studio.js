@@ -730,6 +730,9 @@
     if (num('st-v2r') && num('st-v2l')) vdq.push({ reading: num('st-v2r'), course_length_m: num('st-v2l') });
     return {
       bed: S.D ? 'double' : 'single',
+      // the structure started from (a heavy jersey is drawn like a single jersey), and whether the mill's work orders may answer
+      template: S.templateId || undefined,
+      use_recipe: $('st-recipe') && !$('st-recipe').checked ? false : undefined,
       gating: S.bed === 'interlock' ? 'interlock' : 'rib',
       grid: { C: S.C.map(function (r) { return r.join(''); }), D: S.D ? S.D.map(function (r) { return r.join(''); }) : null },
       feeds: S.feeds.map(function (f) {
@@ -836,7 +839,7 @@
     var p = last.yarn_plan, f = last.fabric || {}, m = last.machine || {}, sv = last.solver;
     if (!p) { el.innerHTML = ''; return; }
     var ROLE = { ground: 'Ground', face: 'Face', binder: 'Binder', loop: 'Loop', pile: 'Pile', plate: 'Back (plated)', elastane: 'Elastane' };
-    var SRC = { solved: ['solved', 'ok'], yours: ['yours', 'calibrated'], assumed: ['assumed', 'estimate'], 'same as ground': ['as ground', 'close'] };
+    var SRC = { solved: ['solved', 'ok'], yours: ['yours', 'calibrated'], assumed: ['assumed', 'estimate'], 'same as ground': ['as ground', 'close'], 'work orders': ['work orders', 'calibrated'], 'loop model': ['loop model', 'close'] };
     var h = '<div class="st-plan-h"><b>Yarns for this cloth</b><span>' + Math.round(f.gsm) + ' GSM · ' + esc(p.cloth) + '</span></div><table class="st-plan-t">' +
       p.rows.map(function (r) {
         var s = SRC[r.source] || [r.source, 'close'];
@@ -844,6 +847,14 @@
           '<small>' + esc(r.type || '') + (r.feeds && r.feeds.length ? ' · feeder ' + r.feeds.slice(0, 8).join(', ') + (r.feeds.length > 8 ? ' …' : '') : '') + '</small></td><td class="n">' + r.share_pct + '%</td><td><span class="st-badge ' + s[1] + '">' + esc(s[0]) + '</span></td></tr>';
       }).join('') + '</table>' +
       '<p class="st-plan-m">Knit on <b>' + m.gauge + ' GG</b>, ' + m.dia + '" · loop <b>' + f.sl_mm + ' mm</b> · open width ' + f.width_open_in + '"</p>';
+    var rc = p.recipe;
+    if (rc) {
+      var names = rc.sl.length >= 3 ? ['face', 'binder', 'loop'] : rc.sl.length === 2 ? ['face', 'loop'] : [''];
+      h += '<p class="st-plan-f"><b>' + (rc.model ? 'Loop model' : 'Factory work orders') + '</b> — ' + esc(rc.note.replace(/^Universal loop model: /, '')) + '<br>Stitch length <b>' + rc.sl.map(function (v, i) { return (names[i] ? names[i] + ' ' : '') + v; }).join(' / ') + ' mm</b>' +
+        (rc.sl_loop_mm && rc.sl_loop_mm[0] !== rc.sl[0] ? ' <small>(' + esc(rc.sl_basis) + '; per needle loop ' + rc.sl_loop_mm.join(' / ') + ' mm)</small>' : '') +
+        ', <b>' + rc.gauge + ' GG</b>' + (rc.dia ? ', <b>' + rc.dia + '"</b>' : '') + (rc.alternatives && rc.alternatives.length ? '<br><small>Other yarns the orders ran at this weight: ' + esc(rc.alternatives.map(function (k) { return k.replace(/\|-/g, '').replace(/\|/g, ' + ').replace(/\/1\b/g, 's'); }).join('; ')) + '</small>' : '') + '</p>';
+    }
+    var box = $('st-recipe-row'); if (box) box.hidden = !last.factory_access && $('st-recipe').checked;
     var pr = p.practice;
     if (pr) {
       var fam = String(pr.family) === 'rib2x2' ? '2x2 rib' : String(pr.family).replace(/_/g, ' ');

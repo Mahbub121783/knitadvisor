@@ -53,3 +53,7 @@ __pycache__/
 # photos people send to teach or debug the scanner: private, server-side only
 backend/uploads/
 backend/tmp/
+
+# the mill R&D work orders turned into recipes: private factory data, kept off the public repository until decided
+backend/data/rnd-recipes.json
+backend/data/universal-model.json

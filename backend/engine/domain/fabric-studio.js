@@ -64,6 +64,9 @@ const FY = require('./fancy-yarn-engine');
 const STRAITS = require('./structure-traits');
 const { SPINNING_SYSTEMS } = require('./yarn-engine');
 const TE = require('./terry-engine');
+const RAP = require('./recipe-apply');
+const UA = require('./universal-apply');
+const ACCESS = require('./recipe-access');
 const TE_FIBRES = ['cotton', 'viscose', 'bamboo', 'modal', 'tencel', 'linen', 'polyester', 'nylon', 'acrylic', 'wool', 'elastane'];
 const { FABRIC_DERIVATIVES } = require('../catalog/fabric-derivatives');
 const { FACTORY_RECORDS } = require('../catalog/factory-dataset');
@@ -843,8 +846,12 @@ function solve(ctx, ground) {
   // stitch length: per feed ℓᵢ = own setting, or ℓref × ratio
   const slOf0 = (i, lref) => feedRows[i].sl_mm || lref * feedRows[i].sl_ratio;
   const knitFeeds = feedRows.map((f, i) => i).filter((i) => isKnitFeed(st, feedRows, i));
+  // on a laid-in cloth with stitch lengths as the mill runs them, the loop that sets the density is the face's: the binder's course length is
+  // shorter by what its tucks save
+  const faceOnly = input[RECIPE] && family === 'fleece' ? knitFeeds.filter((i) => ['face', 'ground'].includes(feedRows[i].role)) : [];
+  const loopFeeds = faceOnly.length ? faceOnly : knitFeeds;
   // the cloth's loop length is the knitting feeders': a tuck feeder set tighter changes the yarn, not the loop
-  const lk = (lref) => (knitFeeds.length ? mean(knitFeeds.map((i) => slOf0(i, lref))) : lref);
+  const lk = (lref) => (loopFeeds.length ? mean(loopFeeds.map((i) => slOf0(i, lref))) : lref);
   // the yarn share the family constant is per, at this structure's tuck level
   const mb = (e) => 1 - (1 - anchorMass('pique', pitch, 3).M) * e;
   const gsmAt = (lref, ks = KS.med) => {
@@ -857,12 +864,17 @@ function solve(ctx, ground) {
   };
   const target = +((input.target || {}).gsm) || null;
   let lref, slSource;
-  if (+mach.sl_mm > 0) { lref = +mach.sl_mm; slSource = 'your setting'; }
+  if (+mach.sl_mm > 0) { lref = +mach.sl_mm; slSource = input[RECIPE] ? (input[RECIPE].model ? 'loop model' : 'factory work orders') : 'your setting'; }
   else if (target) {
     let lo = 1.0, hi = 12;
     for (let k = 0; k < 36; k++) { const mid = (lo + hi) / 2; if (gsmAt(mid).gsm > target) lo = mid; else hi = mid; }
     lref = (lo + hi) / 2; slSource = `solved for ${target} GSM`;
   } else throw new StudioError('Give a target GSM, or your machine stitch length.');
+  // the mill's own loop reaches the weight it was ordered at: the constant is the one those orders show
+  if (input[RECIPE] && target && !ctx.calib) {
+    const g1 = gsmAt(lref).gsm;
+    if (g1 > 0) KS = { ...scaled(KS, target / g1), basis: input[RECIPE].note };
+  }
   const at = gsmAt(lref);
   const gsm = at.gsm;
   const gsmRange = [gsmAt(lref, KS.q1).gsm, gsmAt(lref, KS.q3).gsm];
@@ -899,8 +911,13 @@ function solve(ctx, ground) {
   const eff = (+mach.efficiency > 0 ? +mach.efficiency : 85) / 100;
 
   // yarn per feed
+  // A stitch length from the mill's orders (or the loop model fitted on them) is the course length shared over every needle in action: it
+  // already counts what the floats and tucks save, so the structure's share is not taken off a second time. On interlock gating each feeder
+  // knits one bed's worth, and the structural share is that.
+  const asRun = !!input[RECIPE] && input.gating !== 'interlock' && family !== 'interlock';
+  const inAction = (i) => [st.beds.C, st.beds.D].filter(Boolean).reduce((t, g) => t + g[i].filter((x) => x !== '-').length, 0) / st.width;
   const feeds = feedRows.map((f, i) => {
-    const s = at.cons[i].share;
+    const s = asRun ? inAction(i) : at.cons[i].share;
     const l = slOf(i);
     const courseM = (s * needles * l) / 1000;            // yarn per revolution at this feeder
     const knitsHere = [st.beds.C, st.beds.D].filter(Boolean).some((g) => g[i].includes('K'));
@@ -953,10 +970,19 @@ function solve(ctx, ground) {
   // this a fleece reported ~1.6× the courses it has, and Σ(L·Tex) ÷ A_cell disagreed with the weight by the same factor (audit 2026-11-20).
   const knitMassShare = (() => {
     if (family !== 'fleece' || !feeds.some((f) => f.role === 'loop')) return 1;
-    const km = feeds.reduce((t, f, i) => t + (f.role !== 'loop' && [st.beds.C, st.beds.D].filter(Boolean).some((g) => g[i].includes('K')) ? f.mass : 0), 0);
-    return massTot > 0 && km > 0 ? Math.min(1, km / massTot) : 1;
+    // the density constant's own measure of the mass: the structural share of each feeder
+    const mass = feeds.map((f, i) => at.cons[i].share * slOf(i) * yarns[i].tex);
+    const km = feeds.reduce((t, f, i) => t + (f.role !== 'loop' && [st.beds.C, st.beds.D].filter(Boolean).some((g) => g[i].includes('K')) ? mass[i] : 0), 0);
+    const all = mass.reduce((t, v) => t + v, 0);
+    return all > 0 && km > 0 ? Math.min(1, km / all) : 1;
   })();
-  const cpc = (KS.med / (bedsLoops * KW.med)) / lcm * rate / (family === 'interlock' ? 0.5 : 1) * knitMassShare;
+  // With the mill's stitch lengths the density constant of the older records does not apply: the courses are what the yarn laid weighs
+  // out to at this weight and width (a laid-in cloth counts its face courses)
+  const faceCourses = family === 'fleece' ? feedRows.filter((f, i) => ['face', 'ground'].includes(f.role) && isKnitFeed(st, feedRows, i)).length : st.feeds * rate;
+  const laid = massTot + elastTot;       // µg per needle position in one repeat
+  const cpc = input[RECIPE] && laid > 0 && faceCourses > 0
+    ? (gsm * width * 0.0254 / (laid * needles * 1e-6)) * faceCourses / 100
+    : (KS.med / (bedsLoops * KW.med)) / lcm * rate / (family === 'interlock' ? 0.5 : 1) * knitMassShare;
 
   // TF
   const groundIdx = feedRows.findIndex((f, i) => ['ground', 'face'].includes(f.role) && [st.beds.C, st.beds.D].filter(Boolean).some((g) => g[i].includes('K')));
@@ -1300,6 +1326,13 @@ function analyse(input) {
   const faults = [];
   const fault = (engine, e) => { faults.push({ engine, error: String((e && e.message) || e).slice(0, 160) }); };
   try {
+    // a structure the mill's own work orders knit, at a weight and composition they cover: their yarns, loops, gauge and diameter are the design
+    const fromBook = recipeDesign(input);
+    if (fromBook) {
+      const ans = recipeAnswer(fromBook, analyse);
+      if (ans) { if (ACCESS.granted(input) && ans.success !== false) ans.factory_access = true; return ans; }
+      input = { ...input, [NO_MODEL]: true };
+    }
     // a target composition ("95% CO 5% EL"): the yarn's fibres, the elastane's denier / draft / feeding (and the counts of per-role fibres) are solved (composition-solver.js)
     if (input && input.target && input.target.composition) return CSOLVE.solve(input, analyse);
     // melange / marl / heather yarns: each role's melange is worked out first (melange-engine.js) and its resultant
@@ -2057,6 +2090,177 @@ function yarnPlan(out, input) {
   return { rows, cloth, practice: (out.solver && out.solver.practice) || null };
 }
 
+// ── the mill's work orders (recipe-book.js) ──────────────────────────────
+// When nothing the person set says otherwise (no count, no stitch length, no other gauge, no trial rolls, no special yarn card), a catalogue
+// structure at a weight and composition the mill has knitted is designed as the mill knits it: the same yarns, stitch lengths, gauge, diameter
+// and elastane, weighed to the target by the loop the orders run.
+// marks on the Studio's own second passes: symbols, so no request body can carry them
+const RECIPE = Symbol('ka.recipe'), NO_MODEL = Symbol('ka.noModel'), PLAIN = Symbol('ka.plain');
+function recipeDesign(input) {
+  if (!input || input[RECIPE] || input[NO_MODEL]) return null;
+  const t = input.target || {}, gsm = +t.gsm, y = input.yarn || {}, m = input.machine || {};
+  if (!(gsm > 0) || +m.sl_mm > 0 || +y.count > 0 || +y.ne > 0 || +y.denier > 0 || +y.tex > 0 || t.composition_roles) return null;
+  if (input.calibration || input.melange || input.blend || input.fancy || input.floor || (input.vbed && input.vbed.enabled)) return null;
+  // a filament yarn is the person's choice
+  if (/filament/.test(String(y.fibre || ''))) return null;
+  if (input.yarns && Object.values(input.yarns).some((v) => v && (+v.count > 0 || +v.ne > 0 || +v.denier > 0))) return null;
+  if ((input.feeds || []).some((f) => f && (f.yarn || +f.sl_mm > 0 || (f.sl_ratio && +f.sl_ratio !== 1)))) return null;
+  let C, D;
+  try { C = readBed((input.grid || {}).C, 'Cylinder'); D = input.bed === 'double' ? readBed((input.grid || {}).D, 'Dial') : null; } catch (e) { return null; }
+  if (!C || (D && (D.length !== C.length || D[0].length !== C[0].length))) return null;
+  const drawn = { beds: { C, D }, feeds: C.length, width: C[0].length };
+  // the structure the person started from, when the drawing is still that structure (a heavy jersey and a single jersey are drawn alike); else the
+  // structure the drawing is
+  const plated = (input.feeds || []).some((f) => f && f.plate);
+  const started = input.template && byId(input.template);
+  const isDrawn = (f) => { const x = matchCatalogue(drawn); return !!x && (x.id === f.id || JSON.stringify(KP.normaliseStructure(x)) === JSON.stringify(KP.normaliseStructure(f))); };
+  const match = started && isDrawn(started) ? started : plated && isDrawn(byId('plated_jersey')) ? byId('plated_jersey') : matchCatalogue(drawn);
+  let fibres = null, elPct = 0;
+  if (t.composition) {
+    // the composition solver's own reading: an unnamed fibre or a total that is not 100 % goes to it, which says so in words
+    try { fibres = CSOLVE.readTarget(t.composition); } catch (e) { if (!(e instanceof CSOLVE.CompositionError)) throw e; return null; }
+    elPct = +fibres.elastane || 0; delete fibres.elastane;
+    if (Object.keys(fibres).some((k) => !BY.FIB[k])) return null;
+  } else if (y.fibre && y.fibre !== 'cotton') {
+    fibres = FIBRE_MIX[y.fibre] || null;
+    if (!fibres) return null;
+  }
+  const el = elPct > 0 || !!input.elastane;
+  const brush = (input.finish || {}).brush;
+  const half = (input.elastane || {}).every === 'alternate';
+  const style = y.type === 'carded' ? 'carded' : y.type === 'open_end' ? 'rotor' : 'combed';
+  const roles = C.map((_, i) => (((input.feeds || [])[i] || {}).role) || 'ground');
+  // 1. the mill's own work orders (only for accounts allowed to see them)
+  let r = null;
+  // (a spinning system the work orders do not record is the person's own choice)
+  if (ACCESS.granted(input) && input.use_recipe !== false && !/vortex|siro/.test(String(y.type || '')) && match && RAP.clothOf(match.id) && (match.id === 'plated_jersey' || !plated)) {
+    r = RAP.recipeFor({ fabricId: match.id, gsm, fibres, elastane: el, half, brushed: brush ? brush !== 'none' : undefined, style, ...(input.recipe_hint || {}) });
+    if (r && (!r.face || !r.face.ne || !r.sl_loop_mm.length || (+m.gauge > 0 && r.gauge && +m.gauge !== r.gauge))) r = null;
+  }
+  // 2. the universal loop model: any drawn weft construction, designed from how it is built (a sinker-loop pile has its own model)
+  const pile = !D && roles.some((role, i) => role === 'loop' && C[i].includes('K'));
+  let query = null;
+  if (!r && input.use_model !== false && !pile && (match && match.id === 'plated_jersey' ? true : !plated)) {
+    query = {
+      C, D, roles, gating: input.gating, gsm, fibres, elastane: el, half, style, brushed: brush ? brush !== 'none' : false,
+      yd: !!(input.stripes && input.stripes.sequence), plated, ends: plated ? 2 : +y.ply >= 2 ? +y.ply : 1, gauge: +m.gauge > 0 ? +m.gauge : null, fabricId: match ? match.id : null, ...(input.recipe_hint || {}),
+    };
+    r = UA.modelFor(query);
+  }
+  if (!r) return null;
+  const spun = (yy) => {
+    const keys = Object.keys(yy.mix || { cotton: 100 }).filter((k) => yy.mix[k] > 0);
+    const type = yy.style === 'carded' ? 'carded' : yy.style === 'rotor' ? 'open_end' : y.type && y.type !== 'auto' ? y.type : 'auto';
+    const count = { count: yy.ne, unit: 'ne', ply: yy.ply || 1, type };
+    if (keys.length > 1 || !FIBRES[keys[0] === 'polyester' ? 'polyester_spun' : keys[0]]) {
+      try { const sy = BY.toStudioYarn({ fibres: yy.mix }); return { ...count, fibre: sy.fibre, mix: sy.mix, blend: true, blend_density: sy.density }; } catch (e) { if (!(e instanceof BY.BlendError)) throw e; }
+    }
+    return { ...count, fibre: keys[0] === 'polyester' ? 'polyester_spun' : FIBRES[keys[0]] ? keys[0] : 'cotton' };
+  };
+  const fil = (yy) => ({ fibre: yy.material === 'nylon' ? 'nylon_filament' : 'polyester_filament', count: yy.denier, unit: 'denier', ply: 1, ...(yy.filaments ? { filaments: yy.filaments } : {}) });
+  const one = (yy) => (!yy ? null : yy.denier ? fil(yy) : spun(yy));
+  // the Studio's own input for a design: its yarns, stitch lengths, machine and elastane
+  const build = (r) => {
+  const sl = r.sl_loop_mm;
+  const face = r.model ? r.sl_per_feed_engine[r.face_feed] : sl[0];
+  const ratio = (role, i) => (r.model ? r.sl_per_feed_engine[i] / face : role === 'binder' && sl.length >= 3 ? sl[1] / face : role === 'loop' && sl.length >= 2 ? sl[sl.length - 1] / face : 1);
+  const feeds = C.map((_, i) => ({ ...((input.feeds || [])[i] || {}), role: roles[i], sl_ratio: Math.round(ratio(roles[i], i) * 1000) / 1000 }));
+  const yarns = { ...(input.yarns || {}) };
+  if (r.loop && roles.includes('loop')) yarns.loop = one(r.loop);
+  if (r.binder && roles.includes('binder')) yarns.binder = one(r.binder);
+  const out = {
+    ...input, [RECIPE]: r, target: { ...t, composition: undefined }, yarn: { ...y, ...one(r.face) }, yarns, feeds,
+    machine: { ...m, gauge: r.gauge || m.gauge, sl_mm: face, ...(+m.dia > 0 || +t.width_in > 0 ? {} : r.dia ? { dia: r.dia } : {}) },
+    elastane: el ? { denier: r.elastane_denier || (input.elastane || {}).denier || 40, draft: (input.elastane || {}).draft || 3, every: r.half ? 'alternate' : 'all' } : input.elastane,
+  };
+  return out;
+  };
+  return {
+    input: build(r), recipe: r, original: input, asked: t.composition ? { ...fibres, ...(elPct ? { elastane: elPct } : {}) } : null, elPct,
+    alt: query ? (ne) => { const x = UA.modelFor({ ...query, count: ne }); return x ? { input: build(x), recipe: x } : null; } : null,
+  };
+}
+// a check that says the setting itself cannot be knitted well: a model design that draws one is not offered
+const MODEL_BREAKS = /Tightness factor|too (fine|coarse) for|coarse for|hook load|stitch length [^.]*outside/i;
+const breaksOf = (a) => (a.checks || []).filter((c) => (c.level === 'warn' || c.level === 'error') && MODEL_BREAKS.test(c.text)).map((c) => c.text);
+// the counts either side of the model's choice, each designed and weighed by the same model: what changes if the mill holds another yarn
+function modelOptions(b, out, run) {
+  const r = b.recipe, at = UA.COUNTS.indexOf(r.face.ne);
+  const row = (a, x) => ({
+    ne: x.face.ne, ply: x.face.ply || 1, count: a.yarn.ground.count, sl_mm: a.fabric.sl_mm, tf: a.fabric.tf, gauge: a.machine.gauge,
+    gauge_fit: (a.machine.gauge_fit && (a.machine.gauge_fit.fit || a.machine.gauge_fit)) || null, gsm: Math.round(a.fabric.gsm), width_in: a.fabric.width_open_in, practised: false, breaks: x.proven ? [] : breaksOf(a),
+  });
+  const options = [row(out, r)];
+  for (const step of at < 0 ? [] : [-1, 1, -2, 2]) {
+    const alt = UA.COUNTS[at + step] ? b.alt(UA.COUNTS[at + step]) : null;
+    if (!alt) continue;
+    const a = run({ ...alt.input, chemistry: undefined, hand: undefined, look: undefined, melange: undefined });
+    if (a && a.success !== false) options.push(row(a, alt.recipe));
+  }
+  const verdict = { level: 'ok', text: `Loop model: ${r.face.ne}s Ne on ${out.machine.gauge} GG at ${out.fabric.sl_mm} mm. The other counts show what changes if you hold another yarn.` };
+  return { practice: null, basis: 'the loop model at the counts either side of its choice, each weighed to your GSM', verdict, tried: options.length, feasible: options.filter((o) => !o.breaks.length).length, options };
+}
+/** The calculator's question answered exactly as the Studio answers it: the model's design, only where the Studio's own checks pass it. */
+function modelDesignFor(fabricId, q) {
+  const t = listTemplates().find((x) => x.id === fabricId);
+  if (!t || (t.bed === 'single' && t.roles.some((role, i) => role === 'loop' && t.grid.C[i].includes('K')))) return null;
+  const el = !!q.elastane || !!(q.fibres && q.fibres.elastane);
+  const a = analyse({
+    template: t.id, bed: t.bed, gating: t.gating, grid: t.grid, feeds: t.roles.map((role) => ({ role, plate: !!t.plated })),
+    yarn: { fibre: 'cotton', type: q.style === 'carded' ? 'carded' : q.style === 'rotor' ? 'open_end' : 'auto', ply: t.ends || 1 },
+    target: { gsm: +q.gsm, ...(q.fibres ? { composition: q.fibres } : {}) }, elastane: el ? { every: q.half ? 'alternate' : 'all' } : undefined,
+    finish: { brush: q.brushed ? 'back' : 'none' }, machine: +q.gauge > 0 ? { gauge: +q.gauge } : {}, recipe_hint: q.hint, use_recipe: false, [PLAIN]: true,
+  });
+  return a && a.success !== false && a.recipe && a.recipe.model ? a.recipe : null;
+}
+
+// the Studio run on the mill's or the model's design; the elastane's draft set so its share of the cloth is the share asked
+function recipeAnswer(b, run) {
+  let out = run(b.input);
+  const r = b.recipe;
+  // a model design the checks refuse goes back to the Studio's own search
+  if (r.model && (!out || out.success === false)) return null;
+  if (!out || out.success === false) return out;
+  if (b.elPct > 0 && b.input.elastane) {
+    let draft = b.input.elastane.draft;
+    for (let k = 0; k < 6; k++) {
+      const got = (out.yarn.composition || []).filter((c) => /elastane/i.test(c.part || '')).reduce((s, c) => s + (+c.pct || 0), 0);
+      if (!(got > 0) || Math.abs(got - b.elPct) < 0.04) break;
+      const next = Math.min(4.2, Math.max(2, Math.round(draft * (got / b.elPct) * 100) / 100));
+      if (next === draft) break;
+      draft = next;
+      out = run({ ...b.input, elastane: { ...b.input.elastane, draft } });
+    }
+  }
+  // a setting inside what knitted orders of this cloth ran: the older family window does not veto it, it is noted
+  if (r.model && r.proven && out && out.success !== false) out.checks = out.checks.map((c) => (c.level === 'warn' && MODEL_BREAKS.test(c.text) ? { ...c, level: 'note', text: `${c.text} Knitted orders the loop model is fitted on run this setting.` } : c));
+  if (r.model && (!out || out.success === false || !out.ok_to_knit || breaksOf(out).length)) return null;
+  out.recipe = r;
+  out.structure.confidence = { level: r.model ? (r.known_construction ? 'close' : 'estimate') : 'calibrated', why: r.note };
+  // a family-wide window says nothing against a setting the mill itself runs: such warnings become notes
+  if (!r.model) out.checks = out.checks.map((c) => (c.level === 'warn' && /^Tightness factor|too (fine|coarse) for|outside the (diameters|gauges)|GG is /.test(c.text) ? { ...c, level: 'note', text: `${c.text} Factory work orders knit it this way.` } : c));
+  if (b.asked) {
+    const got = FEAS.clothFibres(out);
+    let miss = 0, at = null;
+    new Set([...Object.keys(b.asked), ...Object.keys(got)]).forEach((k) => { const d = Math.abs((got[k] || 0) - (b.asked[k] || 0)); if (d > miss) { miss = d; at = k; } });
+    // the model's one blend per yarn can miss a mixed construction: the composition solver then settles the blend on its counts
+    if (r.model && miss > 3) return null;
+    out.composition_solve = {
+      success: miss <= 3, target: b.asked, achieved: got, largest_miss_pts: r1(miss), largest_miss_fibre: at,
+      held: miss <= 0.5 ? 'solved: inside half a point' : miss <= 3 ? 'inside the 3-point label tolerance, not exact' : 'the yarns the work orders knit land off the composition',
+      solved: { recipe: r.model ? 'the yarns of the loop model' : 'the yarns of the factory work orders', ...(b.input.elastane && b.elPct ? { elastane: b.input.elastane } : {}) }, notes: miss > 3 ? [`The yarns knitted at this weight land ${r1(miss)} points from the ${at} share asked.`] : [], basis: 'mass of yarn as fed to the machine', inputs_written: {},
+    };
+  }
+  if (out.yarn_plan) {
+    out.yarn_plan.rows.forEach((x) => { if (x.source === 'yours' || x.source === 'solved') x.source = r.model ? 'loop model' : 'work orders'; });
+    // one source for one answer: the older floor practice is not shown beside the work orders or the model
+    out.yarn_plan.practice = null;
+    out.yarn_plan.recipe = r;
+  }
+  if (r.model && b.alt && !b.original[PLAIN]) out.solver = modelOptions(b, out, run);
+  return out;
+}
+
 // What the melange yarns do to THIS fabric: each role's analysis, and the fibre composition of the whole cloth
 // (the fibre mix of every yarn weighted by its mass in the fabric — the figure the garment label needs).
 // every yarn the design uses, once per role: its fibre mix (label %, with the Lycra card's elastane in the ground yarn), its tex per ply,
@@ -2336,5 +2540,4 @@ function melangeSummary(results, feedRows, S, ctx) {
   return { roles: results, fabric_checks, fabric_composition: { dry_pct: out, elastane_pct: elast > 0.001 ? r1(elast * 100) : null, basis: 'law', rule: "each yarn's fibre mix × its mass share in the fabric" } };
 }
 
-module.exports = {
-  groupKeyOf, cleanFloor, analyse, listTemplates, FIBRES, ROLES, LIMITS, TF_WINDOW };
+module.exports = { analyse, modelDesignFor, listTemplates, groupKeyOf, cleanFloor, FIBRES, ROLES, LIMITS, TF_WINDOW };

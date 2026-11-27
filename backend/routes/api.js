@@ -15,6 +15,7 @@ const crypto = require('crypto');
 const router = express.Router();
 
 const { calculate, getAllFabrics, ENGINE_INPUTS } = require('../engine/index');
+const recipeAccess = require('../engine/domain/recipe-access');
 const { analyzeShadeSpec } = require('../engine/domain/shade-spec');
 const { dyeingCharge } = require('../engine/domain/wet-cost-model');
 const { UnitConverter, FabricWeightFormulas, YarnCountFormulas, WeftCalculators } = require('../engine/formulas');
@@ -140,10 +141,12 @@ router.post('/calculate', requireUser, enforceDailyLimit, async (req, res) => {
   // Normalise the one input that has a default, so "omitted" and "sent as 85"
   // are the same cache entry rather than two entries holding the same answer.
   engineParams.efficiency = body.efficiency || 85;
+  // factory work orders answer only the accounts allowed to see them (never from the request body)
+  recipeAccess.grant(engineParams, req.user);
 
   const cacheInput = ENGINE_INPUTS
     .map(f => (engineParams[f] == null ? '' : engineParams[f]))
-    .join('_');
+    .join('_') + (recipeAccess.granted(engineParams) ? '|factory' : '');
   // The price list is part of the answer, so it has to be part of the key.
   // Results are cached for thirty days; without this, a sync that moved cotton
   // three per cent would leave every cached costing quoting the old figure
@@ -563,6 +566,7 @@ router.post('/techpack/generate', requireUser, enforceDailyLimit, (req, res) => 
     engineParams.gsm = gsm;
     engineParams.efficiency = body.efficiency || 85;
     engineParams.live_prices = yarnPrices.feed();
+    recipeAccess.grant(engineParams, req.user);
 
     const result = calculate(engineParams);
     if (result.error) {
@@ -1681,14 +1685,15 @@ async function floorFor(userId, machineId) {
 }
 
 // One answer for a design, from memory when the same design was answered before.
-async function studioAnswer(userId, input) {
+async function studioAnswer(userId, input, user) {
   const { floor_machine_id, floor: _f, ...rest } = input || {};
   const body = { ...rest, core_engines: true };           // the Studio page, the exports and the sheet get the core engines whatever cards are open
+  recipeAccess.grant(body, user);
   const ff = await floorFor(userId, floor_machine_id);
   if (ff.notFound) return { status: 404, body: JSON.stringify({ success: false, error: 'Floor machine not found.' }) };
   if (ff.floor) body.floor = ff.floor;
   const floor = ff.machine ? ff.machine.name : null;
-  const key = JSON.stringify(body);
+  const key = JSON.stringify(body) + (recipeAccess.granted(body) ? '|factory' : '');
   let hit = key.length < 32768 ? studioCache.get(key) : null;
   if (hit) { studioCache.delete(key); studioCache.set(key, hit); }
   else {
@@ -1706,7 +1711,7 @@ async function studioAnswer(userId, input) {
 
 router.post('/studio/analyse', requireUser, async (req, res) => {
   try {
-    const hit = await studioAnswer(req.user.id, req.body);
+    const hit = await studioAnswer(req.user.id, req.body, req.user);
     res.status(hit.status).type('application/json').send(hit.body);
   } catch (err) {
     console.error('[studio] analyse failed:', err);
@@ -1870,7 +1875,7 @@ router.post('/studio/drape', requireUser, drapeLimiter, async (req, res) => {
     const b = req.body || {};
     const design = b.design && typeof b.design === 'object' ? { ...b.design, hand: { ...(b.design.hand || {}), enabled: true } } : null;
     if (!design) return res.status(400).json({ success: false, error: 'Give the design.' });
-    const hit = await studioAnswer(req.user.id, design);
+    const hit = await studioAnswer(req.user.id, design, req.user);
     if (hit.status !== 200) return res.status(hit.status).type('application/json').send(hit.body);
     const a = JSON.parse(hit.body);
     const params = drapeEngine.fromHand(a.hand, b.test);
@@ -1897,7 +1902,7 @@ router.post('/studio/material', requireUser, async (req, res) => {
     const b = req.body || {};
     const design = b.design && typeof b.design === 'object' ? { ...b.design, hand: { ...(b.design.hand || {}), enabled: true }, look: { ...(b.design.look || {}) } } : null;
     if (!design) return res.status(400).json({ success: false, error: 'Give the design.' });
-    const hit = await studioAnswer(req.user.id, design);
+    const hit = await studioAnswer(req.user.id, design, req.user);
     if (hit.status !== 200) return res.status(hit.status).type('application/json').send(hit.body);
     const a = JSON.parse(hit.body);
     const extra = { name: String(b.name || '').slice(0, 60) || null, roughness: +b.roughness > 0 ? +b.roughness : undefined, tile_cm: b.tile_cm, files: Array.isArray(b.files) ? b.files.slice(0, 40).map(String) : [], drape: b.drape && b.drape.success !== false ? b.drape : null };
@@ -1989,7 +1994,7 @@ router.post('/studio/cam-sheet/needles', requireUser, sheetLimiter, (req, res) =
 router.post('/studio/dev-sheet', requireUser, sheetLimiter, (req, res) => {
   try {
     const devSheet = require('../engine/domain/dev-sheet');
-    res.json(devSheet.build(req.body || {}, (d) => fabricStudio.analyse(d)));
+    res.json(devSheet.build(req.body || {}, (d) => fabricStudio.analyse(recipeAccess.grant({ ...d }, req.user))));
   } catch (err) {
     if (err instanceof require('../engine/domain/dev-sheet').SheetError) return res.status(400).json({ success: false, error: err.message });
     console.error('[studio] development sheet failed:', err);
@@ -2002,7 +2007,7 @@ router.post('/studio/dna/export', requireUser, async (req, res) => {
     const b = req.body || {};
     const design = b.design && typeof b.design === 'object' ? b.design : null;
     if (!design) return res.status(400).json({ success: false, error: 'Give the design.' });
-    const hit = await studioAnswer(req.user.id, design);
+    const hit = await studioAnswer(req.user.id, design, req.user);
     if (hit.status !== 200) return res.status(hit.status).type('application/json').send(hit.body);
     const { floor_machine_id: _m, floor: _f, ...clean } = design;
     const dna = fabricDna.toDNA({ ...clean, ...(b.name ? { name: String(b.name).slice(0, 60) } : {}) }, JSON.parse(hit.body));
@@ -2122,7 +2127,7 @@ router.post('/studio/calibration', requireUser, async (req, res) => {
   try {
     const b = req.body || {};
     const measured = calibration.cleanMeasured(b.measured);
-    const hit = await studioAnswer(req.user.id, b.design);
+    const hit = await studioAnswer(req.user.id, b.design, req.user);
     if (hit.status !== 200) return res.status(hit.status).type('application/json').send(hit.body);
     const out = JSON.parse(hit.body);
     const predicted = calibration.snapshot(out);
@@ -2150,7 +2155,7 @@ const twinLimiter = createRateLimiter({ name: 'studio_twin', max: 12, windowMs: 
 const twinCache = new Map();
 router.post('/studio/twin', requireUser, twinLimiter, async (req, res) => {
   try {
-    const hit = await studioAnswer(req.user.id, (req.body || {}).design);
+    const hit = await studioAnswer(req.user.id, (req.body || {}).design, req.user);
     if (hit.status !== 200) return res.status(hit.status).type('application/json').send(hit.body);
     const out = JSON.parse(hit.body);
     const pre = yarnTwin.walesOf(out);
@@ -2177,7 +2182,7 @@ const exportLimiter = createRateLimiter({ name: 'studio_export', max: 30, window
 router.post('/studio/export', requireUser, exportLimiter, async (req, res) => {
   try {
     const b = req.body || {};
-    const hit = await studioAnswer(req.user.id, b.design);
+    const hit = await studioAnswer(req.user.id, b.design, req.user);
     if (hit.status !== 200) return res.status(hit.status).type('application/json').send(hit.body);
     const out = JSON.parse(hit.body);
     const fmt = ['pdf', 'png', 'bmp', 'csv', 'calib', 'motif', 'colours', 'stripe'].includes(b.format) ? b.format : 'pdf';

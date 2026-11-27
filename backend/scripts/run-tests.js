@@ -29,7 +29,7 @@ const failed = [];
 for (const suite of SUITES) {
   process.stdout.write(`\n──── ${suite} ${'─'.repeat(Math.max(0, 50 - suite.length))}\n`);
   try {
-    execFileSync(process.execPath, [path.join(ROOT, suite)], { stdio: 'inherit', cwd: ROOT });
+    execFileSync(process.execPath, [path.join(ROOT, suite)], { stdio: 'inherit', cwd: ROOT, env: { ...process.env, KA_NO_RECIPES: '1' } });
     passed++;
   } catch (err) {
     failed.push(suite);

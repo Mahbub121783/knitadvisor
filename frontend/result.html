@@ -913,6 +913,9 @@
         </div>
       </div>
 
+      <!-- Where the yarns came from: factory work orders (recipe-book.js) or the loop model (universal-model.js) -->
+      <div id="y-recipe-box" class="hidden" style="margin:12px 0 10px; padding:12px; border-radius:var(--radius-sm); border:1px solid rgba(30,122,84,.35); background:rgba(30,122,84,.06); font-size:12px; line-height:1.6;"></div>
+
       <!-- How old the yarn price is. The date is the headline because it is
            the only thing that tells a reader whether to trust the number: the
            reference list drifted 3-7% over four months and nothing could say
@@ -2184,6 +2187,7 @@ function renderResult(r, params) {
 
   // — Yarn —
   renderYarn(r.yarn);
+  renderRecipe(r.recipe);
 
   // — Factory R&D data match —
   renderFactoryMatch(r.factory_prediction);
@@ -4000,6 +4004,27 @@ function renderBulkProductionData(r) {
 /* ============================================================
    YARN RENDER
    ============================================================ */
+// the mill's work orders behind the answer: the yarns, each stitch length, the machine and how many orders ran them
+function renderRecipe(rc) {
+  const box = document.getElementById('y-recipe-box');
+  if (!box) return;
+  box.classList.toggle('hidden', !rc);
+  box.textContent = '';
+  if (!rc) return;
+  const add = (label, value) => {
+    const row = document.createElement('div'), b = document.createElement('b');
+    b.textContent = label + ' ';
+    row.appendChild(b); row.appendChild(document.createTextNode(value)); box.appendChild(row);
+  };
+  const yarn = (y) => (!y ? null : y.denier ? y.denier + 'D' + (y.filaments ? '/' + y.filaments + 'F' : '') + ' ' + (y.material || 'filament') : y.ne + '/' + (y.ply || 1) + (y.style && y.style !== 'combed' ? ' ' + y.style : ''));
+  const names = rc.sl.length >= 3 ? ['face', 'binder', 'loop'] : rc.sl.length === 2 ? ['face', 'loop'] : [''];
+  add(rc.model ? 'Loop model:' : 'Factory work orders:', rc.model ? rc.note.replace(/^Universal loop model: /, '') : rc.note);
+  add('Yarns:', [['face', rc.face], ['binder', rc.binder], ['loop', rc.loop]].filter((x) => x[1]).map((x) => x[0] + ' ' + yarn(x[1])).join(' · ') + (rc.elastane_denier ? ' · elastane ' + rc.elastane_denier + 'D ' + (rc.half ? '(half feeder)' : '(full feeder)') : ''));
+  if (rc.sl.length) add('Stitch length:', rc.sl.map((v, i) => (names[i] ? names[i] + ' ' : '') + v).join(' / ') + ' mm' + (rc.sl_loop_mm && rc.sl_loop_mm[0] !== rc.sl[0] ? ' (' + rc.sl_basis + '; per needle loop ' + rc.sl_loop_mm.join(' / ') + ' mm)' : ''));
+  add('Machine:', (rc.dia ? rc.dia + '" × ' : '') + (rc.gauge ? rc.gauge + ' GG' : '—'));
+  if (rc.alternatives && rc.alternatives.length) add('Also run at this weight:', rc.alternatives.map((k) => k.replace(/\|-/g, '').replace(/\|/g, ' + ').replace(/\/1\b/g, 's')).join('; '));
+}
+
 function renderYarn(yarn) {
   if (!yarn) return;
 

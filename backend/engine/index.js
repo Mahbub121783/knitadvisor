@@ -86,6 +86,8 @@ const { analyzeWetProcessing, greigeGsmTarget, resolveFamily } = require('./doma
 const { applyFabricPhysics, resolveFinishId, finishProcess } = require('./domain/fabric-physics');
 const { fibreAdvisory } = require('./domain/fibre-advisory');
 const { classifySource } = require('./domain/source-confidence');
+const { recipeFor } = require('./domain/recipe-apply');
+const recipeAccess = require('./domain/recipe-access');
 
 // ============================================================
 // MAIN CALCULATE FUNCTION
@@ -370,10 +372,57 @@ function calculate(params) {
     }
   }
 
+  // --- 1.95. The mill's own R&D work orders: the cloth, composition and weight it has knitted ---
+  // Where they cover the request their yarns, stitch lengths, gauge and diameter ARE the answer (the mill's standard), ahead
+  // of every table and model below. A user's own gauge that differs from the recipe's leaves the models to answer.
+  let recipe = null;
+  // a loop setting is the person's own choice: the engines model it; a spinning system the work orders do not record keeps them out
+  const ownChoice = params.loop_size || params.loop_length_mm || params.loop_arrangement;
+  const ownSpin = /vortex|siro/i.test(String(spinning_system || ''));
+  const style = melange_type ? 'melange' : /carded/i.test(String(spinning_system || '')) ? 'carded' : /open|rotor/i.test(String(spinning_system || '')) ? 'rotor' : 'combed';
+  const brushedAsk = /brush|raise/i.test(String(surface_finish || '')) ? true : /unbrush|loop ?back|no brush/i.test(String(surface_finish || '')) ? false : undefined;
+  const half = /half/i.test(String(params.elastane_feed || '')), yd = /yarn.?dyed|\byd\b/i.test(String(params.order_variant || '')), stripe = /stripe/i.test(String(params.order_variant || ''));
+  const wovenOrWarp = fabricDef.category === 'warp_knit' || fabricDef.is_woven;
+  // 1. the factory work orders, for the accounts allowed to see them
+  if (!wovenOrWarp && !isPlushTerry(fabricDef.id) && !ownChoice && !ownSpin && recipeAccess.granted(params) && !/^(false|0|off)$/i.test(String(params.use_recipe))) {
+    const found = recipeFor({
+      fabricId: fabricDef.id, gsm,
+      fibres: parsedComp ? parsedComp.fibers : null, elastane: !!(parsedComp && parsedComp.has_elastane),
+      brushed: brushedAsk, style,
+      slub: /slub/i.test(String(yarn_form || '')), colour: /white/i.test(String(color_shade || '')) ? 'white' : undefined, half, yd, stripe,
+      ...(params.recipe_hint || {}),
+    });
+    if (found && found.face && found.face.ne && !(gauge && found.gauge && +gauge !== found.gauge)) recipe = found;
+  }
+  // 2. the universal loop model: every weft construction designed from its needle diagram (a sinker-loop pile has its own engine)
+  if (!recipe && !wovenOrWarp && !isPlushTerry(fabricDef.id) && !ownChoice && !stitch_length && !/^(false|0|off)$/i.test(String(params.use_model))) {
+    // asked of the Studio, so the calculator and the Studio give one answer for one cloth
+    recipe = require('./domain/fabric-studio').modelDesignFor(fabricDef.id, {
+      gsm, fibres: parsedComp ? parsedComp.fibers : null, elastane: !!(parsedComp && parsedComp.has_elastane) || /^lycra_/.test(fabricDef.id), half, style,
+      brushed: brushedAsk != null ? brushedAsk : /fleece_(3|diag)/.test(fabricDef.id), gauge, hint: { yd: yd || stripe, ...(params.recipe_hint || {}) },
+    });
+  }
+  if (recipe) {
+      factoryLookup = {
+        ...(factoryLookup || {}),
+        count_ne: recipe.face.ne, count_display: recipe.face.ply > 1 ? `${recipe.face.ply}/${recipe.face.ne}` : `${recipe.face.ne}/1`,
+        gauge: recipe.gauge || (factoryLookup && factoryLookup.gauge), sl: recipe.sl_loop_mm[0] || (factoryLookup && factoryLookup.sl),
+        source: recipe.model ? 'UNIVERSAL_MODEL' : 'FACTORY_RECIPE', interpolated: !recipe.known, blend_fallback: false, family_alias: null,
+      };
+      // the stitch length of the orders (and of the model fitted on knitted cloth) already carries composition and shade
+      compModifiers.sl_factor = 1;
+      trace.push({ step: '1.95', action: recipe.model ? 'loop_model' : 'work_order_recipe', result: recipe.note });
+  }
+
   // --- 2. Calculate yarn count (with composition modifiers) ---
   const countResult = calculateCount(fabric, gsm, fabricDef, compModifiers, factoryLookup, parsedComp, composition);
   trace.push({ step: 2, action: 'count', ...countResult.trace });
   if (countResult.warning) warnings.push(countResult.warning);
+
+  if (recipe) {
+    // the count the work orders knit (a multi-yarn table never overrides it)
+    countResult.count_ne = recipe.face.ne; countResult.count_rounded = recipe.face.ne; countResult.count_ne_exact = recipe.face.ne; countResult.source = recipe.model ? 'UNIVERSAL_MODEL' : 'FACTORY_RECIPE';
+  }
 
   // --- 2.5. Yarn Expertise Engine (grade, spinning system, strength, evenness) ---
   let yarnExpertise = null, yarnRecommendation = null;
@@ -484,6 +533,7 @@ function calculate(params) {
     fleeceResult = analyzeFleece({
       fabricId: fabricDef.id, gsm, gauge: gauge || 20, composition: parsedComp, rawComposition: composition,
       faceNe: countResult.count_ne, faceSlMm: llResult && llResult.ll_mm > 0 ? llResult.ll_mm : null,
+      recipe,
       loopSize: params.loop_size, loopLengthMm: params.loop_length_mm, loopArrangement: params.loop_arrangement,
       brushing: { passes: params.brush_passes, sheared: !!params.sheared, sides: params.brush_sides,
         brushed: /brush|raise/i.test(String(surface_finish || '')) },
@@ -507,6 +557,15 @@ function calculate(params) {
       fleeceResult.warnings.forEach(w => warnings.push(`Fleece: ${w}`));
       trace.push({ step: '3.05', action: 'fleece_plan', result: `${fleeceResult.declaration} · ${fleeceResult.mass_balance.courses_per_cm}c × ${fleeceResult.mass_balance.wales_per_cm}w /cm → ${fleeceResult.mass_balance.gsm_at_chosen_counts} GSM`, formula: fleeceResult.mass_balance.formula });
     }
+  }
+
+  if (recipe) {
+    // the yarns exactly as the work orders (or the model) knit them: two ends, the second yarn, the elastane's denier
+    countResult.source = recipe.model ? 'UNIVERSAL_MODEL' : 'FACTORY_RECIPE';
+    if (recipe.face.ply > 1) countResult.ply = recipe.face.ply;
+    if (recipe.loop && recipe.loop.ne) countResult.yarn2_ne = recipe.loop.ne;
+    if (recipe.binder && recipe.binder.denier) countResult.binder_denier = recipe.binder.denier;
+    if (recipe.elastane_denier && countResult.count_display) countResult.count_display = countResult.count_display.replace(/\b\d{2,3}D (Elastane|Lycra)( \((?:Half|Full)[- ]feed(?:er)?\))?/, `${recipe.elastane_denier}D $1 (${recipe.half ? 'half' : 'full'} feeder)`);
   }
 
   // --- 3.06 Plush terry / velour: ground + pile plated, sinker-loop pile ---
@@ -831,15 +890,16 @@ function calculate(params) {
     try {
       planPattern = getEnginePattern(fabricDef.id, gsm, gauge, composition);
       if (planPattern && fleeceResult && fleeceResult.loop) planPattern = { ...planPattern, ...loopbackPattern(fleeceResult.loop.arrangement.key) };
-      const hint = terryResult && terryResult.machine ? { gauge: terryResult.machine.gauge, source: 'plush engine (ground + pile in one hook)', ok: true }
+      const hint = recipe && recipe.gauge ? { gauge: recipe.gauge, source: recipe.model ? 'the loop model' : 'factory work orders', ok: true }
+        : terryResult && terryResult.machine ? { gauge: terryResult.machine.gauge, source: 'plush engine (ground + pile in one hook)', ok: true }
         : fleeceResult && fleeceResult.gauge_check ? { gauge: fleeceResult.gauge_check.ok ? fleeceResult.gauge_check.gauge : (fleeceResult.gauge_check.suggested_gauge || fleeceResult.gauge_check.gauge), source: 'fleece engine (face, binder and loop yarn must all clear the hook)', ok: !!fleeceResult.gauge_check.ok && !fleeceResult.gauge_check.suggested_gauge }
           : null;
       knitPlan = buildKnitPlan({
-        fabricDef, pattern: planPattern, countNe: countResult.count_ne,
+        fabricDef, pattern: planPattern, countNe: recipe && recipe.face.ply > 1 ? countResult.count_ne / recipe.face.ply : countResult.count_ne,
         slMm: llResult && llResult.ll_mm > 0 ? llResult.ll_mm : null,
         slSource: llResult && llResult.multiplier_source === 'FACTORY_R_D_RECORD' ? 'factory records' : 'engine model',
         slUser: stitch_length, gsm, lycra: !!(parsedComp && parsedComp.has_elastane),
-        gauge, dia, feeders, rpm, efficiency, targetWidthIn: target_width, gaugeHint: hint,
+        gauge, dia: dia || (recipe && !target_width ? recipe.dia : null), feeders, rpm, efficiency, targetWidthIn: target_width, gaugeHint: hint,
         yarnTex: {
           loop: countResult.yarn2_ne ? 590.5 / countResult.yarn2_ne : null,
           binder: countResult.binder_denier ? countResult.binder_denier / 9 : null,
@@ -1597,6 +1657,9 @@ function calculate(params) {
       interpolated: factoryLookup.interpolated,
     } : null,
 
+    // what the mill's own work orders knit for this request (null where they say nothing near enough)
+    recipe,
+
     grammage: {
       gsm,
       osy: osy,
@@ -1801,6 +1864,9 @@ const ENGINE_INPUTS = Object.freeze([
   // stays null in the response unless both garment_weight_g and garment_type
   // are present)
   'garment_weight_g', 'garment_type', 'order_quantity',
+  // the mill's work-order recipes (recipe-book.js): off with use_recipe=false; the order's kind: elastane on every ('full') or every
+  // other ('half') feeder, and 'yarn_dyed' / 'stripe'
+  'use_recipe', 'use_model', 'elastane_feed', 'order_variant',
   // how the yarn is bought: 'bonded_export' (default: no duty, no VAT) or
   // 'domestic', and the charges on top of the quote, each in percent
   'yarn_buy_basis', 'yarn_freight_pct', 'yarn_duty_pct', 'yarn_lc_bank_pct', 'yarn_vat_pct',

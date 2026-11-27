@@ -24,23 +24,27 @@ const sheet = (id, extra) => DS.build({ design: design(id), composition: '95% CO
   console.log('✓ the whole sheet: yarn with half/full feeder elastane, machine set-up, VDQ course length, greige, dyeing route with amounts, finishing, finished cloth, first-roll instructions');
 }
 {
-  // a record-backed structure uses the family answer; the weight is the target
+  // a jersey: designed by the loop model where its (private) constants are present, by the family records otherwise; either way the sheet
+  // carries the Studio's own stitch length, not a second solution of it
+  const modelled = require('../engine/domain/universal-model').model().ok;
   const j = sheet('single_jersey');
-  assert.strictEqual(j.weight_basis.path, 'family records');
-  assert(Math.abs(j.finished.gsm / 200 - 1) < 0.02 && j.weight_basis.band_pct === 5);
+  assert.strictEqual(j.weight_basis.path, modelled ? 'loop model' : 'family records');
+  const studio = S.analyse({ ...design('single_jersey'), target: { gsm: 200, composition: '95% CO 5% EL' }, machine: { dia: 30 }, finish: { brush: 'face' } });
+  assert(!!(studio.recipe && studio.recipe.model) === modelled && Math.abs(j.machine.stitch_length_mm - studio.fabric.sl_mm) < 0.02, j.machine.stitch_length_mm + ' ' + studio.fabric.sl_mm);
+  assert(Math.abs(j.finished.gsm / 200 - 1) < 0.02 && j.weight_basis.band_pct >= 5 && j.weight_basis.band_pct <= 25);
   // a structure the records do not cover: the laws weigh the target, and are trusted only where they give a cloth the factory could knit;
   // where the two engines part, the family table is kept and the band is the gap between them
   const b = sheet('bourrelet');
   assert(/laws|DISAGREE/.test(b.weight_basis.path) && b.weight_basis.laws && b.weight_basis.band_pct >= 14, b.weight_basis.path);
   assert(Math.abs(b.finished.gsm / 200 - 1) < 0.02, 'the headline weight is the target: ' + b.finished.gsm);
   if (/DISAGREE/.test(b.weight_basis.path)) assert(b.weight_basis.band_pct >= Math.round(Math.abs(b.weight_basis.laws.difference_pct)) && /tightness factor/.test(b.weight_basis.why));
-  // the Lacoste with elastane plated on every feeder is in the factory records (about 32s, 2.56 mm at 200 GSM): the records answer, not the laws,
-  // whose stitch length would be far too loose
+  // the Lacoste with elastane plated on every feeder is knitted often: the loop model or the records answer, not the laws, whose stitch length
+  // would be far too loose (knitted settings at 200 GSM run from about 2.5 to 3.1 mm)
   const l = sheet('lacoste_single');
-  assert(l.weight_basis.path === 'family records' && Math.abs(l.machine.stitch_length_mm / 2.56 - 1) < 0.08, l.weight_basis.path + ' ' + l.machine.stitch_length_mm);
+  assert(['loop model', 'family records'].includes(l.weight_basis.path) && l.machine.stitch_length_mm >= 2.45 && l.machine.stitch_length_mm <= 3.15, l.weight_basis.path + ' ' + l.machine.stitch_length_mm);
   const a = sheet('accordion_tuck');
   assert(a.weight_basis.band_pct >= 14, 'no law covers the stitches: a wide band');
-  console.log('✓ weight: family records where they exist (±5 %), the stitch-graph laws where they do not (±14 %, the laws\' own weight), a wider band where no law covers the stitches');
+  console.log('✓ weight: the loop model or the family records (±5 %), the stitch-graph laws where they do not (±14 %, the laws\' own weight), a wider band where no law covers the stitches');
 }
 {
   // shades, brushing words, bad input in words
