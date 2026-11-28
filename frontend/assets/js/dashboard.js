@@ -85,10 +85,11 @@
 
     var us = d.usage || {};
     var box = $('db-usage');
-    var planName = { free: 'Free', student: 'Student', paid: 'Mill' }[us.plan] || us.plan;
+    var planName = us.plan_name || { free: 'Free', student: 'Student' }[us.plan] || us.plan;
+    var planEnds = us.ends_at ? 'Plan runs until ' + new Date(us.ends_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) + (us.days_left != null && us.days_left <= 7 ? ' (' + us.days_left + ' day' + (us.days_left === 1 ? '' : 's') + ' left)' : '') : '';
     if (us.daily_limit == null) {
       box.innerHTML = '<svg class="db-ring" viewBox="0 0 54 54"><circle class="tr" cx="27" cy="27" r="23"/><circle class="fg" cx="27" cy="27" r="23" style="stroke:#1E7A54"/><text x="27" y="31" text-anchor="middle">∞</text></svg>' +
-        '<div><b>Unlimited requests<span class="db-plan">' + esc(planName) + '</span></b><span>' + num(us.used_today) + ' used today</span></div>';
+        '<div><b>Unlimited requests<span class="db-plan">' + esc(planName) + '</span></b><span>' + num(us.used_today) + ' used today</span>' + (planEnds ? '<span>' + esc(planEnds) + '</span>' : '') + '</div>';
     } else {
       var used = us.used_today || 0, lim = us.daily_limit, left = Math.max(0, lim - used);
       var C = 2 * Math.PI * 23, frac = Math.min(1, used / lim);
@@ -96,7 +97,7 @@
       box.innerHTML = '<svg class="db-ring" viewBox="0 0 54 54"><circle class="tr" cx="27" cy="27" r="23"/><circle class="fg" cx="27" cy="27" r="23" style="stroke:' + col + ';stroke-dasharray:' + C + ';stroke-dashoffset:' + C + '" id="db-ring-fg"/>' +
         '<text x="27" y="31" text-anchor="middle">' + left + '</text></svg>' +
         '<div><b>' + left + ' of ' + lim + ' requests left<span class="db-plan">' + esc(planName) + '</span></b>' +
-        '<span>' + (left ? 'Resets at midnight, Dhaka time' : 'Back at midnight, Dhaka time') + '</span>' +
+        '<span>' + (left ? 'Resets at midnight, Dhaka time' : 'Back at midnight, Dhaka time') + '</span>' + (planEnds ? '<span>' + esc(planEnds) + '</span>' : '') +
         (us.plan === 'free' ? '<span><a href="/account.html#student" style="color:var(--accent);font-weight:600;text-decoration:none">Student? Verify for 30 a day →</a></span>' : '') + '</div>';
       requestAnimationFrame(function () { var fg = $('db-ring-fg'); if (fg) fg.style.strokeDashoffset = String(C * (1 - frac)); });
     }

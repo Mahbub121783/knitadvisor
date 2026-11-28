@@ -916,6 +916,9 @@
       <!-- Where the yarns came from: factory work orders (recipe-book.js) or the loop model (universal-model.js) -->
       <div id="y-recipe-box" class="hidden" style="margin:12px 0 10px; padding:12px; border-radius:var(--radius-sm); border:1px solid rgba(30,122,84,.35); background:rgba(30,122,84,.06); font-size:12px; line-height:1.6;"></div>
 
+      <!-- The person's verdict on this answer (assets/js/ka-feedback.js) -->
+      <div id="ka-fb-result" style="margin-bottom:12px;"></div>
+
       <!-- How old the yarn price is. The date is the headline because it is
            the only thing that tells a reader whether to trust the number: the
            reference list drifted 3-7% over four months and nothing could say
@@ -1849,6 +1852,7 @@
 
 <!-- SCRIPTS -->
 <script src="assets/js/api.js"></script>
+<script src="assets/js/ka-feedback.js?v=20261127a"></script>
 <script src="assets/js/ui.js"></script>
 <script src="assets/js/storage.js"></script>
 <script src="assets/js/pattern-renderer.js?v=20261111b"></script>
@@ -2188,6 +2192,7 @@ function renderResult(r, params) {
   // — Yarn —
   renderYarn(r.yarn);
   renderRecipe(r.recipe);
+  showFeedback(r, params);
 
   // — Factory R&D data match —
   renderFactoryMatch(r.factory_prediction);
@@ -4005,6 +4010,18 @@ function renderBulkProductionData(r) {
    YARN RENDER
    ============================================================ */
 // the mill's work orders behind the answer: the yarns, each stitch length, the machine and how many orders ran them
+function showFeedback(r, params) {
+  if (!window.KAFeedback) return;
+  const kp = r.knit_plan || {}, m = kp.machine || {};
+  const shown = {
+    count: r.yarn && r.yarn.count_display, gauge: m.gauge, dia: m.dia,
+    sl_mm: (r.loop_length && r.loop_length.value_mm) || (kp.stitch_length && kp.stitch_length.used_mm),
+    yarns: r.fleece && r.fleece.yarns ? r.fleece.yarns.map((y) => ({ role: y.role, ne: y.ne, sl_mm: y.sl_mm })) : undefined,
+    by: r.recipe ? (r.recipe.model ? 'loop model' : 'work orders') : 'engine', gsm: r.input && r.input.gsm,
+  };
+  KAFeedback.show(document.getElementById('ka-fb-result'), { key: JSON.stringify([params.fabric, params.gsm, shown]), tool: 'calculate', input: params, shown });
+}
+
 function renderRecipe(rc) {
   const box = document.getElementById('y-recipe-box');
   if (!box) return;

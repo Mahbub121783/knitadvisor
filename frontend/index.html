@@ -1244,7 +1244,7 @@
     var subs = {
       signin: 'Use your email or username to open the calculator.',
       twostep: (twoStep.message || 'Enter your 6-digit code.') + (twoStep.method === 'email' ? spamNote : ''),
-      signup: 'Free while plans are finalised.' + plan,
+      signup: 'Free while plans are finalised. What you calculate here, and the answers, are recorded to check accuracy and improve them.' + plan,
       verify: (pendingIdentifier ? 'Enter the 6-digit code we emailed to ' + pendingIdentifier + '.' : 'Enter the 6-digit code we emailed you.') + spamNote,
       forgot: 'Enter your account email or username and we will mail a reset code to the address on file.',
       // Never echo the identifier here — in reset mode it may be the username

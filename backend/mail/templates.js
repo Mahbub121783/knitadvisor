@@ -200,5 +200,5 @@ module.exports = {
   activationEmail, passwordResetEmail, passwordChangedByAdminEmail, emailChangedNoticeEmail,
   studentEmailCodeEmail, studentApprovedEmail, studentPendingReviewEmail, studentRejectedEmail,
   studentRevokedEmail, studentExpiredEmail, studentRenewalReminderEmail, loginCodeEmail,
-  newSignInEmail, accountLockedEmail, emailChangedSelfEmail, accountDeletedEmail, emailChangeCodeEmail,
+  newSignInEmail, accountLockedEmail, emailChangedSelfEmail, accountDeletedEmail, emailChangeCodeEmail, noticeMail,
 };

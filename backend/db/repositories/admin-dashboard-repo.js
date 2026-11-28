@@ -42,14 +42,15 @@ async function build({ days, apiCatalogue, runtime, queues }) {
               count(*) FILTER (WHERE created_at > now() - make_interval(days => $1))::int AS new_range,
               count(*) FILTER (WHERE created_at <= now() - make_interval(days => $1) AND created_at > now() - make_interval(days => 2 * $1))::int AS new_prev,
               count(*) FILTER (WHERE disabled)::int AS disabled,
-              count(*) FILTER (WHERE is_paid)::int AS paid,
+              count(*) FILTER (WHERE is_paid OR (plan_code IS NOT NULL AND plan_code <> 'free' AND (plan_expires_at IS NULL OR plan_expires_at > now())))::int AS paid,
+              count(*) FILTER (WHERE plan_code IS NOT NULL AND plan_expires_at > now() AND plan_expires_at <= now() + interval '7 days')::int AS plans_ending,
               count(*) FILTER (WHERE student_status = 'active')::int AS students,
               count(*) FILTER (WHERE last_login_at > now() - interval '24 hours')::int AS active_24h,
               count(*) FILTER (WHERE last_login_at > now() - interval '7 days')::int AS active_7d
          FROM app_users`, [days])),
     S('signups', () => query(`SELECT (created_at AT TIME ZONE $2)::date AS d, count(*)::int AS signups FROM app_users WHERE created_at > now() - make_interval(days => $1 + 1) GROUP BY 1`, [days, T])),
     S('calcs', () => query(`SELECT (created_at AT TIME ZONE $2)::date AS d, count(*)::int AS calcs FROM user_calculations WHERE created_at > now() - make_interval(days => $1 + 1) GROUP BY 1`, [days, T])),
-    S('api series', () => query(`SELECT day AS d, sum(calls)::int AS calls, sum(errors)::int AS errors FROM api_key_daily WHERE day > (now() AT TIME ZONE $2)::date - $1 GROUP BY 1`, [days, T])),
+    S('api series', () => query(`SELECT day AS d, sum(calls)::int AS calls, sum(errors)::int AS errors FROM api_key_daily WHERE day > (now() AT TIME ZONE $2)::date - $1::int GROUP BY 1`, [days, T])),
     S('api now', () => queryOne(
       `SELECT (SELECT count(*) FROM api_keys WHERE status = 'active')::int AS active_keys,
               (SELECT count(*) FROM api_keys WHERE status = 'suspended')::int AS suspended_keys,
@@ -124,6 +125,7 @@ async function build({ days, apiCatalogue, runtime, queues }) {
   // ── what needs attention, each with where to act ──
   const attention = [];
   const A = (level, text, tab, count) => attention.push({ level, text, tab, count: count == null ? null : count });
+  if (users && users.plans_ending > 0) A('info', `${users.plans_ending} subscription${users.plans_ending > 1 ? 's end' : ' ends'} within 7 days — renew or let it end.`, 'tab-subs', users.plans_ending);
   if (orders && orders.pending > 0) A(orders.oldest_hours >= 24 ? 'warn' : 'info', `${orders.pending} API order${orders.pending > 1 ? 's' : ''} waiting for a payment check${orders.oldest_hours >= 1 ? ` (the oldest ${orders.oldest_hours >= 48 ? Math.floor(orders.oldest_hours / 24) + ' days' : orders.oldest_hours + ' h'})` : ''}.`, 'tab-apikeys', orders.pending);
   if (orders && orders.paid_no_key > 0) A('info', `${orders.paid_no_key} paid order${orders.paid_no_key > 1 ? 's have' : ' has'} not turned into a key yet — the customer has not pressed "Create my API key".`, 'tab-apikeys', orders.paid_no_key);
   const near = (nearQuota || []).filter((k) => { const lim = k.monthly_limit != null ? k.monthly_limit : (apiCatalogue.PLANS[k.plan] || apiCatalogue.PLANS.custom).monthly; return lim > 0 && k.calls / lim >= 0.9; });

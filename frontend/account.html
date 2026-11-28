@@ -737,7 +737,8 @@
 
   function fmtDate(iso) { return iso ? new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' }) : ''; }
   function stuPlan(d) {
-    var label = d.plan === 'paid' ? 'Paid plan — unlimited' : d.plan === 'student' ? 'Student plan — 30 a day' : 'Free plan — 5 a day';
+    var name = d.plan_name || (d.plan === 'student' ? 'Student' : 'Free');
+    var label = name + ' plan — ' + (d.daily_limit == null ? 'unlimited' : d.daily_limit + ' a day') + (d.ends_at ? ', until ' + fmtDate(d.ends_at) : '');
     var use = d.daily_limit == null ? 'unlimited' : d.used_today + ' of ' + d.daily_limit + ' used today';
     return '<div class="stu-plan"><b>' + esc(label) + '</b><span>' + esc(use) + '</span></div>';
   }

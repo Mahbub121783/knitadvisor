@@ -794,10 +794,12 @@
   function analyse() {
     var my = ++reqSeq;
     $('st-status').innerHTML = '<span style="color:var(--t3)">Checking…</span>';
-    apiFetch('/api/studio/analyse', { method: 'POST', body: payload() }).then(function (r) {
+    var asked = payload();
+    apiFetch('/api/studio/analyse', { method: 'POST', body: asked }).then(function (r) {
       if (my !== reqSeq) return;
       last = r;
       renderResult();
+      showFeedback(asked, r);
       if (window.KAStudioMelange) window.KAStudioMelange.studioResult(r);
       if (window.KAStudioBlend) window.KAStudioBlend.studioResult(r);
       if (window.KAStudioChem) window.KAStudioChem.studioResult(r);
@@ -820,6 +822,7 @@
     }).catch(function (e) {
       if (my !== reqSeq) return;
       last = null;
+      var fb = $('ka-fb-studio'); if (fb) { fb.innerHTML = ''; delete fb.dataset.key; }
       var msg = (e.data && e.data.error) || e.message || 'Could not analyse.';
       if ($('st-plan')) $('st-plan').innerHTML = '<p class="st-plan-warn">' + esc(msg) + '</p>';
       $('st-status').innerHTML = '<div class="st-err">' + esc(msg) + '</div>';
@@ -834,6 +837,15 @@
   // that knits it, one click away. The options are kept while the person tries them: their key is the design, not the count.
   var planOptions = null;
   function planKey() { return JSON.stringify([S.C, S.D, S.bed, S.feeds.map(function (f) { return [f.role, !!f.plate]; }), num('st-gsm'), $('st-comp') && $('st-comp').value.trim(), $('st-fibre').value, $('st-lycra').checked]); }
+  // the person's verdict on this answer (ka-feedback.js): what was asked and the figures shown go with it
+  function showFeedback(asked, r) {
+    if (!window.KAFeedback || !r || !r.fabric || !r.yarn) return;
+    var m = r.machine || {}, f = r.fabric, s = r.structure || {};
+    var shown = { structure: (s.match && s.match.name) || (s.identity && s.identity.title), count: r.yarn.ground && r.yarn.ground.count, sl_mm: f.sl_mm, gauge: m.gauge, dia: m.dia, gsm: f.gsm,
+      yarns: (r.yarn.feeds || []).slice(0, 12).map(function (x) { return { role: x.role, yarn: x.yarn, sl_mm: x.sl_mm }; }), by: r.recipe ? (r.recipe.model ? 'loop model' : 'work orders') : 'engine' };
+    KAFeedback.show($('ka-fb-studio'), { key: JSON.stringify(shown), tool: 'studio/analyse', input: asked, shown: shown });
+  }
+
   function renderPlan() {
     var el = $('st-plan'); if (!el || !last) return;
     var p = last.yarn_plan, f = last.fabric || {}, m = last.machine || {}, sv = last.solver;
@@ -867,7 +879,7 @@
     if (sv && sv.verdict && sv.verdict.level !== 'ok') h += '<p class="st-plan-warn">' + esc(sv.verdict.text) + '</p>';
     if (opts && opts.length) {
       var cur = userCount ? [+$('st-ne').value, $('st-unit').value, +$('st-gauge').value] : null;
-      h += '<div class="st-plan-o"><span>Counts that knit it (★ what the floor runs):</span>' + opts.map(function (o, i) {
+      h += '<div class="st-plan-o"><span>Counts that knit it' + (opts.some(function (o) { return o.practised; }) ? ' (★ what the floor runs)' : '') + ':</span>' + opts.map(function (o, i) {
         var filament = / D$/.test(o.count), v = filament ? Math.round(5314.5 / o.ne) : o.ne, unit = filament ? 'denier' : 'ne';
         var on = cur ? cur[0] === v && cur[1] === unit && (!cur[2] || cur[2] === o.gauge) : i === 0;
         var bad = o.breaks && o.breaks.length;

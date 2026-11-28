@@ -56,19 +56,11 @@ const users = {
   findById(id) {
     return queryOne(
       'SELECT id, email, username, username_changed_at, full_name, company, plan_interest, password_hash, disabled, ' +
-      'email_verified, is_paid, student_status, student_expires_at, created_at, last_login_at, two_factor, totp_pending, pending_email FROM app_users WHERE id = $1',
+      'email_verified, is_paid, student_status, student_expires_at, plan_code, plan_expires_at, plan_daily_limit, factory_access, created_at, last_login_at, two_factor, totp_pending, pending_email FROM app_users WHERE id = $1',
       [id]
     );
   },
 
-  /**
-   * Admin-set only — there is no payment gateway yet, so this is how an
-   * account becomes unlimited until one exists.
-   */
-  async setPaid(id, isPaid) {
-    const rows = await query('UPDATE app_users SET is_paid = $2 WHERE id = $1 RETURNING id, is_paid', [id, !!isPaid]);
-    return rows[0] || null;
-  },
 
   /**
    * The cached half of the student-plan state (db/repositories/student-repo.js
@@ -222,7 +214,7 @@ const users = {
     const total = Number((await queryOne('SELECT count(*)::int AS count FROM app_users ' + where, params)).count);
     const rows = await query(
       'SELECT id, email, username, full_name, company, plan_interest, disabled, email_verified, ' +
-      'is_paid, student_status, student_expires_at, created_at, last_login_at ' +
+      'is_paid, student_status, student_expires_at, plan_code, plan_expires_at, plan_daily_limit, factory_access, created_at, last_login_at ' +
       'FROM app_users ' + where + ' ORDER BY created_at DESC, id DESC ' +
       'LIMIT ' + lim + ' OFFSET ' + ((pageN - 1) * lim),
       params
@@ -260,7 +252,7 @@ const users = {
          count(*) FILTER (WHERE email_verified)::int AS verified,
          count(*) FILTER (WHERE created_at > now() - interval '30 days')::int AS signups_30d,
          count(*) FILTER (WHERE student_status = 'active')::int AS student_active,
-         count(*) FILTER (WHERE is_paid)::int AS paid,
+         count(*) FILTER (WHERE is_paid OR (plan_code IS NOT NULL AND plan_code <> 'free' AND (plan_expires_at IS NULL OR plan_expires_at > now())))::int AS paid,
          (SELECT count(DISTINCT user_id)::int FROM user_calculations) AS calculated
        FROM app_users`
     );
@@ -278,7 +270,8 @@ const sessions = {
   /** The user behind a valid, unexpired token hash — or null. Disabled accounts never match. */
   findUserByTokenHash(tokenHash) {
     return queryOne(
-      `SELECT u.id, u.email, u.username, u.full_name, u.company, u.is_paid, u.student_status, u.student_expires_at, u.email_verified, u.two_factor
+      `SELECT u.id, u.email, u.username, u.full_name, u.company, u.is_paid, u.student_status, u.student_expires_at, u.email_verified, u.two_factor,
+              u.plan_code, u.plan_expires_at, u.plan_daily_limit, u.factory_access
          FROM app_user_sessions s
          JOIN app_users u ON u.id = s.user_id
         WHERE s.token_hash = $1 AND s.expires_at > now() AND NOT u.disabled`,

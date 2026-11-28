@@ -4,10 +4,15 @@
 
 const ACCESS = Symbol.for('ka.factoryRecipes');
 
-/** accounts allowed: KA_RECIPE_ACCOUNTS="owner@mill.com,planner@mill.com" (read at each call, so a restart is enough) */
+/**
+ * Accounts allowed: the ones switched on in the admin panel (Subscriptions → factory work orders), or named in
+ * KA_RECIPE_ACCOUNTS="owner@mill.com,planner@mill.com". Either way the email must be verified.
+ */
 function allowedAccount(user) {
+  if (!user || !user.email || user.email_verified === false) return false;
+  if (user.factory_access === true) return true;
   const list = String(process.env.KA_RECIPE_ACCOUNTS || '').toLowerCase().split(',').map((s) => s.trim()).filter(Boolean);
-  return !!(user && user.email && user.email_verified !== false && list.includes(String(user.email).toLowerCase()));
+  return list.includes(String(user.email).toLowerCase());
 }
 
 /** mark (or unmark) an engine input for this user */

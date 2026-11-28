@@ -50,7 +50,7 @@ const totp = require('../engine/domain/totp');
 const security = require('../services/security');
 const { clearSessionCookie } = require('../middleware/user-auth');
 const {
-  matchUniversityDomain, resolveOutcome, resolvePlanLimits, STUDENT_DURATION_DAYS,
+  matchUniversityDomain, resolveOutcome, STUDENT_DURATION_DAYS,
 } = require('../engine/domain/student-eligibility');
 const {
   studentApprovedEmail, studentPendingReviewEmail, emailChangedSelfEmail, accountDeletedEmail,
@@ -309,7 +309,7 @@ router.get('/dashboard', async (req, res) => {
       settle(userRepo.sessions.list(uid, req.sessionTokenHash)),
       settle(userRepo.events.list(uid, 6)),
     ]);
-    const { plan, dailyLimit } = resolvePlanLimits(row);
+    const { plan, name: planName, dailyLimit, expiresAt, daysLeft, source } = await require('../services/plans').planOf(row);
     const sheetCards = (sheets || []).slice(0, 6).map(sheetCard);
     const designCards = (designs || []).slice(0, 6).map(designCard);
     const calcCards = ((calcs && calcs.rows) || []).map((c) => ({
@@ -332,7 +332,7 @@ router.get('/dashboard', async (req, res) => {
       success: true,
       user: { full_name: row.full_name, username: row.username, company: row.company, member_since: row.created_at, last_login_at: row.last_login_at,
         student_status: row.student_status || null },
-      usage: { plan, daily_limit: dailyLimit, used_today: used == null ? null : Number(used) },
+      usage: { plan, plan_name: planName, plan_source: source, ends_at: expiresAt, days_left: daysLeft, daily_limit: dailyLimit, used_today: used == null ? null : Number(used) },
       totals: {
         calculations: stats ? stats.distinct_specs : null, runs: stats ? stats.total_runs : null, specs_30d: stats ? stats.specs_30d : null,
         cost_sheets: sheets ? sheets.length : null, designs: designs ? designs.length : null,
@@ -713,11 +713,11 @@ router.get('/student/status', async (req, res) => {
     ]);
     const latest = history.length ? await studentRepo.findById(history[0].id) : null;
     const full = history.length ? [{ ...history[0], ...latest }, ...history.slice(1)] : [];
-    const { plan, dailyLimit } = resolvePlanLimits(row);
+    const { plan, name: planName, dailyLimit, expiresAt } = await require('../services/plans').planOf(row);
     const lastAt = codes && codes.last_at ? new Date(codes.last_at).getTime() : 0;
     res.json({
       success: true,
-      plan, daily_limit: dailyLimit, used_today: usedToday,
+      plan, plan_name: planName, ends_at: expiresAt, daily_limit: dailyLimit, used_today: usedToday,
       verification: publicVerification(latest),
       history: history.slice(0, 6).map((h) => ({ status: h.status, university_name: h.university_name, created_at: h.created_at, expires_at: h.expires_at, renewal: !!h.renewal_of, reason: h.reason })),
       can: {

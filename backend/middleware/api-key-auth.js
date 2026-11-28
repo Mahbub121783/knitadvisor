@@ -110,7 +110,8 @@ function createGate(repo = apiRepo.keys, deps = {}) {
 
       req.apiKey = { id: key.id, name: key.name, prefix: key.prefix, plan: key.plan, limits: lim, used_this_month: used, endpoint: endpoint.id };
       req.user = { id: key.user_id, email: key.email, username: key.username, full_name: key.full_name, company: key.company, is_paid: key.is_paid,
-        student_status: key.student_status, student_expires_at: key.student_expires_at, email_verified: key.email_verified, two_factor: key.two_factor };
+        student_status: key.student_status, student_expires_at: key.student_expires_at, email_verified: key.email_verified, two_factor: key.two_factor,
+        plan_code: key.plan_code, plan_expires_at: key.plan_expires_at, plan_daily_limit: key.plan_daily_limit, factory_access: key.factory_access };
       res.on('finish', () => { repo.record(key.id, res.statusCode >= 400).catch(() => {}); });
       return next();
     } catch (err) {

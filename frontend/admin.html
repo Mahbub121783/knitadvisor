@@ -248,6 +248,7 @@
     /* ── FORM ── */
     .form-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
     .form-group { display: flex; flex-direction: column; gap: 5px; }
+    .form-group[hidden] { display: none !important; }
     .form-label { font-size: 9px; text-transform: uppercase; letter-spacing: .8px; color: var(--t3); font-weight: 600; }
     .form-input, .form-select {
       background: var(--bg3); border: 1px solid var(--line2);
@@ -1123,6 +1124,10 @@
       </div>
       <div class="sb-group">
         <div class="sb-group-label">Analytics</div>
+        <button class="tab-btn sb-link" data-tab="tab-usage">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M3 12h4l3-8 4 16 3-8h4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Usage &amp; accuracy
+        </button>
         <button class="tab-btn sb-link" data-tab="tab-logs">
           <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M4 19V9M12 19V5M20 19v-6" stroke-linecap="round"/></svg>
           Query Logs
@@ -1137,6 +1142,10 @@
         <button class="tab-btn sb-link" data-tab="tab-users">
           <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke-linecap="round"/><path d="M16 4.5c1.7.4 3 2 3 3.9 0 1.9-1.3 3.5-3 3.9M21 20c0-2.9-2-5.3-4.7-5.9" stroke-linecap="round"/></svg>
           Users
+        </button>
+        <button class="tab-btn sb-link" data-tab="tab-subs">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h4" stroke-linecap="round"/></svg>
+          Subscriptions
         </button>
         <button class="tab-btn sb-link" data-tab="tab-students">
           <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M12 3 2 8l10 5 10-5-10-5z"/><path d="M6 10.5V16c0 1.7 2.7 3 6 3s6-1.3 6-3v-5.5"/></svg>
@@ -1968,6 +1977,96 @@
       <div id="usr-pagination" class="pagination"></div>
     </div>
 
+    <!-- ── SUBSCRIPTIONS ── -->
+    <div id="tab-subs" class="tab-panel">
+      <div class="mb-20">
+        <div class="section-title">Subscriptions</div>
+        <div class="section-sub">Put any account on a plan by hand, for as long as you choose: Education, Floor, Mill, Buying House or your own. Raise or lower it, add days, or end it. When a subscription ends, the account goes back to free (or student) by itself.</div>
+      </div>
+      <div class="kpi-grid" id="sub-kpis" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));"></div>
+
+      <div class="card mb-16" id="sub-give">
+        <div class="card-head"><span class="card-title">Give or change a plan</span><span class="card-sub">one account or many: write the e-mails, or tick accounts in the table below</span></div>
+        <div class="form-row">
+          <div class="form-group" style="flex:1;min-width:240px;"><label class="form-label" for="sub-emails">E-mail addresses (one per line, or separated by commas)</label>
+            <textarea id="sub-emails" class="form-input" rows="3" spellcheck="false" placeholder="someone@mill.com"></textarea></div>
+          <div class="form-group" style="min-width:230px;"><label class="form-label" for="sub-plan">Plan</label><select id="sub-plan" class="form-select"></select></div>
+        </div>
+        <div class="form-row mt-12">
+          <div class="form-group"><label class="form-label" for="sub-mode">How long</label>
+            <select id="sub-mode" class="form-select"><option value="default">The plan's usual length</option><option value="days">A number of days</option><option value="until">Until a date</option><option value="lifetime">No end date</option></select></div>
+          <div class="form-group" id="sub-days-wrap" hidden><label class="form-label" for="sub-days">Days</label><input type="number" id="sub-days" class="form-input" min="1" max="3660" value="30" style="width:90px;"></div>
+          <div class="form-group" id="sub-until-wrap" hidden><label class="form-label" for="sub-until">Last day</label><input type="date" id="sub-until" class="form-input"></div>
+          <div class="form-group" id="sub-from-wrap"><label class="form-label" for="sub-from">Counting from</label>
+            <select id="sub-from" class="form-select"><option value="now">today</option><option value="after_current">the end of the running period</option></select></div>
+          <div class="form-group"><label class="form-label" for="sub-own-limit">Own daily limit (optional)</label><input type="number" id="sub-own-limit" class="form-input" min="0" placeholder="as the plan" style="width:120px;"></div>
+          <div class="form-group"><label class="form-label" for="sub-factory">Factory work orders</label><select id="sub-factory" class="form-select"><option value="">leave as it is</option><option value="on">switch on</option><option value="off">switch off</option></select></div>
+          <div class="form-group" style="flex:1;min-width:200px;"><label class="form-label" for="sub-note">Note (payment reference, who asked…)</label><input type="text" id="sub-note" class="form-input" maxlength="500"></div>
+        </div>
+        <div class="row mt-12"><label style="font-size:12px;color:var(--t2);"><input type="checkbox" id="sub-notify" checked> E-mail the person</label><button type="button" id="sub-apply" class="btn btn-primary">Apply</button></div>
+        <div id="sub-result" style="font-size:12px;color:var(--t2);margin-top:8px;"></div>
+      </div>
+
+      <div class="card mb-16">
+        <div class="form-row">
+          <div class="form-group"><label class="form-label" for="sub-filter">Show</label>
+            <select id="sub-filter" class="form-select"><option value="subscribed">On a plan now</option><option value="expiring">Ending within 7 days</option><option value="expired">Ended</option><option value="student">Students</option><option value="free">Free</option><option value="factory">Factory work orders on</option><option value="all">All accounts</option></select></div>
+          <div class="form-group"><label class="form-label" for="sub-filter-plan">Plan</label><select id="sub-filter-plan" class="form-select"></select></div>
+          <div class="form-group" style="min-width:240px;"><label class="form-label" for="sub-search">Search (name, email, company)</label><input type="text" id="sub-search" class="form-input"></div>
+          <div class="form-group"><label class="form-label" style="opacity:0;">.</label><button type="button" id="sub-find" class="btn btn-ghost">Search</button></div>
+        </div>
+      </div>
+      <div class="tbl-wrap"><table class="tbl"><thead><tr><th><input type="checkbox" id="sub-all" aria-label="Select all"></th><th>Account</th><th>Plan today</th><th>Ends</th><th>Limit</th><th>Factory</th><th></th></tr></thead><tbody id="sub-tbody"></tbody></table></div>
+      <div id="sub-pagination" class="pagination"></div>
+
+      <div class="card mt-20 mb-16">
+        <div class="card-head"><span class="card-title">Plans</span><span class="card-sub">empty daily limit = unlimited · empty days = no end date · a higher rank is a bigger plan · Free and Education also set the free and student limits</span></div>
+        <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Code</th><th>Name</th><th>Requests a day</th><th>Usual days</th><th>Rank</th><th>On</th><th>Accounts</th><th></th></tr></thead><tbody id="sub-plans"></tbody></table></div>
+      </div>
+      <div class="card"><div class="card-head"><span class="card-title">Latest changes</span></div><div class="tbl-wrap"><table class="tbl"><thead><tr><th>When</th><th>Account</th><th>Change</th><th>Note</th></tr></thead><tbody id="sub-recent"></tbody></table></div></div>
+    </div>
+
+    <!-- ── USAGE & ACCURACY ── -->
+    <div id="tab-usage" class="tab-panel">
+      <div class="mb-20">
+        <div class="section-title">Usage &amp; accuracy</div>
+        <div class="section-sub">What people ask the engines, what they are told, and their verdicts. Days are Bangladesh days. Download the day's file and hand it over for review.</div>
+      </div>
+      <div class="card mb-16" id="use-off" hidden style="border-color:rgba(178,59,59,.3);color:var(--a3);font-size:12px;">Recording is switched off on the server (USAGE_LOG=off).</div>
+      <div class="card mb-16">
+        <div class="form-row">
+          <div class="form-group"><label class="form-label" for="use-from">From</label><input type="date" id="use-from" class="form-input"></div>
+          <div class="form-group"><label class="form-label" for="use-to">To</label><input type="date" id="use-to" class="form-input"></div>
+          <div class="form-group"><label class="form-label" style="opacity:0;">.</label><div class="row"><button type="button" id="use-today" class="btn btn-ghost btn-sm">Today</button><button type="button" id="use-yesterday" class="btn btn-ghost btn-sm">Yesterday</button><button type="button" id="use-week" class="btn btn-ghost btn-sm">7 days</button><button type="button" id="use-reload" class="btn btn-ghost btn-sm">Refresh</button></div></div>
+        </div>
+        <div class="row mt-12" style="border-top:1px solid var(--line);padding-top:12px;">
+          <button type="button" class="btn btn-primary" data-export="json">Download for review (JSON)</button>
+          <button type="button" class="btn btn-ghost" data-export="csv">Requests (CSV)</button>
+          <button type="button" class="btn btn-ghost" data-export="feedback_csv">Verdicts (CSV)</button>
+          <label style="font-size:12px;color:var(--t2);"><input type="checkbox" id="use-identify"> include names and e-mails</label>
+        </div>
+      </div>
+      <div class="kpi-grid" id="use-kpis" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));"></div>
+
+      <div class="card mb-16">
+        <div class="card-head"><span class="card-title">Verdicts</span><select id="use-verdict" class="form-select"><option value="">all</option><option value="wrong">wrong</option><option value="close">close</option><option value="right">right</option></select></div>
+        <div class="tbl-wrap"><table class="tbl"><thead><tr><th>When</th><th>Who</th><th>Verdict</th><th>Asked</th><th>Shown</th><th>Their floor</th><th></th></tr></thead><tbody id="use-feedback"></tbody></table></div>
+      </div>
+      <div class="card mb-16">
+        <div class="card-head"><span class="card-title">Requests</span></div>
+        <div class="form-row mb-12">
+          <div class="form-group"><label class="form-label" for="use-tool">Tool</label><select id="use-tool" class="form-select"></select></div>
+          <div class="form-group" style="min-width:240px;"><label class="form-label" for="use-search">Search (account, or a word in the request) — Enter</label><input type="text" id="use-search" class="form-input"></div>
+          <label style="font-size:12px;color:var(--t2);"><input type="checkbox" id="use-errors"> failed only</label>
+        </div>
+        <div class="tbl-wrap"><table class="tbl"><thead><tr><th>When</th><th>Who</th><th>Tool</th><th>Asked</th><th>Answered</th><th></th></tr></thead><tbody id="use-events"></tbody></table></div>
+        <div id="use-pagination" class="pagination"></div>
+      </div>
+      <div class="card mb-16"><div class="card-head"><span class="card-title">Tools</span></div><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Tool</th><th>Requests</th><th>People</th><th>Failed</th></tr></thead><tbody id="use-tools"></tbody></table></div></div>
+      <div class="card mb-16"><div class="card-head"><span class="card-title">What failed</span></div><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Tool</th><th>Message</th><th>Times</th><th>People</th></tr></thead><tbody id="use-fails"></tbody></table></div></div>
+      <div class="card"><div class="card-head"><span class="card-title">Most active accounts</span></div><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Account</th><th>Requests</th><th>Tools</th><th>Last</th></tr></thead><tbody id="use-people"></tbody></table></div></div>
+    </div>
+
     <div id="tab-apikeys" class="tab-panel">
       <div class="row-between mb-20">
         <div>
@@ -2195,8 +2294,8 @@
           <div id="ud-pw-msg" style="font-size:10.5px;min-height:15px;margin-top:5px;">At least 10 characters, 3 of: lower/upper/number/symbol. Signs out every device.</div>
 
           <div class="row" style="margin-top:12px;align-items:center;">
-            <span style="font-size:12px;color:var(--t2);flex:1;">Paid plan (no payment gateway yet — admin-set, unlimited daily use)</span>
-            <button class="btn btn-ghost btn-sm" id="ud-paid-toggle">—</button>
+            <span style="font-size:12px;color:var(--t2);flex:1;" id="ud-plan-line">—</span>
+            <button class="btn btn-primary btn-sm" id="ud-plan-manage">Subscription</button>
           </div>
           <div id="ud-student-line" style="font-size:10.5px;min-height:15px;margin-top:8px;color:var(--t3);"></div>
         </div>
@@ -2329,8 +2428,9 @@
 
 <script src="assets/js/password-toggle.js?v=20260922a"></script>
 <script src="assets/js/vendor/qrcode.min.js?v=1.4.4"></script>
-<script src="assets/js/admin.js?v=20261122b"></script>
+<script src="assets/js/admin.js?v=20261127a"></script>
 <script src="assets/js/admin-et.js?v=20261123a"></script>
 <script src="assets/js/admin-open-access.js?v=20261113a"></script>
+<script src="assets/js/admin-insights.js?v=20261127a"></script>
 </body>
 </html>

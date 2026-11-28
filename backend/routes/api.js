@@ -40,6 +40,7 @@ const colorEngine = require('../engine/domain/color-engine');
 const { buildTechPackContent } = require('../engine/domain/techpack-content-builder');
 const { renderTechPackPdf } = require('../engine/domain/techpack-pdf-renderer');
 const fabricStudio = require('../engine/domain/fabric-studio');
+const usageCapture = require('../engine/domain/usage-capture');
 const knitMachine = require('../engine/domain/knit-machine');
 const warpStudio = require('../engine/domain/warp-studio');
 const studioRepo = require('../db/repositories/studio-repo');
@@ -107,6 +108,26 @@ function recordHistory(req, body, result) {
 router.get('/open-access', (req, res) => {
   res.set('Cache-Control', 'no-store');
   res.json(require('../services/open-access').publicStatus());
+});
+
+// A person's verdict on an answer (right / close / wrong, and what their floor runs): signed in, or a guest on an open day.
+const feedbackLimiter = createRateLimiter({ name: 'feedback', max: 30, windowMs: 10 * 60 * 1000, message: 'Too many reports in a short time — try again in a few minutes.' });
+router.post('/feedback', feedbackLimiter, async (req, res) => {
+  try {
+    const user = await require('../middleware/user-auth').loadUser(req);
+    if (user) req.user = user;
+    else {
+      const openAccess = require('../services/open-access');
+      if (!openAccess.active(openAccess.read())) return res.status(401).json({ success: false, code: 'AUTH_REQUIRED', error: 'Sign in to send a report.' });
+      req.guest = true;
+    }
+    await require('../services/usage-log').addFeedback(req, req.body);
+    res.json({ success: true });
+  } catch (err) {
+    if (err instanceof usageCapture.FeedbackError) return res.status(400).json({ success: false, error: err.message });
+    console.error('[feedback] failed:', err.message);
+    res.status(500).json({ success: false, error: 'The report could not be saved. Please try again.' });
+  }
 });
 
 router.post('/calculate', requireUser, enforceDailyLimit, async (req, res) => {
@@ -1700,7 +1721,7 @@ async function studioAnswer(userId, input, user) {
     const out = fabricStudio.analyse(body);
     // a second opinion from the stitches themselves (brick laws, no family table) — never allowed to break the answer
     if (out.success) { try { out.fabric.second_opinion = secondOpinion.forDesign(out._design ? out._design : body.melange ? require('../engine/domain/melange-engine').applyToInput(body).input : body, out); } catch (err) { console.error('[studio] second opinion failed:', err.message); } }
-    hit = { status: out.success ? 200 : 400, body: JSON.stringify(out) };
+    hit = { status: out.success ? 200 : 400, body: JSON.stringify(out), summary: usageCapture.summarise('studio/analyse', out) };
     if (key.length < 32768) {
       studioCache.set(key, hit);
       if (studioCache.size > STUDIO_CACHE_MAX) studioCache.delete(studioCache.keys().next().value);
@@ -1712,6 +1733,7 @@ async function studioAnswer(userId, input, user) {
 router.post('/studio/analyse', requireUser, async (req, res) => {
   try {
     const hit = await studioAnswer(req.user.id, req.body, req.user);
+    res.locals.usageSummary = hit.summary;          // the answer goes out as text: its headline for the usage log
     res.status(hit.status).type('application/json').send(hit.body);
   } catch (err) {
     console.error('[studio] analyse failed:', err);

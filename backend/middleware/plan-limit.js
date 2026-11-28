@@ -11,14 +11,14 @@
  * be let through.
  */
 const usageRepo = require('../db/repositories/usage-repo');
-const { resolvePlanLimits } = require('../engine/domain/student-eligibility');
+const plans = require('../services/plans');
 
 async function enforceDailyLimit(req, res, next) {
   // an API key has its own plan (monthly quota and per-minute rate, counted in api-key-auth)
   if (req.apiKey) { req.plan = 'api'; return next(); }
   // an open-access guest has no account to count against; the hourly per-address ceiling holds them
   if (req.guest) { req.plan = 'guest'; return next(); }
-  const { plan, dailyLimit } = resolvePlanLimits(req.user);
+  const { plan, name, dailyLimit } = await plans.planOf(req.user);
   req.plan = plan;
   if (dailyLimit == null) return next();
 
@@ -30,7 +30,9 @@ async function enforceDailyLimit(req, res, next) {
         code: 'DAILY_LIMIT_REACHED',
         error: plan === 'student'
           ? `You've used today's ${dailyLimit} student requests. More open tomorrow at midnight (Dhaka time).`
-          : `You've used today's ${dailyLimit} free requests. Verify as a student for ${require('../engine/domain/student-eligibility').STUDENT_DAILY_LIMIT}/day, or ask us about paid access for unlimited use.`,
+          : plan === 'free'
+          ? `You've used today's ${dailyLimit} free requests. Verify as a student for more, or ask us about a subscription.`
+          : `You've used today's ${dailyLimit} requests on the ${name} plan. More open tomorrow at midnight (Dhaka time).`,
         plan,
         daily_limit: dailyLimit,
         used_today: usedToday,

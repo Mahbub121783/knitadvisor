@@ -277,6 +277,8 @@ app.use('/api', rateLimiter);
 app.use('/api', require('./middleware/no-sources').middleware);
 // the versioned API: a key for every endpoint, listed endpoints only
 app.use('/api', require('./middleware/api-key-auth').v1Surface);
+// what is asked of the engines and what they answer, kept for judging accuracy (services/usage-log.js)
+app.use('/api', require('./services/usage-log').middleware);
 
 // ============================================================
 // ROUTES

@@ -28,7 +28,7 @@ function keyFromRequest(req) {
   return typeof raw === 'string' && raw.startsWith('ka_') ? raw : null;
 }
 
-const OWNER = `u.id AS user_id, u.email, u.username, u.full_name, u.company, u.is_paid, u.student_status, u.student_expires_at, u.email_verified, u.two_factor, u.disabled AS user_disabled`;
+const OWNER = `u.id AS user_id, u.email, u.username, u.full_name, u.company, u.is_paid, u.student_status, u.student_expires_at, u.email_verified, u.two_factor, u.disabled AS user_disabled, u.plan_code, u.plan_expires_at, u.plan_daily_limit, u.factory_access`;
 
 const keys = {
   /** Every key with its owner and this month's calls (admin). */

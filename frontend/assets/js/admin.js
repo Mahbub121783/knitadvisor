@@ -121,7 +121,7 @@ const TAB_TITLES = {
   'tab-cache': 'Cache', 'tab-prices': 'Yarn Prices', 'tab-charges': 'Knit & Dye Charges', 'tab-dyeing-prices': 'Dyeing Prices',
   'tab-validation': 'Real-Order Validation', 'tab-inquiries': 'Inquiries', 'tab-rfq': 'RFQ / Quotes',
   'tab-users': 'Users', 'tab-students': 'Student Plan', 'tab-settings': 'Settings', 'tab-apikeys': 'API Keys',
-  'tab-open': 'Open Access', 'tab-et': 'Emerging Textiles',
+  'tab-open': 'Open Access', 'tab-et': 'Emerging Textiles', 'tab-subs': 'Subscriptions', 'tab-usage': 'Usage & accuracy',
 };
 
 function switchTab(tabId) {
@@ -143,6 +143,7 @@ function switchTab(tabId) {
 
   if (tabId === 'tab-overview') loadDashboard();
   if (typeof window.kaOpenAccessTab === 'function') window.kaOpenAccessTab(tabId === 'tab-open');
+  if (typeof window.kaInsightsTab === 'function') window.kaInsightsTab(tabId);
   if (tabId === 'tab-providers' && !tabState.loaded.providers) {
     tabState.loaded.providers = true;
     loadProviders();
@@ -1272,7 +1273,12 @@ const PLAN_LABELS = { floor: 'Floor', mill: 'Mill', buying_house: 'Buying House'
 
 // Mirrors engine/domain/student-eligibility.js's resolvePlanLimits() for
 // display only — the server is always the one that actually enforces it.
+const PLAN_NAMES = { free: 'Free', edu: 'Education', floor: 'Floor', mill: 'Mill', buying_house: 'Buying House', unlimited: 'Unlimited' };
 function userPlanBadge(u) {
+  const left = (d) => Math.max(0, Math.ceil((new Date(d) - Date.now()) / 86400000));
+  if (u.plan_code && (!u.plan_expires_at || new Date(u.plan_expires_at) > new Date())) {
+    return '<span class="badge badge-purple">' + esc(PLAN_NAMES[u.plan_code] || u.plan_code) + (u.plan_expires_at ? ' · ' + left(u.plan_expires_at) + 'd left' : '') + '</span>';
+  }
   if (u.is_paid) return '<span class="badge badge-purple">Paid</span>';
   if (u.student_status === 'active' && u.student_expires_at && new Date(u.student_expires_at) > new Date()) {
     const days = Math.max(0, Math.ceil((new Date(u.student_expires_at) - Date.now()) / 86400000));
@@ -1525,9 +1531,9 @@ async function openUserDetail(id) {
     setUdMsg('ud-email-msg', '', null);
     setUdMsg('ud-pw-msg', 'At least 10 characters, 3 of: lower/upper/number/symbol. Signs out every device.', null);
 
-    const paidBtn = document.getElementById('ud-paid-toggle');
-    paidBtn.textContent = u.is_paid ? 'Paid — click to remove' : 'Not paid — click to grant';
-    paidBtn.dataset.paid = u.is_paid ? 'false' : 'true'; // the value it will BECOME on click
+    const pn = u.plan_now || {};
+    document.getElementById('ud-plan-line').textContent = 'Plan today: ' + (pn.name || 'Free') + (pn.dailyLimit == null ? ', unlimited' : ', ' + pn.dailyLimit + ' a day') +
+      (pn.expiresAt ? ', until ' + new Date(pn.expiresAt).toLocaleDateString('en-GB', { timeZone: 'Asia/Dhaka', day: 'numeric', month: 'short', year: 'numeric' }) : '') + (u.factory_access ? ' · factory work orders on' : '');
     const stuLine = document.getElementById('ud-student-line');
     if (u.student_status === 'active' && u.student_expires_at) {
       stuLine.innerHTML = 'Student plan active until ' + esc(new Date(u.student_expires_at).toLocaleDateString()) +
@@ -1606,20 +1612,6 @@ async function saveUserPassword() {
   } catch (e) {
     setUdMsg('ud-pw-msg', e.message, false);
   } finally { btn.disabled = false; }
-}
-
-async function toggleUserPaid() {
-  if (openUserId == null) return;
-  const btn = document.getElementById('ud-paid-toggle');
-  const nextValue = btn.dataset.paid === 'true';
-  btn.disabled = true;
-  try {
-    await api('/admin/api/users/' + openUserId + '/paid', 'PATCH', { is_paid: nextValue });
-    toast(nextValue ? 'Marked as paid — unlimited use' : 'Paid flag removed', 'success');
-    loadUsers(1, getUsrFilters());
-    await openUserDetail(openUserId);
-  } catch (e) { toast(e.message, 'error'); }
-  finally { btn.disabled = false; }
 }
 
 // ── STUDENT PLAN: university allow-list + verification queue ─
@@ -2872,7 +2864,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('ud-username-save').addEventListener('click', saveUserUsername);
   document.getElementById('ud-email-save').addEventListener('click', saveUserEmail);
   document.getElementById('ud-pw-save').addEventListener('click', saveUserPassword);
-  document.getElementById('ud-paid-toggle').addEventListener('click', toggleUserPaid);
+  document.getElementById('ud-plan-manage').addEventListener('click', () => { const id = openUserId; closeUserDetail(); window.kaSubscriptionFor(id); });
   document.getElementById('ud-student-line').addEventListener('click', (e) => {
     if (e.target.closest('#ud-goto-students')) { closeUserDetail(); switchTab('tab-students'); }
   });

@@ -61,6 +61,10 @@ const loginLimiter = createRateLimiter({
   message: 'Too many login attempts. Try again in a few minutes.',
 });
 
+// plans and hand-set subscriptions; the usage log and the verdicts on answers
+router.use(require('./admin-subscriptions'));
+router.use(require('./admin-usage'));
+
 // ============================================================
 // PUBLIC: Login / Logout / Ping
 // ============================================================
@@ -639,6 +643,7 @@ router.get('/api/users/:id', adminAuth, async (req, res) => {
       full_name: user.full_name, company: user.company,
       plan_interest: user.plan_interest, disabled: user.disabled, email_verified: user.email_verified,
       is_paid: user.is_paid, student_status: user.student_status, student_expires_at: user.student_expires_at,
+      plan_now: await require('../services/plans').planOf(user), factory_access: !!user.factory_access,
       created_at: user.created_at, last_login_at: user.last_login_at,
       stats, recent_calculations: recent.rows, active_sessions: activeSessions,
     });
@@ -738,23 +743,6 @@ router.patch('/api/users/:id/disabled', adminAuth, async (req, res) => {
   } catch (err) {
     console.error('[Users Admin Disable Error]', err);
     res.status(500).json({ error: 'Failed to update user' });
-  }
-});
-
-// Admin-set only — no payment gateway exists yet, so this is how an account
-// becomes unlimited-use until one does.
-router.patch('/api/users/:id/paid', adminAuth, async (req, res) => {
-  try {
-    const id = parseInt(req.params.id, 10);
-    if (!Number.isInteger(id) || typeof (req.body || {}).is_paid !== 'boolean') {
-      return res.status(400).json({ error: 'A user id and a boolean "is_paid" are required' });
-    }
-    const row = await userRepo.users.setPaid(id, req.body.is_paid);
-    if (!row) return res.status(404).json({ error: 'User not found' });
-    res.json({ ok: true, id: row.id, is_paid: row.is_paid });
-  } catch (err) {
-    console.error('[Users Admin Paid Error]', err);
-    res.status(500).json({ error: 'Failed to update the plan' });
   }
 });
 
